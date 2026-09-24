@@ -947,6 +947,7 @@ builds two fields.
                                 // conflict detection uses the server's own doc.rev
   "lastEditedBy": null, "lastEditedAt": null,
   "wordsPerMinute": 150,        // clamped 60–400
+  "targetSeconds": 120,         // #170 — whole seconds 1–86400, ABSENT for no target
   "rows": [{ "id": "r1", "visualText": "sanitised HTML", "audioText": "sanitised HTML",
     "imageRef": { "sha256": "64 lowercase hex", "width": 1, "height": 1,
                   "mime": "image/png | image/jpeg | image/gif | image/webp" },  // or null
@@ -1020,7 +1021,35 @@ base, theirs when both did (no conflict card), and with no base a set length
 beats none; `rowContentEqual()` counts it, so setting it outranks the other
 side's delete. Undo needs nothing — `diffStates` makes it a `rowField` step.
 A `.splitpage` and the `.md` data block carry it as any row key; the `.md`
-table does not show it.
+table does not show it. Present counts it too, for a scene with no Audio
+words as well (its clock steps over that scene's length as the reading
+passes it, and the running order gives it a block); only Present's scroll
+speed is words at the reading speed.
+
+**A target length** (#170) is the document key `targetSeconds`, whole
+seconds 1–86400, and — like `personColors` — has **no default**: no target
+is no key, so a file from before #170 reads, merges and saves byte for
+byte as it did. `migrateRows()` keeps it through `normalizeTargetLength()`
+(01-scene-status.js; 0 and garbage delete the key). `mergeStates()` uses
+the `target-length` strategy, `mergeTargetLength()` (03-sync.js): merged
+like the title — the side that changed it since the base wins, and taking
+it away is a change too (which `changed-side-wins`' `m || fallback` would
+lose) — but both sides changing it keeps theirs with no conflict card, as a
+scene's length does; with no base a set target beats none. Both project
+formats carry it as a plain key; the `.md` table does not show it and no
+export prints it. It is set only through `setTargetLength()`
+(05t-target.js), one `markDirty()`, so undo sees a `docField` step and a
+review session is refused there as well as in the popover. What reads it:
+the program clock (`updateScriptStats()`: `01:35 / 02:00` and `0:25 left` /
+`0:05 over` in `#program-clock-slot`, via the pure `targetClock()`; the
+target is measured against the whole script — with shot scenes hidden the
+remaining-to-shoot figure moves to the clock's tooltip), and the rundown
+strip (`setRundownExtraSeconds(target)`, so the span is
+max(target, total) + 10s; 05t-target.js draws the line, "Target 2:00" and
+the hatching on `#rundown-overlay` from `rundownLayout()` — to scale, never
+`rundownX()`, because the overlay is faded while the lens is on and must be
+right when it settles; minimized, CSS leaves only the line as a tick).
+Present does not show it.
 
 **Per person, not per document:** the script's zoom (#191) is
 `localStorage["splitpage-script-scale"]` (a number, 1 = 100 %, absent at
@@ -1595,6 +1624,7 @@ evaluation order via `_entry.js`):
 | `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
 | `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
 | `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
+| `05t-target.js` | a script's target length (#170): `setTargetLength()`, the clock popover's Target section, and the line / label / hatching on the rundown's overlay |
 | `06-rows.js` | row add/move/drag, images |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |

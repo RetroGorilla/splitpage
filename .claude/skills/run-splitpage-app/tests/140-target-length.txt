@@ -1,0 +1,303 @@
+# A target length per script (#170, src/js/05t-target.js).
+#
+# Set from the clock's popover (the reading speed's box, #193) — a field
+# taking the scene-length forms Adam signed off (1:30, 90, 90s, 1m30), six
+# presets and "No target" — or from the command menu's "Set target
+# length…". With one set the clock reads "01:35 / 02:00" and "0:25 left"
+# (dim) or "0:05 over" (tally red); the rundown strip spans max(target,
+# total) + 10s and draws a dashed line at the target, "Target 2:00", and
+# hatching over the gap (or over the blocks past the target). One undo
+# step; saved in the file; the overlay fades under the hover lens and comes
+# back to scale; the thin bar keeps a tick; read-only in a review session.
+# The value, the merge and the formats are src/test/target-length.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; var doc = {"schema": 2, "title": "Target check", "wordsPerMinute": 150, "rows": [{"id": "r1", "visualText": "Wide on the harbour", "audioText": "Every morning the town wakes to the same sound.", "status": "todo", "lengthSeconds": 60}, {"id": "r2", "visualText": "Close on the nets", "audioText": "Mara has mended nets on this quay for thirty years.", "status": "ready", "lengthSeconds": 35}], "comments": []}; F.openFile(new File([JSON.stringify(doc)], 'target.splitpage')); return true; })()
+wait F.state().title === 'Target check' && document.querySelectorAll('#rows .row').length === 2
+sleep 400
+eval (function(){ window.T = window.__targetTest; window.ov = function(sel){ return document.querySelector('#rundown-overlay ' + sel); }; window.near = function(a, b){ return Math.abs(a - b) < 1.5; }; return true; })()
+
+# --- no target: the clock is the total, the strip draws nothing -------------
+expect document.getElementById('runtime-total').textContent == 01:35
+expect document.getElementById('program-clock-slot').textContent === ''
+expect getComputedStyle(document.getElementById('program-clock-slot')).display === 'none'
+expect document.getElementById('rundown-overlay').innerHTML === ''
+expect T.layout().spanSeconds === 105
+expect !('targetSeconds' in F.state())
+
+# --- the popover: reading speed, then the target ------------------------------
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+expect document.getElementById('wpm-editor').getAttribute('aria-label') == Reading speed and target length
+expect document.activeElement.id == wpm-input
+expect document.getElementById('target-input').value === ''
+expect document.querySelectorAll('#wpm-editor .target-preset').length === 6
+expect Array.prototype.map.call(document.querySelectorAll('#wpm-editor .target-preset'), function(b){return b.textContent;}).join(' ') == 0:30 1:00 2:00 3:00 5:00 10:00
+expect document.getElementById('target-clear').getAttribute('aria-pressed') == true
+expect (function(){var r=document.getElementById('wpm-editor').getBoundingClientRect();return r.left>=0&&r.right<=document.documentElement.clientWidth&&r.bottom<=innerHeight;})()
+shot 140-popover-light
+
+# --- a preset sets it at once and closes ---------------------------------------
+click #wpm-editor .target-preset[data-target-seconds="120"]
+sleep 300
+expect document.getElementById('wpm-editor') === null
+expect F.state().targetSeconds === 120
+expect document.activeElement.id == runtime-chip
+expect document.getElementById('runtime-total').textContent == 01:35
+expect document.querySelector('#program-clock-slot .program-clock-of').textContent === ' / 02:00'
+expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect document.querySelector('#program-clock-slot .program-clock-delta').classList.contains('is-over') === false
+# dim: not the clock's own colour
+eval window.__leftColor = getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).color
+expect window.__leftColor !== getComputedStyle(document.getElementById('runtime-total')).color
+expect document.getElementById('runtime-chip').title.indexOf('against a 2:00 target') !== -1
+
+# --- the strip: max(target, total) + 10s, the line, the label, the gap --------
+expect T.layout().spanSeconds === 130
+expect near(parseFloat(ov('.rd-target-line').style.left), 120 * T.layout().pxPerSecond)
+expect getComputedStyle(ov('.rd-target-line')).borderLeftStyle == dashed
+expect getComputedStyle(ov('.rd-target-line')).borderLeftWidth == 1px
+expect ov('.rd-target-label').textContent == Target 2:00
+expect ov('.rd-target-label').getBoundingClientRect().right <= ov('.rd-target-line').getBoundingClientRect().left
+expect ov('.rd-target-hatch').classList.contains('is-left')
+expect near(parseFloat(ov('.rd-target-hatch').style.left), 95 * T.layout().pxPerSecond)
+expect near(parseFloat(ov('.rd-target-hatch').style.width), 25 * T.layout().pxPerSecond)
+expect getComputedStyle(ov('.rd-target-hatch')).backgroundImage.indexOf('repeating-linear-gradient') === 0
+expect ov('.rd-target-delta').textContent == 0:25 left
+expect getComputedStyle(ov('.rd-target-delta')).display == block
+# the script's last block ends where the hatching starts
+expect near(document.querySelectorAll('#rundown .rd-block')[1].getBoundingClientRect().right + 2, ov('.rd-target-hatch').getBoundingClientRect().left)
+shot 140-strip-under-light
+
+# --- one undo step, and redo --------------------------------------------------
+key ctrl KeyZ
+sleep 300
+expect !('targetSeconds' in F.state())
+expect document.getElementById('program-clock-slot').textContent === ''
+expect document.getElementById('rundown-overlay').innerHTML === ''
+expect T.layout().spanSeconds === 105
+key ctrl+shift KeyZ
+sleep 300
+expect F.state().targetSeconds === 120
+expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect T.layout().spanSeconds === 130
+
+# --- typed: over the target, in tally red, the blocks past it hatched ---------
+click #runtime-chip
+wait document.getElementById('target-input')
+expect document.getElementById('target-input').value == 2:00
+expect document.querySelector('#wpm-editor .target-preset[data-target-seconds="120"]').getAttribute('aria-pressed') == true
+click #target-input
+eval document.getElementById('target-input').select()
+type 1:30
+key Enter
+sleep 300
+expect document.getElementById('wpm-editor') === null
+expect F.state().targetSeconds === 90
+expect document.querySelector('#program-clock-slot .program-clock-of').textContent === ' / 01:30'
+expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:05 over
+expect document.querySelector('#program-clock-slot .program-clock-delta').classList.contains('is-over')
+# tally red: the Present button's lamp colour, not the dim of "left"
+expect getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).color !== window.__leftColor
+expect getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).color == rgb(196, 48, 42)
+expect T.layout().spanSeconds === 105
+expect near(parseFloat(ov('.rd-target-line').style.left), 90 * T.layout().pxPerSecond)
+expect ov('.rd-target-hatch').classList.contains('is-over')
+expect near(parseFloat(ov('.rd-target-hatch').style.left), 90 * T.layout().pxPerSecond)
+expect near(parseFloat(ov('.rd-target-hatch').style.width), 5 * T.layout().pxPerSecond)
+expect ov('.rd-target-label').textContent == Target 1:30
+shot 140-strip-over-light
+
+# --- the other forms: 90, 90s, 1m30 (and 100 between, so each is a change) ----
+click #runtime-chip
+wait document.getElementById('target-input')
+click #target-input
+eval document.getElementById('target-input').select()
+type 100
+key Enter
+sleep 300
+expect F.state().targetSeconds === 100
+click #runtime-chip
+wait document.getElementById('target-input')
+click #target-input
+eval document.getElementById('target-input').select()
+type 90s
+key Enter
+sleep 300
+expect F.state().targetSeconds === 90
+click #runtime-chip
+wait document.getElementById('target-input')
+click #target-input
+eval document.getElementById('target-input').select()
+type 1m40
+key Enter
+sleep 300
+expect F.state().targetSeconds === 100
+click #runtime-chip
+wait document.getElementById('target-input')
+click #target-input
+eval document.getElementById('target-input').select()
+type 90
+key Enter
+sleep 300
+expect F.state().targetSeconds === 90
+
+# --- not a length: the box stays, marked, nothing changes; Esc leaves it -----
+click #runtime-chip
+wait document.getElementById('target-input')
+click #target-input
+eval document.getElementById('target-input').select()
+type abc
+key Enter
+sleep 200
+expect document.getElementById('wpm-editor') !== null
+expect document.getElementById('target-input').getAttribute('aria-invalid') == true
+expect F.state().targetSeconds === 90
+key Escape
+sleep 200
+expect document.getElementById('wpm-editor') === null
+expect F.state().targetSeconds === 90
+
+# --- the reading speed's Set still sets only the reading speed ----------------
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+eval document.getElementById('wpm-input').value = '180'
+click #wpm-save
+expect document.getElementById('wpm-editor') === null
+expect F.state().wordsPerMinute === 180
+expect F.state().targetSeconds === 90
+
+# --- empty is no target; so is "No target" -----------------------------------
+click #runtime-chip
+wait document.getElementById('target-input')
+click #target-input
+eval document.getElementById('target-input').select()
+key Backspace
+key Enter
+sleep 300
+expect !('targetSeconds' in F.state())
+expect document.getElementById('program-clock-slot').textContent === ''
+expect document.getElementById('rundown-overlay').innerHTML === ''
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+click #wpm-editor .target-preset[data-target-seconds="600"]
+sleep 300
+expect F.state().targetSeconds === 600
+# a long target: the strip spans it, the script is a sliver of it
+expect T.layout().spanSeconds === 610
+expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 8:25 left
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+expect document.getElementById('target-clear').getAttribute('aria-pressed') == false
+click #target-clear
+sleep 300
+expect !('targetSeconds' in F.state())
+expect T.layout().spanSeconds === 105
+
+# --- the command menu: "Set target length…" opens the box, in its field ------
+caret #rows .row .audio-cell .cell-editable
+key ctrl KeyK
+sleep 300
+expect !document.getElementById('cmdk').hidden
+type target
+sleep 200
+expect document.querySelector('#cmdk-list .cmdk-item').getAttribute('data-cmd') == set-target
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="set-target"]').textContent.indexOf('Set target length…') !== -1
+expect window.__commandTest.results('goal')[0].items[0].id == set-target
+key Enter
+sleep 300
+expect document.getElementById('cmdk').hidden
+expect document.getElementById('wpm-editor') !== null
+expect document.activeElement.id == target-input
+type 2:00
+key Enter
+sleep 300
+expect F.state().targetSeconds === 120
+
+# --- the hover lens: the overlay fades while it is on, and is to scale after --
+eval window.__lx = parseFloat(ov('.rd-target-line').style.left)
+eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var r = t.getBoundingClientRect(); t.dispatchEvent(new PointerEvent('pointermove', {bubbles: true, clientX: r.left + r.width * 0.3, clientY: r.top + 15, pointerType: 'mouse'})); return true; })()
+wait document.getElementById('rundown').classList.contains('is-lensed')
+wait parseFloat(getComputedStyle(document.getElementById('rundown-overlay')).opacity) < 0.05
+eval (function(){ var t = document.querySelector('#rundown .rundown-track'); t.dispatchEvent(new PointerEvent('pointerleave', {bubbles: false, pointerType: 'mouse'})); return true; })()
+wait !document.getElementById('rundown').classList.contains('is-lensed')
+wait parseFloat(getComputedStyle(document.getElementById('rundown-overlay')).opacity) > 0.95
+expect near(parseFloat(ov('.rd-target-line').style.left), window.__lx)
+expect near(window.__rundownTest.x(120), 120 * T.layout().pxPerSecond)
+
+# --- the thin bar keeps a tick ----------------------------------------------------
+eval window.__rundownTest.setMinimized(true)
+sleep 300
+expect document.getElementById('rundown').classList.contains('is-min')
+expect ov('.rd-target-line') !== null
+expect ov('.rd-target-line').getBoundingClientRect().height > 5
+expect ov('.rd-target-line').getBoundingClientRect().height <= 10
+expect getComputedStyle(ov('.rd-target-line')).display !== 'none'
+expect getComputedStyle(ov('.rd-target-label')).display == none
+expect getComputedStyle(ov('.rd-target-hatch')).display == none
+expect near(parseFloat(ov('.rd-target-line').style.left), 120 * T.layout().pxPerSecond)
+shot 140-thin-bar-light
+eval window.__rundownTest.setMinimized(false)
+sleep 300
+expect !document.getElementById('rundown').classList.contains('is-min')
+expect getComputedStyle(ov('.rd-target-label')).display !== 'none'
+
+# --- a target near the strip's start: its label goes right of the line --------
+expect T.set(5) === true
+sleep 200
+expect ov('.rd-target-label').classList.contains('is-right')
+expect ov('.rd-target-label').getBoundingClientRect().left >= ov('.rd-target-line').getBoundingClientRect().right
+expect ov('.rd-target-label').getBoundingClientRect().left >= document.querySelector('#rundown .rundown-track').getBoundingClientRect().left
+expect ov('.rd-target-hatch').classList.contains('is-over')
+expect ov('.rd-target-delta').textContent == 1:30 over
+expect T.set(120) === true
+sleep 200
+expect ov('.rd-target-label').classList.contains('is-right') === false
+
+# --- with shot scenes hidden, the target still measures the whole script -----
+jsclick #file-menu [data-file-action="toggle-hide-shot"]
+sleep 300
+expect document.getElementById('runtime-total').textContent == 01:35
+expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect document.getElementById('runtime-chip').title.indexOf('still to shoot') !== -1
+jsclick #file-menu [data-file-action="toggle-hide-shot"]
+sleep 300
+
+# --- it goes out in the file --------------------------------------------------
+expect JSON.parse(F.buildSplitpage(F.state())).targetSeconds === 120
+
+# --- dark ----------------------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme','dark')
+sleep 200
+shot 140-strip-under-dark
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+shot 140-popover-dark
+key Escape
+eval document.documentElement.removeAttribute('data-theme')
+
+# --- a review session sees it and cannot change it ------------------------------
+eval document.activeElement.blur()
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 400
+expect window.__hostedTest.reviewMode() === true
+expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect ov('.rd-target-line') !== null
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+expect document.getElementById('target-input').disabled === true
+expect document.getElementById('target-input').value == 2:00
+expect document.querySelectorAll('#wpm-editor .target-preset:disabled').length === 6
+expect document.getElementById('target-clear').disabled === true
+expect document.querySelector('#wpm-editor .target-note') !== null
+jsclick #wpm-editor .target-preset[data-target-seconds="30"]
+sleep 200
+expect F.state().targetSeconds === 120
+key Escape
+expect T.set(30) === false
+expect F.state().targetSeconds === 120
+expect window.__commandTest.results('target')[0].items[0].id == set-target
+expect window.__commandTest.results('target')[0].items[0].disabled === true

@@ -173,12 +173,16 @@ export function buildPrompterContent() {
      rundown strip and the program clock read, so the prompter's clock
      agrees with the editor's. It runs over `source`, the scenes the
      prompter reads: Skip shot and Hide shot scenes leave a shot scene's
-     time out along with its words. */
+     time out along with its words. A scene with no words but a length set
+     by hand (#179, a silent shot) counts its length too: it has no words
+     to scroll through, so the clock steps over it as the reading passes,
+     and it has its block in the running order. The scroll speed is not
+     this — that is still the words at the reading speed. */
   sceneSeconds = [];
   sceneStartSec = [];
   var t = 0;
-  source.forEach(function (row, i) {
-    var secs = sceneWordEnd[i] > sceneWordStart[i] ? rowSeconds(row) : 0;
+  source.forEach(function (row) {
+    var secs = rowSeconds(row);
     sceneStartSec.push(t);
     sceneSeconds.push(secs);
     t += secs;

@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
+import { promptForTarget } from "./03-sync.js";
 import { reviewMode } from "./13-hosted.js";
 import {
   IS_MAC,
@@ -33,7 +34,9 @@ import { writerOpen } from "./19-writer.js";
    all (20b, 20c, 20e), and whether a command is offered, enabled or has a
    reason is read off that same button — refreshFileMenu() first, so it is
    current. An unavailable command is listed greyed with the menu's own
-   reason under it, and Enter on it does nothing.
+   reason under it, and Enter on it does nothing. The one command with no
+   button, "Set target length…" (#170), opens the clock's own popover
+   (promptForTarget, 03-sync.js), which is what clicking the clock does.
 
    WHERE IT DOES NOT OPEN. Not over the teleprompter, the writer, a modal
    dialog or the tour: each of those owns the keyboard while it is up. And
@@ -162,6 +165,17 @@ function commands() {
     fromMenu("find", "This document", "search replace look for"),
     fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
     fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
+    /* #170: the clock's popover, the caret in its target field */
+    {
+      id: "set-target",
+      group: "This document",
+      words: "target length goal duration aim runtime running time clock back timing over under minutes",
+      read: function () {
+        var why = reviewMode() ? "Viewing only — the writer sets the target" : "";
+        return { label: "Set target length…", icon: "i-clock", keys: "", why: why, disabled: !!why, state: "" };
+      },
+      run: function () { promptForTarget(); }
+    },
     fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
     fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
     fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
