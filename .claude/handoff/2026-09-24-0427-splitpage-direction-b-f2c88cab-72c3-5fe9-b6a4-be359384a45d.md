@@ -41,8 +41,8 @@ comments naming the app source they were drawn from.
 | --- | --- | --- | --- |
 | 1. Tokens, type, logo, sentence case | done | `d72e47c` | 94/94 browser suites, 563/563 unit tests, eslint 0 |
 | 2. Editor, topbar, rundown strip | done | `8fb43e2` | Windows 11 x64, real fonts: all 94 browser suites (4911/4911), 574/574 unit tests, eslint 0; desktop smoke dev 808/808 (the first run since phase 1). See "What phase 2 did" |
-| 3. Side panels | **next**, planned | | Planned for four parallel lanes after a shared panel shell: `2026-09-24-0539-direction-b-phases-3-4-8d326eb5-5ba1-4b4d-8759-20638d702fee.md` |
-| 4. Start page, prompter, phone, gallery, menus | planned | | Five parallel lanes, the same handoff |
+| 3. Side panels | done | `82f1645` | Shared panel shell + four parallel lanes. Windows 11 x64, real fonts: all 94 browser suites (4929/4929), 574/574 unit tests, eslint 0. Adam's calls during the phase: every panel defaults to 488px (the boards' width); B-roll's Status field toggles in one click; Comments' ⋯ opens a menu holding Delete; the Older history Restore is a small outlined button; no comment roles. Suites 07, 50, 61, 77, 78, 89, 93, 94, 95 updated for design changes (see the commit body) |
+| 4. Start page, prompter, phone, gallery, menus | **next**, lanes built | | Five parallel lanes, the same handoff; merging after phase 3 |
 | PR into `main` | not opened | | Ask Adam first; he hasn't asked for one yet |
 
 ## Adam's decisions from the design review (all of them; the briefs repeat the relevant ones)
