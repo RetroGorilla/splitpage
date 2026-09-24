@@ -666,7 +666,7 @@ tabs**.
   docId (the renderer stamps it). A malformed call rejects (the renderer
   reads that as `invalid` and drops the entry); everything a retry could
   fix is a code. The migrator and `v1-backup/` go in the release after
-  (see §8, "Temporary code to delete"). Test-mode faults:
+  3.0.0 (see §8, "Temporary code to delete"). Test-mode faults:
   `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `exit-mid-migration`,
   `exit-after-migration-index`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
@@ -1182,8 +1182,12 @@ bytes, #82 — nothing deletes them yet, D4).
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
 16. **Anything that opens over the whole screen must close the side
-    panels.** `openWriter()` closes Production, Comments, find. Writer sits
-    at `z-index: 145`, above panels (140), below modals (150) and toasts (200).
+    panels.** Not yet true everywhere: `openWriter()` closes Production,
+    Gear, Comments and find but not B-roll or History, and `openPrompter()`
+    closes none (#163). Help (`closeSidePanelsForHelp()`) and the full-page
+    shot list (`openBrollPage()`) each walk `SIDE_PANEL_IDS` with their own
+    loop; #163 folds all four into one helper. Writer and Present sit at
+    `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
 18. **A comment's anchor is its `cmt` mark in the script; `rowId`/`field`
     only say where that is, and one function keeps them saying it** (#85,
@@ -1657,10 +1661,19 @@ Google Cloud project only Adam can create — the by-hand check is in
 `docs/WINDOWS-CHECKS.md` §3. Per-tab server/tunnel connections are built (#11,
 §3.13).
 
+**The header after Direction B (#169).** Between 761 and about 1240 px the
+header row overlaps itself: the labelled panel toggles don't fit their
+column and spill left over the clock, title and save status (#174). Fix
+that first: #166 (the mark and name become the File button, with a clear
+button cue) and #175 (a visible Ctrl K search control) both add to that
+row. A new logo is coming, so keep the header mark a single swappable SVG.
+The open issues were re-checked against the redesign on 2026-09-24.
+
 **Temporary code to delete (#83) — tracked in #100.** Each item has to
-ship in one release first, so an upgrading user skips nothing. When the
-release after the one that ships #83 is being cut, delete all four
-together: `desktop/history-v1-migrate.js` and
+ship in one release first, so an upgrading user skips nothing. #83 first
+shipped in the 3.0.0 betas, but 2.1 copies aren't offered betas, so most
+users only get the migration with 3.0.0 itself: when the release after
+3.0.0 is being cut (not before), delete all four together: `desktop/history-v1-migrate.js` and
 its call in `main.js`'s `initHistoryStore` (plus its unit suite and the
 smoke v1-migration cases); `<userData>/history/v1-backup/` (delete it at
 launch, once, from main); 03c's v1 → v2 migrator and its read-only v1
