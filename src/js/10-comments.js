@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
@@ -268,16 +269,14 @@ function renderCommentFilterBar() {
    03b-side-panels.js — it now covers every side panel, not just this
    one. */
 
+/* Clock times go through the one formatter (#180, 00p-prefs.js), so the
+   12/24-hour setting reaches them with the save status and History. */
 export function formatTimestamp(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    var now = new Date();
-    var sameDay = d.toDateString() === now.toDateString();
-    var opts = sameDay
-      ? { hour: "numeric", minute: "2-digit" }
-      : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
-    return d.toLocaleString(undefined, opts);
+    var sameDay = d.toDateString() === new Date().toDateString();
+    return sameDay ? formatClock(d) : formatDateClock(d);
   } catch (e) { return ""; }
 }
 
@@ -382,7 +381,7 @@ function formatTimestampAbsolute(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return formatDateClock(d, { year: true });
   } catch (e) { return ""; }
 }
 

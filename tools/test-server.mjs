@@ -943,6 +943,18 @@ try {
       body.here.every((p) => p.field !== "nonsense"));
   }
   {
+    /* A picked colour (#194) is passed on as "#RRGGBB" and nothing else:
+       it lands in another browser's style attribute. */
+    await beat(editToken, { docId: "shared-doc", id: "p4", name: "Ana", color: "#80bdfb" });
+    await beat(editToken, { docId: "shared-doc", id: "p5", name: "Bo", color: "red;background:url(x)" });
+    const body = await json(await beat(editToken, { docId: "shared-doc", id: "p3" }));
+    const ana = body.here.find((p) => p.id === "p4");
+    const bo = body.here.find((p) => p.id === "p5");
+    eq("a picked colour is passed on, upper-cased", ana && ana.color, "#80BDFB");
+    check("...and anything that is not a colour is not passed on at all", !!bo && !("color" in bo));
+    check("...nor is a colour nobody sent", body.here.filter((p) => p.id === "p1").every((p) => !("color" in p)));
+  }
+  {
     /* The beacon a closing tab sends: sendBeacon cannot set a header, so the
        token comes in the body, and text/plain is what a beacon may use. */
     const res = await fetch(s7.base + "api/presence", {

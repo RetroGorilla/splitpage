@@ -129,7 +129,12 @@ expect window.__presenceTest.payload(false).name == Sam Okafor
 expect window.__presenceTest.payload(false).docId == shared-doc
 expect window.__presenceTest.payload(false).rowId == r1
 expect window.__presenceTest.payload(false).field == visualText
-expect Object.keys(window.__presenceTest.payload(false)).sort().join(',') == docId,field,gone,id,name,rowId
+expect Object.keys(window.__presenceTest.payload(false)).sort().join(',') == color,docId,field,gone,id,name,rowId
+# the colour you picked (#194), "" until you pick one
+expect window.__presenceTest.payload(false).color === ''
+eval localStorage.setItem('splitpage-person-color','#CBA1FA')
+expect window.__presenceTest.payload(false).color === '#CBA1FA'
+eval localStorage.removeItem('splitpage-person-color')
 # a client id of its own, per tab, and not in localStorage where it would
 # outlive the tab
 expect window.__presenceTest.id().length > 8

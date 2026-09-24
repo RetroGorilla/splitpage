@@ -163,6 +163,7 @@ function commands() {
     fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
     fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
     fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
+    fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
     fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
     fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
     fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),

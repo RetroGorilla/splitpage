@@ -1,0 +1,167 @@
+# Settings (#181, 20s-settings.js): opened from the File menu's foot, Ctrl K
+# and the desktop app's menu; each setting taking effect at once, through the
+# same key and setter its old home uses (and the old home's changes showing
+# in Settings), every change announced as a "splitpage:pref" event, and
+# nothing in it touching the script.
+
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.D=window.__desktopTest;window.T=window.__settingsTest;['splitpage-theme','splitpage-clock','splitpage-hide-shot','splitpage-rundown-min','splitpage-script-scale','splitpage-default-wpm','splitpage-prompter-mirror','splitpage-person-color'].forEach(function(k){localStorage.removeItem(k);});window.__events=[];document.addEventListener('splitpage:pref',function(e){window.__events.push(e.detail.key+'='+e.detail.value);});window.__doc0=JSON.stringify(F.state().rows);return true;})()
+eval window.__on = function(id){return document.getElementById(id).checked;}
+eval window.__set = function(id,v){var el=document.getElementById(id);el.value=String(v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true;}
+
+# --- File ▸ Settings ------------------------------------------------------
+click #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.querySelector('#file-menu .menu-foot [data-file-action="settings"]') !== null
+expect document.querySelector('#file-menu .menu-foot [data-file-action="settings"] .mi-label').textContent === 'Settings'
+# no shortcut of its own
+expect document.querySelector('#file-menu [data-file-action="settings"]').hasAttribute('data-keys') === false
+click #file-menu [data-file-action="settings"]
+wait T.isOpen()
+expect document.getElementById('file-menu').hidden
+expect document.querySelector('#settings-modal [role="dialog"]').getAttribute('aria-modal') === 'true'
+expect document.getElementById('settings-title').textContent === 'Settings'
+expect Array.prototype.map.call(document.querySelectorAll('#settings-modal .settings-section-title'), function(h){return h.textContent;}).join('|') == Appearance|Editor|Present|You|Help & tips|Data
+expect document.getElementById('settings-modal').contains(document.activeElement)
+expect (function(){var r=document.querySelector('#settings-modal .modal-panel').getBoundingClientRect();return r.top>=0&&r.left>=0&&r.bottom<=innerHeight&&r.right<=innerWidth;})()
+shot 134-settings-light
+key Escape
+expect T.isOpen() === false
+expect document.activeElement.id === 'btn-file'
+
+# --- Ctrl K "Settings" ------------------------------------------------------
+caret #rows .row .audio-cell .cell-editable
+key ctrl KeyK
+wait document.getElementById('cmdk-input') && document.activeElement.id === 'cmdk-input'
+type settings
+sleep 150
+expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') === 'settings'
+key Enter
+wait T.isOpen()
+key Escape
+expect T.isOpen() === false
+
+# --- the desktop app's File ▸ Settings… -----------------------------------
+eval D.runMenuCommand('settings')
+wait T.isOpen()
+
+# --- Theme ------------------------------------------------------------------
+click #settings-modal input[name="settings-theme"][value="dark"]
+expect document.documentElement.getAttribute('data-theme') === 'dark'
+expect localStorage.getItem('splitpage-theme') === 'dark'
+expect getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toUpperCase() === '#0F0E0C'
+shot 134-settings-dark
+click #settings-modal input[name="settings-theme"][value="light"]
+expect document.documentElement.getAttribute('data-theme') === 'light'
+click #settings-modal input[name="settings-theme"][value="system"]
+expect document.documentElement.hasAttribute('data-theme') === false
+expect localStorage.getItem('splitpage-theme') === null
+
+# --- Hide shot scenes: the File menu's switch, the same key ----------------
+click #settings-modal label[for="settings-hide-shot"]
+expect localStorage.getItem('splitpage-hide-shot') === '1'
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
+# changed from the File menu while Settings is open: Settings follows
+jsclick #menu-hide-shot
+wait window.__on('settings-hide-shot') === false
+expect localStorage.getItem('splitpage-hide-shot') === '0'
+
+# --- Autosave ---------------------------------------------------------------
+expect window.__on('settings-autosave') === true
+click #settings-modal label[for="settings-autosave"]
+expect localStorage.getItem('splitpage-autosave') === '0'
+expect F.autosave.enabled() === false
+expect document.getElementById('menu-autosave').getAttribute('aria-checked') === 'false'
+click #settings-modal label[for="settings-autosave"]
+expect F.autosave.enabled() === true
+
+# --- Rundown strip and script zoom: stored, and announced ------------------
+click #settings-modal label[for="settings-rundown-min"]
+expect localStorage.getItem('splitpage-rundown-min') === '1'
+expect window.__events.indexOf('splitpage-rundown-min=1') !== -1
+eval window.__set('settings-script-scale', 150)
+expect localStorage.getItem('splitpage-script-scale') === '1.5'
+expect window.__events.indexOf('splitpage-script-scale=1.5') !== -1
+wait document.getElementById('settings-script-scale-out').textContent === '150 %'
+click #settings-modal [data-settings-action="scale-reset"]
+expect localStorage.getItem('splitpage-script-scale') === '1'
+expect document.getElementById('settings-script-scale').value === '100'
+# another lane's own control changing it: Settings follows
+eval (function(){localStorage.setItem('splitpage-script-scale','1.2');document.dispatchEvent(new CustomEvent('splitpage:pref',{detail:{key:'splitpage-script-scale',value:'1.2'}}));return true;})()
+expect document.getElementById('settings-script-scale').value === '120'
+
+# --- Writer text size: the writer's own slider and key ---------------------
+eval window.__set('settings-writer-size', 24)
+expect localStorage.getItem('splitpage-writer-size') === '24'
+expect document.getElementById('writer').style.getPropertyValue('--wr-font') === '24px'
+expect document.getElementById('wr-size').value === '24'
+
+# --- Reading speed for new scripts ----------------------------------------
+eval window.__set('settings-default-wpm', 180)
+expect localStorage.getItem('splitpage-default-wpm') === '180'
+# this script's own speed is untouched
+expect F.state().wordsPerMinute === 150
+eval window.__set('settings-default-wpm', 900)
+expect localStorage.getItem('splitpage-default-wpm') === '180'
+
+# --- Present: the prompter's own buttons ---------------------------------
+click #settings-modal label[for="settings-prompter-mirror"]
+expect localStorage.getItem('splitpage-prompter-mirror') === '1'
+expect document.getElementById('pp-mirror').classList.contains('is-active')
+key Escape
+# ...and the prompter's button changing it shows in Settings
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+jsclick #pp-mirror
+expect localStorage.getItem('splitpage-prompter-mirror') === '0'
+key Escape
+wait document.getElementById('prompter').hidden
+eval T.open()
+wait T.isOpen()
+expect window.__on('settings-prompter-mirror') === false
+
+# --- You: name and colour --------------------------------------------------
+eval (function(){var el=document.getElementById('settings-name');el.focus();el.value='Robin Settings';return true;})()
+key Enter
+expect localStorage.getItem('splitpage-comment-author') === 'Robin Settings'
+expect document.getElementById('identity-name').textContent === 'Robin Settings'
+expect document.querySelectorAll('#settings-modal input[name="settings-person-color"]').length === 8
+# the colour the name gives is the one checked until a pick
+expect document.querySelector('#settings-modal input[name="settings-person-color"]:checked').value === window.__presenceTest.color({id:'x',name:'Robin Settings'})
+expect document.querySelector('#settings-modal input[name="settings-person-color"][value="#EF958E"]').checked === false
+click #settings-modal input[name="settings-person-color"][value="#EF958E"] + .swatch-dot
+expect localStorage.getItem('splitpage-person-color') === '#EF958E'
+expect getComputedStyle(document.querySelector('#identity-chip .identity-dot')).backgroundColor === 'rgb(239, 149, 142)'
+
+# --- Help & tips -------------------------------------------------------------
+eval localStorage.setItem('splitpage-desktop-notice-dismissed','1')
+click #settings-modal [data-settings-action="desktop-notice"]
+expect localStorage.getItem('splitpage-desktop-notice-dismissed') === null
+
+# --- nothing here changed the script -------------------------------------
+expect JSON.stringify(F.state().rows) === window.__doc0
+expect F.state().wordsPerMinute === 150
+
+# --- Data: Servers… takes over from Settings ------------------------------
+# (jsclick: the toast just shown sits over the foot of the dialog)
+jsclick #settings-modal [data-settings-action="servers"]
+expect T.isOpen() === false
+expect document.getElementById('connect-modal').hidden === false
+jsclick #connect-modal [data-connect-action="close"]
+
+# --- File ▸ New script starts at the chosen reading speed -----------------
+eval window.__newScript = document.querySelector('#file-menu [data-file-action="new"]')
+eval window.__newScript && window.__newScript.click()
+wait F.state().rows.length === 1
+expect F.state().wordsPerMinute === 180
+
+# --- a review session still has its own view settings ---------------------
+eval window.__hostedTest.setSession({role:'review',docId:'rev-doc'})
+eval T.open()
+wait T.isOpen()
+click #settings-modal input[name="settings-theme"][value="dark"]
+expect document.documentElement.getAttribute('data-theme') === 'dark'
+click #settings-modal input[name="settings-theme"][value="system"]
+key Escape

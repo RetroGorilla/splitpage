@@ -805,6 +805,11 @@ function presenceWord(value, max) {
   return String(value == null ? "" : value).replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, max);
 }
 
+function presenceColor(value) {
+  const v = String(value == null ? "" : value);
+  return /^#[0-9A-Fa-f]{6}$/.test(v) ? v.toUpperCase() : "";
+}
+
 function presenceHandle(value) {
   const v = String(value == null ? "" : value);
   return /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : "";
@@ -1750,12 +1755,19 @@ async function handleApi(req, res, url) {
       rowId: presenceHandle(body && body.rowId),
       field: ["visualText", "audioText", "visualImage", "title"].indexOf(String(body && body.field)) === -1
         ? "" : String(body.field),
+      /* The colour this person picked for themselves (#194), which ends up
+         in another browser's style attribute — so a "#rrggbb" and nothing
+         else, whitelisted rather than sanitised. The client checks it
+         against its own eight colours again. */
+      color: presenceColor(body && body.color),
       at: now
     });
     const here = [];
     for (const [id, who] of people) {
       if (id === me) continue;
-      here.push({ id, name: who.name, rowId: who.rowId, field: who.field });
+      const entry = { id, name: who.name, rowId: who.rowId, field: who.field };
+      if (who.color) entry.color = who.color;
+      here.push(entry);
     }
     return answer(here);
   }
