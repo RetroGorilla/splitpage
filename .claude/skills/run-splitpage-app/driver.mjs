@@ -306,6 +306,14 @@ async function connectCdp() {
   log("cdp connected");
   await send("Page.enable");
   await send("Runtime.enable");
+  // Every suite runs in the light theme, whatever the machine's own (#169).
+  // A headless browser takes prefers-color-scheme from the OS, so on a
+  // machine set to dark mode the app drew its dark palette and every suite
+  // that reads a colour back (12's gear rule, 94's and 96's lamps) failed
+  // against values that are right in the light theme the suites are written
+  // for. A suite that wants the dark theme says so by setting data-theme on
+  // <html> itself (96 and 97 do). driver.ps1 does the same.
+  await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
   // The first-run wizard shows itself over the pristine demo (invariant #30),
   // which is exactly what every suite loads — and its backdrop swallows the
   // real mouse clicks the suites make. Mark onboarding as done before any

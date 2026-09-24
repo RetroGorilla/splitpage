@@ -74,6 +74,9 @@ import {
   setDropMarkerForRow,
   splitCellField,
   swapAdjacentRows,
+  closeRowMenus,
+  rowMenuKeydown,
+  toggleRowMenu,
   updateDragScroll,
   videoFirstFrame
 } from "./06-rows.js";
@@ -512,11 +515,16 @@ export function onRootClick(e) {
     return;
   }
 
+  /* The scene's "⋯" menu (#169, 06-rows.js). detail 0 is a click the
+     keyboard made — Enter or Space — so the first item takes focus. */
+  var rowMenuBtn = e.target.closest('[data-action="row-menu"]');
+  if (rowMenuBtn) { toggleRowMenu(rowMenuBtn, e.detail === 0); return; }
+
   var moveUp = e.target.closest('[data-action="move-up"]');
-  if (moveUp) { moveRow(moveUp.getAttribute("data-id"), -1); return; }
+  if (moveUp) { moveRow(moveUp.getAttribute("data-id"), -1); refocusRowMenu(moveUp.getAttribute("data-id")); return; }
 
   var moveDown = e.target.closest('[data-action="move-down"]');
-  if (moveDown) { moveRow(moveDown.getAttribute("data-id"), 1); return; }
+  if (moveDown) { moveRow(moveDown.getAttribute("data-id"), 1); refocusRowMenu(moveDown.getAttribute("data-id")); return; }
 
   var insertBelow = e.target.closest('[data-action="insert-below"]');
   if (insertBelow) { addRow(insertBelow.getAttribute("data-id")); return; }
@@ -564,6 +572,20 @@ export function onRootClick(e) {
 /* The slot the file picker's picture goes to: a number for Replace,
    undefined to add one (#135). */
 var pendingImageSlot;
+
+/* A move from the scene's menu repaints its gutter, and the menu item that
+   had focus goes with it — leaving focus on <body>, where the next arrow
+   key does nothing. It comes back to the moved scene's "⋯", so a second
+   Move up is one Enter and one arrow away. Only when focus really was
+   lost: a move made while a script cell has the caret (a test's jsclick,
+   a merge landing) leaves the caret where it is. */
+function refocusRowMenu(rowId) {
+  closeRowMenus();
+  var a = document.activeElement;
+  if (a && a !== document.body && a.isConnected && !(a.closest && a.closest(".row-menu"))) return;
+  var btn = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"] .row-more');
+  if (btn) btn.focus({ preventScroll: true });
+}
 
 
 
@@ -1025,6 +1047,7 @@ function onRootPaste(e) {
 }
 
 function onRootKeydown(e) {
+  if (rowMenuKeydown(e)) return;
   if (e.target.matches && e.target.matches(".link-popover input")) {
     if (e.key === "Enter") { e.preventDefault(); confirmLink(e.target.closest(".field-wrap")); }
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelLink(e.target.closest(".field-wrap")); }
@@ -1442,6 +1465,10 @@ function init() {
   rowsEl.addEventListener("copy", onRootCopy);
   rowsEl.addEventListener("cut", onRootCut);
   rowsEl.addEventListener("keydown", onRootKeydown);
+  /* An open scene menu closes on a press anywhere outside it (#169). */
+  document.addEventListener("mousedown", function (e) {
+    if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
+  }, true);
   configureUndo({ commentsAreSent: onServerDoc, afterApply: afterUndoApplied, onRefused: onUndoRefused });
   /* Ctrl+Z with nothing focused, or a button — after deleting a scene from
      its menu, say — is the document's undo too. A focused script cell
@@ -1499,9 +1526,12 @@ function init() {
     document.getElementById("tagging-help").hidden = true;
     try { localStorage.setItem(TAGGING_HELP_KEY, "1"); } catch (e) {}
   });
-  var helpDismissed = false;
-  try { helpDismissed = localStorage.getItem(TAGGING_HELP_KEY) === "1"; } catch (e) {}
-  if (!helpDismissed) document.getElementById("tagging-help").hidden = false;
+  /* The reference no longer opens itself over the script on every visit
+     until dismissed (#169, the brief's "the script starts immediately"):
+     it was a whole panel between the header and the first scene. It is
+     one click away wherever it was before — File ▸ Tagging reference, the
+     start page's "Tagging cheat sheet", Help, and the tour's step that
+     shows it (showTaggingHelp, 10-comments.js). */
 
   /* ---- find & replace ---- */
   document.getElementById("find-close").addEventListener("click", closeFindBar);

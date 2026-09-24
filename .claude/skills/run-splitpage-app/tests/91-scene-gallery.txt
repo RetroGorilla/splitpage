@@ -42,8 +42,9 @@ expect tiles('r5')[3].textContent === '+2' && tiles('r5')[3].getAttribute('aria-
 expect tiles('r5')[3].querySelector('img').getAttribute('data-blob') === shas('r5')[3]
 expect !!tiles('r5')[3].querySelector('.scene-gallery-play')
 expect tiles('r10').length === 4 && tiles('r10')[3].textContent === '+7'
-# the mosaic's height does not change with how many there are
-wait (function(){ var h = [gal('r3'), gal('r4'), gal('r5'), gal('r10')].map(function(g){ return Math.round(g.getBoundingClientRect().height); }); return h.every(function(x){ return x === h[0] && x >= 130 && x <= 145; }); })()
+# the mosaic's height does not change with how many there are — 162px since
+# #169 (B-Gallery draws it 360 by 162; it was three 44px rows, ~140)
+wait (function(){ var h = [gal('r3'), gal('r4'), gal('r5'), gal('r10')].map(function(g){ return Math.round(g.getBoundingClientRect().height); }); return h.every(function(x){ return x === h[0] && x >= 155 && x <= 170; }); })()
 # a video cover: the big badge and its length
 expect tiles('r10')[0].classList.contains('is-video') && !!tiles('r10')[0].querySelector('.scene-gallery-play.is-big')
 expect tiles('r10')[0].querySelector('.scene-gallery-length').textContent === '0:42'

@@ -138,6 +138,14 @@ function Connect-Cdp {
   Log 'cdp connected'
   $null = Send-Cdp 'Page.enable'
   $null = Send-Cdp 'Runtime.enable'
+  # Every suite runs in the light theme, whatever the machine's own (#169).
+  # Headless Edge takes prefers-color-scheme from Windows, so on a PC set to
+  # dark mode the app drew its dark palette and every suite that reads a
+  # colour back (12's gear rule, 94's and 96's lamps) failed against values
+  # that are right in the light theme the suites are written for - the cloud
+  # container and CI run light. A suite that wants the dark theme says so by
+  # setting data-theme on <html> itself (96 and 97 do).
+  $null = Send-Cdp 'Emulation.setEmulatedMedia' @{ features = @(@{ name = 'prefers-color-scheme'; value = 'light' }) }
   # The first-run wizard shows itself over the pristine demo (invariant #30),
   # which is exactly what every suite loads - and its backdrop swallows the
   # real mouse clicks the suites make. Mark onboarding as done before any

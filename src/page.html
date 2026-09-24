@@ -102,57 +102,43 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
     <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1 1 17.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 1 1-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 1 1 6.5 15H9z"/></symbol>
+    <!-- The editor's own (#169, Direction B): the header's panel toggles,
+         the gutter's grip and "⋯" menu, the picture slot and the format
+         toolbar. Same grid, same 1.75 stroke. -->
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24"><path d="M4.5 5h15a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="0.9"/><circle cx="15" cy="6" r="0.9"/><circle cx="9" cy="12" r="0.9"/><circle cx="15" cy="12" r="0.9"/><circle cx="9" cy="18" r="0.9"/><circle cx="15" cy="18" r="0.9"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6.5 13.5L12 19l5.5-5.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5a1 1 0 0 0 1 .9h7a1 1 0 0 0 1-.9l1-12.5"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8 8"/></symbol>
+    <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M13.5 5l5.5 5.5-7.5 7.5H6v-5.5z"/><path d="M4 21h16"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.75"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
   </defs>
 </svg>
 <div id="root">
+  <!-- The header (#169, Direction B): one row and the rundown strip under
+       it. Left, the app and the document — the mark, File, the title, and
+       Save as a status rather than a box; centre, the program clock; right,
+       the panels as quiet toggles, Write as a mode, and Present, the one
+       primary action and the one thing in tally red. Every id the rest of
+       the app and the suites reach for is the one it always was; only
+       where each sits has changed. -->
   <header class="topbar">
-    <div>
-      <div class="brand-row">
-        <!-- The mark (#169): a tally monitor, preview blue beside program
-             amber with the tally light above. Its colours are fixed, the
-             same in both themes — it is the logo, not a themed control. -->
-        <span class="brand"><svg class="brand-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>Splitpage</span>
-      </div>
-      <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
-      <!-- One line of plain text under the title: file, runtime, who you are,
-           each separated by a dot drawn in CSS (.doc-meta in app.css) so a
-           hidden item never leaves a stray separator behind. -->
-      <div class="doc-meta">
-        <div class="file-chip" id="file-chip" hidden>
-          <span class="file-chip-icon">📄</span>
-          <span id="file-chip-name"></span>
-          <span class="file-chip-state" id="file-chip-state"></span>
+    <div class="topbar-row">
+      <div class="topbar-left">
+        <div class="brand-row">
+          <!-- The mark (#169): a tally monitor, preview blue beside program
+               amber with the tally light above. Its colours are fixed, the
+               same in both themes — it is the logo, not a themed control. -->
+          <span class="brand"><svg class="brand-mark" width="24" height="22" viewBox="0 0 24 22" aria-hidden="true"><rect x="0.5" y="0.5" width="23" height="21" rx="4.5" fill="#141311" stroke="#43423F"/><rect x="3.5" y="6" width="7.8" height="12.5" rx="1.5" fill="#80BDFB"/><rect x="12.7" y="6" width="7.8" height="12.5" rx="1.5" fill="#F9B64F"/><circle cx="18.8" cy="3.3" r="1.6" fill="#F45246"/></svg>Splitpage</span>
         </div>
-        <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
-             joined with the review credential and a hosted document is open:
-             the fields are not editable and the server would refuse the save
-             anyway, so say which before anyone types. -->
-        <div class="review-chip" id="review-chip" hidden
-             title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
-          <span class="review-chip-icon" aria-hidden="true">👁</span>
-          <span>Viewing · comments only</span>
-        </div>
-        <!-- Who else is in this hosted document, filled in by 13a-presence.js
-             from /api/presence. Empty and hidden on a local document, and never
-             part of the document itself. -->
-        <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
-        <span class="stat-chips">
-          <button type="button" class="stat-chip" id="runtime-chip"
-                  title="Estimated read time for the Audio column — click to set your reading speed">
-            <span>⏱</span><span id="runtime-total">0:00</span>
-          </button>
-          <span class="stat-chip" id="progress-chip" hidden>
-            <span class="stat-dot"></span><span id="progress-text"></span>
-          </span>
-        </span>
-        <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
-          <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
-        </button>
-      </div>
-    </div>
-    <div class="toolbar">
       <div class="menu-wrap">
-        <button class="btn" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">☰ File</button>
+        <button class="btn btn-quiet" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">File<svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
         <!-- Only drawn at phone width, where the menu is a sheet from the
              bottom of the screen; a dropdown needs no scrim. -->
         <div class="menu-backdrop" id="file-menu-backdrop" hidden></div>
@@ -303,21 +289,93 @@
           </div>
         </div>
       </div>
-      <div class="btn-group" role="group" aria-label="Panels">
-        <button class="btn" id="btn-production" type="button">Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
-        <button class="btn" id="btn-gear" type="button" title="Gear: an equipment list, tagged with <gear> or its own quick-add box">Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
-        <button class="btn" id="btn-broll" type="button" title="B-roll: start a line in the visual column with B-roll: and it lands on this list">B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
-        <button class="btn" id="btn-comments" type="button">Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+        <span class="topbar-rule" aria-hidden="true"></span>
+        <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
+        <!-- Save is a status that is also the button (#169): "Saved 2 min
+             ago", "Unsaved changes", "Saving…" — click it to save. The words
+             come from updateSaveStatus() (12-dirty-toast.js), which writes
+             them onto #btn-save as data-status for the CSS to draw; the
+             button's own text stays "Save" / "Save •", which the writer's
+             Save button mirrors (invariant #20). #save-status is the same
+             words for a screen reader, `aria-live="polite"` so it hears
+             "Saved" without being interrupted mid-sentence. -->
+        <div class="save-state">
+          <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
+          <button class="save-btn" id="btn-save" type="button" data-status="Save">Save</button>
+        </div>
+        <!-- Who else is in this hosted document, filled in by 13a-presence.js
+             from /api/presence. Empty and hidden on a local document, and never
+             part of the document itself. -->
+        <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
+        <!-- The document's facts that are not the clock: a review session,
+             an imported file, the shot count, and who you are. Quiet text,
+             one dot between each item that is showing, drawn in CSS
+             (.doc-meta in app.css) so a hidden item never leaves a stray
+             separator behind — and only in the room the title leaves. -->
+        <div class="doc-meta">
+          <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
+               joined with the review credential and a hosted document is open:
+               the fields are not editable and the server would refuse the save
+               anyway, so say which before anyone types. -->
+          <div class="review-chip" id="review-chip" hidden
+               title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
+            <svg class="review-chip-icon" aria-hidden="true"><use href="#i-eye"/></svg>
+            <span>Viewing · comments only</span>
+          </div>
+          <div class="file-chip" id="file-chip" hidden>
+            <svg class="file-chip-icon" aria-hidden="true"><use href="#i-file"/></svg>
+            <span id="file-chip-name"></span>
+            <span class="file-chip-state" id="file-chip-state"></span>
+          </div>
+          <span class="stat-chip" id="progress-chip" hidden>
+            <span class="stat-dot"></span><span id="progress-text"></span>
+          </span>
+          <button class="identity-chip" id="identity-chip" type="button" title="Change the name your edits and comments are signed with">
+            <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
+          </button>
+        </div>
       </div>
-      <button class="btn" id="btn-write" type="button" title="Write the narration as one flowing document">✎ Write</button>
-      <!-- Whether what is on screen is on disk yet, in words, next to the
-           button that puts it there. Filled in by updateSaveStatus()
-           (12-dirty-toast.js); `aria-live="polite"` so a screen reader hears
-           "Saved" without being interrupted mid-sentence. -->
-      <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
-      <button class="btn btn-primary" id="btn-save" type="button">Save</button>
-      <button class="btn btn-accent" id="btn-present" type="button">▶ Present</button>
+      <!-- The program clock (#169): the script's whole read time, centred,
+           in the mono. Still the runtime chip it always was — click it to
+           set the reading speed (promptForWpm, 03-sync.js). The slot after
+           the total is empty on purpose: a target length per script (#170)
+           puts " / 02:00" and "0:25 left" there. -->
+      <div class="program-clock-wrap">
+        <button type="button" class="program-clock" id="runtime-chip"
+                title="Estimated read time for the Audio column — click to set your reading speed">
+          <span class="program-clock-total" id="runtime-total">00:00</span>
+          <span class="program-clock-slot" id="program-clock-slot"></span>
+        </button>
+      </div>
+      <div class="toolbar">
+        <!-- The four panels share one slot on the right; each is a quiet
+             toggle — icon, label, and its count in the mono — pressed while
+             its panel is open (syncPanelClass, 03-sync.js). -->
+        <div class="btn-group" role="group" aria-label="Panels">
+          <button class="btn panel-toggle" id="btn-production" type="button" aria-pressed="false"><svg class="btn-icon" aria-hidden="true"><use href="#i-tag"/></svg>Production<span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-gear" type="button" aria-pressed="false" title="Gear: an equipment list, tagged with <gear> or its own quick-add box"><svg class="btn-icon" aria-hidden="true"><use href="#i-box"/></svg>Gear<span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg>B-roll<span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
+          <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg>Comments<span class="comments-badge" id="comments-badge" hidden>0</span></button>
+        </div>
+        <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg>Write</button>
+        <!-- The one primary action, and the one tally-red thing in the
+             header: presenting is going live. -->
+        <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span>Present</button>
+      </div>
     </div>
+    <!-- The rundown (#169): the script as blocks sized by read time on a
+         time ruler, drawn by 05f-rundown.js from state.rows. Clicking a
+         block goes to that scene. #rundown-overlay is the layer a line can
+         be placed on by time — a target length (#170) draws its line and
+         hatching there. -->
+    <section class="rundown" id="rundown" aria-label="Rundown" hidden>
+      <div class="rundown-ruler" aria-hidden="true"></div>
+      <div class="rundown-track">
+        <div class="rundown-blocks"></div>
+        <div class="rundown-overlay" id="rundown-overlay" aria-hidden="true"></div>
+        <div class="rundown-playhead" aria-hidden="true" hidden></div>
+      </div>
+    </section>
   </header>
 
   <div class="findbar" id="findbar" hidden>
@@ -334,7 +392,7 @@
 
   <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
   <div class="update-bar" id="update-bar" hidden>
-    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <svg class="update-bar-icon" aria-hidden="true"><use href="#i-import"/></svg>
     <span id="update-bar-text"></span>
     <!-- 20a-update.js owns this button entirely: whether it shows at all, its
          label, and what it does. Label and handler both change with the state
@@ -348,7 +406,7 @@
        desktop app (20a-update.js renderDesktopAppNotice). Same class shape
        as #update-bar so it reuses those rules and stacks the same way. -->
   <div class="update-bar" id="desktop-app-bar" hidden>
-    <span class="update-bar-icon" aria-hidden="true">⬆</span>
+    <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
     <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
     <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
     <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
@@ -371,7 +429,7 @@
         <div class="tagging-help-row"><kbd>Tab</kbd><span>completes a tag you've already used, keeping its own category.</span></div>
         <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>starts the next scene and jumps into it.</span></div>
         <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>F</kbd><span>find and replace across the whole script.</span></div>
-        <div class="tagging-help-note">Click a tag in the script — or any card in <strong>Production</strong> — to assign who's responsible and keep notes, links or file paths against it. Group the breakdown by category, person, scene or <strong>Shoot</strong> (everything at one location together), and export the lot as CSV. Drag a scene by its number to reorder; click the dot beside it to mark it To&nbsp;do / Ready / Shot.</div>
+        <div class="tagging-help-note">Click a tag in the script — or any card in <strong>Production</strong> — to assign who's responsible and keep notes, links or file paths against it. Group the breakdown by category, person, scene or <strong>Shoot</strong> (everything at one location together), and export the lot as CSV. Drag a scene by its number to reorder; click its status to mark it To&nbsp;do / Ready / Shot.</div>
       </div>
     </div>
   </div>
@@ -418,10 +476,13 @@
     </div>
   </div>
 
+  <!-- Column identity is the heading and a lamp, not a tint over the whole
+       column (#169): the page under the words is one calm surface. -->
   <div class="col-head">
-    <div class="col-head-cell"></div>
-    <div class="col-head-cell visual">Visual</div>
-    <div class="col-head-cell audio">Audio</div>
+    <div class="col-head-cell scene">Scene</div>
+    <div class="col-head-cell visual"><span class="col-lamp" aria-hidden="true"></span>Visual</div>
+    <div class="col-head-cell audio"><span class="col-lamp" aria-hidden="true"></span>Audio</div>
+    <div class="col-head-cell read">Read</div>
   </div>
 
   <div id="rows"></div>
