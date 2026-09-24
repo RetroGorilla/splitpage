@@ -61,6 +61,7 @@ expect window.__swEntries.indexOf('/index.html') !== -1
 expect window.__swEntries.indexOf('/') !== -1
 expect window.__swEntries.indexOf('/manifest.webmanifest') !== -1
 expect window.__swEntries.indexOf('/icon.svg') !== -1
+expect window.__swEntries.indexOf('/icon-maskable.svg') !== -1
 
 # ---- the page is network-first -----------------------------------------
 #

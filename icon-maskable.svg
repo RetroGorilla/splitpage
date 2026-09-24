@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- icon.svg for Android's adaptive icons (manifest purpose "maskable"):
+       a full-bleed tile, since the launcher cuts its own shape, and the
+       artwork scaled into the centre 80% circle every mask keeps, so the
+       tally lamp in the corner survives a round crop. -->
+  <rect width="512" height="512" fill="#0F0E0C"/>
+  <g transform="translate(256 256) scale(0.82) translate(-266 -246)">
+    <rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/>
+    <rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/>
+    <rect x="120" y="176" width="100" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="120" y="208" width="76" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="120" y="240" width="90" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="120" y="296" width="100" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="120" y="328" width="62" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="292" y="176" width="84" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="292" y="208" width="100" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="292" y="240" width="88" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="292" y="272" width="56" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="292" y="328" width="100" height="14" rx="7" fill="#0F0E0C"/>
+    <rect x="292" y="360" width="72" height="14" rx="7" fill="#0F0E0C"/>
+    <circle cx="404" cy="116" r="50" fill="#0F0E0C"/>
+    <circle cx="404" cy="116" r="38" fill="#D7352D"/>
+    <circle cx="404" cy="116" r="26" fill="#F45246"/>
+  </g>
+</svg>
