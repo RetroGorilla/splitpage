@@ -43,22 +43,22 @@ expect !document.getElementById('comments-panel').hidden
 expect window.__panelWidth('comments-panel') === 333
 
 # =============================================================================
-# defaults differ per panel: Production and B-roll start wider (520) than
-# Comments/Gear/History (400) — same clamp range (280-720) for all five.
+# every panel starts at the B boards' 488 (#169) — same clamp range
+# (280-720) for all five, and each remembers its own width from there.
 # =============================================================================
 jsclick #btn-production
 sleep 300
-expect window.__panelWidth('production-panel') === 520
+expect window.__panelWidth('production-panel') === 488
 jsclick #btn-gear
 sleep 300
-expect window.__panelWidth('gear-panel') === 400
+expect window.__panelWidth('gear-panel') === 488
 jsclick #btn-broll
 sleep 300
-expect window.__panelWidth('broll-panel') === 520
+expect window.__panelWidth('broll-panel') === 488
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 sleep 300
-expect window.__panelWidth('history-panel') === 400
+expect window.__panelWidth('history-panel') === 488
 
 # =============================================================================
 # drag never starts a text selection or a scene drag underneath — the
@@ -80,40 +80,40 @@ expect window.__panelWidth('production-panel') === 280
 # double-click resets to that panel's own default
 # =============================================================================
 eval (function(){document.getElementById('production-panel-resize-handle').dispatchEvent(new MouseEvent('dblclick', {bubbles:true, cancelable:true}));return true;})()
-expect window.__panelWidth('production-panel') === 520
+expect window.__panelWidth('production-panel') === 488
 
 # =============================================================================
 # per-panel independence: widen Production, open Comments — Comments is
 # unaffected — then reopen Production and it is still the wide one.
 # =============================================================================
 eval window.__dragHandle('production-panel-resize-handle', 500, 370)
-expect window.__panelWidth('production-panel') === 650
+expect window.__panelWidth('production-panel') === 618
 jsclick #btn-comments
 sleep 300
 expect window.__panelWidth('comments-panel') === 333
 expect document.getElementById('production-panel').hidden
 jsclick #btn-production
 sleep 300
-expect window.__panelWidth('production-panel') === 650
+expect window.__panelWidth('production-panel') === 618
 
 # =============================================================================
 # #root's padding-right (>=1100px) tracks whichever panel is actually open,
 # for every panel — not a fixed guess
 # =============================================================================
-expect window.__rootPadding() === 670
+expect window.__rootPadding() === 638
 jsclick #btn-comments
 sleep 300
 expect window.__rootPadding() === 353
 jsclick #btn-gear
 sleep 300
-expect window.__rootPadding() === 420
+expect window.__rootPadding() === 508
 jsclick #btn-broll
 sleep 300
-expect window.__rootPadding() === 540
+expect window.__rootPadding() === 508
 jsclick #btn-file
 jsclick #file-menu [data-file-action="history"]
 sleep 300
-expect window.__rootPadding() === 420
+expect window.__rootPadding() === 508
 
 # =============================================================================
 # persistence across reload — kept minimal and at the very end. Narrow Gear
@@ -125,17 +125,17 @@ expect window.__rootPadding() === 420
 jsclick #btn-gear
 sleep 300
 eval window.__dragHandle('gear-panel-resize-handle', 500, 600)
-expect window.__panelWidth('gear-panel') === 300
+expect window.__panelWidth('gear-panel') === 388
 
 goto /index.html
 sleep 900
 eval (function(){window.__panelWidth=function(id){return parseFloat(getComputedStyle(document.getElementById(id)).getPropertyValue('--panel-width'));};return true;})()
 jsclick #btn-gear
 sleep 300
-expect window.__panelWidth('gear-panel') === 300
+expect window.__panelWidth('gear-panel') === 388
 jsclick #btn-production
 sleep 300
-expect window.__panelWidth('production-panel') === 650
+expect window.__panelWidth('production-panel') === 618
 jsclick #btn-comments
 sleep 300
 expect window.__panelWidth('comments-panel') === 333

@@ -118,6 +118,28 @@
     <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M13.5 5l5.5 5.5-7.5 7.5H6v-5.5z"/><path d="M4 21h16"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.75"/></symbol>
     <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
+    <!-- The side panels', the start page's, the prompter's and the phone's
+         (#169, Direction B phases 3 and 4), added in one go so the lanes
+         that draw those never have to edit the sprite. Paths from the
+         boards. -->
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.25"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M15.5 14.3a4.5 4.5 0 0 1 5 5.2"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.8 2.8 5.2-5.6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-return" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H6M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6.5v11M15 6.5v11"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-mirror" viewBox="0 0 24 24"><path d="M12 3v18M8.5 7.5L4 17h4.5zM15.5 7.5L20 17h-4.5z"/></symbol>
+    <symbol id="i-flip" viewBox="0 0 24 24"><path d="M3 12h18M7.5 8.5L17 4v4.5zM7.5 15.5L17 20v-4.5z"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
+    <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
+    <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
   </defs>
 </svg>
 <div id="root">
@@ -706,28 +728,31 @@
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="comment-title">
     <div class="modal-header">
       <h2 id="comment-title">Add a comment</h2>
-      <button type="button" class="modal-close" id="comment-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" id="comment-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
+    <!-- The thread card's language (#169): the words in the script face with
+         the comment's amber dotted underline, fields outlined at rest, the
+         format toolbar as the script's icons. -->
     <div class="comment-modal-quote" id="comment-modal-quote"></div>
-    <div class="comment-field-label">Your name</div>
+    <label class="comment-field-label" for="comment-name">Your name</label>
     <div class="comment-name-row">
-      <input type="text" id="comment-name" placeholder="e.g. Jordan" autocomplete="off" spellcheck="false">
+      <input type="text" id="comment-name" class="ev-field" placeholder="e.g. Jordan" autocomplete="off" spellcheck="false">
     </div>
-    <div class="comment-field-label">Comment</div>
-    <div class="field-wrap">
+    <div class="comment-field-label" id="comment-body-label">Comment</div>
+    <div class="field-wrap comment-modal-field">
       <div class="mini-toolbar" role="toolbar" aria-label="Comment formatting">
-        <button type="button" data-cmd="bold" title="Bold">B</button>
-        <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
-        <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
-        <button type="button" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+        <button type="button" data-cmd="bold" title="Bold" aria-label="Bold"><span class="tb-letter tb-b">B</span></button>
+        <button type="button" data-cmd="italic" title="Italic" aria-label="Italic"><span class="tb-letter tb-i">I</span></button>
+        <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><span class="tb-letter tb-u">U</span></button>
+        <button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><span class="tb-letter tb-s">S</span></button>
         <span class="tb-sep"></span>
-        <button type="button" data-cmd="highlight" title="Highlight"><span class="hl-dot"></span>HL</button>
-        <button type="button" data-cmd="link" title="Add link">Link</button>
+        <button type="button" data-cmd="highlight" title="Highlight" aria-label="Highlight"><svg class="tb-icon" aria-hidden="true"><use href="#i-highlight"/></svg></button>
+        <button type="button" data-cmd="link" title="Add link" aria-label="Link"><svg class="tb-icon" aria-hidden="true"><use href="#i-link"/></svg></button>
         <span class="tb-sep"></span>
-        <button type="button" data-cmd="image" title="Add image">🖼 Image</button>
-        <button type="button" data-cmd="video" title="Add video link">▶ Video</button>
+        <button type="button" data-cmd="image" title="Add image" aria-label="Image"><svg class="tb-icon" aria-hidden="true"><use href="#i-image"/></svg></button>
+        <button type="button" data-cmd="video" title="Add video link" aria-label="Video link"><svg class="tb-icon" aria-hidden="true"><use href="#i-play"/></svg></button>
       </div>
-      <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…"></div>
+      <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…" aria-labelledby="comment-body-label"></div>
       <div class="link-popover" hidden>
         <input type="url" placeholder="https://example.com" data-role="link-input">
         <button type="button" data-action="link-confirm">Add</button>
@@ -830,74 +855,89 @@
   <div class="comments-panel-resize-handle" id="production-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Production breakdown</h2>
-    <button type="button" class="modal-close" id="production-close" aria-label="Close">×</button>
+    <button type="button" class="modal-close" id="production-close" aria-label="Close Production"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <div class="comments-panel-toggle production-controls">
-    <div class="group-seg" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
-      <button type="button" data-group="cat" role="radio" aria-checked="true">Category</button>
-      <button type="button" data-group="person" role="radio" aria-checked="false">Person</button>
-      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
-      <button type="button" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
+  <!-- #169 (B-PanelProduction): the groupings as text tabs, the CSV
+       export as an outlined button, one hairline under both. -->
+  <div class="panel-tabbar">
+    <div class="panel-tabs" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
+      <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="true">Category</button>
+      <button type="button" class="panel-tab" data-group="person" role="radio" aria-checked="false">Person</button>
+      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Scene</button>
+      <button type="button" class="panel-tab" data-group="shoot" role="radio" aria-checked="false">Shoot</button>
     </div>
-    <button type="button" class="group-export" data-action="export-breakdown" title="Export this breakdown as a spreadsheet">CSV</button>
+    <button type="button" class="btn-outline is-small" data-action="export-breakdown" title="Export this breakdown as a spreadsheet" aria-label="Export this breakdown as a spreadsheet (CSV)"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>CSV</button>
   </div>
   <!-- Only rendered while something is selected. Sits outside #production-list
        so it stays pinned while the list scrolls under it. -->
   <div class="bulk-bar" id="production-bulk" hidden></div>
+  <!-- What each value in a row is (Adam's review). Shown for the two
+       groupings drawn as rows, Category and Person (renderProductionList). -->
+  <div class="tag-col-labels" id="production-cols" aria-hidden="true" hidden>
+    <span>Item</span><span>Status</span><span>Scenes</span><span>Owner</span>
+  </div>
   <div class="comments-list" id="production-list"></div>
 </div>
 
 <div class="comments-panel" id="gear-panel" hidden>
   <div class="comments-panel-resize-handle" id="gear-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
-    <h2>Gear</h2>
-    <button type="button" class="modal-close" id="gear-close" aria-label="Close">×</button>
-  </div>
-  <div class="comments-panel-toggle production-controls">
-    <div class="group-seg" id="gear-modes" role="radiogroup" aria-label="Group gear by">
-      <button type="button" data-group="flat" role="radio" aria-checked="true">List</button>
-      <button type="button" data-group="scene" role="radio" aria-checked="false">Scene</button>
+    <!-- "Gear · 2 items" (#169, B-PanelGear); the count is renderGearList's -->
+    <div class="gear-head-title">
+      <h2>Gear</h2>
+      <span class="gear-head-count" id="gear-head-count" hidden></span>
     </div>
-    <button type="button" class="group-export" data-action="export-packing-gear" title="Export a printable packing list">Packing list</button>
+    <button type="button" class="modal-close" id="gear-close" aria-label="Close Gear"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
+  <!-- #169: the groupings as text tabs and a quiet Packing list button -->
+  <div class="panel-tabbar">
+    <div class="panel-tabs" id="gear-modes" role="radiogroup" aria-label="Group gear by">
+      <button type="button" class="panel-tab" data-group="flat" role="radio" aria-checked="true">List</button>
+      <button type="button" class="panel-tab" data-group="scene" role="radio" aria-checked="false">Scene</button>
+    </div>
+    <button type="button" class="gear-packing-btn" data-action="export-packing-gear" title="Export a printable packing list" aria-label="Packing list: export a printable PDF"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>Packing list</button>
+  </div>
+  <div class="comments-list" id="gear-list"></div>
   <!-- Bulk-adds or edits the gear list directly, whether or not any of it is
        actually typed into the script — see applyGearQuickAdd(). Pre-filled
-       with the current list every time the panel opens. -->
+       with the current list every time the panel opens. At the panel's foot
+       since #169, under the list it edits. -->
   <div class="gear-quickadd">
     <label for="gear-quickadd-input">Add gear — one item per line</label>
-    <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand"></textarea>
+    <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand" aria-describedby="gear-quickadd-hint"></textarea>
     <div class="gear-quickadd-row">
-      <span class="gear-quickadd-hint">Remove a line to un-track it — unless it's still tagged in the script.</span>
+      <span class="gear-quickadd-hint" id="gear-quickadd-hint">Remove a line to un-track it — unless it’s still tagged in the script.</span>
       <button type="button" id="gear-quickadd-save">Update list</button>
     </div>
   </div>
-  <div class="comments-list" id="gear-list"></div>
 </div>
 
 <div class="comments-panel broll-panel" id="broll-panel" hidden>
   <div class="comments-panel-resize-handle" id="broll-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
+  <!-- B-BrollCalm (#169): the title, "1 of 3 shot" and a small bar on one
+       line, then Open as a full page and Close. -->
   <div class="comments-panel-head">
-    <h2>B-roll</h2>
+    <div class="broll-head-main">
+      <h2>B-roll</h2>
+      <!-- the count and the bar: drawn by renderBroll() (08d-broll-panel.js) -->
+      <div class="broll-summary" id="broll-summary"></div>
+    </div>
     <button type="button" class="broll-head-btn" id="broll-open-page" data-action="broll-open-page"
-      title="Open as a full page" aria-label="Open as a full page"><svg class="broll-ico" width="16" height="16"
-      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
-      stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg></button>
-    <button type="button" class="modal-close" id="broll-close" aria-label="Close">×</button>
+      title="Open as a full page" aria-label="Open as a full page"><svg aria-hidden="true" focusable="false"><use href="#i-expand"/></svg></button>
+    <button type="button" class="modal-close" id="broll-close" aria-label="Close B-roll"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <!-- The summary, the filter chips and the Group menu: drawn by
-       renderBroll() (08d-broll-panel.js), since every count in them moves. -->
-  <div class="broll-controls" id="broll-controls"></div>
+  <!-- The filter tabs and the group menu: drawn by renderBroll()
+       (08d-broll-panel.js), since every count in them moves. -->
+  <div class="panel-tabbar broll-controls" id="broll-controls"></div>
   <div class="comments-list broll-list" id="broll-list"></div>
   <!-- Only there while shots are selected: pinned under the list. -->
   <div class="broll-bulk" id="broll-bulk" hidden></div>
   <!-- A shot nobody has written a scene for yet is an ordinary thing to
-       want on the list — see addBrollFromPanel(). -->
-  <div class="broll-add gear-quickadd" id="broll-add">
-    <div class="broll-add-row">
-      <input type="text" id="broll-add-input" maxlength="200" placeholder="Add a shot" aria-label="Add a shot">
-      <button type="button" id="broll-add-save">Add</button>
-    </div>
-    <div class="broll-add-hint">Or start a line with <code>B-roll:</code> in the Visual column.</div>
+       want on the list — see addBrollFromPanel(). The placeholder carries
+       the other way in, so the foot is one line (#169). -->
+  <div class="broll-add" id="broll-add">
+    <input type="text" id="broll-add-input" maxlength="200" placeholder="Add a shot — or start a Visual line with B-roll:" aria-label="Add a shot">
+    <button type="button" class="btn-outline is-small" id="broll-add-save">Add</button>
   </div>
 </div>
 
@@ -1068,36 +1108,52 @@
   <div class="comments-panel-resize-handle" id="history-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Version history</h2>
-    <button type="button" class="modal-close" id="history-close" aria-label="Close">×</button>
+    <button type="button" class="modal-close" id="history-close" aria-label="Close Version history"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <div class="comments-panel-toggle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</div>
-  <div class="comments-list" id="history-list"></div>
-  <details id="history-older" class="history-older" hidden><summary id="history-older-summary">Older history (before per-document history)</summary><p class="modal-hint">Saved before Splitpage kept history per document, so these may belong to a different script. Restoring one replaces this document's content.</p><div id="history-older-list"></div></details><div id="history-usage" class="modal-hint" hidden></div>
+  <p class="history-subtitle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</p>
+  <!-- One scrolling column under the subtitle (#169): the days, Older, then the usage line. -->
+  <div class="history-scroll">
+    <div class="history-list" id="history-list"></div>
+    <details id="history-older" class="history-older" hidden>
+      <summary id="history-older-summary"><svg class="history-older-chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg><span>Older history (before per-document history)</span><span class="history-fig" id="history-older-count"></span></summary>
+      <p class="history-older-hint">Saved before Splitpage kept history per document, so these may belong to a different script. Restoring one replaces this document's content.</p>
+      <ol class="history-older-list" id="history-older-list"></ol>
+    </details>
+    <p class="history-usage" id="history-usage" hidden></p>
+  </div>
 </div>
 
 <div class="comments-panel" id="comments-panel" hidden>
   <div class="comments-panel-resize-handle" id="comments-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
     <h2>Comments</h2>
-    <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close">×</button>
+    <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close Comments"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <div class="comments-panel-toggle">
-    <div class="comment-filter-seg group-seg" id="comments-filter-seg" role="radiogroup" aria-label="Filter comments">
-      <button type="button" data-filter="open" role="radio" aria-checked="true">Open<span class="filter-count" id="comments-filter-count-open">0</span></button>
-      <button type="button" data-filter="resolved" role="radio" aria-checked="false">Resolved<span class="filter-count" id="comments-filter-count-resolved">0</span></button>
-      <button type="button" data-filter="all" role="radio" aria-checked="false">All<span class="filter-count" id="comments-filter-count-all">0</span></button>
+  <!-- Filters (#169): Open / Resolved / All as the panels' text tabs, then
+       who it's assigned to and the sort as outlined menus. Both are real
+       selects; their labels are for screen readers, the chosen option is
+       what shows. -->
+  <div class="panel-tabbar comments-filterbar">
+    <div class="panel-tabs comment-filter-seg" id="comments-filter-seg" role="radiogroup" aria-label="Filter comments">
+      <button type="button" class="panel-tab" data-filter="open" role="radio" aria-checked="true">Open<span class="filter-count" id="comments-filter-count-open">0</span></button>
+      <button type="button" class="panel-tab" data-filter="resolved" role="radio" aria-checked="false">Resolved<span class="filter-count" id="comments-filter-count-resolved">0</span></button>
+      <button type="button" class="panel-tab" data-filter="all" role="radio" aria-checked="false">All<span class="filter-count" id="comments-filter-count-all">0</span></button>
     </div>
-    <span class="comments-sort-wrap">
-      <label for="comments-assignee-filter">Assigned</label>
-      <select id="comments-assignee-filter" aria-label="Filter by assignee"></select>
-    </span>
-    <span class="comments-sort-wrap">
-      <label for="comments-sort">Sort</label>
-      <select id="comments-sort" aria-label="Sort comments">
-        <option value="position">Script order</option>
-        <option value="recent">Most recent</option>
-      </select>
-    </span>
+    <div class="comments-filter-menus">
+      <label class="comments-filter-label" for="comments-assignee-filter">Assigned</label>
+      <span class="ev-field comments-filter-menu">
+        <select id="comments-assignee-filter" aria-label="Filter by assignee"></select>
+        <svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </span>
+      <label class="comments-filter-label" for="comments-sort">Sort</label>
+      <span class="ev-field comments-filter-menu">
+        <select id="comments-sort" aria-label="Sort comments">
+          <option value="position">Script order</option>
+          <option value="recent">Most recent</option>
+        </select>
+        <svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </span>
+    </div>
   </div>
   <div class="comments-list" id="comments-list"></div>
 </div>

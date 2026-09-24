@@ -35,7 +35,7 @@ expect F.state().rows[0].visualText === 'one' && F.state().rows[1].visualText ==
 # the comment points at the first of them, and its card says so
 expect c1().rowId === 'r1' && c1().field === 'audioText'
 jsclick #btn-comments
-wait card() && card().querySelector('.comment-loc').textContent === 'Row 01 · Audio'
+wait card() && card().querySelector('.comment-loc').textContent === 'Scene 01 · Audio'
 jsclick #comments-panel-close
 # the caret went with the words it moved
 expect document.activeElement === cell(__new)
@@ -59,7 +59,7 @@ expect aud(0) === 'Alpha '
 expect aud(1) === '<span class="cmt-anchor" data-cmt="c1">bravo charlie</span> delta'
 expect c1().rowId === __new && c1().field === 'audioText'
 jsclick #btn-comments
-wait card() && card().querySelector('.comment-loc').textContent === 'Row 02 · Audio'
+wait card() && card().querySelector('.comment-loc').textContent === 'Scene 02 · Audio'
 jsclick #comments-panel-close
 eval U.flush()
 expect U.sizes().undo === __u0 + 1
@@ -69,7 +69,7 @@ wait F.state().rows.length === 2
 expect aud(0) === ORIG
 expect c1().rowId === 'r1'
 jsclick #btn-comments
-wait card() && card().querySelector('.comment-loc').textContent === 'Row 01 · Audio'
+wait card() && card().querySelector('.comment-loc').textContent === 'Scene 01 · Audio'
 jsclick #comments-panel-close
 # and redo moves it again
 key ctrl+shift KeyZ

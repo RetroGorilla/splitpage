@@ -70,7 +70,7 @@ wait st('r1', 'audioText') === 'Alpha '
 expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="c1"]').length === 0
 jsclick #btn-comments
 wait card('c1')
-expect card('c1').querySelector('.comment-loc').textContent === 'Row 01 · Audio'
+expect card('c1').querySelector('.comment-loc').textContent === 'Scene 01 · Audio'
 eval selectText(cell('r2', 'visualText'), 'two')
 eval (function(){ U.flush(); window.__u1 = U.sizes().undo; return clip('paste', cell('r2', 'visualText'), { 'text/html': __cut.html, 'text/plain': __cut.text }).prevented; })()
 wait st('r2', 'visualText') === '<span class="cmt-anchor" data-cmt="c1">bravo</span> charlie'
@@ -78,7 +78,7 @@ expect F.state().comments.length === 1
 expect F.state().comments[0].rowId === 'r2' && F.state().comments[0].field === 'visualText'
 expect document.querySelector('#rows .row[data-id="r2"] .visual-cell .cmt-anchor[data-cmt="c1"]') !== null
 # the card follows its words
-wait card('c1') && card('c1').querySelector('.comment-loc').textContent === 'Row 02 · Visual'
+wait card('c1') && card('c1').querySelector('.comment-loc').textContent === 'Scene 02 · Visual'
 eval U.flush()
 expect U.sizes().undo === __u1 + 1
 # a second paste of the same cut is only words: the comment has moved once
