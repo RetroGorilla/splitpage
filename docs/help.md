@@ -31,6 +31,12 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   full-page shot list.
 - **Merging a word at a time**: two people's edits to one scene combine
   unless they changed the same words.
+- **Plain-language tags**: type `VFX:` or `Prop:` in the Visual column and
+  press Tab. The tagging reference is now a card that floats beside you.
+- **Whole scenes**: drag out of a text box to select scenes, then copy, cut,
+  paste or delete them, comments and pictures included.
+- **The rundown** magnifies the scenes under the pointer, shows the script's
+  length at its end, and shows where other people are working.
 - **In the desktop app**: Follow My Voice through Windows' own speech
   recognition, Google Drive, and a server connection per tab.
 
