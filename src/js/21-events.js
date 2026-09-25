@@ -1424,6 +1424,15 @@ function init() {
     e.preventDefault();
     acceptTagGhost();
   });
+  /* The open "VFX:" tag's note is its Tab key on a phone (Adam, #210): a
+     tap closes the tag exactly as Tab does. pointerdown with the default
+     prevented, as the ghost above, so the cell keeps the focus and the
+     caret the close reads; a click on desktop does the same. */
+  var openHintEl = document.getElementById("tag-open-hint");
+  if (openHintEl) openHintEl.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (plainTagOpen()) closePlainTag();
+  });
 
   /* the OS silently revokes a wake lock when the app is backgrounded;
      take it back when the prompter is still up on return */

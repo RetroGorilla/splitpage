@@ -3035,9 +3035,10 @@
   ::highlight(splitpage-open-tag-vfx)      { background-color: color-mix(in srgb, var(--tag-vfx-tint) 70%, transparent);      text-decoration: underline dashed var(--tag-vfx) 1.5px;      text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-sound)    { background-color: color-mix(in srgb, var(--tag-sound-tint) 70%, transparent);    text-decoration: underline dashed var(--tag-sound) 1.5px;    text-underline-offset: 3px; }
   ::highlight(splitpage-open-tag-gear)     { background-color: color-mix(in srgb, var(--tag-gear-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-gear) 1.5px;     text-underline-offset: 3px; }
-  /* the note under the cell: the category and the key. The untagged
-     prompt's look, but not a button — nothing to click, Tab is the way. */
-  .tag-open-hint { pointer-events: none; cursor: default; gap: 7px; }
+  /* the note under the cell: the category and the key, in the untagged
+     prompt's look. A tap on it closes the tag as Tab would (the phone has
+     no Tab key), so it is a button like the prompt. */
+  .tag-open-hint { gap: 7px; }
   .tag-open-hint .tag-cat-dot { width: 8px; height: 8px; }
 
   /* only shown when Tab would land the tag in a different category than the

@@ -326,4 +326,30 @@ press after
 sleep 200
 expect /fog<\/span> after$/.test(st(7))
 
+# --- a tap (or click) on the note closes it as Tab does (Adam, #210) --------
+# pointerdown with its default prevented, as the ghost's: the cell keeps the
+# focus and the caret. The phone's own run is 196-plain-tags-phone.txt.
+eval (function(){ cell(8).scrollIntoView({ block: 'center' }); return true; })()
+caret #rows .row:nth-child(9) .visual-cell .cell-editable
+press  Music: rain loop
+sleep 200
+expect kw() == 1
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+expect document.getElementById('tag-open-hint').tagName == BUTTON
+expect document.getElementById('tag-open-hint').tabIndex == -1
+eval (function(){ var h = document.getElementById('tag-open-hint'); var r = h.getBoundingClientRect(); var o = { bubbles: true, cancelable: true, clientX: r.left + 4, clientY: r.top + 4, pointerType: 'mouse', isPrimary: true }; var down = new PointerEvent('pointerdown', o); h.dispatchEvent(down); h.dispatchEvent(new MouseEvent('click', o)); return down.defaultPrevented; })()
+sleep 300
+expect kw() == 0
+expect hint() === ''
+expect JSON.stringify(tags(cell(8))) == ["sound:rain loop"]
+expect U.sizes().undo === window.__n + 1
+expect document.activeElement === cell(8)
+expect (function(){ var s = getSelection(); var n = s.anchorNode; var el = n.nodeType === 3 ? n.parentNode : n; return s.isCollapsed && !el.closest('.tag-anchor') && cell(8).contains(n); })()
+press  plays
+sleep 200
+expect /rain loop<\/span> plays$/.test(st(8))
+# a tap with nothing open does nothing
+eval (function(){ var h = document.getElementById('tag-open-hint'); h.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true })); h.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; })()
+expect JSON.stringify(tags(cell(8))) == ["sound:rain loop"]
+
 quit

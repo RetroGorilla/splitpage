@@ -36,6 +36,17 @@ import { renderProduction } from "./08-production-panels.js";
       the untagged-mention prompt (21-events.js onRootKeydown). Brackets are
       untouched by any of this.
 
+   And Adam's answers to the questions building it raised (2026-09-24):
+   6. A tap (or click) on the open tag's note under the cell (#tag-open-hint)
+      closes it exactly as Tab does — the phone has no Tab key. It takes
+      neither the focus nor the caret (pointerdown, 21-events.js).
+   7. While a tag is open, a second keyword is just words; it neither
+      closes the first nor starts another.
+   8. Shift+Tab closes an open tag too, as it takes the ghost and the
+      prompt. Intended.
+   9. A bracket typed inside an open tag ("VFX: glow [zeb") is wrapped with
+      the rest of the words: the open tag has Tab before the ghost.
+
    HOW. The keyword is never taken out of the document: until Tab, the
    document holds exactly what was typed. It is only hidden on screen, by
    wrapping its characters in a span app.css does not display
@@ -65,12 +76,13 @@ import { renderProduction } from "./08-production-panels.js";
    - anything that repaints the cell: a line break, a bracket shortcut
      closing inside it, an undo, a remote edit;
    - Tab with nothing but spaces typed after the keyword (nothing to tag).
-   While a tag is open, a second keyword is just words.
+   While a tag is open, a second keyword is just words (7 above).
 
    The painted part is a CSS Custom Highlight (::highlight(splitpage-open-
    tag-<cat>), app.css) over a live Range — like the untagged mentions
    (§3.8), a remark about the text rather than markup in it — and a small
-   note under the cell (#tag-open-hint) naming the category and the key. */
+   note under the cell (#tag-open-hint) naming the category and the key,
+   which a tap closes as Tab does (6 above). */
 
 /* Lower-case keyword -> category id. The whole vocabulary; see above. */
 export var PLAIN_TAG_KEYWORDS = {
