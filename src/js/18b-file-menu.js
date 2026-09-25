@@ -17,6 +17,7 @@ import {
   notifyDesktopDocumentState
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { LONG_DEMO } from "./_starters.js";
 
 /* ================= the File menu (issue #145) =================
 
@@ -421,14 +422,46 @@ async function openRecentFile(fileId) {
    tab holds no document any more" and forgets the old file for it. */
 export function startNewScript() {
   if (!S.state) { showToast("Still loading…", "warn"); return false; }
-  var kept = S.state.rows.length ? pushSnapshot("Before starting a new script") : null;
-  S.state = migrateRows({
+  var kept = replaceWithNewDocument(migrateRows({
     title: "Untitled Script",
     rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
     /* Settings' starting reading speed (#181) */
     wordsPerMinute: readDefaultWpm()
-  });
-  setBaseState(cloneState(S.state), "startNewScript: a new blank document");
+  }), "startNewScript: a new blank document", "Before starting a new script");
+  var first = document.querySelector('#rows .row .audio-cell .cell-editable');
+  if (first) first.focus();
+  showToast(kept ? "New script — the one before is in Version history." : "New script.", "ok");
+  return true;
+}
+
+/* The long demo (#215, _starters.js), from the command menu: a new
+   untitled copy of it in this tab, exactly as New script puts a blank one
+   there — the document on screen into Version history first, no home, so
+   autosave writes it nowhere until it is saved, and not dirty. */
+export function openLongDemo() {
+  if (!S.state) { showToast("Still loading…", "warn"); return false; }
+  var kept = replaceWithNewDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))),
+    "openLongDemo: a new copy of the long demo", "Before opening the long demo");
+  showToast("The long demo — " + LONG_DEMO.state.rows.length + " scenes, not saved anywhere yet." +
+    (kept ? " The script before is in Version history." : ""), "ok");
+  return true;
+}
+
+/* What New script and the long demo share: `next` becomes the document,
+   with the one before it kept in Version history (labelled `keepLabel`)
+   when it had anything in it. Answers whether it kept one. */
+function replaceWithNewDocument(next, reason, keepLabel) {
+  /* Let go of the field being typed in first, as a click on a menu would:
+     its last words then land in the document going into history, and the
+     render cannot keep the focused cell (05-render.js keeps it by row id,
+     which a starter's "r1" can share with the script it replaces) with
+     the old script's words in it. The command menu hands the focus back
+     to the cell before it runs anything, so this is not hypothetical. */
+  var active = document.activeElement;
+  if (active && active !== document.body && typeof active.blur === "function") active.blur();
+  var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
+  S.state = next;
+  setBaseState(cloneState(S.state), reason);
   setHome("none");
   S.docIdWrittenOut = false;
   resetProductionPanelState();
@@ -441,10 +474,7 @@ export function startNewScript() {
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  var first = document.querySelector('#rows .row .audio-cell .cell-editable');
-  if (first) first.focus();
-  showToast(kept ? "New script — the one before is in Version history." : "New script.", "ok");
-  return true;
+  return kept;
 }
 
 /* ---- the keyboard ----
