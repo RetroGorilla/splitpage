@@ -37,12 +37,9 @@ import { __init as init_05c_clipboard } from "./05c-clipboard.js";
 import { __init as init_05d_draft_edit } from "./05d-draft-edit.js";
 import { __init as init_05e_gallery_overlay } from "./05e-gallery-overlay.js";
 import { __init as init_05f_rundown } from "./05f-rundown.js";
-<<<<<<< ours
-import { __init as init_05p_rundown_presence } from "./05p-rundown-presence.js";
-=======
 import { __init as init_05g_scene_clip } from "./05g-scene-clip.js";
 import { __init as init_05h_scene_select } from "./05h-scene-select.js";
->>>>>>> theirs
+import { __init as init_05p_rundown_presence } from "./05p-rundown-presence.js";
 import { __init as init_05q_cell_reach } from "./05q-cell-reach.js";
 import { __init as init_05r_read_time } from "./05r-read-time.js";
 import { __init as init_05s_script_zoom } from "./05s-script-zoom.js";
@@ -106,12 +103,9 @@ init_05c_clipboard();
 init_05d_draft_edit();
 init_05e_gallery_overlay();
 init_05f_rundown();
-<<<<<<< ours
-init_05p_rundown_presence();
-=======
 init_05g_scene_clip();
 init_05h_scene_select();
->>>>>>> theirs
+init_05p_rundown_presence();
 init_05q_cell_reach();
 init_05r_read_time();
 init_05s_script_zoom();
