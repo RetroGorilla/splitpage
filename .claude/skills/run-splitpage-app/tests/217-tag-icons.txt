@@ -1,0 +1,152 @@
+# Settings ▸ Show icons on tags (#217): off by default (the tint and rule
+# only, as #143 shipped); on, a category icon in the tag's colour before
+# every tag — in the script, the Production and Gear panels and the tagging
+# reference — drawn with CSS (::before, a mask) so it is never a node in the
+# cell, never in the row's HTML, never in a copy; not in the teleprompter;
+# applied live through the splitpage:pref event, and off again.
+
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.F=window.__splitpageFormats;window.T=window.__settingsTest;localStorage.removeItem('splitpage-tag-icons');window.__events=[];document.addEventListener('splitpage:pref',function(e){window.__events.push(e.detail.key+'='+e.detail.value);});return true;})()
+eval window.__before = function(sel){var el=document.querySelector(sel);return el?getComputedStyle(el,'::before'):null;}
+
+# --- four tags typed with their shortcuts ------------------------------------
+caret #rows .row .visual-cell .cell-editable
+press  The [red mug] in the {kitchen} with ~lens glow~ and a <tripod>.
+eval document.activeElement.blur()
+caret #rows .row .audio-cell .cell-editable
+press  Hold up the [coffee cup].
+eval document.activeElement.blur()
+sleep 300
+expect document.querySelectorAll('#rows .row:first-child .tag-anchor').length === 5
+eval window.__txt = function(){return JSON.stringify(F.state().rows.map(function(r){return [r.visualText,r.audioText];}));}
+eval window.__rows0 = __txt()
+eval window.__text0 = document.querySelector('#rows .row .visual-cell .cell-editable').innerText
+
+# --- off by default: no attribute, no icon ------------------------------------
+expect document.documentElement.hasAttribute('data-tag-icons') === false
+expect __before('#rows .tag-anchor[data-tag-cat="prop"]').content == none
+# the category's mask is there all the same, waiting for the setting
+expect getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="prop"]')).getPropertyValue('--tag-icon').indexOf('data:image/svg+xml') !== -1
+expect document.getElementById('tag-icon-style') !== null
+
+# --- the switch in Settings ---------------------------------------------------
+eval T.open()
+wait T.isOpen()
+expect document.getElementById('settings-tag-icons') !== null
+expect document.getElementById('settings-tag-icons').checked === false
+expect document.getElementById('settings-tag-icons').getAttribute('role') === 'switch'
+expect document.querySelector('label[for="settings-tag-icons"] .settings-switch-label').textContent === 'Show icons on tags'
+# it sits in Appearance
+expect document.getElementById('settings-tag-icons').closest('.settings-section').getAttribute('aria-label') === 'Appearance'
+click label[for="settings-tag-icons"]
+wait document.documentElement.hasAttribute('data-tag-icons')
+expect localStorage.getItem('splitpage-tag-icons') === '1'
+expect __events.indexOf('splitpage-tag-icons=1') !== -1
+expect document.getElementById('settings-tag-icons').checked === true
+key Escape
+expect T.isOpen() === false
+
+# --- on: the icon before every tag, in its colour, about 0.85em -------------
+expect __before('#rows .tag-anchor[data-tag-cat="prop"]').content !== 'none'
+expect __before('#rows .tag-anchor[data-tag-cat="prop"]').maskImage.indexOf('data:image/svg+xml') !== -1 || __before('#rows .tag-anchor[data-tag-cat="prop"]').webkitMaskImage.indexOf('data:image/svg+xml') !== -1
+expect (function(){var a=document.querySelector('#rows .tag-anchor[data-tag-cat="prop"]');var fs=parseFloat(getComputedStyle(a).fontSize);var w=parseFloat(__before('#rows .tag-anchor[data-tag-cat="prop"]').paddingLeft);return Math.abs(w-0.85*fs)<0.6;})()
+# the icon never ends a line its words start the next: every tag's first
+# line box starts with the icon (its first client rect is wider than the icon)
+expect Array.prototype.every.call(document.querySelectorAll('#rows .tag-anchor'), function(a){var r=a.getClientRects();var fs=parseFloat(getComputedStyle(a).fontSize);return r.length && r[0].width > 1.3*fs;})
+expect __before('#rows .tag-anchor[data-tag-cat="prop"]').backgroundColor === getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="prop"]')).boxShadow.match(/rgb\([^)]*\)/)[0]
+# each category a different icon
+expect (function(){var seen={};var ok=true;['prop','location','vfx','gear'].forEach(function(c){var m=__before('#rows .tag-anchor[data-tag-cat="'+c+'"]').webkitMaskImage||__before('#rows .tag-anchor[data-tag-cat="'+c+'"]').maskImage;if(!m||seen[m])ok=false;seen[m]=1;});return ok;})()
+
+# --- never part of the script -------------------------------------------------
+# no node in the cell, the row's HTML unchanged, the text unchanged
+expect document.querySelector('#rows .tag-anchor[data-tag-cat="prop"]').firstChild.nodeType === 3
+expect __txt() === __rows0
+expect document.querySelector('#rows .row .visual-cell .cell-editable').innerText === __text0
+# a trip through the field (focus, sync on blur) reads nothing back
+caret #rows .row .visual-cell .cell-editable
+eval document.activeElement.blur()
+sleep 200
+expect __txt() === __rows0
+# a selection over a tag copies only its words
+expect (function(){var a=document.querySelector('#rows .tag-anchor[data-tag-cat="prop"]');var r=document.createRange();r.selectNode(a);var s=getSelection();s.removeAllRanges();s.addRange(r);var t=s.toString();s.removeAllRanges();return t==='red mug';})()
+# the caret: just before a tag, typing lands before it (not in it), and
+# the caret still sits where it was put
+eval (function(){var a=document.querySelector('#rows .visual-cell .tag-anchor[data-tag-cat="prop"]');var ed=a.closest('.cell-editable');ed.focus();var r=document.createRange();r.setStartBefore(a);r.collapse(true);var s=getSelection();s.removeAllRanges();s.addRange(r);return true;})()
+press X
+eval document.activeElement.blur()
+sleep 200
+expect /The X<span class="tag-anchor" data-tag-cat="prop"/.test(F.state().rows[0].visualText)
+caret #rows .row .visual-cell .cell-editable
+key ctrl KeyZ
+eval document.activeElement.blur()
+sleep 200
+expect __txt() === __rows0
+
+# --- the panels: category heads and dots become the icon --------------------
+click #btn-production
+wait !document.getElementById('production-panel').hidden
+sleep 300
+expect document.querySelectorAll('#production-list .tag-group-head .tag-cat-dot[data-tag-cat]').length >= 3
+expect (function(){var d=document.querySelector('#production-list .tag-group-head .tag-cat-dot[data-tag-cat="prop"]');var cs=getComputedStyle(d);return cs.width==='12px'&&(cs.webkitMaskImage||cs.maskImage).indexOf('data:image/svg+xml')!==-1;})()
+jsclick #production-modes [data-group="scene"]
+sleep 300
+expect (function(){var d=document.querySelector('#production-list .tag-pill .tag-cat-dot[data-tag-cat]');var cs=getComputedStyle(d);return cs.width==='12px'&&(cs.webkitMaskImage||cs.maskImage).indexOf('data:image/svg+xml')!==-1;})()
+jsclick #production-modes [data-group="person"]
+sleep 300
+expect (function(){var d=document.querySelector('#production-list .tag-row-dot[data-tag-cat]');var cs=getComputedStyle(d);return cs.width==='12px'&&(cs.webkitMaskImage||cs.maskImage).indexOf('data:image/svg+xml')!==-1;})()
+jsclick #production-modes [data-group="cat"]
+sleep 300
+shot 217-production-icons-light
+click #btn-gear
+wait !document.getElementById('gear-panel').hidden
+sleep 300
+expect (function(){var d=document.querySelector('#gear-panel .tag-row-dot[data-tag-cat="gear"]');var cs=getComputedStyle(d);return cs.width==='12px'&&(cs.webkitMaskImage||cs.maskImage).indexOf('data:image/svg+xml')!==-1;})()
+click #btn-gear
+sleep 300
+
+# --- the tagging reference ----------------------------------------------------
+eval T.open()
+wait T.isOpen()
+jsclick #settings-modal [data-settings-action="tagging-help"]
+wait !document.getElementById('tagging-help').hidden
+expect document.querySelectorAll('#tagging-help .tag-sample').length >= 6
+expect __before('#tagging-help .tag-sample[data-tag-cat="sound"]').content !== 'none'
+shot 217-reference-light
+key Escape
+sleep 200
+
+# --- not in the teleprompter -------------------------------------------------
+click #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 300
+expect document.querySelectorAll('#prompter-content .tag-anchor').length >= 1
+expect __before('#prompter-content .tag-anchor').content == none
+key Escape
+wait document.getElementById('prompter').hidden
+sleep 300
+
+# --- dark: the dark palette's colours ----------------------------------------
+eval document.documentElement.setAttribute('data-theme','dark')
+sleep 200
+expect (function(){var a=document.querySelector('#rows .tag-anchor[data-tag-cat="location"]');var probe=document.createElement('span');probe.style.color='var(--tag-location)';document.body.appendChild(probe);var want=getComputedStyle(probe).color;probe.remove();return __before('#rows .tag-anchor[data-tag-cat="location"]').backgroundColor===want;})()
+eval document.querySelector('#rows .row').scrollIntoView({block:'center'})
+sleep 200
+shot 217-script-icons-dark
+eval document.documentElement.removeAttribute('data-theme')
+sleep 200
+shot 217-script-icons-light
+
+# --- off again ----------------------------------------------------------------
+eval T.open()
+wait T.isOpen()
+click label[for="settings-tag-icons"]
+wait !document.documentElement.hasAttribute('data-tag-icons')
+expect localStorage.getItem('splitpage-tag-icons') === null
+expect __before('#rows .tag-anchor[data-tag-cat="prop"]').content == none
+expect (function(){var d=document.querySelector('#production-list .tag-group-head .tag-cat-dot[data-tag-cat="prop"]');return getComputedStyle(d).width==='8px';})()
+key Escape
+
+expect __txt() === __rows0
+quit

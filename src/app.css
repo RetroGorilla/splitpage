@@ -2754,8 +2754,9 @@
 
   /* ---------- production tags ---------- */
   /* A tag is a light tint of its category with a 2px rule under it — no
-     icon in the text (#143: tried in the mockups and rejected; an icon in a
-     line being read aloud is one more thing to read). The tint is an opaque
+     icon in the text by default (#143: tried in the mockups and rejected;
+     an icon in a line being read aloud is one more thing to read; #217
+     brings one back as a setting, below). The tint is an opaque
      colour of its own rather than the category colour over transparent, so
      it reads the same over the Visual column's blue wash and the Audio
      column's amber one. The colours are the --tag-* tokens at the top. */
@@ -2786,6 +2787,42 @@
   .tag-sample[data-tag-cat="sound"],    .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
   .tag-sample[data-tag-cat="gear"],     .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
   .tag-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
+
+  /* Settings ▸ Show icons on tags (#217): the category's icon before the
+     words, in the tag's colour, so a category reads without telling
+     colours apart (colour blindness, greyscale print). --tag-icon is each
+     category's mask, set on [data-tag-cat] from TAG_CATEGORIES
+     (07-production-tags.js tagIconCss). A ::before, never a node: nothing
+     reads it back into the row, copies, exports or counts it, and the caret
+     has nothing to stop on. Not in the teleprompter, which is read aloud.
+     Inline, a word joiner (U+2060) with the icon in its padding, rather than
+     an inline-block: a line may break after an inline-block, which left the
+     icon at the end of one line and its words on the next. */
+  :root[data-tag-icons] .tag-sample::before,
+  :root[data-tag-icons] .tag-anchor::before {
+    content: "\2060";
+    padding-left: 0.85em;
+    margin-right: 0.2em;
+    background: var(--tag-color, var(--visual));
+    -webkit-mask: var(--tag-icon) left center / 0.85em 0.85em no-repeat;
+    mask: var(--tag-icon) left center / 0.85em 0.85em no-repeat;
+    pointer-events: none;
+  }
+  :root[data-tag-icons] .prompter .tag-anchor::before { content: none; }
+  /* the panels' category dots (Production, Gear, the shoot days, the tag
+     composer, the open-tag note) become the same icon */
+  :root[data-tag-icons] .tag-cat-dot[data-tag-cat],
+  :root[data-tag-icons] .tag-row-dot[data-tag-cat],
+  :root[data-tag-icons] .tag-cat-btn .tag-cat-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 0;
+    background: var(--dot);
+    -webkit-mask: var(--tag-icon) center / contain no-repeat;
+    mask: var(--tag-icon) center / contain no-repeat;
+  }
+  /* 6px taller than the dot: kept centred on the line the dot was */
+  :root[data-tag-icons] .tag-row-dot[data-tag-cat] { transform: translateY(-3px); }
   .tag-badge { background: var(--visual); }
 
   /* The tag composer's categories (#169): outlined buttons with the
