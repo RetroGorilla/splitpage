@@ -468,28 +468,6 @@
     <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
   </div>
 
-  <div class="tagging-help" id="tagging-help" hidden>
-    <div class="tagging-help-head">
-      <span class="tagging-help-title">Tagging quick reference</span>
-      <span class="tagging-help-sub">File ▸ Tagging reference brings this back</span>
-      <button type="button" class="notice-close" id="tagging-help-dismiss" aria-label="Dismiss the tagging reference">×</button>
-    </div>
-    <div class="tagging-help-body">
-      <div class="tagging-help-col">
-        <div class="tagging-help-row"><code>[gaffer tape]</code><span>→ <strong>Prop</strong></span></div>
-        <div class="tagging-help-row"><code>{kitchen}</code><span>→ <strong>Location</strong></span></div>
-        <div class="tagging-help-row"><code>~lens flare~</code><span>→ <strong>VFX</strong></span></div>
-        <div class="tagging-help-note">Tagged the moment you type the closing character. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text. For <strong>Cast</strong> and <strong>Music/SFX</strong>, select the words and press <strong>Tag</strong>.</div>
-      </div>
-      <div class="tagging-help-col">
-        <div class="tagging-help-row"><kbd>Tab</kbd><span>completes a tag you've already used, keeping its own category.</span></div>
-        <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>starts the next scene and jumps into it.</span></div>
-        <div class="tagging-help-row"><kbd>Ctrl</kbd><kbd>F</kbd><span>find and replace across the whole script.</span></div>
-        <div class="tagging-help-note">Click a tag in the script — or any card in <strong>Production</strong> — to assign who's responsible and keep notes, links or file paths against it. Group the breakdown by category, person, scene or <strong>Shoot</strong> (everything at one location together), and export the lot as CSV. Drag a scene by its number to reorder; click its status to mark it To&nbsp;do / Ready / Shot.</div>
-      </div>
-    </div>
-  </div>
-
   <div class="notice" id="resume-banner" hidden>
     <div class="notice-body">
       <strong>Continue where you left off?</strong>
@@ -576,6 +554,53 @@
      without labelling it; tabindex -1 because Tab is the accept key, not a
      way to focus this -->
 <button class="tag-suggest" id="tag-suggest" type="button" tabindex="-1"></button>
+
+<!-- The tagging reference (#205): a non-modal card floating over the script,
+     docked bottom right clear of the side panels (a bottom sheet on a
+     phone), so it can be read while you tag. It sits outside #root on
+     purpose: nothing in the script's flow moves it (20i-topbar.js animates
+     every sibling below the header). Opened by showTaggingHelp() and closed
+     by hideTaggingHelp() (10-comments.js); 20c-help.js adds the full-guide
+     link to its foot.
+
+     The example tags are .tag-sample, not .tag-anchor: they share the
+     script's tag rules in app.css (the same --tag-* tokens), so they cannot
+     drift from what a tag looks like, but nothing that reads tags out of the
+     page (the breakdown, find, exports, counts, a click in the script) ever
+     sees them. -->
+<section class="tagging-help" id="tagging-help" role="dialog" aria-labelledby="tagging-help-title" tabindex="-1" hidden>
+  <div class="tagging-help-head">
+    <h2 class="tagging-help-title" id="tagging-help-title">Tagging reference</h2>
+    <button type="button" class="modal-close" id="tagging-help-dismiss" aria-label="Close the tagging reference" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="tagging-help-body">
+    <h3 class="tagging-help-label">Type it</h3>
+    <ul class="tagging-help-list">
+      <li class="tagging-help-row"><code>[gaffer tape]</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
+      <li class="tagging-help-row"><code>{kitchen}</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
+      <li class="tagging-help-row"><code>~lens flare~</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">lens flare</span><span class="tagging-help-cat">VFX</span></li>
+      <li class="tagging-help-row"><code>&lt;tripod&gt;</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
+      <!-- #210's plain-language opener ("VFX: words… Tab") belongs here as
+           one more row of this list, once it lands. -->
+    </ul>
+    <p class="tagging-help-note">Tagged the moment you type the closing character. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text.</p>
+    <h3 class="tagging-help-label">Select the words, then press Tag</h3>
+    <ul class="tagging-help-list">
+      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+    </ul>
+    <h3 class="tagging-help-label">Keys</h3>
+    <ul class="tagging-help-list tagging-help-keys">
+      <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Tab</kbd></span><span>completes a tag you've already used, in its own category</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Ctrl</kbd><kbd>Enter</kbd></span><span>starts the next scene and jumps into it</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-caps"><kbd>Ctrl</kbd><kbd>F</kbd></span><span>find and replace across the whole script</span></li>
+    </ul>
+    <p class="tagging-help-note">Click a tag in the script, or its card in <strong>Production</strong>, to say who's responsible and keep notes, links or file paths against it.</p>
+  </div>
+  <div class="tagging-help-foot">
+    <span class="tagging-help-sub">File ▸ Tagging reference brings this back</span>
+  </div>
+</section>
 
 <div class="modal-backdrop" id="import-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
@@ -1545,8 +1570,6 @@
 
       <footer class="newtab-foot">
         <a href="#" data-newtab-action="tour">Take the tour</a>
-        <span class="newtab-foot-sep" aria-hidden="true">·</span>
-        <a href="#" data-newtab-action="tagging-help">Tagging cheat sheet</a>
         <span class="newtab-foot-sep" aria-hidden="true">·</span>
         <a href="#" data-newtab-action="dismiss">Look at the example script</a>
         <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop

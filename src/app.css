@@ -2729,24 +2729,30 @@
      column's amber one. The colours are the --tag-* tokens at the top. */
   /* B's mark (#169): the top corners rounded and the bottom square, where
      the rule runs, which carries on unbroken across a line break. */
+  /* .tag-sample is the same mark drawn as an example (the tagging
+     reference, #205): every rule here names both, so the reference can
+     never drift from the script, while nothing that reads tags out of the
+     page (they all look for .tag-anchor) ever counts an example. It takes
+     neither the pointer nor the hover: it is not a thing to click. */
+  .tag-sample,
   .tag-anchor {
     border-radius: 3px 3px 0 0;
     padding: 0 2px;
-    cursor: pointer;
     box-shadow: inset 0 -2px 0 var(--tag-color, var(--visual));
     background: var(--tag-tint, color-mix(in srgb, var(--tag-color, var(--visual)) 14%, transparent));
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
+  .tag-anchor { cursor: pointer; }
   .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 22%, var(--tag-tint, transparent)); }
-  .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
-  .tag-anchor[data-tag-cat="location"] { --tag-color: var(--tag-location); --tag-tint: var(--tag-location-tint); }
-  .tag-anchor[data-tag-cat="cast"]     { --tag-color: var(--tag-cast);     --tag-tint: var(--tag-cast-tint); }
-  .tag-anchor[data-tag-cat="vfx"]      { --tag-color: var(--tag-vfx);      --tag-tint: var(--tag-vfx-tint); }
+  .tag-sample[data-tag-cat="prop"],     .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
+  .tag-sample[data-tag-cat="location"], .tag-anchor[data-tag-cat="location"] { --tag-color: var(--tag-location); --tag-tint: var(--tag-location-tint); }
+  .tag-sample[data-tag-cat="cast"],     .tag-anchor[data-tag-cat="cast"]     { --tag-color: var(--tag-cast);     --tag-tint: var(--tag-cast-tint); }
+  .tag-sample[data-tag-cat="vfx"],      .tag-anchor[data-tag-cat="vfx"]      { --tag-color: var(--tag-vfx);      --tag-tint: var(--tag-vfx-tint); }
   /* added when Music/SFX was split out of VFX — without it a sound tag fell
      back to --visual and read as the wrong category in the script itself */
-  .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
-  .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
+  .tag-sample[data-tag-cat="sound"],    .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
+  .tag-sample[data-tag-cat="gear"],     .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
   .tag-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
   .tag-badge { background: var(--visual); }
 
@@ -3382,54 +3388,174 @@
     .shoot-need .tag-owner.is-none { display: none; }
   }
 
-  /* ---------- tagging quick reference ---------- */
+  /* ---------- the tagging reference (#205) ----------
+     A non-modal card floating over the script (page.html, 10-comments.js):
+     B's floating layer like the tour card and the small header boxes —
+     raised, the strong edge, the shadow, a popover's 8px corners — with a
+     side panel's head (the title and the 32px icon close, .modal-close).
+     Docked bottom right, and moved left of whichever side panel is open
+     (--open-panel-width, 03b-side-panels.js) so it never sits under one.
+     Under the header's menus, the side panels (140), the full-screen modes
+     (145), the New Tab page (130) and every dialog; over the header row
+     (120) and the phone's bottom bar (110). */
   .tagging-help {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    margin: 0 0 14px;
-    overflow: hidden;
+    --layer-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 125;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    max-width: calc(100vw - 40px);
+    /* clear of the 52px header row, with the same 20px as the corner */
+    max-height: calc(100vh - 92px);
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    font-family: var(--font-body);
+    opacity: 1;
+    transform: none;
+    transition: right var(--dur-enter) var(--ease-enter),
+                opacity var(--dur-fast) var(--ease-standard),
+                transform var(--dur-enter) var(--ease-enter);
   }
-  .tagging-help[hidden] { display: none; }
+  .tagging-help:focus { outline: none; }
+  .tagging-help:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* arriving: the dialogs' 8px rise and fade, no scale */
+  @starting-style {
+    .tagging-help:not([hidden]) { opacity: 0; transform: translateY(8px); }
+  }
+  @media (min-width: 761px) {
+    body.panel-open .tagging-help {
+      right: calc(min(var(--open-panel-width, 488px), 100vw) + 20px);
+      max-width: calc(100vw - min(var(--open-panel-width, 488px), 100vw) - 40px);
+    }
+    body.is-panel-resizing .tagging-help { transition: none; }
+  }
+  /* The caret has gone under the card (10-comments.js, updateTaggingHelpCover):
+     it steps back to a ghost and lets clicks through, so it never covers
+     the words being typed, and comes back once the caret moves on. */
+  .tagging-help.is-covering { opacity: 0.12; pointer-events: none; }
+  /* The tour's "Tag shortcuts" step shows it (20c-help.js): over the tour's
+     scrim (160) rather than dimmed under it. Not on a phone, where the
+     tour's card is a bottom sheet in the same place. */
+  @media (min-width: 481px) {
+    body:has(> .tour-overlay:not([hidden])) .tagging-help { z-index: 161; }
+  }
+  /* The writer is a full-screen mode (145) you tag in, so the card stays
+     over it there. */
+  body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
+
   .tagging-help-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px 8px 14px;
-    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 8px 4px 16px;
   }
   .tagging-help-title {
+    margin: 0;
     font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-dim);
-  }
-  .tagging-help-sub {
-    flex: 1;
-    font-family: var(--font-body);
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 700;
+    color: var(--text);
   }
   .tagging-help-body {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 28px;
-    padding: 11px 14px 13px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 16px 4px;
     font-size: 13px;
     line-height: 1.5;
     color: var(--text-dim);
   }
-  .tagging-help-col { flex: 1 1 300px; display: flex; flex-direction: column; gap: 5px; }
-  .tagging-help-row { display: flex; align-items: baseline; gap: 8px; }
-  .tagging-help-note { font-size: 12px; color: var(--text-faint); line-height: 1.45; margin-top: 2px; }
-  .tagging-help-note strong, .tagging-help-row strong { color: var(--text-dim); }
+  .tagging-help-label {
+    margin: 10px 0 6px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--text-faint);
+  }
+  .tagging-help-label:first-child { margin-top: 4px; }
+  .tagging-help-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  /* what you do | → | the tag it makes | its category */
+  .tagging-help-row {
+    display: grid;
+    grid-template-columns: 108px 14px auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 6px;
+  }
+  .tagging-help-keys .tagging-help-row { grid-template-columns: 100px minmax(0, 1fr); column-gap: 8px; }
+  .tagging-help-arrow { color: var(--text-faint); text-align: center; }
+  .tagging-help-cat { font-size: 12.5px; color: var(--text-dim); }
+  .tagging-help-how { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+  .tagging-help-caps { display: inline-flex; gap: 3px; }
+  /* The example is drawn by the script's own tag rule (.tag-sample shares
+     .tag-anchor's, under production tags) in the script's own face. */
+  .tagging-help .tag-sample {
+    justify-self: start;
+    font-family: var(--font-script);
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .tagging-help-note { margin: 8px 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+  .tagging-help-note strong { color: var(--text); font-weight: 600; }
+  .tagging-help-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 12px;
+    margin-top: 8px;
+    padding: 10px 16px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .tagging-help-sub {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  /* a code sample sits on the page's ground, set into the raised card */
   .tagging-help-body code {
+    justify-self: start;
     font-family: var(--font-display);
     font-size: 12px;
-    background: var(--surface-2);
+    line-height: 18px;
+    color: var(--text);
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 1px 5px;
+    padding: 0 5px;
+    white-space: nowrap;
+  }
+  /* A phone: a bottom sheet over the bottom bar, the width of the screen. */
+  @media (max-width: 760px) {
+    .tagging-help {
+      left: 0;
+      right: 0;
+      bottom: calc(72px + env(safe-area-inset-bottom));
+      width: auto;
+      max-width: none;
+      max-height: min(60vh, calc(100vh - 72px - 64px));
+      border-width: 1px 0 0;
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+    }
+    .tagging-help-head { padding-top: 10px; }
   }
   /* B's keycap (#169): flat, the strong line, 4px corners */
   .tagging-help-body kbd {
@@ -6018,7 +6144,6 @@
     .rundown .rundown-playhead::before,
     .topbar.is-condensed .rundown .rundown-playhead::before { display: block; left: -3px; top: -5px; border-width: 6px 4px 0 4px; }
 
-    .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
     /* panel is full viewport width here, so there's nothing to drag against */
     .comments-panel-resize-handle { display: none; }
 
@@ -6514,6 +6639,7 @@
 /* ---- Tagging reference: "Open the full guide" ---- */
 .tagging-help-fullguide { font-size: 12.5px; }
 .tagging-help-fullguide a { color: var(--visual); }
+.tagging-help-fullguide a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
 
 /* ---- coach-mark tour (20c-help.js) ----
    One fixed overlay reused for every step, following the hideTagGhost

@@ -1,0 +1,203 @@
+# The tagging reference as a floating card (#205): page.html #tagging-help,
+# 10-comments.js showTaggingHelp / hideTaggingHelp, app.css "the tagging
+# reference". A non-modal dialog over the script, docked bottom right and
+# moved left of an open side panel; opening it scrolls nothing and it stays
+# put while the script scrolls under it; Esc closes it only while it has the
+# focus; opening it again when it is open focuses it; closing it is
+# remembered (splitpage-tagging-help-dismissed) and the focus goes back where
+# it came from. Its example tags are .tag-sample, drawn by the script's own
+# tag rule — the same colours as a real tag of that category in both themes
+# — and never counted as tags by anything (the breakdown, find, exports, the
+# page's .tag-anchor count, a click). 181 is the phone's bottom sheet.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; var T = function(cat, name, text){ return '<span class="tag-anchor" data-tag-cat="' + cat + '" data-tag-name="' + name + '" contenteditable="false">' + text + '</span>'; }; var tagged = [T('prop','Kettle','kettle'), T('location','Harbour','harbour'), T('vfx','Sky replacement','sky replacement'), T('gear','Slider','slider'), T('cast','Mara','Mara'), T('sound','Gull cries','gull cries')]; var rows = []; for (var i = 0; i < 24; i++) { rows.push({ id: 'r' + (i + 1), visualText: 'Shot ' + (i + 1) + ': wide on the quay' + (i < tagged.length ? ', with the ' + tagged[i] : '') + '.', audioText: 'Line ' + (i + 1) + '. Every morning the town wakes to the same sound, and every morning somebody on the quay pretends not to have heard it.', status: 'todo' }); } var doc = { schema: 2, title: 'Tag card', rows: rows, productionTags: [{cat:'prop',name:'Kettle',status:'needed'},{cat:'location',name:'Harbour',status:'needed'},{cat:'vfx',name:'Sky replacement',status:'needed'},{cat:'gear',name:'Slider',status:'needed'},{cat:'cast',name:'Mara',status:'needed'},{cat:'sound',name:'Gull cries',status:'needed'}], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'tagcard.splitpage')); return true; })()
+wait F.state().title === 'Tag card' && document.querySelectorAll('#rows .row').length === 24
+sleep 400
+expect document.querySelectorAll('#rows .tag-anchor').length == 6
+eval (function(){ window.__tagsBefore = document.querySelectorAll('.tag-anchor').length; window.__badgeBefore = document.getElementById('production-badge').textContent; window.__card = function(){ return document.getElementById('tagging-help'); }; window.__rect = function(){ return window.__card().getBoundingClientRect(); }; return window.__tagsBefore + ' / badge ' + window.__badgeBefore; })()
+
+# --- closed to begin with, and out of the script's flow -------------------------
+expect window.__card().hidden == true
+expect window.__card().parentNode === document.body
+expect !document.getElementById('root').contains(window.__card())
+
+# --- File ▸ Tagging reference: no scroll jump, focused, a labelled dialog -------
+eval window.scrollTo(0, 500); window.__y0 = window.scrollY; window.__y0
+expect window.__y0 > 300
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tagging-help"]
+sleep 400
+expect window.__card().hidden == false
+expect window.scrollY === window.__y0
+expect window.__card().getAttribute('role') == dialog
+expect window.__card().getAttribute('aria-modal') === null
+expect document.getElementById(window.__card().getAttribute('aria-labelledby')).textContent == Tagging reference
+expect window.__card().contains(document.activeElement)
+expect localStorage.getItem('splitpage-tagging-help-dismissed') == 0
+expect getComputedStyle(window.__card()).position == fixed
+
+# --- docked bottom right, 20px in, whole on screen -------------------------------
+expect Math.abs(document.documentElement.clientWidth - window.__rect().right - 20) <= 1
+expect Math.abs(document.documentElement.clientHeight - window.__rect().bottom - 20) <= 1
+expect Math.round(window.__rect().width) == 380
+expect window.__rect().top >= 52
+
+# --- B's floating layer: raised surface, strong edge, shadow, 8px, the panel head
+eval (function(){ var probe = document.createElement('div'); probe.style.cssText = 'position:absolute;background:var(--surface-2);border:1px solid var(--border-strong)'; document.body.appendChild(probe); var cs = getComputedStyle(probe); window.__layer = { bg: cs.backgroundColor, edge: cs.borderTopColor }; probe.remove(); return JSON.stringify(window.__layer); })()
+expect getComputedStyle(window.__card()).backgroundColor === window.__layer.bg
+expect getComputedStyle(window.__card()).borderTopColor === window.__layer.edge
+expect getComputedStyle(window.__card()).borderTopLeftRadius == 8px
+expect getComputedStyle(window.__card()).boxShadow !== 'none'
+expect document.querySelector('#tagging-help-dismiss').classList.contains('modal-close')
+expect document.querySelector('#tagging-help-dismiss use').getAttribute('href') == #i-close
+expect Math.round(document.getElementById('tagging-help-dismiss').getBoundingClientRect().width) == 32
+expect getComputedStyle(document.getElementById('tagging-help-title')).fontWeight == 700
+expect document.querySelectorAll('#tagging-help-fullguide a').length == 1
+
+# --- the example tags: every category, drawn as the script draws it ------------
+expect Array.prototype.map.call(document.querySelectorAll('#tagging-help .tag-sample'), function(s){ return s.getAttribute('data-tag-cat'); }).sort().join(',') == cast,gear,location,prop,sound,vfx
+expect document.querySelectorAll('#tagging-help .tag-anchor').length == 0
+expect document.querySelectorAll('#tagging-help [data-tag-name]').length == 0
+eval window.__sameAsScript = function(){ return ['prop','location','vfx','gear','cast','sound'].every(function(cat){ var a = getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="' + cat + '"]')); var s = getComputedStyle(document.querySelector('#tagging-help .tag-sample[data-tag-cat="' + cat + '"]')); return a.backgroundColor === s.backgroundColor && a.boxShadow === s.boxShadow && a.borderTopLeftRadius === s.borderTopLeftRadius; }); }; window.__distinct = function(){ var seen = {}; document.querySelectorAll('#tagging-help .tag-sample').forEach(function(s){ seen[getComputedStyle(s).boxShadow] = 1; }); return Object.keys(seen).length; }; true
+expect window.__sameAsScript()
+expect window.__distinct() == 6
+# the rule under a real tag, not a fallback: prop's is the --tag-prop violet
+expect getComputedStyle(document.querySelector('#tagging-help .tag-sample[data-tag-cat="prop"]')).boxShadow.indexOf('rgb(118, 74, 162)') !== -1
+shot 180-card-light
+
+# --- the chips are not tags: page count, badge, breakdown, find, exports, click --
+expect document.querySelectorAll('.tag-anchor').length === window.__tagsBefore
+expect document.getElementById('production-badge').textContent === window.__badgeBefore
+expect F.buildMarkdown(F.state()).indexOf('gaffer tape') === -1
+expect F.buildMarkdown(F.state()).indexOf('rain ambience') === -1
+expect F.buildMarkdown(F.state()).indexOf('Kettle') !== -1
+click #tagging-help .tag-sample[data-tag-cat="prop"]
+sleep 300
+expect document.getElementById('production-panel').hidden == true
+expect window.__card().hidden == false
+eval (function(){ document.querySelector('#file-menu [data-file-action="find"]').click(); var f = document.getElementById('find-input'); f.value = 'gaffer'; f.dispatchEvent(new Event('input', {bubbles:true})); return true; })()
+sleep 300
+expect document.getElementById('find-count').textContent == No matches
+eval (function(){ var f = document.getElementById('find-input'); f.value = 'Shot 12:'; f.dispatchEvent(new Event('input', {bubbles:true})); return true; })()
+sleep 300
+expect document.getElementById('find-count').textContent == 1 of 1
+jsclick #find-close
+sleep 200
+jsclick #btn-production
+sleep 500
+expect document.getElementById('production-panel').hidden == false
+expect document.querySelectorAll('#production-list .tag-entity').length == 6
+expect document.querySelector('#production-list').textContent.indexOf('gaffer tape') === -1
+
+# --- it moves left of an open side panel, and back ------------------------------
+expect window.__rect().right <= document.getElementById('production-panel').getBoundingClientRect().left - 16
+expect window.__rect().left >= 0
+jsclick #btn-production
+sleep 500
+expect document.getElementById('production-panel').hidden == true
+expect Math.abs(document.documentElement.clientWidth - window.__rect().right - 20) <= 1
+
+# --- stays put while the script scrolls under it -------------------------------
+eval window.__top0 = window.__rect().top; window.__y1 = window.scrollY; window.scrollBy(0, 300); true
+sleep 300
+expect window.scrollY > window.__y1
+expect Math.abs(window.__rect().top - window.__top0) < 1
+eval window.scrollBy(0, -450); true
+sleep 300
+expect Math.abs(window.__rect().top - window.__top0) < 1
+
+# --- Esc closes it while it has the focus, remembers that, and gives the focus back
+eval window.__card().focus(); document.activeElement === window.__card()
+key Escape
+sleep 200
+expect window.__card().hidden == true
+expect localStorage.getItem('splitpage-tagging-help-dismissed') == 1
+expect !window.__card().contains(document.activeElement)
+
+# --- the command menu opens it too, from a script cell; the caret comes back ----
+caret #rows .row[data-id="r3"] .audio-cell .cell-editable
+eval window.__y2 = window.scrollY; true
+key ctrl KeyK
+sleep 300
+expect !document.getElementById('cmdk').hidden
+type tagging reference
+sleep 200
+expect document.querySelector('#cmdk-list .cmdk-item.is-active, #cmdk-list .cmdk-item[aria-selected="true"]').getAttribute('data-cmd') == tagging-help
+key Enter
+sleep 400
+expect window.__card().hidden == false
+expect window.__card().contains(document.activeElement)
+expect localStorage.getItem('splitpage-tagging-help-dismissed') == 0
+expect Math.abs(window.scrollY - window.__y2) < 2
+
+# --- not modal: Esc in the script is the script's; the card stays ----------------
+caret #rows .row[data-id="r3"] .audio-cell .cell-editable
+key Escape
+sleep 200
+expect window.__card().hidden == false
+expect document.activeElement.classList.contains('cell-editable')
+# typing behind it still edits the script
+press xyz
+wait F.state().rows[2].audioText.indexOf('xyz') !== -1
+
+# --- opening it again while it is open hands it the focus ------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tagging-help"]
+sleep 300
+expect window.__card().contains(document.activeElement)
+expect document.querySelectorAll('#tagging-help').length == 1
+
+# --- × closes it and the caret goes back into the cell it was in -----------------
+caret #rows .row[data-id="r3"] .audio-cell .cell-editable
+key ctrl KeyK
+sleep 300
+type tagging reference
+sleep 200
+key Enter
+sleep 300
+expect window.__card().contains(document.activeElement)
+click #tagging-help-dismiss
+sleep 200
+expect window.__card().hidden == true
+expect localStorage.getItem('splitpage-tagging-help-dismissed') == 1
+expect document.activeElement === document.querySelector('#rows .row[data-id="r3"] .audio-cell .cell-editable')
+
+# --- never over the words being typed: the caret under it makes it a ghost ------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tagging-help"]
+sleep 300
+caret #rows .row[data-id="r1"] .visual-cell .cell-editable
+eval window.scrollTo(0, 0); true
+sleep 300
+expect !window.__card().classList.contains('is-covering')
+caret #rows .row[data-id="r3"] .audio-cell .cell-editable
+# (the card laid over the whole cell the caret is in, wherever the caret is in it)
+eval (function(){ var r = document.querySelector('#rows .row[data-id="r3"] .audio-cell .cell-editable').getBoundingClientRect(); var c = window.__card(); c.style.cssText = 'left:' + r.left + 'px;top:' + r.top + 'px;right:auto;bottom:auto;width:' + r.width + 'px;max-width:none;height:' + Math.max(r.height, 40) + 'px;transition:none'; document.dispatchEvent(new Event('selectionchange')); return true; })()
+sleep 300
+expect window.__card().classList.contains('is-covering')
+expect getComputedStyle(window.__card()).pointerEvents == none
+caret #rows .row[data-id="r1"] .visual-cell .cell-editable
+eval window.scrollTo(0, 0); true
+sleep 300
+expect !window.__card().classList.contains('is-covering')
+eval window.__card().style.cssText = ''; true
+
+# --- the dark theme: its own layer, and the chips still the script's colours -----
+eval document.documentElement.setAttribute('data-theme', 'dark'); true
+sleep 300
+eval (function(){ var probe = document.createElement('div'); probe.style.cssText = 'position:absolute;background:var(--surface-2)'; document.body.appendChild(probe); window.__darkBg = getComputedStyle(probe).backgroundColor; probe.remove(); return window.__darkBg; })()
+expect window.__darkBg !== window.__layer.bg
+expect getComputedStyle(window.__card()).backgroundColor === window.__darkBg
+expect window.__sameAsScript()
+expect window.__distinct() == 6
+eval window.__card().focus(); true
+shot 180-card-dark
+eval document.documentElement.setAttribute('data-theme', 'light'); true
+
+quit

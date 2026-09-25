@@ -146,7 +146,6 @@ import {
   stepFind
 } from "./09-find-replace.js";
 import {
-  TAGGING_HELP_KEY,
   armDeleteComment,
   captureReplyDrafts,
   closeCommentComposer,
@@ -1551,20 +1550,12 @@ function init() {
 
   document.getElementById("identity-chip").addEventListener("click", promptForName);
 
-  /* Dismissed for good once you know it, but never lost — File ▸ Tagging
-     reference calls showTaggingHelp() to put it back. Kept in localStorage
-     rather than the document so it follows the reader, not the script:
-     sending someone a file shouldn't hide the reference from them. */
-  document.getElementById("tagging-help-dismiss").addEventListener("click", function () {
-    document.getElementById("tagging-help").hidden = true;
-    try { localStorage.setItem(TAGGING_HELP_KEY, "1"); } catch (e) {}
-  });
-  /* The reference no longer opens itself over the script on every visit
-     until dismissed (#169, the brief's "the script starts immediately"):
-     it was a whole panel between the header and the first scene. It is
-     one click away wherever it was before — File ▸ Tagging reference, the
-     start page's "Tagging cheat sheet", Help, and the tour's step that
-     shows it (showTaggingHelp, 10-comments.js). */
+  /* The tagging reference no longer opens itself over the script on every
+     visit until dismissed (#169, the brief's "the script starts
+     immediately"). It is one click away — File ▸ Tagging reference, the
+     command menu, Settings, and the tour's step that shows it — and a
+     floating card since #205; its close, Esc and dismissal are wired with
+     it in 10-comments.js (showTaggingHelp / hideTaggingHelp). */
 
   /* ---- find & replace ---- */
   document.getElementById("find-close").addEventListener("click", closeFindBar);
