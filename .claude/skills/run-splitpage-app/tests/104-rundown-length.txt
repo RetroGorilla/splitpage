@@ -18,7 +18,7 @@ goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
 sleep 400
-eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; window.T = window.__targetTest; window.len = function(){ return document.getElementById('runtime-chip'); }; window.R = function(el){ return el.getBoundingClientRect(); }; window.track = function(){ return R(document.querySelector('#rundown .rundown-track')); }; window.lastBlock = function(){ var b = document.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'); return R(b[b.length - 1]); }; window.clear = function(){ var l = R(len()); return Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'), function(b){ var r = R(b); return r.right <= l.left + 0.5 || r.left >= l.right - 0.5; }); }; return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; window.T = window.__targetTest; window.len = function(){ return document.getElementById('runtime-chip'); }; window.R = function(el){ return el.getBoundingClientRect(); }; window.track = function(){ return R(document.querySelector('#rundown .rundown-track')); }; window.lastBlock = function(){ var b = document.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'); return R(b[b.length - 1]); }; window.clear = function(){ var l = R(len()); var c = R(document.querySelector('#rundown .rundown-blocks')); return Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'), function(b){ var r = R(b); var left = Math.max(r.left, c.left), right = Math.min(r.right, c.right); return right <= left || right <= l.left + 0.5 || left >= l.right - 0.5; }); }; return true; })()
 
 # --- no clock in the header -------------------------------------------------
 expect document.querySelector('.topbar-row #runtime-chip') === null
@@ -120,6 +120,11 @@ eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var
 wait document.getElementById('rundown').classList.contains('is-lensed')
 sleep 400
 expect Math.abs(R(len()).left - window.__lenLeft) < 0.5
+# (the sliding lens carries the last blocks past the end of the blocks' layer,
+# which ends short of the label and clips them there: clear() counts only what
+# is drawn)
+expect R(document.querySelector('#rundown .rundown-blocks')).right <= R(len()).left + 0.5
+expect getComputedStyle(document.querySelector('#rundown .rundown-blocks')).overflowX === 'clip'
 expect clear()
 # and a pointer on the label is not on the script: the lens lets go
 eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var l = R(len()); t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: l.left + l.width / 2, clientY: l.top + 10, pointerType: 'mouse' })); return true; })()

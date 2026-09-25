@@ -123,9 +123,18 @@ expect Math.abs(cx(dot('p1')) - window.__restX) > 3 && Math.abs(cx(dot('p3')) - 
 expect onBlock('p1', 'r3')
 expect onBlock('p3', 'r8')
 shot 115-presence-lens
-# moving on keeps them with their blocks, frame by frame
-eval (async function(){ for (var k = 1; k <= 30; k++) { move(cx(blk('r5')) + k * 12); await new Promise(function(r){ requestAnimationFrame(function(){ r(); }); }); if (!onBlock('p1', 'r3') || !onBlock('p3', 'r8')) { window.__lost = k; return false; } } return true; })()
+# moving on keeps them with their blocks, frame by frame — or hidden, once the
+# sliding lens has carried the block's middle off the track
+eval (function(){ window.offTrack = function(id){ var t = track().getBoundingClientRect(), b = blk(id).getBoundingClientRect(), m = b.left + b.width / 2; return m < t.left || m > t.left + RT.lens().W; }; window.onOrOff = function(pid, id){ return offTrack(id) ? dot(pid).hidden : !dot(pid).hidden && onBlock(pid, id); }; return true; })()
+eval (async function(){ var x0 = cx(blk('r5')); for (var k = 1; k <= 30; k++) { move(x0 + k * 12); await new Promise(function(r){ requestAnimationFrame(function(){ r(); }); }); if (!onOrOff('p1', 'r3') || !onOrOff('p3', 'r8')) { window.__lost = k; return false; } } return true; })()
 expect window.__lost === undefined
+# at the far right the strip's start has slid off the left edge: scene 4's
+# block and its dot are gone from the track, and the edge fades
+eval (function(){ var t = track().getBoundingClientRect(); move(t.left + RT.lens().W - 4); return true; })()
+wait offTrack('r3')
+wait dot('p1').hidden
+expect document.querySelector('#rundown .rundown-blocks').classList.contains('over-l')
+expect !dot('p3').hidden || offTrack('r8')
 eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
 wait !document.getElementById('rundown').classList.contains('is-lensed')
 sleep 300

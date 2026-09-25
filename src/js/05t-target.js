@@ -30,10 +30,10 @@ import { queueAutoSave } from "./14-export.js";
    it is one undo step, saved, synced and merged like the title with no
    code of its own here. A review session sees it and cannot change it.
 
-   The overlay is drawn TO SCALE (rundownLayout(), not rundownX()): while
-   the hover lens is on the overlay fades out, since the blocks under it are
-   not to scale then, and it has to be right the moment the lens comes to
-   rest. Minimized, the thin bar keeps the line as a small tick; the label
+   The overlay is drawn on the layout AT REST (rundownLayout().x, not
+   rundownX()): while the hover lens is on the overlay fades out, since the
+   blocks under it have moved then, and it has to be right the moment the
+   lens comes to rest. Minimized, the thin bar keeps the line as a small tick; the label
    and the hatching need the full strip. */
 
 /* The presets the popover offers: 0:30, 1:00, 2:00, 3:00, 5:00, 10:00. */
@@ -41,15 +41,19 @@ export var TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
 
 function tenth(v) { return Math.round(v * 10) / 10; }
 
-/* Where the target goes on a strip at `pxPerSecond`, for a script `total`
+/* Where the target goes on a strip at `scale`, for a script `total`
    seconds long: the line's x, its label, and the hatched stretch between
    the end of the script and the target — {left, width, over, delta} — or
-   null when the two meet. Pure; px to one decimal, as the blocks are. */
-export function targetOverlayParts(total, target, pxPerSecond) {
-  if (!(target > 0) || !(pxPerSecond > 0)) return null;
+   null when the two meet. `scale` is px per second, or where a time falls
+   (the rest layout's x, rundownLayout().x: with the rest floor the blocks
+   are not quite to scale, and a target inside the script has to land where
+   its time is on them). Pure; px to one decimal, as the blocks are. */
+export function targetOverlayParts(total, target, scale) {
+  var at = typeof scale === "function" ? scale : scale > 0 ? function (s) { return s * scale; } : null;
+  if (!(target > 0) || !at) return null;
   var T = Math.max(0, Number(total) || 0);
-  var lineX = tenth(target * pxPerSecond);
-  var endX = tenth(T * pxPerSecond);
+  var lineX = tenth(at(target));
+  var endX = tenth(at(T));
   var diff = Math.round(target) - Math.round(T);
   var over = T > target;
   var width = tenth(Math.abs(endX - lineX));
@@ -91,7 +95,7 @@ export function paintTargetOverlay() {
   if (!layer) return;
   var target = targetLengthOf(S.state);
   var L = rundownLayout();
-  var parts = target ? targetOverlayParts(L.totalSeconds, target, L.pxPerSecond) : null;
+  var parts = target && L.pxPerSecond > 0 ? targetOverlayParts(L.totalSeconds, target, L.x) : null;
   var html = parts ? overlayHtml(parts) : "";
   if (html === lastOverlayHtml) return;
   layer.innerHTML = html;

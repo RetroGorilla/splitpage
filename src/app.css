@@ -7661,6 +7661,25 @@
   .rundown-track { position: relative; height: 45px; }
   .rundown-blocks, .rundown-overlay { position: absolute; inset: 0; }
   .rundown-overlay { pointer-events: none; }
+  /* The hover lens slides the strip (05f-rundown.js): its far ends go past
+     the track's edges and come back as the pointer nears them. The blocks
+     are clipped there (05f-rundown.js ends this layer where the blocks are
+     laid out, short of a length label at the right edge), with room for a
+     focus ring at rest; and an edge something has gone past fades over
+     18px, so it reads as "more this way". The mask is only there while
+     something is past an edge, and clips at the layer's own box. */
+  .rundown-blocks {
+    overflow: clip;
+    overflow-clip-margin: 4px;
+    --fade-l: 0px;
+    --fade-r: 0px;
+  }
+  .rundown-blocks:is(.over-l, .over-r) {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+  }
+  .rundown-blocks.over-l { --fade-l: 18px; }
+  .rundown-blocks.over-r { --fade-r: 18px; }
   .rd-block {
     position: absolute;
     top: 4px;
