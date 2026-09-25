@@ -53,7 +53,9 @@ expect (function(){ var bs = document.querySelectorAll('#rundown .rd-block'); fo
 # the ruler and the overlay fade; rundownX() is where a time is on screen now
 wait parseFloat(getComputedStyle(document.querySelector('#rundown .rundown-ruler')).opacity) === 0
 expect parseFloat(getComputedStyle(document.getElementById('rundown-overlay')).opacity) === 0
-expect Math.abs(RT.x(RT.lens().starts[13]) - parseFloat(blk(13).style.left)) < 0.6
+# (to a pixel and a half: a block's to-scale left is rounded to a tenth,
+# and under the lens a tenth next to the sliver is magnified ~15 times)
+expect Math.abs(RT.x(RT.lens().starts[13]) - parseFloat(blk(13).style.left)) < 1.5
 expect Math.abs(RT.x(RT.lens().starts[60]) - parseFloat(blk(60).style.left)) < 0.6
 # a b-roll block's ticks sit inside it
 expect (function(){ var b = blk(15).getBoundingClientRect(); return Array.prototype.every.call(blk(15).querySelectorAll('.rd-broll'), function(t){ var r = t.getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1; }); })()
@@ -66,6 +68,12 @@ eval (async function(){ for (var k = 1; k <= 20; k++) { move(__x + k); await new
 sleep 300
 expect under(__x + 20) === 13
 expect window.__muts === 0
+# #199: stopped, the lens comes to rest centred on the pointer — not left
+# off to one side of it — with the sliver still under it
+sleep 500
+expect Math.abs(RT.lens().a - (__x + 20 - track().getBoundingClientRect().left)) < 8
+expect under(__x + 20) === 13
+expect blk(13).getBoundingClientRect().width >= 80
 
 # --- a real click lands on what is under the pointer and goes to the scene ----
 eval (function(){ var r = blk(13).getBoundingClientRect(); return [r.left, r.width, __x + 20]; })()

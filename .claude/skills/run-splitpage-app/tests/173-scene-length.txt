@@ -18,7 +18,7 @@ eval (function(){ window.F = window.__splitpageFormats; window.rd = function (i)
 # --- at rest: the estimate, as plain figures --------------------------------
 expect rd(0).textContent == 0:12
 expect rd(1).textContent == 0:12
-expect document.getElementById('runtime-total').textContent == 00:24
+expect document.getElementById('runtime-total').textContent == 0:24
 expect rd(0).classList.contains('is-set') === false
 expect rd(0).title.indexOf('Estimated read time') === 0
 expect rd(0).getAttribute('aria-disabled') == false
@@ -41,7 +41,7 @@ expect rd(0).hidden === false
 expect rd(0).textContent == 1:30
 expect rd(0).classList.contains('is-set')
 expect rd(0).title.indexOf('Set by hand · estimate 0:12') === 0
-expect document.getElementById('runtime-total').textContent == 01:42
+expect document.getElementById('runtime-total').textContent == 1:42
 expect document.querySelectorAll('#rows .row .row-start')[1].textContent == 01:30
 expect document.querySelector('#rundown .rd-block .rd-len').textContent == 1:30
 # the focus is back on the time, so the keyboard carries on from there
@@ -55,11 +55,11 @@ key ctrl KeyZ
 sleep 300
 expect !('lengthSeconds' in F.state().rows[0])
 expect rd(0).textContent == 0:12
-expect document.getElementById('runtime-total').textContent == 00:24
+expect document.getElementById('runtime-total').textContent == 0:24
 key ctrl+shift KeyZ
 sleep 300
 expect F.state().rows[0].lengthSeconds === 90
-expect document.getElementById('runtime-total').textContent == 01:42
+expect document.getElementById('runtime-total').textContent == 1:42
 
 # --- shorter than the words: amber, and the tooltip says why ------------------
 click #rows .row:nth-child(1) .row-read
@@ -119,7 +119,7 @@ sleep 300
 expect !('lengthSeconds' in F.state().rows[0])
 expect rd(0).textContent == 0:12
 expect rd(0).classList.contains('is-set') === false
-expect document.getElementById('runtime-total').textContent == 00:24
+expect document.getElementById('runtime-total').textContent == 0:24
 
 # --- the estimate, confirmed unchanged, is not turned into a set length -------
 click #rows .row:nth-child(1) .row-read
@@ -145,7 +145,7 @@ key Enter
 sleep 300
 expect F.state().rows[2].lengthSeconds === 20
 expect rd(2).textContent == 0:20
-expect document.getElementById('runtime-total').textContent == 00:44
+expect document.getElementById('runtime-total').textContent == 0:44
 expect document.querySelectorAll('#rows .row .row-start')[2].textContent == 00:24
 
 # --- it goes out in the file -----------------------------------------------------

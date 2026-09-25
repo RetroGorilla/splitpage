@@ -19,6 +19,8 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  LENGTH_GAP_PX,
+  LENS_DRIFT_SHARE,
   LENS_MIN_PX,
   RUNDOWN_TAIL_SECONDS,
   knotBlocks,
@@ -28,6 +30,8 @@ import {
   rundownKnots,
   rundownLens,
   rundownLensFollow,
+  rundownLensRecenter,
+  rundownLengthPlace,
   rundownLensSlots,
   rundownScale,
   rundownSpan,
@@ -147,6 +151,64 @@ test("no scale, no ruler", () => {
   assert.deepEqual(rundownTicks(105, 0, 0), []);
 });
 
+/* ---- the script's length at the end of the strip (#207) ---- */
+
+test("the length sits just after the last block, in the tail, when it fits there", () => {
+  /* 1:35 on 1400px: the script ends at 1266.7, the tail is 133px */
+  const p = rundownLengthPlace(95, 0, 1400, [40]);
+  assert.equal(p.fit, 0);
+  assert.equal(p.pinned, false);
+  assert.equal(p.width, 1400, "the blocks keep the whole track");
+  const end = 95 * rundownScale(95, 0, 1400);
+  assert.ok(Math.abs(p.left - (end + LENGTH_GAP_PX)) < 0.1);
+  /* against a target the whole label fits in the gap to it as well */
+  const t = rundownLengthPlace(95, 120, 1400, [150, 40]);
+  assert.equal(t.fit, 0);
+  assert.ok(Math.abs(t.left - (95 * rundownScale(95, 120, 1400) + LENGTH_GAP_PX)) < 0.1);
+});
+
+test("a script that fills the strip puts its length at the track's right edge, and the blocks stop short of it", () => {
+  /* twenty minutes: the 10s tail is 11px */
+  const p = rundownLengthPlace(1200, 0, 1400, [44]);
+  assert.equal(p.fit, 0);
+  assert.equal(p.pinned, true);
+  assert.equal(p.left, 1400 - 44);
+  assert.equal(p.width, 1400 - 44 - LENGTH_GAP_PX);
+  /* laid out in that width, the last block ends before the label */
+  const blocks = rundownBlocks([{ seconds: 600, status: "todo" }, { seconds: 600, status: "todo" }], rundownScale(1200, 0, p.width));
+  const last = blocks[1];
+  assert.ok(last.left + last.width + LENGTH_GAP_PX <= p.left);
+  /* over its target, the same */
+  const over = rundownLengthPlace(125, 90, 1400, [160, 40]);
+  assert.equal(over.pinned, true);
+  assert.equal(over.fit, 0);
+});
+
+test("short of room, the length drops its target and delta before it goes, and goes only when it would take a quarter of the strip", () => {
+  /* 400px, a long script: the whole label (150px) is over a quarter, the total alone is not */
+  const p = rundownLengthPlace(1200, 1300, 400, [150, 40]);
+  assert.equal(p.fit, 1);
+  assert.equal(p.pinned, true);
+  assert.equal(p.left, 360);
+  /* the whole label anywhere before the total alone: at the edge rather
+     than drop the delta... */
+  const e = rundownLengthPlace(115, 120, 1000, [150, 40]);
+  assert.equal(e.fit, 0);
+  assert.equal(e.pinned, true);
+  /* ...and the total alone in the tail when the whole label fits nowhere */
+  const q = rundownLengthPlace(60, 0, 400, [150, 40]);
+  assert.equal(q.fit, 1);
+  assert.equal(q.pinned, false);
+  /* too narrow even for the total */
+  const none = rundownLengthPlace(1200, 0, 100, [40]);
+  assert.equal(none.fit, -1);
+  assert.equal(none.left, null);
+  assert.equal(none.width, 100);
+  /* and nothing to place */
+  assert.equal(rundownLengthPlace(95, 0, 0, [40]).fit, -1);
+  assert.equal(rundownLengthPlace(95, 0, 1400, []).fit, -1);
+});
+
 /* ---- the lens (#184) ----
  *
  * A layout is n + 2 knots: where each scene starts, where the last one
@@ -225,27 +287,64 @@ test("the scene under the lens is wide enough for its number and read time, and 
   blocks.forEach((b) => { assert.ok(b.left >= 0 && b.left + b.width <= width + 0.1); assert.ok(b.width >= 2); });
 });
 
+/* The room a lensed layout adds: what its scenes grew by, in all. */
+function extraOf(U, Y) {
+  let e = 0;
+  for (let i = 0; i < U.length - 1; i++) e += Math.max(0, (Y[i + 1] - Y[i]) - (U[i + 1] - U[i]));
+  return e;
+}
+
 test("the focus stays where it is anchored: what is under the pointer does not slide away", () => {
   const { U } = layout(longScript(), 1400);
-  for (const focus of [30, 333.3, 700, 1111, 1300]) {
+  for (const focus of [333.3, 700, 1111]) {
     const Y = rundownLens(U, focus, focus);
     assert.ok(Math.abs(knotMap(U, Y, focus) - focus) < 0.01, "focus " + focus);
   }
-  /* anchored somewhere else nearby (within the magnified room, which is
-     all the anchor may drift), it is there instead */
-  const Y2 = rundownLens(U, 700, 715);
-  assert.ok(Math.abs(knotMap(U, Y2, 700) - 715) < 0.01);
+  /* anchored somewhere else nearby (within the drift the anchor is
+     allowed, #199), it is there instead */
+  const cap = LENS_DRIFT_SHARE * extraOf(U, rundownLens(U, 700, 700));
+  assert.ok(cap > 4, "the test's lens adds room: a cap of " + cap);
+  const Y2 = rundownLens(U, 700, 700 + cap / 2);
+  assert.ok(Math.abs(knotMap(U, Y2, 700) - (700 + cap / 2)) < 0.01);
 });
 
-test("the anchor never drifts further than the magnified room, so the rest is never stretched", () => {
+test("#199: the anchor drifts from the focus by at most LENS_DRIFT_SHARE of the room the lens adds, and the rest is never stretched", () => {
   const { U, width } = layout(longScript(), 1400);
-  const Y = rundownLens(U, 700, 1300);
-  const at = knotMap(U, Y, 700);
-  assert.ok(at < 1300, "clamped, at " + at);
-  /* everything far from the focus is shrunk, never stretched (beyond the
-     hair the focus scene's straightening can add) */
-  for (let i = 0; i < 30; i++) assert.ok(Y[i + 1] - Y[i] <= (U[i + 1] - U[i]) * 1.02, "scene " + i);
-  assert.equal(Y[Y.length - 1], width);
+  for (const want of [1300, 100]) {
+    const Y = rundownLens(U, 700, want);
+    const at = knotMap(U, Y, 700);
+    const cap = LENS_DRIFT_SHARE * extraOf(U, Y);
+    assert.ok(Math.abs(at - 700) <= cap + 0.5, "drifted " + (at - 700).toFixed(1) + " past a cap of " + cap.toFixed(1));
+    assert.ok(Math.abs(at - 700) >= cap - 0.5, "but as far as the cap, towards " + want);
+    /* everything far from the focus is shrunk, never stretched (beyond the
+       hair the focus scene's straightening can add) */
+    for (let i = 0; i < 30; i++) assert.ok(Y[i + 1] - Y[i] <= (U[i + 1] - U[i]) * 1.02, "scene " + i);
+    for (let i = 50; i < 80; i++) assert.ok(Y[i + 1] - Y[i] <= (U[i + 1] - U[i]) * 1.02, "scene " + i);
+    assert.equal(Y[Y.length - 1], width);
+  }
+});
+
+test("#199: at either end the lens moves inward rather than being cut short on the near side", () => {
+  const { U, width } = layout(longScript(), 1400);
+  const mid = (i) => (U[i] + U[i + 1]) / 2;
+  /* the first scene and the last grow nearly as far as a scene in the
+     middle (the half of them beyond the focus keeps only the floor of
+     its own few pixels); before #199 the first was cut to under half */
+  const Y0 = rundownLens(U, mid(0), mid(0));
+  assert.ok(Y0[1] - Y0[0] >= LENS_MIN_PX * 0.9, "the first scene is " + (Y0[1] - Y0[0]).toFixed(1));
+  const Yn = rundownLens(U, mid(79), mid(79));
+  assert.ok(Yn[80] - Yn[79] >= LENS_MIN_PX * 0.9, "the last scene is " + (Yn[80] - Yn[79]).toFixed(1));
+  /* the sliver near the start (scene 5, a 3s scene) grows as wide as the
+     same kind of sliver in the middle (scene 13) */
+  const Y4 = rundownLens(U, mid(4), mid(4));
+  const Y13 = rundownLens(U, mid(13), mid(13));
+  assert.ok(Math.abs((Y4[5] - Y4[4]) - (Y13[14] - Y13[13])) < 2.5, (Y4[5] - Y4[4]).toFixed(1) + " against " + (Y13[14] - Y13[13]).toFixed(1));
+  /* and nothing leaves the strip or runs backwards */
+  for (const Y of [Y0, Yn, Y4]) {
+    assert.ok(ordered(Y));
+    assert.equal(Y[0], 0);
+    assert.equal(Y[Y.length - 1], width);
+  }
 });
 
 test("scenes outside the lens shrink evenly, one factor each side", () => {
@@ -257,22 +356,30 @@ test("scenes outside the lens shrink evenly, one factor each side", () => {
   assert.ok(ratios[0] < 1 && ratios[0] > 0.1);
 });
 
-/* What the strip does: the lens opens on what is under the pointer, and
-   each move after that goes through rundownLensFollow at the speed it was
-   made. `moves` is [x, ms since the last]; the answer is every frame. */
+/* What the strip does: the lens opens on what is under the pointer, each
+   move after that goes through rundownLensFollow at the speed it was made,
+   and every frame the lens re-centres a frame's worth (#199). `moves` is
+   [x, ms since the last], one per frame (the same x again is a frame with
+   the pointer still); the answer is every frame, with the anchor as the
+   lens really uses it. */
 function drive(U, X, x0, moves) {
   let focus = knotMap(X, U, x0);
   let anchor = x0;
   let shown = rundownLens(U, focus, anchor);
   let x = x0;
-  const out = [{ x, shown, focus, anchor }];
+  const out = [{ x, shown, focus, anchor: knotMap(U, shown, focus) }];
   for (const [nx, dt] of moves) {
-    const next = rundownLensFollow(U, X, shown, focus, anchor, nx, nx - x, dt);
-    focus = next.focus;
-    anchor = next.anchor;
-    shown = rundownLens(U, focus, anchor);
+    if (nx !== x) {
+      const next = rundownLensFollow(U, X, shown, focus, anchor, nx, nx - x, dt);
+      focus = next.focus;
+      anchor = next.anchor;
+    }
     x = nx;
-    out.push({ x, shown, focus, anchor });
+    const settled = rundownLensRecenter(U, shown, focus, anchor, x, dt);
+    focus = settled.focus;
+    anchor = settled.anchor;
+    shown = rundownLens(U, focus, anchor);
+    out.push({ x, shown, focus, anchor: knotMap(U, shown, focus) });
   }
   return out;
 }
@@ -291,30 +398,72 @@ test("hovering a sliver opens the lens on it: under the pointer, its number and 
   assert.ok(f.shown[i + 1] - f.shown[i] - 2 >= 80);
 });
 
-test("aiming: moving slowly, what is under the pointer stays there, and a still pointer moves nothing", () => {
+test("aiming (#199): a slow pointer crosses a sliver drawn wide with time to click it, and the lens stays round the pointer", () => {
   const { U, X } = layout(longScript(), 1400);
-  const x0 = 700;
+  const i = 13;                             /* a 3s sliver */
+  const x0 = X[i] - 30;
   const moves = [];
-  for (let k = 1; k <= 60; k++) moves.push([x0 + k, 16]);   /* 1px a frame: ~60px a second */
+  for (let k = 1; k <= 140; k++) moves.push([x0 + k, 16]);   /* 1px a frame: ~60px a second */
   const frames = drive(U, X, x0, moves);
-  for (let k = 1; k < frames.length; k++) {
-    const prev = frames[k - 1], f = frames[k];
-    /* the point of the script the pointer is over on the old frame is
-       where the pointer is on the new one */
-    const u = knotMap(prev.shown, U, f.x);
-    assert.ok(Math.abs(knotMap(U, f.shown, u) - f.x) < 1, "slipped at " + f.x);
-    let jump = 0;
-    for (let j = 0; j < f.shown.length; j++) jump = Math.max(jump, Math.abs(f.shown[j] - prev.shown[j]));
-    assert.ok(jump < 6, "a knot jumped " + jump.toFixed(2) + "px at " + f.x);
+  const px = {};
+  frames.slice(1).forEach((f) => { const sc = sceneAt(f.shown, f.x); px[sc] = (px[sc] || 0) + 1; });
+  /* the sliver is under the pointer for a good stretch of travel — the
+     plain magnifier would give it its 4px slot, and the lens before #199
+     (which held still, then swung) gave it 2px */
+  assert.ok(px[i] >= 16, "the sliver was under the pointer for " + px[i] + "px: " + JSON.stringify(px));
+  /* and nothing the pointer crossed was skipped: the scenes under it go
+     up one at a time */
+  const seq = frames.map((f) => sceneAt(f.shown, f.x));
+  for (let k = 1; k < seq.length; k++) assert.ok(seq[k] - seq[k - 1] >= 0 && seq[k] - seq[k - 1] <= 1, "scene " + seq[k - 1] + " to " + seq[k]);
+  for (const f of frames) {
+    assert.ok(ordered(f.shown));
+    /* the lens's centre is never far from the pointer: it neither leads
+       nor trails by more than about half a magnified scene */
+    assert.ok(Math.abs(f.x - f.anchor) <= LENS_MIN_PX * 0.6, "the lens is " + (f.x - f.anchor).toFixed(1) + "px off the pointer at " + f.x);
+    /* nor is it pushed to one side by more than the drift cap (extraOf
+       reads the room net of the magnified scenes' own shrink, a few per
+       cent under what the lens adds, hence the tenth) */
+    assert.ok(Math.abs(f.anchor - f.focus) <= LENS_DRIFT_SHARE * extraOf(U, f.shown) * 1.1 + 1, "drift " + (f.anchor - f.focus).toFixed(1) + " at " + f.x);
   }
-  /* 60px of slow travel crosses at most a scene or two, each drawn wide */
-  const a = sceneAt(frames[0].shown, x0), b = sceneAt(frames[frames.length - 1].shown, x0 + 60);
-  assert.ok(b - a >= 0 && b - a <= 2, "from scene " + a + " to " + b);
-  /* standing still */
-  const last = frames[frames.length - 1];
-  const still = rundownLensFollow(U, X, last.shown, last.focus, last.anchor, last.x, 0, 16);
-  assert.equal(still.focus, last.focus);
-  assert.equal(still.anchor, last.anchor);
+});
+
+test("#199: a pointer that stops on a sliver keeps it, and the lens comes to rest centred on the pointer", () => {
+  const { U, X } = layout(longScript(), 1400);
+  const i = 13;
+  /* move in slowly until the sliver is under the pointer, a few pixels
+     more, then stop for a second */
+  let moves = [];
+  let frames = [];
+  for (let k = 1; k <= 120; k++) {
+    moves.push([X[i] - 30 + k, 16]);
+    frames = drive(U, X, X[i] - 30, moves);
+    if (sceneAt(frames[frames.length - 1].shown, frames[frames.length - 1].x) === i) break;
+  }
+  const xs = frames[frames.length - 1].x + 4;
+  for (let k = 1; k <= 4; k++) moves.push([xs - 4 + k, 16]);
+  for (let k = 0; k < 60; k++) moves.push([xs, 16]);
+  frames = drive(U, X, X[i] - 30, moves);
+  const stopped = frames.length - 61;
+  for (let k = stopped; k < frames.length; k++) {
+    assert.equal(sceneAt(frames[k].shown, xs), i, "the sliver left the pointer " + (k - stopped) + " frames after it stopped");
+  }
+  const rest = frames[frames.length - 1];
+  assert.ok(rest.shown[i + 1] - rest.shown[i] >= 80, "and it is " + (rest.shown[i + 1] - rest.shown[i]).toFixed(1) + "px wide");
+  /* at rest the lens is centred on the pointer, or all but — the last few
+     pixels close slowly over a sliver, since closing them is what would
+     slide the sliver away — and what the pointer is over is the focus */
+  assert.ok(Math.abs(rest.anchor - xs) < 8, "the lens's centre is " + (rest.anchor - xs).toFixed(2) + "px off the pointer");
+  assert.ok(Math.abs(knotMap(rest.shown, U, xs) - rest.focus) < 0.5);
+  /* it is not moving by more than a hair a frame by then, nor at all
+     without time passing */
+  const again = rundownLensRecenter(U, rest.shown, rest.focus, rest.anchor, xs, 16);
+  assert.ok(Math.abs(again.focus - rest.focus) < 0.1 && Math.abs(again.anchor - rest.anchor) < 1, "still moving " + (again.anchor - rest.anchor).toFixed(2) + "px a frame");
+  const still = rundownLensFollow(U, X, rest.shown, rest.focus, rest.anchor, xs, 0, 16);
+  assert.equal(still.focus, rest.focus);
+  assert.equal(still.anchor, rest.anchor);
+  const noTime = rundownLensRecenter(U, rest.shown, rest.focus, rest.anchor, xs, 0);
+  assert.equal(noTime.focus, rest.focus);
+  assert.equal(noTime.anchor, rest.anchor);
 });
 
 test("travelling: moving fast, the lens goes where the pointer goes, end to end", () => {
@@ -323,9 +472,16 @@ test("travelling: moving fast, the lens goes where the pointer goes, end to end"
   for (let x = 20; x <= 1400; x += 20) moves.push([x, 16]);   /* 20px a frame */
   const frames = drive(U, X, 0, moves);
   for (const f of frames.slice(1)) {
-    assert.ok(Math.abs(f.focus - knotMap(X, U, f.x)) < 1e-6, "focus at " + f.x);
+    /* a fast move puts the focus on the to-scale point under the pointer;
+       the frame's re-centring after it moves it a few pixels at most */
+    assert.ok(Math.abs(f.focus - knotMap(X, U, f.x)) < 8, "focus at " + f.x);
     assert.ok(ordered(f.shown));
   }
+  /* the move alone, with no frame after it, is exactly the plain magnifier */
+  const f1 = frames[20];
+  const moved = rundownLensFollow(U, X, f1.shown, f1.focus, f1.anchor, f1.x + 20, 20, 16);
+  assert.ok(Math.abs(moved.focus - knotMap(X, U, f1.x + 20)) < 1e-6);
+  assert.ok(Math.abs(moved.anchor - (f1.x + 20)) < 1e-6);
   /* and it reaches both ends: the last scene is under a pointer near the right edge */
   const end = frames[frames.length - 1];
   assert.equal(end.shown[end.shown.length - 1], 1400);

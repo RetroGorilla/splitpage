@@ -1,0 +1,169 @@
+# The script's length at the end of the rundown (issue #207): not a clock in
+# the header any more, but a small label in the rundown's own mono just
+# after the last block — "0:24", or against a target "0:24 / 2:00 · 1:36
+# left" (the hatching then does not repeat the delta), tally red once over.
+# A long script fills the strip: the label sits at the track's right edge and
+# the blocks are laid out short of it, so it never covers one, under the
+# hover lens too. Minimized (#178) the thin bar keeps it at its end, still a
+# button of its own. With shot scenes hidden it reads what is left / the
+# whole. A click opens the reading speed and target popover (promptForWpm).
+# The placement arithmetic is src/test/rundown.test.mjs (rundownLengthPlace);
+# the phone's home for it (the header's status line) is suite 106.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 1440 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+wait document.querySelectorAll('#rundown .rd-block').length === document.querySelectorAll('#rows .row').length
+sleep 400
+eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; window.T = window.__targetTest; window.len = function(){ return document.getElementById('runtime-chip'); }; window.R = function(el){ return el.getBoundingClientRect(); }; window.track = function(){ return R(document.querySelector('#rundown .rundown-track')); }; window.lastBlock = function(){ var b = document.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'); return R(b[b.length - 1]); }; window.clear = function(){ var l = R(len()); return Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'), function(b){ var r = R(b); return r.right <= l.left + 0.5 || r.left >= l.right - 0.5; }); }; return true; })()
+
+# --- no clock in the header -------------------------------------------------
+expect document.querySelector('.topbar-row #runtime-chip') === null
+expect document.querySelector('.program-clock, .program-clock-wrap') === null
+expect document.querySelectorAll('.topbar-row > *').length === 2
+expect document.getElementById('runtime-chip').closest('#rundown .rundown-track') !== null
+expect getComputedStyle(document.getElementById('length-status')).display == none
+
+# --- just after the last block, in the tail ------------------------------------
+expect document.getElementById('runtime-total').textContent == 0:24
+expect document.getElementById('runtime-slot').textContent === ''
+expect RT.lens().length.fit === 0
+expect RT.lens().length.pinned === false
+expect RT.lens().W === Math.round(track().width)
+expect Math.abs(R(len()).left - (lastBlock().right + 2 + 6)) < 1
+expect R(len()).right <= track().right
+# in the blocks' band, in the blocks' mono, not a 20px clock
+expect Math.abs((R(len()).top + R(len()).bottom) / 2 - (lastBlock().top + lastBlock().bottom) / 2) < 1
+expect parseFloat(getComputedStyle(len()).fontSize) === 12
+expect getComputedStyle(len()).fontFamily === getComputedStyle(document.querySelector('#rundown .rd-block')).fontFamily
+expect clear()
+expect len().title.indexOf('reading speed') !== -1
+shot 104-length-rest
+
+# --- a click opens the reading speed and target popover, under it -------------
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= R(len()).bottom
+expect !document.getElementById('rundown').classList.contains('is-min')
+key Escape
+wait document.getElementById('wpm-editor') === null
+expect document.activeElement.id == runtime-chip
+
+# --- against a target: " / 2:00 · 1:36 left", the hatching quiet ---------------
+expect T.set(120) === true
+sleep 300
+expect document.querySelector('#runtime-slot .rd-length-of').textContent === ' / 2:00'
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 1:36 left
+expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta'), '::before').content.indexOf('·') !== -1
+expect len().textContent.replace(/\s+/g, ' ') == 0:24 / 2:001:36 left
+expect RT.lens().length.fit === 0
+expect Math.abs(R(len()).left - (lastBlock().right + 2 + 6)) < 1
+expect document.getElementById('rundown').classList.contains('has-length-delta')
+expect getComputedStyle(document.querySelector('#rundown-overlay .rd-target-delta')).display == none
+# the target's dashed line and hatching pass behind it, not through it
+expect parseInt(getComputedStyle(len()).zIndex, 10) > 0
+expect getComputedStyle(len()).backgroundColor !== 'rgba(0, 0, 0, 0)'
+expect clear()
+shot 104-length-target
+
+# --- over the target, in tally red ------------------------------------------------
+expect T.set(20) === true
+sleep 300
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:04 over
+expect document.querySelector('#runtime-slot .rd-length-delta').classList.contains('is-over')
+expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).color == rgb(196, 48, 42)
+expect R(len()).right <= track().right + 0.5
+expect clear()
+shot 104-length-over
+expect T.set(null) === true
+sleep 300
+expect document.getElementById('runtime-slot').textContent === ''
+expect !document.getElementById('rundown').classList.contains('has-length-delta')
+
+# --- shot scenes hidden: what is left / the whole ---------------------------------
+eval (function(){ F.state().rows[0].status = 'shot'; return true; })()
+jsclick #file-menu [data-file-action="toggle-hide-shot"]
+sleep 400
+expect document.getElementById('runtime-total').textContent == 0:12 / 0:24
+expect document.querySelector('#runtime-total .rd-length-of').textContent === ' / 0:24'
+expect len().title.indexOf('still to shoot') !== -1
+jsclick #file-menu [data-file-action="toggle-hide-shot"]
+sleep 400
+expect document.getElementById('runtime-total').textContent == 0:24
+
+# --- a long script fills the strip: the label at the track's right edge -----------
+eval (function(){ var w = function(n){ var a = []; for (var i = 0; i < n; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 60; i++) rows.push({ id: 'L' + i, visualText: 'Shot ' + i, audioText: 'Scene ' + i + ' ' + w(10 + (i * 13) % 50), status: i % 3 === 0 ? 'shot' : 'todo' }); F.openFile(new File([JSON.stringify({ schema: 2, title: 'Long one', wordsPerMinute: 150, rows: rows })], 'long.splitpage')); return true; })()
+wait F.state().title === 'Long one' && document.querySelectorAll('#rundown .rd-block').length === 60
+sleep 400
+expect RT.lens().length.pinned === true
+expect RT.lens().length.fit === 0
+expect Math.abs(R(len()).right - track().right) < 1
+expect RT.lens().W < Math.round(track().width) - R(len()).width
+expect lastBlock().right + 6 <= R(len()).left + 0.5
+expect clear()
+shot 104-length-filled
+# over its target too, the whole label, still clear of every block
+expect T.set(300) === true
+sleep 300
+expect document.querySelector('#runtime-slot .rd-length-delta').classList.contains('is-over')
+expect RT.lens().length.pinned === true
+expect RT.lens().length.fit === 0
+expect Math.abs(R(len()).right - track().right) < 1
+expect clear()
+shot 104-length-filled-over
+
+# --- under the lens: the blocks never run under it --------------------------------
+eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var b = document.querySelectorAll('#rundown .rd-block'); var r = R(b[57]); t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + 10, pointerType: 'mouse' })); window.__lenLeft = R(len()).left; return true; })()
+wait document.getElementById('rundown').classList.contains('is-lensed')
+sleep 400
+expect Math.abs(R(len()).left - window.__lenLeft) < 0.5
+expect clear()
+# and a pointer on the label is not on the script: the lens lets go
+eval (function(){ var t = document.querySelector('#rundown .rundown-track'); var l = R(len()); t.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: l.left + l.width / 2, clientY: l.top + 10, pointerType: 'mouse' })); return true; })()
+wait RT.lens().Z === null
+expect Math.abs(R(len()).left - window.__lenLeft) < 0.5
+eval document.querySelector('#rundown .rundown-track').dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+
+# --- minimized: the thin bar keeps it, at its end, a button of its own ------------
+eval RT.setMinimized(true)
+sleep 400
+expect document.getElementById('rundown').classList.contains('is-min')
+expect R(document.getElementById('rundown')).height <= 12
+expect R(len()).height > 0
+expect R(len()).top >= R(document.querySelector('#rundown .rundown-track')).top - 0.5
+expect R(len()).bottom <= R(document.querySelector('#rundown .rundown-track')).bottom + 0.5
+expect R(len()).right <= track().right + 0.5
+expect clear()
+# the delta beside it while there is room
+expect getComputedStyle(document.querySelector('#runtime-slot')).visibility !== 'hidden'
+expect (function(){ var l = R(len()); var el = document.elementFromPoint(l.left + l.width / 2, l.top + l.height / 2); return !!el && !!el.closest('#runtime-chip'); })()
+shot 104-length-min
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+expect document.getElementById('rundown').classList.contains('is-min')
+key Escape
+wait document.getElementById('wpm-editor') === null
+# anywhere else on the bar still brings the strip back
+expect (function(){ var s = R(document.getElementById('rundown')); var el = document.elementFromPoint(s.left + 200, s.top + 4); return !!el && !!el.closest('.rundown-toggle'); })()
+# a short script on the thin bar: just after the last segment
+expect T.set(null) === true
+eval (function(){ F.openFile(new File([JSON.stringify({ schema: 2, title: 'Short one', wordsPerMinute: 150, rows: [{ id: 's1', audioText: 'One two three four five six seven eight nine ten eleven twelve' }, { id: 's2', audioText: 'Thirteen fourteen fifteen sixteen seventeen eighteen' }] })], 'short.splitpage')); return true; })()
+wait F.state().title === 'Short one'
+sleep 400
+expect RT.lens().length.pinned === false
+expect Math.abs(R(len()).left - (lastBlock().right + 2 + 6)) < 1
+shot 104-length-min-short
+eval RT.setMinimized(false)
+sleep 300
+
+# --- dark --------------------------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme','dark')
+expect T.set(10) === true
+sleep 300
+shot 104-length-over-dark
+eval document.documentElement.removeAttribute('data-theme')
+
+quit
