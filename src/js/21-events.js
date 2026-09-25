@@ -47,6 +47,7 @@ import {
   updateToolbarState
 } from "./05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
+import { pasteScenesAt } from "./05h-scene-select.js";
 import { openGalleryOverlay } from "./05e-gallery-overlay.js";
 import { thumbnailsAfterPaste } from "./05v-video.js";
 import {
@@ -1059,6 +1060,8 @@ function onRootPaste(e) {
   e.preventDefault();
   var cd = e.clipboardData || window.clipboardData;
   if (isScriptCell(cellEl)) {
+    /* whole scenes on the clipboard (#204): new scenes after this one */
+    if (pasteScenesAt(cd, cellEl)) return;
     /* a review session's script is read-only: nothing to paste into */
     if (reviewMode()) return;
     insertIntoScriptCell(cellEl, cd.getData("text/html"), cd.getData("text/plain"), cd.files);

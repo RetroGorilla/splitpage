@@ -1111,6 +1111,29 @@
   .row-menu-item:hover, .row-menu-item:focus-visible { background: var(--hover); outline: none; }
   .row-menu-item.danger, .row-menu-item.danger .mi-icon { color: var(--danger); }
   .row-menu-item.danger.armed { background: var(--danger-soft); }
+  .row-menu-item:disabled { opacity: 0.45; cursor: default; }
+  .row-menu-item:disabled:hover { background: transparent; }
+
+  /* ---------- whole scenes selected (#204, 05h-scene-select.js) ----------
+     The highlight itself is a rule per selected row, written by the module
+     into #scene-selection-style (--selection behind both columns, a
+     --focus-ring edge round the block), because render() resets a row's
+     class. While a drag is choosing scenes nothing in the script takes a
+     text selection. The right-click menu is the scene menu's look, placed
+     at the pointer. */
+  body.is-scene-selecting #rows, body.is-scene-selecting #rows * {
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+  .scene-menu { position: fixed; top: 0; left: 0; z-index: 140; min-width: 248px; }
+  .scene-menu-keys {
+    margin-left: auto;
+    padding-left: 16px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
 
   /* The rail: the scene's read time, right-aligned on the first line. */
   .row-rail {
