@@ -1422,6 +1422,21 @@
   }
   .cell-editable .stage-dir::before, .prompter-line .stage-dir::before { content: "("; }
   .cell-editable .stage-dir::after, .prompter-line .stage-dir::after { content: ")"; }
+  /* A sound cue line of the Audio column (#219): "SFX: door slam" as its
+     own small line in the Music/SFX colour, after a note, so the eye skips
+     it while reading the words. The span is always a whole line
+     (04c-doc-model.js settleCues). --tag-sound is 5.9:1 on the page in the
+     light theme and 7:1 in the dark one, so it stays readable at 0.82em.
+     The prompter never shows one: 20-teleprompter.js leaves cues out. */
+  .cell-editable .audio-cue {
+    color: var(--tag-sound);
+    font-size: 0.82em;
+    letter-spacing: 0.01em;
+  }
+  .cell-editable .audio-cue::before {
+    content: "\266A\00a0";
+    font-weight: 600;
+  }
 
   /* Under the Visual words since #169. */
   .visual-media { margin-top: 12px; }
@@ -2744,6 +2759,7 @@
   .tag-sample[data-tag-cat="sound"],    .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
   .tag-sample[data-tag-cat="gear"],     .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
   .tag-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
+  .audio-cue.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
   .tag-badge { background: var(--visual); }
 
   /* The tag composer's categories (#169): outlined buttons with the

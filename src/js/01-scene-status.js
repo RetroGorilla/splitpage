@@ -301,7 +301,8 @@ export function __init() {
      on every refresh, but only the row being typed in has changed. The
      words are the cell's text as the document model reads it (cellOf,
      #85), not a parse of the markup here — and only the words that are
-     said: a stage direction ("(beat)", #167) takes no reading time. */
+     said: a stage direction ("(beat)", #167) and a sound cue line ("SFX:
+     door slam", #219) take no reading time. */
   wordCount = contentMemo(function (html) {
     var text = spokenText(cellOf(html));
     return text ? text.split(/\s+/).filter(Boolean).length : 0;

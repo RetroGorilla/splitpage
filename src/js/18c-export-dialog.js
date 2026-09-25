@@ -250,7 +250,8 @@ function previewHtml(action) {
   if (action === "export-narration-docx" || action === "export-narration-txt") {
     var paras = narrationRows().slice(0, 8);
     var mono = action === "export-narration-txt" ? ' pv-mono' : '';
-    var said = narrationIncludesDirections() ? null : { directions: "omit" };
+    /* a sound cue (#219) is never in the narration */
+    var said = narrationIncludesDirections() ? { cues: "omit" } : { directions: "omit", cues: "omit" };
     return '<div class="pv-title">' + title + '</div><div class="' + mono.trim() + '">' +
       (paras.length ? paras.map(function (r) { return '<p class="pv-para">' + cellText(r.audioText, 180, said) + '</p>'; }).join("")
                     : '<p class="pv-para">(no narration yet)</p>') + '</div>';
