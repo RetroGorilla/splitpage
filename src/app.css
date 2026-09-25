@@ -1697,6 +1697,48 @@
   .scene-gallery-note .btn-outline svg {
     width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
   }
+  /* a picture opens at full size (#216): the preview says so with its
+     cursor, then a layer over the whole window — the picture on a dark
+     backdrop, its size and name at the foot, × in the corner */
+  .scene-gallery-preview-pic.is-zoomable { cursor: zoom-in; }
+  .scene-gallery-preview-pic.is-zoomable:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .scene-gallery-zoom {
+    position: fixed; inset: 0; z-index: 1; overflow: hidden;
+    background: rgba(8, 8, 7, 0.94); color: #ECEBE7; outline: none;
+  }
+  .scene-gallery-zoom[hidden] { display: none; }
+  .scene-gallery-zoom-stage { position: absolute; inset: 0; touch-action: none; }
+  .scene-gallery-zoom-img {
+    position: absolute; left: 0; top: 0; max-width: none; max-height: none;
+    transform-origin: 0 0; user-select: none; -webkit-user-drag: none;
+  }
+  .scene-gallery-zoom-stage.can-zoom-in .scene-gallery-zoom-img { cursor: zoom-in; }
+  .scene-gallery-zoom-stage.can-zoom-out .scene-gallery-zoom-img { cursor: grab; }
+  .scene-gallery-zoom-stage.is-dragging .scene-gallery-zoom-img { cursor: grabbing; }
+  .scene-gallery-zoom-stage.is-animating .scene-gallery-zoom-img {
+    transition: transform var(--dur-enter) var(--ease-standard);
+  }
+  .scene-gallery-zoom-info {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; max-width: calc(100% - 32px);
+    margin: 0; padding: 4px 12px; border-radius: 14px;
+    background: rgba(15,14,12,.78); white-space: nowrap; pointer-events: none;
+    font-family: var(--font-body); font-size: 13px; line-height: 20px; font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery-zoom-info:empty { display: none; }
+  .scene-gallery-zoom-dims { font-family: var(--font-display); font-weight: 500; }
+  .scene-gallery-zoom-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .scene-gallery-zoom-close {
+    position: absolute; right: 16px; top: 16px;
+    display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
+    background: rgba(15,14,12,.78); color: #ECEBE7; cursor: pointer;
+  }
+  .scene-gallery-zoom-close:hover { background: rgba(15,14,12,.95); }
+  .scene-gallery-zoom-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .scene-gallery-zoom-close svg {
+    width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }
   /* the caption: the file's name, or each video link as the cell draws it
      (where it lives, then the link) — centred under the still */
   .scene-gallery-preview-caption {
@@ -2712,8 +2754,9 @@
 
   /* ---------- production tags ---------- */
   /* A tag is a light tint of its category with a 2px rule under it — no
-     icon in the text (#143: tried in the mockups and rejected; an icon in a
-     line being read aloud is one more thing to read). The tint is an opaque
+     icon in the text by default (#143: tried in the mockups and rejected;
+     an icon in a line being read aloud is one more thing to read; #217
+     brings one back as a setting, below). The tint is an opaque
      colour of its own rather than the category colour over transparent, so
      it reads the same over the Visual column's blue wash and the Audio
      column's amber one. The colours are the --tag-* tokens at the top. */
@@ -2744,6 +2787,42 @@
   .tag-sample[data-tag-cat="sound"],    .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
   .tag-sample[data-tag-cat="gear"],     .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
   .tag-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
+
+  /* Settings ▸ Show icons on tags (#217): the category's icon before the
+     words, in the tag's colour, so a category reads without telling
+     colours apart (colour blindness, greyscale print). --tag-icon is each
+     category's mask, set on [data-tag-cat] from TAG_CATEGORIES
+     (07-production-tags.js tagIconCss). A ::before, never a node: nothing
+     reads it back into the row, copies, exports or counts it, and the caret
+     has nothing to stop on. Not in the teleprompter, which is read aloud.
+     Inline, a word joiner (U+2060) with the icon in its padding, rather than
+     an inline-block: a line may break after an inline-block, which left the
+     icon at the end of one line and its words on the next. */
+  :root[data-tag-icons] .tag-sample::before,
+  :root[data-tag-icons] .tag-anchor::before {
+    content: "\2060";
+    padding-left: 0.85em;
+    margin-right: 0.2em;
+    background: var(--tag-color, var(--visual));
+    -webkit-mask: var(--tag-icon) left center / 0.85em 0.85em no-repeat;
+    mask: var(--tag-icon) left center / 0.85em 0.85em no-repeat;
+    pointer-events: none;
+  }
+  :root[data-tag-icons] .prompter .tag-anchor::before { content: none; }
+  /* the panels' category dots (Production, Gear, the shoot days, the tag
+     composer, the open-tag note) become the same icon */
+  :root[data-tag-icons] .tag-cat-dot[data-tag-cat],
+  :root[data-tag-icons] .tag-row-dot[data-tag-cat],
+  :root[data-tag-icons] .tag-cat-btn .tag-cat-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 0;
+    background: var(--dot);
+    -webkit-mask: var(--tag-icon) center / contain no-repeat;
+    mask: var(--tag-icon) center / contain no-repeat;
+  }
+  /* 6px taller than the dot: kept centred on the line the dot was */
+  :root[data-tag-icons] .tag-row-dot[data-tag-cat] { transform: translateY(-3px); }
   .tag-badge { background: var(--visual); }
 
   /* The tag composer's categories (#169): outlined buttons with the

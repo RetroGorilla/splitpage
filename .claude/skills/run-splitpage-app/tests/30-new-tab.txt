@@ -141,10 +141,11 @@ expect document.getElementById('newtab-desktop-link').href.indexOf('https://gith
 # the command menu open it — 14-help and 180-tagging-card)
 expect document.querySelector('#newtab-drop strong').textContent == Drop a script here
 expect document.querySelectorAll('#newtab-drop [data-newtab-action="paste"], #newtab-drop [data-newtab-action="gdoc"]').length == 2
-expect document.querySelectorAll('.newtab-foot [data-newtab-action="tour"], .newtab-foot [data-newtab-action="dismiss"]').length == 2
+expect document.querySelectorAll('.newtab-foot [data-newtab-action="tour"], .newtab-foot [data-newtab-action="dismiss"], .newtab-foot [data-newtab-action="long-demo"]').length == 3
 expect document.querySelectorAll('[data-newtab-action="tagging-help"]').length == 0
 expect document.querySelector('.newtab-foot').textContent.indexOf('cheat sheet') === -1
-expect document.querySelectorAll('.newtab-foot > .newtab-foot-sep').length == 1
+# the long demo's link (#215) after the example script's, a separator each
+expect document.querySelectorAll('.newtab-foot > .newtab-foot-sep').length == 2
 expect document.querySelectorAll('.newtab-bar [data-newtab-action="join"], .newtab-bar [data-newtab-action="open"]').length == 2
 # icons are inline SVG, never text (seven since #169: the board's help links
 # are plain text links, so the tour and cheat-sheet icons went)

@@ -1,0 +1,20 @@
+# Show icons on tags (#217) set before the page loads: applied at boot, from
+# localStorage alone, with nothing of it in the page a Save would write.
+
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.setItem('splitpage-tag-icons','1')
+goto /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+expect document.documentElement.hasAttribute('data-tag-icons')
+expect document.getElementById('tag-icon-style') !== null
+eval window.__settingsTest.open()
+wait window.__settingsTest.isOpen()
+expect document.getElementById('settings-tag-icons').checked === true
+key Escape
+# the saved page is PAGE_SHELL, captured before either was added
+expect (function(){var h=window.__splitpageFormats.buildStandaloneHtml();var d=new DOMParser().parseFromString(h,'text/html');return h.length>1000 && !d.documentElement.hasAttribute('data-tag-icons') && !d.getElementById('tag-icon-style');})()
+eval localStorage.removeItem('splitpage-tag-icons')
+quit

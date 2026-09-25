@@ -313,6 +313,9 @@ var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
   "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
   "jump-tag": 1, "jump-row": 1, "writer-jump": 1,
+  /* a scene's gallery dialog, to look at (and see a picture at full size,
+     #216): it offers no edit in a review session (05e-gallery-overlay.js) */
+  "gallery-open": 1, "gallery-open-videos": 1,
   "tag-expand": 1, "bulk-clear": 1,
   "export-breakdown": 1, "export-packing-gear": 1
 };

@@ -2924,6 +2924,28 @@ function registerProtocol() {
  * 11. The window.
  * --------------------------------------------------------------------- */
 
+/* Settings ▸ Theme as main last heard it (#214). The page tells main its
+   choice only once its script runs, so without this a launch with Dark
+   chosen and the OS in light mode would draw the window, the first tab's
+   view and the page's first paint light. One word, applied before the
+   first window; anything else in the file reads as "system". */
+function themeChoicePath() { return path.join(app.getPath("userData"), "theme.json"); }
+
+function readThemeChoice() {
+  try {
+    const mode = JSON.parse(fs.readFileSync(themeChoicePath(), "utf8")).theme;
+    return mode === "light" || mode === "dark" ? mode : "system";
+  } catch { return "system"; }
+}
+
+function writeThemeChoice(mode) {
+  if (readThemeChoice() === mode) return;
+  try {
+    fs.mkdirSync(path.dirname(themeChoicePath()), { recursive: true });
+    fs.writeFileSync(themeChoicePath(), JSON.stringify({ theme: mode }), "utf8");
+  } catch { /* the next launch follows the OS until the page says otherwise */ }
+}
+
 function backgroundColorForTheme() {
   // The app's --bg (src/app.css, #169), which the tab strip also paints.
   return nativeTheme.shouldUseDarkColors ? "#0F0E0C" : "#F1F0ED";
@@ -3336,6 +3358,10 @@ function createTab(windowId, opts) {
       backgroundThrottling: !TEST_MODE
     }
   });
+  /* Until its page paints, a view shows its own background, and a
+     WebContentsView's default is white: a flash in the dark theme (#214).
+     Set before it is added to the window or loads anything. */
+  view.setBackgroundColor(backgroundColorForTheme());
 
   const tab = {
     id: tabId,
@@ -4974,6 +5000,7 @@ function registerIpc() {
   ipcOn("splitpage:set-theme", (event, mode) => {
     if (mode !== "system" && mode !== "light" && mode !== "dark") return;
     if (nativeTheme.themeSource !== mode) nativeTheme.themeSource = mode;
+    writeThemeChoice(mode);
   });
 
   /* ---- video files in a scene's gallery (#135) -----------------------
@@ -5841,6 +5868,7 @@ app.on("open-file", (event, filePath) => {
 app.setAppUserModelId("com.retrogorilla.splitpage");
 
 app.whenReady().then(async () => {
+  nativeTheme.themeSource = readThemeChoice();
   sweepDesktopStateTempFiles();
   /* DESKTOP-RECENTS: read once, before anything can write. From here on
      recentDocuments is the authority — shellStateAsV2() writes it back with
@@ -5871,6 +5899,11 @@ app.whenReady().then(async () => {
       if (w.win.isDestroyed()) continue;
       w.win.setBackgroundColor(backgroundColorForTheme());
       try { w.win.setTitleBarOverlay(overlay); } catch { /* not a custom title bar on this platform */ }
+    }
+    /* Every tab's view too, or a reload or crash reload paints the old
+       theme's colour before its page does (#214). */
+    for (const tab of tabs.values()) {
+      if (!tab.view.webContents.isDestroyed()) tab.view.setBackgroundColor(backgroundColorForTheme());
     }
     if (tunnelWindow && !tunnelWindow.isDestroyed()) tunnelWindow.setBackgroundColor(backgroundColorForTheme());
   });
