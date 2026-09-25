@@ -103,7 +103,8 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   or drag it by its number. The scene's **⋯** menu also has **Move up**,
   **Move down**, **Insert scene** and **Delete**.
 - **The rundown**: the strip under the header shows every scene as a block.
-  Hover it to magnify, click a block to jump to that scene, or drop a
+  Hover it to magnify the scenes round the pointer, click a block to jump
+  to that scene, or drop a
   dragged scene on it to move the scene. **File ▸ Minimize the rundown**
   shrinks it to a line; click the line to bring it back.
 - **Scene status**: click the lamp in the scene's gutter to cycle **To do →
@@ -130,15 +131,19 @@ On a Mac, read <kbd>Cmd</kbd> for <kbd>Ctrl</kbd> throughout.
 Splitpage estimates each scene's read time from its Audio words, at the
 script's reading speed. Visual notes and stage directions don't count.
 
-- **Reading speed**: click the clock in the header. It's saved with the
-  script.
+- **Script length**: the small time at the end of the rundown, just after
+  the last scene (at the strip's right edge on a long script, and at the
+  right of the status line on a phone). With shot scenes hidden it reads
+  what's left / the whole script. It stays on the minimized rundown.
+- **Reading speed**: click the script length. It's saved with the script.
 - **A scene's length by hand**, for a montage, a title card or a pause: click
   the scene's time in the **Read** column, type `1:30`, `90`, `90s` or
   `1m30`, and press <kbd>Enter</kbd>. Clear it and press <kbd>Enter</kbd> to
   go back to the estimate. It turns amber if the words would take longer.
-- **Target length**: click the clock and pick or type a **Target length**
-  (or search commands for *target*). Splitpage then shows how much time is
-  left or how far over you are. **No target** removes it.
+- **Target length**: click the script length and pick or type a **Target
+  length** (or search commands for *target*). The length then reads
+  *4:32 / 5:00 · 0:28 left*, or how far over in red. **No target** removes
+  it.
 
 ### Whole scenes
 
