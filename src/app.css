@@ -7735,6 +7735,23 @@
     .rundown.is-lensed :is(.rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip) { opacity: 0; }
   }
   .rundown.is-lensed .rd-in { transition: padding var(--dur-fast) var(--ease-standard); }
+  /* A label a block shows at rest stays under the lens while it fits
+     (rundownKeepLabels, 05f-rundown.js): the lens shrinks every block away
+     from the pointer, and without this the numbers all along the strip
+     blinked out whenever it opened. Kept, a label sits on tighter padding
+     instead: the number centred with none, the number and read time on 3px
+     with a 4px gap. */
+  .rundown.is-lensed .rd-block.keep-num .rd-num { display: inline; opacity: 1; }
+  .rundown.is-lensed .rd-block.keep-len .rd-len { display: inline; opacity: 1; }
+  @container rdb (max-width: 25.99px) {
+    .rundown.is-lensed .rd-block.keep-num .rd-in { justify-content: center; }
+  }
+  @container rdb (max-width: 63.99px) {
+    .rundown.is-lensed .rd-block.keep-len .rd-in { padding: 0 3px; gap: 4px; }
+  }
+  @container rdb (max-width: 77.99px) {
+    .rundown.is-lensed .rd-block.is-shot.keep-len .rd-in { padding: 0 3px; gap: 4px; }
+  }
   .rd-block .rd-len { color: var(--text-faint); }
   .rd-stat {
     font-family: var(--font-body);

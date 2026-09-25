@@ -496,6 +496,29 @@ export function knotMap(from, to, x) {
   return w > 0 ? to[lo] + (x - from[lo]) / w * (to[lo + 1] - to[lo]) : to[lo];
 }
 
+/* Labels the lens keeps (Adam, after #199). The lens takes its room out of
+   every other block, so a block whose number only just fitted at rest lost
+   it the moment the lens opened, anywhere on the strip: numbers far from
+   the pointer blinked out. Now a label a block shows at rest stays while
+   the lens is on, drawn on tighter padding (.keep-num / .keep-len,
+   app.css), for as long as it still fits; only the scenes near the pointer
+   gain labels. The widths are the block's (border included) that the
+   tight layout needs: a two-digit number with no padding, a three-digit
+   one from scene 100 on; the number and read time on 3px padding, and the
+   shot check besides. `rest` is the block as rundownBlocks() laid it out. */
+var KEEP_NUMBER_PX = 18;
+var KEEP_NUMBER_3_PX = 25;
+var KEEP_LENGTH_PX = 56;
+var KEEP_LENGTH_SHOT_PX = 70;
+
+export function rundownKeepLabels(rest, width, shot) {
+  var numberPx = rest.index + 1 >= 100 ? KEEP_NUMBER_3_PX : KEEP_NUMBER_PX;
+  return {
+    number: !!rest.showNumber && width >= numberPx,
+    length: !!rest.showLength && width >= (shot ? KEEP_LENGTH_SHOT_PX : KEEP_LENGTH_PX)
+  };
+}
+
 /* Each scene's block on a layout: its left and width, the gap taken off. */
 export function knotBlocks(knots) {
   var out = [];
@@ -541,7 +564,7 @@ var minimized = false;
 /* What the last paint drew, for the lens to move: the to-scale blocks and
    knots, the slot knots (worked out only once the lens wants them), the
    block elements in scene order, and the style each was last given. */
-var base = { blocks: [], X: null, U: null, n: 0, W: 0, pps: 0, els: [], lefts: [], widths: [], current: -1 };
+var base = { blocks: [], X: null, U: null, n: 0, W: 0, pps: 0, els: [], lefts: [], widths: [], keep: [], shot: [], current: -1 };
 
 /* #170: make the strip span `seconds` as well as the script. */
 export function setRundownExtraSeconds(seconds) {
@@ -762,7 +785,9 @@ export function renderRundown() {
     base.els = minimized ? [] : Array.prototype.slice.call(blocksEl.querySelectorAll(".rd-block"));
     base.lefts = blocks.map(function (b) { return b.left; });
     base.widths = blocks.map(function (b) { return b.width; });
+    base.keep = [];
   }
+  base.shot = rows.map(function (r) { var st = rowStatus(r.status); return !!st && st.id === "shot"; });
 
   if (playhead) {
     playhead.hidden = at === -1;
@@ -802,9 +827,59 @@ var lens = {
   t: 0,            /* and when it was there, for its speed */
   Z: null,         /* the displayed knots, or null at rest */
   raf: 0,
-  last: 0          /* the last frame's time: the glide's and the re-centring's step */
+  last: 0,         /* the last frame's time: the glide's and the re-centring's step */
+  hold: false,     /* the second stage: the pointer has rested on one scene */
+  holdAt: -1,      /* the scene the pointer is resting on, timed from when it arrived */
+  holdTimer: 0
 };
 var noHover = false;
+
+/* ---- the lens's second stage (Adam, after #199) ----
+   Rest the pointer on one scene for LENS_HOLD_MS and the lens opens
+   further, to LENS_HOLD_PX, so the scene has room for its status and its
+   first words (the .rd-stat and .rd-snip container queries, app.css).
+   Moving on to another scene drops back to the first stage and starts the
+   wait again, so sweeping the strip never triggers it; moving about
+   within the scene keeps it. The mouse only: a drag or keyboard focus
+   keeps the first stage. Both numbers are tuned by feel. */
+export var LENS_HOLD_MS = 700;
+export var LENS_HOLD_PX = 240;
+
+function lensOpts() {
+  return lens.hold ? { minWidth: LENS_HOLD_PX } : undefined;
+}
+
+function holdClear() {
+  if (lens.holdTimer) { clearTimeout(lens.holdTimer); lens.holdTimer = 0; }
+  lens.holdAt = -1;
+  if (lens.hold) {
+    lens.hold = false;
+    var strip = stripEl();
+    if (strip) strip.classList.remove("is-held");
+  }
+}
+
+/* The pointer is over scene `i` (on the layout as drawn). */
+function holdTrack(i) {
+  if (i === lens.holdAt) return;
+  holdClear();
+  if (i < 0) return;
+  lens.holdAt = i;
+  lens.holdTimer = setTimeout(function () {
+    lens.holdTimer = 0;
+    if (!lens.on || lens.src !== "pointer" || lens.holdAt !== i) return;
+    lens.hold = true;
+    var strip = stripEl();
+    if (strip) strip.classList.add("is-held");
+    lensKick();
+  }, LENS_HOLD_MS);
+}
+
+/* The scene under `x` on the knots `Z`, or -1 in the tail. */
+function sceneAt(Z, x) {
+  for (var i = 0; i < base.n; i++) if (x >= Z[i] && x < Z[i + 1]) return i;
+  return -1;
+}
 /* #185: the gap a dragged scene would land in (-1 for none), and the
    pointer's x while a drag is over the strip. */
 var drop = { x: null, gap: -1 };
@@ -826,7 +901,7 @@ function slots() {
 }
 
 function lensTarget() {
-  return lens.on ? rundownLens(slots(), lens.p, lens.a) : base.X;
+  return lens.on ? rundownLens(slots(), lens.p, lens.a, lensOpts()) : base.X;
 }
 
 function applyKnots(Z) {
@@ -836,6 +911,17 @@ function applyKnots(Z) {
     var width = Math.max(BLOCK_MIN_PX, tenth(Z[i + 1] - Z[i] - BLOCK_GAP_PX));
     if (left !== base.lefts[i]) { els[i].style.left = left + "px"; base.lefts[i] = left; }
     if (width !== base.widths[i]) { els[i].style.width = width + "px"; base.widths[i] = width; }
+    /* the labels this block showed at rest stay while they fit (above) */
+    var rest = base.blocks[i];
+    if (rest) {
+      var k = rundownKeepLabels(rest, width, base.shot && base.shot[i]);
+      var key = (k.number ? "n" : "") + (k.length ? "l" : "");
+      if (key !== base.keep[i]) {
+        els[i].classList.toggle("keep-num", k.number);
+        els[i].classList.toggle("keep-len", k.length);
+        base.keep[i] = key;
+      }
+    }
   }
   var strip = stripEl();
   var playhead = strip && strip.querySelector(".rundown-playhead");
@@ -853,7 +939,7 @@ function lensFrame(now) {
      pixel moved — so it comes to rest round a pointer that has stopped */
   var recentring = false;
   if (lens.on && lens.x !== null && (lens.src === "pointer" || lens.src === "drag")) {
-    var next = rundownLensRecenter(slots(), lens.Z, lens.p, lens.a, lens.x, dt);
+    var next = rundownLensRecenter(slots(), lens.Z, lens.p, lens.a, lens.x, dt, lensOpts());
     recentring = Math.abs(next.focus - lens.p) > 0.002 || Math.abs(next.anchor - lens.a) > 0.02;
     lens.p = next.focus;
     lens.a = next.anchor;
@@ -924,6 +1010,7 @@ function lensSettle() {
 
 /* Off at once, no glide back: minimized, emptied, or the strip hidden. */
 function lensReset() {
+  holdClear();
   lens.on = false;
   lens.src = null;
   lens.x = null;
@@ -935,6 +1022,7 @@ function lensReset() {
 function lensRepainted(countChanged) {
   if (!lensAllowed()) { lensReset(); return; }
   if (countChanged || lens.Z.length !== base.X.length) {
+    holdClear();
     lens.Z = base.X.slice();
     if (lens.x !== null) { lens.p = knotMap(lens.Z, slots(), lens.x); lens.a = lens.x; }
     else if (lens.src === "focus") lensOff();
@@ -956,7 +1044,7 @@ function lensAt(x, src, t) {
     lens.p = knotMap(lens.Z, U, x);
     lens.a = x;
   } else if (x !== lens.x) {
-    var next = rundownLensFollow(U, base.X, lens.Z, lens.p, lens.a, x, x - lens.x, t - lens.t);
+    var next = rundownLensFollow(U, base.X, lens.Z, lens.p, lens.a, x, x - lens.x, t - lens.t, lensOpts());
     lens.p = next.focus;
     lens.a = next.anchor;
   }
@@ -964,6 +1052,8 @@ function lensAt(x, src, t) {
   lens.src = src;
   lens.x = x;
   lens.t = t;
+  /* the second stage: timed from when the pointer reached this scene */
+  if (src === "pointer") holdTrack(sceneAt(lens.Z, x)); else holdClear();
   lensKick();
 }
 
@@ -983,6 +1073,7 @@ function lensFocus(i) {
 
 function lensOff(src) {
   if (src && lens.src !== src) return;
+  holdClear();
   lens.on = false;
   lens.src = null;
   lens.x = null;
@@ -1213,7 +1304,7 @@ function ensureToggle(strip) {
 /* For the browser suites: the lens's numbers, read without a frame. */
 function lensDebug() {
   return {
-    on: lens.on, src: lens.src, p: lens.p, a: lens.a,
+    on: lens.on, src: lens.src, p: lens.p, a: lens.a, hold: lens.hold, holdAt: lens.holdAt,
     Z: lens.Z ? lens.Z.slice() : null, X: base.X ? base.X.slice() : null,
     starts: base.blocks.map(function (b) { return b.start; }),
     dropGap: drop.gap, minimized: minimized,
