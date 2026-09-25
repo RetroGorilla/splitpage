@@ -580,10 +580,9 @@
       <li class="tagging-help-row"><code>{kitchen}</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
       <li class="tagging-help-row"><code>~lens flare~</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">lens flare</span><span class="tagging-help-cat">VFX</span></li>
       <li class="tagging-help-row"><code>&lt;tripod&gt;</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
-      <!-- #210's plain-language opener ("VFX: words… Tab") belongs here as
-           one more row of this list, once it lands. -->
+      <li class="tagging-help-row"><code>VFX: glow</code> <kbd>Tab</kbd><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
     </ul>
-    <p class="tagging-help-note">Tagged the moment you type the closing character. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text.</p>
+    <p class="tagging-help-note">Brackets tag the moment you type the closing one. In the Visual column, a name and a colon (Prop, Location or Loc, Cast, VFX, Gear, SFX, Music) starts a tag, and <kbd>Tab</kbd> closes it; <kbd>Esc</kbd> cancels. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text.</p>
     <h3 class="tagging-help-label">Select the words, then press Tag</h3>
     <ul class="tagging-help-list">
       <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
@@ -601,6 +600,9 @@
     <span class="tagging-help-sub">File ▸ Tagging reference brings this back</span>
   </div>
 </section>
+<!-- an open plain-language tag ("VFX:" typed in a visual cell, #210):
+     which category Tab will wrap the words in. A note, not a control. -->
+<div class="tag-suggest tag-open-hint" id="tag-open-hint" role="status"></div>
 
 <div class="modal-backdrop" id="import-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">

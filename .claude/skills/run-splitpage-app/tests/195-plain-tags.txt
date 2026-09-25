@@ -1,0 +1,329 @@
+# Plain-language tagging (#210, 07b-plain-tags.js): "VFX:" typed in a Visual
+# cell starts an open VFX tag, Tab wraps the words typed since, Esc puts the
+# keyword back. The convention is Adam's (2026-09-24): Prop, Location, Loc,
+# Cast, VFX, Gear, SFX and Music (both Music/SFX), any case, a colon after,
+# Visual column only; Tab: the open tag, then the ghost, then the mention
+# prompt. The pure parts (every name, the word test, the wrap) are
+# src/test/plain-tags.test.mjs; this is the page.
+#
+# Typing is `press` (one key at a time): the colon has to arrive on its own,
+# as it does for a real writer. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 1
+# eight scenes to write in (the demo document has two)
+eval (function(){ for (var i = 0; i < 8; i++) document.querySelector('[data-action="add-row"]').click(); document.activeElement.blur(); return document.querySelectorAll('#rows .row').length; })()
+wait document.querySelectorAll('#rows .row').length >= 9
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.cell = function (i, col) { return document.querySelectorAll('#rows .row')[i].querySelector('.' + (col || 'visual') + '-cell .cell-editable'); }; window.st = function (i, col) { return F.state().rows[i][(col || 'visual') + 'Text'].replace(/&nbsp;/g, ' '); }; window.reg = function (cat, name) { return F.state().productionTags.some(function (t) { return t.cat === cat && t.name === name; }); }; window.kw = function () { return document.querySelectorAll('#rows .plain-tag-keyword').length; }; window.hint = function () { var h = document.getElementById('tag-open-hint'); return h.classList.contains('is-visible') ? h.textContent : ''; }; window.hl = function (cat) { var h = CSS.highlights.get('splitpage-open-tag-' + cat); if (!h || !h.size) return null; var r = Array.from(h)[0]; return String(r).split(String.fromCharCode(0x200B)).join(''); }; window.seen = function (el) { return el.innerText.split(String.fromCharCode(0xA0)).join(' ').split(String.fromCharCode(0x200B)).join(''); }; window.tags = function (el) { return Array.from(el.querySelectorAll('.tag-anchor')).map(function (t) { return t.getAttribute('data-tag-cat') + ':' + t.getAttribute('data-tag-name'); }); }; return true; })()
+
+# --- VFX: opens a tag; the keyword disappears, the document keeps it --------
+caret #rows .row:nth-child(1) .visual-cell .cell-editable
+press  Shot VFX:
+sleep 250
+expect kw() == 1
+expect getComputedStyle(document.querySelector('#rows .plain-tag-keyword')).display == none
+expect document.querySelector('#rows .plain-tag-keyword').textContent == VFX:
+expect seen(cell(0)).indexOf('VFX:') === -1
+expect /Shot\s*$/.test(seen(cell(0)))
+# the note under the cell names the category and the key
+expect hint().indexOf('VFX') !== -1
+expect hint().indexOf('Tab') !== -1
+# the document holds exactly what was typed: plain words, no tag, no span
+expect /Shot VFX:$/.test(st(0))
+expect st(0).indexOf('tag-anchor') === -1
+expect st(0).indexOf('plain-tag') === -1
+
+# --- it grows as you type, faintly in the category's colour -----------------
+press  lens flare sweeps
+sleep 250
+expect hl('vfx') === 'lens flare sweeps'
+expect hl('prop') === null
+expect kw() == 1
+expect /Shot VFX: lens flare sweeps$/.test(st(0))
+# nothing of the open state reaches the saved document (or a peer): the
+# .splitpage file is the words as typed, no tag and no hidden span
+expect JSON.stringify(F.state()).indexOf('plain-tag') === -1
+expect F.buildSplitpage().indexOf('plain-tag') === -1
+expect F.buildSplitpage().indexOf('Shot VFX: lens flare sweeps') !== -1
+expect !reg('vfx', 'lens flare sweeps')
+eval document.documentElement.removeAttribute('data-theme')
+shot 195-open-tag-light
+eval document.documentElement.setAttribute('data-theme','dark')
+sleep 150
+shot 195-open-tag-dark
+eval document.documentElement.removeAttribute('data-theme')
+
+# --- Tab wraps it: one tag, one undo entry, the caret after it --------------
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+key Tab
+sleep 300
+expect kw() == 0
+expect hint() === ''
+expect hl('vfx') === null
+expect JSON.stringify(tags(cell(0))) == ["vfx:lens flare sweeps"]
+expect cell(0).querySelector('.tag-anchor').textContent == lens flare sweeps
+expect /Shot <span class="tag-anchor" data-tag-cat="vfx" data-tag-name="lens flare sweeps" contenteditable="false">lens flare sweeps<\/span>$/.test(st(0))
+expect reg('vfx', 'lens flare sweeps')
+expect U.sizes().undo === window.__n + 1
+expect document.activeElement === cell(0)
+expect (function(){ var s = getSelection(); var n = s.anchorNode; var el = n.nodeType === 3 ? n.parentNode : n; return s.isCollapsed && !el.closest('.tag-anchor') && cell(0).contains(n); })()
+press  in
+sleep 200
+expect /lens flare sweeps<\/span> in$/.test(st(0))
+
+# --- Ctrl+Z after Tab takes back just the tag, as brackets do ---------------
+eval (function(){ var n = 0; while (U.sizes().undo > window.__n + 1 && n++ < 20) { cell(0).dispatchEvent(new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true })); } return U.sizes().undo; })()
+expect st(0).indexOf(' in') === -1 || !/<\/span> in$/.test(st(0))
+key ctrl KeyZ
+sleep 300
+expect cell(0).querySelectorAll('.tag-anchor').length == 0
+expect /Shot VFX: lens flare sweeps$/.test(st(0))
+expect !reg('vfx', 'lens flare sweeps')
+expect kw() == 0
+# and redo puts the tag back
+key ctrl+shift KeyZ
+sleep 300
+expect JSON.stringify(tags(cell(0))) == ["vfx:lens flare sweeps"]
+
+# --- Esc cancels and puts the plain keyword back; no edit, no entry ---------
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+press  Prop: red mug
+sleep 250
+expect kw() == 1
+expect hint().indexOf('Prop') !== -1
+expect hl('prop') === 'red mug'
+eval (function(){ U.flush(); window.__n = U.sizes().undo; window.__before = st(1); return window.__n; })()
+key Escape
+sleep 250
+expect kw() == 0
+expect hint() === ''
+expect hl('prop') === null
+expect /Prop: red mug$/.test(seen(cell(1)))
+expect cell(1).querySelectorAll('.tag-anchor').length == 0
+expect st(1) === window.__before
+expect (function(){ U.flush(); return U.sizes().undo === window.__n; })()
+# the caret is where it was, and typing carries on as plain words
+expect document.activeElement === cell(1)
+press  too
+sleep 200
+expect /Prop: red mug too$/.test(st(1))
+expect cell(1).querySelectorAll('.tag-anchor').length == 0
+
+# --- every name, any case, each its own category ----------------------------
+caret #rows .row:nth-child(3) .visual-cell .cell-editable
+press  prop: mug
+key Tab
+press  LOCATION: park
+key Tab
+press  loc: kitchen
+key Tab
+press  Cast: Anna
+key Tab
+press  vFx: glow
+key Tab
+press  GEAR: tripod
+key Tab
+press  sfx: whoosh
+key Tab
+press  Music: theme
+key Tab
+sleep 300
+expect JSON.stringify(tags(cell(2))) == ["prop:mug","location:park","location:kitchen","cast:Anna","vfx:glow","gear:tripod","sound:whoosh","sound:theme"]
+expect kw() == 0
+expect reg('cast', 'Anna') && reg('gear', 'tripod') && reg('sound', 'whoosh') && reg('sound', 'theme') && reg('location', 'kitchen')
+# the keywords are gone from the text, the words are tags
+expect seen(cell(2)).indexOf(':') === -1
+# a Cast and a Music/SFX tag the same as the Tag button's: category and name
+# on the span, contenteditable="false", an entry in the registry
+expect cell(2).querySelector('.tag-anchor[data-tag-cat="cast"]').getAttribute('contenteditable') == false
+expect getComputedStyle(cell(2).querySelector('.tag-anchor[data-tag-cat="gear"]')).boxShadow.indexOf('68, 105, 60') !== -1
+
+# --- not a keyword: mid-word, other names, the Audio column -----------------
+caret #rows .row:nth-child(4) .visual-cell .cell-editable
+press  myVFX: a Sound: b Props: c FX: d
+sleep 200
+expect kw() == 0
+expect hint() === ''
+caret #rows .row:nth-child(4) .audio-cell .cell-editable
+press  VFX: boom
+sleep 200
+expect kw() == 0
+expect hint() === ''
+expect /VFX: boom$/.test(st(3, 'audio'))
+expect cell(3, 'audio').querySelectorAll('.tag-anchor').length == 0
+
+# --- Tab with nothing typed puts the keyword back, and stays in the cell ----
+caret #rows .row:nth-child(4) .visual-cell .cell-editable
+press  Gear:
+sleep 150
+expect kw() == 1
+key Tab
+sleep 200
+expect kw() == 0
+expect document.activeElement === cell(3)
+expect /Gear:$/.test(seen(cell(3)))
+expect cell(3).querySelectorAll('.tag-anchor').length == 0
+# only spaces typed: the same
+press  VFX:
+eval document.execCommand('insertText', false, '   ')
+key Tab
+sleep 200
+expect kw() == 0
+expect cell(3).querySelectorAll('.tag-anchor').length == 0
+expect /VFX:\s*$/.test(seen(cell(3)))
+
+# --- Backspace with nothing typed: the keyword back, its colon deleted ------
+press  Cast:
+sleep 150
+expect kw() == 1
+key Backspace
+sleep 200
+expect kw() == 0
+expect hint() === ''
+expect /Cast$/.test(st(3))
+# and typing the colon again opens it again
+press :
+sleep 150
+expect kw() == 1
+press  Bo
+key Backspace
+key Backspace
+key Backspace
+sleep 150
+expect kw() == 1
+key Backspace
+sleep 200
+expect kw() == 0
+expect /Cast$/.test(st(3))
+
+# --- the caret leaving ends it: the plain text again ------------------------
+press : smoke machine
+sleep 150
+expect kw() == 1
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+sleep 250
+expect kw() == 0
+expect hint() === ''
+expect /Cast: smoke machine$/.test(seen(cell(3)))
+expect cell(3).querySelectorAll('.tag-anchor').length == 0
+# a click (a caret move) inside the same cell, before where the keyword was
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+press  VFX: sparks
+sleep 150
+expect kw() == 1
+eval (function(){ var c = cell(4); var w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT, null); var t = w.nextNode(); var r = document.createRange(); r.setStart(t, 0); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+sleep 250
+expect kw() == 0
+expect /VFX: sparks$/.test(seen(cell(4)))
+
+# --- a line break ends it, as plain text -----------------------------------
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+press  Loc: roof
+key Enter
+sleep 300
+expect kw() == 0
+expect hint() === ''
+expect /Loc: roof<br>/.test(st(4))
+expect cell(4).querySelectorAll('.tag-anchor').length == 0
+
+# --- a repaint of the cell from state (an undo, a remote edit) ends it ------
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+press  VFX: rain
+sleep 150
+expect kw() == 1
+# the row changed behind the cell and render() run, as a pulled remote edit
+# does. (What the document says afterwards is not this suite's to check:
+# render() replacing a focused cell here reads the old one back on its way
+# out — the harness artifact SKILL.md describes — with or without a tag open.)
+eval (function(){ var r = F.state().rows[4]; r.visualText = r.visualText.replace(/&nbsp;/g, ' ').replace('VFX: rain', 'VFX: rain (edited elsewhere)'); window.__renderTest.render(); return true; })()
+sleep 300
+expect kw() == 0
+expect hint() === ''
+expect hl('vfx') === null
+expect st(4).indexOf('plain-tag') === -1
+expect cell(4).querySelectorAll('.tag-anchor').length == 0
+# an undo while one is open: the typing taken back, the tag forgotten
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+press  Prop: hat
+sleep 150
+expect kw() == 1
+key ctrl KeyZ
+sleep 300
+expect kw() == 0
+expect hint() === ''
+expect hl('prop') === null
+expect cell(4).querySelectorAll('.tag-anchor').length == 0
+expect st(4).indexOf('plain-tag') === -1
+expect !/Prop: hat$/.test(st(4))
+
+# --- Tab: the open tag before the ghost ------------------------------------
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+press  a [zebra lamp]
+sleep 300
+# mid-screen first: a scroll puts the ghost away, and typing low on the
+# screen scrolls to follow the caret
+eval (function(){ cell(5).scrollIntoView({ block: 'center' }); return true; })()
+caret #rows .row:nth-child(6) .visual-cell .cell-editable
+press  VFX: glow [zeb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+expect kw() == 1
+key Tab
+sleep 300
+expect kw() == 0
+expect JSON.stringify(tags(cell(5))) == ["vfx:glow [zeb"]
+expect cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 0
+# with nothing open the ghost has Tab, as before
+press  [zeb
+wait document.getElementById('tag-ghost').classList.contains('is-visible')
+key Tab
+sleep 300
+expect cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 1
+
+# --- Tab: the open tag before the untagged-mention prompt -------------------
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+press  and [gaffer tape]
+sleep 300
+eval (function(){ cell(6).scrollIntoView({ block: 'center' }); return true; })()
+caret #rows .row:nth-child(7) .visual-cell .cell-editable
+press  VFX: gaffer tape smoke
+sleep 900
+expect kw() == 1
+# the prompt stays away while a tag is open (the note is in its place)
+expect document.getElementById('tag-suggest').classList.contains('is-visible') === false
+key Tab
+sleep 400
+expect JSON.stringify(tags(cell(6))) == ["vfx:gaffer tape smoke"]
+# nothing open: the prompt has Tab again
+press  then gaffer tape
+sleep 900
+expect document.getElementById('tag-suggest').classList.contains('is-visible')
+key Tab
+sleep 500
+expect JSON.stringify(tags(cell(6))) == ["vfx:gaffer tape smoke","prop:gaffer tape"]
+
+# --- brackets are unchanged -----------------------------------------------
+caret #rows .row:nth-child(8) .visual-cell .cell-editable
+press  [cup] {hall} ~haze~ <boom pole>
+sleep 300
+expect JSON.stringify(tags(cell(7))) == ["prop:cup","location:hall","vfx:haze","gear:boom pole"]
+expect kw() == 0
+
+# --- an item already tracked keeps its spelling; the words keep theirs ------
+press  Prop: Zebra Lamp
+key Tab
+sleep 300
+expect cell(7).querySelector('.tag-anchor[data-tag-name="zebra lamp"]').textContent == Zebra Lamp
+expect F.state().productionTags.filter(function (t) { return t.cat === 'prop' && t.name.toLowerCase() === 'zebra lamp'; }).length == 1
+
+# --- a space typed before Tab stays after the tag, outside it ---------------
+press  VFX: fog
+eval document.execCommand('insertText', false, ' ')
+key Tab
+sleep 300
+expect cell(7).querySelector('.tag-anchor[data-tag-name="fog"]').textContent == fog
+expect /data-tag-name="fog"[^>]*>fog<\/span> $/.test(st(7))
+press after
+sleep 200
+expect /fog<\/span> after$/.test(st(7))
+
+quit

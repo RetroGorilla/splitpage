@@ -108,6 +108,14 @@ import {
   updateUntaggedPrompt
 } from "./07-production-tags.js";
 import {
+  cancelPlainTag,
+  closePlainTag,
+  maybeOpenPlainTag,
+  plainTagEmptyAtCaret,
+  plainTagOpen,
+  refreshPlainTag
+} from "./07b-plain-tags.js";
+import {
   IS_TOUCH,
   addPersonForTag,
   applyGearQuickAdd,
@@ -897,6 +905,7 @@ function onRootInput(e) {
   maybeAutoTagShortcut(e, cellEl);
   maybeDirectionShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
+  maybeOpenPlainTag(e, cellEl);
   syncFieldFromDom(cellEl);
   afterScriptCellChange(cellEl);
 }
@@ -928,6 +937,9 @@ function afterScriptCellChange(cellEl) {
   S.untaggedMutedFor = null;
   scheduleUntaggedScan();
   updateTagGhost(cellEl);
+  /* an open "VFX:" tag grows with the typing, and ends if the edit took it
+     away (07b-plain-tags.js) */
+  refreshPlainTag();
 }
 
 function onRootFocusOut(e) {
@@ -938,6 +950,8 @@ function onRootFocusOut(e) {
      and read the old element's words back over the edit. */
   if (S.cellRepainting) return;
   hideTagGhost();
+  /* leaving the cell ends an open "VFX:" tag: its keyword back as typed */
+  cancelPlainTag();
   hideUntaggedPrompt();
   S.untaggedMutedFor = null;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
@@ -1104,9 +1118,20 @@ function onRootKeydown(e) {
      comment's composer or a reply box has a history of its own. */
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   if (onUndoKey(e)) return;
-  /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
-     The untagged-mention prompt only ever gets the key when nothing more
-     explicit is in flight. */
+  /* Tab, in this order (#210, Adam's decision): an open plain-language tag
+     ("VFX: lens flare", 07b-plain-tags.js) closes first — you typed its
+     keyword, so it is the most explicit thing in flight. Then the ghost,
+     which wins outright over the prompt: you typed a bracket, so you asked
+     for it. The untagged-mention prompt only ever gets the key when nothing
+     more explicit is in flight. Esc cancels an open tag and puts its
+     keyword back, and nothing else (not the comments panel behind it);
+     Backspace with nothing typed after the keyword does the same and then
+     deletes the colon, as it would have. */
+  if (plainTagOpen(cellEl)) {
+    if (e.key === "Tab") { e.preventDefault(); closePlainTag(); return; }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); cancelPlainTag(); return; }
+    if (e.key === "Backspace" && plainTagEmptyAtCaret()) cancelPlainTag();
+  }
   if (e.key === "Tab" && tagGhost && tagGhost.cellEl === cellEl) {
     if (acceptTagGhost()) { e.preventDefault(); return; }
   }
@@ -1544,6 +1569,10 @@ function init() {
      next moves or a key is pressed. */
   window.addEventListener("scroll", hideUntaggedPrompt, true);
   window.addEventListener("resize", hideUntaggedPrompt);
+  /* An open "VFX:" tag is still open after a scroll: its note moves with
+     the cell rather than going away. */
+  window.addEventListener("scroll", refreshPlainTag, true);
+  window.addEventListener("resize", refreshPlainTag);
 
   var suggestEl = document.getElementById("tag-suggest");
   /* mousedown, not click, is where the default has to go: by the time click
@@ -1978,6 +2007,9 @@ function init() {
       if (active.classList.contains("wr-para")) updateWriterFormatState();
       else updateToolbarState(active);
     }
+    /* An open "VFX:" tag follows the caret too, and ends when the caret
+       leaves it (07b-plain-tags.js) — first, so the prompt below knows. */
+    refreshPlainTag();
     /* Follows the caret without re-scanning: the ranges are already in
        hand, this only picks which one to offer and where to put it. */
     updateUntaggedPrompt();

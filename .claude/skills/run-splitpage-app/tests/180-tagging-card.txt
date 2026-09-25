@@ -61,7 +61,8 @@ expect getComputedStyle(document.getElementById('tagging-help-title')).fontWeigh
 expect document.querySelectorAll('#tagging-help-fullguide a').length == 1
 
 # --- the example tags: every category, drawn as the script draws it ------------
-expect Array.prototype.map.call(document.querySelectorAll('#tagging-help .tag-sample'), function(s){ return s.getAttribute('data-tag-cat'); }).sort().join(',') == cast,gear,location,prop,sound,vfx
+expect Array.prototype.map.call(document.querySelectorAll('#tagging-help .tag-sample'), function(s){ return s.getAttribute('data-tag-cat'); }).sort().join(',') == cast,gear,location,prop,sound,vfx,vfx
+expect document.querySelector('#tagging-help kbd') && /VFX: glow/.test(document.getElementById('tagging-help').textContent)
 expect document.querySelectorAll('#tagging-help .tag-anchor').length == 0
 expect document.querySelectorAll('#tagging-help [data-tag-name]').length == 0
 eval window.__sameAsScript = function(){ return ['prop','location','vfx','gear','cast','sound'].every(function(cat){ var a = getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="' + cat + '"]')); var s = getComputedStyle(document.querySelector('#tagging-help .tag-sample[data-tag-cat="' + cat + '"]')); return a.backgroundColor === s.backgroundColor && a.boxShadow === s.boxShadow && a.borderTopLeftRadius === s.borderTopLeftRadius; }); }; window.__distinct = function(){ var seen = {}; document.querySelectorAll('#tagging-help .tag-sample').forEach(function(s){ seen[getComputedStyle(s).boxShadow] = 1; }); return Object.keys(seen).length; }; true
