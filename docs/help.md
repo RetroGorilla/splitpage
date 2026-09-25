@@ -70,6 +70,13 @@ shows it too, on a fresh copy nothing has been opened in.
   **Continue** at the top reopens the most recent.
 - **Take the tour**, or **Look at the example script** (or <kbd>Esc</kbd>)
   to close the start screen and see the demo script.
+- **Open the long demo (30 scenes)**: a whole video, nearly ten minutes
+  long, with every feature in use (all three scene statuses, every tag
+  category, b-roll, comments, stage directions, set read times and a target
+  length), to see how Splitpage handles a real-length script. Like a
+  starter, it opens as a new, unsaved copy. The command menu
+  (<kbd>Ctrl</kbd>+<kbd>K</kbd>) opens it too, keeping the script you had in
+  Version history.
 
 ## Running it
 
@@ -226,6 +233,11 @@ waited for by Follow My Voice, and don't count toward the read time.
   <kbd>→</kbd> to browse, <kbd>Shift</kbd>+<kbd>←</kbd> /
   <kbd>→</kbd> or drag to reorder, **Make cover**, **Remove**
   (<kbd>Delete</kbd>), and <kbd>Esc</kbd> to close.
+- **See a picture at full size**: click the big picture in the gallery
+  (or press <kbd>Enter</kbd> on it). A large picture opens fitted to the
+  window; click it or scroll to see it at 100 %, and drag to look around.
+  <kbd>←</kbd> <kbd>→</kbd> go through the scene's pictures, and
+  <kbd>Esc</kbd>, **×** or a click outside goes back to the gallery.
 - **Watch a video**: press **▶** in the gallery. YouTube and Vimeo links
   play there, and so does a video file dropped since you opened the script.
   Anything else opens with **Open link** / **Open file**.
@@ -271,6 +283,14 @@ bottom on a phone). It shows every category's shortcut in its tag colour,
 and stays while you scroll and type, fading while the caret is under it.
 <kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no shortcut:
 select the words and press **Tag**.
+
+**Icons on tags**: turn on **Settings ▸ Show icons on tags** to put a small
+icon before each tag as well as its colour: a box for a prop, a pin for a
+location, a person for cast, a sparkle for VFX, a note for music and sound,
+a camera for gear. It helps when the colours are hard to tell apart, for
+example in greyscale. The icons also show in the Production and Gear panels
+and on the tagging reference. They are never part of your text, so copying,
+exports and read times stay the same, and the teleprompter leaves them out.
 
 **Plain-language tags**: in the Visual column, type a category and a colon
 (`VFX:`, `Prop:`, `Location:` or `Loc:`, `Cast:`, `Gear:`, `SFX:` or
@@ -483,8 +503,8 @@ closes. With nothing typed, your recent commands come first.
 change the script.
 
 - **Appearance**: theme, 12- or 24-hour clock (used for times such as the
-  save status's "Last saved … at"), and whether the rundown strip starts
-  small.
+  save status's "Last saved … at"), whether the rundown strip starts
+  small, and **Show icons on tags**.
 - **Editor**: Hide shot scenes, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.

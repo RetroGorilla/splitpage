@@ -625,6 +625,13 @@ tabs**.
   hadPriorSession, hasDraftToRestore}` — no path, no server doc id (#34
   again). Crash reload/loop guard: twice per 60s per tab, third crash
   leaves it `crashed`, no reload, no prompt.
+- **No white frame before a page paints** (#214): every tab's
+  `WebContentsView` gets `setBackgroundColor(backgroundColorForTheme())`
+  in `createTab()` before it loads, and `nativeTheme`'s `updated` handler
+  repaints every view as well as every window. `<userData>/theme.json`
+  (`{"theme":"system"|"light"|"dark"}`, written by `splitpage:set-theme`)
+  sets `nativeTheme.themeSource` before the first window, so a launch with
+  Settings ▸ Theme differing from the OS starts in the right colours.
 - **Crash-safe drafts** (`desktop/drafts.js`, plain CommonJS) live under
   `<userData>/drafts/<tabId>/`: two-generation writes, `base-<sha12>.json`,
   `session.json`. Write is fsync then one sync tick renaming
@@ -1367,7 +1374,12 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     a CSS token, so that table is a deliberate second copy — the one place
     they are written out, read through `tagPrintColor(catId)`.
     `src/test/palette.test.mjs` checks all of it, contrast included, and
-    fails the moment `TAG_PRINT_COLORS` and `:root` disagree.
+    fails the moment `TAG_PRINT_COLORS` and `:root` disagree. It also needs
+    an `icon` (#217): a stroked 24×24 SVG's inside in `TAG_ICON_PATHS`, next
+    to `TAG_CATEGORIES`, which `tagIconCss()` gives to `[data-tag-cat]` as
+    `--tag-icon` for Settings ▸ Show icons on tags. The icon is CSS only
+    (`::before` and the panels' dots, under `<html data-tag-icons>`), never
+    a node in a `.cell-editable`, or `syncFieldFromDom()` would read it back.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.
@@ -1771,7 +1783,7 @@ evaluation order via `_entry.js`):
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
 | `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
-| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed |
+| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
 | `21-events.js` | all event wiring, `init()` |
 
 **Desktop files** (optional; the web app runs without them):

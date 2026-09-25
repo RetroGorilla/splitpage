@@ -514,6 +514,7 @@ export function __init() {
       e.preventDefault();
       if (action === "new") startBlankScript();
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
+      else if (action === "long-demo") startStarterScript("long-demo");  /* #215 */
       else if (action === "open") newTabOpenFile();
       else if (action === "join") openServersDialog();                 /* 20e-connect.js */
       else if (action === "paste") openPasteAsNewDocument();

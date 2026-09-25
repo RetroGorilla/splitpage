@@ -8,14 +8,17 @@ import {
   SCRIPT_SCALE_KEY,
   SCRIPT_SCALE_MAX,
   SCRIPT_SCALE_MIN,
+  TAG_ICONS_KEY,
   THEME_KEY,
   VIDEO_THUMBS_KEY,
+  applyTagIcons,
   applyTheme,
   formatClock,
   readClockPref,
   readDefaultWpm,
   readPref,
   readThemePref,
+  tagIconsOn,
   videoThumbsOn,
   writePref
 } from "./00p-prefs.js";
@@ -138,7 +141,9 @@ function bodyHtml() {
       segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], readThemePref()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
       '<p class="settings-hint settings-clock-example" id="settings-clock-example">' + escapeHtml(clockExample(clock)) + '</p>' +
-      switchHtml("settings-rundown-min", "Minimize the rundown strip", "Keep the strip of scenes under the header small.", flagOn(RUNDOWN_MIN_KEY))) +
+      switchHtml("settings-rundown-min", "Minimize the rundown strip", "Keep the strip of scenes under the header small.", flagOn(RUNDOWN_MIN_KEY)) +
+      switchHtml("settings-tag-icons", "Show icons on tags",
+        "Put a small icon for its category before each tag, as well as its colour.", tagIconsOn())) +
     section("Editor",
       switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", flagOn(HIDE_SHOT_KEY)) +
       switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", flagOn(AUTOSAVE_KEY, true)) +
@@ -287,6 +292,8 @@ function applyChange(target) {
   if (name === "settings-clock") { writePref(CLOCK_KEY, target.value === "system" ? null : target.value); return; }
   if (name === "settings-person-color") { setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { writePref(RUNDOWN_MIN_KEY, target.checked ? "1" : "0"); return; }
+  /* off is the default, so off is no key at all */
+  if (id === "settings-tag-icons") { writePref(TAG_ICONS_KEY, target.checked ? "1" : null); return; }
   /* on is the default, so on is no key at all */
   if (id === "settings-video-thumbs") { writePref(VIDEO_THUMBS_KEY, target.checked ? null : "0"); return; }
   /* these setters store and announce the change themselves (writePref) */
@@ -391,6 +398,7 @@ function wireModal(m) {
 /* A preference changed, here or anywhere: bring what shows it up to date. */
 function onPrefChanged(key) {
   if (key === THEME_KEY) applyTheme();
+  if (key === TAG_ICONS_KEY) applyTagIcons();
   if (key === CLOCK_KEY) {
     /* every clock time on screen: the save status, the gutters, comments, History */
     updateSaveStatus();
