@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { savedAgoPhrase } from "./00p-prefs.js";
+import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
 import { recordMyColor } from "./13a-presence.js";
 import {
@@ -114,11 +114,14 @@ export function clearDirty() {
      the same reason. */
   clearAutoSaveTimers();
   resumeAutoSave();
-  /* Every successful save sets this again on its way past (noteSaveStatus,
-     below); clearing it here is what stops "Saved to the file you had open
-     an hour ago" turning up under a different document, since opening one
-     comes through here too. */
-  lastSaveDetail = "";
+  /* Every successful save sets this again on its way past (the Saving… →
+     Saved step in updateSaveStatus, below, which comes after this: a save
+     calls clearDirty() while the status still reads Saving…). Clearing it
+     here is what stops "Last saved to the file you had open an hour ago"
+     turning up under a different document, since opening one comes
+     through here too — and opening one straight from Saved used to keep
+     the old time, because Saved → Saved never touched it. */
+  savedAt = 0;
   setSaveButtons("Save");
 }
 
@@ -136,12 +139,24 @@ export function clearDirty() {
    funnel both markDirty() and clearDirty() already share (invariant #20),
    so a new path that changes the save state cannot forget to update it. */
 
-/* What the last successful save did, for the tooltip — set by the quiet
-   automatic saves, which have no toast to say it instead. */
-var lastSaveDetail = "";
-export function noteSaveStatus(detail) {
-  lastSaveDetail = detail || "";
+/* Called by the quiet automatic saves, which have no toast to say where the
+   document went: the tooltip says it instead ("Last saved to script.md at
+   2:52 PM"), derived below like everything else here. */
+export function noteSaveStatus() {
   updateSaveStatus();
+}
+
+/* The tooltip over "Saved just now" / "All changes saved" (#208): where the
+   document went and when this page last wrote it, in the person's own
+   clock (Settings ▸ Clock). `where` is the server, the file's name — a
+   desktop file's too, its handle carries one (makeDesktopHandle) — or ""
+   when the write was a download with no file to name. Nothing written yet
+   (a document just opened, a pull that brought the server's copy in) has
+   no time to give: it is simply up to date. */
+function savedTitle(where) {
+  var when = savedWhenText(savedAt, Date.now());
+  if (when) return "Last saved " + (where ? "to " + where + " " : "") + "at " + when + ".";
+  return where ? "Up to date with " + where + "." : "Everything is saved.";
 }
 
 function saveStatusView() {
@@ -165,8 +180,9 @@ function saveStatusView() {
        start — has nothing to report, and "Saved" over a file that does not
        exist would be a lie. */
     if (!target && home.kind !== "file" && !where) return null;
-    return { text: "Saved", cls: "ok",
-             title: lastSaveDetail || (where ? "Saved to " + where + "." : "Everything is saved.") };
+    /* its title is savedTitle(where), filled in by updateSaveStatus once
+       it knows whether this is the Saving… → Saved step (savedAt) */
+    return { text: "Saved", cls: "ok", title: "", where: where };
   }
   if (target && autoSaveEnabled) {
     return { text: "Unsaved changes", cls: "pending",
@@ -178,21 +194,16 @@ function saveStatusView() {
              : "Press Save to choose where this script is kept." };
 }
 
-/* When the document on screen was last written, for the header's "Saved 2
-   min ago" (#169). Derived like everything else here: it is the moment the
-   indicator went from Saving… to Saved, so every save path — a manual
-   Save, an autosave, the server — sets it without a call of its own, and
-   opening a document (Saved straight from anything else) does not, since
-   "2 min ago" would then be a claim about a write this page never made. */
+/* When the document on screen was last written, for the header's "Saved
+   just now" and the time in its tooltip (#169, #208). Derived like
+   everything else here: it is the moment the indicator went from Saving…
+   to Saved, so every save path — a manual Save, an autosave, the server —
+   sets it without a call of its own, and opening a document (Saved
+   straight from anything else, through clearDirty) does not, since a time
+   would then be a claim about a write this page never made. */
 var savedAt = 0;
 var lastViewText = "";
-var savedAgoTimer = null;
-
-/* "just now", "12 min ago", then the clock time in the person's own
-   format (#180, formatClock in 00p-prefs.js): "at 2:52 PM" or "at 14:52". */
-function savedAgoText() {
-  return savedAgoPhrase(savedAt, Date.now());
-}
+var justNowTimer = null;
 
 export function updateSaveStatus() {
   var view = saveStatusView();
@@ -200,6 +211,7 @@ export function updateSaveStatus() {
   if (text === "Saved" && lastViewText === "Saving…") savedAt = Date.now();
   else if (text !== "Saved") savedAt = 0;
   lastViewText = text;
+  if (text === "Saved") view.title = savedTitle(view.where);
   ["save-status", "wr-save-status"].forEach(function (id) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -215,19 +227,26 @@ export function updateSaveStatus() {
      suites read. */
   var btn = document.getElementById("btn-save");
   if (btn) {
-    var ago = text === "Saved" ? savedAgoText() : "";
-    var shown = view ? view.text + (ago ? " " + ago : "") : "Save";
+    /* "Saved just now", then "All changes saved" (savedStatusText,
+       00p-prefs.js) — never an age, which read as autosave falling behind */
+    var shown = !view ? "Save" : text === "Saved" ? savedStatusText(savedAt, Date.now()) : view.text;
     btn.setAttribute("data-status", shown);
     btn.setAttribute("data-state", view ? view.cls : "none");
     btn.setAttribute("aria-label", view ? shown + ". Save now" : "Save");
     btn.title = view ? view.title + " Click to save now." : "Save this script";
   }
-  /* "just now" becomes "1 min ago" without anything else happening */
-  if (savedAt && !savedAgoTimer) {
-    savedAgoTimer = setInterval(function () {
-      if (!savedAt) { clearInterval(savedAgoTimer); savedAgoTimer = null; return; }
-      updateSaveStatus();
-    }, 30000);
+  /* "Saved just now" becomes "All changes saved" a minute after the write
+     without anything else happening: one timer, for that one moment. A
+     write inside the minute moves savedAt, and the late timer finds it
+     still "just now" and sets itself again. */
+  if (savedAt && !justNowTimer) {
+    var left = savedAt + SAVED_JUST_NOW_MS - Date.now();
+    if (left > 0) {
+      justNowTimer = setTimeout(function () {
+        justNowTimer = null;
+        if (savedAt) updateSaveStatus();
+      }, left + 50);
+    }
   }
 }
 

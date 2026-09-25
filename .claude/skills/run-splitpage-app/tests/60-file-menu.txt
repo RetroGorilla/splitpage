@@ -229,7 +229,7 @@ sleep 300
 expect !document.getElementById('file-menu').hidden
 expect document.getElementById('fm-card-name').textContent == script-a.md
 expect document.getElementById('fm-card-meta').textContent.indexOf('Markdown') !== -1
-expect document.getElementById('fm-card-meta').textContent.indexOf('Saved') === 0
+expect /^(Saved just now|All changes saved) · /.test(document.getElementById('fm-card-meta').textContent)
 shot 60-file-menu-desktop
 key Escape
 eval (function(){ D.restoreBackend(); return true; })()
