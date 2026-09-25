@@ -1,0 +1,749 @@
+{
+  "schema": 2,
+  "title": "I Fixed a $40 Film Camera (and Shot a Roll With It)",
+  "rows": [
+    {
+      "id": "r1",
+      "status": "shot",
+      "visualText": "Cold open, macro: a dusty <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Pentax K1000\" contenteditable=\"false\">Pentax K1000</span> on the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"workbench\" contenteditable=\"false\">workbench</span>. A finger wipes a line through the dust.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"shutter click\" contenteditable=\"false\">shutter click</span> as the lever is wound.",
+      "audioText": "Forty dollars. That's what this cost me at a flea market. The meter's dead, the seals are gone, and the shutter sticks. Let's fix it.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r2",
+      "status": "shot",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Title card\" contenteditable=\"false\">Title card</span> over a fast montage of the camera coming apart.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"intro sting\" contenteditable=\"false\">intro sting</span> under it.",
+      "audioText": "<span class=\"stage-dir\">music up</span>",
+      "imageRef": null,
+      "lengthSeconds": 6,
+      "imageLinks": [
+        {
+          "href": "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+          "poster": true
+        }
+      ],
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r3",
+      "status": "shot",
+      "visualText": "Medium shot, <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"workbench\" contenteditable=\"false\">workbench</span>, <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"lav mic\" contenteditable=\"false\">lav mic</span> hidden under the collar. Camera held up to the lens.",
+      "audioText": "Hi, I'm Sam. On this channel I take old cameras that everyone gave up on and try to get one roll of film through them. Some of them make it. <span class=\"cmt-anchor\" data-cmt=\"c1\">Some of them really, really don't.</span> This one I have a good feeling about. The Pentax K1000 was made for more than twenty years, it has almost no electronics in it, and there are millions of them still out there, sitting in drawers and lofts. Which means parts are cheap, advice is everywhere, and if I break it, well, I can buy another one. Here's the plan: seals, shutter, meter, film, and then we go and shoot a whole roll and see what comes back from the lab.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r4",
+      "status": "shot",
+      "visualText": "Close-up: the back door open, crumbling foam in the channels.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Problem 1 — light seals”<br><span class=\"broll-key\" data-broll-id=\"bs_ld_01\" contenteditable=\"false\">B-roll:</span> fingertip pushing on the sticky old foam",
+      "audioText": "First problem. These little foam strips keep light from leaking in round the back door. After forty years they turn into black goo. If you shoot with them like this, every frame gets a red stripe down one side. And you won't find out until the film comes back from the lab, weeks later, which is a very specific kind of heartbreak. There's a second strip up by the hinge, and a thin one under the mirror that stops it slapping the top of the chamber. Those three are the whole job.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r5",
+      "status": "shot",
+      "visualText": "Top-down from the <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"overhead rig\" contenteditable=\"false\">overhead rig</span>: the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"light seal kit\" contenteditable=\"false\">light seal kit</span> laid out beside a <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"toothpick\" contenteditable=\"false\">toothpick</span> and a bottle of <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"naphtha\" contenteditable=\"false\">naphtha</span>.",
+      "audioText": "Replacement seals are about eight dollars. You'll also want a toothpick, a bit of lighter fluid to dissolve the old stuff, and a lot of patience.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r6",
+      "status": "shot",
+      "visualText": "Timelapse from the <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"overhead rig\" contenteditable=\"false\">overhead rig</span>: the old seals scraped out of the channel.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"lo-fi bed\" contenteditable=\"false\">lo-fi bed</span> throughout.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_02\" contenteditable=\"false\">B-roll:</span> the toothpick lifting a long strand of goo",
+      "audioText": "This part takes about forty minutes and it is genuinely the worst forty minutes in camera repair. Go slowly. If you scratch the channel, the new seal won't sit flat. Soak a cotton bud, let it sit for a minute, and the old foam lifts out in long sticky strings. Keep a paper towel under the camera, because it drips, and keep the naphtha well away from the lens and the mirror. When the channel is clean, it should be bare shiny metal from end to end.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r7",
+      "status": "shot",
+      "visualText": "Macro: new foam strip pressed into place with the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"toothpick\" contenteditable=\"false\">toothpick</span>.",
+      "audioText": "New seals in. Press them down with the flat end, not your fingers, and don't stretch them.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r8",
+      "status": "shot",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> closes the back. Beat.",
+      "audioText": "Door shuts. That's one.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r9",
+      "status": "shot",
+      "visualText": "Medium shot at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"workbench\" contenteditable=\"false\">workbench</span>. <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> fires the shutter; it hangs open.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Problem 2 — sticky shutter”",
+      "audioText": "Problem two. Listen to this. <span class=\"stage-dir\">fires the shutter</span> That should be a crisp click. Instead it hangs, and then it sort of sighs closed. At slow speeds that's a disaster. <span class=\"cmt-anchor\" data-cmt=\"c2\">Old oil has gone gummy in the escapement.</span>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r10",
+      "status": "ready",
+      "visualText": "Macro through the lens mount: the shutter curtain.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Arrow callout\" contenteditable=\"false\">Arrow callout</span> pointing at the escapement.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_03\" contenteditable=\"false\">B-roll:</span> slow-motion shutter firing at one second",
+      "audioText": "The fix everyone suggests is to exercise it. Fire it at every speed, fifty times each, and a lot of the time the old oil loosens up on its own. It's boring, but it's free, and it doesn't involve opening anything. Start at the fastest speed, a thousandth of a second, and work your way down. The fast speeds barely touch the mechanism that's sticking, but they get everything moving. By the time you reach the slow speeds, where the gears actually do the timing, the old oil has warmed up and started to spread.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r11",
+      "status": "ready",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Counter\" contenteditable=\"false\">Counter</span> ticking up in the corner as <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> fires the shutter again and again.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"shutter click\" contenteditable=\"false\">shutter click</span> layered and speeding up.",
+      "audioText": "So that's what I did. For a whole episode of a podcast.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r12",
+      "status": "ready",
+      "visualText": "Same framing. One clean fire.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Split screen\" contenteditable=\"false\">Split screen</span>: before and after, the same one-second exposure.",
+      "audioText": "And there it is. <span class=\"stage-dir\">beat</span> One second actually lasts one second now. If exercising it doesn't work for you, the next step is a proper clean, and that's a video of its own.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r13",
+      "status": "todo",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Kitchen table\" contenteditable=\"false\">Kitchen table</span>, window light. <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> with a <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"button cell battery\" contenteditable=\"false\">button cell battery</span> between two fingers.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Problem 3 — the light meter”",
+      "audioText": "Problem three is the light meter. The K1000 was built for a mercury battery that you can't buy any more. The easy swap is a silver oxide cell, which runs at a slightly higher voltage, so the meter will read a touch hot. For colour negative film, that honestly doesn't matter. Negative film has loads of room on the bright side, so a meter that reads a little hot just makes your pictures a touch denser, and the scanner sorts that out. If you're going to shoot slide film, which has almost no room at all, you'd want a proper adapter that drops the voltage. I'm not going to do that today.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r14",
+      "status": "todo",
+      "visualText": "Insert: the battery cover unscrewed with a coin.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_04\" contenteditable=\"false\">B-roll:</span> battery dropping into the base plate",
+      "audioText": "Battery in. And the needle moves.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r15",
+      "status": "todo",
+      "visualText": "Over the shoulder, through the viewfinder: the needle swinging as the camera pans across the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"kitchen table\" contenteditable=\"false\">kitchen table</span>.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Viewfinder overlay\" contenteditable=\"false\">Viewfinder overlay</span> on the needle.",
+      "audioText": "To check it, I compared it to the meter app on my phone at a few different scenes. It was within about a third of a stop everywhere, which is better than I expected, and more than good enough. I tried a bright window, a dark hallway, and the fridge light, which is the least scientific test in the world, but it told me the needle moves in the right direction by the right amount. If yours doesn't move at all, check the battery contact first. It's usually a bit of green corrosion, and a pencil eraser takes it right off.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r16",
+      "status": "shot",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Camera shop\" contenteditable=\"false\">Camera shop</span> exterior, handheld on the <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"gimbal\" contenteditable=\"false\">gimbal</span>.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_05\" contenteditable=\"false\">B-roll:</span> shop sign and window display",
+      "audioText": "Next stop: film.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r17",
+      "status": "shot",
+      "visualText": "Inside the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"camera shop\" contenteditable=\"false\">camera shop</span>. <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Rita\" contenteditable=\"false\">Rita</span> behind the counter with a fridge full of film.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"shop door bell\" contenteditable=\"false\">shop door bell</span> as they come in.",
+      "audioText": "This is Rita. She has run this shop for twenty-two years and she has opinions about every film stock ever made. I asked her what she'd put in a camera with a brand new meter she didn't trust yet. She also told me that about half the cameras people bring in with a problem just need a battery, and the other half need new seals, which made me feel very clever for about ten seconds.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r18",
+      "status": "shot",
+      "visualText": "Two-shot, <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Rita\" contenteditable=\"false\">Rita</span> holding up a box of <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Portra 400\" contenteditable=\"false\">Portra 400</span>.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Rita — owner, Frame &amp; Grain”",
+      "audioText": "<span class=\"stage-dir\">Rita, off camera</span> Portra 400. It forgives you. Overexpose it two stops and it still looks lovely. Underexpose it and, well, you get what you deserve. <span class=\"cmt-anchor\" data-cmt=\"c3\">Buy two.</span>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r19",
+      "status": "shot",
+      "visualText": "Close-up: cash going over the counter.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"cash register ding\" contenteditable=\"false\">cash register ding</span><br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Price counter\" contenteditable=\"false\">Price counter</span>: $40 + $8 + $4 + $18",
+      "audioText": "Running total: sixty-eight dollars. Still less than a nice dinner.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r20",
+      "status": "ready",
+      "visualText": "Back at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"workbench\" contenteditable=\"false\">workbench</span>. Loading the film, the leader threaded onto the take-up spool.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_06\" contenteditable=\"false\">B-roll:</span> sprocket holes catching on the teeth",
+      "audioText": "Loading a manual camera for the first time is the moment everyone gets nervous. Pull the leader across, hook it into the slot, and wind on until both sets of sprocket holes are caught. Then, and this is the important bit, watch the rewind knob turn as you advance. If it doesn't turn, the film isn't moving. You'll shoot thirty-six frames onto the same patch of film, or onto nothing at all, and you'll only find out when you try to rewind and there's no tension. Ask me how I know. Close the back, fire two blank frames to get past the part you fogged while loading, and the counter should sit on one.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r21",
+      "status": "ready",
+      "visualText": "Tight on the rewind knob turning.",
+      "audioText": "It turns. We're good.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r22",
+      "status": "todo",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Riverside park\" contenteditable=\"false\">Riverside park</span>, golden hour. Wide: <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> walking in with the camera on a strap.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"lo-fi bed\" contenteditable=\"false\">lo-fi bed</span> returns.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_07\" contenteditable=\"false\">B-roll:</span> feet on the gravel path, low angle",
+      "audioText": "Then I took it for a walk. The whole point of a camera like this is that it slows you down. There's no screen to check. You look at the needle, you turn the rings, and you commit. I set the camera for the light at the start of the walk, and then only changed it when the needle told me to. That meant I spent most of the hour just looking at things, which, honestly, I don't do enough of with a phone in my pocket. By the time I reached the river, I'd only taken four pictures, and I was fine with that.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r23",
+      "status": "todo",
+      "visualText": "Series of handheld shots round the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Riverside park\" contenteditable=\"false\">Riverside park</span>, <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> metering and shooting: a bench, a heron, a bike leaning on a rail.<br>Each frame freezes for a beat with a <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"shutter click\" contenteditable=\"false\">shutter click</span>.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_08\" contenteditable=\"false\">B-roll:</span> the heron taking off",
+      "audioText": "I shot all thirty-six frames in about an hour. Some of them I thought about for a long time. Some of them I just took, because the light was doing something and I didn't want to miss it. The heron stood in the shallows for nearly ten minutes while I crept closer, and then took off the moment I lifted the camera, which I'm told is what herons are for. The bike on the rail was the last frame. I stood there a long time deciding whether it was worth it, and then took it anyway, because it was frame thirty-six.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r24",
+      "status": "todo",
+      "visualText": "Medium, <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> on a bench in the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Riverside park\" contenteditable=\"false\">Riverside park</span>, winding back the film.",
+      "audioText": "Rewinding is the most stressful thirty seconds in photography. <span class=\"cmt-anchor\" data-cmt=\"c4\">If the film tears now, there's nothing left to show you.</span>",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r25",
+      "status": "todo",
+      "visualText": "Montage: the canister going into an envelope, the envelope into a post box.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"lo-fi bed\" contenteditable=\"false\">lo-fi bed</span> swells.",
+      "audioText": "<span class=\"stage-dir\">music only</span>",
+      "imageRef": null,
+      "lengthSeconds": 12,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r26",
+      "status": "todo",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Kitchen table\" contenteditable=\"false\">Kitchen table</span>, a week later. <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> opens an email on a laptop.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Screen recording\" contenteditable=\"false\">Screen recording</span> of the lab's download page.",
+      "audioText": "A week later, the scans came back.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r27",
+      "status": "todo",
+      "visualText": "Full screen, one by one: the scans.<br><span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Ken Burns\" contenteditable=\"false\">Ken Burns</span> slow push on each.<br><span class=\"broll-key\" data-broll-id=\"bs_ld_09\" contenteditable=\"false\">B-roll:</span> prints laid out on the table, overhead",
+      "audioText": "And I'm really happy with them. The meter held up. There's no light leak anywhere, not even on the first frame. Two frames are soft because I missed focus, and that's entirely on me. The heron is out of focus too. The heron was always going to be out of focus. The colours are what got me. Portra does this warm, soft thing with late light that I've spent years trying to get out of a phone with filters, and here it is, straight out of the scanner, no editing at all. Rita was right. It forgave me for everything.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r28",
+      "status": "ready",
+      "visualText": "Medium at the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"workbench\" contenteditable=\"false\">workbench</span>, the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Pentax K1000\" contenteditable=\"false\">Pentax K1000</span> on the bench beside the prints.",
+      "audioText": "So was it worth it? Forty dollars for the camera, eight for the seals, four for a battery, eighteen for film and another fifteen to get it developed and scanned. Eighty-five dollars all in, for a camera that will outlive my phone, and a roll of pictures I actually like. <strong>Yes.</strong> It was worth it.",
+      "imageRef": null,
+      "imageLinks": [
+        {
+          "href": "https://www.youtube.com/watch?v=eRsGyueVLvQ",
+          "poster": true
+        }
+      ],
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r29",
+      "status": "ready",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> to camera. <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"End screen\" contenteditable=\"false\">End screen</span> for the last twenty seconds.<br><span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"outro sting\" contenteditable=\"false\">outro sting</span>",
+      "audioText": "If you want to try this, the full parts list is in the description. Next time, we're going somewhere much scarier: a rangefinder with a cloth shutter and a big hole in it.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    },
+    {
+      "id": "r30",
+      "status": "todo",
+      "visualText": "Post-credits: <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Sam\" contenteditable=\"false\">Sam</span> fires the shutter one more time. It hangs.",
+      "audioText": "<span class=\"stage-dir\">long pause</span> Oh no.",
+      "imageRef": null,
+      "updatedAt": "",
+      "updatedBy": null
+    }
+  ],
+  "comments": [
+    {
+      "id": "c1",
+      "rowId": "r3",
+      "field": "audioText",
+      "anchorId": "c1",
+      "quotedText": "Some of them really, really don't.",
+      "author": "Jo (editor)",
+      "body": "Love this. Could we hold on your face for a beat after it?",
+      "resolved": false,
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "assignee": "",
+      "createdAt": "2026-09-20T10:12:00.000Z",
+      "updatedAt": "2026-09-20T10:12:00.000Z",
+      "replies": [
+        {
+          "id": "c1r1",
+          "author": "Sam",
+          "body": "Yes — I'll leave a second of room in the take.",
+          "createdAt": "2026-09-20T11:40:00.000Z"
+        }
+      ],
+      "kind": "anchor"
+    },
+    {
+      "id": "c2",
+      "rowId": "r9",
+      "field": "audioText",
+      "anchorId": "c2",
+      "quotedText": "Old oil has gone gummy in the escapement.",
+      "author": "Jo (editor)",
+      "body": "Is “escapement” right for a focal-plane shutter? Worth checking.",
+      "resolved": true,
+      "resolvedBy": "Sam",
+      "resolvedAt": "2026-09-21T09:05:00.000Z",
+      "assignee": "",
+      "createdAt": "2026-09-20T10:20:00.000Z",
+      "updatedAt": "2026-09-20T10:20:00.000Z",
+      "replies": [],
+      "kind": "anchor"
+    },
+    {
+      "id": "c3",
+      "rowId": "r18",
+      "field": "audioText",
+      "anchorId": "c3",
+      "quotedText": "Buy two.",
+      "author": "Sam",
+      "body": "Rita's line — keep it exactly as she said it.",
+      "resolved": false,
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "assignee": "Jo (editor)",
+      "createdAt": "2026-09-21T14:30:00.000Z",
+      "updatedAt": "2026-09-21T14:30:00.000Z",
+      "replies": [],
+      "kind": "anchor"
+    },
+    {
+      "id": "c4",
+      "rowId": "r24",
+      "field": "audioText",
+      "anchorId": "c4",
+      "quotedText": "If the film tears now, there's nothing left to show you.",
+      "author": "Jo (editor)",
+      "body": "Tension here could use a sting. Something short and low?",
+      "resolved": false,
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "assignee": "",
+      "createdAt": "2026-09-22T08:15:00.000Z",
+      "updatedAt": "2026-09-22T08:15:00.000Z",
+      "replies": [],
+      "kind": "anchor"
+    }
+  ],
+  "people": [
+    {
+      "id": "p_ld_sam",
+      "name": "Sam"
+    },
+    {
+      "id": "p_ld_jo",
+      "name": "Jo (editor)"
+    }
+  ],
+  "productionTags": [
+    {
+      "id": "t_nehw781hawtqy",
+      "cat": "prop",
+      "name": "Pentax K1000",
+      "status": "have",
+      "owner": "p_ld_sam",
+      "notes": "The $40 flea-market body. Keep the lens cap on between setups."
+    },
+    {
+      "id": "t_qnnurt1s7dc0c",
+      "cat": "prop",
+      "name": "light seal kit",
+      "status": "have",
+      "owner": "p_ld_sam",
+      "notes": ""
+    },
+    {
+      "id": "t_11e2rcn1t3j38i",
+      "cat": "prop",
+      "name": "toothpick",
+      "status": "have",
+      "owner": "",
+      "notes": ""
+    },
+    {
+      "id": "t_14n9qt01hbph00",
+      "cat": "prop",
+      "name": "naphtha",
+      "status": "have",
+      "owner": "",
+      "notes": "Zippo fluid is fine."
+    },
+    {
+      "id": "t_9r0rolan06ud",
+      "cat": "prop",
+      "name": "button cell battery",
+      "status": "sourcing",
+      "owner": "p_ld_sam",
+      "notes": "SR44 silver oxide."
+    },
+    {
+      "id": "t_10lgz0ydng2aw",
+      "cat": "prop",
+      "name": "Portra 400",
+      "status": "have",
+      "owner": "",
+      "notes": "Two rolls, from Rita."
+    },
+    {
+      "id": "t_d8cff78x066r",
+      "cat": "location",
+      "name": "workbench",
+      "status": "have",
+      "owner": "",
+      "notes": ""
+    },
+    {
+      "id": "t_wr8s2q9gognr",
+      "cat": "location",
+      "name": "Kitchen table",
+      "status": "have",
+      "owner": "",
+      "notes": ""
+    },
+    {
+      "id": "t_quf5kfv0pqer",
+      "cat": "location",
+      "name": "Camera shop",
+      "status": "have",
+      "owner": "p_ld_sam",
+      "notes": "Frame & Grain, weekday mornings only."
+    },
+    {
+      "id": "t_1vjgyvd1bug7nf",
+      "cat": "location",
+      "name": "Riverside park",
+      "status": "needed",
+      "owner": "",
+      "notes": "Golden hour, check the forecast."
+    },
+    {
+      "id": "t_1bamaxl13emujz",
+      "cat": "cast",
+      "name": "Sam",
+      "status": "have",
+      "owner": "",
+      "notes": ""
+    },
+    {
+      "id": "t_17ikyzw17ary8p",
+      "cat": "cast",
+      "name": "Rita",
+      "status": "have",
+      "owner": "p_ld_sam",
+      "notes": "Release form signed."
+    },
+    {
+      "id": "t_nzo4b69nw035",
+      "cat": "gear",
+      "name": "lav mic",
+      "status": "have",
+      "owner": "",
+      "notes": ""
+    },
+    {
+      "id": "t_o7uezk1k8kjrc",
+      "cat": "gear",
+      "name": "overhead rig",
+      "status": "have",
+      "owner": "",
+      "notes": ""
+    },
+    {
+      "id": "t_1fijg281r3calw",
+      "cat": "gear",
+      "name": "gimbal",
+      "status": "returned",
+      "owner": "",
+      "notes": "Borrowed for the shop day."
+    },
+    {
+      "id": "t_1qo6uv9fbawg8",
+      "cat": "vfx",
+      "name": "Title card",
+      "status": "have",
+      "owner": "p_ld_jo",
+      "notes": ""
+    },
+    {
+      "id": "t_1mi4te71e9svzw",
+      "cat": "vfx",
+      "name": "Lower third",
+      "status": "sourcing",
+      "owner": "p_ld_jo",
+      "notes": "One template for all of them."
+    },
+    {
+      "id": "t_9z2kfp10c2v9g",
+      "cat": "vfx",
+      "name": "Split screen",
+      "status": "needed",
+      "owner": "p_ld_jo",
+      "notes": ""
+    },
+    {
+      "id": "t_1apazg61s8b7j6",
+      "cat": "vfx",
+      "name": "Price counter",
+      "status": "needed",
+      "owner": "p_ld_jo",
+      "notes": ""
+    },
+    {
+      "id": "t_11fjge21hkwctz",
+      "cat": "vfx",
+      "name": "End screen",
+      "status": "needed",
+      "owner": "p_ld_jo",
+      "notes": ""
+    },
+    {
+      "id": "t_469hj710bzits",
+      "cat": "sound",
+      "name": "intro sting",
+      "status": "have",
+      "owner": "p_ld_jo",
+      "notes": ""
+    },
+    {
+      "id": "t_1xhcwde1yyojue",
+      "cat": "sound",
+      "name": "lo-fi bed",
+      "status": "sourcing",
+      "owner": "p_ld_jo",
+      "notes": "Licensed track, not the free one."
+    },
+    {
+      "id": "t_iqukx9dfz9w5",
+      "cat": "sound",
+      "name": "shutter click",
+      "status": "have",
+      "owner": "",
+      "notes": "Record the real one, close up."
+    },
+    {
+      "cat": "vfx",
+      "name": "Arrow callout",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_785ak21at6lqu"
+    },
+    {
+      "cat": "vfx",
+      "name": "Counter",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_1m7l0u38jc16r"
+    },
+    {
+      "cat": "vfx",
+      "name": "Viewfinder overlay",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_97xrfs19hoxli"
+    },
+    {
+      "cat": "sound",
+      "name": "shop door bell",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_1or5715nwmi6s"
+    },
+    {
+      "cat": "sound",
+      "name": "cash register ding",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_sxhdgs1rnslhr"
+    },
+    {
+      "cat": "vfx",
+      "name": "Screen recording",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_1riido6bii3lu"
+    },
+    {
+      "cat": "vfx",
+      "name": "Ken Burns",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_bft6rv1dy6xrm"
+    },
+    {
+      "cat": "sound",
+      "name": "outro sting",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_267c7em1dtvg"
+    }
+  ],
+  "brollShots": [
+    {
+      "id": "bs_ld_01",
+      "name": "fingertip pushing on the sticky old foam",
+      "desc": "",
+      "status": "shot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "First problem. These little foam strips keep light from leaking in round the back door. After forty years they turn into black goo. If you shoot with them like this, every frame gets a red stripe down one side. And you won't find out until the film comes back from the lab, weeks later, which is a very specific kind of heartbreak. There's a second strip up by the hinge, and a thin one under the mirror that stops it slapping the top of the chamber. Those three are the whole job.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_02",
+      "name": "the toothpick lifting a long strand of goo",
+      "desc": "",
+      "status": "shot",
+      "reshoot": true,
+      "notes": "Soft focus — grab it again on the macro day.",
+      "owner": "",
+      "audioRef": "This part takes about forty minutes and it is genuinely the worst forty minutes in camera repair. Go slowly. If you scratch the channel, the new seal won't sit flat. Soak a cotton bud, let it sit for a minute, and the old foam lifts out in long sticky strings. Keep a paper towel under the camera, because it drips, and keep the naphtha well away from the lens and the mirror. When the channel is clean, it should be bare shiny metal from end to end.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_03",
+      "name": "slow-motion shutter firing at one second",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "The fix everyone suggests is to exercise it. Fire it at every speed, fifty times each, and a lot of the time the old oil loosens up on its own. It's boring, but it's free, and it doesn't involve opening anything. Start at the fastest speed, a thousandth of a second, and work your way down. The fast speeds barely touch the mechanism that's sticking, but they get everything moving. By the time you reach the slow speeds, where the gears actually do the timing, the old oil has warmed up and started to spread.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_04",
+      "name": "battery dropping into the base plate",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Battery in. And the needle moves.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_05",
+      "name": "shop sign and window display",
+      "desc": "",
+      "status": "shot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Next stop: film.",
+      "location": "Camera shop",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_06",
+      "name": "sprocket holes catching on the teeth",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Loading a manual camera for the first time is the moment everyone gets nervous. Pull the leader across, hook it into the slot, and wind on until both sets of sprocket holes are caught. Then, and this is the important bit, watch the rewind knob turn as you advance. If it doesn't turn, the film isn't moving. You'll shoot thirty-six frames onto the same patch of film, or onto nothing at all, and you'll only find out when you try to rewind and there's no tension. Ask me how I know. Close the back, fire two blank frames to get past the part you fogged while loading, and the counter should sit on one.",
+      "location": "workbench",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_07",
+      "name": "feet on the gravel path, low angle",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Then I took it for a walk. The whole point of a camera like this is that it slows you down. There's no screen to check. You look at the needle, you turn the rings, and you commit. I set the camera for the light at the start of the walk, and then only changed it when the needle told me to. That meant I spent most of the hour just looking at things, which, honestly, I don't do enough of with a phone in my pocket. By the time I reached the river, I'd only taken four pictures, and I was fine with that.",
+      "location": "Riverside park",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_08",
+      "name": "the heron taking off",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "I shot all thirty-six frames in about an hour. Some of them I thought about for a long time. Some of them I just took, because the light was doing something and I didn't want to miss it. The heron stood in the shallows for nearly ten minutes while I crept closer, and then took off the moment I lifted the camera, which I'm told is what herons are for. The bike on the rail was the last frame. I stood there a long time deciding whether it was worth it, and then took it anyway, because it was frame thirty-six.",
+      "location": "Riverside park",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_ld_09",
+      "name": "prints laid out on the table, overhead",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "And I'm really happy with them. The meter held up. There's no light leak anywhere, not even on the first frame. Two frames are soft because I missed focus, and that's entirely on me. The heron is out of focus too. The heron was always going to be out of focus. The colours are what got me. Portra does this warm, soft thing with late light that I've spent years trying to get out of a phone with filters, and here it is, straight out of the scanner, no editing at all. Rita was right. It forgave me for everything.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    }
+  ],
+  "wordsPerMinute": 150,
+  "rev": 0,
+  "targetSeconds": 540
+}

@@ -238,7 +238,7 @@ function paint(o, offset) {
   var cat = tagCategory(o.cat);
   if (el.getAttribute("data-cat") !== o.cat) {
     el.setAttribute("data-cat", o.cat);
-    el.innerHTML = '<span class="tag-cat-dot" style="--dot: ' + cat.color + '"></span>' +
+    el.innerHTML = '<span class="tag-cat-dot" data-tag-cat="' + cat.id + '" style="--dot: ' + cat.color + '"></span>' +
       '<b>' + escapeHtml(cat.label) + '</b>' +
       '<span class="tag-suggest-cat">tag</span><kbd>Tab</kbd>';
   }

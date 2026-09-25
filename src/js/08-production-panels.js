@@ -9,6 +9,7 @@ import {
   TAG_CATEGORIES,
   TAG_STATUSES,
   bulkDeleteArmed,
+  bulkTagRows,
   clearProductionSelection,
   deletePerson,
   deleteProductionTagEntry,
@@ -335,6 +336,41 @@ function dropEditingForReview() {
    as a menu, lists the item's mentions, and puts Rename under the list
    with the "⋯" beside it. Either way every field shows its border at rest
    (Adam: fields and buttons must be easy to find). */
+/* Plain-text mentions of an item still to be tagged in the Visual column
+   (#218): one button tags every one of them, the find bar's "Tag all as…"
+   for this item's own name and category. Counted only for the open item,
+   and never offered to a reviewer. */
+function untaggedMentionCount(item) {
+  if (!S.state || !item.name) return 0;
+  return bulkTagRows(S.state.rows, item.name, item.cat.id, item.name, false, true).hits;
+}
+
+function untaggedMentionsHtml(item, ro) {
+  if (ro) return "";
+  var n = untaggedMentionCount(item);
+  if (!n) return "";
+  return '<dt>Untagged</dt><dd class="tag-untagged-dd">' +
+    '<button type="button" class="btn-outline is-small" data-action="tag-all-mentions" data-key="' +
+      escapeHtml(item.key) + '" title="Tag every plain-text mention of ' + escapeHtml(item.name) +
+      ' in the Visual column">Tag all ' + n + ' mention' + (n === 1 ? '' : 's') + '</button></dd>';
+}
+
+export function tagAllMentions(key) {
+  if (reviewBlocked()) return;
+  var item = findTagByKey(key);
+  if (!item) return;
+  /* one undo entry of its own, however many scenes it touches */
+  breakUndoCoalescing();
+  var done = bulkTagRows(S.state.rows, item.name, item.cat.id, item.name, false, false);
+  if (!done.hits) { showToast("No untagged mentions of " + item.name + " left.", "warn"); return; }
+  registerProductionTag(item.cat.id, item.name);
+  markDirty();
+  breakUndoCoalescing();
+  render();
+  queueAutoSave();
+  showToast("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
+}
+
 function tagEntityDetailHtml(item, renaming, gear, detailId) {
   var k = escapeHtml(item.key);
   var name = escapeHtml(item.name);
@@ -424,6 +460,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
           '</dd>'
         : '') +
       '<dt>Status</dt><dd class="tag-status-dd">' + status + '</dd>' +
+      untaggedMentionsHtml(item, ro) +
       (gear
         ? '<dt>Mentions</dt><dd class="tag-mentions">' +
             (item.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : mentionLinksHtml(item)) + '</dd>'
@@ -471,7 +508,7 @@ function tagEntityHtml(item, opts) {
   var detailId = tagFieldId("detail", gear, item.key);
   /* the category's dot where no section title carries it: Gear's rows,
      and the breakdown grouped by person */
-  var dot = '<span class="tag-row-dot" aria-hidden="true"></span>';
+  var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
   return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
       (expanded ? ' is-expanded' : '') +
       (selected ? ' is-selected' : '') +
@@ -512,7 +549,7 @@ function renderProductionByScene(all) {
       '<ul class="tag-pills">' +
         items.map(function (item) {
           return '<li class="tag-pill" style="--dot:' + item.cat.color + '">' +
-            '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+            '<span class="tag-cat-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>' +
             escapeHtml(item.name) + '</li>';
         }).join("") +
       '</ul>' +
@@ -618,7 +655,7 @@ function renderProductionByShoot(entries) {
     var done = shot === g.rows.length;
     return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
-        '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+        '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + TAG_CATEGORIES[1].id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
           '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> shot · ' +
@@ -645,7 +682,7 @@ function renderProductionByShoot(entries) {
                 var owner = personById(item.owner);
                 var nst = tagStatus(item.status) || TAG_STATUSES[0];
                 return '<li class="shoot-need" style="--dot:' + item.cat.color + '">' +
-                  '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+                  '<span class="tag-cat-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>' +
                   '<span class="shoot-need-name">' + escapeHtml(item.name) + '</span>' +
                   '<span class="shoot-need-status">' + tagStatusLampHtml(nst.id) + escapeHtml(nst.label) + '</span>' +
                   ownerCellHtml(owner) +
@@ -745,7 +782,7 @@ function renderProductionList(entries) {
   listEl.innerHTML = groups.map(function (g) {
     return '<section class="tag-group">' +
       '<h3 class="tag-group-head" style="--dot:' + g.cat.color + '">' +
-        '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+        '<span class="tag-cat-dot" data-tag-cat="' + g.cat.id + '" aria-hidden="true"></span>' +
         '<span class="tag-group-label">' + escapeHtml(g.cat.plural) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
       '</h3>' +
