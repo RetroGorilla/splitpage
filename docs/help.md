@@ -221,6 +221,11 @@ waited for by Follow My Voice, and don't count toward the read time.
   <kbd>→</kbd> to browse, <kbd>Shift</kbd>+<kbd>←</kbd> /
   <kbd>→</kbd> or drag to reorder, **Make cover**, **Remove**
   (<kbd>Delete</kbd>), and <kbd>Esc</kbd> to close.
+- **See a picture at full size**: click the big picture in the gallery
+  (or press <kbd>Enter</kbd> on it). A large picture opens fitted to the
+  window; click it or scroll to see it at 100 %, and drag to look around.
+  <kbd>←</kbd> <kbd>→</kbd> go through the scene's pictures, and
+  <kbd>Esc</kbd>, **×** or a click outside goes back to the gallery.
 - **Watch a video**: press **▶** in the gallery. YouTube and Vimeo links
   play there, and so does a video file dropped since you opened the script.
   Anything else opens with **Open link** / **Open file**.
