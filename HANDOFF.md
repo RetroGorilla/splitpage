@@ -1788,7 +1788,7 @@ evaluation order via `_entry.js`):
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |
-| `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`) |
+| `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`); 1.0.x removal (`customInit`); the running-app check (`customCheckAppRunning`), which never force-kills while the app has a visible window, so a save prompt is waited for, not killed (#198) |
 | `desktop/stage.mjs` | build step: runs `build.mjs`, verifies version, stages files for packaging |
 | `desktop/verify-dist.mjs` | post-`dist:win` check: PE machine field per binary, NSIS stub arch, installer freshness, installer payload actually extracts (#6) |
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |
