@@ -105,7 +105,10 @@ function Start-Edge {
   $script:UserDataDir = Join-Path $env:TEMP ("splitpage-edge-" + $RunId + "-" + [guid]::NewGuid().ToString('N').Substring(0,8))
   $a = @(
     "--remote-debugging-port=$CdpPort",
-    "--user-data-dir=$script:UserDataDir",
+    # Quoted: Start-Process joins -ArgumentList with spaces unescaped, so a
+    # TEMP path with a space in it split into two arguments and Edge never
+    # started ("no CDP page target").
+    "--user-data-dir=`"$script:UserDataDir`"",
     '--no-first-run', '--no-default-browser-check', '--disable-gpu',
     '--disable-features=Translate,msEdgeSplitScreen,msImplicitSignin',
     '--window-size=1440,960',
