@@ -1,0 +1,116 @@
+# Sound cues in the Audio column (#219).
+#
+# "SFX:" or "Music:" starting a line of an Audio cell makes that whole line
+# a cue: the `cue` mark (04c-doc-model.js), stored as
+# <span class="audio-cue">, shown small, after a note, in the Music/SFX
+# colour. It turns into one when its colon is typed, and one Ctrl+Z gives
+# the plain words back. Typing on is more of the cue; Enter at its end
+# starts an ordinary line. Mid-sentence, and in the Visual column, the
+# words are words. The teleprompter never shows one, the read time leaves
+# it out, and it is an item of the Production panel's Music/SFX list. The
+# model, the readers, the merge and the formats are src/test/cues.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.cellA = function(i){ return document.querySelectorAll('#rows .row .audio-cell .cell-editable')[i || 0]; }; window.cellV = function(){ return document.querySelector('#rows .row .visual-cell .cell-editable'); }; window.aud = function(i){ return F.state().rows[i || 0].audioText; }; window.vis = function(){ return F.state().rows[0].visualText; }; window.clearCell = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand('delete'); return el.innerHTML; }; window.caretEnd = function(el){ el.focus(); var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; window.rd = function(i){ return document.querySelectorAll('#rows .row .row-read')[i]; }; return true; })()
+
+# --- typing "SFX:" at the start of a line makes the line a cue ---------------
+caret #rows .row .audio-cell .cell-editable
+eval clearCell(cellA(0))
+press Welcome back.
+key Enter
+press SFX
+sleep 150
+expect aud(0).indexOf('audio-cue') === -1
+press :
+sleep 300
+expect cellA(0).querySelector('.audio-cue') !== null
+expect cellA(0).querySelector('.audio-cue').textContent == SFX:
+# typing on is more of the cue
+press  door slam
+sleep 300
+expect cellA(0).querySelector('.audio-cue').textContent.replace(/ /g, ' ') == SFX: door slam
+expect aud(0).replace(/&nbsp;/g, ' ') == Welcome back.<br><span class="audio-cue">SFX: door slam</span>
+# shown small, in the Music/SFX colour, after a note
+eval (function(){ window.__cue = getComputedStyle(cellA(0).querySelector('.audio-cue')); window.__cell = getComputedStyle(cellA(0)); return true; })()
+expect parseFloat(window.__cue.fontSize) < parseFloat(window.__cell.fontSize)
+expect window.__cue.color !== window.__cell.color
+expect window.__cue.color === getComputedStyle(document.documentElement).getPropertyValue('--tag-sound').trim() || window.__cue.color.indexOf('rgb') === 0
+expect getComputedStyle(cellA(0).querySelector('.audio-cue'), '::before').content.indexOf('♪') !== -1
+shot 219-cue-editor
+
+# --- Enter at its end starts an ordinary line ---------------------------------
+key Enter
+press Today, the kettle.
+sleep 300
+expect cellA(0).querySelectorAll('.audio-cue').length === 1
+expect aud(0).replace(/&nbsp;/g, ' ').indexOf('<span class="audio-cue">SFX: door slam</span><br>Today, the kettle.') !== -1
+
+# --- a fresh cell: Music, any case; mid-sentence is words ---------------------
+eval clearCell(cellA(0))
+press Cue the SFX
+press :
+press  now.
+key Enter
+press music
+press :
+press  upbeat intro
+sleep 300
+expect cellA(0).querySelectorAll('.audio-cue').length === 1
+expect cellA(0).querySelector('.audio-cue').textContent.replace(/ /g, ' ') == music: upbeat intro
+expect aud(0).indexOf('Cue the SFX: now.') === 0
+
+# --- one Ctrl+Z right after the colon gives plain words -----------------------
+key Enter
+press SFX
+press :
+sleep 300
+expect cellA(0).querySelectorAll('.audio-cue').length === 2
+key ctrl KeyZ
+sleep 300
+expect cellA(0).querySelectorAll('.audio-cue').length === 1
+expect aud(0).replace(/&nbsp;/g, ' ').slice(-8) == <br>SFX:
+
+# --- the Visual column: "SFX:" is a plain-language tag there, never a cue ------
+eval document.activeElement.blur()
+caret #rows .row .visual-cell .cell-editable
+eval clearCell(cellV())
+press SFX
+press :
+press  whoosh
+sleep 300
+expect cellV().querySelector('.audio-cue') === null
+key Escape
+eval document.activeElement.blur()
+sleep 200
+expect vis().indexOf('audio-cue') === -1
+
+# --- read time, teleprompter, Production panel, over an opened document ------
+eval (function(){ var CUE = function (t) { return '<span class="audio-cue">' + t + '</span>'; }; var doc = { schema: 2, title: 'Cues', wordsPerMinute: 150, rows: [ { id: 'r1', visualText: 'Host', audioText: 'one two three four five six seven eight nine ten<br>' + CUE('SFX: a long rolling rumble of thunder over the distant hills'), status: 'todo' }, { id: 'r2', visualText: 'Kettle', audioText: CUE('Music: upbeat intro') + '<br>Hello there.', status: 'todo' } ] }; return F.openFile(new File([JSON.stringify(doc)], 'cues.splitpage')).then(function () { return true; }); })()
+wait F.state().title === 'Cues' && document.querySelectorAll('#rows .row').length === 2
+sleep 400
+expect document.querySelectorAll('#rows .audio-cell .audio-cue').length === 2
+# 10 words said: 4 s; the cue's eleven words take none
+expect rd(0).textContent == 0:04
+expect rd(1).textContent == 0:01
+
+click #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 300
+expect document.querySelectorAll('#prompter-content .audio-cue').length === 0
+expect document.getElementById('prompter-content').textContent.indexOf('thunder') === -1
+expect document.getElementById('prompter-content').textContent.indexOf('upbeat') === -1
+expect document.querySelectorAll('#prompter-content .w').length === 12
+shot 219-cue-prompter
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+
+click #btn-production
+wait !document.getElementById('production-panel').hidden
+sleep 400
+expect document.getElementById('production-panel').textContent.indexOf('upbeat intro') !== -1
+expect document.getElementById('production-panel').textContent.indexOf('a long rolling rumble of thunder over the distant hills') !== -1
+expect F.state().productionTags.some(function (t) { return t.cat === 'sound' && t.name === 'upbeat intro'; })
+shot 219-cue-production

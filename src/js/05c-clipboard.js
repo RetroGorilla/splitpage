@@ -10,6 +10,7 @@ import {
   cellOf,
   commentIds,
   deleteRange,
+  flattenCues,
   flattenDirections,
   fromHtml,
   insertText,
@@ -468,6 +469,8 @@ export function pasteIntoCell(cellEl, html, text, extra) {
     /* The Visual column has no stage directions (#167): one pasted there
        is its words again, in the brackets it was shown with. */
     if (field === "visualText") piece = flattenDirections(piece);
+    /* nor sound cue lines (#219): one pasted there is its words */
+    if (field === "visualText") piece = flattenCues(piece);
     var next = got.text !== null
       ? insertText(rest, from, got.text)
       : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));

@@ -18,6 +18,7 @@ import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeH
 import {
   breakLine,
   cellLength,
+  cueShortcut,
   directionRangeAt,
   directionShortcut,
   directionToggleRange,
@@ -1118,6 +1119,32 @@ export function maybeDirectionShortcut(e, cellEl) {
     if (!sel || sel.from !== sel.to) return null;
     var got = directionShortcut(cell, sel.from);
     return got ? { cell: got.cell, sel: { from: got.end, to: got.end } } : null;
+  });
+}
+
+/* The typed sound cue (#219, cueShortcut in 04c-doc-model.js, which
+   records the convention): a ":" typed live in the Audio column, with only
+   "SFX" or "Music" before it on its line, makes the line a cue. The same
+   shape as the direction shortcut above: never a paste, an import or a
+   merge, never the Visual column (where "SFX:" starts a plain-language
+   tag instead, #210), an edit of its own so one Ctrl+Z gives the plain
+   words back, and the DOM asked first so ordinary typing never reads the
+   model. The caret stays where it was, at the end of the cue's span, so
+   the words typed next are more of the cue. */
+var CUE_HINT_RE = /(sfx|music)[ \t\u00a0]*:$/i;
+
+export function maybeCueShortcut(e, cellEl) {
+  if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ":") return;
+  if (!isDirectionCell(cellEl)) return;
+  var s = window.getSelection();
+  if (!s || !s.rangeCount || !s.isCollapsed) return;
+  var r = s.getRangeAt(0);
+  var node = r.startContainer, offset = r.startOffset;
+  if (node.nodeType !== 3 || !CUE_HINT_RE.test(node.data.slice(0, offset).replace(/\u200B/g, ""))) return;
+  editCell(cellEl, function (cell, sel) {
+    if (!sel || sel.from !== sel.to) return null;
+    var next = cueShortcut(cell, sel.from);
+    return next ? { cell: next, sel: sel } : null;
   });
 }
 

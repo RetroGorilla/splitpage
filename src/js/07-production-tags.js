@@ -10,6 +10,8 @@ import {
 } from "./04-richtext.js";
 import {
   cellOf,
+  cuesInCell,
+  editCues,
   namedTagId,
   projection,
   replaceWithTag,
@@ -275,7 +277,14 @@ export function contentMemo(compute) {
    someone fixed a typo next to it; counting the model's stretches gives
    the count the cell keeps. It is what the panel shows as an item's
    mentions, what the breakdown exports print, and what Remove label
-   reports (tag-panel-model.test.mjs pins each case). */
+   reports (tag-panel-model.test.mjs pins each case).
+
+   A sound cue line of the Audio column (#219, "SFX: door slam") is a
+   Music/SFX mention too, named by the words after its colon, after the
+   cell's tags: so a cue is an item of the Production panel's Music/SFX
+   list, merged with a tag of the same name, with the owner and status
+   every item has, and the registry heal tracks it like any live tag. A
+   bare "SFX:" names nothing and is no item. */
 export var tagsInField = contentMemo(function (html) {
   var out = [];
   var last = null;
@@ -289,7 +298,14 @@ export var tagsInField = contentMemo(function (html) {
     last = { id: id, catId: t.cat, name: name, text: r.text };
     out.push(last);
   });
-  return out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
+  var found = out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
+  if (html.indexOf("audio-cue") !== -1) {
+    cuesInCell(cellOf(html)).forEach(function (c) {
+      var name = c.name.slice(0, 80).trim();
+      if (name) found.push({ catId: "sound", name: name, text: c.text });
+    });
+  }
+  return found;
 });
 
 export function collectTagsFromRows(rows) {
@@ -1567,6 +1583,12 @@ function retagCell(html, cat, target, toId) {
     var t = tagNameOf(id);
     if (t && t.cat === cat && normalizeTagName(t.name) === target) cell = retag(cell, id, toId);
   });
+  /* a Music/SFX item that is a sound cue (#219): renamed in its words, or
+     made plain words again (editCues) */
+  if (cat === "sound" && html.indexOf("audio-cue") !== -1) {
+    cell = editCues(cell, function (name) { return normalizeTagName(name.slice(0, 80)) === target; },
+      toId === null ? null : tagNameOf(toId).name);
+  }
   return toHtml(cell);
 }
 

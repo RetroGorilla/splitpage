@@ -10,11 +10,14 @@ import {
   cellLength,
   cellOf,
   fromHtml,
+  importCues,
   importDirections,
   setMark,
+  flattenCues,
   toDocxRuns,
   toHtml,
-  toPlainText
+  toPlainText,
+  withoutCues
 } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import { breakdownRows } from "./08-production-panels.js";
@@ -141,8 +144,18 @@ function omitDirectionRuns(runs) {
   return out;
 }
 
+/* A sound cue line (#219): its own character style, small and in the
+   Music/SFX colour, as the editor shows it — written on the run too, like
+   a direction's. It is its own line already (a cue is a whole line). A
+   narration export leaves cues out (opts.cues "omit"). */
+var CUE_STYLE = "SplitpageCue";
+var CUE_COLOR = "AB413E";
+var CUE_SIZE = 18;
+
 function docxRunsXml(html, rels, opts) {
-  var runs = toDocxRuns(cellOf(html));
+  var cell = cellOf(html);
+  if (opts && opts.cues === "omit") cell = withoutCues(cell);
+  var runs = toDocxRuns(cell);
   if (opts && opts.directions === "omit") runs = omitDirectionRuns(runs);
   if (!runs.length) return '<w:p/>';
   var out = '<w:p>';
@@ -151,13 +164,16 @@ function docxRunsXml(html, rels, opts) {
     if (r.text === "\n") { out += '<w:r><w:br/></w:r>'; return; }
     var props = "";
     if (r.dir) props += '<w:rStyle w:val="' + DIRECTION_STYLE + '"/>';
+    else if (r.cue) props += '<w:rStyle w:val="' + CUE_STYLE + '"/>';
     if (r.b) props += "<w:b/>";
     if (r.i || r.dir) props += "<w:i/>";
     if (r.dir && !r.href) props += '<w:color w:val="' + DIRECTION_COLOR + '"/>';
+    else if (r.cue && !r.href) props += '<w:color w:val="' + CUE_COLOR + '"/>';
     if (r.u) props += '<w:u w:val="single"/>';
     if (r.s) props += "<w:strike/>";
     if (r.mark) props += '<w:highlight w:val="yellow"/>';
     if (r.href) props += '<w:color w:val="1155CC"/><w:u w:val="single"/>';
+    if (r.cue) props += '<w:sz w:val="' + CUE_SIZE + '"/>';
     var run = '<w:r>' + (props ? "<w:rPr>" + props + "</w:rPr>" : "") +
       '<w:t xml:space="preserve">' + xmlEscape(r.text) + '</w:t></w:r>';
     if (r.href) {
@@ -644,10 +660,11 @@ export function setNarrationIncludesDirections(on) {
   writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
 }
 
-/* opts.directions: true/false overrides the preference (tests). */
+/* opts.directions: true/false overrides the preference (tests). Sound
+   cues (#219) are never in it: this is what is said, and a cue is not. */
 function narrationTextOpts(opts) {
   var include = opts && typeof opts.directions === "boolean" ? opts.directions : narrationIncludesDirections();
-  return include ? {} : { directions: "omit" };
+  return include ? { cues: "omit" } : { directions: "omit", cues: "omit" };
 }
 
 export function narrationRows(opts) {
@@ -1107,16 +1124,26 @@ export async function docxToRows(file) {
    round it. The Visual column has none: a styled one that landed there —
    a paragraph that was nothing but a direction goes to the Visual column
    by the bracket rule above — is its words, brackets and all. A cell
-   with neither is left exactly as it was read. */
+   with neither is left exactly as it was read.
+
+   Sound cues (#219) the same way: in the Audio column a line starting
+   "SFX:" or "Music:" becomes one, as typing it would; in the Visual column
+   it is its words. */
 export function audioDirectionsHtml(html) {
-  if (!html || (html.indexOf("((") === -1 && html.indexOf("stage-dir") === -1)) return html;
-  return toHtml(importDirections(fromHtml(html)));
+  if (!html) return html;
+  var dirs = html.indexOf("((") !== -1 || html.indexOf("stage-dir") !== -1;
+  var cues = /(sfx|music)[ \t\u00a0]*:/i.test(html);
+  if (!dirs && !cues) return html;
+  var c = fromHtml(html);
+  if (dirs) c = importDirections(c);
+  if (cues) c = importCues(c);
+  return toHtml(c);
 }
 
 function noDirectionsHtml(html) {
-  if (!html || html.indexOf("stage-dir") === -1) return html;
+  if (!html || (html.indexOf("stage-dir") === -1 && html.indexOf("audio-cue") === -1)) return html;
   var c = fromHtml(html);
-  return toHtml(setMark(c, 0, cellLength(c), "dir", false));
+  return toHtml(flattenCues(setMark(c, 0, cellLength(c), "dir", false)));
 }
 
 /* re-encode any image to JPEG so every downstream writer can rely on it */
@@ -1200,6 +1227,9 @@ export function __init() {
     /* a stage direction (#167, docxRunsXml) */
     '<w:style w:type="character" w:customStyle="1" w:styleId="' + DIRECTION_STYLE + '"><w:name w:val="Stage direction"/>' +
       '<w:rPr><w:i/><w:color w:val="' + DIRECTION_COLOR + '"/></w:rPr></w:style>' +
+    /* a sound cue line (#219, docxRunsXml) */
+    '<w:style w:type="character" w:customStyle="1" w:styleId="' + CUE_STYLE + '"><w:name w:val="Sound cue"/>' +
+      '<w:rPr><w:color w:val="' + CUE_COLOR + '"/><w:sz w:val="' + CUE_SIZE + '"/></w:rPr></w:style>' +
     '<w:style w:type="table" w:styleId="SplitpageTable"><w:name w:val="Splitpage Table"/>' +
       '<w:basedOn w:val="TableNormal"/>' +
       '<w:tblPr>' +
