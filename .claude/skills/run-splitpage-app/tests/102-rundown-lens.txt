@@ -1,6 +1,9 @@
 # The rundown's hover lens (issue #184, 05f-rundown.js): over the strip,
-# the scenes near the pointer grow to a readable width and the rest shrink
-# to make room, so a 3-second scene in a long script can be read and hit.
+# the scenes near the pointer grow to a readable width, so a 3-second scene
+# in a long script can be read and hit. Since 2026-09-24 it slides rather
+# than squeezes: every other block keeps its rest width, and the strip's far
+# ends go past the track's edges (clipped, the edge faded, the playhead
+# hidden while its block is off the track).
 # The layout math is src/test/rundown.test.mjs; this is the page: an
 # 80-scene document opened through the real open path, the pointer moved
 # with PointerEvents (pointerType "mouse") on the track, since the driver
@@ -44,10 +47,19 @@ expect under(__x) === 13
 expect shown(blk(13).querySelector('.rd-num'))
 expect shown(blk(13).querySelector('.rd-len'))
 expect blk(13).querySelector('.rd-num').textContent == 14
-# neighbours grow a little less; far scenes shrink; the whole script still fits
+# neighbours grow a little less; far scenes keep their rest width exactly (the
+# lens slides the strip rather than squeeze it, 2026-09-24)
 expect blk(12).getBoundingClientRect().width > 20
-expect blk(70).getBoundingClientRect().width < parseFloat(__rest[70].split('|')[1])
-expect (function(){ var t = track().getBoundingClientRect(); var last = blk(79).getBoundingClientRect(); var first = blk(0).getBoundingClientRect(); return first.left >= t.left - 0.5 && last.right <= t.right + 0.5; })()
+expect Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block'), function(b, i){ return Math.abs(i - 13) <= 4 || Math.abs(parseFloat(b.style.width) - parseFloat(__rest[i].split('|')[1])) < 0.15; })
+# ...so the strip is longer than the track: its far end has slid off the right
+# edge, clipped there, and that edge fades; the start is still on (scene 14 is
+# near it, and the strip never leaves a gap)
+expect (function(){ var t = track().getBoundingClientRect(); return blk(79).getBoundingClientRect().left > t.right; })()
+expect document.querySelector('#rundown .rundown-blocks').classList.contains('over-r')
+expect getComputedStyle(document.querySelector('#rundown .rundown-blocks')).overflowX === 'clip'
+expect /gradient/.test(getComputedStyle(document.querySelector('#rundown .rundown-blocks')).maskImage || getComputedStyle(document.querySelector('#rundown .rundown-blocks')).webkitMaskImage)
+expect parseFloat(RT.lens().Z[0]) <= 0
+expect (function(){ var t = track().getBoundingClientRect(); var el = document.elementFromPoint(t.right - 3, t.top + 18); return !el || !el.closest || !el.closest('.rd-block') || Number(el.closest('.rd-block').getAttribute('data-i')) < 79; })()
 # blocks stay in order, none overlapping the next
 expect (function(){ var bs = document.querySelectorAll('#rundown .rd-block'); for (var i = 1; i < bs.length; i++) { if (parseFloat(bs[i].style.left) < parseFloat(bs[i-1].style.left)) return false; } return true; })()
 # the ruler and the overlay fade; rundownX() is where a time is on screen now
@@ -69,8 +81,9 @@ sleep 300
 expect under(__x + 20) === 13
 expect window.__muts === 0
 # #199: stopped, the lens comes to rest centred on the pointer — not left
-# off to one side of it — with the sliver still under it
-sleep 500
+# off to one side of it — with the sliver still under it (LENS_RECENTER_MS is
+# 400ms: three of them)
+sleep 1200
 expect Math.abs(RT.lens().a - (__x + 20 - track().getBoundingClientRect().left)) < 8
 expect under(__x + 20) === 13
 expect blk(13).getBoundingClientRect().width >= 80
@@ -93,6 +106,24 @@ expect !document.getElementById('rundown').classList.contains('is-lensed')
 expect Array.prototype.every.call(document.querySelectorAll('#rundown .rd-block'), function(b, i){ return i === 13 ? true : (b.style.left + '|' + b.style.width) === __rest[i]; })
 expect blk(13).style.width === __rest[13].split('|')[1]
 wait parseFloat(getComputedStyle(document.querySelector('#rundown .rundown-ruler')).opacity) === 1
+# at rest nothing is off the track, nothing fades
+expect !document.querySelector('#rundown .rundown-blocks').classList.contains('over-l') && !document.querySelector('#rundown .rundown-blocks').classList.contains('over-r')
+expect (getComputedStyle(document.querySelector('#rundown .rundown-blocks')).maskImage || 'none') === 'none'
+
+# --- off the track: the playhead is hidden with its block ---------------------
+# the caret in the last scene, then the lens near the start: the last block
+# slides off the right edge, and the playhead on it is hidden until it is back
+caret #rows .row[data-id="r79"] .audio-cell .cell-editable
+wait blk(79).classList.contains('is-current')
+expect !document.querySelector('#rundown .rundown-playhead').hidden
+eval move(__x)
+wait RT.lens().Z !== null && RT.lens().Z[79] - 1 > RT.lens().W
+wait document.querySelector('#rundown .rundown-playhead').hidden
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+wait RT.lens().Z === null
+expect !document.querySelector('#rundown .rundown-playhead').hidden
+expect Math.abs(parseFloat(document.querySelector('#rundown .rundown-playhead').style.left) - (parseFloat(blk(79).style.left) - 1)) < 0.6
+eval document.activeElement.blur()
 
 # --- keyboard focus opens the lens on the focused block -----------------------
 eval blk(12).focus()
@@ -153,10 +184,11 @@ expect shown(__fb.querySelector('.rd-num')) && fadeOf(__fb.querySelector('.rd-nu
 eval (function(){ __fb.style.width = __fw; return true; })()
 
 # --- labels away from the pointer stay (after #199) --------------------------
-# The lens shrinks every block away from the pointer; a number or read time a
-# block showed at rest stays on tighter padding (rundownKeepLabels, .keep-*)
-# instead of blinking out all along the strip. At least one kept block has to
-# be narrower than the rest-time cutoff, or this proves nothing.
+# The squeezing lens shrank every block away from the pointer, and a number or
+# read time shown at rest blinked out all along the strip (rundownKeepLabels,
+# .keep-*, kept them on tighter padding). The sliding lens (2026-09-24) never
+# shrinks a block: every block away from the pointer is its rest width, and
+# every label it showed at rest is still there.
 eval window.scrollTo(0, 0)
 wait !document.querySelector('.topbar').classList.contains('is-condensed')
 # 36 scenes of mixed length: most blocks 20-60px at rest, many just over the
@@ -164,13 +196,13 @@ wait !document.querySelector('.topbar').classList.contains('is-condensed')
 eval (function(){ var w = function(n){ var a = []; for (var i = 0; i < n; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 36; i++) rows.push({ id: 'k' + i, visualText: 'Visual ' + i, audioText: 'Scene ' + i + ' ' + w(i % 7 === 3 ? 90 : 18 + (i * 11) % 30), status: i % 3 === 0 ? 'shot' : i % 3 === 1 ? 'ready' : 'todo' }); F.openFile(new File([JSON.stringify({ schema: 2, title: 'Keep suite', rows: rows })], 'keep-suite.splitpage')); return true; })()
 wait F.state().title === 'Keep suite' && document.querySelectorAll('#rundown .rd-block').length === 36
 sleep 300
-eval (function(){ window.__restNum = []; window.__restLen = []; for (var i = 0; i < 36; i++) { if (shown(blk(i).querySelector('.rd-num'))) __restNum.push(i); if (shown(blk(i).querySelector('.rd-len'))) __restLen.push(i); } var r = blk(18).getBoundingClientRect(); window.__x3 = r.left + r.width / 2; move(__x3); return [__restNum.length, __restLen.length]; })()
+eval (function(){ window.__restNum = []; window.__restLen = []; window.__restW = []; for (var i = 0; i < 36; i++) { __restW.push(parseFloat(blk(i).style.width)); if (shown(blk(i).querySelector('.rd-num'))) __restNum.push(i); if (shown(blk(i).querySelector('.rd-len'))) __restLen.push(i); } var r = blk(18).getBoundingClientRect(); window.__x3 = r.left + r.width / 2; move(__x3); return [__restNum.length, __restLen.length]; })()
 wait document.getElementById('rundown').classList.contains('is-lensed')
 sleep 500
 expect __restNum.length > 12 && __restLen.length > 2
 expect __restNum.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ return shown(blk(i).querySelector('.rd-num')); })
 expect __restLen.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ return shown(blk(i).querySelector('.rd-len')); })
-expect __restNum.some(function(i){ return Math.abs(i - 18) > 3 && blk(i).getBoundingClientRect().width < 28; })
+expect __restW.every(function(w, i){ return Math.abs(i - 18) <= 3 || Math.abs(parseFloat(blk(i).style.width) - w) < 0.15; })
 # and a kept label is not cut off by its block
 expect __restNum.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ var b = blk(i).getBoundingClientRect(), s = blk(i).querySelector('.rd-num').getBoundingClientRect(); return s.left >= b.left - 0.5 && s.right <= b.right + 0.5; })
 expect __restLen.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ var b = blk(i).getBoundingClientRect(), s = blk(i).querySelector('.rd-len').getBoundingClientRect(); return s.right <= b.right + 0.5; })

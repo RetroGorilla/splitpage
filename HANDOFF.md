@@ -1107,9 +1107,11 @@ target is measured against the whole script — with shot scenes hidden the
 remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
 max(target, total) + 10s; 05t-target.js draws the line, "Target 2:00" and
-the hatching on `#rundown-overlay` from `rundownLayout()` — to scale, never
-`rundownX()`, because the overlay is faded while the lens is on and must be
-right when it settles; minimized, CSS leaves only the line as a tick).
+the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
+rest, never `rundownX()`, because the overlay is faded while the lens is on
+and must be right when it settles; and never seconds × `pxPerSecond`, since
+the rest floor (`REST_MIN_PX`, `rundownRestLayout()`) keeps short scenes'
+blocks wider than to scale; minimized, CSS leaves only the line as a tick).
 Present does not show it.
 
 **Per person, not per document:** the script's zoom (#191) is
@@ -1746,7 +1748,7 @@ evaluation order via `_entry.js`):
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
-| `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` being exported; `paintRundownPresence()` is called from `paintPresence()` |
+| `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` and `rundownEdge()` (a dot whose block the sliding lens has carried off the track is hidden) being exported; `paintRundownPresence()` is called from `paintPresence()` |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171) |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |

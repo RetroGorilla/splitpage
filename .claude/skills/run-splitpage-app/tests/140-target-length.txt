@@ -110,10 +110,12 @@ expect document.querySelector('#runtime-slot .rd-length-delta').classList.contai
 expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).color !== window.__leftColor
 expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).color == rgb(196, 48, 42)
 expect T.layout().spanSeconds === 105
-expect near(parseFloat(ov('.rd-target-line').style.left), 90 * T.layout().pxPerSecond)
+# inside the script, placed where its time falls on the blocks (the rest
+# layout's x: the floor under short blocks can move it off seconds x scale)
+expect near(parseFloat(ov('.rd-target-line').style.left), T.layout().x(90))
 expect ov('.rd-target-hatch').classList.contains('is-over')
-expect near(parseFloat(ov('.rd-target-hatch').style.left), 90 * T.layout().pxPerSecond)
-expect near(parseFloat(ov('.rd-target-hatch').style.width), 5 * T.layout().pxPerSecond)
+expect near(parseFloat(ov('.rd-target-hatch').style.left), T.layout().x(90))
+expect near(parseFloat(ov('.rd-target-hatch').style.width), T.layout().x(95) - T.layout().x(90))
 expect ov('.rd-target-label').textContent == Target 1:30
 shot 140-strip-over-light
 

@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { pad2 } from "./05-render.js";
-import { goToScene } from "./05f-rundown.js";
+import { goToScene, rundownEdge } from "./05f-rundown.js";
 import { presenceShown } from "./13a-presence.js";
 
 /* ================= who is where, on the rundown (#202) =================
@@ -36,8 +36,9 @@ import { presenceShown } from "./13a-presence.js";
    MutationObserver on .rundown-blocks: a paint that rewrites it (the words
    changed, a scene moved, the window resized, minimized) and every lens
    frame's style writes. Its callback runs before the frame is drawn, so a
-   dot never lags its block. The one thing this needs from 05f-rundown.js
-   is goToScene, exported for it. */
+   dot never lags its block. What this needs from 05f-rundown.js is
+   goToScene, and rundownEdge() for hiding a dot whose block the sliding
+   lens has carried off the track. */
 
 /* A minute with nothing about them changing and a person is idle. */
 export var RUNDOWN_IDLE_MS = 60 * 1000;
@@ -166,13 +167,17 @@ function placeRundownPresence() {
   var kids = blocksEl ? blocksEl.children : [];
   var min = strip.classList.contains("is-min");
   var trackW = layer.clientWidth || (blocksEl ? blocksEl.clientWidth : 0);
+  /* the sliding lens can carry a block past either end of the blocks
+     (rundownEdge(): the track, less a length label at its right edge);
+     a dot whose block's middle is off the track is hidden with it */
+  var edge = rundownEdge() || trackW;
   var dots = layer.children;
   var k = 0;
   groups.forEach(function (g) {
     var el = kids[g.index];
     var left = el ? parseFloat(el.style.left) : NaN;
     var width = el ? parseFloat(el.style.width) : NaN;
-    var ok = isFinite(left) && isFinite(width);
+    var ok = isFinite(left) && isFinite(width) && left + width / 2 >= 0 && left + width / 2 <= edge;
     var xs = ok ? rundownDotXs(left + width / 2, g.people.length, trackW, min ? MIN_DOT_PX : DOT_PX, min ? MIN_DOT_STEP_PX : DOT_STEP_PX) : [];
     for (var i = 0; i < g.people.length; i++, k++) {
       var dot = dots[k];
