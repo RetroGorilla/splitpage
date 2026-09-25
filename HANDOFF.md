@@ -625,6 +625,13 @@ tabs**.
   hadPriorSession, hasDraftToRestore}` — no path, no server doc id (#34
   again). Crash reload/loop guard: twice per 60s per tab, third crash
   leaves it `crashed`, no reload, no prompt.
+- **No white frame before a page paints** (#214): every tab's
+  `WebContentsView` gets `setBackgroundColor(backgroundColorForTheme())`
+  in `createTab()` before it loads, and `nativeTheme`'s `updated` handler
+  repaints every view as well as every window. `<userData>/theme.json`
+  (`{"theme":"system"|"light"|"dark"}`, written by `splitpage:set-theme`)
+  sets `nativeTheme.themeSource` before the first window, so a launch with
+  Settings ▸ Theme differing from the OS starts in the right colours.
 - **Crash-safe drafts** (`desktop/drafts.js`, plain CommonJS) live under
   `<userData>/drafts/<tabId>/`: two-generation writes, `base-<sha12>.json`,
   `session.json`. Write is fsync then one sync tick renaming
