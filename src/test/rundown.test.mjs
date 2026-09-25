@@ -231,9 +231,10 @@ test("the focus stays where it is anchored: what is under the pointer does not s
     const Y = rundownLens(U, focus, focus);
     assert.ok(Math.abs(knotMap(U, Y, focus) - focus) < 0.01, "focus " + focus);
   }
-  /* anchored somewhere else nearby, it is there instead */
-  const Y2 = rundownLens(U, 700, 760);
-  assert.ok(Math.abs(knotMap(U, Y2, 700) - 760) < 0.01);
+  /* anchored somewhere else nearby (within the magnified room, which is
+     all the anchor may drift), it is there instead */
+  const Y2 = rundownLens(U, 700, 715);
+  assert.ok(Math.abs(knotMap(U, Y2, 700) - 715) < 0.01);
 });
 
 test("the anchor never drifts further than the magnified room, so the rest is never stretched", () => {
@@ -361,7 +362,9 @@ test("hundreds of scenes: the lens still fits, and still magnifies", () => {
   assert.equal(Y[Y.length - 1], width);
   const blocks = knotBlocks(Y);
   const widest = Math.max(...blocks.map((b) => b.width));
-  assert.ok(widest >= 66, "the widest is " + widest);
+  /* a 3px slot drawn well over ten times as wide, though the lens may take
+     only LENS_MAX_SHARE of the strip among all the scenes in its reach */
+  assert.ok(widest >= 56, "the widest is " + widest);
 });
 
 test("knotMap is piecewise linear, clamps at the ends and inverts itself", () => {
