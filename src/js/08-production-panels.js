@@ -789,6 +789,16 @@ export function jumpToTag(rowId, key) {
     void el.offsetWidth;
     el.classList.add("flash");
   });
+  /* a Music/SFX item can be a sound cue line (#219): its words after the
+     colon are its name */
+  if (item.cat.id !== "sound") return;
+  Array.prototype.forEach.call(row.querySelectorAll(".audio-cue"), function (el) {
+    var name = (el.textContent || "").replace(/\u200B/g, "").replace(/^\s*(sfx|music)\s*:/i, "");
+    if (normalizeTagName(name) !== normalizeTagName(item.name)) return;
+    el.classList.remove("flash");
+    void el.offsetWidth;
+    el.classList.add("flash");
+  });
 }
 
 export function armRemoveTag(btn, key) {

@@ -37,6 +37,7 @@ import {
   handleToolbarCmd,
   insertLineBreak,
   isScriptCell,
+  maybeCueShortcut,
   maybeDirectionShortcut,
   render,
   renderRow,
@@ -904,6 +905,7 @@ function onRootInput(e) {
   if (!isScriptCell(cellEl)) { noteDraftInput(cellEl); return; }
   maybeAutoTagShortcut(e, cellEl);
   maybeDirectionShortcut(e, cellEl);
+  maybeCueShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
   maybeOpenPlainTag(e, cellEl);
   syncFieldFromDom(cellEl);

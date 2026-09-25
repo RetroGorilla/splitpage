@@ -15,7 +15,9 @@ import { BROLL_MARKER_RE } from "./08c-broll.js";
      { atom: "broll", id: "bs_41", text: "B-roll:", marks: {} }
 
    Marks, all optional: b, i, u, s, hl (true); dir (true: a stage direction
-   for the performer, #167 — shown, never read aloud); href (a safeHref
+   for the performer, #167 — shown, never read aloud); cue (true: a sound
+   cue line of the Audio column, #219 — a whole "SFX: …" or "Music: …"
+   line, never read aloud); href (a safeHref
    URL); tag (a registry id, at most one per run); cmt (sorted comment
    ids). "\n" in text
    is a line break. A no-break space stays what it is (it is how two typed
@@ -63,6 +65,7 @@ function cleanMarks(marks, forAtom) {
   FORMAT_MARKS.forEach(function (k) { if (marks[k] === true) out[k] = true; });
   /* a b-roll key is never part of a direction */
   if (!forAtom && marks.dir === true) out.dir = true;
+  if (!forAtom && marks.cue === true) out.cue = true;
   if (typeof marks.href === "string") {
     var href = safeHref(marks.href);
     if (href) out.href = href;
@@ -94,7 +97,7 @@ function sameMarks(a, b) {
 function orderedMarks(m) {
   /* One key order, so equal marks are equal JSON too. */
   var out = {};
-  ["b", "i", "u", "s", "hl", "dir", "href", "tag", "cmt"].forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
+  ["b", "i", "u", "s", "hl", "dir", "cue", "href", "tag", "cmt"].forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
   return out;
 }
 
@@ -155,6 +158,8 @@ export function normalizeCell(cell, opts) {
     }
     i = j;
   }
+
+  runs = settleCues(runs);
 
   var out = [];
   runs.forEach(function (r) {
@@ -225,6 +230,8 @@ export function fromHtml(html, opts) {
         next.cmt = (marks.cmt || []).concat([child.getAttribute("data-cmt")]);
       } else if (tag === "SPAN" && cls && cls.contains("stage-dir")) {
         next.dir = true;
+      } else if (tag === "SPAN" && cls && cls.contains("audio-cue")) {
+        next.cue = true;
       }
       walk(child, next);
     });
@@ -272,8 +279,8 @@ export function namedTagId(cat, name) {
 
 /* ---- the one nesting, shared by every writer ----
 
-   Elements open outermost first in this order: each comment (by id), the
-   stage direction, the link, the tag, then highlight, bold, italic,
+   Elements open outermost first in this order: a sound cue line (#219),
+   each comment (by id), the stage direction, the link, the tag, then highlight, bold, italic,
    underline, strike. Where two neighbouring runs share a prefix of that
    list the elements stay open across both, so a comment over bold and
    plain text is one span. The order never changes with the content, which
@@ -282,9 +289,12 @@ export function namedTagId(cat, name) {
    split. A direction sits just inside the comments so that only a comment
    edge can cut one in two: its brackets are drawn around each span of it
    (app.css), and a link or a format edge inside a direction must not add a
-   pair. */
+   pair. A cue is outermost because it is a whole line: one span from the
+   line's start to its end, whatever is inside it, so its icon (app.css) is
+   drawn once. */
 function elementKeys(marks, isAtom) {
   var keys = [];
+  if (marks.cue && !isAtom) keys.push({ k: "cue", v: true });
   (marks.cmt || []).forEach(function (id) { keys.push({ k: "cmt", v: id }); });
   if (marks.dir && !isAtom) keys.push({ k: "dir", v: true });
   if (marks.href) keys.push({ k: "href", v: marks.href });
@@ -373,6 +383,7 @@ export function toHtml(cell, opts) {
       var inner = render(n, e.k === "dir" ? INSIDE_DIRECTION : where);
       if (e.k === "cmt") out += '<span class="cmt-anchor" data-cmt="' + escAttr(e.v) + '">' + inner + "</span>";
       else if (e.k === "dir") out += '<span class="stage-dir">' + inner + "</span>";
+      else if (e.k === "cue") out += '<span class="audio-cue">' + inner + "</span>";
       else if (e.k === "href") out += '<a href="' + escAttr(e.v) + '" target="_blank" rel="noopener">' + inner + "</a>";
       else if (e.k === "tag") {
         var info = t.tagOf(e.v);
@@ -406,7 +417,7 @@ export var OMIT_CLOSES = /^[.,;:!?)\]}"'\u2019\u201d]/;
 
 export function toPlainText(cell, opts) {
   var omit = !!(opts && opts.directions === "omit");
-  var runs = normalizeCell(cell);
+  var runs = opts && opts.cues === "omit" ? withoutCues(cell) : normalizeCell(cell);
   var out = "", gap = false;
   runs.forEach(function (r, i) {
     var t = r.text;
@@ -426,10 +437,11 @@ export function toPlainText(cell, opts) {
   return out.replace(/\u00a0/g, " ").trim();
 }
 
-/* The words someone says aloud: the cell's text without its directions \u2014
-   what the read-time estimate counts (01-scene-status.js wordCount). */
+/* The words someone says aloud: the cell's text without its directions
+   or its sound cues (#219) \u2014 what the read-time estimate counts
+   (01-scene-status.js wordCount). */
 export function spokenText(cell) {
-  return toPlainText(cell, { directions: "omit" });
+  return toPlainText(cell, { directions: "omit", cues: "omit" });
 }
 
 /* ---- Markdown ----
@@ -480,6 +492,8 @@ function mdChars(cell) {
        take its closing bracket with it */
     var dir = isDirRun(r);
     if (dir) m.i = true;
+    /* a sound cue line (#219) set apart the same way, in italics */
+    if (r.marks.cue) m.i = true;
     if (dir && !isDirRun(runs[ri - 1])) chars.push({ ch: "(", m: { i: true } });
     Array.from(r.text).forEach(function (ch) { chars.push({ ch: ch, m: Object.assign({}, m) }); });
     if (dir && !isDirRun(runs[ri + 1])) chars.push({ ch: ")", m: { i: true } });
@@ -668,6 +682,7 @@ export function toMarkdown(cell) {
 }
 
 /* [{text, b, i, u, s, mark, href}], a line break as its own {text:"\n"}.
+   A run of a sound cue line (#219) also carries cue: true.
    A run inside a stage direction also carries dir: true (and only then \u2014
    a cell with none gives exactly the runs htmlToRuns gives), and each
    direction is bracketed: a "(" run before it and a ")" run after it,
@@ -683,6 +698,7 @@ export function toDocxRuns(cell, opts) {
         if (!text) return;
         var run = { text: text, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href };
         if (fmt.dir) run.dir = true;
+        if (fmt.cue) run.cue = true;
         runs.push(run);
         return;
       }
@@ -690,10 +706,11 @@ export function toDocxRuns(cell, opts) {
       var k = n.el.k;
       walk(n, {
         b: fmt.b || k === "b", i: fmt.i || k === "i", u: fmt.u || k === "u", s: fmt.s || k === "s",
-        mark: fmt.mark || k === "hl", href: k === "href" ? n.el.v : fmt.href, dir: fmt.dir || k === "dir"
+        mark: fmt.mark || k === "hl", href: k === "href" ? n.el.v : fmt.href, dir: fmt.dir || k === "dir",
+        cue: fmt.cue || k === "cue"
       });
     });
-  })(t.root, { b: false, i: false, u: false, s: false, mark: false, href: null, dir: false });
+  })(t.root, { b: false, i: false, u: false, s: false, mark: false, href: null, dir: false, cue: false });
   return bracketDirections(runs);
 }
 
@@ -869,7 +886,7 @@ export function setMark(cell, from, to, name, value) {
   for (var i = Math.min(from, to); i < Math.max(from, to); i++) {
     var c = chars[i];
     var base = c.atom ? c.atom.marks : c.marks;
-    if (c.atom && (name === "tag" || name === "dir")) continue;
+    if (c.atom && (name === "tag" || name === "dir" || name === "cue")) continue;
     var next = cache.get(base);
     if (!next) {
       next = Object.assign({}, base);
@@ -1043,6 +1060,202 @@ export function flattenDirections(cell) {
     if (!isDirRun(runs[i + 1])) out.push({ text: ")", marks: edge });
   });
   return normalizeCell(out);
+}
+
+/* ---- sound cues (#219) ----
+
+   THE CONVENTION — Adam's decisions on #219 (2026-09-25); a typing
+   convention, so change none of it without asking him:
+   - "SFX:" or "Music:" starting a line of an Audio cell, in any case,
+     makes that whole line a sound cue. Mid-sentence the words are just
+     words. In the Visual column the same words start a plain-language
+     Music/SFX tag instead (#210, 07b-plain-tags.js).
+   - It turns into one the moment its colon is typed (cueShortcut, run by
+     05-render.js maybeCueShortcut), as an edit of its own, so one Ctrl+Z
+     gives the plain "SFX: …" words back, as for a b-roll marker.
+   - A cue is set apart from the words: its own small, dim line in the
+     editor with a note icon, in the Music/SFX colour (app.css .audio-cue);
+     never on the teleprompter, never in the read time, never listened for
+     by voice follow, left out of the narration export; its own styled line
+     in the script exports; an item in the Production panel's Music/SFX
+     list (07-production-tags.js tagsInField), with its owner and status.
+
+   It is the mark cue on every character of the line but its line break,
+   and the line's words, "SFX: door slam", stay in the cell as they were
+   typed — the keyword is how every reader, and a person reading a plain
+   export, knows what it is. The mark only ever covers whole lines whose
+   words still start with the keyword: settleCues, run by normalizeCell,
+   spreads it over the rest of a line that has any of it and takes it off
+   a line that no longer starts "SFX:" / "Music:" (its keyword deleted, a
+   line break typed through it). So typing on at the end of a cue is more
+   of the cue, and Enter at its end starts an ordinary line. */
+export var CUE_LINE_RE = /^[ \t\u00a0]*(sfx|music)[ \t\u00a0]*:/i;
+var CUE_TYPED_RE = /^[ \t\u00a0]*(sfx|music)[ \t\u00a0]*:$/i;
+
+function isCueRun(r) { return !!(r && !r.atom && r.marks.cue); }
+
+function settleCues(runs) {
+  if (!runs.some(isCueRun)) return runs;
+  var out = [], line = [];
+  function flush() {
+    if (line.some(isCueRun)) {
+      var text = line.map(function (p) { return p.atom ? OBJ : p.text; }).join("");
+      var on = CUE_LINE_RE.test(text);
+      line.forEach(function (p) {
+        if (p.atom) return;
+        if (on) p.marks.cue = true; else delete p.marks.cue;
+      });
+    }
+    out.push.apply(out, line);
+    line = [];
+  }
+  runs.forEach(function (r) {
+    if (r.atom) { line.push(r); return; }
+    r.text.split(/(\n)/).forEach(function (t) {
+      if (!t) return;
+      var piece = { text: t, marks: Object.assign({}, r.marks) };
+      if (t === "\n") {
+        flush();
+        delete piece.marks.cue;
+        out.push(piece);
+      } else {
+        line.push(piece);
+      }
+    });
+  });
+  flush();
+  return out;
+}
+
+/* The cell's lines as [{from, to, cue}] — to is before the line's own
+   break. */
+export function cueLines(cell) {
+  var runs = normalizeCell(cell);
+  var lines = [{ from: 0, to: 0, cue: false }];
+  var pos = 0;
+  runs.forEach(function (r) {
+    if (r.atom) { pos++; lines[lines.length - 1].to = pos; return; }
+    var parts = r.text.split("\n");
+    parts.forEach(function (part, i) {
+      if (i > 0) { pos++; lines.push({ from: pos, to: pos, cue: false }); }
+      pos += part.length;
+      lines[lines.length - 1].to = pos;
+      if (part && r.marks.cue) lines[lines.length - 1].cue = true;
+    });
+  });
+  return lines;
+}
+
+/* Each cue in the cell, in order, as {kind, name, text}: kind "sfx" or
+   "music" (the keyword, lower case), name the words after its colon (what
+   the Production panel lists it by), text the whole line. */
+export function cuesInCell(cell) {
+  var runs = normalizeCell(cell);
+  if (!runs.some(isCueRun)) return [];
+  var p = projection(runs);
+  var out = [];
+  cueLines(runs).forEach(function (l) {
+    if (!l.cue) return;
+    var text = p.slice(l.from, l.to).replace(/\uFFFC/g, "").replace(/\u00a0/g, " ");
+    var m = CUE_LINE_RE.exec(text);
+    if (!m) return;
+    out.push({
+      kind: m[1].toLowerCase(),
+      name: text.slice(m[0].length).replace(/\s+/g, " ").trim(),
+      text: text.trim()
+    });
+  });
+  return out;
+}
+
+/* The cell without its cue lines, each taken out with one line break (the
+   one after it; the one before it for the last line) — what is said, for
+   the teleprompter, the read time and the narration export. */
+export function withoutCues(cell) {
+  var runs = normalizeCell(cell);
+  if (!runs.some(isCueRun)) return runs;
+  var lines = cueLines(runs);
+  var n = cellLength(runs);
+  var out = runs;
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var l = lines[i];
+    if (!l.cue) continue;
+    if (l.to < n) out = deleteRange(out, l.from, l.to + 1);
+    else if (l.from > 0) out = deleteRange(out, l.from - 1, l.to);
+    else out = deleteRange(out, l.from, l.to);
+    n = cellLength(out);
+  }
+  return out;
+}
+
+/* The typed shortcut: pos is just after a ":" typed in an Audio cell.
+   When everything on the line before it is "SFX" or "Music" (spaces
+   allowed round it), the line becomes a cue — the words after the caret
+   too, if the colon went in the middle of a line that already had some.
+   Null otherwise, and on a line that already is one. The caller keeps
+   it to live typing in the Audio column. */
+export function cueShortcut(cell, pos) {
+  pos = clamp(cell, pos);
+  var p = projection(cell);
+  if (p.charAt(pos - 1) !== ":") return null;
+  var from = p.lastIndexOf("\n", pos - 1) + 1;
+  if (!CUE_TYPED_RE.test(p.slice(from, pos))) return null;
+  var to = p.indexOf("\n", pos);
+  if (to === -1) to = p.length;
+  var line = cueLines(cell).filter(function (l) { return l.from === from; })[0];
+  if (line && line.cue) return null;
+  return setMark(cell, from, to, "cue", true);
+}
+
+/* Cues in text that came from outside (an import, a Markdown table cell
+   edited by hand): each line starting "SFX:" or "Music:" becomes one, the
+   way typing it would. For the Audio column only; the caller decides. */
+export function importCues(cell) {
+  var out = normalizeCell(cell);
+  var p = projection(out);
+  if (!/(sfx|music)[ \t\u00a0]*:/i.test(p)) return out;
+  cueLines(out).forEach(function (l) {
+    if (!l.cue && CUE_LINE_RE.test(p.slice(l.from, l.to))) out = setMark(out, l.from, l.to, "cue", true);
+  });
+  return out;
+}
+
+/* Rename or take off the cues whose name `match(name)` accepts — the
+   Production panel's rename and remove for a Music/SFX item that is a cue
+   (07-production-tags.js): a rename rewrites the words after the colon,
+   the keyword and its spacing kept; a remove (newName null) makes the line
+   plain words again, as Ctrl+Z after typing one does, so the item does not
+   come straight back. */
+export function editCues(cell, match, newName) {
+  var out = normalizeCell(cell);
+  if (!out.some(isCueRun)) return out;
+  var lines = cueLines(out);
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var l = lines[i];
+    if (!l.cue) continue;
+    var text = projection(out).slice(l.from, l.to);
+    var m = CUE_LINE_RE.exec(text.replace(/\u00a0/g, " "));
+    if (!m) continue;
+    var name = text.slice(m[0].length).replace(/\uFFFC/g, "").replace(/\s+/g, " ").trim();
+    if (!match(name)) continue;
+    if (newName === null) {
+      out = setMark(out, l.from, l.to, "cue", false);
+    } else {
+      var lead = text.slice(m[0].length).length - text.slice(m[0].length).replace(/^[ \t\u00a0]+/, "").length;
+      var at = l.from + m[0].length + lead;
+      out = replaceText(out, at, l.to, newName);
+      if (at === l.from + m[0].length) out = insertText(out, at, " ");
+    }
+  }
+  return out;
+}
+
+/* A cell's cues as ordinary words again — what a cue pasted into the
+   Visual column, which has none, becomes. */
+export function flattenCues(cell) {
+  var runs = normalizeCell(cell);
+  if (!runs.some(isCueRun)) return runs;
+  return setMark(runs, 0, cellLength(runs), "cue", false);
 }
 
 /* Enter / Shift+Enter over [from, to): the range replaced by a line break,
@@ -1381,6 +1594,7 @@ function markSet(m) {
   var set = {};
   FORMAT_MARKS.forEach(function (k) { if (m[k]) set[k] = true; });
   if (m.dir) set.dir = true;
+  if (m.cue) set.cue = true;
   if (m.href) set["href=" + m.href] = true;
   if (m.tag) set["tag=" + m.tag] = true;
   (m.cmt || []).forEach(function (id) { set["cmt=" + id] = true; });
