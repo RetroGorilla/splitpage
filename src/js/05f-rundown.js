@@ -1017,7 +1017,7 @@ function onStripDrop(e) {
 
 /* Go to a scene from its block: unfold it if hidden shot scenes cover it,
    bring it to the middle of the window, and put the caret in its Audio. */
-function goToScene(rowId) {
+export function goToScene(rowId) {
   revealRow(rowId);
   var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;

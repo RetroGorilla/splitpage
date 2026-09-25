@@ -4330,6 +4330,52 @@
     z-index: 2;
   }
 
+  /* And on the rundown strip (#202, 05p-rundown-presence.js): a 10px dot
+     in the person's colour centred on the top edge of the block of the
+     scene they are in, a second person's overlapping it a little to the
+     right. Its own layer in the track, not #rundown-overlay (which fades
+     while the lens is on); the script places each dot from its block's
+     left and width, so it moves with it. Idle (a minute with nothing about
+     them changing) it is an empty ring in the same colour. A hairline of
+     the ink colour keeps the bright values off a light surface; on a dark
+     one it disappears into it. The thin bar (#178) gets 7px dots on its
+     line, above the bar's own toggle so a click reaches them. */
+  .rundown-presence {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .rd-who {
+    position: absolute;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--who, var(--text-dim));
+    box-shadow: 0 0 0 1px rgba(15, 14, 12, 0.32);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  /* a bigger target than the dot */
+  .rd-who::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; }
+  .rd-who.is-idle {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 2px var(--who, var(--text-dim)), 0 0 0 1px rgba(15, 14, 12, 0.32);
+  }
+  .rd-who[hidden] { display: none; }
+  .rd-who:hover { transform: translate(-50%, -50%) scale(1.25); }
+  #rundown.is-min .rd-who { top: 4.5px; width: 7px; height: 7px; }
+  #rundown.is-min .rd-who.is-idle { box-shadow: inset 0 0 0 1.5px var(--who, var(--text-dim)), 0 0 0 1px rgba(15, 14, 12, 0.32); }
+  /* the phone's compact strip has its blocks lower (B-Phone) */
+  @media (max-width: 760px) {
+    .rundown .rd-who { top: 15px; }
+  }
+
   /* The controls a review session never renders are gone from the markup
      (05-render.js, 10-comments.js); these are the ones that live in the page
      shell, so hiding them here is the only place it can happen. */
