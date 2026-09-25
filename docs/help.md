@@ -70,6 +70,13 @@ shows it too, on a fresh copy nothing has been opened in.
   **Continue** at the top reopens the most recent.
 - **Take the tour**, or **Look at the example script** (or <kbd>Esc</kbd>)
   to close the start screen and see the demo script.
+- **Open the long demo (30 scenes)**: a whole video, nearly ten minutes
+  long, with every feature in use (all three scene statuses, every tag
+  category, b-roll, comments, stage directions, set read times and a target
+  length), to see how Splitpage handles a real-length script. Like a
+  starter, it opens as a new, unsaved copy. The command menu
+  (<kbd>Ctrl</kbd>+<kbd>K</kbd>) opens it too, keeping the script you had in
+  Version history.
 
 ## Running it
 

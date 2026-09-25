@@ -11,6 +11,7 @@ import {
   menuItemReason,
   modalIsOpen,
   refreshFileMenu,
+  openLongDemo,
   toggleFileMenu
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
@@ -181,6 +182,16 @@ function commands() {
     fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
     fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
     fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
+    /* #215: no menu button of its own, like "Set target length…" */
+    {
+      id: "long-demo",
+      group: "Help",
+      words: "demo example sample long thirty 30 scenes test try every feature",
+      read: function () {
+        return { label: "Open the long demo (30 scenes)", icon: "i-file-plus", keys: "", why: "", disabled: false, state: "" };
+      },
+      run: function () { openLongDemo(); }
+    },
     fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),
     fromMenu("about", "Help", "version about", "About Splitpage"),
     fromMenu("tagging-help", "Help", "tags tagging reference shortcuts brackets"),
