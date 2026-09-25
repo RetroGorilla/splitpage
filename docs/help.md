@@ -73,7 +73,7 @@ beta copy is offered it like any other update.
   waited for by Follow My Voice and don't count toward the read time — see
   [Stage directions](#stage-directions).
 - **Find and replace** finds a phrase even when part of it is bold, a link or
-  a tag.
+  a comment.
 - **Markdown export** writes bold, italic and strikethrough that other
   Markdown readers show correctly, even where they overlap.
 - **Pictures stay out of script text.** Pasting into a script cell keeps the
@@ -987,8 +987,9 @@ undo leaves it alone — delete it the usual way.
 **Find and replace.** <kbd>Ctrl</kbd>+<kbd>F</kbd>. Enter and
 Shift+Enter step through matches; **Aa** toggles case-sensitivity.
 Formatting, links and comment anchors survive a replace untouched. Text
-inside a tag is deliberately left alone — rename those in Production, which
-changes the label and the tracked item together.
+inside a tag is deliberately left alone — when that's the only place a word
+appears, the count says so ("No matches · 1 in a tag"). Rename those in
+Production, which changes the label and the tracked item together.
 
 **Reference images.** **Add picture** under a scene's Visual text (it shows
 when you point at the scene or are working in it) attaches a still — or

@@ -12,7 +12,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cellOf, projection } from "../js/04c-doc-model.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
-import { countInTags, domProjection, domRangeFor, findInCell, replaceInHtml } from "../js/09-find-replace.js";
+import { countInTags, domProjection, domRangeFor, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 const find = (html, needle, matchCase) => findInCell(cellOf(html), needle, !!matchCase);
@@ -47,6 +47,31 @@ test("find: never inside a tag, never across one or across a b-roll key", () => 
   /* two tags side by side are two pieces */
   const two = tagSpan("prop", "Ab", "ab") + tagSpan("prop", "Cd", "cd");
   assert.equal(countInTags(cellOf(two), "bc", false), 0);
+});
+
+test("find count: occurrences only inside tags are counted, never matched", () => {
+  const rows = [
+    { id: "r1", visualText: "the " + tagSpan("prop", "Gaffer tape", "gaffer tape"), audioText: "no gaffer here? " + tagSpan("prop", "Gaffer", "Gaffer") },
+    { id: "r2", visualText: tagSpan("location", "Gaffer shed", "gaffer shed"), audioText: "" },
+  ];
+  /* one free "gaffer" in r1's audio, three inside tags */
+  const all = findInRows(rows, "gaffer", false);
+  assert.deepEqual(all.matches, [{ rowId: "r1", field: "audioText", nth: 0 }]);
+  assert.equal(all.inTags, 3);
+  /* only inside tags: nothing to select or replace, but the count says why */
+  const tagged = findInRows(rows, "shed", false);
+  assert.deepEqual(tagged.matches, []);
+  assert.equal(tagged.inTags, 1);
+  assert.equal(noMatchLabel(tagged.inTags), "No matches · 1 in a tag");
+  assert.equal(noMatchLabel(findInRows(rows, "tape", false).inTags), "No matches · 1 in a tag");
+  /* case sensitivity reaches the in-tag count too */
+  assert.equal(findInRows(rows, "Gaffer", true).inTags, 1);
+  assert.equal(noMatchLabel(2), "No matches · 2 in tags");
+  assert.equal(noMatchLabel(0), "No matches");
+  assert.deepEqual(findInRows(rows, "zzz", false), { matches: [], inTags: 0 });
+  assert.deepEqual(findInRows(rows, "", false), { matches: [], inTags: 0 });
+  /* and replace still leaves every tagged one alone */
+  assert.equal(replace(rows[1].visualText, "shed", "barn").changed, 0);
 });
 
 test("find: case sensitivity, and characters whose lowercase is longer", () => {
