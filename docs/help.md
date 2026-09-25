@@ -140,6 +140,21 @@ script's reading speed. Visual notes and stage directions don't count.
   (or search commands for *target*). Splitpage then shows how much time is
   left or how far over you are. **No target** removes it.
 
+### Whole scenes
+
+- **Select**: click in a text box and drag up or down past its edge. The
+  page scrolls at the window's edge. <kbd>Esc</kbd> or a click lets go.
+- <kbd>Ctrl</kbd>+<kbd>C</kbd> copies, <kbd>Ctrl</kbd>+<kbd>X</kbd> cuts,
+  <kbd>Delete</kbd> removes. Right-click for the same, plus **New script
+  from these scenes** (it replaces this tab's script; the old one goes to
+  Version history).
+- **Paste** with the caret in any script, in another tab or the desktop app
+  too: the scenes go in after that scene, or replace it if it's empty, with
+  their comments, status, b-roll, breakdown details and pictures (up to
+  16 MB of pictures per copy). One <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.
+- **Into Word or Google Docs** they paste as a two-column table.
+- A review copy can select and copy only.
+
 ### The writer
 
 **Write** in the header opens the Audio column as one flowing document, for
@@ -229,9 +244,26 @@ In the desktop app, Follow My Voice uses Windows' speech recognition; see
 ## Tagging and the production breakdown
 
 Tag things in the script and they appear in the **Production** panel, with
-every scene they're in. For how to tag, open **File ▸ Tagging reference**.
-While you type a tag you've used before, <kbd>Tab</kbd> accepts the
-completion Splitpage offers.
+every scene they're in. While you type a tag you've used before,
+<kbd>Tab</kbd> accepts the completion Splitpage offers.
+
+**The tagging reference**: **File ▸ Tagging reference** (or search commands
+for it) opens a card at the bottom right of the script (a sheet at the
+bottom on a phone). It shows every category's shortcut in its tag colour,
+and stays while you scroll and type, fading while the caret is under it.
+<kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no shortcut:
+select the words and press **Tag**.
+
+**Plain-language tags**: in the Visual column, type a category and a colon
+(`VFX:`, `Prop:`, `Location:` or `Loc:`, `Cast:`, `Gear:`, `SFX:` or
+`Music:`, in any case). The words you type next are tinted in that
+category's colour.
+
+- <kbd>Tab</kbd> (on a phone, tap the note under the box) makes them one
+  tag.
+- <kbd>Esc</kbd> cancels and leaves the plain text.
+- <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> takes the tag off and
+  leaves your words as you typed them.
 
 **The Production panel**, grouped by category or person, is a table:
 **Item · Status · Scenes · Owner**. Click a scene number to jump to it.
@@ -305,8 +337,17 @@ you stop typing, and when you leave the window. Before the first Save,
 nothing is written. Turn it off with the **Autosave** switch at the top of
 the File menu.
 
-The status beside **Save** says whether everything is saved. Hover it for
-detail.
+The **Save** button shows where things stand:
+
+- **Saved just now** for a minute after a write, then **All changes saved**
+  for as long as nothing changes. Autosave still writes a couple of seconds
+  after every change.
+- **Saving…** or **Unsaved changes**.
+- **Not saving** when something is in the way: the file changed on disk, a
+  write failed, or a sign-in lapsed.
+
+Hover it for where and when ("Last saved to script.md at 2:52 PM") or what
+to do. The writer shows the same status.
 
 ### If you edit the `.md` somewhere else
 
@@ -376,7 +417,8 @@ only. **Export again** in the File menu repeats the last format.
 ## The File menu
 
 Click the **Splitpage** mark at the top left (the file icon on a phone). At
-the top: where the script is saved, the **Autosave** switch and **Save a
+the top: where the script is saved and whether it's all saved (*All changes
+saved · Markdown*; hover for the time), the **Autosave** switch and **Save a
 copy…**. Below:
 
 - **New & open**: New script, Open…, Open recent (desktop app), and Import
@@ -421,8 +463,9 @@ closes. With nothing typed, your recent commands come first.
 **File ▸ Settings** holds your preferences on this device. None of them
 change the script.
 
-- **Appearance**: theme, 12- or 24-hour clock, and whether the rundown strip
-  starts small.
+- **Appearance**: theme, 12- or 24-hour clock (used for times such as the
+  save status's "Last saved … at"), and whether the rundown strip starts
+  small.
 - **Editor**: Hide shot scenes, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.
@@ -532,6 +575,11 @@ In a shared session, coloured initials in the header show who else has the
 document open, and a dot marks the scene each of them is in. Hover to see
 names. Anyone without a name shows as **Guest**.
 
+Each person also shows as a dot in their colour on the rundown, on the
+scene they're working in. Hover it for their name; click it to go there.
+The dot becomes an empty ring when they haven't moved or typed for about a
+minute.
+
 ### Working on a server
 
 On a server, three things appear in the File menu:
@@ -597,7 +645,10 @@ Drive: browse, download and upload files.
   `-arm64.exe` for Windows on ARM) from the
   [releases page](https://github.com/RetroGorilla/splitpage-releases/releases).
   It installs for you only, with no administrator needed. Windows may warn
-  that it isn't signed: click **More info ▸ Run anyway**.
+  that it isn't signed: click **More info ▸ Run anyway**. If Splitpage is
+  open with unsaved changes, it asks whether to save first, and Setup
+  waits. If you choose **Stay**, save or close Splitpage yourself, then
+  press **Retry** in Setup (or **Cancel** to install later).
 - **Updates**: when there's a newer version, a bar says so. In the desktop
   app, press **Download**, then **Install and restart**. A portable copy
   doesn't update itself: **Open release page**, then unzip the new release
