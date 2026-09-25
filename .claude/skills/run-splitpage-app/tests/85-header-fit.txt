@@ -206,22 +206,20 @@ expect window.__hdr() === '0,52,14'
 # =============================================================================
 eval (function(){ var W=window; W.__wide=function(w){ W.__at(w); var d=W.__d(); var vw=d.documentElement.clientWidth; var row=d.querySelector('.topbar-row').getBoundingClientRect(); var strip=d.getElementById('rundown').getBoundingClientRect(); var rows=d.getElementById('rows').getBoundingClientRect(); var open=d.querySelector('.comments-panel:not([hidden])'); var edge=open? open.getBoundingClientRect().left : vw; var bad=[]; if(Math.abs(row.left)>0.5||Math.abs(row.right-vw)>0.5) bad.push('row '+Math.round(row.left)+'-'+Math.round(row.right)+' of '+vw); if(Math.abs(strip.left)>0.5||Math.abs(strip.right-edge)>1) bad.push('strip '+Math.round(strip.left)+'-'+Math.round(strip.right)+' to '+Math.round(edge)); if(Math.abs(rows.width-1760)>0.5) bad.push('script '+Math.round(rows.width)); if(Math.abs((rows.left+rows.right)/2-edge/2)>1) bad.push('script centred on '+Math.round((rows.left+rows.right)/2)+' not '+Math.round(edge/2)); var c=d.getElementById('runtime-chip').getBoundingClientRect(); var tr=d.querySelector('#rundown .rundown-track').getBoundingClientRect(); if(c.width<20||c.left<tr.left-0.5||c.right>tr.right+0.5) bad.push('the length is not on the strip'); var f=d.getElementById('btn-file').getBoundingClientRect(); if(f.left>20) bad.push('File button at '+Math.round(f.left)); var p=d.getElementById('btn-present').getBoundingClientRect(); if(vw-p.right>20.5) bad.push('Present ends '+Math.round(vw-p.right)+'px short'); W.__last=bad.length? w+': '+bad.join(', ') : ''; return W.__last; }; return true; })()
 expect true
-eval window.__wide(2560)
-expect window.__last === ''
-eval window.__wide(3440)
-expect window.__last === ''
-eval window.__wide(1920)
-expect window.__last === ''
+# wait, not eval + expect: the rundown places its length label (#207) a
+# frame after the frame resizes, so a check right after the resize can
+# catch it mid-move when the machine is busy (a full run at -Parallel 6)
+wait window.__wide(2560) === ''
+wait window.__wide(3440) === ''
+wait window.__wide(1920) === ''
 # the strip's blocks take the width: the track is the window's less its
 # 20px either side, and the blocks are laid out across it (the ruler runs
 # on past the script's end to a round time, so they stop short of it)
 expect (function(){ var d=window.__d(); var vw=d.documentElement.clientWidth; var t=d.querySelector('#rundown .rundown-track').getBoundingClientRect(); var bl=d.querySelectorAll('#rundown .rd-block'); var last=bl[bl.length-1].getBoundingClientRect(); return Math.abs(t.width - (vw - 40)) < 1 && last.right - t.left > t.width / 2; })()
 eval window.__panel('btn-production')
 sleep 500
-eval window.__wide(2560)
-expect window.__last === ''
-eval window.__wide(3440)
-expect window.__last === ''
+wait window.__wide(2560) === ''
+wait window.__wide(3440) === ''
 
 # =============================================================================
 # #187, #188: the slim bars, the page's own bar gone under a panel, and the
