@@ -152,4 +152,44 @@ eval (function(){ document.getElementById('rundown').classList.remove('is-lensed
 expect shown(__fb.querySelector('.rd-num')) && fadeOf(__fb.querySelector('.rd-num')) === 0 && getComputedStyle(__fb.querySelector('.rd-num')).opacity === '1'
 eval (function(){ __fb.style.width = __fw; return true; })()
 
+# --- labels away from the pointer stay (after #199) --------------------------
+# The lens shrinks every block away from the pointer; a number or read time a
+# block showed at rest stays on tighter padding (rundownKeepLabels, .keep-*)
+# instead of blinking out all along the strip. At least one kept block has to
+# be narrower than the rest-time cutoff, or this proves nothing.
+eval window.scrollTo(0, 0)
+wait !document.querySelector('.topbar').classList.contains('is-condensed')
+# 36 scenes of mixed length: most blocks 20-60px at rest, many just over the
+# number's cutoff, some with their read time
+eval (function(){ var w = function(n){ var a = []; for (var i = 0; i < n; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 36; i++) rows.push({ id: 'k' + i, visualText: 'Visual ' + i, audioText: 'Scene ' + i + ' ' + w(i % 7 === 3 ? 90 : 18 + (i * 11) % 30), status: i % 3 === 0 ? 'shot' : i % 3 === 1 ? 'ready' : 'todo' }); F.openFile(new File([JSON.stringify({ schema: 2, title: 'Keep suite', rows: rows })], 'keep-suite.splitpage')); return true; })()
+wait F.state().title === 'Keep suite' && document.querySelectorAll('#rundown .rd-block').length === 36
+sleep 300
+eval (function(){ window.__restNum = []; window.__restLen = []; for (var i = 0; i < 36; i++) { if (shown(blk(i).querySelector('.rd-num'))) __restNum.push(i); if (shown(blk(i).querySelector('.rd-len'))) __restLen.push(i); } var r = blk(18).getBoundingClientRect(); window.__x3 = r.left + r.width / 2; move(__x3); return [__restNum.length, __restLen.length]; })()
+wait document.getElementById('rundown').classList.contains('is-lensed')
+sleep 500
+expect __restNum.length > 12 && __restLen.length > 2
+expect __restNum.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ return shown(blk(i).querySelector('.rd-num')); })
+expect __restLen.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ return shown(blk(i).querySelector('.rd-len')); })
+expect __restNum.some(function(i){ return Math.abs(i - 18) > 3 && blk(i).getBoundingClientRect().width < 28; })
+# and a kept label is not cut off by its block
+expect __restNum.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ var b = blk(i).getBoundingClientRect(), s = blk(i).querySelector('.rd-num').getBoundingClientRect(); return s.left >= b.left - 0.5 && s.right <= b.right + 0.5; })
+expect __restLen.filter(function(i){ return Math.abs(i - 18) > 3; }).every(function(i){ var b = blk(i).getBoundingClientRect(), s = blk(i).querySelector('.rd-len').getBoundingClientRect(); return s.right <= b.right + 0.5; })
+
+# --- the second stage: rest on one scene and it opens further -------------------
+# LENS_HOLD_MS on the same scene -> LENS_HOLD_PX wide, with its status and first
+# words; the pointer still over it; moving on to another scene drops back.
+expect RT.lens().hold === false && RT.lens().holdAt === 18
+expect !shown(blk(18).querySelector('.rd-snip'))
+wait RT.lens().hold === true && document.getElementById('rundown').classList.contains('is-held')
+wait blk(18).getBoundingClientRect().width > 200
+wait shown(blk(18).querySelector('.rd-snip')) && shown(blk(18).querySelector('.rd-stat'))
+wait under(__x3) === 18
+eval (function(){ var r = blk(18).getBoundingClientRect(); move(Math.min(r.right - 3, __x3 + 20)); return true; })()
+expect RT.lens().hold === true
+eval (function(){ var r = blk(30).getBoundingClientRect(); move(r.left + r.width / 2); return true; })()
+expect RT.lens().hold === false && !document.getElementById('rundown').classList.contains('is-held')
+wait blk(18).getBoundingClientRect().width < 150
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+wait RT.lens().Z === null
+
 quit

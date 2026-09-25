@@ -27,6 +27,7 @@ import {
   knotMap,
   rundownBlocks,
   rundownDropGap,
+  rundownKeepLabels,
   rundownKnots,
   rundownLens,
   rundownLensFollow,
@@ -557,4 +558,34 @@ test("between very short scenes the gap nearest the pointer wins", () => {
   const K = [0, 4, 8, 12, 16, 500];
   assert.equal(rundownDropGap(K, 7.4, 0, 20), 2);
   assert.equal(rundownDropGap(K, 11.2, 0, 20), 3);
+});
+
+/* Labels the lens keeps (after #199): a label shown at rest stays while
+   the block, shrunk by the lens away from the pointer, still fits it on
+   tighter padding; one not shown at rest is never kept. */
+test("the lens keeps a label a block showed at rest while it fits", () => {
+  const [a, b] = rundownBlocks([{ seconds: 30 }, { seconds: 4 }], 1);
+  assert.equal(a.showNumber, true);
+  assert.equal(a.showLength, false);
+  assert.deepEqual(rundownKeepLabels(a, 20, false), { number: true, length: false });
+  assert.deepEqual(rundownKeepLabels(a, 17, false), { number: false, length: false });
+  // a sliver at rest gains nothing from keeping, however wide it is drawn
+  assert.equal(b.showNumber, false);
+  assert.deepEqual(rundownKeepLabels(b, 90, false), { number: false, length: false });
+});
+
+test("the read time is kept down to the tight width, wider for a shot block", () => {
+  const [a] = rundownBlocks([{ seconds: 90 }], 1);
+  assert.equal(a.showLength, true);
+  assert.equal(rundownKeepLabels(a, 56, false).length, true);
+  assert.equal(rundownKeepLabels(a, 55, false).length, false);
+  assert.equal(rundownKeepLabels(a, 69, true).length, false);
+  assert.equal(rundownKeepLabels(a, 70, true).length, true);
+});
+
+test("from scene 100 the number needs room for three digits", () => {
+  const rest = { index: 99, showNumber: true, showLength: false };
+  assert.equal(rundownKeepLabels(rest, 24, false).number, false);
+  assert.equal(rundownKeepLabels(rest, 25, false).number, true);
+  assert.equal(rundownKeepLabels({ index: 98, showNumber: true }, 18, false).number, true);
 });
