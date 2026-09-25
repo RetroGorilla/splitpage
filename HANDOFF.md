@@ -1778,7 +1778,7 @@ evaluation order via `_entry.js`):
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
 | `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
-| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed |
+| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
 | `21-events.js` | all event wiring, `init()` |
 
 **Desktop files** (optional; the web app runs without them):
