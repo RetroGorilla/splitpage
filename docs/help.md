@@ -118,7 +118,9 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   Someone else's merged changes are never undone.
 - **Find and replace**: <kbd>Ctrl</kbd>+<kbd>F</kbd>. <kbd>Enter</kbd> and
   <kbd>Shift</kbd>+<kbd>Enter</kbd> step through matches; **Aa** matches
-  case. Tagged words are skipped: rename those in Production.
+  case. Tagged words are skipped; when that's the only place a word
+  appears, the count says so ("No matches · 1 in a tag"). Rename those in
+  Production.
 - **Zoom the script**: <kbd>Ctrl</kbd> + mouse wheel (or pinch) over the
   script, or <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd>.
   Only the script changes size, from 70 % to 200 %. Click the size note to go
