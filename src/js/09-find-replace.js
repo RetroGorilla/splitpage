@@ -37,6 +37,7 @@ export var findOpen = false;
 S.findMatchCase = false;
 var findMatches = [];      /* [{rowId, field, nth}] in document order */
 var findIndex = -1;
+var findInTags = 0;        /* occurrences inside tags: shown, never matched */
 
 function findNeedle() {
   return document.getElementById("find-input").value || "";
@@ -102,9 +103,13 @@ function searchablePieces(cell) {
 /* Every match in a cell, as {from, to} offsets into its projection, in
    order. */
 export function findInCell(cell, needle, matchCase) {
+  if (!needle) return [];
+  return matchesInPieces(searchablePieces(cell), needle, matchCase);
+}
+
+function matchesInPieces(pieces, needle, matchCase) {
   var out = [];
-  if (!needle) return out;
-  searchablePieces(cell).free.forEach(function (p) {
+  pieces.free.forEach(function (p) {
     findAllMatches(p.text, needle, matchCase).forEach(function (m) {
       out.push({ from: p.start + m.start, to: p.start + m.end });
     });
@@ -116,9 +121,40 @@ export function findInCell(cell, needle, matchCase) {
    only to explain the difference rather than leave it mysterious. */
 export function countInTags(cell, needle, matchCase) {
   if (!needle) return 0;
-  return searchablePieces(cell).tagged.reduce(function (n, p) {
+  return countInPieces(searchablePieces(cell), needle, matchCase);
+}
+
+function countInPieces(pieces, needle, matchCase) {
+  return pieces.tagged.reduce(function (n, p) {
     return n + findAllMatches(p.text, needle, matchCase).length;
   }, 0);
+}
+
+/* The whole document's matches, [{rowId, field, nth}] in document order,
+   and how many more occurrences sit inside tags. Both come from the one
+   cut of each cell, so the in-tag count costs the find count no second
+   pass over the document (HANDOFF invariant #6). The in-tag number is for
+   display only: nothing ever selects or replaces one. */
+export function findInRows(rows, needle, matchCase) {
+  var matches = [], inTags = 0;
+  if (!needle) return { matches: matches, inTags: inTags };
+  (rows || []).forEach(function (row) {
+    ["visualText", "audioText"].forEach(function (field) {
+      var pieces = searchablePieces(cellOf(row[field]));
+      var n = matchesInPieces(pieces, needle, matchCase).length;
+      for (var i = 0; i < n; i++) matches.push({ rowId: row.id, field: field, nth: i });
+      inTags += countInPieces(pieces, needle, matchCase);
+    });
+  });
+  return { matches: matches, inTags: inTags };
+}
+
+/* What the find bar's count says when nothing can be stepped to: plain
+   "No matches", or — when the only occurrences are inside tags — how many,
+   so a search for a tagged word does not look like a miss. */
+export function noMatchLabel(inTags) {
+  if (!inTags) return "No matches";
+  return "No matches · " + (inTags === 1 ? "1 in a tag" : inTags + " in tags");
 }
 
 /* ---- the projection in a DOM ----
@@ -249,16 +285,9 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
 }
 
 export function refreshFindMatches(keepIndex) {
-  var needle = findNeedle();
-  findMatches = [];
-  if (needle && S.state) {
-    S.state.rows.forEach(function (row) {
-      ["visualText", "audioText"].forEach(function (field) {
-        var n = findInCell(cellOf(row[field]), needle, S.findMatchCase).length;
-        for (var i = 0; i < n; i++) findMatches.push({ rowId: row.id, field: field, nth: i });
-      });
-    });
-  }
+  var found = findInRows(S.state ? S.state.rows : [], findNeedle(), S.findMatchCase);
+  findMatches = found.matches;
+  findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
   else if (!keepIndex || findIndex < 0) findIndex = 0;
   else if (findIndex >= findMatches.length) findIndex = findMatches.length - 1;
@@ -269,8 +298,14 @@ function updateFindCount() {
   var el = document.getElementById("find-count");
   if (!el) return;
   var needle = findNeedle();
+  el.removeAttribute("title");
   if (!needle) { el.textContent = ""; el.classList.remove("none"); return; }
-  if (!findMatches.length) { el.textContent = "No matches"; el.classList.add("none"); return; }
+  if (!findMatches.length) {
+    el.textContent = noMatchLabel(findInTags);
+    if (findInTags) el.title = "Find never changes a tag's words — rename it in Production instead.";
+    el.classList.add("none");
+    return;
+  }
   el.classList.remove("none");
   el.textContent = (findIndex + 1) + " of " + findMatches.length;
 }
@@ -384,6 +419,7 @@ export function closeFindBar() {
   document.getElementById("findbar").hidden = true;
   findMatches = [];
   findIndex = -1;
+  findInTags = 0;
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

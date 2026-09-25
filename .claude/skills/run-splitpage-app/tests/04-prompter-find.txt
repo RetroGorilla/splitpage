@@ -67,10 +67,23 @@ sleep 800
 expect document.querySelectorAll('#rows .tag-anchor').length === window.__tagsBefore
 expect document.body.innerText.indexOf('tomorrow') !== -1
 
-# the tag's own words are deliberately NOT replaceable
+# the tag's own words are deliberately NOT replaceable - but the count says
+# they are there, rather than a bare "No matches" that reads as a miss
 eval (function(){var f=document.getElementById('find-input');f.value='gaffer';f.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
 sleep 600
+expect document.querySelector('.find-count').textContent == No matches · 1 in a tag
+expect document.querySelector('.find-count').classList.contains('none')
+expect document.querySelector('.find-count').title.indexOf('Production') !== -1
+# display only: stepping selects nothing inside the tag
+eval getSelection().removeAllRanges()
+jsclick #find-next
+sleep 300
+expect getSelection().rangeCount === 0 || !getSelection().anchorNode || !(getSelection().anchorNode.nodeType === 1 ? getSelection().anchorNode : getSelection().anchorNode.parentNode).closest('.tag-anchor')
+# a plain miss still says just "No matches", with no tooltip left over
+eval (function(){var f=document.getElementById('find-input');f.value='qqzzqq';f.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
+sleep 400
 expect document.querySelector('.find-count').textContent == No matches
+expect !document.querySelector('.find-count').title
 
 # --- a match across a formatting boundary (#85) -----------------------------
 # Half plain, half bold is two text nodes, and find used to search one text
