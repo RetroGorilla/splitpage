@@ -33,7 +33,9 @@ import {
 import { htmlToMarkdown, inertBody } from "./04-richtext.js";
 import { cellOf, toMarkdown } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
+import { healTagRegistry } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
+import { brollEntries } from "./08c-broll.js";
 import { commentBodyText, commentEntries, nowIso } from "./10-comments.js";
 import {
   clearDirty,
@@ -64,6 +66,27 @@ import { makeDesktopHandle } from "./20f-desktop.js";
 export var autoSaveEnabled;
 
 /* ================= save / export ================= */
+
+/* Two records follow the script rather than being edited themselves, and
+   are brought up to date by the idle refresh a moment after the typing
+   that changed them (07-production-tags.js runIdleRefresh), without
+   marking the document dirty — nobody edited them. The b-roll list: a
+   "B-roll:" key typed into a line gets its record at once, but the record
+   takes the line's words as its name only on that read (brollEntries), and
+   a nameless record is dropped on the way into a file (migrateRows). The
+   registry: a tag that arrived without an entry (a paste, a merge) gets one
+   (healTagRegistry). A save that landed before that read — an action's
+   save goes out at once, and the typing before it may still be waiting
+   for its refresh — wrote the list as it was a moment earlier, and the
+   refresh then changed the document under a "Saved" that no further edit
+   would correct (#208). Settled here, every save writes both as the
+   script says they are, and the refresh that follows finds nothing to
+   change. */
+function settleDerivedRecords() {
+  if (!S.state) return;
+  healTagRegistry();
+  brollEntries();
+}
 
 export async function saveDoc(opts) {
   opts = opts || {};
@@ -127,6 +150,7 @@ export async function saveDoc(opts) {
     }
     retarget = null;
   }
+  settleDerivedRecords();
   S.saveButtonBusy = true;
   setSaveButtons("Saving…", true);
 
@@ -303,7 +327,7 @@ export async function saveDoc(opts) {
          `auto` at the top): one "Saved to script.md" per pause in the
          typing is noise sitting on top of the work. */
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
-      else noteSaveStatus("Saved to " + targetHandle.name);
+      else noteSaveStatus();
       warnImagesLeftOut(imagesLeftOut, targetHandle.name);
     } else {
       /* no File System Access API (e.g. Firefox) — a plain download is the

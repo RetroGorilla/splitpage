@@ -205,8 +205,129 @@
 ; Un_A.exe/old-uninstaller.exe, so this can never match the process running
 ; it. $CmdPath is set by CHECK_APP_RUNNING before it inserts this macro.
 ;
-; Kept deliberately close to the original's shape: OK/Cancel first, a polite
-; taskkill, then a forced one, then escalate to the user.
+; --- Never force-close an app that may be asking a question (#198) ---------
+;
+; The polite taskkill posts WM_CLOSE, and a window with unsaved work answers
+; it with a modal "You have unsaved changes" dialog (main.js, win.on("close")).
+; The original shape forced `taskkill /F` ~1.3 s later, while that dialog was
+; still up, and the work was lost. Now what the installer does next depends
+; on what the app is showing, re-read every 500 ms:
+;
+;   gone                       -> carry on.
+;   a dialog is up             -> the user is being asked something: wait, for
+;                                 as long as it takes. No forcing, no second
+;                                 WM_CLOSE (that would dismiss the dialog as
+;                                 Cancel/Stay and ask again).
+;   a window, but no dialog    -> the user chose Stay/Cancel, or the app is on
+;                                 its way out. After 5 s of that: the
+;                                 "cannot be closed" Retry/Cancel box. Never /F.
+;   no window at all           -> nothing can be asking. Allow 10 s to finish
+;                                 quitting (will-quit stops the document server
+;                                 and flushes drafts), then /F.
+;
+; "Window" means a VISIBLE top-level window of class Chrome_WidgetWin_1 (every
+; Electron BrowserWindow) or #32770 (MessageBox, Electron's TaskDialog, the
+; common file dialogs) owned by any process whose image is
+; ${APP_EXECUTABLE_FILENAME}; "dialog" means one of the #32770 ones. Only those
+; two classes are looked at because walking every top-level window is far too
+; slow to poll: a desktop with Edge open can have thousands (4,560 on the
+; machine this was written on, ~1.5 s a pass through System::Call). A
+; minimised or other-desktop window is still WS_VISIBLE, so it still counts.
+;
+; The signal is read from the windows themselves, not from anything the app
+; publishes, on purpose: the app this macro has to close is the one ALREADY
+; installed, i.e. an older build that knows nothing about this installer.
+;
+; Retry re-checks. If a dialog is up it just goes back to waiting; otherwise it
+; sends one more polite close (which brings the unsaved-changes question back)
+; and starts over. Cancel is the template's `Quit`.
+;
+; Silent runs (/S, and the old uninstaller the new installer runs with /S
+; --updated) cannot wait forever for a question nobody may be there to
+; answer: after 60 s of an unanswered dialog they reach the same box, whose
+; silent default is IDCANCEL, so Setup stops and the app, its dialog and its
+; unsaved work are left exactly as they were. ${isUpdated} still skips the
+; "Splitpage is running" OK/Cancel box and gives the app a second to go by
+; itself first, as the template does.
+
+; Milliseconds, measured with GetTickCount from the moment the app entered its
+; current state (each poll also spends ~250 ms in tasklist, so counting polls
+; would drift): window-without-dialog before the Retry box; no-window before
+; /F; unanswered dialog before a SILENT run gives up.
+!define /ifndef SP_POLL_MS 500
+!define /ifndef SP_STAYED_MS 5000
+!define /ifndef SP_NOWINDOW_MS 10000
+!define /ifndef SP_SILENT_ASK_MS 60000
+!define /ifndef SP_APP_WINDOW_CLASS "Chrome_WidgetWin_1"
+
+; One pass over the visible top-level windows of class _CLASS. Sets _WIN to 1
+; if one of them belongs to ${APP_EXECUTABLE_FILENAME}. Works in $R4-$R9 as
+; splitpageScanWindows sets them up; no labels, so it can be inserted freely.
+!macro splitpageScanClass _CLASS _WIN
+  StrCpy $R4 0
+  ${Do}
+    FindWindow $R4 "${_CLASS}" "" "" $R4
+    ${If} $R4 == 0
+      ${Break}
+    ${EndIf}
+    System::Call 'user32::IsWindowVisible(p r14) i.r16'
+    ${If} $R6 != 0
+      StrCpy $R5 0
+      System::Call 'user32::GetWindowThreadProcessId(p r14, *i .r15)'
+      ${If} $R5 != $R7
+        ; Look each pid up once per pass.
+        StrCpy $R7 $R5
+        StrCpy $R8 0
+        System::Call 'kernel32::OpenProcess(i 0x1000, i 0, i r15) p.r16'
+        ${If} $R6 != 0
+          StrCpy $R9 ""
+          System::Call 'kernel32::QueryFullProcessImageNameW(p r16, i 0, w .r19, *i ${NSIS_MAX_STRLEN}) i.s'
+          System::Call 'kernel32::CloseHandle(p r16)'
+          Pop $R6
+          ${If} $R6 != 0
+            StrLen $R6 "\${APP_EXECUTABLE_FILENAME}"
+            IntOp $R6 0 - $R6
+            StrCpy $R9 $R9 "" $R6
+            ${If} $R9 == "\${APP_EXECUTABLE_FILENAME}"
+              StrCpy $R8 1
+            ${EndIf}
+          ${EndIf}
+        ${EndIf}
+      ${EndIf}
+      ${If} $R8 == 1
+        StrCpy ${_WIN} 1
+        ${Break}
+      ${EndIf}
+    ${EndIf}
+  ${Loop}
+!macroend
+
+; _WIN = 1 if the app has a visible window, else 0; _ASK = 1 if one of them is
+; a dialog, else 0 (see above). Pass registers outside $R4-$R9 (they are saved
+; and used here; System's r14-r19). No labels, so it can be inserted any number
+; of times in one function or section.
+!macro splitpageScanWindows _WIN _ASK
+  Push $R4 ; hwnd
+  Push $R5 ; its pid
+  Push $R6 ; scratch
+  Push $R7 ; the pid last looked up
+  Push $R8 ; 1 if that pid is ${APP_EXECUTABLE_FILENAME}
+  Push $R9 ; image path
+  StrCpy $R7 -1
+  StrCpy $R8 0
+  StrCpy ${_ASK} 0
+  !insertmacro splitpageScanClass "#32770" ${_ASK}
+  StrCpy ${_WIN} ${_ASK}
+  ${If} ${_WIN} == 0
+    !insertmacro splitpageScanClass "${SP_APP_WINDOW_CLASS}" ${_WIN}
+  ${EndIf}
+  Pop $R9
+  Pop $R8
+  Pop $R7
+  Pop $R6
+  Pop $R5
+  Pop $R4
+!macroend
 
 !macro splitpageFindApp _RET
   nsExec::Exec `"$CmdPath" /C tasklist /FI "USERNAME eq %USERNAME%" /FI "IMAGENAME eq ${APP_EXECUTABLE_FILENAME}" /FO CSV /NH | "$SYSDIR\findstr.exe" /B /I /C:"\"${APP_EXECUTABLE_FILENAME}\""`
@@ -214,8 +335,11 @@
 !macroend
 
 !macro customCheckAppRunning
-  Push $R0
-  Push $R1
+  Push $R0 ; exit code of the last tasklist/taskkill; ms spent in the state
+  Push $R1 ; GetTickCount when the app entered its current state
+  Push $R2 ; the app has a visible window
+  Push $R3 ; the app has a dialog up
+  Push $R4 ; its state at the last poll: 2 dialog, 1 window, 0 neither
 
   !insertmacro splitpageFindApp $R0
   ${if} $R0 == 0
@@ -230,45 +354,95 @@
 
     spDoStopProcess:
       DetailPrint "$(appClosing)"
+
+    spAskToClose:
+      ; The one polite close per attempt. A second WM_CLOSE while the app's
+      ; own dialog is up would dismiss that dialog as Cancel.
       nsExec::Exec `"$CmdPath" /C taskkill /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"`
       Pop $R0
-      ; Give the close handlers a chance before anything is forced.
-      Sleep 300
-      StrCpy $R1 0
-
-    spLoop:
-      IntOp $R1 $R1 + 1
-
-      !insertmacro splitpageFindApp $R0
-      ${if} $R0 != 0
-        Goto spNotRunning
-      ${endIf}
-
-      Sleep 1000
-      nsExec::Exec `"$CmdPath" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"`
-      Pop $R0
-      Sleep 500
-
-      !insertmacro splitpageFindApp $R0
-      ${if} $R0 != 0
-        Goto spNotRunning
-      ${endIf}
-
-      ; Still there after a forced kill: elevated, or not ours to stop.
-      ${if} $R1 >= 3
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY spRetry
-        Quit
-        spRetry:
-          StrCpy $R1 0
-      ${endIf}
-
       DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
-      Sleep 1000
-      Goto spLoop
+      StrCpy $R4 -1
+
+    spWait:
+      Sleep ${SP_POLL_MS}
+      !insertmacro splitpageFindApp $R0
+      ${if} $R0 != 0
+        Goto spNotRunning
+      ${endIf}
+      !insertmacro splitpageScanWindows $R2 $R3
+      ${if} $R3 == 1
+        StrCpy $R0 2
+      ${elseIf} $R2 == 1
+        StrCpy $R0 1
+      ${else}
+        StrCpy $R0 0
+      ${endIf}
+      ${if} $R0 != $R4
+        StrCpy $R4 $R0
+        System::Call 'kernel32::GetTickCount() i.r11'
+      ${endIf}
+      System::Call 'kernel32::GetTickCount() i.r10'
+      IntOp $R0 $R0 - $R1
+
+      ${if} $R4 == 2
+        ; The app is asking the user something (unsaved changes, stop
+        ; sharing, a Save dialog). Wait for the answer, however long it takes.
+        ${if} ${Silent}
+        ${andIf} $R0 >= ${SP_SILENT_ASK_MS}
+          Goto spCannotClose
+        ${endIf}
+        Goto spWait
+      ${endIf}
+
+      ${if} $R4 == 1
+        ; A window but no question: the answer was Stay/Cancel, or the app is
+        ; about to go. Never forced: a window can put a question back up.
+        ${if} $R0 >= ${SP_STAYED_MS}
+          Goto spCannotClose
+        ${endIf}
+        Goto spWait
+      ${endIf}
+
+      ; No window at all, so nothing can be asking. Give quitting time to
+      ; finish, then force whatever is left (a stuck quit, an orphaned
+      ; document server).
+      ${if} $R0 >= ${SP_NOWINDOW_MS}
+        DetailPrint `"${PRODUCT_NAME}" has no window open but is still running; ending it.`
+        nsExec::Exec `"$CmdPath" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"`
+        Pop $R0
+        Sleep 1000
+        !insertmacro splitpageFindApp $R0
+        ${if} $R0 != 0
+          Goto spNotRunning
+        ${endIf}
+        ; Still there after a forced kill: elevated, or not ours to stop.
+        Goto spCannotClose
+      ${endIf}
+      Goto spWait
+
+    spCannotClose:
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY spRetry
+      Quit
+
+    spRetry:
+      !insertmacro splitpageFindApp $R0
+      ${if} $R0 != 0
+        Goto spNotRunning
+      ${endIf}
+      !insertmacro splitpageScanWindows $R2 $R3
+      ${if} $R3 == 1
+        ; Its question is still up: go back to waiting for the answer.
+        StrCpy $R4 -1
+        Goto spWait
+      ${endIf}
+      Goto spAskToClose
 
     spNotRunning:
   ${endIf}
 
+  Pop $R4
+  Pop $R3
+  Pop $R2
   Pop $R1
   Pop $R0
 !macroend

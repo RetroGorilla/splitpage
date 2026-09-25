@@ -1,0 +1,203 @@
+# Other people on the rundown strip (issue #202, 05p-rundown-presence.js):
+# a dot in each person's colour on the block of the scene their caret is
+# in, their name on hover, side by side when two share a block, an empty
+# ring once they have been idle a minute, gone when they leave, following
+# its block under the lens, on the thin bar too, and a click on one going
+# to that scene. Nothing at all for a document that is nobody's session.
+#
+# People are faked the way tests/44-presence.txt fakes them: through
+# window.__presenceTest.apply(), as the server would have answered. The
+# beat keeps running while the session is hosted, and against this static
+# server it would fail three times and clear everyone, so /api/presence is
+# answered here from window.__here (and counted) — nothing else is faked.
+# The idle minute is aged with window.__rundownPresenceTest.age().
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.RT = window.__rundownTest; window.PT = window.__presenceTest; window.RP = window.__rundownPresenceTest; var w = function(n){ var a = []; for (var i = 0; i < n; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 40; i++) rows.push({ id: 'r' + i, visualText: 'Visual ' + i, audioText: 'Scene ' + i + ' ' + w(i === 5 ? 2 : 6 + (i * 13) % 30), status: i % 3 === 0 ? 'shot' : i % 3 === 1 ? 'ready' : 'todo' }); F.openFile(new File([JSON.stringify({ schema: 2, title: 'Presence strip', rows: rows })], 'presence-strip.splitpage')); return true; })()
+wait F.state().title === 'Presence strip' && document.querySelectorAll('#rundown .rd-block').length === 40
+sleep 300
+eval (function(){ window.blk = function(id){ return document.querySelector('#rundown .rundown-blocks > [data-row="' + id + '"]') || document.querySelectorAll('#rundown .rundown-blocks > *')[Number(id.slice(1))]; }; window.dots = function(){ return document.querySelectorAll('#rundown .rundown-presence .rd-who'); }; window.dot = function(pid){ return document.querySelector('#rundown .rd-who[data-person="' + pid + '"]'); }; window.cx = function(el){ var r = el.getBoundingClientRect(); return r.left + r.width / 2; }; window.cy = function(el){ var r = el.getBoundingClientRect(); return r.top + r.height / 2; }; window.onBlock = function(pid, id){ var b = blk(id).getBoundingClientRect(); var x = cx(dot(pid)); return x >= b.left - 12 && x <= b.right + 12 && Math.abs(x - (b.left + b.width / 2)) <= 12; }; window.track = function(){ return document.querySelector('#rundown .rundown-track'); }; window.move = function(x){ var r = track().getBoundingClientRect(); track().dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: r.top + 18, pointerType: 'mouse' })); }; window.rgb = function(hex){ var n = parseInt(hex.slice(1), 16); return 'rgb(' + (n >> 16) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')'; }; return true; })()
+
+# --- a document that is nobody's session: no layer content, nothing sent -----
+expect document.querySelector('#rundown .rundown-track > .rundown-presence') !== null
+expect dots().length === 0
+expect PT.wanted() === false
+eval window.__t0 = PT.sends()
+eval PT.beat()
+sleep 300
+expect PT.sends() === window.__t0
+expect dots().length === 0
+# the layer is not the overlay, which fades under the lens
+expect document.querySelector('#rundown-overlay .rd-who') === null
+
+# --- hosted, the beat answered from __here -----------------------------------
+eval (function(){ window.__here = []; window.__presencePosts = 0; var real = window.fetch; window.fetch = function(url, opts){ if (String(url).indexOf('api/presence') !== -1) { window.__presencePosts++; return Promise.resolve(new Response(JSON.stringify({ here: window.__here }), { status: 200, headers: { 'Content-Type': 'application/json' } })); } return real.apply(this, arguments); }; return true; })()
+eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
+sleep 200
+expect PT.wanted() === true
+# hosted but alone: still nothing
+eval PT.apply([])
+sleep 200
+expect dots().length === 0
+
+# --- someone in scene 4: a dot on its block, in their colour -----------------
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'audioText'}]
+eval PT.apply(window.__here)
+sleep 200
+expect dots().length === 1
+expect dot('p1').getAttribute('data-row') == r3
+expect onBlock('p1', 'r3')
+# on the top edge of the block
+expect Math.abs(cy(dot('p1')) - blk('r3').getBoundingClientRect().top) <= 2
+# the header avatar's colour, filled
+expect dot('p1').style.getPropertyValue('--who') === document.querySelector('#presence-bar .presence-chip').style.getPropertyValue('--presence')
+expect getComputedStyle(dot('p1')).backgroundColor === rgb(dot('p1').style.getPropertyValue('--who').trim())
+expect !dot('p1').classList.contains('is-idle')
+# the name on hover, the gutter's words
+expect dot('p1').title == Sam Okafor is in scene 04
+# it is not in the document
+expect JSON.stringify(F.state()).indexOf('rd-who') === -1
+expect document.querySelectorAll('#rows .rd-who').length === 0
+shot 115-presence-one
+
+# --- two people on one block: side by side, each their own colour ------------
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'audioText'},{id:'p2',name:'Priya Malhotra',rowId:'r3',field:'visualText'},{id:'p3',name:'',rowId:'r8',field:'audioText'}]
+eval PT.apply(window.__here)
+sleep 200
+expect dots().length === 3
+expect onBlock('p1', 'r3') && onBlock('p2', 'r3')
+expect cx(dot('p2')) - cx(dot('p1')) > 4
+expect Math.abs(cy(dot('p2')) - cy(dot('p1'))) < 1
+expect dot('p1').style.getPropertyValue('--who') !== dot('p2').style.getPropertyValue('--who')
+expect onBlock('p3', 'r8')
+expect dot('p3').title == Guest is in scene 09
+shot 115-presence-two
+
+# --- a minute idle is an empty ring; active again fills it ------------------
+eval RP.age(RP.idleMs + 1000)
+sleep 100
+expect dots().length === 3
+expect dot('p1').classList.contains('is-idle') && dot('p2').classList.contains('is-idle')
+expect getComputedStyle(dot('p1')).backgroundColor !== rgb(dot('p1').style.getPropertyValue('--who').trim())
+expect getComputedStyle(dot('p1')).boxShadow.indexOf(rgb(dot('p1').style.getPropertyValue('--who').trim())) !== -1
+expect dot('p1').title == Sam Okafor is in scene 04 (idle)
+# still where they were
+expect onBlock('p1', 'r3')
+# a beat with nothing new about them keeps them idle
+eval PT.apply(window.__here)
+sleep 100
+expect dot('p1').classList.contains('is-idle')
+shot 115-presence-idle
+# Sam moves to the other field: active again, Priya still idle
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'visualText'},{id:'p2',name:'Priya Malhotra',rowId:'r3',field:'visualText'},{id:'p3',name:'',rowId:'r8',field:'audioText'}]
+eval PT.apply(window.__here)
+sleep 100
+expect !dot('p1').classList.contains('is-idle')
+expect dot('p2').classList.contains('is-idle')
+expect getComputedStyle(dot('p1')).backgroundColor === rgb(dot('p1').style.getPropertyValue('--who').trim())
+# words arriving in Priya's scene (a merge of her typing) wake her too
+eval (function(){ var s = F.state(); s.rows[3] =Object.assign({}, s.rows[3], { audioText: s.rows[3].audioText + ' more' }); return true; })()
+eval PT.apply(window.__here)
+sleep 100
+expect !dot('p2').classList.contains('is-idle')
+
+# --- leaving removes the dot -------------------------------------------------
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'visualText'},{id:'p3',name:'',rowId:'r8',field:'audioText'}]
+eval PT.apply(window.__here)
+sleep 100
+expect dots().length === 2
+expect dot('p2') === null
+expect RP.activity().p2 === undefined
+
+# --- the lens: the dots stay on their blocks --------------------------------
+eval (function(){ window.__restX = cx(dot('p1')); window.__restX3 = cx(dot('p3')); move(cx(blk('r5'))); return true; })()
+wait document.getElementById('rundown').classList.contains('is-lensed')
+sleep 400
+expect parseFloat(getComputedStyle(document.getElementById('rundown-overlay')).opacity) === 0
+expect parseFloat(getComputedStyle(document.querySelector('#rundown .rundown-presence')).opacity) === 1
+# the lens moved them: scene 6 is a sliver grown wide, so its neighbours slide
+expect Math.abs(cx(dot('p1')) - window.__restX) > 3 && Math.abs(cx(dot('p3')) - window.__restX3) > 3
+expect onBlock('p1', 'r3')
+expect onBlock('p3', 'r8')
+shot 115-presence-lens
+# moving on keeps them with their blocks, frame by frame — or hidden, once the
+# sliding lens has carried the block's middle off the track
+eval (function(){ window.offTrack = function(id){ var t = track().getBoundingClientRect(), b = blk(id).getBoundingClientRect(), m = b.left + b.width / 2; return m < t.left || m > t.left + RT.lens().W; }; window.onOrOff = function(pid, id){ return offTrack(id) ? dot(pid).hidden : !dot(pid).hidden && onBlock(pid, id); }; return true; })()
+eval (async function(){ var x0 = cx(blk('r5')); for (var k = 1; k <= 30; k++) { move(x0 + k * 12); await new Promise(function(r){ requestAnimationFrame(function(){ r(); }); }); if (!onOrOff('p1', 'r3') || !onOrOff('p3', 'r8')) { window.__lost = k; return false; } } return true; })()
+expect window.__lost === undefined
+# at the far right the strip's start has slid off the left edge: scene 4's
+# block and its dot are gone from the track, and the edge fades
+eval (function(){ var t = track().getBoundingClientRect(); move(t.left + RT.lens().W - 4); return true; })()
+wait offTrack('r3')
+wait dot('p1').hidden
+expect document.querySelector('#rundown .rundown-blocks').classList.contains('over-l')
+expect !dot('p3').hidden || offTrack('r8')
+eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, pointerType: 'mouse' }))
+wait !document.getElementById('rundown').classList.contains('is-lensed')
+sleep 300
+expect Math.abs(cx(dot('p1')) - window.__restX) < 0.6
+expect onBlock('p1', 'r3')
+
+# --- a click on a dot goes to that scene -----------------------------------
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+click #rundown .rd-who[data-person="p3"]
+wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r8'
+expect (function(){ var r = document.querySelector('#rows .row[data-id="r8"]').getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0; })()
+
+# --- the thin bar: smaller dots on its line, and a click still goes there ----
+eval RT.setMinimized(true)
+wait document.querySelectorAll('#rundown .rd-seg').length === 40
+sleep 200
+expect dots().length === 2
+expect onBlock('p1', 'r3') && onBlock('p3', 'r8')
+expect Math.round(dot('p1').getBoundingClientRect().width) === 7
+expect (function(){ var t = track().getBoundingClientRect(); var d = dot('p1').getBoundingClientRect(); return d.top >= t.top - 0.5 && d.bottom <= t.bottom + 0.5; })()
+shot 115-presence-min
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+click #rundown .rd-who[data-person="p1"]
+wait document.activeElement && document.activeElement.closest && document.activeElement.closest('#rows .row') && document.activeElement.closest('#rows .row').getAttribute('data-id') === 'r3'
+# the click was the dot's, not the bar's toggle
+expect document.getElementById('rundown').classList.contains('is-min')
+eval RP.age(RP.idleMs + 1000)
+sleep 100
+shot 115-presence-min-idle
+eval PT.apply(window.__here)
+
+# --- the dark theme ----------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme', 'dark')
+sleep 200
+shot 115-presence-min-dark
+eval RT.setMinimized(false)
+wait document.querySelectorAll('#rundown .rd-block').length === 40
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'audioText'},{id:'p2',name:'Priya Malhotra',rowId:'r3',field:'visualText'},{id:'p3',name:'',rowId:'r8',field:'audioText'}]
+eval PT.apply(window.__here)
+eval RP.age(RP.idleMs + 1000)
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'visualText'},{id:'p2',name:'Priya Malhotra',rowId:'r3',field:'visualText'},{id:'p3',name:'',rowId:'r8',field:'audioText'}]
+eval PT.apply(window.__here)
+sleep 200
+expect dots().length === 3
+expect onBlock('p1', 'r3') && onBlock('p2', 'r3')
+expect dot('p2').classList.contains('is-idle')
+shot 115-presence-dark
+eval document.documentElement.removeAttribute('data-theme')
+
+# --- nobody left, then back to a local document: nothing ---------------------
+eval window.__here = []
+eval PT.apply([])
+sleep 100
+expect dots().length === 0
+eval window.__here = [{id:'p1',name:'Sam Okafor',rowId:'r3',field:'audioText'}]
+eval PT.apply(window.__here)
+sleep 100
+expect dots().length === 1
+eval window.__hostedTest.setSession({role:'edit',docId:null})
+sleep 200
+expect PT.wanted() === false
+eval window.__p0 = window.__presencePosts
+eval PT.beat()
+sleep 300
+expect dots().length === 0
+expect window.__presencePosts === window.__p0

@@ -1249,7 +1249,16 @@ export function promptForName() {
 /* Reading speed lives on the document (see migrateRows), so the estimate
    reads the same for whoever opens the file next. The same popover as the
    name box. Under it, the script's target length (#170, 05t-target.js):
-   the clock is where both show, so one click on it reaches both. */
+   the script's length is where both show, so one click on it reaches
+   both. Since #207 that is the label at the end of the rundown
+   (#runtime-chip), or at phone widths the header's status line
+   (#length-status) — the popover hangs off whichever is on screen. */
+function lengthHost() {
+  var phone = document.getElementById("length-status");
+  if (phone && phone.getClientRects().length) return phone;
+  return document.getElementById("runtime-chip");
+}
+
 export function promptForWpm() {
   openClockPopover("wpm");
 }
@@ -1266,7 +1275,7 @@ function openClockPopover(focusOn) {
      saved in the script, like the target below it (05t-target.js). */
   var viewing = reviewMode();
   var off = viewing ? " disabled" : "";
-  var host = document.getElementById("runtime-chip");
+  var host = lengthHost();
   var wrap = openAnchorPopover(host, "wpm-editor", "Reading speed and target length",
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +

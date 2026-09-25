@@ -1098,15 +1098,20 @@ formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
 (05t-target.js), one `markDirty()`, so undo sees a `docField` step and a
 review session is refused there as well as in the popover. What reads it:
-the program clock (`updateScriptStats()`: `01:35 / 02:00` and `0:25 left` /
-`0:05 over` in `#program-clock-slot`, via the pure `targetClock()`; the
+the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
+`0:05 over` in `#runtime-slot`, via the pure `targetClock()`; since #207 a
+label at the end of the rundown, `#runtime-chip`, placed by
+`rundownLengthPlace()`, and at phone widths `#length-status` in the
+header's status line — it was the header's program clock before; the
 target is measured against the whole script — with shot scenes hidden the
-remaining-to-shoot figure moves to the clock's tooltip), and the rundown
+remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
 max(target, total) + 10s; 05t-target.js draws the line, "Target 2:00" and
-the hatching on `#rundown-overlay` from `rundownLayout()` — to scale, never
-`rundownX()`, because the overlay is faded while the lens is on and must be
-right when it settles; minimized, CSS leaves only the line as a tick).
+the hatching on `#rundown-overlay` from `rundownLayout().x` — the layout at
+rest, never `rundownX()`, because the overlay is faded while the lens is on
+and must be right when it settles; and never seconds × `pxPerSecond`, since
+the rest floor (`REST_MIN_PX`, `rundownRestLayout()`) keeps short scenes'
+blocks wider than to scale; minimized, CSS leaves only the line as a tick).
 Present does not show it.
 
 **Per person, not per document:** the script's zoom (#191) is
@@ -1706,7 +1711,7 @@ evaluation order via `_entry.js`):
 | `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11) |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
-| `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`, `savedAgoPhrase`), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
+| `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`; the save status's words `savedStatusText` and tooltip time `savedWhenText`, #208), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
@@ -1723,6 +1728,8 @@ evaluation order via `_entry.js`):
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
+| `05g-scene-clip.js` | whole scenes on the clipboard (#204): the payload (`application/x-splitpage-scenes` JSON — the scenes and everything they name, comments, b-roll records, breakdown entries, owners, picture bytes up to `SCENE_BLOB_CAP`, 16 MiB, the rest by reference), the two-column table (the payload without bytes on its `data-splitpage-scenes` attribute) and labelled plain text; reading it back through `migrateRows`; `insertScenes` (fresh row/comment/reply ids, anchors renamed, a b-roll key's id kept only when free — invariant #54 — with its record, a live cut in the same document a move) and `removeScenes` |
+| `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from 21-events.js's paste), each change one undo entry; a server document's pasted comments a second, unrecorded step (design D5) |
 | `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
 | `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
 | `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
@@ -1731,6 +1738,7 @@ evaluation order via `_entry.js`):
 | `05e-gallery-overlay.js` | a scene's gallery dialog (#135): the still, ‹ ›, the grid, Make cover / Remove / reorder as undo steps; click-to-play in the preview (#168: a sandboxed frame for YouTube/Vimeo, a `<video>` for a file dropped this session, a note plus Open where it cannot play), Retry thumbnail (#141) |
 | `06-rows.js` | row add/move/drag, images; a gallery video's Open (`openGalleryLink`, `openVideoFile`), the desktop's per-run file grants, and the Files dropped or pasted this session (`hasSessionVideo`/`sessionVideoUrl`, #168) |
 | `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
+| `07b-plain-tags.js` | plain-language tagging (#210): `VFX:` in a Visual cell opens a tag, Tab wraps it, Esc puts the keyword back — Adam's typing convention is written out at the top of the file; the keyword is only hidden on screen, never taken out of the document until Tab |
 | `08-production-panels.js` | production and gear panels, multi-select, breakdown |
 | `08c-broll.js` | the b-roll list itself: reading `B-roll:` lines off the model, the records in `state.brollShots`, anchoring (#21), a pasted key's record (invariant #54), the props a shot needs (#149, invariant #56), the badge and the idle refresh |
 | `08d-broll-panel.js` | how the b-roll list is shown and edited (#148): the side panel — one line per shot, summary bar, filter chips and Group menu (remembered per device, `splitpage-broll-view`), the compact detail card, multi-select and the bulk bar (one change, one undo); and the full-page shot list (#150) — a table over the script at the writer's z-index that closes the side panels and traps the focus (invariants #16, #19), edited through the panel's own handlers (`wireBrollRoot`), with its CSV (`buildBrollCsv`) and printable PDF (`buildShotListPdf` in 17-pdf.js, the packing list's writer) |
@@ -1740,6 +1748,7 @@ evaluation order via `_entry.js`):
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
+| `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` and `rundownEdge()` (a dot whose block the sliding lens has carried off the track is hidden) being exported; `paintRundownPresence()` is called from `paintPresence()` |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171) |
 | `15-docx.js` | .docx read/write, narration-only export |
 | `16-csv.js` | csv |
@@ -1787,7 +1796,7 @@ evaluation order via `_entry.js`):
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |
-| `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`) |
+| `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`); 1.0.x removal (`customInit`); the running-app check (`customCheckAppRunning`), which never force-kills while the app has a visible window, so a save prompt is waited for, not killed (#198) |
 | `desktop/stage.mjs` | build step: runs `build.mjs`, verifies version, stages files for packaging |
 | `desktop/verify-dist.mjs` | post-`dist:win` check: PE machine field per binary, NSIS stub arch, installer freshness, installer payload actually extracts (#6) |
 | `desktop/verify-dist-payload.mjs` | verify-dist.mjs's payload-extraction half: pulls the app package back out of a built setup.exe with 7z.exe + 7za and diffs its top-level PE files against the unpacked dir (#6) |

@@ -47,6 +47,7 @@ import {
   updateToolbarState
 } from "./05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "./05c-clipboard.js";
+import { pasteScenesAt } from "./05h-scene-select.js";
 import { openGalleryOverlay } from "./05e-gallery-overlay.js";
 import { thumbnailsAfterPaste } from "./05v-video.js";
 import {
@@ -107,6 +108,14 @@ import {
   updateUntaggedPrompt
 } from "./07-production-tags.js";
 import {
+  cancelPlainTag,
+  closePlainTag,
+  maybeOpenPlainTag,
+  plainTagEmptyAtCaret,
+  plainTagOpen,
+  refreshPlainTag
+} from "./07b-plain-tags.js";
+import {
   IS_TOUCH,
   addPersonForTag,
   applyGearQuickAdd,
@@ -146,7 +155,6 @@ import {
   stepFind
 } from "./09-find-replace.js";
 import {
-  TAGGING_HELP_KEY,
   armDeleteComment,
   captureReplyDrafts,
   closeCommentComposer,
@@ -897,6 +905,7 @@ function onRootInput(e) {
   maybeAutoTagShortcut(e, cellEl);
   maybeDirectionShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
+  maybeOpenPlainTag(e, cellEl);
   syncFieldFromDom(cellEl);
   afterScriptCellChange(cellEl);
 }
@@ -928,6 +937,9 @@ function afterScriptCellChange(cellEl) {
   S.untaggedMutedFor = null;
   scheduleUntaggedScan();
   updateTagGhost(cellEl);
+  /* an open "VFX:" tag grows with the typing, and ends if the edit took it
+     away (07b-plain-tags.js) */
+  refreshPlainTag();
 }
 
 function onRootFocusOut(e) {
@@ -938,6 +950,8 @@ function onRootFocusOut(e) {
      and read the old element's words back over the edit. */
   if (S.cellRepainting) return;
   hideTagGhost();
+  /* leaving the cell ends an open "VFX:" tag: its keyword back as typed */
+  cancelPlainTag();
   hideUntaggedPrompt();
   S.untaggedMutedFor = null;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
@@ -1060,6 +1074,8 @@ function onRootPaste(e) {
   e.preventDefault();
   var cd = e.clipboardData || window.clipboardData;
   if (isScriptCell(cellEl)) {
+    /* whole scenes on the clipboard (#204): new scenes after this one */
+    if (pasteScenesAt(cd, cellEl)) return;
     /* a review session's script is read-only: nothing to paste into */
     if (reviewMode()) return;
     insertIntoScriptCell(cellEl, cd.getData("text/html"), cd.getData("text/plain"), cd.files);
@@ -1102,9 +1118,20 @@ function onRootKeydown(e) {
      comment's composer or a reply box has a history of its own. */
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   if (onUndoKey(e)) return;
-  /* The ghost wins Tab outright: you typed a bracket, so you asked for it.
-     The untagged-mention prompt only ever gets the key when nothing more
-     explicit is in flight. */
+  /* Tab, in this order (#210, Adam's decision): an open plain-language tag
+     ("VFX: lens flare", 07b-plain-tags.js) closes first — you typed its
+     keyword, so it is the most explicit thing in flight. Then the ghost,
+     which wins outright over the prompt: you typed a bracket, so you asked
+     for it. The untagged-mention prompt only ever gets the key when nothing
+     more explicit is in flight. Esc cancels an open tag and puts its
+     keyword back, and nothing else (not the comments panel behind it);
+     Backspace with nothing typed after the keyword does the same and then
+     deletes the colon, as it would have. */
+  if (plainTagOpen(cellEl)) {
+    if (e.key === "Tab") { e.preventDefault(); closePlainTag(); return; }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); cancelPlainTag(); return; }
+    if (e.key === "Backspace" && plainTagEmptyAtCaret()) cancelPlainTag();
+  }
   if (e.key === "Tab" && tagGhost && tagGhost.cellEl === cellEl) {
     if (acceptTagGhost()) { e.preventDefault(); return; }
   }
@@ -1397,6 +1424,15 @@ function init() {
     e.preventDefault();
     acceptTagGhost();
   });
+  /* The open "VFX:" tag's note is its Tab key on a phone (Adam, #210): a
+     tap closes the tag exactly as Tab does. pointerdown with the default
+     prevented, as the ghost above, so the cell keeps the focus and the
+     caret the close reads; a click on desktop does the same. */
+  var openHintEl = document.getElementById("tag-open-hint");
+  if (openHintEl) openHintEl.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    if (plainTagOpen()) closePlainTag();
+  });
 
   /* the OS silently revokes a wake lock when the app is backgrounded;
      take it back when the prompter is still up on return */
@@ -1542,6 +1578,10 @@ function init() {
      next moves or a key is pressed. */
   window.addEventListener("scroll", hideUntaggedPrompt, true);
   window.addEventListener("resize", hideUntaggedPrompt);
+  /* An open "VFX:" tag is still open after a scroll: its note moves with
+     the cell rather than going away. */
+  window.addEventListener("scroll", refreshPlainTag, true);
+  window.addEventListener("resize", refreshPlainTag);
 
   var suggestEl = document.getElementById("tag-suggest");
   /* mousedown, not click, is where the default has to go: by the time click
@@ -1551,20 +1591,12 @@ function init() {
 
   document.getElementById("identity-chip").addEventListener("click", promptForName);
 
-  /* Dismissed for good once you know it, but never lost — File ▸ Tagging
-     reference calls showTaggingHelp() to put it back. Kept in localStorage
-     rather than the document so it follows the reader, not the script:
-     sending someone a file shouldn't hide the reference from them. */
-  document.getElementById("tagging-help-dismiss").addEventListener("click", function () {
-    document.getElementById("tagging-help").hidden = true;
-    try { localStorage.setItem(TAGGING_HELP_KEY, "1"); } catch (e) {}
-  });
-  /* The reference no longer opens itself over the script on every visit
-     until dismissed (#169, the brief's "the script starts immediately"):
-     it was a whole panel between the header and the first scene. It is
-     one click away wherever it was before — File ▸ Tagging reference, the
-     start page's "Tagging cheat sheet", Help, and the tour's step that
-     shows it (showTaggingHelp, 10-comments.js). */
+  /* The tagging reference no longer opens itself over the script on every
+     visit until dismissed (#169, the brief's "the script starts
+     immediately"). It is one click away — File ▸ Tagging reference, the
+     command menu, Settings, and the tour's step that shows it — and a
+     floating card since #205; its close, Esc and dismissal are wired with
+     it in 10-comments.js (showTaggingHelp / hideTaggingHelp). */
 
   /* ---- find & replace ---- */
   document.getElementById("find-close").addEventListener("click", closeFindBar);
@@ -1637,8 +1669,11 @@ function init() {
     if (id) S.lastFocusedRowId = id;
   });
 
-  /* ---- reading speed ---- */
+  /* ---- reading speed: the script's length, on the rundown or (phone) in
+     the header's status line (#207) ---- */
   document.getElementById("runtime-chip").addEventListener("click", promptForWpm);
+  var lengthStatus = document.getElementById("length-status");
+  if (lengthStatus) lengthStatus.addEventListener("click", promptForWpm);
 
   document.getElementById("history-close").addEventListener("click", closeHistoryPanel);
   document.getElementById("history-panel").addEventListener("click", onRootClick);
@@ -1984,6 +2019,9 @@ function init() {
       if (active.classList.contains("wr-para")) updateWriterFormatState();
       else updateToolbarState(active);
     }
+    /* An open "VFX:" tag follows the caret too, and ends when the caret
+       leaves it (07b-plain-tags.js) — first, so the prompt below knows. */
+    refreshPlainTag();
     /* Follows the caret without re-scanning: the ranges are already in
        hand, this only picks which one to offer and where to put it. */
     updateUntaggedPrompt();

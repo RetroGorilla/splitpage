@@ -99,13 +99,15 @@ function resumeTourAfterHelp() {
   renderTourStep();
 }
 
-/* The static "Tagging quick reference" strip (page.html, wired by
-   10-comments.js — off limits here) gets one more line pointing at the
-   full guide. Added from script rather than in the markup, since this
-   fragment may only APPEND new blocks to page.html, not edit existing
-   ones. Idempotent so a rebuild/re-render never double-inserts it. */
+/* The tagging reference card (page.html, wired by 10-comments.js) gets a
+   link to the full guide in its foot, beside "File ▸ Tagging reference
+   brings this back" (#205). Added from script rather than in the markup,
+   since this fragment may only APPEND new blocks to page.html, not edit
+   existing ones. Idempotent so a rebuild/re-render never double-inserts
+   it. */
 function injectTaggingHelpGuideLink() {
-  var body = document.querySelector("#tagging-help .tagging-help-body");
+  var body = document.querySelector("#tagging-help .tagging-help-foot") ||
+    document.querySelector("#tagging-help .tagging-help-body");
   if (!body || document.getElementById("tagging-help-fullguide")) return;
   var wrap = document.createElement("div");
   wrap.className = "tagging-help-fullguide";

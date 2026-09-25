@@ -15,7 +15,7 @@ wait F.state().title === 'Silent scene' && document.querySelectorAll('#rows .row
 sleep 400
 
 # the editor: 0:04 + 0:20 + 0:04
-expect document.getElementById('runtime-total').textContent == 00:28
+expect document.getElementById('runtime-total').textContent == 0:28
 
 # --- Present agrees ------------------------------------------------------------
 eval window.__speed0 = document.getElementById('pp-speed-value').textContent

@@ -21,6 +21,7 @@ import {
 } from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
+import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { brollPropsRenamed, runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
@@ -131,7 +132,9 @@ export function nextTagStatus(id) {
    parentheses were ruled out for exactly that reason. Cast and Music/SFX
    have no shortcut on purpose: every remaining prose-safe character is
    spoken for, and both are still one Tab away from the autocomplete once
-   one of them exists (see bestTagCompletion). */
+   one of them exists (see bestTagCompletion). Every category, those two
+   included, can also be typed in plain words — "Cast:" and the rest, then
+   Tab (#210, 07b-plain-tags.js). */
 var TAG_SHORTCUTS = [
   { open: "[", close: "]", cat: "prop" },
   { open: "{", close: "}", cat: "location" },
@@ -810,7 +813,9 @@ export function maybeAutoTagShortcut(e, cellEl) {
 /* ---- putting a tag into a cell ----
 
    The three typed routes to a tag — a shortcut closing, Tab on the ghost,
-   Tab on an untagged mention — end the same way: characters a..b of one
+   Tab on an untagged mention — end the same way (the fourth, Tab on an
+   open "VFX:" tag, is applyPlainTag in 07b-plain-tags.js, the same mark
+   through the same replaceWithTag): characters a..b of one
    text node in the cell become `text`, tagged (cat, name), with the caret
    just after it. That is an edit of the cell's model (#85, design §5):
    editCell() reads the cell, replaceWithTag() makes the change, and the
@@ -1124,6 +1129,9 @@ export function updateUntaggedPrompt() {
   var cellEl = (active && active.classList && active.classList.contains("cell-editable") &&
     active.getAttribute("data-field") === "visualText" && active.closest("#rows")) ? active : null;
   if (!cellEl || S.untaggedMutedFor === cellEl) { hideUntaggedPrompt(); return; }
+  /* An open plain-language tag ("VFX:", 07b-plain-tags.js) has Tab first
+     and its own note where this one would sit: this waits until it ends. */
+  if (plainTagOpen(cellEl)) { hideUntaggedPrompt(); return; }
 
   var here = untaggedList.filter(function (i) { return i.cellEl === cellEl; });
   if (!here.length) { hideUntaggedPrompt(); return; }

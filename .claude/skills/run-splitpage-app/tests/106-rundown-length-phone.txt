@@ -1,0 +1,81 @@
+# The script's length on a phone (issue #207, Adam's call): the rundown has
+# no room for it there, so it is the last item of the header's status line —
+# small plain text at its right, after Save's status and the facts — and a
+# tap opens the same reading speed and target popover. The strip draws no
+# length label of its own, full or minimized. Nothing in the header overlaps
+# (bounding boxes), nothing is wider than the screen, and the status line's
+# items stay on their line. Its own suite: device metrics are set once.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 375 812 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 600
+eval (function(){ window.F = window.__splitpageFormats; window.T = window.__targetTest; window.R = function(el){ return el.getBoundingClientRect(); }; window.inView = function(el){var r=R(el);return r.width>0&&r.height>0&&r.left>=0&&r.top>=0&&r.right<=document.documentElement.clientWidth&&r.bottom<=innerHeight;}; window.__hdr = function(){ var bad = []; var sel = {file:'#btn-file', title:'#doc-title', save:'.save-state', length:'#length-status', search:'#btn-command', present:'#btn-present'}; var bs = []; Object.keys(sel).forEach(function(k){ var e = document.querySelector(sel[k]); var r = e && R(e); if (!r || r.width <= 0) bad.push(k + ' missing'); else bs.push({k:k, r:r}); }); Array.prototype.forEach.call(document.querySelectorAll('.doc-meta > *'), function(e, i){ var r = R(e); if (!e.hidden && r.width > 0) bs.push({k:'fact' + i, r:r}); }); var ls = R(document.querySelector('#length-status .rd-length-total')); bs.forEach(function(a, i){ if (a.r.left < -0.5 || a.r.right > innerWidth + 0.5) bad.push(a.k + ' off screen'); for (var j = i + 1; j < bs.length; j++) { var b = bs[j]; if (a.k === 'length' || b.k === 'length') { var o = Math.min(a.k === 'length' ? ls.right : a.r.right, b.k === 'length' ? ls.right : b.r.right) - Math.max(a.k === 'length' ? ls.left : a.r.left, b.k === 'length' ? ls.left : b.r.left); var v = Math.min(a.k === 'length' ? ls.bottom : a.r.bottom, b.k === 'length' ? ls.bottom : b.r.bottom) - Math.max(a.k === 'length' ? ls.top : a.r.top, b.k === 'length' ? ls.top : b.r.top); if (o > 0.5 && v > 0.5) bad.push(a.k + '/' + b.k); continue; } var o2 = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left), v2 = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top); if (o2 > 0.5 && v2 > 0.5 && !(a.k === 'title' && b.k.indexOf('fact') === 0)) bad.push(a.k + '/' + b.k); } }); if (document.documentElement.scrollWidth > innerWidth) bad.push('wider than the screen'); window.__last = bad.join(', '); return window.__last; }; return true; })()
+
+# --- in the status line, at its right ------------------------------------------
+expect inView(document.getElementById('length-status'))
+expect document.querySelector('#length-status .rd-length-total').textContent == 0:24
+expect Math.abs(R(document.querySelector('#length-status .rd-length-total')).top - R(document.querySelector('.save-btn')).top) < 4
+expect R(document.getElementById('length-status')).left >= R(document.querySelector('.doc-meta')).right - 0.5
+expect R(document.getElementById('length-status')).right <= R(document.getElementById('btn-command')).left + 1
+expect parseFloat(getComputedStyle(document.getElementById('length-status')).fontSize) <= 12
+expect document.getElementById('length-status').title.indexOf('reading speed') !== -1
+eval window.__hdr()
+expect window.__last === ''
+# the strip has none of its own, and gives its blocks the whole track
+expect getComputedStyle(document.getElementById('runtime-chip')).display == none
+expect window.__rundownTest.lens().length.fit === -1
+expect window.__rundownTest.lens().W === document.querySelector('#rundown .rundown-track').clientWidth
+shot 106-length-phone
+
+# --- a tap opens the popover, under it and on screen ------------------------------
+jsclick #length-status
+wait document.getElementById('wpm-editor')
+expect inView(document.getElementById('wpm-editor'))
+expect R(document.getElementById('wpm-editor')).top >= R(document.getElementById('length-status')).bottom
+expect parseFloat(getComputedStyle(document.getElementById('wpm-input')).fontSize) >= 16
+jsclick #wpm-editor .target-preset[data-target-seconds="60"]
+sleep 300
+expect document.getElementById('wpm-editor') === null
+expect F.state().targetSeconds === 60
+
+# --- against a target: "0:24 · 0:36 left" ------------------------------------------
+expect document.querySelector('#length-status .rd-length-delta').textContent == 0:36 left
+expect getComputedStyle(document.querySelector('#length-status .rd-length-slot .rd-length-of')).display == none
+eval window.__hdr()
+expect window.__last === ''
+# a long name and a long title still leave it whole, at the right
+eval (function(){ localStorage.setItem('splitpage-comment-author', 'Bartholomew Montgomery-Smythe'); var t = document.getElementById('doc-title'); t.value = 'The Long Road Home: Episode Four of the Documentary Series'; t.dispatchEvent(new Event('input', {bubbles:true})); t.blur(); return true; })()
+sleep 300
+eval window.__hdr()
+expect window.__last === ''
+expect inView(document.getElementById('length-status'))
+shot 106-length-phone-target
+expect T.set(10) === true
+sleep 300
+expect document.querySelector('#length-status .rd-length-delta').textContent == 0:14 over
+expect document.querySelector('#length-status .rd-length-delta').classList.contains('is-over')
+eval window.__hdr()
+expect window.__last === ''
+
+# --- minimized, the strip still has no label; the header keeps it -----------------
+eval window.__rundownTest.setMinimized(true)
+sleep 300
+expect getComputedStyle(document.getElementById('runtime-chip')).display == none
+expect inView(document.getElementById('length-status'))
+eval window.__hdr()
+expect window.__last === ''
+shot 106-length-phone-min
+eval window.__rundownTest.setMinimized(false)
+sleep 300
+
+# --- dark ---------------------------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme','dark')
+sleep 200
+shot 106-length-phone-dark
+eval document.documentElement.removeAttribute('data-theme')
+
+quit

@@ -44,10 +44,18 @@ sleep 300
 expect document.getElementById('help-modal').hidden == true
 
 # --- "Tagging reference" links into the full guide, at the tagging section --
+# A floating card since #205 (180-tagging-card has the rest of it): opening
+# it scrolls nothing, and the full-guide link sits in its foot.
+eval window.scrollTo(0, 400); window.__scrollBefore = window.scrollY
 jsclick #btn-file
 jsclick #file-menu [data-file-action="tagging-help"]
 sleep 300
 expect document.getElementById('tagging-help').hidden == false
+expect document.getElementById('tagging-help').getAttribute('role') == dialog
+expect getComputedStyle(document.getElementById('tagging-help')).position == fixed
+expect window.scrollY === window.__scrollBefore
+expect document.getElementById('tagging-help').contains(document.activeElement)
+expect document.querySelectorAll('#tagging-help .tagging-help-foot #tagging-help-fullguide a').length == 1
 jsclick #tagging-help-fullguide a
 sleep 300
 expect document.getElementById('help-modal').hidden == false

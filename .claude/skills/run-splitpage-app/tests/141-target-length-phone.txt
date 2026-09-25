@@ -1,10 +1,11 @@
-# A target length on the phone (#170): the clock chip's readout
-# ("01:35 / 02:00 0:25 left") fits the header with nothing wider than the
-# screen, the popover opens on screen below the clock with 16px fields and
-# finger-sized presets, a tap on a preset sets it, and the compact strip
-# (no ruler) keeps the line, its "Target" label and the hatching on its
-# 22px blocks. Its own suite: device metrics are set once, before the page
-# loads.
+# A target length on the phone (#170): the script's length, which on a
+# phone is the last item of the header's status line (#207, Adam's call;
+# the program clock's chip until then), reads "1:35 · 0:25 left" and fits
+# with nothing wider than the screen; the popover opens on screen below it
+# with 16px fields and finger-sized presets, a tap on a preset sets it, and
+# the compact strip (no ruler) keeps the line, its "Target" label and the
+# hatching on its 22px blocks, with no length label of its own. Its own
+# suite: device metrics are set once, before the page loads.
 #
 # Every `eval` is one physical line (the driver splits on newlines).
 
@@ -19,11 +20,16 @@ wait F.state().title === 'Target phone' && document.querySelectorAll('#rows .row
 sleep 400
 eval (function(){ window.T = window.__targetTest; window.ov = function(sel){ return document.querySelector('#rundown-overlay ' + sel); }; window.inView = function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.left>=0&&r.top>=0&&r.right<=document.documentElement.clientWidth&&r.bottom<=innerHeight;}; return true; })()
 
-# --- the box, on screen, below the clock, 16px fields, finger-sized presets ---
-jsclick #runtime-chip
+# --- the length is in the header here, not on the strip --------------------------
+expect inView(document.getElementById('length-status'))
+expect document.getElementById('runtime-chip').getBoundingClientRect().width === 0
+expect document.querySelector('#length-status .rd-length-total').textContent == 1:35
+
+# --- the box, on screen, below the length, 16px fields, finger-sized presets ---
+jsclick #length-status
 wait document.getElementById('wpm-editor')
 expect inView(document.getElementById('wpm-editor'))
-expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('runtime-chip').getBoundingClientRect().bottom
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('length-status').getBoundingClientRect().bottom
 expect parseFloat(getComputedStyle(document.getElementById('target-input')).fontSize) >= 16
 expect document.querySelector('#wpm-editor .target-preset').getBoundingClientRect().height >= 36
 expect Array.prototype.every.call(document.querySelectorAll('#wpm-editor .target-preset'), function(b){ return inView(b); })
@@ -34,21 +40,22 @@ sleep 300
 expect document.getElementById('wpm-editor') === null
 expect F.state().targetSeconds === 120
 
-# --- the clock chip's readout fits ----------------------------------------------
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
-expect inView(document.getElementById('runtime-chip'))
+# --- the length's readout fits the status line ------------------------------------
+expect document.querySelector('#length-status .rd-length-delta').textContent == 0:25 left
+expect inView(document.getElementById('length-status'))
 expect document.documentElement.scrollWidth <= innerWidth
-expect document.getElementById('runtime-chip').getBoundingClientRect().right <= document.getElementById('btn-command').getBoundingClientRect().left + 1
-# nothing under the chip: the title and its line end before it
-expect document.querySelector('.topbar-left').getBoundingClientRect().right <= document.getElementById('runtime-chip').getBoundingClientRect().left + 1
-expect document.querySelector('.doc-title').getBoundingClientRect().right <= document.getElementById('runtime-chip').getBoundingClientRect().left + 1
-# the time left goes under the total; the target itself is the strip's label
-expect document.querySelector('#program-clock-slot .program-clock-delta').getBoundingClientRect().top >= document.getElementById('runtime-total').getBoundingClientRect().bottom - 1
-expect getComputedStyle(document.querySelector('#program-clock-slot .program-clock-of')).display == none
-expect parseFloat(getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).fontSize) === 10
-# the figures stay inside the drawn chip (inset 8px in the 44px button)
-expect document.getElementById('runtime-total').getBoundingClientRect().top >= document.getElementById('runtime-chip').getBoundingClientRect().top + 8 - 1
-expect document.querySelector('#program-clock-slot .program-clock-delta').getBoundingClientRect().bottom <= document.getElementById('runtime-chip').getBoundingClientRect().bottom - 8 + 1
+expect document.getElementById('length-status').getBoundingClientRect().right <= document.getElementById('btn-command').getBoundingClientRect().left + 1
+# on the status line, right of the facts, under the title
+expect Math.abs(document.querySelector('#length-status .rd-length-total').getBoundingClientRect().top - document.querySelector('.doc-meta').getBoundingClientRect().top) < 3
+expect document.querySelector('.doc-meta').getBoundingClientRect().right <= document.getElementById('length-status').getBoundingClientRect().left + 0.5
+expect document.querySelector('#length-status .rd-length-total').getBoundingClientRect().top >= document.querySelector('.doc-title').getBoundingClientRect().bottom - 1
+# "1:35 · 0:25 left": the target itself is the strip's "Target 2:00" label
+expect getComputedStyle(document.querySelector('#length-status .rd-length-slot .rd-length-of')).display == none
+expect getComputedStyle(document.querySelector('#length-status .rd-length-delta'), '::before').content.indexOf('·') !== -1
+# small, like the status line's other items
+expect parseFloat(getComputedStyle(document.getElementById('length-status')).fontSize) <= 12
+# the strip has no length label of its own here
+expect getComputedStyle(document.getElementById('runtime-chip')).display == none
 
 # --- the compact strip: the line, the label and the hatching on its blocks ------
 expect ov('.rd-target-line') !== null
@@ -64,17 +71,18 @@ shot 141-phone-strip-light
 eval document.documentElement.setAttribute('data-theme','dark')
 expect T.set(60) === true
 sleep 300
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:35 over
+expect document.querySelector('#length-status .rd-length-delta').textContent == 0:35 over
+expect document.querySelector('#length-status .rd-length-delta').classList.contains('is-over')
 expect document.documentElement.scrollWidth <= innerWidth
 expect ov('.rd-target-hatch').classList.contains('is-over')
 shot 141-phone-strip-dark
-jsclick #runtime-chip
+jsclick #length-status
 wait document.getElementById('wpm-editor')
 expect inView(document.getElementById('wpm-editor'))
 shot 141-phone-popover-dark
 key Escape
-# the line under the title stops short of the clock chip: your name there
-# is cut short with "…" rather than drawn under the chip
-expect document.querySelector('.doc-meta').getBoundingClientRect().right <= document.querySelector('.program-clock').getBoundingClientRect().left + 0.5
+# the facts stop short of the length: your name there is cut short with
+# "…" rather than drawn under it
+expect document.querySelector('.doc-meta').getBoundingClientRect().right <= document.getElementById('length-status').getBoundingClientRect().left + 0.5
 expect (function(){var c=document.getElementById('identity-chip').getBoundingClientRect(),m=document.querySelector('.doc-meta').getBoundingClientRect();return c.width===0||c.right<=m.right+0.5;})()
 eval document.documentElement.removeAttribute('data-theme')

@@ -8,7 +8,6 @@ import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
-import { showTaggingHelp } from "./10-comments.js";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
@@ -43,8 +42,7 @@ import { STARTERS, starterById } from "./_starters.js";
    WHAT IT DOES NOT TOUCH: the document. Showing the page changes no
    state at all; the demo is still underneath, which is why "Look at the
    example script instead" (and Esc) can simply dismiss it — and why the
-   tour and the tagging cheat sheet dismiss it too, since both are about
-   that example. Only a card replaces the document, and with a NEW one: a
+   tour dismisses it too, since it is about that example. Only a card replaces the document, and with a NEW one: a
    blank is one empty scene with no tags, no comments, no b-roll; a starter
    is a copy of one of the documents in src/starters/ (_starters.js). Both
    get a fresh identity, no home and nothing to save — exactly what the
@@ -521,10 +519,10 @@ export function __init() {
       else if (action === "paste") openPasteAsNewDocument();
       else if (action === "gdoc") openGdocModal();                     /* 11-import.js */
       else if (action === "dismiss") closeNewTabPage();
-      /* The tour and the cheat sheet are both about the example script,
-         so they take the page down to show it. */
+      /* The tour is about the example script, so it takes the page down
+         to show it. (The tagging cheat sheet's link went in #209: File ▸
+         Tagging reference and the command menu open it.) */
       else if (action === "tour") { closeNewTabPage(); startTour(); }  /* 20c-help.js */
-      else if (action === "tagging-help") { closeNewTabPage(); showTaggingHelp(); } /* 10-comments.js */
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();
