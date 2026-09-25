@@ -471,7 +471,7 @@ function tagEntityHtml(item, opts) {
   var detailId = tagFieldId("detail", gear, item.key);
   /* the category's dot where no section title carries it: Gear's rows,
      and the breakdown grouped by person */
-  var dot = '<span class="tag-row-dot" aria-hidden="true"></span>';
+  var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
   return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
       (expanded ? ' is-expanded' : '') +
       (selected ? ' is-selected' : '') +
@@ -512,7 +512,7 @@ function renderProductionByScene(all) {
       '<ul class="tag-pills">' +
         items.map(function (item) {
           return '<li class="tag-pill" style="--dot:' + item.cat.color + '">' +
-            '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+            '<span class="tag-cat-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>' +
             escapeHtml(item.name) + '</li>';
         }).join("") +
       '</ul>' +
@@ -618,7 +618,7 @@ function renderProductionByShoot(entries) {
     var done = shot === g.rows.length;
     return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
-        '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+        '<span class="tag-cat-dot"' + (key ? ' data-tag-cat="' + TAG_CATEGORIES[1].id + '"' : '') + ' aria-hidden="true"></span>' +
         '<span class="shoot-name">' + escapeHtml(g.name) + '</span>' +
         '<span class="shoot-progress' + (done ? ' is-done' : '') + '">' +
           '<span class="tag-figure">' + shot + '/' + g.rows.length + '</span> shot · ' +
@@ -645,7 +645,7 @@ function renderProductionByShoot(entries) {
                 var owner = personById(item.owner);
                 var nst = tagStatus(item.status) || TAG_STATUSES[0];
                 return '<li class="shoot-need" style="--dot:' + item.cat.color + '">' +
-                  '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+                  '<span class="tag-cat-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>' +
                   '<span class="shoot-need-name">' + escapeHtml(item.name) + '</span>' +
                   '<span class="shoot-need-status">' + tagStatusLampHtml(nst.id) + escapeHtml(nst.label) + '</span>' +
                   ownerCellHtml(owner) +
@@ -745,7 +745,7 @@ function renderProductionList(entries) {
   listEl.innerHTML = groups.map(function (g) {
     return '<section class="tag-group">' +
       '<h3 class="tag-group-head" style="--dot:' + g.cat.color + '">' +
-        '<span class="tag-cat-dot" aria-hidden="true"></span>' +
+        '<span class="tag-cat-dot" data-tag-cat="' + g.cat.id + '" aria-hidden="true"></span>' +
         '<span class="tag-group-label">' + escapeHtml(g.cat.plural) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
       '</h3>' +
