@@ -291,6 +291,16 @@ again, and arm64 has not been built at all.
   deliberate — it runs against the copy on a 1.0.x machine, not a repo file
   (#75 deleted the repo one). Confirm an upgrade over an old install still
   works.
+- `installer.nsh`'s `customCheckAppRunning` no longer force-kills an app
+  that may be asking a question (#198). It waits while the app has a dialog
+  up, shows the "cannot be closed" Retry/Cancel box when the app keeps a
+  window but has no dialog (Stay/Cancel), and uses `/F` only once the app has
+  no visible window at all. Proven against a scratch copy of the packaged app
+  under another exe name, never the real `SplitpageDesktopSetup-*.exe`
+  against a real install. Still to do: run the real setup over an installed
+  copy that has a dirty tab, and answer Stay, then Retry, then Leave without
+  saving. Setup must wait the whole time and must not close the app until
+  you answer.
 
 Once a build exists, `node test/smoke.mjs` (no `--only-target`) runs the whole
 suite against each unpacked exe as well as dev, with nothing skipped (the
