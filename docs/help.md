@@ -127,6 +127,11 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   case. Tagged words are skipped; when that's the only place a word
   appears, the count says so ("No matches · 1 in a tag"). Rename those in
   Production.
+- **Tag every mention at once**: in the find bar, **Tag all as…** tags every
+  whole-word mention of the search in the Visual column as one category —
+  find "drone", pick Gear, and all of them are tagged. It shows the count
+  before it runs, leaves mentions that are already tagged, and one
+  <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes the whole batch.
 - **Zoom the script**: <kbd>Ctrl</kbd> + mouse wheel (or pinch) over the
   script, or <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd>.
   Only the script changes size, from 70 % to 200 %. Click the size note to go
@@ -296,6 +301,7 @@ category's colour.
 - **Untagged mentions**: write the name of something already tracked in
   the Visual column without tagging it, and it gets a dotted underline and a
   **Tag** offer. <kbd>Tab</kbd> takes it, <kbd>Esc</kbd> waves it off.
+  To tag them all at once, open the item and press **Tag all N mentions**.
 - **Not in script**: deleting a tag from the script keeps the item, flagged,
   until you delete it.
 - **Export** it with the panel's **CSV** button, or File ▸ Export… ▸

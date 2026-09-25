@@ -1,12 +1,16 @@
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
+import { escapeHtml } from "./02-state.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { cellOf, projection, replaceText, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
-import { registryTagHooks } from "./07-production-tags.js";
+import {
+  TAG_CATEGORIES, bulkTagRows, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
+} from "./07-production-tags.js";
 import { BROLL_MARKER_RE } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
+import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 
@@ -292,6 +296,7 @@ export function refreshFindMatches(keepIndex) {
   else if (!keepIndex || findIndex < 0) findIndex = 0;
   else if (findIndex >= findMatches.length) findIndex = findMatches.length - 1;
   updateFindCount();
+  refreshBulkTagRow();
 }
 
 function updateFindCount() {
@@ -401,6 +406,138 @@ export function replaceAll() {
   showToast("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
 }
 
+/* ---- Tag all as… (#218) ----
+
+   Every Visual-column mention of the search text tagged as one category,
+   named as the text was typed in the Find box: the rules, and what is
+   turned down, are bulkTagRows' (07-production-tags.js). The row under the
+   find bar asks first, with the count, and the tagging is one undo step
+   however many scenes it touches. */
+var bulkTagCat = null;
+
+function bulkTagNeedle() {
+  return findNeedle().trim();
+}
+
+function bulkTagRowEl() { return document.getElementById("find-tag-row"); }
+
+export function bulkTagOpen() {
+  var row = bulkTagRowEl();
+  return !!(row && !row.hidden);
+}
+
+export function closeBulkTag() {
+  var row = bulkTagRowEl();
+  if (row) row.hidden = true;
+  var btn = document.getElementById("find-tag");
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+/* Why nothing can be tagged, in words, or "" when something can. */
+function bulkTagRefusal(needle, plan) {
+  if (!needle) return "Type the words to tag in the Find box first.";
+  if (needle.length > 80) return "That is too long to be a tag's name.";
+  if (plan.hits) return "";
+  if (plan.inTags) return "Every mention of \u201c" + needle + "\u201d in the Visual column is tagged already.";
+  if (plan.skipped) return "No mention of \u201c" + needle + "\u201d in the Visual column can be tagged as it stands.";
+  return "No whole-word mention of \u201c" + needle + "\u201d in the Visual column.";
+}
+
+function renderBulkTagRow() {
+  var needle = bulkTagNeedle();
+  var plan = bulkTagRows(S.state ? S.state.rows : [], needle, bulkTagCat, needle, S.findMatchCase, true);
+  var why = bulkTagRefusal(needle, plan);
+  var ask = document.getElementById("find-tag-ask");
+  var go = document.getElementById("find-tag-go");
+  var cat = tagCategory(bulkTagCat) || TAG_CATEGORIES[0];
+  document.getElementById("find-tag-cats").innerHTML = TAG_CATEGORIES.map(function (c) {
+    var on = c.id === cat.id;
+    return '<button type="button" class="tag-cat-btn' + (on ? ' is-active' : '') +
+      '" style="--dot:' + c.color + '" data-tag-cat="' + c.id + '" role="radio" aria-checked="' +
+      (on ? 'true' : 'false') + '">' +
+      '<span class="tag-cat-dot" aria-hidden="true"></span>' + escapeHtml(c.label) + '</button>';
+  }).join("");
+  if (why) {
+    ask.textContent = why;
+  } else {
+    var not = [];
+    if (plan.inTags) not.push(plan.inTags + " already tagged");
+    if (plan.skipped) not.push(plan.skipped + " can\u2019t be tagged");
+    ask.innerHTML = "Tag " + plan.hits + " mention" + (plan.hits === 1 ? "" : "s") + " of <em>" +
+      escapeHtml(needle) + "</em> as " + escapeHtml(cat.label) + "?" +
+      (not.length ? ' <span class="find-tag-note">(' + escapeHtml(not.join(" \u00b7 ")) + ")</span>" : "");
+  }
+  go.disabled = !!why;
+  return plan;
+}
+
+/* A category to start on: the item's own when the words are one already,
+   else the last one chosen, else Prop. */
+function defaultBulkTagCat(needle) {
+  var key = normalizeTagName(needle);
+  var tags = (S.state && S.state.productionTags) || [];
+  for (var i = 0; i < tags.length; i++) {
+    if (normalizeTagName(tags[i].name) === key && tagCategory(tags[i].cat)) return tags[i].cat;
+  }
+  return bulkTagCat || TAG_CATEGORIES[0].id;
+}
+
+export function openBulkTag() {
+  if (reviewBlocked()) return;
+  if (!S.state) return;
+  bulkTagCat = defaultBulkTagCat(bulkTagNeedle());
+  var row = bulkTagRowEl();
+  row.hidden = false;
+  document.getElementById("find-tag").setAttribute("aria-expanded", "true");
+  renderBulkTagRow();
+  var active = row.querySelector(".tag-cat-btn.is-active");
+  if (active) active.focus();
+}
+
+export function toggleBulkTag() {
+  if (bulkTagOpen()) closeBulkTag();
+  else openBulkTag();
+}
+
+export function pickBulkTagCat(cat) {
+  if (!tagCategory(cat)) return;
+  bulkTagCat = cat;
+  renderBulkTagRow();
+  var btn = document.querySelector('#find-tag-cats .tag-cat-btn[data-tag-cat="' + cssAttr(cat) + '"]');
+  if (btn) btn.focus();
+}
+
+/* The find box changed: the question follows it while it is open. */
+function refreshBulkTagRow() {
+  if (bulkTagOpen()) renderBulkTagRow();
+}
+
+export function runBulkTag() {
+  if (reviewBlocked()) return;
+  if (!S.state) return;
+  var needle = bulkTagNeedle();
+  var cat = tagCategory(bulkTagCat) || TAG_CATEGORIES[0];
+  var plan = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, true);
+  var why = bulkTagRefusal(needle, plan);
+  if (why) { showToast(why, "warn"); return; }
+  /* One undo entry: whatever was typed before is recorded first, and the
+     entry is closed after, as the tag composer's "every mention" does. */
+  breakUndoCoalescing();
+  var done = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, false);
+  if (!done.hits) { showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn"); return; }
+  registerProductionTag(cat.id, needle);
+  markDirty();
+  breakUndoCoalescing();
+  render();
+  closeBulkTag();
+  refreshFindMatches(false);
+  queueAutoSave();
+  var note = "";
+  if (done.inTags) note += " \u00b7 " + done.inTags + " already tagged";
+  if (done.skipped) note += " \u00b7 " + done.skipped + " skipped";
+  showToast("Tagged " + done.hits + " as " + cat.label + note, "ok");
+}
+
 export function openFindBar() {
   findOpen = true;
   document.getElementById("findbar").hidden = false;
@@ -420,6 +557,7 @@ export function closeFindBar() {
   findMatches = [];
   findIndex = -1;
   findInTags = 0;
+  closeBulkTag();
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
