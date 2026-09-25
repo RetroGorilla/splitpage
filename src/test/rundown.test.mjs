@@ -31,6 +31,7 @@ import {
   rundownKnots,
   rundownLens,
   rundownLensFollow,
+  LENS_SLOW_PX_MS,
   rundownLensRecenter,
   rundownLengthPlace,
   rundownLensSlots,
@@ -470,7 +471,9 @@ test("#199: a pointer that stops on a sliver keeps it, and the lens comes to res
 test("travelling: moving fast, the lens goes where the pointer goes, end to end", () => {
   const { U, X } = layout(longScript(), 1400);
   const moves = [];
-  for (let x = 20; x <= 1400; x += 20) moves.push([x, 16]);   /* 20px a frame */
+  /* 20px every 6ms, ~3px/ms: a flick, fast enough to travel even over this
+     script's thinnest scenes (the travel speed scales with magnification) */
+  for (let x = 20; x <= 1400; x += 20) moves.push([x, 6]);
   const frames = drive(U, X, 0, moves);
   for (const f of frames.slice(1)) {
     /* a fast move puts the focus on the to-scale point under the pointer;
@@ -480,7 +483,7 @@ test("travelling: moving fast, the lens goes where the pointer goes, end to end"
   }
   /* the move alone, with no frame after it, is exactly the plain magnifier */
   const f1 = frames[20];
-  const moved = rundownLensFollow(U, X, f1.shown, f1.focus, f1.anchor, f1.x + 20, 20, 16);
+  const moved = rundownLensFollow(U, X, f1.shown, f1.focus, f1.anchor, f1.x + 20, 20, 6);
   assert.ok(Math.abs(moved.focus - knotMap(X, U, f1.x + 20)) < 1e-6);
   assert.ok(Math.abs(moved.anchor - (f1.x + 20)) < 1e-6);
   /* and it reaches both ends: the last scene is under a pointer near the right edge */
@@ -588,4 +591,25 @@ test("from scene 100 the number needs room for three digits", () => {
   assert.equal(rundownKeepLabels(rest, 24, false).number, false);
   assert.equal(rundownKeepLabels(rest, 25, false).number, true);
   assert.equal(rundownKeepLabels({ index: 98, showNumber: true }, 18, false).number, true);
+});
+
+/* A long script (Adam: "with a ton of scenes the rundown won't stay
+   still"): the speed that means travelling scales with the magnification,
+   so a moderate hand speed over 2-3px scenes still aims. */
+test("over dense scenes a moderate speed aims; over wide ones it travels", () => {
+  const dense = [0];
+  for (let i = 0; i < 500; i++) dense.push(dense[dense.length - 1] + 2.7);
+  dense.push(1360);
+  const sparse = [0];
+  for (let i = 0; i < 10; i++) sparse.push(sparse[sparse.length - 1] + 120);
+  sparse.push(1360);
+  const speed = 0.3, dt = 16, dx = speed * dt;
+  const d = rundownLensFollow(dense, dense, dense, 675, 675, 675 + dx, dx, dt);
+  assert.equal(d.focus, 675);
+  const s = rundownLensFollow(sparse, sparse, sparse, 600, 600, 600 + dx, dx, dt);
+  assert.ok(s.focus > 600, "travels a little over wide scenes");
+  // a flick still travels over the dense ones
+  const f = rundownLensFollow(dense, dense, dense, 675, 675, 675 + 48, 48, dt);
+  assert.ok(f.focus > 700);
+  assert.ok(LENS_SLOW_PX_MS > 0);
 });

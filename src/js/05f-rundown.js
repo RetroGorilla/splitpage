@@ -453,10 +453,29 @@ function anchorFor(slots, focus, u, x, opts) {
   return knotMap(slots, rundownLens(slots, focus, (lo + hi) / 2, opts), focus);
 }
 
+/* Aiming and travelling are told apart by speed, and what counts as fast
+   depends on how much the lens magnifies (Adam: "with a ton of scenes the
+   rundown won't stay still"). In a 500-scene script a scene is 2-3px at
+   rest and ~96px under the lens, so an ordinary hand correction read as
+   travelling and raced 16-27 scenes past the pointer per 100px moved. Both
+   speeds are scaled by the square root of the magnification at the focus
+   (LENS_MIN_PX over that scene's slot width, capped at LENS_SPEED_MAG_MAX):
+   a short script is unchanged, and a long one still travels on a flick. */
+export var LENS_SPEED_MAG_MAX = 64;
+
+function lensSpeedScale(slots, focus, opts) {
+  var minW = opts && opts.minWidth > 0 ? opts.minWidth : LENS_MIN_PX;
+  var j = 0;
+  while (j < slots.length - 2 && slots[j + 1] <= focus) j++;
+  var ws = Math.max(0.5, slots[j + 1] - slots[j]);
+  return Math.sqrt(clamp(minW / ws, 1, LENS_SPEED_MAG_MAX));
+}
+
 export function rundownLensFollow(slots, knots, shown, focus, anchor, x, dx, dtMs, opts) {
   if (!dx) return { focus: focus, anchor: anchor };
   var speed = dtMs > 0 ? Math.abs(dx) / dtMs : Infinity;
-  var g = clamp((speed - LENS_SLOW_PX_MS) / (LENS_FAST_PX_MS - LENS_SLOW_PX_MS), 0, 1);
+  var k = lensSpeedScale(slots, focus, opts);
+  var g = clamp((speed - LENS_SLOW_PX_MS * k) / ((LENS_FAST_PX_MS - LENS_SLOW_PX_MS) * k), 0, 1);
   var slowAnchor = anchor;
   if (g < 1) slowAnchor = anchorFor(slots, focus, knotMap(shown, slots, x), x, opts);
   var natural = knotMap(knots, slots, x);
