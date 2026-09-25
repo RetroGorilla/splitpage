@@ -1,0 +1,67 @@
+# The tagging reference at phone width (#205): a bottom sheet the width of
+# the screen, sitting on the bottom bar rather than under it, never taller
+# than 60% of the screen (its body scrolls), with nothing sticking out
+# sideways. Esc still closes it; the example tags still wear the script's
+# colours. 180 is the desktop card.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 375 812 mobile
+goto /index.html
+sleep 800
+wait document.querySelectorAll('#rows .row').length > 0
+expect innerWidth == 375
+eval window.__card = function(){ return document.getElementById('tagging-help'); }; window.__rect = function(){ return window.__card().getBoundingClientRect(); }; true
+
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tagging-help"]
+sleep 500
+expect window.__card().hidden == false
+expect window.__card().contains(document.activeElement)
+
+# --- a bottom sheet: edge to edge, on the bottom bar, top corners rounded -------
+expect Math.round(window.__rect().left) == 0
+expect Math.abs(window.__rect().right - document.documentElement.clientWidth) <= 1
+expect getComputedStyle(document.getElementById('phone-bar')).display !== 'none'
+expect Math.abs(window.__rect().bottom - document.getElementById('phone-bar').getBoundingClientRect().top) <= 1
+expect window.__rect().height <= innerHeight * 0.6 + 1
+expect window.__rect().top > 0
+expect getComputedStyle(window.__card()).borderTopLeftRadius == 8px
+expect getComputedStyle(window.__card()).borderBottomLeftRadius == 0px
+expect document.documentElement.scrollWidth <= document.documentElement.clientWidth
+# the close button and every example on screen, within the sheet's width
+expect (function(){ var b = document.getElementById('tagging-help-dismiss').getBoundingClientRect(); return b.width >= 32 && b.right <= innerWidth && b.top >= window.__rect().top; })()
+expect Array.prototype.every.call(document.querySelectorAll('#tagging-help .tag-sample'), function(s){ var r = s.getBoundingClientRect(); return r.width > 0 && r.right <= window.__rect().right; })
+# its body scrolls inside the sheet when it is taller than the room
+expect getComputedStyle(document.querySelector('#tagging-help .tagging-help-body')).overflowY == auto
+shot 181-card-phone-light
+
+# --- the chips are drawn by the script's rule (a tag typed here to compare) -----
+eval document.getElementById('tagging-help-dismiss').click(); true
+caret #rows .row .visual-cell .cell-editable
+press  the [kettle] and the {harbour}
+sleep 500
+expect document.querySelectorAll('#rows .tag-anchor').length == 2
+eval document.activeElement.blur(); true
+jsclick #btn-file
+jsclick #file-menu [data-file-action="tagging-help"]
+sleep 400
+expect ['prop','location'].every(function(cat){ var a = getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="' + cat + '"]')); var s = getComputedStyle(document.querySelector('#tagging-help .tag-sample[data-tag-cat="' + cat + '"]')); return a.backgroundColor === s.backgroundColor && a.boxShadow === s.boxShadow; })
+expect document.querySelectorAll('.tag-anchor').length == 2
+
+# --- dark ------------------------------------------------------------------------
+eval document.documentElement.setAttribute('data-theme', 'dark'); true
+sleep 300
+expect ['prop','location'].every(function(cat){ var a = getComputedStyle(document.querySelector('#rows .tag-anchor[data-tag-cat="' + cat + '"]')); var s = getComputedStyle(document.querySelector('#tagging-help .tag-sample[data-tag-cat="' + cat + '"]')); return a.backgroundColor === s.backgroundColor && a.boxShadow === s.boxShadow; })
+shot 181-card-phone-dark
+eval document.documentElement.setAttribute('data-theme', 'light'); true
+
+# --- Esc closes it while it has the focus -----------------------------------------
+eval window.__card().focus(); true
+key Escape
+sleep 200
+expect window.__card().hidden == true
+expect localStorage.getItem('splitpage-tagging-help-dismissed') == 1
+
+quit

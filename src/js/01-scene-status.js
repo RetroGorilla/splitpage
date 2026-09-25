@@ -51,7 +51,7 @@ export var DEFAULT_WPM = 150;
    override, not a minimum. It is the row key `lengthSeconds`, a whole
    number of seconds, absent when the scene uses the estimate (every file
    from before #179 reads that way). Everything that uses a scene's length
-   reads rowSeconds(): the gutter's start times, the program clock, the
+   reads rowSeconds(): the gutter's start times, the script's length, the
    rundown strip, the panels, the CSV and Present's clock. Present's scroll
    speed does not — that is words and reading speed, as before. */
 export var SCENE_LENGTH_MAX = 24 * 3600;
@@ -157,15 +157,16 @@ export function targetLengthOf(s) {
   return v === undefined ? null : v;
 }
 
-/* What the program clock shows against a target: the target as a
-   timecode ("02:00"), and how far the script is from it as a length
-   ("0:25") — left while it is shorter or exactly on it, over once it is
-   longer. Worked out on the whole seconds the clock prints, so the two
-   figures always agree with the difference. Pure. */
+/* What the script's length shows against a target (#170, #207): the
+   target ("2:00"), and how far the script is from it ("0:25") — left while
+   it is shorter or exactly on it, over once it is longer. Lengths, not
+   timecodes: since #207 the script's length is a label at the end of the
+   rundown, not a clock. Worked out on the whole seconds the label prints,
+   so the two figures always agree with the difference. Pure. */
 export function targetClock(total, target) {
   var diff = Math.round(target) - Math.max(0, Math.round(total));
   return {
-    target: formatTimecode(target),
+    target: formatDuration(target),
     delta: formatDuration(Math.abs(diff)),
     over: diff < 0
   };
@@ -177,9 +178,9 @@ export function formatDuration(sec) {
   return h ? (h + ":" + pad2(m) + ":" + pad2(s)) : (m + ":" + pad2(s));
 }
 
-/* A point in the programme rather than a length (#169): the program clock
-   and each scene's start, "01:35" and "00:31" — minutes always two digits,
-   the way a timecode reads. A length (a scene's read time) stays
+/* A point in the programme rather than a length (#169): each scene's
+   start, "00:31" — minutes always two digits, the way a timecode reads. A
+   length (a scene's read time, and since #207 the script's) stays
    formatDuration's "0:19". */
 export function formatTimecode(sec) {
   var whole = Math.max(0, Math.round(sec));
@@ -187,52 +188,59 @@ export function formatTimecode(sec) {
   return (h ? h + ":" : "") + pad2(m) + ":" + pad2(s);
 }
 
-var CLOCK_TITLE = "Estimated read time for the Audio column — click to set your reading speed or a target length";
+var LENGTH_TITLE = "The script's read time, from the Audio column — click to set your reading speed or a target length";
+
+/* The script's length (#207): a label at the end of the rundown strip
+   (#runtime-chip, 05f-rundown.js places it) and, at phone widths, an item
+   in the header's status line (#length-status) — the same figures in both,
+   and a click on either opens the reading speed and target popover
+   (promptForWpm, 03-sync.js). It used to be the program clock in the
+   middle of the header (#169). */
+function paintLength(el, totalHtml, slotHtml, title) {
+  if (!el) return;
+  var totalEl = el.querySelector(".rd-length-total");
+  var slotEl = el.querySelector(".rd-length-slot");
+  if (totalEl && totalEl.innerHTML !== totalHtml) totalEl.innerHTML = totalHtml;
+  if (slotEl && slotEl.innerHTML !== slotHtml) slotEl.innerHTML = slotHtml;
+  if (el.title !== title) el.title = title;
+}
 
 export function updateScriptStats() {
   if (!S.state) return;
-  var totalEl = document.getElementById("runtime-total");
   var target = targetLengthOf(S.state);
-  if (totalEl) {
-    var total = totalSeconds();
-    var remaining = hideShotScenes ? S.state.rows.reduce(function (n, r) {
-      return n + (r.status === "shot" ? 0 : rowSeconds(r));
-    }, 0) : 0;
-    var slotHtml = "";
-    var title = CLOCK_TITLE;
-    if (target) {
-      /* A target (#170) is measured against the whole script, shot scenes
-         and all — it is the programme's length, not the shoot's. So with
-         one set the clock is always "01:35 / 02:00" and how far off that
-         is; what is left to record, with shot scenes hidden, moves to the
-         tooltip. */
-      var clockText = formatTimecode(total);
-      if (totalEl.textContent !== clockText) totalEl.textContent = clockText;
-      var tc = targetClock(total, target);
-      /* digits, colons and fixed words only — nothing here needs escaping */
-      slotHtml = '<span class="program-clock-of"> / ' + tc.target + '</span>' +
-        '<span class="program-clock-delta' + (tc.over ? ' is-over' : '') + '">' +
-        tc.delta + (tc.over ? ' over' : ' left') + '</span>';
-      title = "Read time " + clockText + " against a " + formatDuration(target) + " target" +
-        (hideShotScenes ? " (" + formatTimecode(remaining) + " still to shoot)" : "") +
-        " — click to change the target or your reading speed";
-    } else if (hideShotScenes) {
-      /* With shot scenes hidden, the number that matters is what's left to
-         record — but the total is still worth keeping in view, so both show:
-         what is left as the clock, the whole after it, quieter. */
-      /* digits and colons only — nothing here needs escaping */
-      var clockHtml = formatTimecode(remaining) +
-        '<span class="program-clock-of"> / ' + formatTimecode(total) + '</span>';
-      if (totalEl.innerHTML !== clockHtml) totalEl.innerHTML = clockHtml;
-    } else {
-      var clock = formatTimecode(total);
-      if (totalEl.textContent !== clock) totalEl.textContent = clock;
-    }
-    var slot = document.getElementById("program-clock-slot");
-    if (slot && slot.innerHTML !== slotHtml) slot.innerHTML = slotHtml;
-    var chipEl = document.getElementById("runtime-chip");
-    if (chipEl && chipEl.title !== title) chipEl.title = title;
+  var total = totalSeconds();
+  var remaining = hideShotScenes ? S.state.rows.reduce(function (n, r) {
+    return n + (r.status === "shot" ? 0 : rowSeconds(r));
+  }, 0) : 0;
+  var totalText = formatDuration(total);
+  /* digits, colons and fixed words only — nothing here needs escaping */
+  var totalHtml = totalText;
+  var slotHtml = "";
+  var title = LENGTH_TITLE;
+  if (target) {
+    /* A target (#170) is measured against the whole script, shot scenes
+       and all — it is the programme's length, not the shoot's. So with one
+       set the label is always "1:35 / 2:00 · 0:25 left"; what is left to
+       record, with shot scenes hidden, moves to the tooltip. The " · "
+       before the delta is drawn by the CSS, so it is not in its text. */
+    var tc = targetClock(total, target);
+    slotHtml = '<span class="rd-length-of"> / ' + tc.target + '</span>' +
+      '<span class="rd-length-delta' + (tc.over ? ' is-over' : '') + '">' +
+      tc.delta + (tc.over ? ' over' : ' left') + '</span>';
+    title = "Read time " + totalText + " against a " + tc.target + " target, " +
+      tc.delta + (tc.over ? " over" : " left") +
+      (hideShotScenes ? " (" + formatDuration(remaining) + " still to shoot)" : "") +
+      " — click to change the target or your reading speed";
+  } else if (hideShotScenes) {
+    /* With shot scenes hidden, the number that matters is what's left to
+       record — but the total is still worth keeping in view, so both show:
+       what is left, then the whole, quieter. */
+    totalHtml = formatDuration(remaining) + '<span class="rd-length-of"> / ' + totalText + '</span>';
+    title = formatDuration(remaining) + " still to shoot of " + totalText +
+      " — click to set your reading speed or a target length";
   }
+  paintLength(document.getElementById("runtime-chip"), totalHtml, slotHtml, title);
+  paintLength(document.getElementById("length-status"), totalHtml, slotHtml, title);
   /* Everything else that moves with the read times moves here too: each
      scene's start and length in its gutter and rail (paintRowTimes,
      05-render.js) and the rundown strip (05f-rundown.js), which spans the

@@ -1,0 +1,255 @@
+# Every kind of edit is saved by autosave (#208), part 2: what is edited
+# outside the script's two columns — the Production and Gear panels, the
+# b-roll list, comments, and a scene's gallery. Same harness as
+# 185-autosave-every-edit.txt: a fake file handle over a .splitpage, a pause
+# of a few milliseconds, and for each edit Unsaved changes → Saving… →
+# Saved ("Saved just now"), the edit in what was written, and a moment later
+# nothing left unsaved under the "Saved" (__same).
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Panels", "rows": [{"id": "r1", "visualText": "Host by the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>.<br><span class=\"broll-key\" data-broll-id=\"bs1\" contenteditable=\"false\">B-roll:</span> steam off the kettle", "audioText": "Every morning the kettle sings.", "status": "todo"}, {"id": "r2", "visualText": "Close on the <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\">tripod</span>", "audioText": "Mara has mended nets for thirty years.", "status": "todo"}, {"id": "r3", "visualText": "Harbour wide", "audioText": "And when the light goes.", "status": "todo"}], "people": [{"id": "p1", "name": "Jordan Sato"}], "productionTags": [{"cat": "prop", "name": "Kettle", "status": "needed"}, {"cat": "gear", "name": "Tripod", "status": "needed"}, {"cat": "prop", "name": "Drone", "status": "needed"}], "brollShots": [{"id": "bs1", "name": "steam off the kettle", "status": "unshot"}, {"id": "bs2", "name": "Crowd at the auction", "status": "unshot", "origin": "list"}], "comments": []}; window.__open = JSON.stringify(doc); window.__written = 0; window.__h = {name: 'panels.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ window.__written++; return {write: async function(b){ window.__body = typeof b === 'string' ? b : await new Response(b).text(); }, close: async function(){ window.__h._mtime = Date.now(); }}; }, getFile: async function(){ return new File([window.__open], 'panels.splitpage', {lastModified: window.__h._mtime}); }}; return F.openFile(new File([window.__open], 'panels.splitpage', {lastModified: window.__h._mtime}), window.__h); })()
+wait F.docFile().kind === 'splitpage' && document.querySelector('#rows .row[data-id="r3"]')
+expect A.target() == file
+eval (function(){ A.timing().idle = 40; A.timing().max = 400; window.__log = []; new MutationObserver(function(ms){ ms.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 3) window.__log.push(n.data); }); }); }).observe(document.getElementById('save-status'), {childList: true}); window.__st = function(){ return document.getElementById('save-status').textContent; }; window.__words = function(){ return document.getElementById('btn-save').getAttribute('data-status'); }; window.__arm = function(){ window.__log = []; window.__w0 = window.__written; return true; }; window.__cycled = function(){ var l = window.__log, a = l.indexOf('Unsaved changes'), b = a === -1 ? -1 : l.indexOf('Saving…', a + 1), c = b === -1 ? -1 : l.indexOf('Saved', b + 1); return c !== -1 && window.__written > window.__w0 && window.__st() === 'Saved' && window.__words() === 'Saved just now'; }; window.__doc = function(){ return JSON.parse(window.__body); }; window.__row = function(id){ return window.__doc().rows.filter(function(r){ return r.id === id; })[0]; }; window.__tag = function(name){ return window.__doc().productionTags.filter(function(t){ return t.name === name; })[0]; }; window.__shot = function(id){ return window.__doc().brollShots.filter(function(r){ return r.id === id; })[0]; }; window.__cmt = function(){ return window.__doc().comments[0]; }; window.__same = function(){ return window.__st() === 'Saved' && window.__body === F.buildSplitpage(F.state()); }; window.entity = function(list, name){ return Array.prototype.filter.call(document.querySelectorAll(list + ' .tag-entity'), function(e){ var n = e.querySelector('.tag-entity-name'); return n && n.textContent === name; })[0]; }; window.keyOf = function(list, name){ return entity(list, name).getAttribute('data-key'); }; window.png = function(w, h, color){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL('image/png'); }; window.bytesOf = function(u){ var bin = atob(u.slice(u.indexOf(',') + 1)); var b = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i); return b; }; window.pickPicture = function(name, color){ var inp = document.getElementById('file-input'); var dt = new DataTransfer(); dt.items.add(new File([bytesOf(png(40, 30, color))], name, {type: 'image/png'})); inp.files = dt.files; inp.dispatchEvent(new Event('change', {bubbles: true})); return true; }; window.pics = function(id){ var r = F.state().rows.filter(function(x){ return x.id === id; })[0]; return (r.imageRef ? 1 : 0) + (r.moreImages || []).length; }; return true; })()
+
+# ===== the Production panel =====================================================
+click #btn-production
+wait entity('#production-list', 'Kettle')
+
+# --- an item's status, from its pill ----------------------------------------------
+eval __arm()
+eval (function(){ entity('#production-list', 'Kettle').querySelector('[data-action="tag-status-cycle"]').click(); return true; })()
+wait __cycled()
+expect __tag('Kettle').status !== 'needed'
+sleep 300
+expect __same()
+
+# --- opened: the status set from its lamps, the owner, a note --------------------------
+eval (function(){ var k = keyOf('#production-list', 'Kettle'); document.querySelector('#production-list [data-action="tag-expand"][data-key="' + k + '"]').click(); return true; })()
+wait document.querySelector('#production-list .tag-notes-input')
+eval __arm()
+eval (function(){ document.querySelector('#production-list .tag-status-choice[data-status="have"]').click(); return true; })()
+wait __cycled()
+expect __tag('Kettle').status === 'have'
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ var s = document.querySelector('#production-list .tag-owner-select'); s.value = 'p1'; s.dispatchEvent(new Event('change', {bubbles: true})); return true; })()
+wait __cycled()
+expect __tag('Kettle').owner === 'p1'
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ var t = document.querySelector('#production-list .tag-notes-input'); t.value = 'Borrow the red one'; t.dispatchEvent(new Event('input', {bubbles: true})); t.dispatchEvent(new FocusEvent('focusout', {bubbles: true})); return true; })()
+wait __cycled()
+expect __tag('Kettle').notes === 'Borrow the red one'
+sleep 300
+expect __same()
+
+# --- a new person, from the item ------------------------------------------------------
+eval __arm()
+eval (function(){ document.querySelector('#production-list [data-action="tag-person-new"]').click(); var i = document.querySelector('#production-list .tag-person-input'); i.value = 'Ada Brenner'; document.querySelector('#production-list [data-action="tag-person-save"]').click(); return true; })()
+wait __cycled()
+expect __doc().people.some(function(p){ return p.name === 'Ada Brenner'; })
+sleep 300
+expect __same()
+
+# --- renamed --------------------------------------------------------------------------
+eval __arm()
+eval (function(){ document.querySelector('#production-list [data-action="tag-rename"]').click(); var i = document.querySelector('#production-list .tag-rename-input'); i.value = 'Copper kettle'; document.querySelector('#production-list [data-action="tag-rename-save"]').click(); return true; })()
+wait __cycled()
+expect !!__tag('Copper kettle')
+expect __row('r1').visualText.indexOf('data-tag-name="Copper kettle"') !== -1
+sleep 300
+expect __same()
+
+# --- an item not in the script, deleted from the list ------------------------------------
+eval __arm()
+eval (function(){ var k = keyOf('#production-list', 'Drone'); document.querySelector('#production-list [data-action="tag-expand"][data-key="' + k + '"]').click(); var sel = '#production-list [data-action="tag-delete"][data-key="' + k + '"]'; document.querySelector(sel).click(); document.querySelector(sel).click(); return true; })()
+wait __cycled()
+expect !__tag('Drone')
+sleep 300
+expect __same()
+
+# ===== the Gear panel ==========================================================
+jsclick #btn-gear
+wait entity('#gear-list', 'Tripod')
+eval __arm()
+eval (function(){ var box = document.getElementById('gear-quickadd-input'); box.value = 'C-stand'; document.getElementById('gear-quickadd-save').click(); return true; })()
+wait __cycled()
+expect !!__tag('C-stand') && __tag('C-stand').cat === 'gear'
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ var k = keyOf('#gear-list', 'Tripod'); document.querySelector('#gear-list [data-action="tag-expand"][data-key="' + k + '"]').click(); document.querySelector('#gear-list .tag-menu-item[data-action="tag-status-set"][data-status="have"]').click(); return true; })()
+wait __cycled()
+expect __tag('Tripod').status === 'have'
+sleep 300
+expect __same()
+
+# ===== the b-roll list ==========================================================
+jsclick #btn-broll
+wait document.querySelectorAll('#broll-list .broll-row').length === 2
+
+# --- the tick: shot ---------------------------------------------------------------
+eval __arm()
+click #broll-list .broll-row[data-id="bs1"] .broll-check
+wait __cycled()
+expect __shot('bs1').status === 'shot'
+sleep 300
+expect __same()
+
+# --- opened: a location, a note ----------------------------------------------------------
+click #broll-list .broll-row-main[data-id="bs2"]
+wait !!document.querySelector('#broll-list .broll-card[data-id="bs2"]')
+eval __arm()
+click #broll-list .broll-card [data-action="broll-loc-edit"]
+wait document.activeElement && document.activeElement.classList.contains('broll-loc-input')
+eval (function(){ document.activeElement.select(); return true; })()
+type Fish market
+key Enter
+wait __cycled()
+expect __shot('bs2').location === 'Fish market'
+sleep 300
+expect __same()
+eval __arm()
+caret #broll-list .broll-card .broll-notes-input
+eval (function(){ var t = document.querySelector('#broll-list .broll-card .broll-notes-input'); t.value = 'Ask the harbourmaster.'; return true; })()
+click #broll-summary .broll-summary-line
+wait __cycled()
+expect __shot('bs2').notes === 'Ask the harbourmaster.'
+sleep 300
+expect __same()
+
+# --- renamed from its menu: the script's line changes with it --------------------------------
+jsclick #broll-list .broll-row-main[data-id="bs1"]
+wait !!document.querySelector('#broll-list .broll-card[data-id="bs1"]')
+eval __arm()
+eval (function(){ document.querySelector('#broll-list .broll-card [data-action="broll-menu"]').click(); document.querySelector('#broll-list .broll-card [data-action="broll-rename"]').click(); var i = document.querySelector('#broll-list .broll-rename-input'); i.value = 'kettle steam, close'; document.querySelector('#broll-list [data-action="broll-rename-save"]').click(); return true; })()
+wait __cycled()
+expect __row('r1').visualText.indexOf('kettle steam, close') !== -1
+sleep 300
+expect __same()
+
+# --- deleted from the list -------------------------------------------------------------------
+eval __arm()
+eval (function(){ document.querySelector('#broll-list .broll-row-main[data-id="bs2"]').click(); document.querySelector('#broll-list .broll-card [data-action="broll-menu"]').click(); var sel = '#broll-list .broll-card [data-action="broll-delete"]'; document.querySelector(sel).click(); if (document.querySelector(sel)) document.querySelector(sel).click(); return true; })()
+wait __cycled()
+expect !__shot('bs2')
+sleep 300
+expect __same()
+
+# --- a b-roll line typed into the script: its record, saved with it ----------------------------
+eval __arm()
+caret #rows .row[data-id="r3"] .visual-cell .cell-editable
+key Enter
+press B-roll: gulls over the quay
+eval document.activeElement.blur()
+wait __cycled()
+wait __doc().brollShots.some(function(r){ return r.name === 'gulls over the quay'; })
+sleep 600
+expect __same()
+
+# ===== comments ================================================================
+jsclick #btn-comments
+eval __arm()
+eval (function(){ var c = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable'); c.focus(); var t = c.firstChild; var r = document.createRange(); r.setStart(t, 0); r.setEnd(t, 4); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return t.nodeValue.slice(0, 4); })()
+sleep 200
+jsclick #rows .row[data-id="r2"] .audio-cell .mini-toolbar [data-cmd="comment"]
+wait document.getElementById('comment-body-editable')
+eval (function(){ var b = document.getElementById('comment-body-editable'); b.focus(); document.execCommand('insertText', false, 'Is it thirty?'); return b.textContent; })()
+jsclick #comment-post
+wait __cycled()
+wait __doc().comments.length === 1
+expect __cmt().body.indexOf('Is it thirty?') !== -1
+expect __row('r2').audioText.indexOf('cmt-anchor') !== -1
+sleep 300
+expect __same()
+eval window.__cid = F.state().comments[0].id
+
+# --- a reply ----------------------------------------------------------------------------------
+eval __arm()
+eval (function(){ document.querySelector('[data-action="toggle-reply"][data-id="' + __cid + '"]').click(); var box = document.querySelector('.reply-composer .cell-editable'); box.focus(); document.execCommand('insertText', false, 'Thirty-one.'); document.querySelector('[data-action="reply-post"][data-id="' + __cid + '"]').click(); return true; })()
+wait __cycled()
+expect __cmt().replies.length === 1
+sleep 300
+expect __same()
+
+# --- assigned, resolved -------------------------------------------------------------------------
+eval __arm()
+eval (function(){ var s = document.querySelector('.comment-assignee-select[data-id="' + __cid + '"]'); s.value = 'Jordan Sato'; s.dispatchEvent(new Event('change', {bubbles: true})); return s.value; })()
+wait __cycled()
+expect __cmt().assignee === 'Jordan Sato'
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ document.querySelector('[data-action="toggle-resolve"][data-id="' + __cid + '"]').click(); return true; })()
+wait __cycled()
+expect __cmt().resolved === true
+sleep 300
+expect __same()
+
+# --- deleted (from the All filter: a resolved thread leaves Open) -----------------------------------
+jsclick #comments-filter-seg [data-filter="all"]
+wait document.querySelector('[data-action="comment-menu"][data-id="' + __cid + '"]')
+eval __arm()
+eval (function(){ var sel = '[data-action="delete-comment"][data-id="' + __cid + '"]'; document.querySelector('[data-action="comment-menu"][data-id="' + __cid + '"]').click(); document.querySelector(sel).click(); if (document.querySelector(sel)) document.querySelector(sel).click(); return true; })()
+wait __cycled()
+expect __doc().comments.length === 0
+sleep 300
+expect __same()
+
+# ===== a scene's gallery (#135) ================================================
+# --- a picture added from the file picker --------------------------------------------------
+eval __arm()
+eval (function(){ window.S_ = 'r3'; document.querySelector('#rows .row[data-id="r3"] [data-action="image-add"]').click(); return pickPicture('first.png', '#c33'); })()
+wait pics('r3') === 1
+wait __cycled()
+expect !!__row('r3').visualImage && __row('r3').visualImage.indexOf('data:image') === 0
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ document.querySelector('#rows .row[data-id="r3"] [data-action="image-add-more"]').click(); return pickPicture('second.png', '#36c'); })()
+wait pics('r3') === 2
+wait __cycled()
+expect __row('r3').moreImages.length === 1 && __row('r3').moreImages[0].name === 'second.png'
+sleep 300
+expect __same()
+
+# --- in its dialog: made the cover, then removed ----------------------------------------------
+eval (function(){ document.querySelector('#rows .row[data-id="r3"] [data-action="gallery-open"]').click(); return true; })()
+wait document.querySelectorAll('#gallery-modal .scene-gallery-grid-tile[data-gact="pick"]').length === 2
+eval (function(){ document.querySelectorAll('#gallery-modal .scene-gallery-grid-tile[data-gact="pick"]')[1].click(); window.__cover = F.state().rows[2].moreImages[0].imageRef.sha256; return true; })()
+eval __arm()
+eval (function(){ var b = document.querySelector('#gallery-modal [data-gact="cover"]'); b.click(); return !!b; })()
+wait __cycled()
+expect F.state().rows[2].imageRef.sha256 === __cover
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ var b = document.querySelector('#gallery-modal [data-gact="remove"]'); b.click(); return !!b; })()
+wait __cycled()
+expect pics('r3') === 1
+sleep 300
+expect __same()
+key Escape
+
+# --- a video link pasted into the Visual column goes to the gallery ------------------------------------
+eval __arm()
+caret #rows .row[data-id="r2"] .visual-cell .cell-editable
+eval (function(){ var dt = new DataTransfer(); dt.setData('text/plain', 'https://vimeo.com/76979871'); var ev = new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}); document.activeElement.dispatchEvent(ev); return ev.defaultPrevented; })()
+eval document.activeElement.blur()
+wait __cycled()
+expect JSON.stringify(__row('r2')).indexOf('vimeo.com/76979871') !== -1
+sleep 300
+expect __same()
+
+# --- nothing is left waiting ------------------------------------------------------------
+sleep 500
+expect __same()
+expect A.pending() === false
+expect window.__hostedTest.dirty() === false
+
+quit

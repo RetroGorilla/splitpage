@@ -36,10 +36,138 @@ var commentFilter;
 
 export var TAGGING_HELP_KEY = "splitpage-tagging-help-dismissed";
 
+/* The tagging reference (#205): a non-modal card floating over the script
+   (page.html #tagging-help), so opening it no longer scrolls anywhere — the
+   script stays where you were writing, and editable behind it. Opening it
+   when it is already open just hands it the focus again. The focus goes
+   back where it came from when it closes, caret and all, if it was still
+   inside the card then. */
+var taggingHelpReturn = null; /* { el, range } */
+
 export function showTaggingHelp() {
-  document.getElementById("tagging-help").hidden = false;
+  var card = document.getElementById("tagging-help");
+  if (!card) return;
+  var active = document.activeElement;
+  if (card.hidden && active && active !== document.body && !card.contains(active)) {
+    var range = null;
+    try {
+      var sel = window.getSelection();
+      if (sel.rangeCount && active.contains(sel.anchorNode)) range = sel.getRangeAt(0).cloneRange();
+    } catch (e) {}
+    taggingHelpReturn = { el: active, range: range };
+  }
+  card.hidden = false;
   try { localStorage.setItem(TAGGING_HELP_KEY, "0"); } catch (e) {}
-  document.getElementById("tagging-help").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  card.focus({ preventScroll: true });
+  updateTaggingHelpCover();
+}
+
+/* Closed by its × or by Esc: remembered as dismissed (TAGGING_HELP_KEY,
+   kept in localStorage rather than the document so it follows the reader,
+   not the script — sending someone a file shouldn't hide the reference
+   from them). File ▸ Tagging reference, the command menu and Settings all
+   bring it back through showTaggingHelp(). */
+export function hideTaggingHelp() {
+  var card = document.getElementById("tagging-help");
+  if (!card || card.hidden) return;
+  var hadFocus = card.contains(document.activeElement);
+  card.hidden = true;
+  card.classList.remove("is-covering");
+  try { localStorage.setItem(TAGGING_HELP_KEY, "1"); } catch (e) {}
+  var back = taggingHelpReturn;
+  taggingHelpReturn = null;
+  if (!hadFocus || !back || !document.contains(back.el)) return;
+  try { back.el.focus({ preventScroll: true }); } catch (e) { return; }
+  if (back.range) {
+    try {
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(back.range);
+    } catch (e) { /* the cell was redrawn meanwhile — focus alone will do */ }
+  }
+}
+
+/* "Doesn't cover the text being typed": whenever the caret in a script
+   cell (or the writer) sits under the card, the card steps back to a ghost
+   that clicks pass through (.is-covering) until the caret moves out from
+   under it. Checked once a frame at most, on the caret moving, typing,
+   scrolling and resizing. */
+var taggingHelpCoverFrame = 0;
+
+function caretRectForCover() {
+  var active = document.activeElement;
+  if (!active || !active.isContentEditable) return null;
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+  var range = sel.getRangeAt(0);
+  if (!active.contains(range.endContainer)) return null;
+  var r = range.getClientRects();
+  if (r.length && r[r.length - 1].height) return r[r.length - 1];
+  /* A caret between elements (or at a cell's very end) has no rect of its
+     own: the character before it does, and the caret is at its right. */
+  var node = range.endContainer, at = range.endOffset;
+  if (node.nodeType === 1 && at > 0) {
+    node = node.childNodes[at - 1];
+    while (node && node.nodeType === 1 && node.lastChild) node = node.lastChild;
+    at = node && node.nodeType === 3 ? node.data.length : 0;
+  }
+  if (node && node.nodeType === 3 && at > 0) {
+    var ch = document.createRange();
+    ch.setStart(node, at - 1);
+    ch.setEnd(node, at);
+    var cr = ch.getClientRects();
+    if (cr.length) {
+      var last = cr[cr.length - 1];
+      return { left: last.right, right: last.right + 1, top: last.top, bottom: last.bottom };
+    }
+  }
+  /* an empty line: the start of the element the caret is in */
+  var el = range.endContainer.nodeType === 1 ? range.endContainer : range.endContainer.parentNode;
+  var box = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+  return box ? { left: box.left, right: box.left + 2, top: box.top, bottom: Math.min(box.bottom, box.top + 24) } : null;
+}
+
+export function updateTaggingHelpCover() {
+  var card = document.getElementById("tagging-help");
+  if (!card) return;
+  if (card.hidden) { card.classList.remove("is-covering"); return; }
+  var caret = caretRectForCover();
+  var covering = false;
+  if (caret) {
+    var box = card.getBoundingClientRect();
+    var pad = 8;
+    covering = caret.right > box.left - pad && caret.left < box.right + pad &&
+               caret.bottom > box.top - pad && caret.top < box.bottom + pad;
+  }
+  card.classList.toggle("is-covering", covering);
+}
+
+function scheduleTaggingHelpCover() {
+  if (taggingHelpCoverFrame) return;
+  var card = document.getElementById("tagging-help");
+  if (!card || (card.hidden && !card.classList.contains("is-covering"))) return;
+  taggingHelpCoverFrame = requestAnimationFrame(function () {
+    taggingHelpCoverFrame = 0;
+    updateTaggingHelpCover();
+  });
+}
+
+function initTaggingHelp() {
+  var card = document.getElementById("tagging-help");
+  if (!card) return;
+  document.getElementById("tagging-help-dismiss").addEventListener("click", hideTaggingHelp);
+  /* Esc closes it when the focus is in it — and only then: it is not
+     modal, so an Esc meant for the script, a panel or a menu is theirs. */
+  card.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    e.preventDefault();
+    e.stopPropagation();
+    hideTaggingHelp();
+  });
+  document.addEventListener("selectionchange", scheduleTaggingHelpCover);
+  document.addEventListener("input", scheduleTaggingHelpCover, true);
+  window.addEventListener("scroll", scheduleTaggingHelpCover, true);
+  window.addEventListener("resize", scheduleTaggingHelpCover);
 }
 
 export var COMMENT_NAME_KEY = "splitpage-comment-author";
@@ -1262,4 +1390,6 @@ export function __init() {
      the Production panel's (08-production-panels.js) */
   document.addEventListener("mousedown", onCommentMenuMouseDown, true);
   document.addEventListener("keydown", onCommentMenuKeydown, true);
+
+  initTaggingHelp();
 }

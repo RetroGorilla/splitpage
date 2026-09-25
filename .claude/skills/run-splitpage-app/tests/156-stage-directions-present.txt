@@ -28,7 +28,7 @@ expect rd(0).textContent == 0:03
 expect rd(1).textContent == 0:04
 # nothing said: no read time shown, as for a scene with no Audio at all
 expect rd(2).textContent === ''
-expect document.getElementById('runtime-total').textContent == 00:07
+expect document.getElementById('runtime-total').textContent == 0:07
 
 # --- the teleprompter: shown in place, never a word to hear -----------------
 click #btn-present

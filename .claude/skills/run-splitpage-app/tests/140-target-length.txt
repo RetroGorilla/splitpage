@@ -1,10 +1,11 @@
 # A target length per script (#170, src/js/05t-target.js).
 #
-# Set from the clock's popover (the reading speed's box, #193) — a field
-# taking the scene-length forms Adam signed off (1:30, 90, 90s, 1m30), six
-# presets and "No target" — or from the command menu's "Set target
-# length…". With one set the clock reads "01:35 / 02:00" and "0:25 left"
-# (dim) or "0:05 over" (tally red); the rundown strip spans max(target,
+# Set from the script length's popover (the reading speed's box, #193) — a
+# field taking the scene-length forms Adam signed off (1:30, 90, 90s, 1m30),
+# six presets and "No target" — or from the command menu's "Set target
+# length…". With one set the script's length at the end of the rundown
+# (#207, #runtime-chip, the header's clock until then) reads "1:35 / 2:00"
+# and "0:25 left" (dim) or "0:05 over" (tally red); the rundown strip spans max(target,
 # total) + 10s and draws a dashed line at the target, "Target 2:00", and
 # hatching over the gap (or over the blocks past the target). One undo
 # step; saved in the file; the overlay fades under the hover lens and comes
@@ -21,9 +22,9 @@ sleep 400
 eval (function(){ window.T = window.__targetTest; window.ov = function(sel){ return document.querySelector('#rundown-overlay ' + sel); }; window.near = function(a, b){ return Math.abs(a - b) < 1.5; }; return true; })()
 
 # --- no target: the clock is the total, the strip draws nothing -------------
-expect document.getElementById('runtime-total').textContent == 01:35
-expect document.getElementById('program-clock-slot').textContent === ''
-expect getComputedStyle(document.getElementById('program-clock-slot')).display === 'none'
+expect document.getElementById('runtime-total').textContent == 1:35
+expect document.getElementById('runtime-slot').textContent === ''
+expect getComputedStyle(document.getElementById('runtime-slot')).display === 'none'
 expect document.getElementById('rundown-overlay').innerHTML === ''
 expect T.layout().spanSeconds === 105
 expect !('targetSeconds' in F.state())
@@ -46,12 +47,12 @@ sleep 300
 expect document.getElementById('wpm-editor') === null
 expect F.state().targetSeconds === 120
 expect document.activeElement.id == runtime-chip
-expect document.getElementById('runtime-total').textContent == 01:35
-expect document.querySelector('#program-clock-slot .program-clock-of').textContent === ' / 02:00'
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
-expect document.querySelector('#program-clock-slot .program-clock-delta').classList.contains('is-over') === false
+expect document.getElementById('runtime-total').textContent == 1:35
+expect document.querySelector('#runtime-slot .rd-length-of').textContent === ' / 2:00'
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
+expect document.querySelector('#runtime-slot .rd-length-delta').classList.contains('is-over') === false
 # dim: not the clock's own colour
-eval window.__leftColor = getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).color
+eval window.__leftColor = getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).color
 expect window.__leftColor !== getComputedStyle(document.getElementById('runtime-total')).color
 expect document.getElementById('runtime-chip').title.indexOf('against a 2:00 target') !== -1
 
@@ -67,7 +68,12 @@ expect near(parseFloat(ov('.rd-target-hatch').style.left), 95 * T.layout().pxPer
 expect near(parseFloat(ov('.rd-target-hatch').style.width), 25 * T.layout().pxPerSecond)
 expect getComputedStyle(ov('.rd-target-hatch')).backgroundImage.indexOf('repeating-linear-gradient') === 0
 expect ov('.rd-target-delta').textContent == 0:25 left
-expect getComputedStyle(ov('.rd-target-delta')).display == block
+# #207: the script's length says how far off it is, just after the last
+# block, so the hatching does not say it again
+expect getComputedStyle(ov('.rd-target-delta')).display == none
+expect document.getElementById('rundown').classList.contains('has-length-delta')
+expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).display !== 'none'
+expect near(document.getElementById('runtime-chip').getBoundingClientRect().left, document.querySelectorAll('#rundown .rd-block')[1].getBoundingClientRect().right + 2 + 6)
 # the script's last block ends where the hatching starts
 expect near(document.querySelectorAll('#rundown .rd-block')[1].getBoundingClientRect().right + 2, ov('.rd-target-hatch').getBoundingClientRect().left)
 shot 140-strip-under-light
@@ -76,13 +82,13 @@ shot 140-strip-under-light
 key ctrl KeyZ
 sleep 300
 expect !('targetSeconds' in F.state())
-expect document.getElementById('program-clock-slot').textContent === ''
+expect document.getElementById('runtime-slot').textContent === ''
 expect document.getElementById('rundown-overlay').innerHTML === ''
 expect T.layout().spanSeconds === 105
 key ctrl+shift KeyZ
 sleep 300
 expect F.state().targetSeconds === 120
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
 expect T.layout().spanSeconds === 130
 
 # --- typed: over the target, in tally red, the blocks past it hatched ---------
@@ -97,17 +103,19 @@ key Enter
 sleep 300
 expect document.getElementById('wpm-editor') === null
 expect F.state().targetSeconds === 90
-expect document.querySelector('#program-clock-slot .program-clock-of').textContent === ' / 01:30'
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:05 over
-expect document.querySelector('#program-clock-slot .program-clock-delta').classList.contains('is-over')
+expect document.querySelector('#runtime-slot .rd-length-of').textContent === ' / 1:30'
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:05 over
+expect document.querySelector('#runtime-slot .rd-length-delta').classList.contains('is-over')
 # tally red: the Present button's lamp colour, not the dim of "left"
-expect getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).color !== window.__leftColor
-expect getComputedStyle(document.querySelector('#program-clock-slot .program-clock-delta')).color == rgb(196, 48, 42)
+expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).color !== window.__leftColor
+expect getComputedStyle(document.querySelector('#runtime-slot .rd-length-delta')).color == rgb(196, 48, 42)
 expect T.layout().spanSeconds === 105
-expect near(parseFloat(ov('.rd-target-line').style.left), 90 * T.layout().pxPerSecond)
+# inside the script, placed where its time falls on the blocks (the rest
+# layout's x: the floor under short blocks can move it off seconds x scale)
+expect near(parseFloat(ov('.rd-target-line').style.left), T.layout().x(90))
 expect ov('.rd-target-hatch').classList.contains('is-over')
-expect near(parseFloat(ov('.rd-target-hatch').style.left), 90 * T.layout().pxPerSecond)
-expect near(parseFloat(ov('.rd-target-hatch').style.width), 5 * T.layout().pxPerSecond)
+expect near(parseFloat(ov('.rd-target-hatch').style.left), T.layout().x(90))
+expect near(parseFloat(ov('.rd-target-hatch').style.width), T.layout().x(95) - T.layout().x(90))
 expect ov('.rd-target-label').textContent == Target 1:30
 shot 140-strip-over-light
 
@@ -179,7 +187,7 @@ key Backspace
 key Enter
 sleep 300
 expect !('targetSeconds' in F.state())
-expect document.getElementById('program-clock-slot').textContent === ''
+expect document.getElementById('runtime-slot').textContent === ''
 expect document.getElementById('rundown-overlay').innerHTML === ''
 click #runtime-chip
 wait document.getElementById('wpm-editor')
@@ -188,7 +196,7 @@ sleep 300
 expect F.state().targetSeconds === 600
 # a long target: the strip spans it, the script is a sliver of it
 expect T.layout().spanSeconds === 610
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 8:25 left
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 8:25 left
 click #runtime-chip
 wait document.getElementById('wpm-editor')
 expect document.getElementById('target-clear').getAttribute('aria-pressed') == false
@@ -260,8 +268,8 @@ expect ov('.rd-target-label').classList.contains('is-right') === false
 # --- with shot scenes hidden, the target still measures the whole script -----
 jsclick #file-menu [data-file-action="toggle-hide-shot"]
 sleep 300
-expect document.getElementById('runtime-total').textContent == 01:35
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect document.getElementById('runtime-total').textContent == 1:35
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
 expect document.getElementById('runtime-chip').title.indexOf('still to shoot') !== -1
 jsclick #file-menu [data-file-action="toggle-hide-shot"]
 sleep 300
@@ -284,7 +292,7 @@ eval document.activeElement.blur()
 eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
 sleep 400
 expect window.__hostedTest.reviewMode() === true
-expect document.querySelector('#program-clock-slot .program-clock-delta').textContent == 0:25 left
+expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
 expect ov('.rd-target-line') !== null
 click #runtime-chip
 wait document.getElementById('wpm-editor')

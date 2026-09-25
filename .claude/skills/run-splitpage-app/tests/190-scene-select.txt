@@ -1,0 +1,346 @@
+# Selecting whole scenes by dragging out of a text box, and copying,
+# cutting, deleting and pasting them (#204; src/js/05h-scene-select.js,
+# src/js/05g-scene-clip.js):
+#
+#   * a drag that stays in its text box selects words, as ever; one that
+#     leaves the box (up or down) selects whole scenes — the text
+#     selection dropped, the scenes highlighted as a block (both columns),
+#     the page scrolling near the window's edge;
+#   * Ctrl+C / the right-click menu put the scenes on the clipboard in
+#     Splitpage's own type (everything: comments, status, b-roll, gallery
+#     pictures with their bytes) plus a two-column table and labelled
+#     plain text for other programs;
+#   * a paste into another document brings them in as new scenes after the
+#     caret's scene, one undo entry, with fresh comment ids;
+#   * cut and delete are one undo entry each; Esc and a click clear;
+#   * a review session selects and copies, and refuses cut, paste and
+#     delete;
+#   * the grip still drags one scene to a new place (#185).
+# The payload itself is src/test/scene-clip.test.mjs. Every `eval` is one
+# physical line. The mouse lines are real CDP mouse events (driver `mouse`).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+
+# ---- a source document: four real scenes and a tail of filler ------------
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.T = window.__sceneSelectTest; var c = document.createElement('canvas'); c.width = 16; c.height = 12; var x = c.getContext('2d'); x.fillStyle = '#c33'; x.fillRect(0, 0, 16, 12); window.__png = c.toDataURL('image/png'); var tag = function(cat, name){ return '<span class="tag-anchor" data-tag-cat="' + cat + '" data-tag-name="' + name + '" contenteditable="false">' + name + '</span>'; }; var rows = [ { id: 'r1', visualText: 'Opening shot', audioText: 'Hello and welcome.', status: 'todo' }, { id: 'r2', visualText: 'Wide of the ' + tag('location', 'Harbour') + '<br><span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> gulls at dawn', audioText: 'Every <span class="cmt-anchor" data-cmt="c1">morning</span> the town wakes.', status: 'shot', visualImage: __png, imageName: 'wide.png' }, { id: 'r3', visualText: 'Mara with the ' + tag('prop', 'Kettle'), audioText: 'She has mended nets for thirty years.', status: 'ready' }, { id: 'r4', visualText: 'Closing', audioText: 'Goodbye.', status: 'todo' } ]; for (var i = 5; i <= 30; i++) rows.push({ id: 'r' + i, visualText: 'Filler ' + i, audioText: 'Line ' + i + ' of the tail.', status: 'todo' }); var doc = { schema: 2, title: 'Harbour film', rows: rows, comments: [ { id: 'c1', rowId: 'r2', field: 'audioText', anchorId: 'c1', quotedText: 'morning', author: 'Ann', body: 'Warmer light here?', assignee: 'Ben', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [ { id: 'rp1', author: 'Ben', body: 'Yes, golden hour.', createdAt: '2026-09-01T11:00:00Z' } ] } ], people: [ { id: 'p1', name: 'Jordan' } ], productionTags: [ { cat: 'location', name: 'Harbour', status: 'sourcing', owner: 'p1', notes: 'Ask the harbour master.' }, { cat: 'prop', name: 'Kettle', status: 'have' } ], brollShots: [ { id: 'bs1', name: 'gulls at dawn', status: 'shot', notes: 'Got it on day 2' } ] }; F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; })()
+wait F.state().title === 'Harbour film' && document.querySelector('#rows .row[data-id="r30"]')
+eval (function(){ window.row = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.cell = function(id, f){ return row(id).querySelector('.' + (f === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.pt = function(el, fx, fy){ var r = el.getBoundingClientRect(); return { x: r.left + r.width * fx, y: r.top + r.height * fy }; }; window.st = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent; }).join(' | '); }; window.untoast = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.clip = function(type, el, data){ var dt = new DataTransfer(); if (data) Object.keys(data).forEach(function(k){ dt.setData(k, data[k]); }); var ev = new ClipboardEvent(type, { clipboardData: dt, bubbles: true, cancelable: true }); el.dispatchEvent(ev); var out = { prevented: ev.defaultPrevented, types: Array.prototype.slice.call(dt.types) }; out.types.forEach(function(t){ out[t] = dt.getData(t); }); return out; }; window.scrollTo(0, 0); return true; })()
+expect st('r2').imageRef && st('r2').imageRef.sha256.length === 64
+
+# ---- 1. a drag inside the box selects words, and nothing else --------------
+mouse down pt(cell('r2', 'audioText'), 0.05, 0.5)
+mouse move pt(cell('r2', 'audioText'), 0.6, 0.5)
+expect T.tracking().scene === false
+expect getSelection().toString().length > 0
+expect T.ids().length === 0
+mouse up pt(cell('r2', 'audioText'), 0.6, 0.5)
+expect T.tracking() === null
+expect T.ids().length === 0
+
+# ---- 2. past the box's edge it is whole scenes -----------------------------
+# (a press on words already selected would drag those words instead)
+eval (function(){ getSelection().removeAllRanges(); document.activeElement.blur(); return true; })()
+mouse down pt(cell('r2', 'audioText'), 0.05, 0.5)
+mouse move pt(cell('r2', 'audioText'), 0.3, 0.5)
+mouse move pt(cell('r3', 'audioText'), 0.5, 0.5)
+expect T.tracking().scene === true
+expect T.ids().join() === 'r2,r3'
+expect document.body.classList.contains('is-scene-selecting')
+# the text selection is gone, and the caret with it
+expect getSelection().isCollapsed || getSelection().rangeCount === 0
+expect !(document.activeElement && document.activeElement.isContentEditable)
+# on down, a scene at a time
+mouse move pt(cell('r4', 'visualText'), 0.5, 0.5)
+expect T.ids().join() === 'r2,r3,r4'
+# and back up past where it started
+mouse move pt(cell('r1', 'audioText'), 0.5, 0.2)
+expect T.ids().join() === 'r1,r2'
+mouse move pt(cell('r3', 'audioText'), 0.5, 0.9)
+mouse up pt(cell('r3', 'audioText'), 0.5, 0.9)
+expect T.ids().join() === 'r2,r3'
+expect !document.body.classList.contains('is-scene-selecting')
+expect getSelection().isCollapsed || getSelection().rangeCount === 0
+
+# ---- 3. the highlight: both columns, a block, nothing else -----------------
+expect getComputedStyle(row('r2')).backgroundColor === 'rgb(200, 218, 242)'
+expect getComputedStyle(row('r3')).backgroundColor === 'rgb(200, 218, 242)'
+expect getComputedStyle(row('r1')).backgroundColor !== 'rgb(200, 218, 242)'
+expect getComputedStyle(row('r4')).backgroundColor !== 'rgb(200, 218, 242)'
+expect getComputedStyle(row('r2')).boxShadow.indexOf('inset') !== -1
+eval (function(){ window.scrollTo(0, row('r2').getBoundingClientRect().top + scrollY - 160); return true; })()
+sleep 300
+shot 190-scene-selection-light
+eval (function(){ document.documentElement.setAttribute('data-theme', 'dark'); return true; })()
+sleep 300
+expect getComputedStyle(row('r2')).backgroundColor === 'rgb(47, 74, 102)'
+shot 190-scene-selection-dark
+eval (function(){ document.documentElement.removeAttribute('data-theme'); return true; })()
+# a render (a status change elsewhere) keeps it
+eval T.select('r2', 'r3')
+jsclick #rows .row[data-id="r4"] .status-btn
+wait st('r4').status === 'ready'
+expect T.ids().join() === 'r2,r3'
+expect getComputedStyle(row('r2')).backgroundColor === 'rgb(200, 218, 242)'
+key ctrl KeyZ
+wait st('r4').status === 'todo'
+eval T.select('r2', 'r3')
+
+# ---- 4. Esc clears; so does a click ----------------------------------------
+key Escape
+expect T.ids().length === 0
+expect getComputedStyle(row('r2')).backgroundColor !== 'rgb(200, 218, 242)'
+eval T.select('r2', 'r3')
+click #rows .row[data-id="r1"] .audio-cell .cell-editable
+expect T.ids().length === 0
+
+# ---- 5. the page scrolls near the window's bottom edge ---------------------
+eval (function(){ window.scrollTo(0, 0); document.activeElement.blur(); return true; })()
+sleep 200
+mouse down pt(cell('r1', 'audioText'), 0.05, 0.5)
+mouse move pt(cell('r1', 'audioText'), 0.3, 0.5)
+mouse move ({ x: innerWidth / 2, y: innerHeight - 6 })
+wait scrollY > 400
+wait T.ids().length > 8
+mouse up ({ x: innerWidth / 2, y: innerHeight - 6 })
+eval scrollY + ' ' + T.ids().length
+expect T.ids()[0] === 'r1'
+key Escape
+eval window.scrollTo(0, 0)
+
+# ---- 6. copy: Splitpage's own type, a table, labelled text -----------------
+eval T.select('r2', 'r3')
+eval (function(){ window.__c = clip('copy', document.body); return __c.types.join(); })()
+expect __c.prevented === true
+expect __c.types.indexOf('application/x-splitpage-scenes') !== -1
+eval (function(){ window.__p = JSON.parse(__c['application/x-splitpage-scenes']); return __p.rows.length + ' ' + __p.comments.length + ' ' + Object.keys(__p.blobs).length; })()
+expect __p.format === 'splitpage-scenes' && __p.rows.length === 2
+expect __p.rows[0].status === 'shot' && __p.rows[1].status === 'ready'
+expect __p.comments.length === 1 && __p.comments[0].replies.length === 1
+expect __p.brollShots.length === 1 && __p.brollShots[0].status === 'shot'
+expect __p.productionTags.length === 2 && __p.people.length === 1
+expect Object.keys(__p.blobs)[0] === st('r2').imageRef.sha256
+expect __p.blobs[st('r2').imageRef.sha256].indexOf('data:image/png;base64,') === 0
+eval JSON.stringify(__c['text/plain'])
+expect __c['text/plain'] === 'Visual: Wide of the Harbour\nB-roll: gulls at dawn\nAudio: Every morning the town wakes.\n\nVisual: Mara with the Kettle\nAudio: She has mended nets for thirty years.'
+expect __c['text/html'].indexOf('<table') === 0 && __c['text/html'].indexOf('<th>Visual</th><th>Audio</th>') !== -1
+expect __c['text/html'].indexOf('data-splitpage-scenes=') !== -1
+expect (function(){ var b = new DOMParser().parseFromString(__c['text/html'], 'text/html').body; return b.querySelectorAll('tbody tr').length === 2 && b.querySelector('tbody').innerHTML.indexOf('cmt-anchor') === -1; })()
+# nothing about a copy changes the document
+expect ids().indexOf('r1,r2,r3,r4,r5') === 0
+expect T.ids().join() === 'r2,r3'
+# the keyboard's Ctrl+C runs the same copy
+eval untoast()
+key ctrl KeyC
+wait toasts().indexOf('2 scenes copied') !== -1
+
+# ---- 7. the right-click menu -----------------------------------------------
+mouse right pt(cell('r3', 'audioText'), 0.5, 0.5)
+wait document.querySelector('#scene-menu') && !document.querySelector('#scene-menu').hidden
+expect T.ids().join() === 'r2,r3'
+expect document.querySelectorAll('#scene-menu [data-scene-action]').length === 4
+expect !document.querySelector('#scene-menu [data-scene-action="cut"]').disabled
+expect !(document.activeElement && document.activeElement.isContentEditable)
+key Escape
+expect document.querySelector('#scene-menu').hidden
+expect T.ids().join() === 'r2,r3'
+# a right-click on a scene outside the selection is the browser's own
+mouse right pt(cell('r1', 'audioText'), 0.5, 0.5)
+expect T.ids().length === 0
+expect document.querySelector('#scene-menu').hidden
+
+# ---- 7b. shot scenes hidden: a folded one between is not selected ---------
+jsclick #menu-hide-shot
+wait !row('r2') && document.querySelector('#rows .hidden-shot-strip')
+eval T.select('r1', 'r3')
+expect T.ids().join() === 'r1,r3'
+key Escape
+jsclick #menu-hide-shot
+wait row('r2') && !document.querySelector('#rows .hidden-shot-strip')
+
+# ---- 8. the grip still moves one scene, and starts no selection -------------
+eval (function(){ window.__mkDrag = function(type, x, y, dt){ return new DragEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt }); }; var r = row('r4'); var grip = r.querySelector('[data-action="drag-grip"]'); grip.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); window.__dt = new DataTransfer(); r.dispatchEvent(__mkDrag('dragstart', 50, 100, __dt)); return T.tracking(); })()
+expect T.tracking() === null
+eval (function(){ var target = row('r1'); var b = target.getBoundingClientRect(); target.dispatchEvent(__mkDrag('dragover', b.left + 20, b.top + 4, __dt)); target.dispatchEvent(__mkDrag('drop', b.left + 20, b.top + 4, __dt)); row('r4') && row('r4').dispatchEvent(__mkDrag('dragend', 0, 0, __dt)); return ids().slice(0, 14); })()
+expect ids().indexOf('r4,r1,r2,r3,r5') === 0
+expect T.ids().length === 0
+key ctrl KeyZ
+wait ids().indexOf('r1,r2,r3,r4,r5') === 0
+# a real press on the grip is a scene drag's business, not this (a real
+# native drag cannot be made over CDP — see 33-drag-autoscroll)
+eval window.scrollTo(0, 0)
+# (the header un-condenses a frame after the scroll, moving the rows)
+sleep 400
+mouse down pt(row('r2').querySelector('.row-num'), 0.5, 0.5)
+expect T.tracking() === null
+expect row('r2').getAttribute('draggable') === 'true'
+mouse up pt(row('r2').querySelector('.row-num'), 0.5, 0.5)
+expect T.ids().length === 0
+eval (function(){ document.querySelectorAll('#rows .row').forEach(function(r){ r.removeAttribute('draggable'); r.classList.remove('is-dragging'); }); return true; })()
+
+# ---- 8b. the browser's real clipboard: Ctrl+C, then Ctrl+V in a cell ------
+# (headless Edge keeps a clipboard of its own; this is the whole round trip,
+# the custom type included, with no synthetic event)
+eval (function(){ window.__seen = null; document.addEventListener('paste', function(e){ window.__seen = Array.prototype.slice.call(e.clipboardData.types); }, { capture: true, once: true }); T.select('r2', 'r3'); return true; })()
+key ctrl KeyC
+caret #rows .row[data-id="r30"] .audio-cell .cell-editable
+key ctrl KeyV
+wait F.state().rows.length === 32
+expect __seen && __seen.indexOf('application/x-splitpage-scenes') !== -1
+expect F.state().rows[29].id === 'r30' && F.state().rows[30].status === 'shot' && F.state().rows[31].status === 'ready'
+expect F.state().comments.length === 2
+
+# ---- 9. a paste into another document: new scenes, everything along --------
+eval (function(){ var doc = { schema: 2, title: 'Second film', rows: [ { id: 't1', visualText: 'Mine', audioText: 'My words.', status: 'todo' }, { id: 't2', visualText: 'Also mine', audioText: 'More words.', status: 'todo' } ], comments: [], people: [], productionTags: [], brollShots: [] }; F.openFile(new File([JSON.stringify(doc)], 'second.splitpage')); return true; })()
+wait F.state().title === 'Second film' && document.querySelector('#rows .row[data-id="t2"]')
+expect T.ids().length === 0
+eval (function(){ var el = cell('t1', 'audioText'); el.focus(); var r = document.createRange(); r.selectNodeContents(el); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); U.flush(); window.__u0 = U.sizes().undo; return true; })()
+eval (function(){ var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __c[t]; }); window.__pp = clip('paste', cell('t1', 'audioText'), data); return __pp.prevented; })()
+wait F.state().rows.length === 4
+eval ids()
+expect F.state().rows[0].id === 't1' && F.state().rows[3].id === 't2'
+eval (function(){ window.P1 = F.state().rows[1]; window.P2 = F.state().rows[2]; return P1.id + ' ' + P2.id; })()
+expect P1.id !== 'r2' && P2.id !== 'r3'
+expect st('t1').audioText === 'My words.'
+expect P1.status === 'shot' && P2.status === 'ready'
+expect P1.imageRef && P1.imageRef.sha256 === __p.rows[0].imageRef.sha256 && P1.imageName === 'wide.png'
+expect P1.visualText.indexOf('data-broll-id="bs1"') !== -1
+expect F.state().brollShots.length === 1 && F.state().brollShots[0].id === 'bs1' && F.state().brollShots[0].status === 'shot' && F.state().brollShots[0].notes === 'Got it on day 2'
+expect F.state().productionTags.filter(function(t){ return t.name === 'Harbour' && t.status === 'sourcing' && t.notes === 'Ask the harbour master.'; }).length === 1
+expect F.state().people.length === 1 && F.state().people[0].name === 'Jordan'
+expect F.state().comments.length === 1
+eval (function(){ window.C = F.state().comments[0]; return C.id + ' ' + C.rowId; })()
+expect C.id !== 'c1' && C.anchorId === C.id && C.rowId === P1.id
+expect C.body === 'Warmer light here?' && C.assignee === 'Ben' && C.replies.length === 1 && C.replies[0].id !== 'rp1'
+expect P1.audioText === 'Every <span class="cmt-anchor" data-cmt="' + C.id + '">morning</span> the town wakes.'
+# on screen: the rows, the picture, the comment's anchor, and the pasted scenes selected
+wait row(P1.id) && row(P1.id).querySelector('.visual-media img')
+wait row(P1.id).querySelector('.visual-media img').naturalWidth === 16
+expect document.querySelector('#rows .cmt-anchor[data-cmt="' + C.id + '"]') !== null
+expect T.ids().join() === P1.id + ',' + P2.id
+wait toasts().indexOf('2 scenes pasted') !== -1
+# one undo entry takes the whole paste back, and redo brings it again
+eval U.flush()
+expect U.sizes().undo === __u0 + 1
+eval (function(){ document.activeElement.blur(); return true; })()
+key ctrl KeyZ
+wait ids() === 't1,t2'
+expect F.state().comments.length === 0 && F.state().brollShots.length === 0 && F.state().people.length === 0
+key ctrl+shift KeyZ
+wait F.state().rows.length === 4 && F.state().comments.length === 1
+expect F.state().brollShots.length === 1
+
+# ---- 10. a paste on a blank scene takes its place --------------------------
+eval (function(){ var doc = { schema: 2, title: 'Blank film', rows: [ { id: 'b1', visualText: '', audioText: '', status: 'todo' } ] }; F.openFile(new File([JSON.stringify(doc)], 'blank.splitpage')); return true; })()
+wait F.state().title === 'Blank film' && document.querySelector('#rows .row[data-id="b1"]')
+eval (function(){ var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __c[t]; }); cell('b1', 'audioText').focus(); return clip('paste', cell('b1', 'audioText'), data).prevented; })()
+wait F.state().rows.length === 2
+expect F.state().rows.every(function(r){ return r.id !== 'b1'; })
+# the table alone (a clipboard that dropped the custom type) still pastes scenes, pictures by reference
+eval (function(){ cell(F.state().rows[1].id, 'audioText').focus(); return clip('paste', cell(F.state().rows[1].id, 'audioText'), { 'text/html': '<meta charset="utf-8">' + __c['text/html'], 'text/plain': __c['text/plain'] }).prevented; })()
+wait F.state().rows.length === 4
+expect F.state().rows[2].imageRef && F.state().rows[2].imageRef.sha256 === __p.rows[0].imageRef.sha256
+# the second copy of the same b-roll key got an id of its own, and a fresh record
+expect (function(){ var keys = F.state().rows.map(function(r){ return (r.visualText.match(/data-broll-id="([^"]+)"/) || [])[1]; }).filter(Boolean); return keys.length === 2 && keys[0] !== keys[1]; })()
+wait F.state().brollShots.length === 2
+expect F.state().brollShots.filter(function(b){ return b.status === 'shot'; }).length === 1
+
+# ---- 11. cut, then undo; cut then paste moves them -------------------------
+eval (function(){ document.activeElement.blur(); untoast(); window.__before = ids(); T.select(F.state().rows[0].id, F.state().rows[1].id); U.flush(); window.__u1 = U.sizes().undo; return __before; })()
+eval (function(){ window.__x = clip('cut', document.body); return __x.types.join(); })()
+expect __x.prevented === true
+expect JSON.parse(__x['application/x-splitpage-scenes']).cut.length === 32
+wait F.state().rows.length === 2
+expect T.ids().length === 0
+eval U.flush()
+expect U.sizes().undo === __u1 + 1
+wait toasts().indexOf('2 scenes cut') !== -1
+# the cut leaves the comments, as a delete does
+expect F.state().comments.length === 2
+key ctrl KeyZ
+wait ids() === __before
+key ctrl+shift KeyZ
+wait F.state().rows.length === 2
+# its paste in this document is a move: the same rows, the same comments
+eval (function(){ var el = cell(F.state().rows[1].id, 'audioText'); el.focus(); var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __x[t]; }); return clip('paste', el, data).prevented; })()
+wait F.state().rows.length === 4
+expect ids() === __before.split(',').slice(2).concat(__before.split(',').slice(0, 2)).join(',')
+expect F.state().comments.length === 2
+expect F.state().comments.every(function(c){ return F.state().rows.some(function(r){ return r.id === c.rowId; }); })
+# the keyboard's Ctrl+X cuts too
+eval (function(){ document.activeElement.blur(); untoast(); T.select(F.state().rows[3].id); return T.ids().length; })()
+key ctrl KeyX
+wait F.state().rows.length === 3
+key ctrl KeyZ
+wait F.state().rows.length === 4
+
+# ---- 12. delete and backspace, then undo -----------------------------------
+eval (function(){ document.activeElement.blur(); window.__before = ids(); T.select(F.state().rows[1].id, F.state().rows[2].id); U.flush(); window.__u2 = U.sizes().undo; return true; })()
+key Delete
+wait F.state().rows.length === 2
+expect T.ids().length === 0
+eval U.flush()
+expect U.sizes().undo === __u2 + 1
+wait toasts().indexOf('2 scenes deleted') !== -1
+key ctrl KeyZ
+wait ids() === __before
+eval T.select(F.state().rows[0].id)
+key Backspace
+wait F.state().rows.length === 3
+key ctrl KeyZ
+wait ids() === __before
+
+# ---- 13. the menu's New script from these scenes ----------------------------
+eval (function(){ untoast(); T.select(F.state().rows[0].id, F.state().rows[1].id); T.openMenu(200, 200); return true; })()
+jsclick #scene-menu [data-scene-action="new"]
+wait F.state().title === 'Blank film — 2 scenes'
+expect F.state().rows.length === 2
+expect F.state().rows[0].status === 'shot'
+expect F.state().comments.length === 1
+
+# ---- 14. a review session: select and copy, nothing else -------------------
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+wait document.body.classList.contains('is-review')
+eval (function(){ untoast(); getSelection().removeAllRanges(); window.__before = ids(); window.__json = JSON.stringify(F.state().rows); window.scrollTo(0, 0); return true; })()
+sleep 400
+mouse down pt(cell(F.state().rows[0].id, 'audioText'), 0.05, 0.5)
+mouse move pt(cell(F.state().rows[0].id, 'audioText'), 0.3, 0.5)
+mouse move pt(cell(F.state().rows[1].id, 'audioText'), 0.5, 0.5)
+mouse up pt(cell(F.state().rows[1].id, 'audioText'), 0.5, 0.5)
+expect T.ids().length === 2
+eval (function(){ window.__rc = clip('copy', document.body); return __rc.types.join(); })()
+expect __rc.types.indexOf('application/x-splitpage-scenes') !== -1
+key Delete
+wait toasts().indexOf('review copy') !== -1
+expect ids() === __before
+eval (function(){ window.__rx = clip('cut', document.body); return __rx.prevented; })()
+expect __rx.types.indexOf('application/x-splitpage-scenes') !== -1
+expect JSON.parse(__rx['application/x-splitpage-scenes']).cut === undefined
+expect ids() === __before
+eval T.openMenu(200, 200)
+expect document.querySelector('#scene-menu [data-scene-action="copy"]').disabled === false
+expect document.querySelector('#scene-menu [data-scene-action="cut"]').disabled === true
+expect document.querySelector('#scene-menu [data-scene-action="delete"]').disabled === true
+key Escape
+eval (function(){ T.clear(); var el = cell(F.state().rows[0].id, 'audioText'); el.focus(); var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __c[t]; }); return clip('paste', el, data).prevented; })()
+expect ids() === __before
+expect JSON.stringify(F.state().rows) === __json
+wait toasts().indexOf('pasted into') !== -1
+eval window.__hostedTest.setSession({role:'review',docId:null})
+eval (function(){ document.body.classList.remove('is-review'); return true; })()
+
+# ---- 15. a server document: the scenes are one undo entry, their comments
+#          are sent and stay (design D5, 12a-undo.js) ----------------------
+eval (function(){ window.fetch = function(){ return new Promise(function(){}); }; window.__hostedTest.setSession({role:'edit',docId:'srv-doc'}); return window.__hostedTest.home().kind; })()
+expect window.__hostedTest.home().kind === 'server'
+expect !document.body.classList.contains('is-review')
+eval (function(){ T.clear(); untoast(); window.__before = ids(); window.__c0 = F.state().comments.length; var el = cell(F.state().rows[0].id, 'audioText'); el.focus(); U.flush(); window.__u3 = U.sizes().undo; var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __c[t]; }); return clip('paste', el, data).prevented; })()
+wait F.state().rows.length === __before.split(',').length + 2
+expect F.state().comments.length === __c0 + 1
+eval U.flush()
+expect U.sizes().undo === __u3 + 1
+eval (function(){ document.activeElement.blur(); return true; })()
+key ctrl KeyZ
+wait ids() === __before
+expect F.state().comments.length === __c0 + 1
+logs

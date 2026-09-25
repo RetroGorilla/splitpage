@@ -1,0 +1,132 @@
+# Autosave's status (#208), part 3: the words, the tooltip, and the two
+# other places a document is saved to.
+#
+# "Saved 43 min ago" read as "autosave last ran 43 minutes ago", as if it
+# had stalled. Now the header says "Saved just now" for the first minute
+# after a write and then "All changes saved"; the time is in the tooltip
+# ("Last saved to <where> at 2:52 PM", in the person's own clock — 133
+# covers the 12/24-hour setting), and "where" is right for each target:
+#   * a browser file (a fake FileSystemFileHandle): its name;
+#   * the desktop app's file target (window.__desktopTest's fake bridge, the
+#     same one 21-desktop-shim.txt drives): its name;
+#   * a hosted document (window.__hostedTest.setSession, and PUTs to
+#     api/docs/ answered by a fake, as in 54-server-conflict.txt): "the
+#     server" — with typing, a status click and a comment each going out.
+# A document just opened is "All changes saved" with no time (nothing was
+# written by this page), and opening another straight from "Saved" no longer
+# carries the first one's time over. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; window.D = window.__desktopTest; localStorage.removeItem('splitpage-clock'); A.timing().idle = 40; A.timing().hostedIdle = 40; A.timing().max = 400; window.__sys = function(t){ return new Intl.DateTimeFormat(undefined, {hour: 'numeric', minute: '2-digit'}).format(new Date(t)); }; window.__st = function(){ return document.getElementById('save-status').textContent; }; window.__tip = function(){ return document.getElementById('save-status').title; }; window.__words = function(){ return document.getElementById('btn-save').getAttribute('data-status'); }; window.__log = []; new MutationObserver(function(ms){ ms.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 3) window.__log.push(n.data); }); }); }).observe(document.getElementById('save-status'), {childList: true}); window.__arm = function(){ window.__log = []; return true; }; window.__went = function(){ var l = window.__log, a = l.indexOf('Unsaved changes'), b = a === -1 ? -1 : l.indexOf('Saving…', a + 1), c = b === -1 ? -1 : l.indexOf('Saved', b + 1); return c !== -1 && __st() === 'Saved' && __words() === 'Saved just now'; }; window.doc = function(title, words){ return JSON.stringify({schema: 2, title: title, rows: [{id: 'r1', visualText: 'Wide', audioText: words, status: 'todo'}, {id: 'r2', visualText: 'Close', audioText: 'Second scene.', status: 'todo'}], comments: []}); }; window.fakeFile = function(name, text){ var h = {name: name, _text: text, _mtime: Date.now() - 100000, _writes: 0, createWritable: async function(){ h._writes++; return {write: async function(b){ h._text = typeof b === 'string' ? b : await new Response(b).text(); }, close: async function(){ h._mtime = Date.now(); }}; }, getFile: async function(){ return new File([h._text], name, {lastModified: h._mtime}); }}; return h; }; return true; })()
+
+# ===== a browser file ================================================
+eval (function(){ window.__a = fakeFile('first.splitpage', doc('First', 'Opening words.')); return F.openFile(new File([__a._text], 'first.splitpage', {lastModified: __a._mtime}), __a); })()
+wait F.docFile().name === 'first.splitpage'
+# just opened: saved, with nothing this page wrote to give a time for
+expect __st() === 'Saved'
+expect __words() === 'All changes saved'
+expect __tip() === 'Up to date with first.splitpage.'
+
+# --- an edit: Unsaved changes, Saving…, Saved just now -------------------
+eval __arm()
+caret #rows .row .audio-cell .cell-editable
+type  more words
+eval document.activeElement.blur()
+wait __went()
+eval window.__at = Date.now()
+expect __a._text.indexOf('more words') !== -1
+expect __tip() === 'Last saved to first.splitpage at ' + __sys(__at) + '.'
+expect document.getElementById('btn-save').title === __tip() + ' Click to save now.'
+expect document.getElementById('btn-save').getAttribute('aria-label') === 'Saved just now. Save now'
+# the File menu's card says it the same way, the time in its tooltip
+jsclick #btn-file
+wait !document.getElementById('file-menu').hidden
+expect document.getElementById('fm-card-meta').textContent.indexOf('Saved just now · ') === 0
+expect document.querySelector('#fm-card-meta span').title.indexOf('Last saved at ') === 0
+key Escape
+wait document.getElementById('file-menu').hidden
+# while it is unsaved the words say so, and never an age
+eval (function(){ A.timing().idle = 60000; A.timing().max = 60000; return true; })()
+caret #rows .row .audio-cell .cell-editable
+type  pending
+eval document.activeElement.blur()
+expect __words() === 'Unsaved changes'
+expect __tip().indexOf('first.splitpage') !== -1
+eval (function(){ A.timing().idle = 40; A.timing().max = 400; A.flush(); return true; })()
+wait __st() === 'Saved' && __a._text.indexOf('pending') !== -1
+
+# --- opening another file straight from Saved: its own words, no old time -----
+eval (function(){ window.__b = fakeFile('second.splitpage', doc('Second', 'Other words.')); return F.openFile(new File([__b._text], 'second.splitpage', {lastModified: __b._mtime}), __b); })()
+wait F.docFile().name === 'second.splitpage'
+expect __st() === 'Saved'
+expect __words() === 'All changes saved'
+expect __tip() === 'Up to date with second.splitpage.'
+
+# ===== the desktop app's file target ================================
+eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); return true; })()
+eval (async function(){ window.__did = fake._addFile('desk.splitpage', doc('Desk', 'Desktop words.')); window.__dh = D.makeHandle({id: __did, name: 'desk.splitpage'}); var f = await __dh.getFile(); await F.openFile(f, __dh); return true; })()
+wait F.docFile().name === 'desk.splitpage'
+expect A.target() == file
+expect __tip() === 'Up to date with desk.splitpage.'
+eval __arm()
+caret #rows .row .audio-cell .cell-editable
+type  DESKEDIT
+eval document.activeElement.blur()
+wait __went()
+eval window.__at = Date.now()
+expect fake._text(__did).indexOf('DESKEDIT') !== -1
+expect __tip() === 'Last saved to desk.splitpage at ' + __sys(__at) + '.'
+eval (function(){ D.restoreBackend(); return true; })()
+
+# ===== a hosted document ==============================================
+eval (function(){ window.__puts = []; window.__rev = 1; var real = window.fetch.bind(window); window.fetch = function(url, opts){ var u = String(url); if (opts && opts.method === 'PUT' && u.indexOf('api/docs/') !== -1) { window.__puts.push(JSON.parse(opts.body)); window.__rev++; return Promise.resolve(new Response(JSON.stringify({id: 'doc-auto', rev: window.__rev, updatedAt: new Date().toISOString(), updatedBy: 'Me'}), {status: 200, headers: {'content-type': 'application/json'}})); } return real(url, opts); }; return true; })()
+eval (function(){ window.__hostedTest.setSession({docId: 'doc-auto', rev: 1}); return window.__hostedTest.role(); })()
+expect A.target() == server
+expect window.__hostedTest.role() == edit
+
+# --- typing -----------------------------------------------------------------
+eval __arm()
+caret #rows .row .audio-cell .cell-editable
+type  HOSTEDEDIT
+eval document.activeElement.blur()
+wait __went()
+eval window.__at = Date.now()
+expect __puts.length >= 1
+expect JSON.stringify(__puts[__puts.length - 1].state.rows[0]).indexOf('HOSTEDEDIT') !== -1
+expect __tip() === 'Last saved to the server at ' + __sys(__at) + '.'
+
+# --- a scene's status -----------------------------------------------------------
+eval __arm()
+eval window.__p0 = __puts.length
+jsclick #rows .row[data-id="r2"] [data-action="cycle-status"]
+wait __went()
+expect __puts.length > __p0
+expect __puts[__puts.length - 1].state.rows[1].status !== 'todo'
+
+# --- a comment ------------------------------------------------------------------
+eval __arm()
+eval window.__p0 = __puts.length
+eval (function(){ var c = document.querySelector('#rows .row[data-id="r2"] .audio-cell .cell-editable'); c.focus(); var t = c.firstChild; var r = document.createRange(); r.setStart(t, 0); r.setEnd(t, 6); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return t.nodeValue.slice(0, 6); })()
+sleep 200
+jsclick #rows .row[data-id="r2"] .audio-cell .mini-toolbar [data-cmd="comment"]
+wait document.getElementById('comment-body-editable')
+eval (function(){ var b = document.getElementById('comment-body-editable'); b.focus(); document.execCommand('insertText', false, 'Hosted note.'); return b.textContent; })()
+jsclick #comment-post
+wait __went()
+expect __puts.length > __p0
+expect JSON.stringify(__puts[__puts.length - 1].state.comments).indexOf('Hosted note.') !== -1
+expect __tip().indexOf('Last saved to the server at ') === 0
+
+# ===== a minute on, with nothing changed: "All changes saved" ======================
+# The real timer, not a faked clock (133 fakes it): the words change by
+# themselves, and the tooltip keeps the time of the write.
+eval window.__tip0 = __tip()
+sleep 61500
+expect __st() === 'Saved'
+expect __words() === 'All changes saved'
+expect __tip() === window.__tip0
+expect __words().indexOf('ago') === -1
+
+eval (function(){ window.__hostedTest.setSession({docId: null}); return true; })()
+quit

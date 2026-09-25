@@ -1,6 +1,6 @@
 /* The one clock formatter (#180, 00p-prefs.js): the system's own format by
- * default, 12- or 24-hour when the person says so, and the header's "Saved
- * …" words after an hour — driven with fixed dates rather than the real
+ * default, 12- or 24-hour when the person says so, and the header's save
+ * status words and their tooltip time (#208) — driven with fixed dates rather than the real
  * clock. The 12-hour and 24-hour checks do not depend on the machine's
  * locale; the "system" one compares against Intl itself.
  */
@@ -13,7 +13,8 @@ import {
   formatClock,
   formatDateClock,
   readClockPref,
-  savedAgoPhrase
+  savedStatusText,
+  savedWhenText
 } from "../js/00p-prefs.js";
 
 const AFTERNOON = new Date(2026, 8, 24, 14, 52);
@@ -55,15 +56,29 @@ test("garbage in is an empty string, not Invalid Date", () => {
   assert.equal(formatDateClock(undefined), "");
 });
 
-test("the save status: just now, minutes, then the clock time", () => {
+test("the save status (#208): just now for a minute, then all saved — never an age", () => {
   const saved = AFTERNOON.getTime();
-  assert.equal(savedAgoPhrase(0, saved), "");
-  assert.equal(savedAgoPhrase(saved, saved + 20 * 1000), "just now");
-  assert.equal(savedAgoPhrase(saved, saved + 12 * 60000), "12 min ago");
-  /* an hour later, a faked "now" */
+  assert.equal(savedStatusText(saved, saved + 20 * 1000), "Saved just now");
+  assert.equal(savedStatusText(saved, saved + 59 * 1000), "Saved just now");
+  assert.equal(savedStatusText(saved, saved + 60 * 1000), "All changes saved");
+  /* 43 minutes of nothing changing says nothing about autosave */
+  assert.equal(savedStatusText(saved, saved + 43 * 60000), "All changes saved");
+  /* a document this page never wrote (just opened) has no "just now" */
+  assert.equal(savedStatusText(0, saved), "All changes saved");
+  for (const n of [1, 12, 43, 65]) assert.doesNotMatch(savedStatusText(saved, saved + n * 60000), /ago|min/);
+});
+
+test("the save status's tooltip time: the clock the same day, a date after midnight", () => {
+  const saved = AFTERNOON.getTime();
+  assert.equal(savedWhenText(0, saved), "");
   const later = saved + 65 * 60000;
-  assert.match(savedAgoPhrase(saved, later, "12"), /^at 2:52\s?PM$/i);
-  assert.equal(savedAgoPhrase(saved, later, "24"), "at 14:52");
+  assert.match(savedWhenText(saved, later, "12"), /^2:52\s?PM$/i);
+  assert.equal(savedWhenText(saved, later, "24"), "14:52");
+  assert.equal(savedWhenText(saved, later, "system"), formatClock(AFTERNOON, "system"));
+  const nextDay = saved + 12 * 3600000;
+  assert.equal(savedWhenText(saved, nextDay, "24"), formatDateClock(AFTERNOON, null, "24"));
+  assert.match(savedWhenText(saved, nextDay, "24"), /14:52/);
+  assert.notEqual(savedWhenText(saved, nextDay, "24"), "14:52");
 });
 
 test("the preference: system unless it says 12 or 24", () => {

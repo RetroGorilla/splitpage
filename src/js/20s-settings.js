@@ -149,7 +149,7 @@ function bodyHtml() {
         '<span class="settings-inline-control"><input type="number" id="settings-default-wpm" min="60" max="400" step="5" value="' +
           readDefaultWpm() + '"><span class="settings-unit">words a minute</span></span>' +
       '</div>' +
-      '<p class="settings-hint">Each script keeps its own speed — click the clock in the header to change it.</p>' +
+      '<p class="settings-hint">Each script keeps its own speed — click its length on the rundown to change it.</p>' +
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-writer-size">Writer text size</label>' +
         '<span class="settings-inline-control"><input type="range" id="settings-writer-size" min="' + WRITER_SIZE_MIN +

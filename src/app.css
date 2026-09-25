@@ -431,32 +431,31 @@
   ::selection { background: var(--selection); color: var(--text); }
 
   /* ---------- header (#169, Direction B) ----------
-     One 52px row, then the rundown strip. Three columns so the program
-     clock sits in the middle of the window whatever is either side of it:
-     the app and the document on the left (the title giving way first, then
-     the facts), the clock, and search, the panels, Write and Present on
-     the right. Sticky, and what it sheds on scroll, are at the end of this
-     file (condensing header).
+     One 52px row, then the rundown strip. Two columns: the app and the
+     document on the left (the title giving way first, then the facts),
+     and search, the panels, Write and Present on the right. Until #207 a
+     third, in the middle, held the program clock; the script's length is
+     at the end of the rundown now, and the room it took is the title's
+     and the facts'. Sticky, and what it sheds on scroll, are at the end
+     of this file (condensing header).
 
      The row spans the window, not the script (#190): #root no longer has
      a width of its own, so the header's 20px either side are the window's.
 
      Nothing in it overlaps at any width (#174). The right column is never
-     narrower than its buttons (max-content), so where the two halves no
-     longer fit either side of a centred clock, the left gives way and the
-     clock moves over rather than the buttons spilling left across it. The
-     buttons themselves drop what they can as the window narrows — "the
-     header's widths" below — so the clock stays centred down to about
-     1000px. Suite 85-header-fit.txt measures all of it with bounding
-     boxes: an overflow here is not clipped and not counted in scrollWidth,
-     so nothing else would see it. */
+     narrower than its buttons (max-content), so where the row runs short
+     the left gives way rather than the buttons spilling left across it.
+     The buttons themselves drop what they can as the window narrows —
+     "the header's widths" below. Suite 85-header-fit.txt measures all of
+     it with bounding boxes: an overflow here is not clipped and not
+     counted in scrollWidth, so nothing else would see it. */
   .topbar {
     margin: 0 -20px;
     background: var(--bg);
   }
   .topbar-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+    grid-template-columns: minmax(0, 1fr) max-content;
     align-items: center;
     column-gap: 16px;
     height: 52px;
@@ -529,7 +528,8 @@
 
   /* Save as a status (#169). #btn-save draws the status words that
      updateSaveStatus() (12-dirty-toast.js) writes into data-status — "Saved
-     2 min ago", "Unsaved changes", "Saving…" — in place of its own text,
+     just now", "All changes saved", "Unsaved changes", "Saving…" — in place
+     of its own text,
      which stays "Save" / "Save •" for the writer's button to mirror and at
      font-size 0 here. #save-status carries the same words for a screen
      reader and is drawn nowhere. */
@@ -571,43 +571,11 @@
   .save-btn:disabled { cursor: default; }
   .save-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-  /* The program clock (#169): the script's read time as a timecode,
-     centred. A button — it is the runtime chip, and a click sets the
-     reading speed — but quiet until it is pointed at. */
-  .program-clock-wrap { position: relative; justify-self: center; }
-  .program-clock {
-    display: inline-flex;
-    align-items: center;
-    height: 36px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text);
-    font-family: var(--font-display);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-  .program-clock:hover { background: var(--hover); }
-  .program-clock:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  .program-clock-total { font-weight: 500; font-size: 20px; line-height: 24px; letter-spacing: -0.01em; }
-  /* with shot scenes hidden: what is left, then the whole, quieter */
-  .program-clock-of { font-weight: 450; font-size: 14px; color: var(--text-faint); letter-spacing: 0; }
-  .program-clock-slot:empty { display: none; }
-  /* the slot is a flex item of its own, so the space before its " / " would
-     otherwise be dropped as the start of a line */
-  .program-clock-slot { white-space: pre; }
-  /* against a target (#170): " / 02:00" in the quiet style above, then how
-     far off it — dim while there is time left, tally red once over */
-  .program-clock-delta {
-    margin-left: 8px;
-    font-weight: 450;
-    font-size: 13px;
-    letter-spacing: 0;
-    color: var(--text-dim);
-  }
-  .program-clock-delta.is-over { color: var(--tally); }
+  /* The script's length used to sit here, as the program clock in the
+     middle of the row (#169). Since #207 it is a label at the end of the
+     rundown (.rd-length, "the rundown strip" below), and at phone widths
+     an item in the status line (.length-status). */
+  .length-status { display: none; }
 
   /* Who is here, a review session, an imported file, the shot count, who
      you are: plain text, one dot between each item that is showing. The
@@ -790,8 +758,7 @@
 
   /* ---- the header's widths (#174, #175, #166) ----
      What the row lets go of as the window narrows, widest first, so that
-     nothing in it ever overlaps and the clock stays centred for as long as
-     it can. Each step keeps every control: a label that leaves the screen
+     nothing in it ever overlaps. Each step keeps every control: a label that leaves the screen
      stays the button's name (a screen reader reads it, innerText has it)
      and its title is the tooltip.
        below 1860  search is "Search" and its keycaps
@@ -799,7 +766,7 @@
        below 1250  the panel toggles are an icon and their count
        below 1180  the File button is its mark and chevron
        below 1000  Write is its icon, and the gaps close up
-       below  880  "Saved 2 min ago" and the rest shorten to a dot in the
+       below  880  "All changes saved" and the rest shorten to a dot in the
                    state's colour (the words stay its name and tooltip)
      The phone (760 and under) is its own layout, further down. Measured by
      suite 85-header-fit.txt at every width #174 lists. */
@@ -1111,6 +1078,29 @@
   .row-menu-item:hover, .row-menu-item:focus-visible { background: var(--hover); outline: none; }
   .row-menu-item.danger, .row-menu-item.danger .mi-icon { color: var(--danger); }
   .row-menu-item.danger.armed { background: var(--danger-soft); }
+  .row-menu-item:disabled { opacity: 0.45; cursor: default; }
+  .row-menu-item:disabled:hover { background: transparent; }
+
+  /* ---------- whole scenes selected (#204, 05h-scene-select.js) ----------
+     The highlight itself is a rule per selected row, written by the module
+     into #scene-selection-style (--selection behind both columns, a
+     --focus-ring edge round the block), because render() resets a row's
+     class. While a drag is choosing scenes nothing in the script takes a
+     text selection. The right-click menu is the scene menu's look, placed
+     at the pointer. */
+  body.is-scene-selecting #rows, body.is-scene-selecting #rows * {
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+  .scene-menu { position: fixed; top: 0; left: 0; z-index: 140; min-width: 248px; }
+  .scene-menu-keys {
+    margin-left: auto;
+    padding-left: 16px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
 
   /* The rail: the scene's read time, right-aligned on the first line. */
   .row-rail {
@@ -2729,24 +2719,30 @@
      column's amber one. The colours are the --tag-* tokens at the top. */
   /* B's mark (#169): the top corners rounded and the bottom square, where
      the rule runs, which carries on unbroken across a line break. */
+  /* .tag-sample is the same mark drawn as an example (the tagging
+     reference, #205): every rule here names both, so the reference can
+     never drift from the script, while nothing that reads tags out of the
+     page (they all look for .tag-anchor) ever counts an example. It takes
+     neither the pointer nor the hover: it is not a thing to click. */
+  .tag-sample,
   .tag-anchor {
     border-radius: 3px 3px 0 0;
     padding: 0 2px;
-    cursor: pointer;
     box-shadow: inset 0 -2px 0 var(--tag-color, var(--visual));
     background: var(--tag-tint, color-mix(in srgb, var(--tag-color, var(--visual)) 14%, transparent));
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
+  .tag-anchor { cursor: pointer; }
   .tag-anchor:hover { background: color-mix(in srgb, var(--tag-color, var(--visual)) 22%, var(--tag-tint, transparent)); }
-  .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
-  .tag-anchor[data-tag-cat="location"] { --tag-color: var(--tag-location); --tag-tint: var(--tag-location-tint); }
-  .tag-anchor[data-tag-cat="cast"]     { --tag-color: var(--tag-cast);     --tag-tint: var(--tag-cast-tint); }
-  .tag-anchor[data-tag-cat="vfx"]      { --tag-color: var(--tag-vfx);      --tag-tint: var(--tag-vfx-tint); }
+  .tag-sample[data-tag-cat="prop"],     .tag-anchor[data-tag-cat="prop"]     { --tag-color: var(--tag-prop);     --tag-tint: var(--tag-prop-tint); }
+  .tag-sample[data-tag-cat="location"], .tag-anchor[data-tag-cat="location"] { --tag-color: var(--tag-location); --tag-tint: var(--tag-location-tint); }
+  .tag-sample[data-tag-cat="cast"],     .tag-anchor[data-tag-cat="cast"]     { --tag-color: var(--tag-cast);     --tag-tint: var(--tag-cast-tint); }
+  .tag-sample[data-tag-cat="vfx"],      .tag-anchor[data-tag-cat="vfx"]      { --tag-color: var(--tag-vfx);      --tag-tint: var(--tag-vfx-tint); }
   /* added when Music/SFX was split out of VFX — without it a sound tag fell
      back to --visual and read as the wrong category in the script itself */
-  .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
-  .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
+  .tag-sample[data-tag-cat="sound"],    .tag-anchor[data-tag-cat="sound"]    { --tag-color: var(--tag-sound);    --tag-tint: var(--tag-sound-tint); }
+  .tag-sample[data-tag-cat="gear"],     .tag-anchor[data-tag-cat="gear"]     { --tag-color: var(--tag-gear);     --tag-tint: var(--tag-gear-tint); }
   .tag-anchor.flash { animation: cmt-flash var(--dur-flash) var(--ease-standard); }
   .tag-badge { background: var(--visual); }
 
@@ -2990,6 +2986,27 @@
     border-radius: 4px;
     color: var(--text-dim);
   }
+  /* ---- an open plain-language tag (#210, 07b-plain-tags.js) ----
+     "VFX:" typed in a Visual cell: the keyword is hidden (it stays in the
+     document as plain words until Tab), and the words typed after it are
+     tinted faintly in the category's colour with a dashed rule under them
+     — the tag's own look, not yet solid — so it is plain what Tab will
+     wrap. One highlight per category, because a ::highlight() cannot read
+     the category off an element; a new TAG_CATEGORIES entry needs its line
+     here as well (src/test/plain-tags.test.mjs checks). */
+  .plain-tag-keyword { display: none; }
+  ::highlight(splitpage-open-tag-prop)     { background-color: color-mix(in srgb, var(--tag-prop-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-prop) 1.5px;     text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-location) { background-color: color-mix(in srgb, var(--tag-location-tint) 70%, transparent); text-decoration: underline dashed var(--tag-location) 1.5px; text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-cast)     { background-color: color-mix(in srgb, var(--tag-cast-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-cast) 1.5px;     text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-vfx)      { background-color: color-mix(in srgb, var(--tag-vfx-tint) 70%, transparent);      text-decoration: underline dashed var(--tag-vfx) 1.5px;      text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-sound)    { background-color: color-mix(in srgb, var(--tag-sound-tint) 70%, transparent);    text-decoration: underline dashed var(--tag-sound) 1.5px;    text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-gear)     { background-color: color-mix(in srgb, var(--tag-gear-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-gear) 1.5px;     text-underline-offset: 3px; }
+  /* the note under the cell: the category and the key, in the untagged
+     prompt's look. A tap on it closes the tag as Tab would (the phone has
+     no Tab key), so it is a button like the prompt. */
+  .tag-open-hint { gap: 7px; }
+  .tag-open-hint .tag-cat-dot { width: 8px; height: 8px; }
+
   /* only shown when Tab would land the tag in a different category than the
      bracket being typed implies — see updateTagGhost() */
   .tag-ghost-cat {
@@ -3382,54 +3399,174 @@
     .shoot-need .tag-owner.is-none { display: none; }
   }
 
-  /* ---------- tagging quick reference ---------- */
+  /* ---------- the tagging reference (#205) ----------
+     A non-modal card floating over the script (page.html, 10-comments.js):
+     B's floating layer like the tour card and the small header boxes —
+     raised, the strong edge, the shadow, a popover's 8px corners — with a
+     side panel's head (the title and the 32px icon close, .modal-close).
+     Docked bottom right, and moved left of whichever side panel is open
+     (--open-panel-width, 03b-side-panels.js) so it never sits under one.
+     Under the header's menus, the side panels (140), the full-screen modes
+     (145), the New Tab page (130) and every dialog; over the header row
+     (120) and the phone's bottom bar (110). */
   .tagging-help {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    margin: 0 0 14px;
-    overflow: hidden;
+    --layer-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 125;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    max-width: calc(100vw - 40px);
+    /* clear of the 52px header row, with the same 20px as the corner */
+    max-height: calc(100vh - 92px);
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    font-family: var(--font-body);
+    opacity: 1;
+    transform: none;
+    transition: right var(--dur-enter) var(--ease-enter),
+                opacity var(--dur-fast) var(--ease-standard),
+                transform var(--dur-enter) var(--ease-enter);
   }
-  .tagging-help[hidden] { display: none; }
+  .tagging-help:focus { outline: none; }
+  .tagging-help:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* arriving: the dialogs' 8px rise and fade, no scale */
+  @starting-style {
+    .tagging-help:not([hidden]) { opacity: 0; transform: translateY(8px); }
+  }
+  @media (min-width: 761px) {
+    body.panel-open .tagging-help {
+      right: calc(min(var(--open-panel-width, 488px), 100vw) + 20px);
+      max-width: calc(100vw - min(var(--open-panel-width, 488px), 100vw) - 40px);
+    }
+    body.is-panel-resizing .tagging-help { transition: none; }
+  }
+  /* The caret has gone under the card (10-comments.js, updateTaggingHelpCover):
+     it steps back to a ghost and lets clicks through, so it never covers
+     the words being typed, and comes back once the caret moves on. */
+  .tagging-help.is-covering { opacity: 0.12; pointer-events: none; }
+  /* The tour's "Tag shortcuts" step shows it (20c-help.js): over the tour's
+     scrim (160) rather than dimmed under it. Not on a phone, where the
+     tour's card is a bottom sheet in the same place. */
+  @media (min-width: 481px) {
+    body:has(> .tour-overlay:not([hidden])) .tagging-help { z-index: 161; }
+  }
+  /* The writer is a full-screen mode (145) you tag in, so the card stays
+     over it there. */
+  body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
+
   .tagging-help-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px 8px 14px;
-    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 8px 4px 16px;
   }
   .tagging-help-title {
+    margin: 0;
     font-family: var(--font-body);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-dim);
-  }
-  .tagging-help-sub {
-    flex: 1;
-    font-family: var(--font-body);
-    font-size: 12px;
-    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 700;
+    color: var(--text);
   }
   .tagging-help-body {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 28px;
-    padding: 11px 14px 13px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 16px 4px;
     font-size: 13px;
     line-height: 1.5;
     color: var(--text-dim);
   }
-  .tagging-help-col { flex: 1 1 300px; display: flex; flex-direction: column; gap: 5px; }
-  .tagging-help-row { display: flex; align-items: baseline; gap: 8px; }
-  .tagging-help-note { font-size: 12px; color: var(--text-faint); line-height: 1.45; margin-top: 2px; }
-  .tagging-help-note strong, .tagging-help-row strong { color: var(--text-dim); }
+  .tagging-help-label {
+    margin: 10px 0 6px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    color: var(--text-faint);
+  }
+  .tagging-help-label:first-child { margin-top: 4px; }
+  .tagging-help-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  /* what you do | → | the tag it makes | its category */
+  .tagging-help-row {
+    display: grid;
+    grid-template-columns: 108px 14px auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 6px;
+  }
+  .tagging-help-keys .tagging-help-row { grid-template-columns: 100px minmax(0, 1fr); column-gap: 8px; }
+  .tagging-help-arrow { color: var(--text-faint); text-align: center; }
+  .tagging-help-cat { font-size: 12.5px; color: var(--text-dim); }
+  .tagging-help-how { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+  .tagging-help-caps { display: inline-flex; gap: 3px; }
+  /* The example is drawn by the script's own tag rule (.tag-sample shares
+     .tag-anchor's, under production tags) in the script's own face. */
+  .tagging-help .tag-sample {
+    justify-self: start;
+    font-family: var(--font-script);
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .tagging-help-note { margin: 8px 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+  .tagging-help-note strong { color: var(--text); font-weight: 600; }
+  .tagging-help-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 12px;
+    margin-top: 8px;
+    padding: 10px 16px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .tagging-help-sub {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  /* a code sample sits on the page's ground, set into the raised card */
   .tagging-help-body code {
+    justify-self: start;
     font-family: var(--font-display);
     font-size: 12px;
-    background: var(--surface-2);
+    line-height: 18px;
+    color: var(--text);
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 1px 5px;
+    padding: 0 5px;
+    white-space: nowrap;
+  }
+  /* A phone: a bottom sheet over the bottom bar, the width of the screen. */
+  @media (max-width: 760px) {
+    .tagging-help {
+      left: 0;
+      right: 0;
+      bottom: calc(72px + env(safe-area-inset-bottom));
+      width: auto;
+      max-width: none;
+      max-height: min(60vh, calc(100vh - 72px - 64px));
+      border-width: 1px 0 0;
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+    }
+    .tagging-help-head { padding-top: 10px; }
   }
   /* B's keycap (#169): flat, the strong line, 4px corners */
   .tagging-help-body kbd {
@@ -4202,6 +4339,52 @@
     top: -7px;
     right: -7px;
     z-index: 2;
+  }
+
+  /* And on the rundown strip (#202, 05p-rundown-presence.js): a 10px dot
+     in the person's colour centred on the top edge of the block of the
+     scene they are in, a second person's overlapping it a little to the
+     right. Its own layer in the track, not #rundown-overlay (which fades
+     while the lens is on); the script places each dot from its block's
+     left and width, so it moves with it. Idle (a minute with nothing about
+     them changing) it is an empty ring in the same colour. A hairline of
+     the ink colour keeps the bright values off a light surface; on a dark
+     one it disappears into it. The thin bar (#178) gets 7px dots on its
+     line, above the bar's own toggle so a click reaches them. */
+  .rundown-presence {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .rd-who {
+    position: absolute;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: var(--who, var(--text-dim));
+    box-shadow: 0 0 0 1px rgba(15, 14, 12, 0.32);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    pointer-events: auto;
+  }
+  /* a bigger target than the dot */
+  .rd-who::before { content: ""; position: absolute; inset: -4px; border-radius: 999px; }
+  .rd-who.is-idle {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 2px var(--who, var(--text-dim)), 0 0 0 1px rgba(15, 14, 12, 0.32);
+  }
+  .rd-who[hidden] { display: none; }
+  .rd-who:hover { transform: translate(-50%, -50%) scale(1.25); }
+  #rundown.is-min .rd-who { top: 4.5px; width: 7px; height: 7px; }
+  #rundown.is-min .rd-who.is-idle { box-shadow: inset 0 0 0 1.5px var(--who, var(--text-dim)), 0 0 0 1px rgba(15, 14, 12, 0.32); }
+  /* the phone's compact strip has its blocks lower (B-Phone) */
+  @media (max-width: 760px) {
+    .rundown .rd-who { top: 15px; }
   }
 
   /* The controls a review session never renders are gone from the markup
@@ -5886,21 +6069,22 @@
     #root { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
 
     /* The header (#169, B-Phone): one 56px row. File as an icon, the title
-       with Save's status and the document's facts in a quiet line under
-       it, the clock as a chip, and Present as a tally icon. The panel
+       with Save's status, the document's facts and the script's length
+       (#207) in a quiet line under it, and Present as a tally icon. The panel
        toggles and Write are the bottom bar's here; their header buttons
        stay in the page, and the bar clicks them. Every button keeps its
        word as its name: font-size 0 drops it from sight only. */
     .topbar { margin: 0 -16px; }
     .topbar-row { display: flex; height: 56px; padding: 0 6px 0 2px; gap: 4px; }
     /* File down both lines; the title on the first, and on the second
-       Save's status (it is still the button), who else is here, and the
-       facts, clipped from the end as the desktop line is. Save and the
+       Save's status (it is still the button), who else is here, the
+       facts, clipped from the end as the desktop line is, and the script's
+       length at the right (#207). Save and the
        facts are real controls the board has no room for, so they keep a
        line of their own rather than go. */
     .topbar-left {
       display: grid;
-      grid-template-columns: 44px auto auto minmax(0, 1fr);
+      grid-template-columns: 44px auto auto minmax(0, 1fr) auto;
       grid-template-rows: minmax(0, 1fr) 24px 16px minmax(0, 1fr);
       align-self: stretch;
       flex: 1 1 auto;
@@ -5940,37 +6124,43 @@
     .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }
     /* The desktop line never shrinks your name (#183), but this column is
        what is left beside Save's status, a few words wide: held whole, the
-       name ran under the clock chip. Here it is cut short with "…" like the
-       other facts, and stays a button, and Settings ▸ You has it in full. */
+       name ran under what was at its right. Here it is cut short with "…"
+       like the other facts, and stays a button, and Settings ▸ You has it
+       in full. */
     .doc-meta { overflow: hidden; }
     .doc-meta .identity-chip { flex: 0 1 auto; min-width: 0; }
     .doc-meta #identity-name { min-width: 0; max-width: none; }
-    /* The clock as a 28px chip on the raised surface, in a 44px target:
-       the chip is drawn behind the figures, the button is the whole
-       height. */
-    .program-clock-wrap { flex: none; margin-right: 2px; }
-    .program-clock { position: relative; isolation: isolate; height: 44px; }
-    .program-clock::before {
-      content: "";
-      position: absolute;
-      inset: 8px 0;
-      z-index: -1;
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
+    /* The script's length (#207, Adam's call): the strip has no room for
+       it here, so it is the last item of the status line, at its right —
+       small plain text like the facts and Save's status. Against a target,
+       "1:35 · 0:25 left": the target itself is the strip's "Target 2:00"
+       just below. A taller target than its line, as Save's: the padding
+       reaches down to the header's edge. With a long save status and a
+       target on a narrow phone it is the facts before it that give way
+       (cut with "…", as they always have here), not the length. */
+    .length-status {
+      display: block;
+      grid-column: 5;
+      grid-row: 3;
+      justify-self: end;
+      margin: 0 0 -8px;
+      padding: 0 4px 8px 10px;
+      border: 0;
+      background: transparent;
+      color: var(--text-faint);
+      font-family: var(--font-body);
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 450;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      cursor: pointer;
     }
-    .program-clock:hover { background: transparent; }
-    .program-clock:hover::before { background: var(--hover); }
-    .program-clock-total { font-size: 13px; line-height: 16px; letter-spacing: 0; }
-    .program-clock-of { font-size: 11px; }
-    /* Against a target (#170) the chip has no room for "01:35 / 02:00
-       0:25 left" in a row: the time left (or over) goes under the total,
-       smaller, and the target itself is the rundown strip's "Target 2:00"
-       just below. */
-    .program-clock { flex-direction: column; justify-content: center; }
-    .program-clock-slot { line-height: 11px; }
-    .program-clock-slot .program-clock-of { display: none; }
-    .program-clock-delta { margin-left: 0; font-size: 10px; line-height: 11px; }
-    .program-clock:has(.program-clock-slot:not(:empty)) .program-clock-total { line-height: 14px; }
+    .length-status .rd-length-total { font-weight: 500; color: var(--text-dim); }
+    .length-status:hover, .length-status:hover .rd-length-total { color: var(--text); }
+    .length-status:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-sm); }
+    .length-status .rd-length-slot .rd-length-of { display: none; }
+    .rundown .rd-length { display: none; }
     .toolbar { flex: none; gap: 0; }
     .btn-group, #btn-write { display: none; }
     /* Search (#175): the magnifier, in a 44px target */
@@ -6018,7 +6208,6 @@
     .rundown .rundown-playhead::before,
     .topbar.is-condensed .rundown .rundown-playhead::before { display: block; left: -3px; top: -5px; border-width: 6px 4px 0 4px; }
 
-    .tagging-help-body { font-size: 12.5px; gap: 8px 20px; }
     /* panel is full viewport width here, so there's nothing to drag against */
     .comments-panel-resize-handle { display: none; }
 
@@ -6514,6 +6703,7 @@
 /* ---- Tagging reference: "Open the full guide" ---- */
 .tagging-help-fullguide { font-size: 12.5px; }
 .tagging-help-fullguide a { color: var(--visual); }
+.tagging-help-fullguide a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
 
 /* ---- coach-mark tour (20c-help.js) ----
    One fixed overlay reused for every step, following the hideTagGhost
@@ -7471,6 +7661,25 @@
   .rundown-track { position: relative; height: 45px; }
   .rundown-blocks, .rundown-overlay { position: absolute; inset: 0; }
   .rundown-overlay { pointer-events: none; }
+  /* The hover lens slides the strip (05f-rundown.js): its far ends go past
+     the track's edges and come back as the pointer nears them. The blocks
+     are clipped there (05f-rundown.js ends this layer where the blocks are
+     laid out, short of a length label at the right edge), with room for a
+     focus ring at rest; and an edge something has gone past fades over
+     18px, so it reads as "more this way". The mask is only there while
+     something is past an edge, and clips at the layer's own box. */
+  .rundown-blocks {
+    overflow: clip;
+    overflow-clip-margin: 4px;
+    --fade-l: 0px;
+    --fade-r: 0px;
+  }
+  .rundown-blocks:is(.over-l, .over-r) {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+  }
+  .rundown-blocks.over-l { --fade-l: 18px; }
+  .rundown-blocks.over-r { --fade-r: 18px; }
   .rd-block {
     position: absolute;
     top: 4px;
@@ -7508,26 +7717,59 @@
     padding: 0;
     overflow: hidden;
   }
-  .rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip { display: none; }
+  /* opacity rides along with display so the lens's fade below has a hidden
+     state to fade to; with no transition it changes nothing */
+  .rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip { display: none; opacity: 0; }
   /* a block too narrow for its number is a sliver, with no room for padding */
   @container rdb (min-width: 26px) {
     .rd-in { padding: 0 8px; }
-    .rd-num { display: inline; }
-    .rd-check { display: block; }
+    .rd-num { display: inline; opacity: 1; }
+    .rd-check { display: block; opacity: 1; }
   }
   @container rdb (min-width: 64px) {
-    .rd-block:not(.is-shot) .rd-len { display: inline; }
+    .rd-block:not(.is-shot) .rd-len { display: inline; opacity: 1; }
   }
   @container rdb (min-width: 78px) {
-    .rd-len { display: inline; }
+    .rd-len { display: inline; opacity: 1; }
   }
   /* Only the lens makes a block this wide in a long script, and only then
      do its status and its first words have somewhere to go. */
   @container rdb (min-width: 134px) {
-    .rundown.is-lensed .rd-stat { display: inline; }
+    .rundown.is-lensed .rd-stat { display: inline; opacity: 1; }
   }
   @container rdb (min-width: 188px) {
-    .rundown.is-lensed .rd-snip { display: block; }
+    .rundown.is-lensed .rd-snip { display: block; opacity: 1; }
+  }
+  /* Under the lens the queries above flip a label on and off as its block
+     grows and shrinks under the pointer; fade it in and out instead of
+     popping (the side panels' mechanism: display allow-discrete plus
+     @starting-style). Only while lensed: the strip is repainted on edits,
+     and a fade there would make every label blink on each keystroke.
+     Browsers without @starting-style keep the plain switch. */
+  .rundown.is-lensed :is(.rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip) {
+    transition: opacity var(--dur-fast) var(--ease-standard),
+                display var(--dur-fast) allow-discrete;
+  }
+  @starting-style {
+    .rundown.is-lensed :is(.rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip) { opacity: 0; }
+  }
+  .rundown.is-lensed .rd-in { transition: padding var(--dur-fast) var(--ease-standard); }
+  /* A label a block shows at rest stays under the lens while it fits
+     (rundownKeepLabels, 05f-rundown.js): the lens shrinks every block away
+     from the pointer, and without this the numbers all along the strip
+     blinked out whenever it opened. Kept, a label sits on tighter padding
+     instead: the number centred with none, the number and read time on 3px
+     with a 4px gap. */
+  .rundown.is-lensed .rd-block.keep-num .rd-num { display: inline; opacity: 1; }
+  .rundown.is-lensed .rd-block.keep-len .rd-len { display: inline; opacity: 1; }
+  @container rdb (max-width: 25.99px) {
+    .rundown.is-lensed .rd-block.keep-num .rd-in { justify-content: center; }
+  }
+  @container rdb (max-width: 63.99px) {
+    .rundown.is-lensed .rd-block.keep-len .rd-in { padding: 0 3px; gap: 4px; }
+  }
+  @container rdb (max-width: 77.99px) {
+    .rundown.is-lensed .rd-block.is-shot.keep-len .rd-in { padding: 0 3px; gap: 4px; }
   }
   .rd-block .rd-len { color: var(--text-faint); }
   .rd-stat {
@@ -7751,6 +7993,74 @@
   #rundown.is-min .rd-target-line { top: 0; bottom: 0; border-left-style: solid; }
   #rundown.is-min .rd-target-label,
   #rundown.is-min .rd-target-hatch { display: none; }
+  /* The script's length is on the strip itself (#207): the hatching need
+     not repeat how far off the target it is. */
+  .rundown.has-length-delta .rd-target-delta { display: none; }
+
+  /* The script's length (#207, 05f-rundown.js places it): a small label in
+     the blocks' band just after the last block — or at the track's right
+     edge when the script fills the strip — in the blocks' own mono: the
+     total as a block's number is drawn, then against a target " / 2:00"
+     faint and "· 0:25 left" dim, or "· 0:05 over" in tally red. A button,
+     quiet until pointed at, that opens the reading speed and target
+     length. It sits on the strip's own surface, so the target's line and
+     hatching pass behind it rather than through its figures. It replaced
+     the header's 20px program clock (#169). */
+  .rd-length {
+    position: absolute;
+    top: 4px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+  }
+  .rd-length:hover { background: var(--hover); }
+  .rd-length:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+  .rd-length-of { font-weight: 450; color: var(--text-faint); }
+  /* the slot is a flex item of its own, so the space before its " / " would
+     otherwise be dropped as the start of a line */
+  .rd-length-slot { white-space: pre; }
+  .rd-length-slot:empty { display: none; }
+  .rd-length-delta { font-weight: 450; color: var(--text-dim); }
+  .rd-length-delta::before { content: " · "; color: var(--text-faint); }
+  .rd-length-delta.is-over { color: var(--tally); }
+  /* Short of room: the total alone (the target stays in the tooltip). The
+     slot keeps its width, out of the flow, so 05f-rundown.js can measure
+     it without putting anything back. */
+  .rd-length.is-short .rd-length-slot { position: absolute; visibility: hidden; pointer-events: none; }
+  /* No room at all (a very narrow strip); measured still, so not display */
+  .rd-length.is-none { visibility: hidden; }
+  /* the lens has pushed the script's end up to it: out of the way until
+     the lens lets go */
+  .rd-length.is-covered { opacity: 0; pointer-events: none; }
+  /* Minimized (#178): the thin bar keeps it, at its end, on the bar's own
+     9px — and above the bar-wide toggle, so it still opens the popover. */
+  #rundown.is-min .rd-length {
+    top: 0;
+    height: 9px;
+    padding: 0 3px;
+    border-radius: 2px;
+    font-size: 9.5px;
+    line-height: 9px;
+  }
+  #rundown.is-min:hover .rd-length { background: var(--hover); }
+  #rundown.is-min .rd-length:hover { color: var(--text); }
+  @media (prefers-reduced-motion: reduce) {
+    .rd-length { transition: none; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .rundown.is-lensed .rundown-ruler,

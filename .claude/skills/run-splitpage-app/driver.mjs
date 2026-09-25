@@ -600,8 +600,32 @@ const KEY_MAP = {
   keyo:      { key: "o",         code: "KeyO",      vk: 79 },
   keye:      { key: "e",         code: "KeyE",      vk: 69 },
   keyk:      { key: "k",         code: "KeyK",      vk: 75 },
+  // the clipboard's own keys (#204: copy, cut and paste whole scenes)
+  keyc:      { key: "c",         code: "KeyC",      vk: 67 },
+  keyx:      { key: "x",         code: "KeyX",      vk: 88 },
+  keyv:      { key: "v",         code: "KeyV",      vk: 86 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK";
+const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV";
+
+// mouse down|move|up|right <js expression giving {x, y}> — one real CDP mouse
+// event at a viewport point the page works out (#204: a drag out of a text
+// box, which only a held button moving across the page can make). `move`
+// carries the held left button; `right` is a right-click (press + release).
+async function mouseEvent(rest) {
+  const m = /^\s*(down|move|up|right)\s+(.+)$/.exec(rest);
+  if (!m) throw new Error("mouse needs: down|move|up|right <js giving {x,y}>");
+  const pt = await js(m[2]);
+  if (!pt) throw new Error(`mouse ${m[1]}: no point from ${m[2]}`);
+  const x = Math.trunc(pt.x), y = Math.trunc(pt.y);
+  if (m[1] === "down") await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
+  else if (m[1] === "move") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 });
+  else if (m[1] === "up") await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
+  else {
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "right", buttons: 2, clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "right", buttons: 0, clickCount: 1 });
+  }
+  out1(`mouse ${m[1]} at ${x},${y}`);
+}
 
 async function pressKey(name, mods = "") {
   // PowerShell hashtable lookup is case-insensitive; the suites write `key Tab`
@@ -677,6 +701,7 @@ async function invokeLine(line) {
       out1(`ok: ${rest}`);
       break;
     case "click": await clickEl(rest); break;
+    case "mouse": await mouseEvent(rest); break;
     case "jsclick": {
       const e = resolveSel(rest);
       const ok = await js(`(()=>{const el=${e}; if(!el) return false; el.click(); return true;})()`);
