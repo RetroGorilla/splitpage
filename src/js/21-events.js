@@ -136,6 +136,7 @@ import {
   renderProduction,
   saveTagRename,
   setTagStatus,
+  tagAllMentions,
   toggleCardSelection,
   wireTouchSelection
 } from "./08-production-panels.js";
@@ -146,13 +147,18 @@ import {
 } from "./08c-broll.js";
 import { wireBrollPanel } from "./08d-broll-panel.js";
 import {
+  bulkTagOpen,
+  closeBulkTag,
   closeFindBar,
   findOpen,
   openFindBar,
+  pickBulkTagCat,
   refreshFindMatches,
   replaceAll,
   replaceCurrent,
-  stepFind
+  runBulkTag,
+  stepFind,
+  toggleBulkTag
 } from "./09-find-replace.js";
 import {
   armDeleteComment,
@@ -508,6 +514,9 @@ export function onRootClick(e) {
 
   var tagRenameCancel = e.target.closest('[data-action="tag-rename-cancel"]');
   if (tagRenameCancel) { S.tagRenaming = null; renderProduction(); return; }
+
+  var tagAllBtn = e.target.closest('[data-action="tag-all-mentions"]');
+  if (tagAllBtn) { tagAllMentions(tagAllBtn.getAttribute("data-key")); return; }
 
   var tagRemoveBtn = e.target.closest('[data-action="tag-remove"]');
   if (tagRemoveBtn) { armRemoveTag(tagRemoveBtn, tagRemoveBtn.getAttribute("data-key")); return; }
@@ -1604,6 +1613,16 @@ function init() {
   document.getElementById("find-prev").addEventListener("click", function () { stepFind(-1); });
   document.getElementById("find-replace").addEventListener("click", replaceCurrent);
   document.getElementById("find-replace-all").addEventListener("click", replaceAll);
+  document.getElementById("find-tag").addEventListener("click", toggleBulkTag);
+  document.getElementById("find-tag-go").addEventListener("click", runBulkTag);
+  document.getElementById("find-tag-cancel").addEventListener("click", function () {
+    closeBulkTag();
+    document.getElementById("find-tag").focus();
+  });
+  document.getElementById("find-tag-cats").addEventListener("click", function (e) {
+    var btn = e.target.closest(".tag-cat-btn");
+    if (btn) pickBulkTagCat(btn.getAttribute("data-tag-cat"));
+  });
   document.getElementById("find-case").addEventListener("click", function (e) {
     S.findMatchCase = !S.findMatchCase;
     e.currentTarget.classList.toggle("is-active", S.findMatchCase);
@@ -1614,8 +1633,16 @@ function init() {
     refreshFindMatches(false);
   });
   document.getElementById("findbar").addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeFindBar(); return; }
+    if (e.key === "Escape") {
+      e.preventDefault(); e.stopPropagation();
+      /* the Tag all row first, then the bar */
+      if (bulkTagOpen()) { closeBulkTag(); document.getElementById("find-tag").focus(); return; }
+      closeFindBar();
+      return;
+    }
     if (e.key !== "Enter") return;
+    /* a button in the bar (Tag all's categories, Tag, Cancel) keeps its own Enter */
+    if (e.target.tagName === "BUTTON") return;
     e.preventDefault();
     if (e.target.id === "replace-input") { replaceCurrent(); return; }
     stepFind(e.shiftKey ? -1 : 1);

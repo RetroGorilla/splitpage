@@ -1,0 +1,139 @@
+# Bulk tagging (#218; 07-production-tags.js bulkTagRows, 09-find-replace.js
+# "Tag all as…", 08-production-panels.js "Tag all N mentions"): the find
+# bar tags every whole-word Visual-column mention of what was searched for
+# as one category, named as typed, after asking with the count; a match
+# across formatting is one tag with the bold kept; mentions already tagged
+# or in a link are counted and left; the Audio column is left alone; it is
+# ONE undo entry; the Production panel follows; a reviewer cannot do it;
+# and the Production panel's open item offers "Tag all N mentions".
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.snap = function () { var s = F.state(); return JSON.stringify({ rows: s.rows.map(function (r) { return [r.visualText, r.audioText]; }), reg: s.productionTags.map(function (t) { return [t.cat, t.name]; }) }); }; window.spans = function (cat, name, col) { return F.state().rows.reduce(function (n, r) { var d = document.createElement('div'); d.innerHTML = col === 'audio' ? r.audioText : r.visualText; return n + Array.prototype.filter.call(d.querySelectorAll('.tag-anchor'), function (el) { return el.getAttribute('data-tag-cat') === cat && el.getAttribute('data-tag-name').toLowerCase() === name.toLowerCase(); }).length; }, 0); }; window.reg = function (cat, name) { return F.state().productionTags.filter(function (t) { return t.cat === cat && t.name.toLowerCase() === name.toLowerCase(); }); }; return true; })()
+
+# --- a document: drone in the Visual column six ways -----------------------
+eval (function(){ var s = JSON.parse(F.buildSplitpage()); var tag = function (cat, name, text) { return '<span class="tag-anchor" data-tag-cat="' + cat + '" data-tag-name="' + name + '" contenteditable="false">' + text + '</span>'; }; s.title = 'Bulk tag'; s.rows = [ { id: 'r1', status: 'todo', visualText: 'A drone shot over the lake. The Drone lands.', audioText: 'The drone hums.' }, { id: 'r2', status: 'todo', visualText: 'Close on the dr<strong>one</strong> and the drones, then a ' + tag('prop', 'drone', 'drone') + '.', audioText: '' }, { id: 'r3', status: 'todo', visualText: 'See <a href="https://e.x/">drone</a> specs. Tapestry, tape.', audioText: 'drone' } ]; s.productionTags = [ { cat: 'prop', name: 'tape', owner: '', notes: '', status: 'needed' } ]; s.comments = []; s.brollShots = []; F.openFile(new File([JSON.stringify(s)], 'bulk.splitpage')); return true; })()
+wait F.state().title === 'Bulk tag' && document.querySelectorAll('#rows .row').length === 3
+sleep 400
+eval (function(){ U.flush(); window.__before = snap(); window.__n = U.sizes().undo; return window.__n; })()
+
+# --- the find bar's Tag all as… asks first, with the count -----------------
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+expect !document.getElementById('find-tag').hidden
+expect document.getElementById('find-tag-row').hidden
+type drone
+sleep 200
+jsclick #find-tag
+wait !document.getElementById('find-tag-row').hidden
+expect document.getElementById('find-tag').getAttribute('aria-expanded') == true
+# six category buttons from TAG_CATEGORIES, Prop picked by default
+expect document.querySelectorAll('#find-tag-cats .tag-cat-btn').length === 6
+expect document.querySelector('#find-tag-cats .tag-cat-btn.is-active').getAttribute('data-tag-cat') == prop
+# three can be tagged (drone, Drone, dr<strong>one</strong>); "drones" is not a whole word;
+# one already tagged; the link one can't be
+expect document.getElementById('find-tag-ask').textContent.indexOf('Tag 3 mentions of drone as Prop?') === 0
+expect document.getElementById('find-tag-ask').textContent.indexOf('1 already tagged') !== -1
+expect document.getElementById('find-tag-ask').textContent.indexOf('1 can’t be tagged') !== -1
+jsclick #find-tag-cats .tag-cat-btn[data-tag-cat="gear"]
+expect document.querySelector('#find-tag-cats .tag-cat-btn.is-active').getAttribute('data-tag-cat') == gear
+expect document.getElementById('find-tag-ask').textContent.indexOf('Tag 3 mentions of drone as Gear?') === 0
+# nothing changed by asking
+expect snap() === window.__before
+shot 218-bulk-tag-ask
+
+# --- Tag: one undo entry, the Visual column only ----------------------------
+jsclick #find-tag-go
+sleep 500
+expect document.getElementById('find-tag-row').hidden
+expect spans('gear', 'drone') === 3
+expect spans('gear', 'drone', 'audio') === 0
+expect spans('prop', 'drone') === 1
+expect reg('gear', 'drone').length === 1
+expect reg('gear', 'drone')[0].name == drone
+expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function (t) { return t.textContent === 'Tagged 3 as Gear · 1 already tagged · 1 skipped'; })
+# the words keep their casing; the bold is kept under one tag
+expect F.state().rows[0].visualText.indexOf('data-tag-name="drone" contenteditable="false">Drone</span>') !== -1
+expect F.state().rows[1].visualText.indexOf('data-tag-cat="gear" data-tag-name="drone" contenteditable="false">dr<strong>one</strong></span>') !== -1
+expect F.state().rows[1].visualText.indexOf('drones') !== -1
+expect F.state().rows[2].visualText.indexOf('<a href="https://e.x/"') !== -1
+expect F.state().rows[0].audioText == The drone hums.
+expect U.sizes().undo === window.__n + 1
+# the Production panel's count follows
+jsclick #btn-production
+wait document.querySelector('#production-list') && document.querySelector('#production-list').textContent.indexOf('drone') !== -1
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+key ctrl+shift KeyZ
+sleep 400
+expect spans('gear', 'drone') === 3
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+
+# --- Aa: the exact case only ------------------------------------------------
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return true; })()
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+eval (function(){ var i = document.getElementById('find-input'); i.value = 'Drone'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
+jsclick #find-case
+jsclick #find-tag
+wait !document.getElementById('find-tag-row').hidden
+expect document.getElementById('find-tag-ask').textContent.indexOf('Tag 1 mention of Drone as') === 0
+jsclick #find-case
+expect document.getElementById('find-tag-ask').textContent.indexOf('Tag 3 mentions of Drone as') === 0
+# Escape closes the row first, then the bar
+eval (function(){ document.getElementById('find-tag-go').focus(); return true; })()
+key Escape
+expect document.getElementById('find-tag-row').hidden
+expect !document.getElementById('findbar').hidden
+key Escape
+expect document.getElementById('findbar').hidden
+
+# --- whole words: tape never inside Tapestry; an item's own category first -
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+eval (function(){ var i = document.getElementById('find-input'); i.value = 'tape'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
+jsclick #find-tag
+wait !document.getElementById('find-tag-row').hidden
+expect document.querySelector('#find-tag-cats .tag-cat-btn.is-active').getAttribute('data-tag-cat') == prop
+expect document.getElementById('find-tag-ask').textContent.indexOf('Tag 1 mention of tape as Prop?') === 0
+# nothing to tag: the button is disabled with the reason
+eval (function(){ var i = document.getElementById('find-input'); i.value = 'zebra'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
+expect document.getElementById('find-tag-go').disabled
+expect document.getElementById('find-tag-ask').textContent.indexOf('No whole-word mention') === 0
+jsclick #find-tag-cancel
+expect document.getElementById('find-tag-row').hidden
+key Escape
+expect snap() === window.__before
+
+# --- the Production panel: "Tag all N mentions" on an open item -------------
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return true; })()
+eval (function(){ var h = Array.prototype.find.call(document.querySelectorAll('#production-list .tag-entity-head'), function (b) { return b.textContent.indexOf('drone') !== -1; }); h.click(); return !!h; })()
+wait document.querySelector('[data-action="tag-all-mentions"]')
+expect document.querySelector('[data-action="tag-all-mentions"]').textContent == Tag all 3 mentions
+jsclick [data-action="tag-all-mentions"]
+sleep 500
+expect spans('prop', 'drone') === 4
+expect U.sizes().undo === window.__n + 1
+expect !document.querySelector('[data-action="tag-all-mentions"]')
+key ctrl KeyZ
+sleep 400
+expect snap() === window.__before
+
+# --- a review session cannot bulk-tag ---------------------------------------
+eval (function(){ window.__hostedTest.setSession({ docId: 'doc-x', role: 'review' }); return true; })()
+sleep 200
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+expect getComputedStyle(document.getElementById('find-tag')).display == none
+eval (function(){ var i = document.getElementById('find-input'); i.value = 'drone'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
+jsclick #find-tag
+sleep 200
+expect document.getElementById('find-tag-row').hidden
+expect !document.querySelector('[data-action="tag-all-mentions"]')
+expect snap() === window.__before

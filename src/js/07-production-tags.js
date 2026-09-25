@@ -1354,6 +1354,12 @@ export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccu
   var found = tagOccurrences(cell, phrase);
   if (countOnly) return { hits: found.length, html: html };
   if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence]] : [];
+  return writeTags(html, cell, found, cat, name);
+}
+
+/* Puts the tag (cat, name) on each of `found` in the field and writes it
+   back: {hits, html}, the same string when nothing was tagged. */
+function writeTags(html, cell, found, cat, name) {
   if (!found.length) return { hits: 0, html: html };
   /* the name the sanitiser would have left on the span */
   var clean = plainText(name).trim().slice(0, 80);
@@ -1364,6 +1370,86 @@ export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccu
   var id = namedTagId(cat, clean);
   found.forEach(function (m) { cell = setMark(cell, m.from, m.to, "tag", id); });
   return { hits: found.length, html: toHtml(cell) };
+}
+
+/* ---- tagging every mention at once (#218) ----
+
+   The find bar's "Tag all as…": every Visual-column mention of what was
+   searched for becomes a tag of one category, in one undo step. What
+   counts as a mention is tagOccurrences' rule above (whole words, across
+   formatting, never in a tag or a link, never across a b-roll key, a line
+   break or a comment's edge), narrowed to the exact case when the find
+   bar's Aa is on. The Visual column only: it is what is in front of the
+   camera, and the breakdown is read from it.
+
+   bulkTagCell also says what it did NOT tag, so the toast can explain the
+   difference from the find bar's count: a whole-word mention that is
+   (partly) inside a tag already is `inTags`; any other it turned down —
+   across a key, a link, a line break, a comment's edge — is `skipped`. */
+function wholeWordHits(text, needle, matchCase) {
+  var hay = matchCase ? text : foldCaseKeepLength(text);
+  var find = matchCase ? needle : foldCaseKeepLength(needle);
+  var out = [];
+  if (!find) return out;
+  var at = hay.indexOf(find);
+  while (at !== -1) {
+    var end = at + find.length;
+    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
+      out.push({ from: at, to: end });
+      at = hay.indexOf(find, end);
+    } else {
+      at = hay.indexOf(find, at + 1);
+    }
+  }
+  return out;
+}
+
+export function bulkTagCell(html, phrase, cat, name, matchCase, countOnly) {
+  var needle = String(phrase == null ? "" : phrase).trim();
+  var none = { hits: 0, inTags: 0, skipped: 0, html: html };
+  if (!needle) return none;
+  var cell = cellOf(html);
+  var text = "", tagged = [];
+  cell.forEach(function (r) {
+    if (r.atom) { text += "\uFFFC"; tagged.push(false); return; }
+    text += r.text;
+    for (var i = 0; i < r.text.length; i++) tagged.push(!!r.marks.tag);
+  });
+  var found = tagOccurrences(cell, needle).filter(function (m) {
+    return !matchCase || text.slice(m.from, m.to) === needle;
+  });
+  var taking = {};
+  found.forEach(function (m) { taking[m.from] = true; });
+  var inTags = 0, skipped = 0;
+  wholeWordHits(text, needle, matchCase).forEach(function (h) {
+    if (taking[h.from]) return;
+    if (tagged.slice(h.from, h.to).indexOf(true) !== -1) inTags++;
+    else skipped++;
+  });
+  if (countOnly || !found.length) {
+    return { hits: found.length, inTags: inTags, skipped: skipped, html: html };
+  }
+  var res = writeTags(html, cell, found, cat, name);
+  /* a cell whose DOM would not read as its model (writeTags' media path)
+     is left as it was: those mentions were turned down, not tagged */
+  return { hits: res.hits, inTags: inTags, skipped: skipped + found.length - res.hits, html: res.html };
+}
+
+/* The same over every scene's Visual column: {hits, inTags, skipped}, and,
+   unless countOnly, each changed row's visualText rewritten and stamped. */
+export function bulkTagRows(rows, phrase, cat, name, matchCase, countOnly) {
+  var total = { hits: 0, inTags: 0, skipped: 0 };
+  (rows || []).forEach(function (row) {
+    var res = bulkTagCell(row.visualText, phrase, cat, name, matchCase, countOnly);
+    total.hits += res.hits;
+    total.inTags += res.inTags;
+    total.skipped += res.skipped;
+    if (!countOnly && res.hits && res.html !== row.visualText) {
+      row.visualText = res.html;
+      stampRow(row);
+    }
+  });
+  return total;
 }
 
 function tagAllOccurrences(phrase, cat, name) {
