@@ -432,7 +432,7 @@ test("#199: a pointer that stops on a sliver keeps it, and the lens comes to res
   const i = 13;
   /* move in slowly until the sliver is under the pointer, a few pixels
      more, then stop for a second */
-  let moves = [];
+  const moves = [];
   let frames = [];
   for (let k = 1; k <= 120; k++) {
     moves.push([X[i] - 30 + k, 16]);
