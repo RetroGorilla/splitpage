@@ -1367,7 +1367,12 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     a CSS token, so that table is a deliberate second copy — the one place
     they are written out, read through `tagPrintColor(catId)`.
     `src/test/palette.test.mjs` checks all of it, contrast included, and
-    fails the moment `TAG_PRINT_COLORS` and `:root` disagree.
+    fails the moment `TAG_PRINT_COLORS` and `:root` disagree. It also needs
+    an `icon` (#217): a stroked 24×24 SVG's inside in `TAG_ICON_PATHS`, next
+    to `TAG_CATEGORIES`, which `tagIconCss()` gives to `[data-tag-cat]` as
+    `--tag-icon` for Settings ▸ Show icons on tags. The icon is CSS only
+    (`::before` and the panels' dots, under `<html data-tag-icons>`), never
+    a node in a `.cell-editable`, or `syncFieldFromDom()` would read it back.
 15. **The writer never re-parses the document into rows** (§3.9). Row-list
     changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
     through `renderWriter()`.

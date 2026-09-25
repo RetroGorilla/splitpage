@@ -267,6 +267,14 @@ and stays while you scroll and type, fading while the caret is under it.
 <kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no shortcut:
 select the words and press **Tag**.
 
+**Icons on tags**: turn on **Settings ▸ Show icons on tags** to put a small
+icon before each tag as well as its colour: a box for a prop, a pin for a
+location, a person for cast, a sparkle for VFX, a note for music and sound,
+a camera for gear. It helps when the colours are hard to tell apart, for
+example in greyscale. The icons also show in the Production and Gear panels
+and on the tagging reference. They are never part of your text, so copying,
+exports and read times stay the same, and the teleprompter leaves them out.
+
 **Plain-language tags**: in the Visual column, type a category and a colon
 (`VFX:`, `Prop:`, `Location:` or `Loc:`, `Cast:`, `Gear:`, `SFX:` or
 `Music:`, in any case). The words you type next are tinted in that
@@ -477,8 +485,8 @@ closes. With nothing typed, your recent commands come first.
 change the script.
 
 - **Appearance**: theme, 12- or 24-hour clock (used for times such as the
-  save status's "Last saved … at"), and whether the rundown strip starts
-  small.
+  save status's "Last saved … at"), whether the rundown strip starts
+  small, and **Show icons on tags**.
 - **Editor**: Hide shot scenes, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.
