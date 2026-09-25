@@ -3020,6 +3020,26 @@
     border-radius: 4px;
     color: var(--text-dim);
   }
+  /* ---- an open plain-language tag (#210, 07b-plain-tags.js) ----
+     "VFX:" typed in a Visual cell: the keyword is hidden (it stays in the
+     document as plain words until Tab), and the words typed after it are
+     tinted faintly in the category's colour with a dashed rule under them
+     — the tag's own look, not yet solid — so it is plain what Tab will
+     wrap. One highlight per category, because a ::highlight() cannot read
+     the category off an element; a new TAG_CATEGORIES entry needs its line
+     here as well (src/test/plain-tags.test.mjs checks). */
+  .plain-tag-keyword { display: none; }
+  ::highlight(splitpage-open-tag-prop)     { background-color: color-mix(in srgb, var(--tag-prop-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-prop) 1.5px;     text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-location) { background-color: color-mix(in srgb, var(--tag-location-tint) 70%, transparent); text-decoration: underline dashed var(--tag-location) 1.5px; text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-cast)     { background-color: color-mix(in srgb, var(--tag-cast-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-cast) 1.5px;     text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-vfx)      { background-color: color-mix(in srgb, var(--tag-vfx-tint) 70%, transparent);      text-decoration: underline dashed var(--tag-vfx) 1.5px;      text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-sound)    { background-color: color-mix(in srgb, var(--tag-sound-tint) 70%, transparent);    text-decoration: underline dashed var(--tag-sound) 1.5px;    text-underline-offset: 3px; }
+  ::highlight(splitpage-open-tag-gear)     { background-color: color-mix(in srgb, var(--tag-gear-tint) 70%, transparent);     text-decoration: underline dashed var(--tag-gear) 1.5px;     text-underline-offset: 3px; }
+  /* the note under the cell: the category and the key. The untagged
+     prompt's look, but not a button — nothing to click, Tab is the way. */
+  .tag-open-hint { pointer-events: none; cursor: default; gap: 7px; }
+  .tag-open-hint .tag-cat-dot { width: 8px; height: 8px; }
+
   /* only shown when Tab would land the tag in a different category than the
      bracket being typed implies — see updateTagGhost() */
   .tag-ghost-cat {
