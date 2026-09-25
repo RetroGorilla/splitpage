@@ -135,4 +135,21 @@ eval track().dispatchEvent(new PointerEvent('pointerleave', { bubbles: false, po
 wait RT.lens().Z === null
 eval window.__mo.disconnect()
 
+# --- labels fade under the lens, and only there -------------------------------
+# A block widened past a label's width starts an opacity transition on that
+# label while the strip is lensed (display allow-discrete + @starting-style,
+# app.css), and narrowed again starts one back out; with no lens the same
+# change is the plain switch, so a repaint never blinks every label.
+eval (function(){ window.fadeOf = function(el){ getComputedStyle(el).opacity; return el.getAnimations().filter(function(a){ return a.transitionProperty === 'opacity'; }).length; }; window.__fb = blk(13); window.__fw = __fb.style.width; return true; })()
+expect !shown(__fb.querySelector('.rd-num'))
+eval (function(){ document.getElementById('rundown').classList.add('is-lensed'); getComputedStyle(__fb.querySelector('.rd-num')).opacity; __fb.style.width = '60px'; return true; })()
+expect shown(__fb.querySelector('.rd-num')) && fadeOf(__fb.querySelector('.rd-num')) === 1
+wait getComputedStyle(__fb.querySelector('.rd-num')).opacity === '1'
+eval (function(){ __fb.style.width = '10px'; return true; })()
+expect fadeOf(__fb.querySelector('.rd-num')) === 1
+wait !shown(__fb.querySelector('.rd-num'))
+eval (function(){ document.getElementById('rundown').classList.remove('is-lensed'); getComputedStyle(__fb.querySelector('.rd-num')).opacity; __fb.style.width = '60px'; return true; })()
+expect shown(__fb.querySelector('.rd-num')) && fadeOf(__fb.querySelector('.rd-num')) === 0 && getComputedStyle(__fb.querySelector('.rd-num')).opacity === '1'
+eval (function(){ __fb.style.width = __fw; return true; })()
+
 quit

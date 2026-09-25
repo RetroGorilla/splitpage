@@ -7698,27 +7698,43 @@
     padding: 0;
     overflow: hidden;
   }
-  .rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip { display: none; }
+  /* opacity rides along with display so the lens's fade below has a hidden
+     state to fade to; with no transition it changes nothing */
+  .rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip { display: none; opacity: 0; }
   /* a block too narrow for its number is a sliver, with no room for padding */
   @container rdb (min-width: 26px) {
     .rd-in { padding: 0 8px; }
-    .rd-num { display: inline; }
-    .rd-check { display: block; }
+    .rd-num { display: inline; opacity: 1; }
+    .rd-check { display: block; opacity: 1; }
   }
   @container rdb (min-width: 64px) {
-    .rd-block:not(.is-shot) .rd-len { display: inline; }
+    .rd-block:not(.is-shot) .rd-len { display: inline; opacity: 1; }
   }
   @container rdb (min-width: 78px) {
-    .rd-len { display: inline; }
+    .rd-len { display: inline; opacity: 1; }
   }
   /* Only the lens makes a block this wide in a long script, and only then
      do its status and its first words have somewhere to go. */
   @container rdb (min-width: 134px) {
-    .rundown.is-lensed .rd-stat { display: inline; }
+    .rundown.is-lensed .rd-stat { display: inline; opacity: 1; }
   }
   @container rdb (min-width: 188px) {
-    .rundown.is-lensed .rd-snip { display: block; }
+    .rundown.is-lensed .rd-snip { display: block; opacity: 1; }
   }
+  /* Under the lens the queries above flip a label on and off as its block
+     grows and shrinks under the pointer; fade it in and out instead of
+     popping (the side panels' mechanism: display allow-discrete plus
+     @starting-style). Only while lensed: the strip is repainted on edits,
+     and a fade there would make every label blink on each keystroke.
+     Browsers without @starting-style keep the plain switch. */
+  .rundown.is-lensed :is(.rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip) {
+    transition: opacity var(--dur-fast) var(--ease-standard),
+                display var(--dur-fast) allow-discrete;
+  }
+  @starting-style {
+    .rundown.is-lensed :is(.rd-num, .rd-check, .rd-len, .rd-stat, .rd-snip) { opacity: 0; }
+  }
+  .rundown.is-lensed .rd-in { transition: padding var(--dur-fast) var(--ease-standard); }
   .rd-block .rd-len { color: var(--text-faint); }
   .rd-stat {
     font-family: var(--font-body);
