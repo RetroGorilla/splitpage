@@ -445,7 +445,32 @@ $KeyMap = @{
   KeyO      = @{ key = 'o';         code = 'KeyO';      vk = 79 }
   KeyE      = @{ key = 'e';         code = 'KeyE';      vk = 69 }
   KeyK      = @{ key = 'k';         code = 'KeyK';      vk = 75 }
+  # the clipboard's own keys (#204: copy, cut and paste whole scenes)
+  KeyC      = @{ key = 'c';         code = 'KeyC';      vk = 67 }
+  KeyX      = @{ key = 'x';         code = 'KeyX';      vk = 88 }
+  KeyV      = @{ key = 'v';         code = 'KeyV';      vk = 86 }
 }
+
+# mouse down|move|up|right <js expression giving {x, y}> — one real CDP mouse
+# event at a viewport point the page works out (#204: a drag out of a text
+# box, which only a held button moving across the page can make). `move`
+# carries the held left button; `right` is a right-click (press + release).
+function Mouse-Event([string]$Rest) {
+  if ($Rest -notmatch '^\s*(down|move|up|right)\s+(.+)$') { throw 'mouse needs: down|move|up|right <js giving {x,y}>' }
+  $what = $Matches[1]; $expr = $Matches[2]
+  $pt = Invoke-Js $expr
+  if (-not $pt) { throw "mouse ${what}: no point from $expr" }
+  $x = [int]$pt.x; $y = [int]$pt.y
+  switch ($what) {
+    'down'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mousePressed'; x = $x; y = $y; button = 'left'; buttons = 1; clickCount = 1 } }
+    'move'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = $x; y = $y; button = 'left'; buttons = 1 } }
+    'up'    { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseReleased'; x = $x; y = $y; button = 'left'; buttons = 0; clickCount = 1 } }
+    'right' { foreach ($t in @('mousePressed','mouseReleased')) {
+                $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = $t; x = $x; y = $y; button = 'right'; buttons = $(if ($t -eq 'mousePressed') { 2 } else { 0 }); clickCount = 1 } } }
+  }
+  Out1 "mouse $what at $x,$y"
+}
+
 function Press-Key([string]$Name, [string]$Mods = '') {
   if (-not $KeyMap.ContainsKey($Name)) { throw "unknown key '$Name' (have: $($KeyMap.Keys -join ', '))" }
   $k = $KeyMap[$Name]
@@ -511,6 +536,7 @@ function Invoke-Line([string]$line) {
               }
     'waitsel' { Wait-For "document.querySelector('$rest')" 20000 | Out-Null; Out1 "ok: $rest" }
     'click'   { Click-El $rest }
+    'mouse'   { Mouse-Event $rest }
     'jsclick' { $e = Resolve-Sel $rest
                 $ok = Invoke-Js "(()=>{const el=$e; if(!el) return false; el.click(); return true;})()"
                 if (-not $ok) { throw "no element for: $rest" }; Out1 "jsclicked $rest" }
