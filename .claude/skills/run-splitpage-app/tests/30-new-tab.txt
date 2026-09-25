@@ -136,10 +136,15 @@ expect document.querySelectorAll('.newtab-preview.is-blank svg').length == 1
 expect document.getElementById('newtab-recents').hidden == true
 expect document.getElementById('newtab-desktop').hidden == false
 expect document.getElementById('newtab-desktop-link').href.indexOf('https://github.com/RetroGorilla/splitpage-releases') === 0
-# the drop zone, and a footer offering the tour and the cheat sheet
+# the drop zone, and a footer offering the tour and the example script
+# (the tagging cheat sheet's link went in #209: File ▸ Tagging reference and
+# the command menu open it — 14-help and 180-tagging-card)
 expect document.querySelector('#newtab-drop strong').textContent == Drop a script here
 expect document.querySelectorAll('#newtab-drop [data-newtab-action="paste"], #newtab-drop [data-newtab-action="gdoc"]').length == 2
-expect document.querySelectorAll('.newtab-foot [data-newtab-action="tour"], .newtab-foot [data-newtab-action="tagging-help"], .newtab-foot [data-newtab-action="dismiss"]').length == 3
+expect document.querySelectorAll('.newtab-foot [data-newtab-action="tour"], .newtab-foot [data-newtab-action="dismiss"]').length == 2
+expect document.querySelectorAll('[data-newtab-action="tagging-help"]').length == 0
+expect document.querySelector('.newtab-foot').textContent.indexOf('cheat sheet') === -1
+expect document.querySelectorAll('.newtab-foot > .newtab-foot-sep').length == 1
 expect document.querySelectorAll('.newtab-bar [data-newtab-action="join"], .newtab-bar [data-newtab-action="open"]').length == 2
 # icons are inline SVG, never text (seven since #169: the board's help links
 # are plain text links, so the tour and cheat-sheet icons went)
@@ -282,12 +287,8 @@ expect window.__splitpageFormats.state().rows.length == 2
 expect window.__splitpageFormats.state().rows[1].audioText == A dropped line of narration.
 
 # --- the footer's links ---------------------------------------------------
-# The cheat sheet and the tour are about the example script: both take the
-# page down to show it. (jsclick: the drop's toasts are still over the footer.)
-eval window.__newTab.open()
-jsclick [data-newtab-action="tagging-help"]
-expect document.getElementById('newtab-page').hidden == true
-expect document.getElementById('tagging-help').hidden == false
+# The tour is about the example script: it takes the page down to show it.
+# (jsclick: the drop's toasts are still over the footer.)
 eval window.__newTab.open()
 jsclick [data-newtab-action="tour"]
 expect document.getElementById('newtab-page').hidden == true
