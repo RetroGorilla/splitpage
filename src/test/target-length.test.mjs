@@ -1,9 +1,10 @@
 /* A target length per script (#170): the document key `targetSeconds`
  * through migrateRows, mergeStates, undo's diff and the two project
- * formats; the clock's figures (targetClock, 01-scene-status.js) and where
- * the strip draws it (targetOverlayParts, 05t-target.js). Setting it from
- * the clock's popover and the command menu, the clock's text, the strip's
- * line and undo in a page are browser suites 140-target-length and
+ * formats; the script's length's figures against it (targetClock,
+ * 01-scene-status.js) and where the strip draws it (targetOverlayParts,
+ * 05t-target.js). Setting it from the length's popover and the command
+ * menu, the length's text (at the end of the rundown since #207), the
+ * strip's line and undo in a page are browser suites 140-target-length and
  * 141-target-length-phone.
  */
 import "./_dom.mjs";
@@ -74,21 +75,21 @@ test("the presets are 0:30, 1:00, 2:00, 3:00, 5:00 and 10:00", () => {
   assert.deepEqual(TARGET_PRESETS, [30, 60, 120, 180, 300, 600]);
 });
 
-/* ---- the clock ---- */
+/* ---- the script's length against it ---- */
 
-test("the clock reads the target as a timecode and the gap as a length, left or over", () => {
-  assert.deepEqual(targetClock(95, 120), { target: "02:00", delta: "0:25", over: false });
-  assert.deepEqual(targetClock(125, 120), { target: "02:00", delta: "0:05", over: true });
-  assert.deepEqual(targetClock(120, 120), { target: "02:00", delta: "0:00", over: false });
-  assert.deepEqual(targetClock(0, 30), { target: "00:30", delta: "0:30", over: false });
+test("the length reads the target and the gap as lengths, left or over (#207: not a timecode)", () => {
+  assert.deepEqual(targetClock(95, 120), { target: "2:00", delta: "0:25", over: false });
+  assert.deepEqual(targetClock(125, 120), { target: "2:00", delta: "0:05", over: true });
+  assert.deepEqual(targetClock(120, 120), { target: "2:00", delta: "0:00", over: false });
+  assert.deepEqual(targetClock(0, 30), { target: "0:30", delta: "0:30", over: false });
   assert.deepEqual(targetClock(4000, 3600), { target: "1:00:00", delta: "6:40", over: true });
 });
 
-test("the gap is worked out on the whole seconds the clock prints", () => {
-  /* 95.4s prints 01:35, so 0:25 left — never 0:24 or 0:26 */
+test("the gap is worked out on the whole seconds the length prints", () => {
+  /* 95.4s prints 1:35, so 0:25 left — never 0:24 or 0:26 */
   assert.equal(targetClock(95.4, 120).delta, "0:25");
   assert.equal(targetClock(95.6, 120).delta, "0:24");
-  /* 120.4s prints 02:00: on the target, not over it */
+  /* 120.4s prints 2:00: on the target, not over it */
   assert.equal(targetClock(120.4, 120).over, false);
   assert.equal(targetClock(120.6, 120).over, true);
 });

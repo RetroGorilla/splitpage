@@ -58,8 +58,8 @@ import { reviewMode } from "./13-hosted.js";
    - a layer to draw on: #rundown-overlay, over the blocks, which a paint
      never touches, with rundownX(seconds) for where a time falls on it and
      onRundownPaint(fn) to be told whenever the scale may have moved;
-   - a place for the readout: #program-clock-slot, after the clock's total
-     (page.html).
+   - a place for the readout: #runtime-slot, after the script's length at
+     the end of the strip (#207, page.html; updateScriptStats writes it).
    While the lens is on, rundownX() answers where the time is on screen,
    and the overlay fades out with the ruler, since the lens moves every
    frame and a paint listener is not. Minimized, the overlay stays: it is
@@ -152,6 +152,42 @@ export function rundownTicks(spanSeconds, pxPerSecond, widthPx) {
   return out;
 }
 
+/* ---- the script's length (#207) ----
+
+   The script's read time is a small label at the end of the rundown, not a
+   clock in the header: "1:35", or against a target "1:35 / 2:00 · 0:25
+   left". It sits just after the last block, in the tail the strip leaves
+   after the script. Where that tail is too short for it — a long script,
+   or one that has run over its target, fills the strip — it sits at the
+   track's right edge instead, and the blocks are laid out short of it, so
+   it never covers one. If even that would take more than LENGTH_MAX_SHARE
+   of the strip, it drops the target and its delta (they stay in its
+   tooltip) and tries again, and past that it is not shown on the strip at
+   all.
+
+   `widths` are the label's widths in pixels, the whole of it first, then
+   without the target (the same, or left out, when there is no target).
+   The answer is the width the blocks are laid out in (`width`), where the
+   label goes (`left`), which of the widths it is drawn at (`fit`: 0, 1,
+   or -1 for not at all) and whether it is at the right edge (`pinned`). */
+export var LENGTH_GAP_PX = 6;
+var LENGTH_MAX_SHARE = 0.25;
+
+export function rundownLengthPlace(totalSeconds, extraSeconds, widthPx, widths) {
+  var none = { width: widthPx, left: null, fit: -1, pinned: false };
+  if (!(widthPx > 0) || !widths || !widths.length) return none;
+  var end = tenth((totalSeconds || 0) * rundownScale(totalSeconds, extraSeconds, widthPx));
+  /* the whole label, in the tail or else at the edge; only then the total
+     alone — how far off the target it is matters more than where it sits */
+  for (var i = 0; i < widths.length; i++) {
+    if (end + LENGTH_GAP_PX + widths[i] <= widthPx) return { width: widthPx, left: end + LENGTH_GAP_PX, fit: i, pinned: false };
+    if (widths[i] + LENGTH_GAP_PX <= LENGTH_MAX_SHARE * widthPx) {
+      return { width: tenth(widthPx - widths[i] - LENGTH_GAP_PX), left: tenth(widthPx - widths[i]), fit: i, pinned: true };
+    }
+  }
+  return none;
+}
+
 /* ---- the lens (#184): the pure half ----
 
    A layout is a list of KNOTS: knot i is where scene i starts, knot n is
@@ -175,26 +211,63 @@ export function rundownTicks(spanSeconds, pxPerSecond, widthPx) {
    right of it by another, so the whole script stays on the strip.
 
    Why an anchor as well as a focus: if the lens were always centred on
-   the pointer's own x, a 2px scene magnified to 140px would be under the
+   the pointer's own x, a 2px scene magnified to 96px would be under the
    pointer for only 2px of mouse travel, and the strip would race past it —
-   the classic fisheye problem. rundownLensFollow() below decides where the
-   focus and the anchor go as the pointer moves; this function only draws
-   a lens for them. The anchor is kept within the magnified room either
-   side of the focus (it cannot drift further than that), so the rest of
-   the script is only ever shrunk, never stretched. */
-/* Kept tight on purpose: at 140px over 40px of reach, a long script's
-   run of short scenes all grew at once and the strip lurched under the
-   mouse (Adam, beta.6). A few scenes around the pointer grow; the rest
-   hardly move. */
+   the classic fisheye problem. rundownLensFollow() and
+   rundownLensRecenter() below decide where the focus and the anchor go as
+   the pointer moves and as time passes; this function only draws a lens
+   for them.
+
+   The lens is an AREA that opens round the focus (#199), not a push to one
+   side: the anchor may drift from the focus by only LENS_DRIFT_SHARE of
+   the magnified room (never more than the room on the side it drifts to,
+   so the rest of the script is only ever shrunk, never stretched), and the
+   magnified room is never trimmed on one side only. Near either end of the
+   strip, where the short side has too little to give up, the whole lens
+   moves inward just far enough instead — so the scenes under it grow by
+   the same amount on both sides wherever the pointer is. */
+
+/* ---- the lens's tuning (#184, #199): the numbers to change by feel ----
+
+   Size — how big the lens is:
+   - LENS_MIN_PX: how wide the scene under the pointer grows. Kept tight
+     on purpose: at 140px over 40px of reach, a long script's run of short
+     scenes all grew at once and the strip lurched under the mouse (Adam,
+     beta.6). A few scenes around the pointer grow; the rest hardly move.
+   - LENS_RADIUS_PX: how far either side of the pointer (in slot pixels)
+     a scene still grows, falling off smoothly to nothing.
+   - LENS_MAX_SHARE: the most of the strip the lens may take in all,
+     however many scenes are in reach.
+   - LENS_FLOOR: the least share of its own width each side keeps: however
+     much the lens wants, what is outside it never vanishes.
+   - LENS_MIN_SLOT_PX: the room a scene with no words is given, so it is
+     somewhere the pointer can be.
+
+   Movement — how it follows the pointer (#199):
+   - LENS_DRIFT_SHARE: how far the lens's centre may lag behind (or run
+     ahead of) the pointer, as a share of the room it adds. Larger holds a
+     sliver still under a slow pointer for longer (easier to click), but
+     lets the lens sit further off to one side of it. 0 is a plain
+     magnifier centred on the pointer.
+   - LENS_RECENTER_MS: how quickly the lens slides back to centre on the
+     pointer, a time constant: about two-thirds of the way there after
+     this long, whether the pointer is moving or has stopped. Longer is
+     calmer; shorter follows more tightly.
+   - LENS_SLOW_PX_MS, LENS_FAST_PX_MS: the pointer speeds (px per ms)
+     under which it is aiming (the lens holds what is under it still) and
+     over which it is travelling (the lens goes wherever the pointer is).
+   - LENS_GLIDE_MS: how softly the blocks move to each new layout, a time
+     constant (the DOM half). */
 export var LENS_MIN_PX = 96;
 export var LENS_RADIUS_PX = 14;
-var LENS_MIN_SLOT_PX = 4;
-/* The least share of its unmagnified width either side keeps: however
-   much the lens wants, what is outside it never vanishes. */
-var LENS_FLOOR = 0.12;
-/* The most of the strip the lens may take in all, however many scenes
-   are in reach: past this every magnified scene gives some back. */
 var LENS_MAX_SHARE = 0.3;
+var LENS_FLOOR = 0.12;
+var LENS_MIN_SLOT_PX = 4;
+export var LENS_DRIFT_SHARE = 0.15;
+export var LENS_RECENTER_MS = 80;
+export var LENS_SLOW_PX_MS = 0.12;
+export var LENS_FAST_PX_MS = 0.6;
+var LENS_GLIDE_MS = 70;
 
 /* The to-scale knots of `blocks` (rundownBlocks) on a strip `widthPx`
    wide. */
@@ -232,7 +305,7 @@ function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 /* The lensed knots for slot knots `slots`, magnified around `focus` (slot
    coordinates) with that point placed at `anchor` (strip pixels) — or as
    near it as the anchor is allowed to drift (see above). `opts` may carry
-   minWidth and radius. */
+   minWidth and radius, and drift (in place of LENS_DRIFT_SHARE) and\n   recenterMs (in place of LENS_RECENTER_MS). */
 export function rundownLens(slots, focus, anchor, opts) {
   opts = opts || {};
   var minW = opts.minWidth > 0 ? opts.minWidth : LENS_MIN_PX;
@@ -268,16 +341,23 @@ export function rundownLens(slots, focus, anchor, opts) {
   var maxExtra = Math.min(1 - LENS_FLOOR, LENS_MAX_SHARE) * W;
   var c = EL + ER > maxExtra ? maxExtra / (EL + ER) : 1;
   EL *= c; ER *= c;
-  /* The anchor never drifts further from the focus than the magnified room
-     on the side it drifts towards. */
-  var a = clamp(clamp(Number(anchor), p - ER, p + EL), 0, W);
+  /* #199: the anchor drifts from the focus by at most LENS_DRIFT_SHARE of
+     the magnified room, and never further than the room on the side it
+     drifts towards (which would stretch the other side). */
+  var share = opts.drift >= 0 ? opts.drift : LENS_DRIFT_SHARE;
+  var drift = share * (EL + ER);
+  var a = Number(anchor);
   if (!isFinite(a)) a = p;
-  /* And each side keeps at least the floor of its own width. */
-  var sL = 1, sR = 1;
-  if (EL > 0 && a - EL < LENS_FLOOR * p) sL = Math.max(0, a - LENS_FLOOR * p) / EL;
-  if (ER > 0 && (W - a) - ER < LENS_FLOOR * (W - p)) sR = Math.max(0, (W - a) - LENS_FLOOR * (W - p)) / ER;
-  var kL = p > 0 ? (a - EL * sL) / p : 1;
-  var kR = W - p > 0 ? ((W - a) - ER * sR) / (W - p) : 1;
+  a = clamp(a, p - Math.min(ER, drift), p + Math.min(EL, drift));
+  /* Each side keeps at least the floor of its own width. Near an end the
+     short side cannot give up its share of the room; rather than cut the
+     lens on that side (which made it lopsided), the lens moves inward.
+     The two bounds never cross: the room is at most 1 - LENS_FLOOR of the
+     strip. */
+  a = Math.max(a, EL + LENS_FLOOR * p);
+  a = Math.min(a, W - ER - LENS_FLOOR * (W - p));
+  var kL = p > 0 ? (a - EL) / p : 1;
+  var kR = W - p > 0 ? ((W - a) - ER) / (W - p) : 1;
 
   /* Out from the anchor, both ways: each interval's slot length at its
      side's factor, plus its (scaled) share of the extra. */
@@ -286,12 +366,12 @@ export function rundownLens(slots, focus, anchor, opts) {
   var Y = new Array(m + 1);
   var y = a;
   for (j = jp; j < m; j++) {
-    y += (slots[j + 1] - Math.max(slots[j], p)) * kR + extraR[j] * c * sR;
+    y += (slots[j + 1] - Math.max(slots[j], p)) * kR + extraR[j] * c;
     Y[j + 1] = y;
   }
   y = a;
   for (j = jp; j >= 0; j--) {
-    y -= (Math.min(slots[j + 1], p) - slots[j]) * kL + extraL[j] * c * sL;
+    y -= (Math.min(slots[j + 1], p) - slots[j]) * kL + extraL[j] * c;
     Y[j] = y;
   }
   Y[0] = 0;
@@ -339,21 +419,27 @@ export function rundownLens(slots, focus, anchor, opts) {
    magnifier: moving slowly is aiming, moving fast is travelling.
 
    - Slowly (under LENS_SLOW_PX_MS): the pointer moves over the layout as
-     it is drawn (`shown`). The lens re-centres on what the pointer is now
-     over, a little per pixel moved, and its anchor is solved so that
-     point stays under the pointer — nothing slides under a pointer that
-     is aiming, and nothing at all moves under one that has stopped.
+     it is drawn (`shown`), and the lens is held so that what the pointer
+     is over stays under it — nothing slides under a pointer that is
+     aiming.
    - Fast (over LENS_FAST_PX_MS): the focus is the to-scale point under
      the pointer and the anchor the pointer itself, the plain magnifier.
    - Between the two, a mix of both.
 
+   Moving is only half of it. Time is the other (#199): every frame,
+   rundownLensRecenter() eases the lens back to centre on whatever the
+   pointer is over, still keeping that under the pointer, over
+   LENS_RECENTER_MS — whether the pointer is moving or has stopped. It
+   used to re-centre a little per pixel moved instead, so a slow move
+   built up an offset the lens then swung through, and a pointer that
+   stopped left the lens wherever it was, off to one side: it led. Now it
+   settles round the pointer. The anchor's drift cap (LENS_DRIFT_SHARE,
+   in rundownLens) is what bounds how far off centre it can ever get
+   while a slow pointer crosses a sliver.
+
    `knots` is the to-scale layout, `shown` what is on screen; `focus` and
    `anchor` the lens as it is; the pointer has moved `dx` to `x` in
    `dtMs`. The answer is the lens's new {focus, anchor}. */
-export var LENS_SLOW_PX_MS = 0.12;
-export var LENS_FAST_PX_MS = 0.6;
-var LENS_RECENTER_PER_PX = 0.012;
-
 function anchorFor(slots, focus, u, x, opts) {
   /* where the lens anchored at `a` draws the point `u` never decreases as
      `a` grows, so halving finds the anchor that puts `u` at `x` */
@@ -362,24 +448,34 @@ function anchorFor(slots, focus, u, x, opts) {
     var mid = (lo + hi) / 2;
     if (knotMap(slots, rundownLens(slots, focus, mid, opts), u) < x) lo = mid; else hi = mid;
   }
-  return (lo + hi) / 2;
+  /* the anchor the lens really uses — where the focus lands — so one held
+     past the drift cap is the cap, not a wish the next move starts from */
+  return knotMap(slots, rundownLens(slots, focus, (lo + hi) / 2, opts), focus);
 }
 
 export function rundownLensFollow(slots, knots, shown, focus, anchor, x, dx, dtMs, opts) {
   if (!dx) return { focus: focus, anchor: anchor };
   var speed = dtMs > 0 ? Math.abs(dx) / dtMs : Infinity;
   var g = clamp((speed - LENS_SLOW_PX_MS) / (LENS_FAST_PX_MS - LENS_SLOW_PX_MS), 0, 1);
-  var slowFocus = focus, slowAnchor = anchor;
-  if (g < 1) {
-    var u = knotMap(shown, slots, x);
-    slowFocus = focus + (u - focus) * Math.min(1, LENS_RECENTER_PER_PX * Math.abs(dx));
-    slowAnchor = anchorFor(slots, slowFocus, u, x, opts);
-  }
+  var slowAnchor = anchor;
+  if (g < 1) slowAnchor = anchorFor(slots, focus, knotMap(shown, slots, x), x, opts);
   var natural = knotMap(knots, slots, x);
   return {
-    focus: slowFocus + (natural - slowFocus) * g,
+    focus: focus + (natural - focus) * g,
     anchor: slowAnchor + (x - slowAnchor) * g
   };
+}
+
+/* The lens `dtMs` later, the pointer still at `x` (or between two moves):
+   the focus eased towards what the pointer is over on `shown`, and the
+   anchor solved to keep that under the pointer, as far as the drift cap
+   allows. Repeated, it comes to rest centred on the pointer. */
+export function rundownLensRecenter(slots, shown, focus, anchor, x, dtMs, opts) {
+  if (!(dtMs > 0) || x == null) return { focus: focus, anchor: anchor };
+  var u = knotMap(shown, slots, x);
+  var tau = opts && opts.recenterMs > 0 ? opts.recenterMs : LENS_RECENTER_MS;
+  var f = focus + (u - focus) * (1 - Math.exp(-dtMs / tau));
+  return { focus: f, anchor: anchorFor(slots, f, u, x, opts) };
 }
 
 /* The piecewise-linear map between two sets of knots: where `x`, a point
@@ -536,6 +632,53 @@ function blockHtml(row, b, isCurrent, focusable) {
     '</button>';
 }
 
+/* #207: measure the length label (updateScriptStats has written it), place
+   it with rundownLengthPlace(), and answer the width the blocks get. Its
+   widths are read without changing anything: the slot keeps its width
+   while it is hidden (.is-short, app.css), so nothing has to be put back.
+   On a phone the label is not on the strip (the header's status line has
+   the length) and measures nothing: the blocks get the whole track. */
+var lengthAt = { left: null, width: 0, fit: -1 };
+
+function placeLength(strip, total, trackWidth) {
+  var el = strip.querySelector(".rd-length");
+  lengthAt = { left: null, width: 0, fit: -1 };
+  if (!el) return trackWidth;
+  var all = el.offsetWidth;
+  if (!all) return trackWidth;
+  var totalEl = el.querySelector(".rd-length-total");
+  var slotEl = el.querySelector(".rd-length-slot");
+  var tw = totalEl ? totalEl.offsetWidth : 0;
+  var sw = slotEl && slotEl.textContent ? slotEl.offsetWidth : 0;
+  var pad = all - tw - (el.classList.contains("is-short") ? 0 : sw);
+  var widths = sw ? [pad + tw + sw, pad + tw] : [pad + tw];
+  var p = rundownLengthPlace(total, extraSeconds, trackWidth, widths);
+  el.classList.toggle("is-short", p.fit === 1);
+  el.classList.toggle("is-none", p.fit === -1);
+  el.classList.remove("is-covered");
+  if (p.left !== null) el.style.left = p.left + "px";
+  /* the delta is on the label: the target's hatching need not say it too */
+  strip.classList.toggle("has-length-delta", p.fit === 0 && sw > 0);
+  lengthAt = { left: p.left, width: p.fit === -1 ? 0 : widths[p.fit], fit: p.fit, pinned: p.pinned };
+  return p.width;
+}
+
+/* Under the lens the label stays where it is; when the lens pushes the
+   script's end up to it (only ever in the tail, never when it is at the
+   right edge), it steps aside until the lens lets go. */
+function lengthCovered(Z) {
+  if (lengthAt.left === null || lengthAt.pinned) return;
+  var strip = stripEl();
+  var el = strip && strip.querySelector(".rd-length");
+  if (el) el.classList.toggle("is-covered", !!Z && Z[base.n] + 1 > lengthAt.left);
+}
+
+/* A pointer over the label (or just short of it) is not over the script:
+   no lens there, so the label never moves from under the pointer. */
+function overLength(x) {
+  return lengthAt.left !== null && x >= lengthAt.left - 2 && x <= lengthAt.left + lengthAt.width + 2;
+}
+
 /* Minimized (#178): the same blocks as a coloured line — no labels, no
    ticks, nothing to focus; the bar's toggle is the one control. */
 function segmentHtml(row, b, isCurrent) {
@@ -562,6 +705,9 @@ export function renderRundown() {
 
   var scenes = rows.map(function (r) { return { seconds: rowSeconds(r), status: r.status }; });
   var total = scenes.reduce(function (n, sc) { return n + sc.seconds; }, 0);
+  /* #207: the script's length goes at its end; where it has to sit at the
+     track's right edge, the blocks are laid out in what it leaves */
+  width = placeLength(strip, total, width);
   var span = rundownSpan(total, extraSeconds);
   var s = rundownScale(total, extraSeconds, width);
   var blocks = rundownBlocks(scenes, s);
@@ -640,10 +786,12 @@ export function renderRundown() {
    displayed knots. Each animation frame moves it a step towards the
    target — the lensed knots while the lens is on, the to-scale ones once
    it is off — and writes the blocks' left and width from it, only where
-   they changed. Once it is off and back to scale, lens.Z is dropped and
-   the blocks get their painted styles back exactly. Nothing here builds
-   HTML. */
-var LENS_GLIDE_MS = 70;       /* the time constant of the glide */
+   they changed. While the pointer is over the track, each frame also lets
+   the lens re-centre on it (rundownLensRecenter, #199), and the frames run
+   until that has come to rest too. Once it is off and back to scale,
+   lens.Z is dropped and the blocks get their painted styles back exactly.
+   Nothing here builds HTML. The glide's time constant is LENS_GLIDE_MS,
+   with the lens's other tuning above. */
 var DROP_HIT_PX = 20;
 var lens = {
   on: false,       /* wanted: the pointer is over the track, or a block has keyboard focus, or a drag is */
@@ -654,7 +802,7 @@ var lens = {
   t: 0,            /* and when it was there, for its speed */
   Z: null,         /* the displayed knots, or null at rest */
   raf: 0,
-  last: 0
+  last: 0          /* the last frame's time: the glide's and the re-centring's step */
 };
 var noHover = false;
 /* #185: the gap a dragged scene would land in (-1 for none), and the
@@ -693,14 +841,24 @@ function applyKnots(Z) {
   var playhead = strip && strip.querySelector(".rundown-playhead");
   if (playhead && base.current !== -1) playhead.style.left = tenth(Z[base.current] - 1) + "px";
   if (drop.x !== null) showDrop(drop.x);
+  lengthCovered(Z);
 }
 
 function lensFrame(now) {
   lens.raf = 0;
   if (!lens.Z || !base.X || lens.Z.length !== base.X.length) { lensSettle(); return; }
-  var T = lensTarget();
   var dt = lens.last ? Math.min(64, Math.max(1, now - lens.last)) : 16;
   lens.last = now;
+  /* #199: the lens eases back to centre on the pointer, in time, not per
+     pixel moved — so it comes to rest round a pointer that has stopped */
+  var recentring = false;
+  if (lens.on && lens.x !== null && (lens.src === "pointer" || lens.src === "drag")) {
+    var next = rundownLensRecenter(slots(), lens.Z, lens.p, lens.a, lens.x, dt);
+    recentring = Math.abs(next.focus - lens.p) > 0.002 || Math.abs(next.anchor - lens.a) > 0.02;
+    lens.p = next.focus;
+    lens.a = next.anchor;
+  }
+  var T = lensTarget();
   var alpha = prefersReducedMotion() ? 1 : 1 - Math.exp(-dt / LENS_GLIDE_MS);
   var moving = false;
   for (var i = 0; i < T.length; i++) {
@@ -709,7 +867,7 @@ function lensFrame(now) {
     else lens.Z[i] = T[i];
   }
   applyKnots(lens.Z);
-  if (!moving) {
+  if (!moving && !recentring) {
     lens.last = 0;
     if (!lens.on) lensSettle();
     return;
@@ -749,6 +907,7 @@ function lensSettle() {
     }
     var playhead = strip.querySelector(".rundown-playhead");
     if (playhead && base.current !== -1 && base.blocks[base.current]) playhead.style.left = tenth(base.blocks[base.current].left - 1) + "px";
+    lengthCovered(null);
   }
   if (strip.classList.contains("is-lensed")) {
     strip.classList.remove("is-lensed");
@@ -1057,7 +1216,8 @@ function lensDebug() {
     on: lens.on, src: lens.src, p: lens.p, a: lens.a,
     Z: lens.Z ? lens.Z.slice() : null, X: base.X ? base.X.slice() : null,
     starts: base.blocks.map(function (b) { return b.start; }),
-    dropGap: drop.gap, minimized: minimized
+    dropGap: drop.gap, minimized: minimized,
+    W: base.W, length: { left: lengthAt.left, width: lengthAt.width, fit: lengthAt.fit, pinned: !!lengthAt.pinned }
   };
 }
 
@@ -1115,7 +1275,9 @@ export function __init() {
   if (track) {
     track.addEventListener("pointermove", function (e) {
       if (e.pointerType === "touch" || S.dragRowId) return;
-      lensAt(trackX(e), "pointer", e.timeStamp);
+      var x = trackX(e);
+      if (overLength(x)) { lensOff("pointer"); return; }
+      lensAt(x, "pointer", e.timeStamp);
     });
     track.addEventListener("pointerleave", function () { lensOff("pointer"); });
   }

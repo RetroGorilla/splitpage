@@ -1,0 +1,124 @@
+# The script's length on the rundown across the 761–1240px band (issue
+# #207), where the strip is narrowest short of a phone: at 761, 900, 1000
+# and 1240, full and minimized, a short script and one that fills the
+# strip, with and without a target — the label is on the track, clear of
+# every block and of the strip's chevron, and wholly on screen; and the
+# header row, with no clock in it, still has nothing overlapping (the full
+# pairwise check is suite 85). The app is loaded a second time in an iframe
+# and the iframe resized, as 85 does, since a suite sets the device metrics
+# once.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+viewport 1400 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ var f=document.createElement('iframe'); f.id='hf'; f.style.cssText='position:fixed;left:0;top:0;width:1240px;height:800px;border:0;z-index:99999;background:#fff'; f.src='/index.html'; document.body.appendChild(f); return true; })()
+wait document.getElementById('hf').contentDocument && document.getElementById('hf').contentDocument.querySelectorAll('#rows .row').length > 0
+sleep 800
+eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__at=function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); return true; }; W.__check=function(w, tag){ W.__at(w); var d=W.__d(); var bad=[]; var vw=d.documentElement.clientWidth; var c=d.getElementById('runtime-chip'); var r=c.getBoundingClientRect(); var tr=d.querySelector('#rundown .rundown-track').getBoundingClientRect(); var tg=d.querySelector('#rundown .rundown-toggle svg').getBoundingClientRect(); if(r.width<20) bad.push('no label ('+Math.round(r.width)+'px)'); if(r.left<tr.left-0.5||r.right>tr.right+0.5) bad.push('off the track '+Math.round(r.left)+'-'+Math.round(r.right)+' of '+Math.round(tr.left)+'-'+Math.round(tr.right)); if(r.right>vw) bad.push('off screen'); var o=Math.min(r.right,tg.right)-Math.max(r.left,tg.left), v=Math.min(r.bottom,tg.bottom)-Math.max(r.top,tg.top); if(o>0.5&&v>0.5) bad.push('over the chevron'); Array.prototype.forEach.call(d.querySelectorAll('#rundown .rd-block, #rundown .rd-seg'), function(b,i){ var q=b.getBoundingClientRect(); if(q.right>r.left+0.5&&q.left<r.right-0.5) bad.push('over block '+i); }); if(d.querySelector('.topbar-row #runtime-chip, .program-clock')) bad.push('a clock in the header'); var ls=d.getElementById('length-status'); if(ls && ls.getBoundingClientRect().width>0) bad.push('the phone status shows'); var row=d.querySelector('.topbar-row').getBoundingClientRect(); if(Math.round(row.height)!==52) bad.push('header row '+Math.round(row.height)+'px'); var s=d.getElementById('btn-present').getBoundingClientRect(), t=d.getElementById('doc-title').getBoundingClientRect(); if(t.right>d.getElementById('btn-command').getBoundingClientRect().left) bad.push('title under search'); if(s.right>vw+0.5) bad.push('present off screen'); W.__last=bad.length? (tag||'')+w+': '+bad.join(', ') : ''; return W.__last; }; W.__open=function(rows, target, title){ var doc={schema:2,title:title,wordsPerMinute:150,rows:rows}; if(target) doc.targetSeconds=target; var FileIn = W.__w().File; W.__w().__splitpageFormats.openFile(new FileIn([JSON.stringify(doc)], 'w.splitpage')); return true; }; W.__long=function(){ var w=function(n){var a=[];for(var i=0;i<n;i++)a.push('word'+(i%7));return a.join(' ');}; var rows=[]; for(var i=0;i<60;i++) rows.push({id:'L'+i,visualText:'Shot '+i,audioText:'Scene '+i+' '+w(10+(i*13)%50),status:i%3===0?'shot':'todo'}); return rows; }; return true; })()
+expect true
+
+# =============================================================================
+# the seed script (0:24): the label just after the last block
+# =============================================================================
+eval window.__at(761)
+sleep 200
+eval window.__check(761)
+expect window.__last === ''
+eval window.__at(900)
+sleep 200
+eval window.__check(900)
+expect window.__last === ''
+eval window.__at(1000)
+sleep 200
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__at(1240)
+sleep 200
+eval window.__check(1240)
+expect window.__last === ''
+expect window.__w().__rundownTest.lens().length.pinned === false
+
+# =============================================================================
+# a long script with a target it runs over: pinned to the right edge
+# =============================================================================
+eval window.__open(window.__long(), 300, 'Long, over')
+wait window.__d().querySelectorAll('#rundown .rd-block').length === 60
+sleep 500
+eval window.__at(761)
+sleep 200
+eval window.__check(761, 'long ')
+expect window.__last === ''
+expect window.__w().__rundownTest.lens().length.pinned === true
+eval window.__at(900)
+sleep 200
+eval window.__check(900, 'long ')
+expect window.__last === ''
+eval window.__at(1000)
+sleep 200
+eval window.__check(1000, 'long ')
+expect window.__last === ''
+eval window.__at(1240)
+sleep 200
+eval window.__check(1240, 'long ')
+expect window.__last === ''
+expect window.__w().__rundownTest.lens().length.fit === 0
+expect window.__d().querySelector('#runtime-slot .rd-length-delta').classList.contains('is-over')
+
+# a panel open narrows the strip: still clear, still on it
+eval window.__d().getElementById('btn-production').click()
+sleep 500
+eval window.__at(1240)
+sleep 200
+eval window.__check(1240, 'panel ')
+expect window.__last === ''
+eval window.__at(900)
+sleep 200
+eval window.__check(900, 'panel ')
+expect window.__last === ''
+eval window.__d().getElementById('btn-production').click()
+sleep 500
+
+# =============================================================================
+# minimized: the thin bar keeps it
+# =============================================================================
+eval window.__w().__rundownTest.setMinimized(true)
+sleep 400
+eval window.__at(761)
+sleep 200
+eval window.__check(761, 'min ')
+expect window.__last === ''
+eval window.__at(1000)
+sleep 200
+eval window.__check(1000, 'min ')
+expect window.__last === ''
+eval window.__at(1240)
+sleep 200
+eval window.__check(1240, 'min ')
+expect window.__last === ''
+expect (function(){ var d=window.__d(); var l=d.getElementById('runtime-chip').getBoundingClientRect(); var el=d.elementFromPoint(l.left+l.width/2, l.top+l.height/2); return !!el && !!el.closest('#runtime-chip'); })()
+eval window.__open([{id:'a',audioText:'One two three four five six seven eight nine ten eleven twelve'},{id:'b',audioText:'Thirteen fourteen fifteen sixteen'}], 120, 'Short, under')
+wait window.__d().querySelectorAll('#rundown .rd-seg').length === 2
+sleep 400
+eval window.__at(761)
+sleep 200
+eval window.__check(761, 'min short ')
+expect window.__last === ''
+eval window.__at(1240)
+sleep 200
+eval window.__check(1240, 'min short ')
+expect window.__last === ''
+eval window.__w().__rundownTest.setMinimized(false)
+sleep 300
+eval window.__at(761)
+sleep 200
+eval window.__check(761, 'short ')
+expect window.__last === ''
+eval window.__at(1000)
+sleep 200
+eval window.__check(1000, 'short ')
+expect window.__last === ''
+
+quit

@@ -157,11 +157,12 @@
 <div id="root">
   <!-- The header (#169, Direction B): one row and the rundown strip under
        it. Left, the app and the document — the mark, File, the title, and
-       Save as a status rather than a box; centre, the program clock; right,
-       the panels as quiet toggles, Write as a mode, and Present, the one
-       primary action and the one thing in tally red. Every id the rest of
-       the app and the suites reach for is the one it always was; only
-       where each sits has changed. -->
+       Save as a status rather than a box; right, the panels as quiet
+       toggles, Write as a mode, and Present, the one primary action and the
+       one thing in tally red. The script's length is at the end of the
+       rundown (#207), no longer a clock in the middle of the row. Every id
+       the rest of the app and the suites reach for is the one it always
+       was; only where each sits has changed. -->
   <header class="topbar">
     <div class="topbar-row">
       <div class="topbar-left">
@@ -378,19 +379,13 @@
             <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
           </button>
         </div>
-      </div>
-      <!-- The program clock (#169): the script's whole read time, centred,
-           in the mono. Still the runtime chip it always was — click it to
-           set the reading speed and the script's target length
-           (promptForWpm, 03-sync.js). The slot after the total is empty
-           until a target is set (#170): then " / 02:00" and "0:25 left"
-           (or "0:05 over") go there (updateScriptStats). -->
-      <div class="program-clock-wrap">
-        <button type="button" class="program-clock" id="runtime-chip"
-                title="Estimated read time for the Audio column — click to set your reading speed or a target length">
-          <span class="program-clock-total" id="runtime-total">00:00</span>
-          <span class="program-clock-slot" id="program-clock-slot"></span>
-        </button>
+        <!-- The script's length at phone widths (#207, Adam's call): small
+             text at the right of the status line, where the rundown has no
+             room for it. The same figures as the label at the end of the
+             rundown (#runtime-chip), written by updateScriptStats(), and the
+             same popover on a click. Not shown on a wider screen. -->
+        <button type="button" class="length-status" id="length-status"
+                title="The script's read time, from the Audio column — click to set your reading speed or a target length"><span class="rd-length-total">0:00</span><span class="rd-length-slot"></span></button>
       </div>
       <div class="toolbar">
         <!-- Search or run a command (#175): a button shaped like a search
@@ -430,6 +425,16 @@
         <div class="rundown-blocks"></div>
         <div class="rundown-overlay" id="rundown-overlay" aria-hidden="true"></div>
         <div class="rundown-playhead" aria-hidden="true" hidden></div>
+        <!-- The script's length (#207): just after the last block, or at the
+             track's right edge when the script fills the strip — placed by
+             05f-rundown.js (rundownLengthPlace), written by
+             updateScriptStats() (01-scene-status.js). A click opens the
+             reading speed and target length (promptForWpm, 03-sync.js). The
+             slot after the total is empty until a target is set (#170):
+             then " / 2:00" and "0:25 left" (or "0:05 over") go there. It
+             was the program clock in the header (#169) and keeps its ids. -->
+        <button type="button" class="rd-length" id="runtime-chip"
+                title="The script's read time, from the Audio column — click to set your reading speed or a target length"><span class="rd-length-total" id="runtime-total">0:00</span><span class="rd-length-slot" id="runtime-slot"></span></button>
       </div>
     </section>
   </header>
@@ -533,7 +538,7 @@
 
 <!-- The phone's bottom bar (#169, B-Phone): the modes and panels under the
      thumb, drawn only at phone width (app.css, the responsive block), where
-     the header keeps File, the title, the clock and Present. Each tab
+     the header keeps File, the title, its status line and Present. Each tab
      clicks the header button named in data-for and mirrors the badge in
      data-badge and the panel in data-panel (20k-phone-bar.js); Script
      closes whichever panel covers the script. Gear is here as well as the

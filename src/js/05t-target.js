@@ -10,16 +10,18 @@ import { queueAutoSave } from "./14-export.js";
    A script can be aimed at a length — "this is a two-minute piece" — and
    then everything that shows its length shows it against that:
 
-   - the program clock reads "01:35 / 02:00" and "0:25 left" (dim) or
-     "0:05 over" (tally red) — updateScriptStats(), 01-scene-status.js,
+   - the script's length at the end of the rundown (#207; the header's
+     status line on a phone) reads "1:35 / 2:00 · 0:25 left" (dim) or
+     "· 0:05 over" (tally red) — updateScriptStats(), 01-scene-status.js,
      which also has the pure halves (normalizeTargetLength,
-     targetLengthOf, targetClock);
+     targetLengthOf, targetClock). While it shows the delta, the hatching
+     below does not repeat it (.has-length-delta, app.css);
    - the rundown strip spans the target as well as the script
      (setRundownExtraSeconds, 05f-rundown.js) and, on its overlay, this
      file draws a dashed line at the target labelled "Target 2:00", and
      hatches the gap to it (labelled with the time left) — or, once the
      script runs over, the part of the blocks past it;
-   - it is set in the clock's popover, under the reading speed (03-sync.js
+   - it is set in the length's popover, under the reading speed (03-sync.js
      promptForWpm / promptForTarget), and from the command menu's "Set
      target length…".
 
@@ -110,7 +112,7 @@ export function setTargetLength(seconds) {
   if (before === after) return false;
   if (after === null) delete S.state.targetSeconds; else S.state.targetSeconds = after;
   markDirty();
-  updateScriptStats();   /* the clock and the strip */
+  updateScriptStats();   /* the script's length and the strip */
   queueAutoSave();
   return true;
 }

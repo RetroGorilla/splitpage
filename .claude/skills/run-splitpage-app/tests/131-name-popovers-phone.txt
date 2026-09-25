@@ -25,10 +25,12 @@ shot 131-name-box-phone
 key Escape
 expect document.getElementById('identity-editor') === null
 
-jsclick #runtime-chip
+# the script's length is in the header's status line here (#207)
+jsclick #length-status
 wait document.getElementById('wpm-editor')
 expect window.__inView(document.getElementById('wpm-editor'))
-expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('runtime-chip').getBoundingClientRect().bottom
+expect document.getElementById('length-status').getBoundingClientRect().width > 0
+expect document.getElementById('wpm-editor').getBoundingClientRect().top >= document.getElementById('length-status').getBoundingClientRect().bottom
 expect parseFloat(getComputedStyle(document.getElementById('wpm-input')).fontSize) >= 16
 expect document.documentElement.scrollWidth <= document.documentElement.clientWidth
 shot 131-speed-box-phone

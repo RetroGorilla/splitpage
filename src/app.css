@@ -431,32 +431,31 @@
   ::selection { background: var(--selection); color: var(--text); }
 
   /* ---------- header (#169, Direction B) ----------
-     One 52px row, then the rundown strip. Three columns so the program
-     clock sits in the middle of the window whatever is either side of it:
-     the app and the document on the left (the title giving way first, then
-     the facts), the clock, and search, the panels, Write and Present on
-     the right. Sticky, and what it sheds on scroll, are at the end of this
-     file (condensing header).
+     One 52px row, then the rundown strip. Two columns: the app and the
+     document on the left (the title giving way first, then the facts),
+     and search, the panels, Write and Present on the right. Until #207 a
+     third, in the middle, held the program clock; the script's length is
+     at the end of the rundown now, and the room it took is the title's
+     and the facts'. Sticky, and what it sheds on scroll, are at the end
+     of this file (condensing header).
 
      The row spans the window, not the script (#190): #root no longer has
      a width of its own, so the header's 20px either side are the window's.
 
      Nothing in it overlaps at any width (#174). The right column is never
-     narrower than its buttons (max-content), so where the two halves no
-     longer fit either side of a centred clock, the left gives way and the
-     clock moves over rather than the buttons spilling left across it. The
-     buttons themselves drop what they can as the window narrows — "the
-     header's widths" below — so the clock stays centred down to about
-     1000px. Suite 85-header-fit.txt measures all of it with bounding
-     boxes: an overflow here is not clipped and not counted in scrollWidth,
-     so nothing else would see it. */
+     narrower than its buttons (max-content), so where the row runs short
+     the left gives way rather than the buttons spilling left across it.
+     The buttons themselves drop what they can as the window narrows —
+     "the header's widths" below. Suite 85-header-fit.txt measures all of
+     it with bounding boxes: an overflow here is not clipped and not
+     counted in scrollWidth, so nothing else would see it. */
   .topbar {
     margin: 0 -20px;
     background: var(--bg);
   }
   .topbar-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+    grid-template-columns: minmax(0, 1fr) max-content;
     align-items: center;
     column-gap: 16px;
     height: 52px;
@@ -572,43 +571,11 @@
   .save-btn:disabled { cursor: default; }
   .save-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
-  /* The program clock (#169): the script's read time as a timecode,
-     centred. A button — it is the runtime chip, and a click sets the
-     reading speed — but quiet until it is pointed at. */
-  .program-clock-wrap { position: relative; justify-self: center; }
-  .program-clock {
-    display: inline-flex;
-    align-items: center;
-    height: 36px;
-    padding: 0 8px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text);
-    font-family: var(--font-display);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-  .program-clock:hover { background: var(--hover); }
-  .program-clock:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  .program-clock-total { font-weight: 500; font-size: 20px; line-height: 24px; letter-spacing: -0.01em; }
-  /* with shot scenes hidden: what is left, then the whole, quieter */
-  .program-clock-of { font-weight: 450; font-size: 14px; color: var(--text-faint); letter-spacing: 0; }
-  .program-clock-slot:empty { display: none; }
-  /* the slot is a flex item of its own, so the space before its " / " would
-     otherwise be dropped as the start of a line */
-  .program-clock-slot { white-space: pre; }
-  /* against a target (#170): " / 02:00" in the quiet style above, then how
-     far off it — dim while there is time left, tally red once over */
-  .program-clock-delta {
-    margin-left: 8px;
-    font-weight: 450;
-    font-size: 13px;
-    letter-spacing: 0;
-    color: var(--text-dim);
-  }
-  .program-clock-delta.is-over { color: var(--tally); }
+  /* The script's length used to sit here, as the program clock in the
+     middle of the row (#169). Since #207 it is a label at the end of the
+     rundown (.rd-length, "the rundown strip" below), and at phone widths
+     an item in the status line (.length-status). */
+  .length-status { display: none; }
 
   /* Who is here, a review session, an imported file, the shot count, who
      you are: plain text, one dot between each item that is showing. The
@@ -791,8 +758,7 @@
 
   /* ---- the header's widths (#174, #175, #166) ----
      What the row lets go of as the window narrows, widest first, so that
-     nothing in it ever overlaps and the clock stays centred for as long as
-     it can. Each step keeps every control: a label that leaves the screen
+     nothing in it ever overlaps. Each step keeps every control: a label that leaves the screen
      stays the button's name (a screen reader reads it, innerText has it)
      and its title is the tooltip.
        below 1860  search is "Search" and its keycaps
@@ -6103,21 +6069,22 @@
     #root { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
 
     /* The header (#169, B-Phone): one 56px row. File as an icon, the title
-       with Save's status and the document's facts in a quiet line under
-       it, the clock as a chip, and Present as a tally icon. The panel
+       with Save's status, the document's facts and the script's length
+       (#207) in a quiet line under it, and Present as a tally icon. The panel
        toggles and Write are the bottom bar's here; their header buttons
        stay in the page, and the bar clicks them. Every button keeps its
        word as its name: font-size 0 drops it from sight only. */
     .topbar { margin: 0 -16px; }
     .topbar-row { display: flex; height: 56px; padding: 0 6px 0 2px; gap: 4px; }
     /* File down both lines; the title on the first, and on the second
-       Save's status (it is still the button), who else is here, and the
-       facts, clipped from the end as the desktop line is. Save and the
+       Save's status (it is still the button), who else is here, the
+       facts, clipped from the end as the desktop line is, and the script's
+       length at the right (#207). Save and the
        facts are real controls the board has no room for, so they keep a
        line of their own rather than go. */
     .topbar-left {
       display: grid;
-      grid-template-columns: 44px auto auto minmax(0, 1fr);
+      grid-template-columns: 44px auto auto minmax(0, 1fr) auto;
       grid-template-rows: minmax(0, 1fr) 24px 16px minmax(0, 1fr);
       align-self: stretch;
       flex: 1 1 auto;
@@ -6157,37 +6124,43 @@
     .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }
     /* The desktop line never shrinks your name (#183), but this column is
        what is left beside Save's status, a few words wide: held whole, the
-       name ran under the clock chip. Here it is cut short with "…" like the
-       other facts, and stays a button, and Settings ▸ You has it in full. */
+       name ran under what was at its right. Here it is cut short with "…"
+       like the other facts, and stays a button, and Settings ▸ You has it
+       in full. */
     .doc-meta { overflow: hidden; }
     .doc-meta .identity-chip { flex: 0 1 auto; min-width: 0; }
     .doc-meta #identity-name { min-width: 0; max-width: none; }
-    /* The clock as a 28px chip on the raised surface, in a 44px target:
-       the chip is drawn behind the figures, the button is the whole
-       height. */
-    .program-clock-wrap { flex: none; margin-right: 2px; }
-    .program-clock { position: relative; isolation: isolate; height: 44px; }
-    .program-clock::before {
-      content: "";
-      position: absolute;
-      inset: 8px 0;
-      z-index: -1;
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
+    /* The script's length (#207, Adam's call): the strip has no room for
+       it here, so it is the last item of the status line, at its right —
+       small plain text like the facts and Save's status. Against a target,
+       "1:35 · 0:25 left": the target itself is the strip's "Target 2:00"
+       just below. A taller target than its line, as Save's: the padding
+       reaches down to the header's edge. With a long save status and a
+       target on a narrow phone it is the facts before it that give way
+       (cut with "…", as they always have here), not the length. */
+    .length-status {
+      display: block;
+      grid-column: 5;
+      grid-row: 3;
+      justify-self: end;
+      margin: 0 0 -8px;
+      padding: 0 4px 8px 10px;
+      border: 0;
+      background: transparent;
+      color: var(--text-faint);
+      font-family: var(--font-body);
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 450;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      cursor: pointer;
     }
-    .program-clock:hover { background: transparent; }
-    .program-clock:hover::before { background: var(--hover); }
-    .program-clock-total { font-size: 13px; line-height: 16px; letter-spacing: 0; }
-    .program-clock-of { font-size: 11px; }
-    /* Against a target (#170) the chip has no room for "01:35 / 02:00
-       0:25 left" in a row: the time left (or over) goes under the total,
-       smaller, and the target itself is the rundown strip's "Target 2:00"
-       just below. */
-    .program-clock { flex-direction: column; justify-content: center; }
-    .program-clock-slot { line-height: 11px; }
-    .program-clock-slot .program-clock-of { display: none; }
-    .program-clock-delta { margin-left: 0; font-size: 10px; line-height: 11px; }
-    .program-clock:has(.program-clock-slot:not(:empty)) .program-clock-total { line-height: 14px; }
+    .length-status .rd-length-total { font-weight: 500; color: var(--text-dim); }
+    .length-status:hover, .length-status:hover .rd-length-total { color: var(--text); }
+    .length-status:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-sm); }
+    .length-status .rd-length-slot .rd-length-of { display: none; }
+    .rundown .rd-length { display: none; }
     .toolbar { flex: none; gap: 0; }
     .btn-group, #btn-write { display: none; }
     /* Search (#175): the magnifier, in a 44px target */
@@ -7968,6 +7941,74 @@
   #rundown.is-min .rd-target-line { top: 0; bottom: 0; border-left-style: solid; }
   #rundown.is-min .rd-target-label,
   #rundown.is-min .rd-target-hatch { display: none; }
+  /* The script's length is on the strip itself (#207): the hatching need
+     not repeat how far off the target it is. */
+  .rundown.has-length-delta .rd-target-delta { display: none; }
+
+  /* The script's length (#207, 05f-rundown.js places it): a small label in
+     the blocks' band just after the last block — or at the track's right
+     edge when the script fills the strip — in the blocks' own mono: the
+     total as a block's number is drawn, then against a target " / 2:00"
+     faint and "· 0:25 left" dim, or "· 0:05 over" in tally red. A button,
+     quiet until pointed at, that opens the reading speed and target
+     length. It sits on the strip's own surface, so the target's line and
+     hatching pass behind it rather than through its figures. It replaced
+     the header's 20px program clock (#169). */
+  .rd-length {
+    position: absolute;
+    top: 4px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+  }
+  .rd-length:hover { background: var(--hover); }
+  .rd-length:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+  .rd-length-of { font-weight: 450; color: var(--text-faint); }
+  /* the slot is a flex item of its own, so the space before its " / " would
+     otherwise be dropped as the start of a line */
+  .rd-length-slot { white-space: pre; }
+  .rd-length-slot:empty { display: none; }
+  .rd-length-delta { font-weight: 450; color: var(--text-dim); }
+  .rd-length-delta::before { content: " · "; color: var(--text-faint); }
+  .rd-length-delta.is-over { color: var(--tally); }
+  /* Short of room: the total alone (the target stays in the tooltip). The
+     slot keeps its width, out of the flow, so 05f-rundown.js can measure
+     it without putting anything back. */
+  .rd-length.is-short .rd-length-slot { position: absolute; visibility: hidden; pointer-events: none; }
+  /* No room at all (a very narrow strip); measured still, so not display */
+  .rd-length.is-none { visibility: hidden; }
+  /* the lens has pushed the script's end up to it: out of the way until
+     the lens lets go */
+  .rd-length.is-covered { opacity: 0; pointer-events: none; }
+  /* Minimized (#178): the thin bar keeps it, at its end, on the bar's own
+     9px — and above the bar-wide toggle, so it still opens the popover. */
+  #rundown.is-min .rd-length {
+    top: 0;
+    height: 9px;
+    padding: 0 3px;
+    border-radius: 2px;
+    font-size: 9.5px;
+    line-height: 9px;
+  }
+  #rundown.is-min:hover .rd-length { background: var(--hover); }
+  #rundown.is-min .rd-length:hover { color: var(--text); }
+  @media (prefers-reduced-motion: reduce) {
+    .rd-length { transition: none; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .rundown.is-lensed .rundown-ruler,

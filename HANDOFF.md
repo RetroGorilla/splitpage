@@ -1098,10 +1098,13 @@ formats carry it as a plain key; the `.md` table does not show it and no
 export prints it. It is set only through `setTargetLength()`
 (05t-target.js), one `markDirty()`, so undo sees a `docField` step and a
 review session is refused there as well as in the popover. What reads it:
-the program clock (`updateScriptStats()`: `01:35 / 02:00` and `0:25 left` /
-`0:05 over` in `#program-clock-slot`, via the pure `targetClock()`; the
+the script's length (`updateScriptStats()`: `1:35 / 2:00` and `0:25 left` /
+`0:05 over` in `#runtime-slot`, via the pure `targetClock()`; since #207 a
+label at the end of the rundown, `#runtime-chip`, placed by
+`rundownLengthPlace()`, and at phone widths `#length-status` in the
+header's status line — it was the header's program clock before; the
 target is measured against the whole script — with shot scenes hidden the
-remaining-to-shoot figure moves to the clock's tooltip), and the rundown
+remaining-to-shoot figure moves to the tooltip), and the rundown
 strip (`setRundownExtraSeconds(target)`, so the span is
 max(target, total) + 10s; 05t-target.js draws the line, "Target 2:00" and
 the hatching on `#rundown-overlay` from `rundownLayout()` — to scale, never

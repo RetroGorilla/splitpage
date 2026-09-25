@@ -48,4 +48,4 @@ key Enter
 sleep 300
 expect window.__splitpageFormats.state().rows[0].lengthSeconds === 45
 expect document.querySelector('#rows .row .row-read').textContent == 0:45
-expect document.getElementById('runtime-total').textContent == 00:57
+expect document.getElementById('runtime-total').textContent == 0:57

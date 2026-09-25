@@ -1,6 +1,7 @@
 /* ================= the phone's bottom bar (#169, B-Phone) =================
 
-   At phone width the header keeps File, the title, the clock and Present,
+   At phone width the header keeps File, the title, its status line (the
+   script's length at its end, #207) and Present,
    and the modes and panels move to a bar along the bottom of the screen,
    under the thumb (app.css, the responsive block; #phone-bar in page.html).
 

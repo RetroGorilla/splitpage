@@ -1669,8 +1669,11 @@ function init() {
     if (id) S.lastFocusedRowId = id;
   });
 
-  /* ---- reading speed ---- */
+  /* ---- reading speed: the script's length, on the rundown or (phone) in
+     the header's status line (#207) ---- */
   document.getElementById("runtime-chip").addEventListener("click", promptForWpm);
+  var lengthStatus = document.getElementById("length-status");
+  if (lengthStatus) lengthStatus.addEventListener("click", promptForWpm);
 
   document.getElementById("history-close").addEventListener("click", closeHistoryPanel);
   document.getElementById("history-panel").addEventListener("click", onRootClick);
