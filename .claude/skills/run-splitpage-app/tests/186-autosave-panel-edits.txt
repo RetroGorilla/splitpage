@@ -94,6 +94,12 @@ jsclick #btn-broll
 wait document.querySelectorAll('#broll-list .broll-row').length === 2
 
 # --- the tick: shot ---------------------------------------------------------------
+# A real mouse click, so the panel has to have finished sliding in first: under
+# a loaded 4-lane run the click was measured mid-slide and landed beside the
+# box. Settled = the panel's transform transition done and the box the same
+# at two polls in a row (the driver polls every 200 ms).
+eval (function(){ window.__box = null; window.__settled = function(sel){ var el = document.querySelector(sel); if (!el) return false; var p = el.closest('.comments-panel'); if (p && p.getAnimations().some(function(a){ return a.playState === 'running'; })) { window.__box = null; return false; } var r = el.getBoundingClientRect(), k = [r.left, r.top, r.width, r.height].join(); var same = window.__box === k && r.width > 0; window.__box = k; return same; }; return true; })()
+wait __settled('#broll-list .broll-row[data-id="bs1"] .broll-check')
 eval __arm()
 click #broll-list .broll-row[data-id="bs1"] .broll-check
 wait __cycled()

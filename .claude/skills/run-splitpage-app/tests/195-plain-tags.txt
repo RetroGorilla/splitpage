@@ -262,8 +262,12 @@ press  a [zebra lamp]
 sleep 300
 # mid-screen first: a scroll puts the ghost away, and typing low on the
 # screen scrolls to follow the caret
-eval (function(){ cell(5).scrollIntoView({ block: 'center' }); return true; })()
+# — and that scroll's own event reaches hideTagGhost a frame later, so let it
+# land before typing: on a loaded run it arrived after the last key and put
+# the fresh ghost away
+eval (async function(){ cell(5).scrollIntoView({ block: 'center' }); await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); }); return true; })()
 caret #rows .row:nth-child(6) .visual-cell .cell-editable
+eval (async function(){ await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); }); return true; })()
 press  VFX: glow [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
 expect kw() == 1
