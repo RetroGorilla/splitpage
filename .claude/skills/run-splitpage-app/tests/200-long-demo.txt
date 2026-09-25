@@ -1,0 +1,93 @@
+# The long demo (#215, src/starters/long-demo.json, _starters.js): thirty
+# scenes of one video with every feature in use, opened as a new untitled
+# copy from the New Tab page's footer link and from the command menu. The
+# file's own shape (every status and category, the b-roll records, the
+# comments, the read times) is src/test/long-demo.test.mjs; this is the
+# page: it opens, it draws, and opening it changes nothing about it.
+
+open /index.html?newtab=1
+viewport 1400 900
+goto /index.html?newtab=1
+wait document.getElementById('newtab-page').hidden == false
+# the seed is still the 3-scene one, and the fresh-copy gate still knows it
+expect window.__onboarding.seedCheckPasses() == true
+expect window.__splitpageFormats.state().rows.length < 5
+
+# --- the footer link, beside "Look at the example script" -------------------
+expect document.querySelector('#newtab-page [data-newtab-action="long-demo"]').textContent == Open the long demo (30 scenes)
+expect document.querySelector('#newtab-page [data-newtab-action="long-demo"]').offsetParent !== null
+# still one row of cards: Blank script and the three starters, no fourth
+expect document.querySelectorAll('#newtab-cards [data-starter]').length == 3
+expect document.documentElement.scrollWidth <= innerWidth
+eval (function(){ window.F = window.__splitpageFormats; window.__canon = function (o) { return JSON.stringify(o, function (k, v) { if (v && typeof v === 'object' && !Array.isArray(v)) { var out = {}; Object.keys(v).sort().forEach(function (key) { if (key !== 'docId') out[key] = v[key]; }); return out; } return v; }); }; window.__ids = [F.state().docId]; return true; })()
+
+click [data-newtab-action="long-demo"]
+wait document.getElementById('newtab-page').hidden == true
+wait document.querySelectorAll('#rows .row').length == 30
+expect document.getElementById('doc-title').value == I Fixed a $40 Film Camera (and Shot a Roll With It)
+
+# a new untitled copy: a fresh id, no file, nothing unsaved
+expect /^d[0-9a-f]{32}$/.test(F.state().docId) == true
+expect window.__ids.indexOf(F.state().docId) === -1
+expect window.__hostedTest.home().kind == none
+expect F.docFile().name === null
+expect document.getElementById('file-chip').hidden == true
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+
+# --- what it is there to show, drawn --------------------------------------
+# the rundown: a block per scene, some of them slivers
+wait document.querySelectorAll('#rundown .rd-block').length == 30
+expect Array.prototype.filter.call(document.querySelectorAll('#rundown .rd-block'), function(b){ return b.getBoundingClientRect().width < 20; }).length >= 2
+# every tag category in the script
+expect ['prop','location','cast','vfx','sound','gear'].every(function(c){ return document.querySelectorAll('#rows .tag-anchor[data-tag-cat="' + c + '"]').length > 0; })
+# every scene status
+expect ['todo','ready','shot'].every(function(s){ return F.state().rows.some(function(r){ return r.status === s; }); })
+# b-roll keys, shot and not
+expect document.querySelectorAll('#rows .broll-key').length == 9
+expect F.state().brollShots.some(function(r){ return r.status === 'shot'; }) && F.state().brollShots.some(function(r){ return r.status === 'unshot'; })
+# comments marked in the script, one resolved
+expect document.querySelectorAll('#rows .cmt-anchor').length >= 4
+expect F.state().comments.filter(function(c){ return c.resolved; }).length == 1
+# stage directions, a set read time, a target
+expect document.querySelectorAll('#rows .stage-dir').length >= 5
+expect F.state().rows.filter(function(r){ return typeof r.lengthSeconds === 'number'; }).length == 2
+expect F.state().targetSeconds == 540
+# a video link in a gallery, as a tile
+expect document.querySelectorAll('#rows .row')[1].querySelector('.scene-gallery-tile.is-video') !== null
+shot 200-long-demo
+
+# after the idle passes (the b-roll list's read, the registry heal), it is
+# still exactly a fresh copy of the demo: opening it changed nothing
+sleep 1500
+expect window.__canon(F.state()) === window.__canon(window.__newTab.starterState('long-demo'))
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+eval (function(){ window.__ids.push(F.state().docId); return window.__ids.length; })()
+
+# --- from the command menu, over a script with an edit in it ----------------
+caret #rows .row .audio-cell .cell-editable
+type Edited.
+wait document.getElementById('btn-save').classList.contains('is-dirty') == true
+key ctrl KeyK
+wait !document.getElementById('cmdk').hidden
+press long demo
+sleep 200
+expect document.querySelector('#cmdk-list .cmdk-item').getAttribute('data-cmd') == long-demo
+expect document.querySelector('#cmdk-list .cmdk-item').textContent.indexOf('Open the long demo (30 scenes)') !== -1
+key Enter
+wait document.getElementById('cmdk').hidden == true
+wait F.state().rows[0].audioText.indexOf('Edited.') === -1
+expect F.state().rows.length == 30
+expect window.__ids.indexOf(F.state().docId) === -1
+expect window.__hostedTest.home().kind == none
+expect document.getElementById('btn-save').classList.contains('is-dirty') == false
+# the edited copy went into Version history, and the toast says so
+wait Array.prototype.some.call(document.querySelectorAll('#toast-host > *'), function(t){ return t.textContent.indexOf('The long demo') !== -1 && t.textContent.indexOf('Version history') !== -1; })
+sleep 1500
+expect window.__canon(F.state()) === window.__canon(window.__newTab.starterState('long-demo'))
+
+# --- typing into it makes it dirty, but there is nowhere to autosave to -----
+caret #rows .row .audio-cell .cell-editable
+type More.
+wait document.getElementById('btn-save').classList.contains('is-dirty') == true
+expect window.__hostedTest.home().kind == none
+expect F.docFile().name === null

@@ -40,6 +40,10 @@ export var SCRIPT_SCALE_MIN = 0.7, SCRIPT_SCALE_MAX = 2;
    whether a pasted YouTube or Vimeo link's thumbnail is fetched from the
    site (05v-video.js). */
 export var VIDEO_THUMBS_KEY = "splitpage-video-thumbs";
+/* Settings ▸ Show icons on tags (#217): "1" on, absent (or "0") off — a
+   category icon before every tag as well as its colour. Shown by the
+   data-tag-icons attribute on <html>, which app.css keys on. */
+export var TAG_ICONS_KEY = "splitpage-tag-icons";
 
 export function readPref(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -48,6 +52,15 @@ export function readPref(key) {
 /* On unless it was switched off. */
 export function videoThumbsOn() {
   return readPref(VIDEO_THUMBS_KEY) !== "0";
+}
+
+export function tagIconsOn() {
+  return readPref(TAG_ICONS_KEY) === "1";
+}
+
+export function applyTagIcons() {
+  if (tagIconsOn()) document.documentElement.setAttribute("data-tag-icons", "");
+  else document.documentElement.removeAttribute("data-tag-icons");
 }
 
 /* `value` null removes the key. The event fires whether or not storage
@@ -81,6 +94,7 @@ export var SETTINGS_APPDATA_PREFS = [
   { name: "prompterSceneMode", key: "splitpage-prompter-scene-mode", valid: isFlag },
   { name: "rundownMin", key: "splitpage-rundown-min", valid: isFlag },
   { name: "videoThumbs", key: "splitpage-video-thumbs", valid: isFlag },
+  { name: "tagIcons", key: "splitpage-tag-icons", valid: isFlag },
   { name: "scriptScale", key: "splitpage-script-scale",
     valid: function (v) { var n = Number(v); return /^\d(\.\d{1,3})?$/.test(v) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX; } }
 ];
@@ -326,8 +340,10 @@ export function resolvePersonColor(name, ctx) {
    theme attribute never lands in a saved copy of the page. */
 export function __init() {
   applyTheme();
+  applyTagIcons();
   /* Another tab changed it: follow, so two windows never disagree. */
   window.addEventListener("storage", function (e) {
     if (e.key === THEME_KEY) applyTheme();
+    if (e.key === TAG_ICONS_KEY) applyTagIcons();
   });
 }

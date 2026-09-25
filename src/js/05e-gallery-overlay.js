@@ -104,6 +104,7 @@ export function openGalleryOverlay(rowId, slot, videosOnly) {
 
 export function closeGalleryOverlay() {
   if (!view) return;
+  closeZoom(true);
   var rowId = view.rowId;
   view = null;
   modal().hidden = true;
@@ -126,6 +127,12 @@ export function refreshGalleryOverlay() {
   if (!got || !rowSlots(got.row).length) { closeGalleryOverlay(); return; }
   var hadFocus = modal().contains(document.activeElement);
   paint();
+  if (zoom) {
+    /* the picture it shows went (an undo, a merge): back to the dialog */
+    if (zoomSlots().indexOf(view.sel) === -1) closeZoom();
+    else paintZoom();
+    return;
+  }
   if (hadFocus && !modal().contains(document.activeElement)) {
     var picked = modal().querySelector(".scene-gallery-grid-tile.is-selected");
     if (picked) picked.focus({ preventScroll: true });
@@ -191,11 +198,16 @@ function paint() {
       (play && play.note ? noteHtml(poster, play.note) : '');
   }
   var group = playing || (play && (play.can || play.note));
+  /* a picture (never a video's still) opens at full size (#216) */
+  var zoomable = !poster && still;
   var picHtml =
       '<div class="scene-gallery-preview-pic' + (poster ? ' is-video' : '') + (playing ? ' is-playing' : '') +
-        (play && play.note ? ' has-note' : '') + '"' +
+        (play && play.note ? ' has-note' : '') + (zoomable ? ' is-zoomable' : '') + '"' +
         (playing ? ' data-play="' + escapeHtml(playKey) + '"' : '') +
-        ' role="' + (group ? 'group' : 'img') + '" aria-label="' + escapeHtml(about) + '">' +
+        (zoomable
+          ? ' data-gact="zoom" role="button" tabindex="0" title="Show at full size" aria-label="' +
+            escapeHtml(about + ". Shows it at full size") + '">'
+          : ' role="' + (group ? 'group' : 'img') + '" aria-label="' + escapeHtml(about) + '">') +
         inner +
       '</div>';
   var preview =
@@ -483,6 +495,7 @@ function onClick(e) {
   else if (act === "remove") removeSelected();
   else if (act === "all") { view.videos = false; paint(); }
   else if (act === "play") startPlaying();
+  else if (act === "zoom") openZoom();
   else if (act === "retry-thumb") retryThumbnail();
   else if (act === "open" || act === "link") openGalleryLink(view.rowId, view.sel, el.getAttribute("data-key"));
   else if (act === "add") {
@@ -493,6 +506,13 @@ function onClick(e) {
 
 function onKeydown(e) {
   if (!view) return;
+  if (zoom) { onZoomKeydown(e); return; }
+  if ((e.key === "Enter" || e.key === " ") && e.target && e.target.classList &&
+      e.target.classList.contains("is-zoomable") && !e.altKey && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    openZoom();
+    return;
+  }
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGalleryOverlay(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
   /* a playing <video>'s own keys: ← → seek it, rather than pick */
@@ -542,6 +562,220 @@ function onDrop(e) {
   if (tile && view) moveTo(from, Number(tile.getAttribute("data-slot")));
 }
 
+/* ---- a picture at full size (#216) ----
+
+   A click on the picked picture in the preview (or Enter on it) lays it
+   over the whole window on a dark backdrop at its real size: fitted to the
+   window first when it is bigger, where a click or the wheel takes it to
+   100 % round the point under the pointer and a drag pans it; left at
+   100 % when it is smaller, never blown up. Under it, its real dimensions
+   and its name. ← / → step through the scene's pictures (the dialog
+   picking along with it); Esc, the ×, or a click on the backdrop go back
+   to the dialog with the same item picked. Only pictures: a video's still
+   keeps its play or open. It shows the bytes already here (the same
+   <img data-blob> the preview draws, 02c-blobs.js), so it asks nothing of
+   any server. */
+
+var zoom = null;          /* {w, h, s, x, y, full, pan, moved} while open */
+var ZOOM_PAD = 48;
+
+function zoomEl() { return document.getElementById("gallery-zoom"); }
+function zoomStage() { return document.getElementById("gallery-zoom-stage"); }
+
+/* The slots it steps through: the shown ones that are pictures. */
+function zoomSlots() {
+  if (!view) return [];
+  var got = rowOf(view.rowId);
+  if (!got) return [];
+  var slots = rowSlots(got.row);
+  return shownSlots(slots).filter(function (i) {
+    var s = slots[i];
+    return !slotPoster(s) && !!(s.ref || s.dataUrl);
+  });
+}
+
+function openZoom() {
+  if (!view || zoomSlots().indexOf(view.sel) === -1) return;
+  zoom = { w: 0, h: 0, s: 1, x: 0, y: 0, full: false, pan: null, moved: false };
+  zoomEl().hidden = false;
+  paintZoom();
+  zoomEl().focus({ preventScroll: true });
+}
+
+function closeZoom(quiet) {
+  if (!zoom) return;
+  zoom = null;
+  zoomEl().hidden = true;
+  zoomStage().innerHTML = "";
+  if (quiet) return;
+  var pic = modal().querySelector(".scene-gallery-preview-pic.is-zoomable");
+  if (pic) pic.focus({ preventScroll: true });
+}
+
+/* Draws the picked picture into the stage, fitted, and its readout. */
+function paintZoom() {
+  var slots = rowSlots(rowOf(view.rowId).row);
+  var slot = slots[view.sel];
+  var stage = zoomStage();
+  stage.innerHTML = gallerySlotPictureHtml(slot);
+  var img = stage.querySelector("img");
+  img.className = "scene-gallery-zoom-img";
+  img.draggable = false;
+  img.alt = slot.name || "Picture " + (view.sel + 1);
+  zoom.full = false;
+  zoom.w = slot.ref ? slot.ref.width | 0 : 0;
+  zoom.h = slot.ref ? slot.ref.height | 0 : 0;
+  var measure = function () {
+    if (!zoom || img !== zoomStage().querySelector("img")) return;
+    if (img.naturalWidth) { zoom.w = img.naturalWidth; zoom.h = img.naturalHeight; }
+    layoutZoom();
+  };
+  if (img.complete && img.naturalWidth) measure();
+  else { img.addEventListener("load", measure); if (zoom.w) layoutZoom(); }
+}
+
+function clampAxis(pos, size, room) {
+  return size <= room ? (room - size) / 2 : Math.min(0, Math.max(room - size, pos));
+}
+
+/* The scale that fits the window, never above 100 %. */
+function fitScale() {
+  var W = window.innerWidth, H = window.innerHeight;
+  var pad = W < 600 ? 16 : ZOOM_PAD;
+  return Math.min(1, (W - 2 * pad) / zoom.w, (H - 2 * pad) / zoom.h);
+}
+
+/* Places the picture: 100 % or fitted, centred on an axis it fits, kept
+   covering the window on one it does not. */
+function layoutZoom(keep) {
+  if (!zoom || !zoom.w || !zoom.h) return;
+  var fit = fitScale();
+  var big = fit < 1;
+  if (!big) zoom.full = false;
+  var s = zoom.full ? 1 : fit;
+  if (!keep) { zoom.x = (window.innerWidth - zoom.w * s) / 2; zoom.y = (window.innerHeight - zoom.h * s) / 2; }
+  zoom.s = s;
+  zoom.x = clampAxis(zoom.x, zoom.w * s, window.innerWidth);
+  zoom.y = clampAxis(zoom.y, zoom.h * s, window.innerHeight);
+  var img = zoomStage().querySelector("img");
+  if (img) {
+    img.style.width = zoom.w + "px";
+    img.style.height = zoom.h + "px";
+    img.style.transform = "translate(" + zoom.x + "px, " + zoom.y + "px) scale(" + s + ")";
+  }
+  var stage = zoomStage();
+  stage.classList.toggle("can-zoom-in", big && !zoom.full);
+  stage.classList.toggle("can-zoom-out", big && zoom.full);
+  zoomInfo();
+}
+
+function zoomInfo() {
+  var slots = rowSlots(rowOf(view.rowId).row);
+  var slot = slots[view.sel];
+  var pics = zoomSlots();
+  var parts = [];
+  if (zoom.w) parts.push('<span class="scene-gallery-zoom-dims">' + zoom.w + ' × ' + zoom.h + '</span>');
+  if (slot.name) parts.push('<span class="scene-gallery-zoom-name">' + escapeHtml(slot.name) + '</span>');
+  if (zoom.w) parts.push('<span>' + Math.round(zoom.s * 100) + '%</span>');
+  if (pics.length > 1) parts.push('<span>' + (pics.indexOf(view.sel) + 1) + ' / ' + pics.length + '</span>');
+  document.getElementById("gallery-zoom-info").innerHTML = parts.join('<span aria-hidden="true">·</span>');
+}
+
+/* 100 % round the point (px, py), or back to fitted; animated unless the
+   system asks for reduced motion (app.css). */
+function zoomTo(full, px, py) {
+  if (!zoom || !zoom.w || fitScale() >= 1 || zoom.full === full) return;
+  var s1 = full ? 1 : fitScale();
+  var u = (px - zoom.x) / zoom.s, v = (py - zoom.y) / zoom.s;
+  zoom.full = full;
+  zoom.x = px - u * s1;
+  zoom.y = py - v * s1;
+  var stage = zoomStage();
+  stage.classList.add("is-animating");
+  clearTimeout(zoomTo.t);
+  zoomTo.t = setTimeout(function () { stage.classList.remove("is-animating"); }, 260);
+  layoutZoom(true);
+}
+
+function zoomStep(by) {
+  var pics = zoomSlots();
+  if (pics.length < 2) return;
+  var k = pics.indexOf(view.sel);
+  view.sel = pics[(k + by + pics.length) % pics.length];
+  paint();
+  paintZoom();
+}
+
+function onZoomKeydown(e) {
+  var k = e.key;
+  if (k === "Escape") { e.preventDefault(); e.stopPropagation(); closeZoom(); return; }
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (k === "ArrowLeft" || k === "ArrowRight") {
+    e.preventDefault();
+    zoomStep(k === "ArrowRight" ? 1 : -1);
+  } else if ((k === "Enter" || k === " ") && e.target === zoomEl()) {
+    e.preventDefault();
+    zoomTo(!zoom.full, window.innerWidth / 2, window.innerHeight / 2);
+  } else if (k === "Tab") {
+    /* the × is the one thing to tab to; keep the focus in here */
+    e.preventDefault();
+    var close = document.getElementById("gallery-zoom-close");
+    (document.activeElement === close ? zoomEl() : close).focus({ preventScroll: true });
+  }
+  /* nothing else: Delete does not remove a picture from here */
+}
+
+function onZoomClick(e) {
+  e.stopPropagation();
+  if (!zoom) return;
+  if (zoom.moved) { zoom.moved = false; return; }
+  if (e.target.closest("#gallery-zoom-close")) { closeZoom(); return; }
+  if (e.target.classList.contains("scene-gallery-zoom-img") && fitScale() < 1) {
+    zoomTo(!zoom.full, e.clientX, e.clientY);
+    return;
+  }
+  if (e.target.classList.contains("scene-gallery-zoom-img")) return;
+  closeZoom();
+}
+
+function onZoomWheel(e) {
+  if (!zoom) return;
+  e.preventDefault();
+  if (e.deltaY < 0) zoomTo(true, e.clientX, e.clientY);
+  else if (e.deltaY > 0) zoomTo(false, e.clientX, e.clientY);
+}
+
+/* Drag to pan at 100 %. A press that moves is a pan, not a click. */
+function onZoomPointerDown(e) {
+  if (!zoom || !zoom.full || e.button !== 0 || !e.target.classList.contains("scene-gallery-zoom-img")) return;
+  e.preventDefault();
+  zoom.pan = { id: e.pointerId, sx: e.clientX, sy: e.clientY, x: zoom.x, y: zoom.y };
+  zoomStage().classList.remove("is-animating");
+  zoom.moved = false;
+}
+
+function onZoomPointerMove(e) {
+  if (!zoom || !zoom.pan || e.pointerId !== zoom.pan.id) return;
+  var dx = e.clientX - zoom.pan.sx, dy = e.clientY - zoom.pan.sy;
+  if (!zoom.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+  if (!zoom.moved) {
+    /* captured only once it is a drag, so a plain click still lands on
+       the picture rather than the stage */
+    try { zoomStage().setPointerCapture(e.pointerId); } catch (err) {}
+  }
+  zoom.moved = true;
+  zoomStage().classList.add("is-dragging");
+  zoom.x = zoom.pan.x + dx;
+  zoom.y = zoom.pan.y + dy;
+  layoutZoom(true);
+}
+
+function onZoomPointerUp(e) {
+  if (!zoom || !zoom.pan || e.pointerId !== zoom.pan.id) return;
+  zoom.pan = null;
+  zoomStage().classList.remove("is-dragging");
+}
+
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order — the order these statements used to run in. */
 export function __init() {
@@ -554,6 +788,16 @@ export function __init() {
   m.addEventListener("drop", onDrop);
   m.addEventListener("dragend", function () { dragFrom = -1; });
   document.getElementById("gallery-close").addEventListener("click", closeGalleryOverlay);
+  var z = zoomEl();
+  if (z) {
+    z.addEventListener("click", onZoomClick);
+    z.addEventListener("wheel", onZoomWheel, { passive: false });
+    z.addEventListener("pointerdown", onZoomPointerDown);
+    z.addEventListener("pointermove", onZoomPointerMove);
+    z.addEventListener("pointerup", onZoomPointerUp);
+    z.addEventListener("pointercancel", onZoomPointerUp);
+    window.addEventListener("resize", function () { if (zoom) layoutZoom(true); });
+  }
   /* A player the page's policy turned away would be an empty frame: say
      so instead, and offer the link (#168). */
   document.addEventListener("securitypolicyviolation", function (e) {

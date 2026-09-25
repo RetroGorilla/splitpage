@@ -152,3 +152,45 @@ test("--broll is defined in every theme, off every other hue, and readable as te
     }
   }
 });
+
+/* A category's icon (#217): every category has one, defined next to
+   TAG_CATEGORIES, and tagIconCss() gives it to [data-tag-cat="<id>"] as
+   --tag-icon. app.css draws it only under <html data-tag-icons>, as a
+   ::before on a tag (never a node the script could read back) and in
+   place of the panels' dots, and never in the teleprompter. */
+import { tagIconCss, tagIconSvg } from "../js/07-production-tags.js";
+import { SETTINGS_APPDATA_PREFS, TAG_ICONS_KEY, tagIconsOn } from "../js/00p-prefs.js";
+
+test("every category has its own icon, given as --tag-icon on its data-tag-cat", () => {
+  const icons = new Set();
+  const out = tagIconCss();
+  for (const c of TAG_CATEGORIES) {
+    assert.ok(c.icon && /<(path|circle|rect)\b/.test(c.icon), c.id + " has no icon");
+    icons.add(c.icon);
+    const svg = new DOMParser().parseFromString(tagIconSvg(c), "image/svg+xml");
+    assert.equal(svg.documentElement.nodeName, "svg", c.id + "'s icon is not well-formed SVG");
+    assert.ok(out.includes('[data-tag-cat="' + c.id + '"]{--tag-icon:url("data:image/svg+xml,'), "no --tag-icon rule for " + c.id);
+  }
+  assert.equal(icons.size, TAG_CATEGORIES.length, "two categories share an icon");
+});
+
+test("icons are drawn only under data-tag-icons, as ::before, and not in the teleprompter", () => {
+  assert.match(css, /:root\[data-tag-icons\] \.tag-anchor::before \{/);
+  assert.match(css, /:root\[data-tag-icons\] \.tag-sample::before,/);
+  assert.match(css, /:root\[data-tag-icons\] \.prompter \.tag-anchor::before \{ content: none; \}/);
+  assert.match(css, /:root\[data-tag-icons\] \.tag-cat-dot\[data-tag-cat\]/);
+  /* no ::before on a tag outside the setting */
+  assert.doesNotMatch(css.replace(/:root\[data-tag-icons\][^{]*\{[^}]*\}/g, ""), /\.tag-anchor::before/);
+});
+
+test("Show icons on tags is off by default and carried in the app data bundle", () => {
+  localStorage.removeItem(TAG_ICONS_KEY);
+  assert.equal(tagIconsOn(), false);
+  localStorage.setItem(TAG_ICONS_KEY, "1");
+  assert.equal(tagIconsOn(), true);
+  localStorage.setItem(TAG_ICONS_KEY, "0");
+  assert.equal(tagIconsOn(), false);
+  localStorage.removeItem(TAG_ICONS_KEY);
+  const row = SETTINGS_APPDATA_PREFS.filter((p) => p.key === TAG_ICONS_KEY)[0];
+  assert.ok(row && row.valid("1") && row.valid("0") && !row.valid("yes"));
+});

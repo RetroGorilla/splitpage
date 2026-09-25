@@ -448,7 +448,14 @@
     <button type="button" id="find-next" title="Next match (Enter)">↓</button>
     <button type="button" id="find-replace">Replace</button>
     <button type="button" id="find-replace-all">Replace all</button>
+    <button type="button" id="find-tag" aria-expanded="false" aria-controls="find-tag-row" title="Tag every Visual-column mention at once">Tag all as…</button>
     <button type="button" class="notice-close" id="find-close" aria-label="Close find">×</button>
+    <div class="find-tag-row" id="find-tag-row" hidden>
+      <span class="find-tag-ask" id="find-tag-ask" aria-live="polite"></span>
+      <div class="tag-cats find-tag-cats" id="find-tag-cats" role="radiogroup" aria-label="Category"></div>
+      <button type="button" id="find-tag-go">Tag</button>
+      <button type="button" id="find-tag-cancel">Cancel</button>
+    </div>
   </div>
 
   <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
@@ -982,6 +989,11 @@
       <button type="button" class="scene-gallery-close" id="gallery-close" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
     <div id="gallery-body"></div>
+  </div>
+  <div class="scene-gallery-zoom" id="gallery-zoom" role="dialog" aria-modal="true" aria-label="Picture at full size" tabindex="-1" hidden>
+    <div class="scene-gallery-zoom-stage" id="gallery-zoom-stage"></div>
+    <p class="scene-gallery-zoom-info" id="gallery-zoom-info"></p>
+    <button type="button" class="scene-gallery-zoom-close" id="gallery-zoom-close" aria-label="Close full size"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
   </div>
 </div>
 
@@ -1582,6 +1594,8 @@
         <a href="#" data-newtab-action="tour">Take the tour</a>
         <span class="newtab-foot-sep" aria-hidden="true">·</span>
         <a href="#" data-newtab-action="dismiss">Look at the example script</a>
+        <span class="newtab-foot-sep" aria-hidden="true">·</span>
+        <a href="#" data-newtab-action="long-demo">Open the long demo (30 scenes)</a>
         <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
              bridge is there. The link is desktopAppUrl() (20a-update.js), the
              same page the desktop-app notice points at. -->

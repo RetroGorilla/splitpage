@@ -51,25 +51,64 @@ var TAG_SHORTCUT_CHARS;
    they avoid the columns' teal and orange, are with the tokens at the top
    of app.css. Only ever used inside CSS; nothing reads it as a hex. */
 
+/* ---- a category's icon (#217) ----
+
+   Settings ▸ Show icons on tags (off by default, TAG_ICONS_KEY in
+   00p-prefs.js) puts a small icon in the category's colour before every
+   tag, so a category reads without telling colours apart. One set, here,
+   for the script, the panels and the tagging reference alike.
+
+   `icon` is the inside of a 24×24 stroked SVG, the sprite's own style (the
+   box, pin, person and camera are page.html's i-box, i-pin, i-person and
+   i-camera). It is never a node in the script: tagIconCss() turns each one
+   into a mask image on `[data-tag-cat="<id>"]` as --tag-icon, and app.css
+   draws it with ::before (.tag-anchor, .tag-sample) or on a panel's
+   .tag-cat-dot / .tag-row-dot, only under <html data-tag-icons>. So it is
+   never read back into a row, copied, exported or counted. */
+var TAG_ICON_PATHS = {
+  prop: '<path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
+  location: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.25"/>',
+  cast: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+  vfx: '<path d="M11 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"/><path d="M19 15.5v5M16.5 18h5"/>',
+  sound: '<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  gear: '<rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/>'
+};
+
 export var TAG_CATEGORIES = [
-  { id: "prop",     label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)" },
-  { id: "location", label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)" },
-  { id: "cast",     label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)" },
-  { id: "vfx",      label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)" },
+  { id: "prop",     label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)",     icon: TAG_ICON_PATHS.prop },
+  { id: "location", label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)", icon: TAG_ICON_PATHS.location },
+  { id: "cast",     label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)",     icon: TAG_ICON_PATHS.cast },
+  { id: "vfx",      label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)",      icon: TAG_ICON_PATHS.vfx },
   /* Split out of the old combined "VFX/SFX" bucket: music and sound are
      sourced, licensed and cleared by different people than graphics are,
      so they need their own list to hand over. The "vfx" id is unchanged,
      so a file saved before the split keeps every tag it had — nothing is
      silently re-filed; anything already tagged stays under VFX until
      someone moves it deliberately. */
-  { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)" },
+  { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)",    icon: TAG_ICON_PATHS.sound },
   /* Equipment, not set dressing: the camera, the lav mic, the C-stand.
      Kept apart from Prop on purpose — different list, different person
      usually packing it — with its own typing shortcut for the same
      reason [prop]/{location}/~vfx~ have theirs: named enough, common
      enough while writing, to be worth a character. */
-  { id: "gear",     label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)" }
+  { id: "gear",     label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)",     icon: TAG_ICON_PATHS.gear }
 ];
+
+/* The whole icon as an SVG document, black strokes: a mask only reads its
+   alpha, and the colour is the tag's own (--tag-color / --dot). */
+export function tagIconSvg(cat) {
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" ' +
+    'stroke-linecap="round" stroke-linejoin="round">' + cat.icon + '</svg>';
+}
+
+/* One rule per category giving --tag-icon to anything carrying its
+   data-tag-cat. Put in the page once by __init (after 00-prelude captured
+   PAGE_SHELL, so a saved copy never carries it). */
+export function tagIconCss() {
+  return TAG_CATEGORIES.map(function (c) {
+    return '[data-tag-cat="' + c.id + '"]{--tag-icon:url("data:image/svg+xml,' + encodeURIComponent(tagIconSvg(c)) + '")}';
+  }).join("\n");
+}
 
 /* ---- how far along each tracked item is ----
 
@@ -1370,6 +1409,12 @@ export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccu
   var found = tagOccurrences(cell, phrase);
   if (countOnly) return { hits: found.length, html: html };
   if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence]] : [];
+  return writeTags(html, cell, found, cat, name);
+}
+
+/* Puts the tag (cat, name) on each of `found` in the field and writes it
+   back: {hits, html}, the same string when nothing was tagged. */
+function writeTags(html, cell, found, cat, name) {
   if (!found.length) return { hits: 0, html: html };
   /* the name the sanitiser would have left on the span */
   var clean = plainText(name).trim().slice(0, 80);
@@ -1380,6 +1425,86 @@ export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccu
   var id = namedTagId(cat, clean);
   found.forEach(function (m) { cell = setMark(cell, m.from, m.to, "tag", id); });
   return { hits: found.length, html: toHtml(cell) };
+}
+
+/* ---- tagging every mention at once (#218) ----
+
+   The find bar's "Tag all as…": every Visual-column mention of what was
+   searched for becomes a tag of one category, in one undo step. What
+   counts as a mention is tagOccurrences' rule above (whole words, across
+   formatting, never in a tag or a link, never across a b-roll key, a line
+   break or a comment's edge), narrowed to the exact case when the find
+   bar's Aa is on. The Visual column only: it is what is in front of the
+   camera, and the breakdown is read from it.
+
+   bulkTagCell also says what it did NOT tag, so the toast can explain the
+   difference from the find bar's count: a whole-word mention that is
+   (partly) inside a tag already is `inTags`; any other it turned down —
+   across a key, a link, a line break, a comment's edge — is `skipped`. */
+function wholeWordHits(text, needle, matchCase) {
+  var hay = matchCase ? text : foldCaseKeepLength(text);
+  var find = matchCase ? needle : foldCaseKeepLength(needle);
+  var out = [];
+  if (!find) return out;
+  var at = hay.indexOf(find);
+  while (at !== -1) {
+    var end = at + find.length;
+    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
+      out.push({ from: at, to: end });
+      at = hay.indexOf(find, end);
+    } else {
+      at = hay.indexOf(find, at + 1);
+    }
+  }
+  return out;
+}
+
+export function bulkTagCell(html, phrase, cat, name, matchCase, countOnly) {
+  var needle = String(phrase == null ? "" : phrase).trim();
+  var none = { hits: 0, inTags: 0, skipped: 0, html: html };
+  if (!needle) return none;
+  var cell = cellOf(html);
+  var text = "", tagged = [];
+  cell.forEach(function (r) {
+    if (r.atom) { text += "\uFFFC"; tagged.push(false); return; }
+    text += r.text;
+    for (var i = 0; i < r.text.length; i++) tagged.push(!!r.marks.tag);
+  });
+  var found = tagOccurrences(cell, needle).filter(function (m) {
+    return !matchCase || text.slice(m.from, m.to) === needle;
+  });
+  var taking = {};
+  found.forEach(function (m) { taking[m.from] = true; });
+  var inTags = 0, skipped = 0;
+  wholeWordHits(text, needle, matchCase).forEach(function (h) {
+    if (taking[h.from]) return;
+    if (tagged.slice(h.from, h.to).indexOf(true) !== -1) inTags++;
+    else skipped++;
+  });
+  if (countOnly || !found.length) {
+    return { hits: found.length, inTags: inTags, skipped: skipped, html: html };
+  }
+  var res = writeTags(html, cell, found, cat, name);
+  /* a cell whose DOM would not read as its model (writeTags' media path)
+     is left as it was: those mentions were turned down, not tagged */
+  return { hits: res.hits, inTags: inTags, skipped: skipped + found.length - res.hits, html: res.html };
+}
+
+/* The same over every scene's Visual column: {hits, inTags, skipped}, and,
+   unless countOnly, each changed row's visualText rewritten and stamped. */
+export function bulkTagRows(rows, phrase, cat, name, matchCase, countOnly) {
+  var total = { hits: 0, inTags: 0, skipped: 0 };
+  (rows || []).forEach(function (row) {
+    var res = bulkTagCell(row.visualText, phrase, cat, name, matchCase, countOnly);
+    total.hits += res.hits;
+    total.inTags += res.inTags;
+    total.skipped += res.skipped;
+    if (!countOnly && res.hits && res.html !== row.visualText) {
+      row.visualText = res.html;
+      stampRow(row);
+    }
+  });
+  return total;
 }
 
 function tagAllOccurrences(phrase, cat, name) {
@@ -1734,6 +1859,13 @@ export function __init() {
     });
     return s;
   })();
+
+  /* each category's icon as --tag-icon (#217); drawn only while
+     <html data-tag-icons> is set (00p-prefs.js) */
+  var iconStyle = document.createElement("style");
+  iconStyle.id = "tag-icon-style";
+  iconStyle.textContent = tagIconCss();
+  document.head.appendChild(iconStyle);
 
   /* The returned array is SHARED with every other caller for the same field
      content — read it, never mutate it. Mentions are built around it. */
