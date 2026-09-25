@@ -10,6 +10,7 @@ import {
 import { escapeHtml } from "./02-state.js";
 import { cssAttr } from "./04-richtext.js";
 import { render } from "./05-render.js";
+import { paintRundownPresence } from "./05p-rundown-presence.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiFetch,
@@ -297,6 +298,8 @@ export function paintPresence() {
     }).join("");
     bar.hidden = !list.length;
   }
+  /* and a dot on each one's block in the rundown (#202) */
+  paintRundownPresence();
   document.querySelectorAll(".presence-mark").forEach(function (el) { el.remove(); });
   if (!list.length) return;
   list.forEach(function (p) {
@@ -322,6 +325,21 @@ export function paintPresence() {
     mark.title = presenceName(p) + (sameField ? " is in this field" : " is in this scene");
     mark.textContent = presenceInitials(presenceName(p));
     target.appendChild(mark);
+  });
+}
+
+/* The people shown, as the rundown's dots want them (#202,
+   05p-rundown-presence.js): the same ones and the same colours as the
+   header's avatars. */
+export function presenceShown() {
+  return presenceHere.slice(0, PRESENCE_MAX_SHOWN).map(function (p) {
+    return {
+      id: String((p && p.id) || presenceSeed(p)),
+      name: presenceName(p),
+      color: presenceColor(p),
+      rowId: (p && p.rowId) || "",
+      field: (p && p.field) || ""
+    };
   });
 }
 
