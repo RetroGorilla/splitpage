@@ -1,0 +1,41 @@
+# Plain-language tagging on a phone (#210, Adam's decision): no Tab key, so
+# a tap on the open tag's note under the cell closes it exactly as Tab does
+# — one tag, one undo entry, the focus and the caret kept. Its own suite
+# because a viewport is set once, before the page loads (SKILL.md); the
+# desktop half is 195-plain-tags.txt.
+
+open
+viewport 390 844 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.cell = function (i) { return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable'); }; window.st = function (i) { return F.state().rows[i].visualText.replace(/&nbsp;/g, ' '); }; window.kw = function () { return document.querySelectorAll('#rows .plain-tag-keyword').length; }; return true; })()
+
+caret #rows .row:nth-child(1) .visual-cell .cell-editable
+press  VFX: lens flare
+sleep 250
+expect kw() == 1
+expect document.getElementById('tag-open-hint').classList.contains('is-visible')
+# on the screen, and not narrower than a finger needs to find it
+expect (function(){ var r = document.getElementById('tag-open-hint').getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.height >= 20; })()
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+eval (function(){ var h = document.getElementById('tag-open-hint'); var r = h.getBoundingClientRect(); var o = { bubbles: true, cancelable: true, clientX: r.left + 4, clientY: r.top + 4, pointerType: 'touch', isPrimary: true }; var down = new PointerEvent('pointerdown', o); h.dispatchEvent(down); h.dispatchEvent(new MouseEvent('click', o)); return down.defaultPrevented; })()
+sleep 300
+expect kw() == 0
+expect !document.getElementById('tag-open-hint').classList.contains('is-visible')
+expect cell(0).querySelectorAll('.tag-anchor[data-tag-cat="vfx"][data-tag-name="lens flare"]').length == 1
+expect /<\/span>$/.test(st(0))
+expect U.sizes().undo === window.__n + 1
+expect document.activeElement === cell(0)
+expect (function(){ var s = getSelection(); var n = s.anchorNode; var el = n.nodeType === 3 ? n.parentNode : n; return s.isCollapsed && !el.closest('.tag-anchor') && cell(0).contains(n); })()
+shot 196-plain-tags-phone
+press  then
+sleep 200
+expect /lens flare<\/span> then$/.test(st(0))
+# and one undo takes back just the tag, as after Tab
+eval (function(){ var n = 0; while (U.sizes().undo > window.__n + 1 && n++ < 20) { cell(0).dispatchEvent(new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true })); } return U.sizes().undo; })()
+key ctrl KeyZ
+sleep 300
+expect cell(0).querySelectorAll('.tag-anchor[data-tag-name="lens flare"]').length == 0
+expect /VFX: lens flare$/.test(st(0))
+
+quit
