@@ -267,6 +267,17 @@ function walkSanitize(srcParent, destParent) {
       destParent.appendChild(dirSpan);
       return;
     }
+    /* A sound cue line of the Audio column (#219, 04c-doc-model.js): its
+       words, keyword and all, stay editable; the class is all it carries,
+       and normalizeCell keeps it to whole lines that start "SFX:" or
+       "Music:". */
+    if (tag === "SPAN" && node.classList && node.classList.contains("audio-cue")) {
+      var cueSpan = document.createElement("span");
+      cueSpan.className = "audio-cue";
+      walkSanitize(node, cueSpan);
+      destParent.appendChild(cueSpan);
+      return;
+    }
     if (tag === "A") {
       var href = safeHref(node.getAttribute("href") || "");
       if (href) {

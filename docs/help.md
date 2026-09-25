@@ -21,6 +21,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
   tags, scene moves, statuses, pictures, comments and Production changes.
 - **Stage directions**: type `((beat))` in the Audio column.
+- **Sound cues**: start an Audio line with `SFX:` or `Music:`.
 - **Timing**: set a target length for the piece, or a scene's length by hand.
 - **Several pictures and videos per scene**, with YouTube, Vimeo and dropped
   video files playing in the scene's gallery.
@@ -149,7 +150,8 @@ On a Mac, read <kbd>Cmd</kbd> for <kbd>Ctrl</kbd> throughout.
 ### Timing
 
 Splitpage estimates each scene's read time from its Audio words, at the
-script's reading speed. Visual notes and stage directions don't count.
+script's reading speed. Visual notes, stage directions and sound cues don't
+count.
 
 - **Script length**: the small time at the end of the rundown, just after
   the last scene (at the strip's right edge on a long script, and at the
@@ -208,6 +210,22 @@ camera 2)*, written into the Audio column where it applies.
 
 Directions show dim and in brackets, appear in the teleprompter, are never
 waited for by Follow My Voice, and don't count toward the read time.
+
+### Sound cues
+
+Start a line of the Audio column with `SFX:` or `Music:` (any case), and
+that whole line becomes a sound cue: *SFX: door slam*. It turns into one
+when you type the colon, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> straight after
+gives you plain words back. Mid-sentence, `SFX:` is just words; in the
+Visual column it starts a Music/SFX tag instead.
+
+A cue is its own small line in the Music/SFX colour, with a note in front,
+so your eye skips it while reading. It is **never on the teleprompter**
+(a pause for the sound is a stage direction's job), doesn't count toward
+the read time, and is left out of the narration export. The script exports
+print it as its own line. Each cue is an item in the Production panel's
+**Music & SFX** list, named by the words after the colon, with its own
+status and owner like any tag.
 
 ### Comments
 
@@ -269,7 +287,7 @@ In the desktop app, Follow My Voice uses Windows' speech recognition; see
 
 **File ▸ Export… ▸ Narration only** writes the Audio column as `.docx` or
 `.txt`, one paragraph per scene. **Include stage directions** puts them in as
-*(beat)*. **Paste a script…** reads that shape back in.
+*(beat)*. Sound cues are never in it. **Paste a script…** reads that shape back in.
 
 ## Tagging and the production breakdown
 

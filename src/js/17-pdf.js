@@ -84,7 +84,12 @@ function pdfCirclePath(cx, cy, r) {
 
 /* break styled runs into lines that fit maxWidth. A stage direction's
    runs (#167, toDocxRuns: dir, already bracketed) are set in italic and
-   keep dir, which drawLines prints grey. */
+   keep dir, which drawLines prints grey. A sound cue line's runs (#219,
+   cue) keep cue, which drawLines prints smaller (CUE_SCALE, measured at
+   that size here) in the Music/SFX colour; a cue is a whole line, so it
+   is its own line on the page. */
+var CUE_SCALE = 0.85;
+
 function pdfWrapRuns(runs, maxWidth, size) {
   var lines = [], line = [], lineWidth = 0;
 
@@ -92,9 +97,11 @@ function pdfWrapRuns(runs, maxWidth, size) {
 
   runs.forEach(function (run) {
     if (run.dir) run = Object.assign({}, run, { i: true });
+    var sz = run.cue ? size * CUE_SCALE : size;
     var seg = function (text, width) {
       var s = { text: text, b: run.b, i: run.i, u: run.u, s: run.s, mark: run.mark, width: width };
       if (run.dir) s.dir = true;
+      if (run.cue) s.cue = true;
       return s;
     };
     if (run.text === "\n") { pushLine(); return; }
@@ -103,21 +110,21 @@ function pdfWrapRuns(runs, maxWidth, size) {
       if (!word) return;
       var isSpace = /^\s+$/.test(word);
       if (isSpace && !line.length) return;
-      var w = pdfTextWidth(word, run.b, size);
+      var w = pdfTextWidth(word, run.b, sz);
       if (!isSpace && lineWidth + w > maxWidth && line.length) pushLine();
       /* a single word longer than the column: hard-split it */
       if (!isSpace && w > maxWidth) {
         var chunk = "";
         for (var i = 0; i < word.length; i++) {
-          if (pdfTextWidth(chunk + word[i], run.b, size) > maxWidth && chunk) {
-            line.push(seg(chunk, pdfTextWidth(chunk, run.b, size)));
+          if (pdfTextWidth(chunk + word[i], run.b, sz) > maxWidth && chunk) {
+            line.push(seg(chunk, pdfTextWidth(chunk, run.b, sz)));
             pushLine();
             chunk = "";
           }
           chunk += word[i];
         }
         if (chunk) {
-          var cw = pdfTextWidth(chunk, run.b, size);
+          var cw = pdfTextWidth(chunk, run.b, sz);
           line.push(seg(chunk, cw));
           lineWidth += cw;
         }
@@ -309,8 +316,10 @@ export function buildPdf(jpegs, commentJpegs) {
         if (seg.text.trim()) {
           /* a stage direction (#167): grey, as the editor shows it */
           if (seg.dir) ops.push("0.42 0.42 0.40 rg");
-          text(seg.text, cx, yy, fontFor(seg), fs);
-          if (seg.dir) ops.push("0 g");
+          /* a sound cue (#219): smaller, in the Music/SFX brick */
+          else if (seg.cue) ops.push("0.671 0.255 0.243 rg");
+          text(seg.text, cx, yy, fontFor(seg), seg.cue ? fs * CUE_SCALE : fs);
+          if (seg.dir || seg.cue) ops.push("0 g");
           if (seg.u) rule(cx, yy - 1.6, seg.width, 0.5);
           if (seg.s) rule(cx, yy + SIZE * 0.28, seg.width, 0.5);
         }

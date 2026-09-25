@@ -5,7 +5,7 @@ import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { cellOf, projection, sliceCell, toHtml, toPlainText } from "./04c-doc-model.js";
+import { cellOf, projection, sliceCell, toHtml, toPlainText, withoutCues } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import {
   addPersonForTag,
@@ -112,7 +112,11 @@ export function buildPrompterContent() {
      counts for its boundaries are the very spans its paragraph shows, so
      the two can never disagree about what a "word" is. */
   var sceneEntries = source.map(function (row) {
-    var cell = trimPrompterCell(cellOf(row.audioText));
+    /* The prompter shows only what is said: a sound cue line (#219) is
+       not, so it is not on screen at all — a pause for the sound is a
+       stage direction's job. Left out here, before the words are cut, it
+       is never in the word list voice follow listens through either. */
+    var cell = trimPrompterCell(withoutCues(cellOf(row.audioText)));
     return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
   });
   var lines = sceneEntries.filter(function (e) { return e.view; });
