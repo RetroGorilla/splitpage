@@ -141,14 +141,29 @@ export function formatDateClock(when, opts, mode) {
   }
 }
 
-/* The header's "Saved …" words (12-dirty-toast.js), as a pure function of
-   when the save was and what time it is now. */
-export function savedAgoPhrase(savedAt, now, mode) {
+/* The header's words once nothing is left to write (12-dirty-toast.js,
+   #208), as a pure function of when this page last wrote the document and
+   what time it is now. "Saved just now" for the first minute after a
+   write, then "All changes saved" for as long as nothing changes.
+
+   It used to count on — "Saved 43 min ago" — which read as "autosave last
+   ran 43 minutes ago", as if it had stalled. Autosave only writes when
+   there is something to write, so an old time only ever meant that nothing
+   had changed since; these words say that, and the time itself is in the
+   tooltip (savedWhenText). `savedAt` 0 is a document this page has not
+   written (just opened, say): it has no "just now". */
+export var SAVED_JUST_NOW_MS = 60000;
+export function savedStatusText(savedAt, now) {
+  return savedAt && now - savedAt < SAVED_JUST_NOW_MS ? "Saved just now" : "All changes saved";
+}
+
+/* When that write was, for the tooltip: "2:52 PM" (or "14:52") the same
+   day, "Sep 21, 2:52 PM" once the page has been open past midnight. */
+export function savedWhenText(savedAt, now, mode) {
   if (!savedAt) return "";
-  var mins = Math.floor((now - savedAt) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return mins + " min ago";
-  return "at " + formatClock(new Date(savedAt), mode);
+  var at = new Date(savedAt);
+  return at.toDateString() === new Date(now).toDateString()
+    ? formatClock(at, mode) : formatDateClock(at, null, mode);
 }
 
 /* ---- the theme (#181) ---- */

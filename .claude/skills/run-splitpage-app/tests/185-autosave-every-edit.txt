@@ -1,0 +1,261 @@
+# Every kind of edit to the script is saved by autosave (#208), part 1: the
+# script itself. 186 is the side panels, comments and the gallery; 187 the
+# hosted document and the words the status uses.
+#
+# "Saved 43 min ago" was only ever honest if every edit marks the document
+# dirty (markDirty, 12-dirty-toast.js): that is what arms the autosave
+# timers (scheduleAutoSave, 14-export.js), so an edit that skipped it would
+# sit unsaved under a "Saved" label until something else wrote the file.
+#
+# The file is a fake FileSystemFileHandle, as in 28-autosave.txt, over a
+# .splitpage so what was written can be read back as JSON. Autosave's pause
+# is shortened to a few milliseconds. For each edit:
+#   * the status goes Unsaved changes → Saving… → Saved (a MutationObserver
+#     on #save-status keeps every text it is given, however briefly), the
+#     header says "Saved just now", and the file was written again;
+#   * what was written holds the edit;
+#   * a moment later nothing has moved under the "Saved": what is on disk is
+#     exactly what the page would write now (__same) — so nothing the app
+#     did after the edit (a b-roll line anchored, a registry healed) was
+#     left unsaved.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; window.U = window.__undoTest; var doc = {"schema": 2, "title": "Every edit", "wordsPerMinute": 150, "rows": [{"id": "r1", "visualText": "Wide on the harbour", "audioText": "Every morning the town wakes.", "status": "todo"}, {"id": "r2", "visualText": "Close on the nets", "audioText": "Mara has mended nets for thirty years.", "status": "todo"}, {"id": "r3", "visualText": "Cafe window", "audioText": "The kettle never stops.", "status": "todo"}, {"id": "r4", "visualText": "Lighthouse", "audioText": "And when the light goes, the lighthouse takes over.", "status": "todo"}], "comments": []}; window.__open = JSON.stringify(doc); window.__written = 0; window.__h = {name: 'every.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ window.__written++; return {write: async function(b){ window.__body = typeof b === 'string' ? b : await new Response(b).text(); }, close: async function(){ window.__h._mtime = Date.now(); }}; }, getFile: async function(){ return new File([window.__open], 'every.splitpage', {lastModified: window.__h._mtime}); }}; return F.openFile(new File([window.__open], 'every.splitpage', {lastModified: window.__h._mtime}), window.__h); })()
+wait F.docFile().kind === 'splitpage' && document.querySelector('#rows .row[data-id="r4"]')
+expect A.target() == file
+expect A.enabled() === true
+expect document.getElementById('save-status').textContent === 'Saved'
+eval (function(){ A.timing().idle = 40; A.timing().max = 400; window.__log = []; new MutationObserver(function(ms){ ms.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 3) window.__log.push(n.data); }); }); }).observe(document.getElementById('save-status'), {childList: true}); window.__st = function(){ return document.getElementById('save-status').textContent; }; window.__words = function(){ return document.getElementById('btn-save').getAttribute('data-status'); }; window.__arm = function(){ window.__log = []; window.__w0 = window.__written; return true; }; window.__cycled = function(){ var l = window.__log, a = l.indexOf('Unsaved changes'), b = a === -1 ? -1 : l.indexOf('Saving…', a + 1), c = b === -1 ? -1 : l.indexOf('Saved', b + 1); return c !== -1 && window.__written > window.__w0 && window.__st() === 'Saved' && window.__words() === 'Saved just now'; }; window.__doc = function(){ return JSON.parse(window.__body); }; window.__row = function(id){ return window.__doc().rows.filter(function(r){ return r.id === id; })[0]; }; window.__order = function(){ return window.__doc().rows.map(function(r){ return r.id; }).join(','); }; window.__same = function(){ return window.__st() === 'Saved' && window.__body === F.buildSplitpage(F.state()); }; window.cell = function(id, field){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (field === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.selectText = function(el, needle){ el.focus(); var text = el.textContent; var at = text.indexOf(needle); if (at === -1) throw new Error('no ' + needle); var from = at, to = at + needle.length; var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); var n, seen = 0, r = document.createRange(), a = null, b = null; while ((n = w.nextNode())) { var len = n.nodeValue.length; if (!a && from <= seen + len) a = [n, from - seen]; if (!b && to <= seen + len) b = [n, to - seen]; seen += len; } r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); }; return true; })()
+
+# --- typing in the Audio column ---------------------------------------------
+eval __arm()
+caret #rows .row[data-id="r1"] .audio-cell .cell-editable
+type  AUDIOEDIT
+eval document.activeElement.blur()
+wait __cycled()
+expect __row('r1').audioText.indexOf('AUDIOEDIT') !== -1
+sleep 300
+expect __same()
+
+# --- typing in the Visual column --------------------------------------------
+eval __arm()
+caret #rows .row[data-id="r1"] .visual-cell .cell-editable
+type  VISUALEDIT
+eval document.activeElement.blur()
+wait __cycled()
+expect __row('r1').visualText.indexOf('VISUALEDIT') !== -1
+sleep 300
+expect __same()
+
+# --- the title ----------------------------------------------------------------
+eval __arm()
+eval (function(){ var t = document.getElementById('doc-title'); t.value = 'Harbour, edited'; t.dispatchEvent(new Event('input', {bubbles: true})); t.blur(); return true; })()
+wait __cycled()
+expect __doc().title === 'Harbour, edited'
+sleep 300
+expect __same()
+
+# --- formatting from the cell's toolbar ---------------------------------------
+eval __arm()
+eval selectText(cell('r2', 'visualText'), 'nets')
+jsclick #rows .row[data-id="r2"] .visual-cell .mini-toolbar [data-cmd="bold"]
+eval document.activeElement.blur()
+wait __cycled()
+expect __row('r2').visualText.indexOf('<strong>nets</strong>') !== -1
+sleep 300
+expect __same()
+
+# --- a tag typed with its shortcut --------------------------------------------
+eval __arm()
+caret #rows .row[data-id="r4"] .audio-cell .cell-editable
+press  [Lantern]
+eval document.activeElement.blur()
+wait __cycled()
+expect __row('r4').audioText.indexOf('data-tag-name="Lantern"') !== -1
+expect __doc().productionTags.some(function(t){ return t.name === 'Lantern'; })
+sleep 300
+expect __same()
+
+# --- a paste ------------------------------------------------------------------
+eval __arm()
+caret #rows .row[data-id="r3"] .audio-cell .cell-editable
+eval (function(){ var dt = new DataTransfer(); dt.setData('text/plain', ' PASTED WORDS'); var ev = new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}); document.activeElement.dispatchEvent(ev); return ev.defaultPrevented; })()
+eval document.activeElement.blur()
+wait __cycled()
+expect __row('r3').audioText.indexOf('PASTED WORDS') !== -1
+sleep 300
+expect __same()
+
+# --- find & replace -------------------------------------------------------------
+eval __arm()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="find"]
+wait !document.querySelector('.findbar').hidden
+eval (function(){ var f = document.getElementById('find-input'); f.value = 'thirty'; f.dispatchEvent(new Event('input', {bubbles: true})); var r = document.getElementById('replace-input'); r.value = 'forty'; r.dispatchEvent(new Event('input', {bubbles: true})); return true; })()
+jsclick #find-replace-all
+wait __cycled()
+expect __row('r2').audioText.indexOf('forty years') !== -1
+jsclick #find-close
+sleep 300
+expect __same()
+
+# --- a scene's status ------------------------------------------------------------
+eval __arm()
+jsclick #rows .row[data-id="r2"] [data-action="cycle-status"]
+wait __cycled()
+expect __row('r2').status !== 'todo'
+expect __row('r2').status === F.state().rows[1].status
+sleep 300
+expect __same()
+
+# --- a scene's read time, set by hand (#179) -------------------------------------
+eval __arm()
+click #rows .row[data-id="r3"] .row-read
+wait document.activeElement.classList.contains('row-read-input')
+type 1:30
+key Enter
+wait __cycled()
+expect __row('r3').lengthSeconds === 90
+sleep 300
+expect __same()
+
+# --- the script's target length (#170) --------------------------------------------
+eval __arm()
+click #runtime-chip
+wait document.getElementById('wpm-editor')
+click #wpm-editor .target-preset[data-target-seconds="120"]
+wait __cycled()
+expect __doc().targetSeconds === 120
+sleep 300
+expect __same()
+
+# --- the reading speed, in the same box ----------------------------------------------
+eval __arm()
+click #runtime-chip
+wait document.getElementById('wpm-input')
+eval (function(){ var i = document.getElementById('wpm-input'); i.value = '170'; return true; })()
+jsclick #wpm-save
+wait __cycled()
+expect __doc().wordsPerMinute === 170
+sleep 300
+expect __same()
+
+# --- a scene split with Alt+Enter ------------------------------------------------------
+eval __arm()
+eval (function(){ var c = cell('r4', 'audioText'); c.focus(); var w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT); var t = w.nextNode(); var r = document.createRange(); r.setStart(t, t.nodeValue.indexOf('the lighthouse')); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+key alt Enter
+eval document.activeElement.blur()
+wait __cycled()
+expect __doc().rows.length === 5
+expect __doc().rows[4].audioText.indexOf('the lighthouse takes over') === 0
+sleep 300
+expect __same()
+
+# --- a scene added, and deleted -----------------------------------------------------------
+eval __arm()
+jsclick .add-row-bar [data-action="add-row"]
+wait __cycled()
+expect __doc().rows.length === 6
+sleep 300
+expect __same()
+eval window.__added = F.state().rows[5].id
+eval __arm()
+eval (function(){ var sel = '#rows .row[data-id="' + window.__added + '"] [data-action="delete-row"]'; document.querySelector(sel).click(); document.querySelector(sel).click(); return true; })()
+wait __cycled()
+expect __doc().rows.length === 5
+expect __doc().rows.every(function(r){ return r.id !== window.__added; })
+sleep 300
+expect __same()
+
+# --- a scene moved from its menu ---------------------------------------------------------
+eval window.__o0 = __order()
+eval __arm()
+jsclick #rows .row[data-id="r1"] [data-action="move-down"]
+wait __cycled()
+expect __order().indexOf('r2,r1') === 0
+sleep 300
+expect __same()
+
+# --- a scene dragged by its grip onto the rundown strip (#185) -------------------------------
+eval (function(){ window.__mkDrag = function(type, x, y, dt){ var ev = new DragEvent(type, {bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: dt}); return ev; }; window.pickUp = function(id){ var row = document.querySelector('#rows .row[data-id="' + id + '"]'); row.querySelector('[data-action="drag-grip"]').dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); window.__dt = new DataTransfer(); row.dispatchEvent(__mkDrag('dragstart', 50, 300, __dt)); window.__dragRow = row; return row.classList.contains('is-dragging'); }; window.dropAt = function(x){ var t = document.querySelector('#rundown .rundown-blocks'); var r = t.getBoundingClientRect(); t.dispatchEvent(__mkDrag('dragover', x, r.top + 18, __dt)); var ev = __mkDrag('drop', x, r.top + 18, __dt); t.dispatchEvent(ev); return ev.defaultPrevented; }; window.endDrag = function(){ if (window.__dragRow) window.__dragRow.dispatchEvent(__mkDrag('dragend', 0, 0, __dt)); }; return true; })()
+eval __arm()
+expect pickUp('r3')
+eval (function(){ var b = document.querySelectorAll('#rundown .rd-block'); var last = b[b.length - 1].getBoundingClientRect(); return dropAt(last.right + 1); })()
+eval endDrag()
+wait __cycled()
+expect __order().split(',').pop() === 'r3'
+sleep 300
+expect __same()
+
+# --- undo, and redo ----------------------------------------------------------------------------
+eval document.activeElement.blur()
+eval U.flush()
+eval __arm()
+key ctrl KeyZ
+wait __cycled()
+expect __order().split(',').pop() !== 'r3'
+sleep 300
+expect __same()
+eval __arm()
+key ctrl+shift KeyZ
+wait __cycled()
+expect __order().split(',').pop() === 'r3'
+sleep 300
+expect __same()
+
+# --- the writer: typing, and Enter splitting a scene ----------------------------------------------
+click #btn-write
+wait document.querySelectorAll('#writer-doc .wr-para').length === 5
+eval __arm()
+caret #writer-doc .wr-para
+press  WRITERWORDS
+eval document.activeElement.blur()
+wait __cycled()
+expect __doc().rows[0].audioText.indexOf('WRITERWORDS') !== -1
+# the writer's own status says the same
+expect document.getElementById('wr-save-status').textContent === 'Saved'
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ var p = document.querySelectorAll('#writer-doc .wr-para')[0]; p.focus(); var w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); var t = w.nextNode(); var r = document.createRange(); r.setStart(t, 0); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+key End
+key Enter
+press WRITERSCENE
+eval document.activeElement.blur()
+wait __cycled()
+expect __doc().rows.length === 6
+expect __doc().rows.some(function(r){ return r.audioText.indexOf('WRITERSCENE') !== -1; })
+sleep 300
+expect __same()
+eval __arm()
+eval (function(){ var t = document.getElementById('writer-title'); t.value = 'Harbour, from the writer'; t.dispatchEvent(new Event('input', {bubbles: true})); t.blur(); return true; })()
+wait __cycled()
+expect __doc().title === 'Harbour, from the writer'
+sleep 300
+expect __same()
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+
+# --- Paste / Import, adding scenes -------------------------------------------------------------------
+eval __arm()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="paste"]
+wait document.getElementById('import-textarea')
+eval (function(){ var t = document.getElementById('import-textarea'); t.value = 'Visual\tAudio\nIMPORTEDSHOT\tIMPORTEDWORDS'; t.dispatchEvent(new Event('input', {bubbles: true})); document.getElementById('import-replace').checked = false; return true; })()
+wait document.querySelector('input[name="import-split"][value="twocolumn"]').checked
+jsclick #import-confirm
+wait __cycled()
+expect __doc().rows.length === 7
+expect __doc().rows[6].audioText.indexOf('IMPORTEDWORDS') !== -1
+sleep 300
+expect __same()
+
+# --- nothing is left waiting ---------------------------------------------------------------------
+sleep 500
+expect __same()
+expect A.pending() === false
+expect window.__hostedTest.dirty() === false
+
+quit

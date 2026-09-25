@@ -529,7 +529,8 @@
 
   /* Save as a status (#169). #btn-save draws the status words that
      updateSaveStatus() (12-dirty-toast.js) writes into data-status — "Saved
-     2 min ago", "Unsaved changes", "Saving…" — in place of its own text,
+     just now", "All changes saved", "Unsaved changes", "Saving…" — in place
+     of its own text,
      which stays "Save" / "Save •" for the writer's button to mirror and at
      font-size 0 here. #save-status carries the same words for a screen
      reader and is drawn nowhere. */
@@ -799,7 +800,7 @@
        below 1250  the panel toggles are an icon and their count
        below 1180  the File button is its mark and chevron
        below 1000  Write is its icon, and the gaps close up
-       below  880  "Saved 2 min ago" and the rest shorten to a dot in the
+       below  880  "All changes saved" and the rest shorten to a dot in the
                    state's colour (the words stay its name and tooltip)
      The phone (760 and under) is its own layout, further down. Measured by
      suite 85-header-fit.txt at every width #174 lists. */

@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { home, setHome } from "./_home.js";
-import { readDefaultWpm } from "./00p-prefs.js";
+import { readDefaultWpm, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03-sync.js";
@@ -157,11 +157,16 @@ export function timeAgo(at, now) {
   return new Date(at).toLocaleDateString();
 }
 
+/* The header's words (#208, savedStatusText in 00p-prefs.js), not an age:
+   "Saved 43 min ago" here read as autosave having stalled, just as it did
+   beside the Save button. `at` is the file's own timestamp — when it was
+   last written, by this page or anyone — and goes in the tooltip. */
 function savedWord(at) {
   if (S.saveButtonBusy) return { text: "Saving…" };
   if (S.dirty) return { text: "Unsaved changes", unsaved: true };
-  var ago = timeAgo(at);
-  return { text: ago ? "Saved " + ago : "Saved" };
+  var now = Date.now();
+  var when = at ? savedWhenText(at, now) : "";
+  return { text: savedStatusText(at, now), title: when ? "Last saved at " + when : "" };
 }
 
 /* What the card says: the file's name (or that there is none yet), and
@@ -198,7 +203,8 @@ function refreshFileCard() {
   nameEl.textContent = view.name;
   nameEl.title = view.name;
   metaEl.innerHTML = view.bits.map(function (b) {
-    return '<span' + (b.unsaved ? ' class="is-unsaved"' : '') + '>' + escapeHtml(b.text) + '</span>';
+    return '<span' + (b.unsaved ? ' class="is-unsaved"' : '') +
+      (b.title ? ' title="' + escapeHtml(b.title) + '"' : '') + '>' + escapeHtml(b.text) + '</span>';
   }).join(" · ");
 }
 

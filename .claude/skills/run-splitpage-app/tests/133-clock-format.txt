@@ -1,5 +1,7 @@
-# One clock (#180, formatClock in 00p-prefs.js): the header's "Saved at …"
-# an hour after a save (Date.now faked forward), the History panel's times
+# One clock (#180, formatClock in 00p-prefs.js): the save status's tooltip
+# ("Last saved to clock.md at …", #208) once the header's words have gone
+# from "Saved just now" to "All changes saved" (Date.now faked a couple of
+# minutes forward), the History panel's times
 # and the comments' times all follow the system's format by default and
 # Settings ▸ Clock's 12-hour / 24-hour when it is set — changed from
 # Settings, taking effect at once everywhere.
@@ -10,6 +12,7 @@ wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){window.F=window.__splitpageFormats;localStorage.removeItem('splitpage-clock');return true;})()
 eval window.__sys = function(d){return new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(d);}
 eval window.__status = function(){return document.getElementById('btn-save').getAttribute('data-status');}
+eval window.__tip = function(){return document.getElementById('save-status').title;}
 
 # --- a document with a file, saved ----------------------------------------
 eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__fakeHandle = {name:'clock.md',_mtime: window.__t0,createWritable: async function(){return {write: async function(b){window.__body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
@@ -22,9 +25,13 @@ eval F.save()
 wait window.__status() === 'Saved just now'
 eval window.__savedAt = Date.now()
 
-# --- an hour later: the clock time, in the system's own format -------------
-eval (function(){window.__realNow = window.__realNow || Date.now;var off = 65*60000;Date.now = function(){return window.__realNow() + off;};window.__settingsTest.refreshSaveStatus();return window.__status();})()
-expect window.__status() === 'Saved at ' + window.__sys(new Date(window.__savedAt))
+expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
+
+# --- two minutes later: no age in the words, the time in the tooltip ---------
+eval (function(){window.__realNow = window.__realNow || Date.now;var off = 2*60000;Date.now = function(){return window.__realNow() + off;};window.__settingsTest.refreshSaveStatus();return window.__status();})()
+expect window.__status() === 'All changes saved'
+expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
+expect document.getElementById('btn-save').title.indexOf(window.__tip()) === 0
 
 # --- Settings ▸ Clock ▸ 12-hour: at once, no reload -----------------------
 jsclick #btn-file
@@ -32,20 +39,21 @@ jsclick #file-menu [data-file-action="settings"]
 wait window.__settingsTest.isOpen()
 click #settings-modal input[name="settings-clock"][value="12"]
 expect localStorage.getItem('splitpage-clock') === '12'
-expect /^Saved at \d{1,2}:\d{2}\s?[AP]M$/.test(window.__status())
+expect window.__status() === 'All changes saved'
+expect /^Last saved to clock\.md at \d{1,2}:\d{2}\s?[AP]M\.$/.test(window.__tip())
 expect /[AP]M/.test(document.getElementById('settings-clock-example').textContent)
 shot 133-settings-clock-12
 
 # --- 24-hour ---------------------------------------------------------------
 click #settings-modal input[name="settings-clock"][value="24"]
 expect localStorage.getItem('splitpage-clock') === '24'
-expect /^Saved at \d{2}:\d{2}$/.test(window.__status())
+expect /^Last saved to clock\.md at \d{2}:\d{2}\.$/.test(window.__tip())
 expect document.getElementById('settings-clock-example').textContent.indexOf('14:52') === 0
 
 # --- System takes the key away ----------------------------------------------
 click #settings-modal input[name="settings-clock"][value="system"]
 expect localStorage.getItem('splitpage-clock') === null
-expect window.__status() === 'Saved at ' + window.__sys(new Date(window.__savedAt))
+expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 key Escape
 wait !window.__settingsTest.isOpen()
 eval (function(){Date.now = window.__realNow;return true;})()
