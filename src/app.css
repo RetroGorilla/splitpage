@@ -3546,8 +3546,9 @@
     flex-direction: column;
     width: 380px;
     max-width: calc(100vw - 40px);
-    /* clear of the 52px header row, with the same 20px as the corner */
-    max-height: calc(100vh - 92px);
+    /* clear of the whole header, the rundown strip included, with the same
+       20px as the corner (--header-bottom is measured, 10-comments.js) */
+    max-height: calc(100vh - max(52px, var(--header-bottom, 124px)) - 40px);
     background: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border-strong);
