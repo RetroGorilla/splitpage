@@ -2676,7 +2676,7 @@
     overflow: hidden;
     padding: 16px 14px;
     background: #FFFFFF;
-    color: #221F1A;
+    color: #171613;
     border: 1px solid var(--border);
     border-radius: 4px;
     box-shadow: 0 1px 2px rgba(30, 25, 15, 0.08), 0 10px 24px -14px rgba(30, 25, 15, 0.35);
@@ -2692,25 +2692,145 @@
     height: 40px;
     background: linear-gradient(to bottom, rgba(255,255,255,0), #FFFFFF);
   }
-  .pv-title { font-size: 10px; font-weight: 700; margin-bottom: 6px; }
-  .pv-sub { font-size: 7px; font-weight: 600; margin: 6px 0 3px; }
-  .pv-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  .pv-table th { text-align: left; font-weight: 700; border-bottom: 0.5px solid #9B9484; padding: 1px 2px; }
-  .pv-table td { vertical-align: top; border-bottom: 0.5px solid #DCD5C4; padding: 2px; overflow: hidden; word-wrap: break-word; }
-  .pv-table .pv-no { width: 14px; color: #6E6858; }
-  .pv-img { display: block; height: 16px; margin-bottom: 1px; background: #E3F1EC; border-radius: 1px; }
-  .pv-mono { font-family: var(--font-display); font-size: 5.8px; white-space: pre-wrap; word-break: break-word; }
+  /* The sketches are paper, so they are drawn in the exports' own light
+     palette whatever the app's theme (PRINT_COLORS, 14b-export-kit.js):
+     text 171613, dim 4E4D48, faint 64635E, hairline DCDAD4, stronger
+     C9C7C1, Visual 2863AB, Audio 9E5800, b-roll 00717F — each file's
+     first page in miniature (#169's look in every export). */
+  .pv-title { font-size: 10px; line-height: 1.25; font-weight: 700; margin-bottom: 2px; overflow-wrap: anywhere; }
+  .pv-meta { font-size: 5.2px; line-height: 1.4; color: #4E4D48; margin-bottom: 6px; }
+  .pv-eyebrow { font-size: 5.2px; color: #64635E; margin-bottom: 1px; }
+  .pv-faint { color: #64635E; }
   .pv-para { margin: 0 0 5px; }
-  .pv-grid td { font-family: var(--font-display); font-size: 5.5px; border: 0.5px solid #DCD5C4; }
+  .pv-img { display: block; height: 16px; margin-bottom: 1px; background: #E3ECF7; border-radius: 1px; }
+  .pv-dot { display: inline-block; flex: none; width: 3px; height: 3px; border-radius: 50%; margin-right: 2px; vertical-align: 0.3px; background: var(--pv-c, #171613); }
+  .pv-dot-v { background: #2863AB; }
+  .pv-dot-a { background: #9E5800; }
+  /* a status lamp: To do unlit, Ready lit amber, Shot lit — and an item's
+     Needed, Sourcing (half), Have it, Returned (a ring) */
+  .pv-lamp { display: inline-block; flex: none; width: 4px; height: 4px; border-radius: 50%; margin-right: 1.5px; box-sizing: border-box; vertical-align: 0; }
+  .pv-lamp-todo, .pv-lamp-needed { border: 0.6px solid #64635E; }
+  .pv-lamp-ready { background: #9E5800; }
+  .pv-lamp-shot, .pv-lamp-have { background: #171613; }
+  .pv-lamp-sourcing { border: 0.6px solid #9E5800; background: linear-gradient(90deg, #9E5800 50%, transparent 50%); }
+  .pv-lamp-returned { border: 0.6px solid #64635E; background: radial-gradient(circle, #64635E 30%, transparent 36%); }
+  /* the rundown strip under the title: a block a scene, as long as it
+     reads — shot dark, ready outlined amber, to do pale — the target's
+     line, and a legend of how many are at each */
+  .pv-rundown { position: relative; display: flex; gap: 0.6px; height: 5.5px; margin: 1px 0 0; }
+  .pv-rd { flex: 1 1 0; min-width: 0.5px; border-radius: 0.6px; box-sizing: border-box; background: #E9E8E4; }
+  .pv-rd-ready { border: 0.5px solid #9E5800; background: #F6EBDC; }
+  .pv-rd-shot { background: #4E4D48; }
+  .pv-rd-target { position: absolute; top: -2px; bottom: -1px; width: 0.6px; background: #171613; }
+  .pv-legend { display: flex; gap: 6px; margin: 2.5px 0 7px; font-size: 4.4px; color: #4E4D48; }
+  .pv-legend span { display: flex; align-items: center; }
+  /* the script: the gutter, Visual and Audio, the Read column */
+  .pv-sh, .pv-sc { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1.3fr) 14px; column-gap: 5px; }
+  .pv-sh { font-size: 5px; color: #4E4D48; padding-bottom: 2px; border-bottom: 0.5px solid #C9C7C1; }
+  .pv-sc { padding: 3.5px 0 3px; border-bottom: 0.5px solid #DCDAD4; font-size: 5.6px; line-height: 1.45; }
+  .pv-sc > div { min-width: 0; overflow-wrap: break-word; }
+  .pv-script-word .pv-sh { border-bottom-color: #4E4D48; }
+  .pv-aud { font-size: 6px; }
+  .pv-gut { line-height: 1.1; }
+  .pv-gut b { font-size: 7.5px; }
+  .pv-tc { font-family: var(--font-display); font-size: 4.4px; color: #64635E; }
+  .pv-gut .pv-st { margin-top: 1.5px; }
+  .pv-script-word .pv-sh span:nth-child(2) { color: #2863AB; }
+  .pv-script-word .pv-sh span:nth-child(3) { color: #9E5800; }
+  .pv-st { display: flex; align-items: center; font-size: 4.6px; color: #4E4D48; white-space: nowrap; }
+  .pv-read { text-align: right; font-family: var(--font-display); font-size: 5px; color: #4E4D48; white-space: nowrap; }
+  .pv-sh .pv-read { font-family: inherit; }
+  .pv-set { border: 0.5px solid #C9C7C1; border-radius: 1.5px; padding: 0 0.8px; }
+  .pv-tag { color: var(--pv-c); text-decoration: underline 0.4px var(--pv-c); text-underline-offset: 0.8px; }
+  .pv-broll {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 4.2px;
+    line-height: 1.3;
+    color: #00717F;
+    border: 0.5px solid #00717F;
+    border-radius: 1.2px;
+    padding: 0 1px;
+    margin-right: 2px;
+    vertical-align: 0.4px;
+  }
+  .pv-mk {
+    display: inline-block;
+    font-size: 3.8px;
+    line-height: 1.2;
+    color: #9E5800;
+    border: 0.5px solid #9E5800;
+    border-radius: 1.2px;
+    padding: 0 0.7px;
+    margin-left: 0.6px;
+    vertical-align: 1.2px;
+  }
+  .pv-dir { font-style: italic; color: #64635E; }
+  .pv-cue { font-size: 5px; color: #AB413E; }
+  /* the running footer of a paged file, in the page's bottom margin: the
+     fade that says the page goes on ends above it */
+  .export-preview:has(.pv-foot)::after { bottom: 17px; height: 34px; }
+  .pv-foot {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 14px 7px;
+    font-size: 4.4px;
+    color: #64635E;
+    background: #FFFFFF;
+  }
+  .pv-foot::before { content: ""; position: absolute; left: 14px; right: 14px; top: 3px; border-top: 0.5px solid #DCDAD4; }
+  .pv-foot span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv-foot span:last-child { flex: none; }
+  /* text files: their own first lines */
+  .pv-mono { font-family: var(--font-display); font-size: 5.6px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: #4E4D48; }
+  .pv-md-h { font-weight: 700; color: #171613; }
+  .pv-md-q { color: #64635E; }
+  /* sheets */
+  .pv-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .pv-grid td { font-family: var(--font-display); font-size: 4.7px; line-height: 1.35; vertical-align: top; padding: 1.3px 1.6px; border: 0.5px solid #DCDAD4; overflow: hidden; overflow-wrap: break-word; }
+  .pv-grid .pv-gh td { font-weight: 600; color: #171613; background: #F1F0ED; }
+  .pv-grid .pv-gap td { color: #64635E; text-align: center; }
+  .pv-grid .pv-gap td:not(:first-child) { color: transparent; }
+  .pv-grid .pv-total td { font-weight: 700; border-top: 0.8px solid #4E4D48; }
+  /* the Standalone page is the app itself, named for the script in the
+     browser's tab, and wears the app's light colours */
   .pv-app { margin: -16px -14px; }
-  /* the Standalone HTML export is the app itself, so its sketch wears the
-     app's light colours (#169) */
-  .pv-app-bar { height: 14px; background: #F1F0ED; border-bottom: 0.5px solid #DCDAD4; padding: 3px 8px; font-weight: 700; font-size: 6px; }
-  .pv-app .pv-table { margin: 8px; width: calc(100% - 16px); }
-  .pv-app td:first-child { background: #F1F5FB; }
-  .pv-app td:last-child { background: #FAF5EE; }
-  .pv-check { display: flex; gap: 4px; align-items: baseline; margin-bottom: 3px; }
-  .pv-check::before { content: ""; flex: none; width: 5px; height: 5px; border: 0.6px solid #221F1A; border-radius: 1px; }
+  .pv-tabbar { height: 12px; padding: 2.5px 5px 0; background: #DCDAD4; }
+  .pv-tab {
+    display: inline-block;
+    max-width: 82%;
+    padding: 2px 6px;
+    font-size: 4.8px;
+    background: #F1F0ED;
+    border-radius: 2.5px 2.5px 0 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  .pv-app-bar { height: 12px; background: #F1F0ED; border-bottom: 0.5px solid #DCDAD4; padding: 3px 8px; font-weight: 700; font-size: 5.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pv-app-bar span { font-weight: 600; color: #4E4D48; margin-left: 4px; }
+  .pv-app-page { padding: 6px 8px; background: #F1F0ED; min-height: 240px; }
+  /* the narration .docx: each paragraph's scene number in the margin */
+  .pv-narr .pv-para { position: relative; padding-left: 13px; font-size: 6px; line-height: 1.5; }
+  .pv-margin { position: absolute; left: 0; top: 0.5px; font-family: var(--font-display); font-size: 5px; color: #64635E; }
+  /* the packing list */
+  .pv-pack-head { display: flex; align-items: center; gap: 1px; font-size: 11px; font-weight: 700; line-height: 1.3; }
+  .pv-pack-head .pv-dot { width: 5px; height: 5px; margin-right: 3px; }
+  .pv-pack { margin-top: 2px; }
+  .pv-pack-row { display: grid; grid-template-columns: 9px 9px minmax(0, 1fr) 29px 17px 19px; column-gap: 3px; align-items: start; padding: 2.5px 0; border-bottom: 0.5px solid #DCDAD4; font-size: 5px; color: #4E4D48; }
+  .pv-pack-h { font-size: 4.4px; border-bottom-color: #C9C7C1; }
+  .pv-pack-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv-pack-h > span { overflow: visible; }
+  .pv-pack-item b { display: block; font-size: 6px; color: #171613; overflow: hidden; text-overflow: ellipsis; }
+  .pv-pack-item .pv-faint { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .pv-box { width: 6px; height: 6px; margin-top: 0.5px; border: 0.6px solid #4E4D48; border-radius: 1.2px; box-sizing: border-box; }
+  .pv-sign { display: grid; grid-template-columns: auto minmax(0, 1.6fr) auto minmax(0, 1fr); gap: 6px 4px; align-items: end; margin-top: 10px; font-size: 5px; color: #4E4D48; }
+  .pv-sign i { display: block; border-bottom: 0.5px solid #C9C7C1; height: 5px; }
 
   .export-summary { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text); text-align: center; }
   .export-options { display: flex; flex-direction: column; gap: 10px; }

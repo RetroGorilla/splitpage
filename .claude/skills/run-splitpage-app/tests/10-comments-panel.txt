@@ -81,9 +81,11 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md"]
 sleep 1400
 eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return true;})()
-# scoped to the Comments section specifically - "Row 01"/"Row 02" as bare
-# strings would also match inside the script table itself
+# scoped to the Comments section specifically - "Scene 01"/"Scene 02" as bare
+# strings would also match the scenes' own headings (the export names a
+# thread's place as the panel does since #169, "Scene 01 · Audio")
 eval (function(){window.__mdComments = window.__md.slice(window.__md.indexOf('## Comments')); return window.__mdComments.length;})()
-expect window.__mdComments.indexOf('Row 01') < window.__mdComments.indexOf('Row 02')
+expect window.__mdComments.indexOf('Scene 01 · ') !== -1
+expect window.__mdComments.indexOf('Scene 01 · ') < window.__mdComments.indexOf('Scene 02 · ')
 
 quit

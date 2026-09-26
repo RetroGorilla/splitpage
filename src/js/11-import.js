@@ -121,8 +121,15 @@ function splitTableRowCells(line) {
    all). Cut there, but only after our own scene header, the way the .docx
    reimport waits for its table style (exportTailStart, 15-docx.js), so a
    table someone wrote with a "## Comments" heading of their own keeps what
-   follows it. */
-var MD_EXPORT_TAIL_RE = /^\s*##\s+(Production breakdown|Comments)\s*$/;
+   follows it. An export's tail (#169) can also open on the b-roll shot
+   list, when nothing is tagged.
+
+   Our scene header is the project's "# | Visual | Audio | Status", or the
+   Export's, which adds the gutter's columns round them ("# | Start |
+   Status | Visual | Audio | Read"); parseMarkdownTable finds Visual and
+   Audio by name in either. */
+var MD_EXPORT_TAIL_RE = /^\s*##\s+(Production breakdown|B-roll shot list|Comments)\s*$/;
+var MD_OWN_TABLE_HEADERS = ["#|visual|audio|status", "#|start|status|visual|audio|read"];
 
 function markdownExportScript(text) {
   var lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
@@ -130,7 +137,7 @@ function markdownExportScript(text) {
   for (var i = 0; i < lines.length; i++) {
     if (!sawHeader) {
       sawHeader = lines[i].indexOf("|") !== -1 &&
-        splitTableRowCells(lines[i].trim()).join("|").toLowerCase() === "#|visual|audio|status";
+        MD_OWN_TABLE_HEADERS.indexOf(splitTableRowCells(lines[i].trim()).join("|").toLowerCase()) !== -1;
     } else if (MD_EXPORT_TAIL_RE.test(lines[i])) {
       return lines.slice(0, i).join("\n");
     }
@@ -148,9 +155,21 @@ function markdownExportScript(text) {
    most the one meta line, then a scene heading), so anybody else's
    Markdown reads as it always did. Null when it is not one; otherwise
    the scenes, a blank one kept. The pictures are files beside the export,
-   not in it, and do not come back. */
-var MD_SCENE_HEADING_RE = /^###\s+Scene\s+\d+\s*$/;
-var MD_SCENE_META_RE = /^_\d+ scenes? · est\. .* running time_$/;
+   not in it, and do not come back.
+
+   Since #169's look reached the exports, the same file says more round
+   the words, and all of it is skipped: the meta line is the kit's ("_30
+   scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot ·
+   26 September 2026_"), a heading carries the scene's start ("### Scene
+   04 · 01:03"), the line under it its status and read time ("**Shot** ·
+   Read 0:10", MD_SCENE_FACTS_RE, only as the scene's first line), each
+   open thread's number follows its words as "<sup>1</sup>" (MD_MARKER_RE,
+   taken out of both cells), and the tail can open on "## B-roll shot
+   list". A file exported before any of that reads exactly as it did. */
+var MD_SCENE_HEADING_RE = /^###\s+Scene\s+\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
+var MD_SCENE_META_RE = /^_\d+ scenes? · (est\. )?\S+ running time( · .*)?_$/;
+var MD_SCENE_FACTS_RE = /^\*\*[^*]+\*\* · Read \d+(:\d\d)+(, set by hand)?$/;
+var MD_MARKER_RE = /<sup>\d+<\/sup>/g;
 var MD_VISUAL_LEAD_RE = /^\*Visual —\*\s?/;
 var MD_SCENE_MEDIA_RE = /^(!\[visual [^\]]*\]\(images\/[^)]*\)|▶ .*)$/;
 
@@ -164,18 +183,28 @@ function parseStackedMarkdownExport(text) {
   }
   if (i === lines.length) return null;
 
-  var scenes = [];
+  var scenes = [], timed = [];
   for (; i < lines.length; i++) {
     if (MD_EXPORT_TAIL_RE.test(lines[i])) break;
-    if (MD_SCENE_HEADING_RE.test(lines[i].trim())) scenes.push([]);
-    else scenes[scenes.length - 1].push(lines[i]);
+    if (MD_SCENE_HEADING_RE.test(lines[i].trim())) {
+      scenes.push([]);
+      /* a heading with the start timecode is the newer export, which
+         writes a cell's line breaks as hard breaks ("  \n") */
+      timed.push(lines[i].indexOf("·") !== -1);
+    } else scenes[scenes.length - 1].push(lines[i]);
   }
-  return scenes.map(function (sc) {
+  return scenes.map(function (sc, n) {
+    function cellText(s) {
+      s = s.replace(MD_MARKER_RE, "");
+      return timed[n] ? s.replace(/ {2}\n/g, "\n") : s;
+    }
     var end = sc.length;
     while (end > 0 && !sc[end - 1].trim()) end--;
     if (end > 0 && sc[end - 1].trim() === "---") end--;
     sc = sc.slice(0, end);
     var k = 0;
+    while (k < sc.length && !sc[k].trim()) k++;
+    if (k < sc.length && MD_SCENE_FACTS_RE.test(sc[k].trim())) k++;
     while (k < sc.length && (!sc[k].trim() || MD_SCENE_MEDIA_RE.test(sc[k].trim()))) k++;
     var visual = [];
     if (k < sc.length && MD_VISUAL_LEAD_RE.test(sc[k])) {
@@ -183,7 +212,10 @@ function parseStackedMarkdownExport(text) {
       for (k++; k < sc.length && sc[k].trim(); k++) visual.push(sc[k]);
     }
     var audio = sc.slice(k).join("\n").trim();
-    return { visualText: visual.join("\n").trim(), audioText: audio === "_(blank scene)_" ? "" : audio };
+    return {
+      visualText: cellText(visual.join("\n")).trim(),
+      audioText: audio === "_(blank scene)_" ? "" : cellText(audio)
+    };
   });
 }
 

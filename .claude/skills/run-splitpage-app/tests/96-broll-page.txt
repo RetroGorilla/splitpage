@@ -102,9 +102,13 @@ expect rec('bs4').status === 'shot'
 click #broll-page [data-action="broll-page-csv"]
 wait window.__blobs.length === 1
 eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
-expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description'
+expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start'
 expect window.__csv.length === 9
 expect window.__csv[1].indexOf('01,gulls wheeling over the nets,Shot,,Harbour,Fishing nets; Drone,') === 0
+# the scene's start last (#169), after the columns a sheet may be built on;
+# a shot added by hand has no scene and no start
+expect /,00:00$/.test(window.__csv[1])
+expect window.__csv.slice(1).every(function(l){ return /,(\d\d:\d\d)?$/.test(l); })
 expect window.__csv.filter(function(l){ return l.indexOf('boats coming in at dawn,To shoot,yes,') !== -1; }).length === 1
 expect window.__csv.filter(function(l){ return l.indexOf(',hands mending a net,Shot,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
 expect window.__csv[8].indexOf(',Establisher of the street, blue hour') === -1 && window.__csv[8].indexOf('"Establisher of the street, blue hour"') !== -1

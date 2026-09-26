@@ -85,6 +85,74 @@ eval document.activeElement.blur()
 expect document.querySelectorAll('#rows .tag-anchor').length >= 3
 expect X.reason('export-packing-gear') === '' && X.reason('export-packing-prop') === ''
 
+# --- the sketches show what each file now looks like (#169) -----------------
+# Each is the file's first page in the app's language: the title and the
+# export's meta line, the gutter (number, start, status lamp), the Read
+# column, tags in their colours, the open thread's number after its words;
+# the text formats their own first lines. The summary says what each carries.
+click #btn-file
+sleep 200
+click #menu-export
+sleep 400
+jsclick .export-card[data-format="pdf"] input
+sleep 150
+expect /^2 scenes · \d+:\d\d running time · 0 of 2 shot · /.test(document.querySelector('#export-preview .pv-meta').textContent)
+expect document.querySelectorAll('#export-preview .pv-rundown .pv-rd').length === 2
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sc .pv-gut b'), function(b){return b.textContent;}).join(',') === '01,02'
+expect document.querySelector('#export-preview .pv-sc .pv-tc').textContent === '00:00' && !!document.querySelector('#export-preview .pv-sc .pv-lamp-todo')
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-mk'), function(m){return m.textContent;}).join(',') === '1'
+# a tag in its category's colour (the typed ones sit past the sketch's cut)
+eval (function(){ var r = window.__splitpageFormats.state().rows[1]; window.__v1 = r.visualText; r.visualText = 'On the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape" contenteditable="false">gaffer tape</span>'; return true; })()
+jsclick .export-card[data-format="docx"] input
+sleep 150
+expect document.querySelector('#export-preview .pv-tag').textContent === 'gaffer tape' && document.querySelector('#export-preview .pv-tag').getAttribute('style').indexOf('#764AA2') !== -1
+eval (function(){ window.__splitpageFormats.state().rows[1].visualText = window.__v1; return true; })()
+jsclick .export-card[data-format="pdf"] input
+sleep 150
+expect !!document.querySelector('#export-preview .pv-foot') && document.querySelector('#export-preview .pv-sh').textContent.indexOf('Read') !== -1
+expect document.getElementById('export-summary').textContent == 2 scenes with timecodes, status and read times · breakdown and numbered comments at the end
+jsclick .export-card[data-format="md"] input
+jsclick .export-seg input[value="stacked"]
+sleep 150
+expect document.getElementById('export-preview').textContent.indexOf('### Scene 01 · 00:00') !== -1 && /\*\*To do\*\* · Read \d+:\d\d/.test(document.getElementById('export-preview').textContent)
+jsclick .export-seg input[value="table"]
+sleep 150
+expect document.getElementById('export-preview').textContent.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
+jsclick .export-seg input[value="stacked"]
+jsclick .export-card[data-format="csv"] input
+sleep 150
+expect document.querySelector('#export-preview .pv-gh').textContent == SceneStartStatusReadVisualAudio
+expect document.querySelector('#export-preview .pv-total').textContent.indexOf('Total') === 0
+expect document.getElementById('export-summary').textContent == 2 scenes, with start and read times, tags and b-roll · comments below · pictures not included
+jsclick .export-card[data-format="html"] input
+sleep 150
+expect document.querySelector('#export-preview .pv-tab').textContent == Untitled Script — Splitpage
+jsclick .export-card[data-format="narration"] input
+jsclick .export-seg input[value="docx"]
+sleep 150
+expect document.querySelector('#export-preview .pv-margin').textContent === '01'
+expect document.getElementById('export-summary').textContent.indexOf('numbered in the margin') !== -1
+jsclick .export-card[data-format="breakdown"] input
+sleep 150
+expect document.querySelector('#export-preview .pv-gh').textContent.indexOf('First at') !== -1
+expect document.getElementById('export-summary').textContent == 3 tagged items · category, status, owner, scenes and where each first appears
+jsclick .export-card[data-format="packing"] input
+jsclick .export-seg input[value="gear"]
+sleep 150
+expect document.querySelector('#export-preview .pv-pack-head').textContent == Gear
+expect document.querySelectorAll('#export-preview .pv-pack-row .pv-box').length === 2 && !!document.querySelector('#export-preview .pv-sign')
+expect document.getElementById('export-summary').textContent == 1 item to pack · Out and Back boxes, status, owner, scenes and a sign-off
+# the document's text goes in escaped, the title included
+eval (function(){ window.__title0 = window.__splitpageFormats.state().title; window.__splitpageFormats.state().title = '<img src=x class=pv-evil>'; return true; })()
+jsclick .export-card[data-format="pdf"] input
+sleep 150
+expect document.querySelectorAll('#export-preview img, #export-preview .pv-evil').length === 0 && document.querySelector('#export-preview .pv-title').textContent === '<img src=x class=pv-evil>'
+eval (function(){ window.__splitpageFormats.state().title = window.__title0; return true; })()
+key Escape
+sleep 300
+expect document.getElementById('export-modal').hidden
+expect window.__files.length === 0
+
 # --- every card makes exactly what the old action made -----------------------
 # For each format: the old button, then the dialog with that card (and
 # option) chosen, then both files compared — same name, same type, same

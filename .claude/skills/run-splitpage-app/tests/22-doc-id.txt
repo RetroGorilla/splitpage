@@ -168,6 +168,8 @@ jsclick #file-menu [data-file-action="export-html"]
 sleep 1200
 eval (async function(){window.__expHtml = await window.__expBlobs[window.__expBlobs.length-1].text(); return true;})()
 expect window.__expHtml.indexOf(window.__expId) === -1
+# named for the script, not the app (#169) — and still no id in its head
+expect window.__expHtml.indexOf('<title>' + (F.state().title || 'Untitled Script').replace(/&/g, '&amp;').replace(/</g, '&lt;') + ' — Splitpage</title>') !== -1
 
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md"]
