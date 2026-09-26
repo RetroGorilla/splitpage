@@ -161,6 +161,99 @@ export function initSidePanelResizeHandles() {
   SIDE_PANEL_IDS.forEach(initSidePanelResize);
 }
 
+/* ================= keeping your place as a panel opens or closes =================
+
+   From 1100px a panel makes room for itself (body.panel-open #root in
+   app.css): the script narrows, every row rewraps taller, and the browser's
+   own scroll anchoring does not step in for a padding change, so the scene
+   you were reading slid a screen or more down the page (at 1440px with 60
+   scenes, from the top of the view to 1700px below it). The script zoom
+   (05s-script-zoom.js) had already solved the same problem: note the row at
+   the point that must stay put and where in it that point is, as a fraction
+   of its height, then scroll by however far it moved. Here the point is the
+   first line of the scene at the top of the view (below), and the hold
+   runs every frame until #root's padding transition has finished, so the
+   scene stays put through the slide rather than jumping back at the end.
+
+   Opening one panel while another is open can change the width too (each
+   panel keeps its own), so openSidePanel() notes the place before it sets
+   the new width; syncPanelClass() calls this again as the class flips,
+   which keeps the place already noted. Scrolling yourself during the slide
+   lets go of it. */
+var placeHold = null;   /* {el, y, frac, until, frames} */
+var placeFrame = 0;
+
+function scriptTopY() {
+  var bar = document.querySelector(".topbar");
+  var y = bar ? bar.getBoundingClientRect().bottom : 0;
+  return Math.max(0, y) + 1;
+}
+
+export function holdScriptPlace() {
+  if (placeHold) { placeHold.until = performance.now() + 1000; return; }
+  /* At the very top there is nothing to keep: stay at the top. */
+  if (window.scrollY <= 0) return;
+  var y = scriptTopY();
+  var rows = document.querySelectorAll("#rows > .row");
+  var el = null;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].getBoundingClientRect().bottom > y) { el = rows[i]; break; }
+  }
+  if (!el) return;
+  var rect = el.getBoundingClientRect();
+  /* The scene that starts in the top third of the view is the one being
+     read, so its first line is what stays put, and the one cut off above it
+     grows out of sight. Only in a scene taller than that is it a point
+     part-way down. */
+  var next = el.nextElementSibling;
+  if (rect.top < y && next && next.classList.contains("row")) {
+    var nextTop = next.getBoundingClientRect().top;
+    if (nextTop < y + (window.innerHeight - y) / 3) { el = next; y = nextTop; rect = next.getBoundingClientRect(); }
+  }
+  placeHold = {
+    el: el, y: y,
+    frac: rect.height ? (y - rect.top) / rect.height : 0,
+    until: performance.now() + 1000,
+    frames: 0
+  };
+  if (!placeFrame) placeFrame = requestAnimationFrame(stepScriptPlace);
+}
+
+function stepScriptPlace() {
+  placeFrame = 0;
+  var h = placeHold;
+  if (!h || !h.el.isConnected) { placeHold = null; return; }
+  var rect = h.el.getBoundingClientRect();
+  var dy = rect.top + h.frac * rect.height - h.y;
+  if (Math.abs(dy) >= 0.5) window.scrollBy(0, dy);
+  h.frames++;
+  /* Done once #root and the header row have stopped moving — a couple of
+     frames past that, as the zoom does, for the header condensing if the
+     scroll crossed its line (20i-topbar.js) — or after a second whatever
+     happens. */
+  var root = document.getElementById("root");
+  var row = document.querySelector(".topbar-row");
+  var moving = (root && root.getAnimations().length) || (row && row.getAnimations().length);
+  if (moving) h.frames = Math.min(h.frames, 1);
+  if ((h.frames > 3 && !moving) || performance.now() > h.until) { placeHold = null; return; }
+  placeFrame = requestAnimationFrame(stepScriptPlace);
+}
+
+function letGoOfScriptPlace() { placeHold = null; }
+
+/* Called by syncPanelClass() just before body.panel-open is set or cleared.
+   The page's scroll bar goes while a panel is open (#187, app.css), which
+   would widen the page by the bar's width: the toolbar stepped sideways
+   under the pointer and, below 1100px, the whole script rewrapped. So the
+   bar's width is measured here, while it is still there, and app.css
+   hands exactly that much back as padding (--page-gutter). A phone's
+   overlay bars, or a page too short to scroll, measure 0. */
+export function sidePanelOpening(open) {
+  var html = document.documentElement;
+  if (open) html.style.setProperty("--page-gutter", Math.max(0, window.innerWidth - html.clientWidth) + "px");
+  holdScriptPlace();
+}
+
 /* ================= closing every side panel =================
 
    Anything that opens over the whole screen closes the side panels first
@@ -204,4 +297,7 @@ export function __init() {
      binding directly; every use is inside a function that runs long after
      all the fragments have. */
   SIDE_PANEL_IDS = Object.keys(SIDE_PANEL_WIDTH_DEFAULTS);
+  window.addEventListener("wheel", letGoOfScriptPlace, { passive: true });
+  window.addEventListener("touchmove", letGoOfScriptPlace, { passive: true });
+  window.addEventListener("keydown", letGoOfScriptPlace, true);
 }
