@@ -687,9 +687,17 @@ export function toMarkdown(cell) {
    a cell with none gives exactly the runs htmlToRuns gives), and each
    direction is bracketed: a "(" run before it and a ")" run after it,
    unformatted but for dir, so a writer that knows nothing of directions
-   still prints "(beat)". */
+   still prints "(beat)".
+
+   opts.annotate (the exports' kit, 14b-export-kit.js): each run also says
+   what the script draws round it \u2014 `tag` {cat, name} for a production tag,
+   `cmt` the ids of the comments over it (outermost first, the order their
+   elements open in), and `broll` the id of a b-roll key (the atom's own
+   run, "B-roll: "). Only when asked, so every other caller gets exactly
+   the runs it always did. */
 export function toDocxRuns(cell, opts) {
   var t = buildTree(cell, opts);
+  var annotate = !!(opts && opts.annotate);
   var runs = [];
   (function walk(node, fmt) {
     node.kids.forEach(function (n) {
@@ -699,6 +707,11 @@ export function toDocxRuns(cell, opts) {
         var run = { text: text, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href };
         if (fmt.dir) run.dir = true;
         if (fmt.cue) run.cue = true;
+        if (annotate) {
+          if (fmt.tag) run.tag = fmt.tag;
+          if (fmt.cmt.length) run.cmt = fmt.cmt.slice();
+          if (n.atom && n.atom.atom === "broll") run.broll = n.atom.id;
+        }
         runs.push(run);
         return;
       }
@@ -707,10 +720,12 @@ export function toDocxRuns(cell, opts) {
       walk(n, {
         b: fmt.b || k === "b", i: fmt.i || k === "i", u: fmt.u || k === "u", s: fmt.s || k === "s",
         mark: fmt.mark || k === "hl", href: k === "href" ? n.el.v : fmt.href, dir: fmt.dir || k === "dir",
-        cue: fmt.cue || k === "cue"
+        cue: fmt.cue || k === "cue",
+        tag: k === "tag" ? t.tagOf(n.el.v) : fmt.tag,
+        cmt: k === "cmt" ? fmt.cmt.concat(n.el.v) : fmt.cmt
       });
     });
-  })(t.root, { b: false, i: false, u: false, s: false, mark: false, href: null, dir: false, cue: false });
+  })(t.root, { b: false, i: false, u: false, s: false, mark: false, href: null, dir: false, cue: false, tag: null, cmt: [] });
   return bracketDirections(runs);
 }
 
