@@ -1,0 +1,48 @@
+# Ctrl+B with nothing selected at the END of a cell, then a space and a
+# word (typePendingMarks, 05-render.js).
+#
+# The pending bold types its first character through the model. A plain
+# space last on a line is not drawn, so the browser put the caret back
+# outside the new bold: the space was lost and the word went in plain
+# ("AnnaLee<strong></strong>"). It is a no-break space now, as the browser
+# types it and as typeAtDirectionEdge already did. A letter first, and a
+# space in the middle of a cell, always worked; both are kept here.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ for (var i = 0; i < 4; i++) document.querySelector('[data-action="add-row"]').click(); document.activeElement.blur(); return true; })()
+eval (function(){ window.F = window.__splitpageFormats; window.st = function (i) { return F.state().rows[i].visualText.replace(/&nbsp;/g, ' '); }; window.cellV = function (i) { return document.querySelectorAll('#rows .row')[i].querySelector('.visual-cell .cell-editable'); }; return true; })()
+
+# --- a letter first: bold from the first letter ------------------------------
+caret #rows .row:nth-child(4) .visual-cell .cell-editable
+press Anna
+key ctrl KeyB
+press Lee
+sleep 300
+expect st(3) == Anna<strong>Lee</strong>
+
+# --- a space first, at the end of the cell -----------------------------------
+caret #rows .row:nth-child(5) .visual-cell .cell-editable
+press Anna
+key ctrl KeyB
+press  Lee
+sleep 300
+expect st(4) == Anna<strong> Lee</strong>
+# typing on stays in the bold, and Ctrl+B again ends it
+press  Park
+key ctrl KeyB
+press  Jr
+sleep 300
+expect st(4) == Anna<strong> Lee Park</strong> Jr
+
+# --- a space first, in the middle of a cell (the space is drawn) -------------
+caret #rows .row:nth-child(6) .visual-cell .cell-editable
+press Anna.
+key ArrowLeft
+key ctrl KeyB
+press  Lee
+sleep 300
+expect st(5) == Anna<strong> Lee</strong>.
+quit
