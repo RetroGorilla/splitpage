@@ -289,15 +289,7 @@ export function paintPresence() {
   var bar = document.getElementById("presence-bar");
   var list = presenceHere.slice(0, PRESENCE_MAX_SHOWN);
   var mine = presenceLocation();
-  if (bar) {
-    bar.innerHTML = list.map(function (p) {
-      var name = presenceName(p);
-      return '<span class="presence-chip" style="--presence:' + presenceColor(p) +
-        '" title="' + escapeHtml(name) + ' is in this document">' +
-        escapeHtml(presenceInitials(name)) + '</span>';
-    }).join("");
-    bar.hidden = !list.length;
-  }
+  if (bar) fitPresenceBar(bar);
   /* and a dot on each one's block in the rundown (#202) */
   paintRundownPresence();
   document.querySelectorAll(".presence-mark").forEach(function (el) { el.remove(); });
@@ -325,6 +317,51 @@ export function paintPresence() {
     mark.title = presenceName(p) + (sameField ? " is in this field" : " is in this scene");
     mark.textContent = presenceInitials(presenceName(p));
     target.appendChild(mark);
+  });
+}
+
+/* The header's avatars. The bar never shrinks (the title gives way first,
+   then the facts, #183), so five to eight people on a tight row used to
+   push your name, the title and the facts under Search or Present. Now,
+   when the row's left half would overflow, the last avatars fold into one
+   "+N" chip, one at a time until it fits (as far as the chip alone); its
+   tooltip names who is in it. Anyone past PRESENCE_MAX_SHOWN is in it
+   from the start. Refitted on every repaint (each beat) and on resize. */
+function presenceBarHtml(shown) {
+  var html = presenceHere.slice(0, shown).map(function (p) {
+    var name = presenceName(p);
+    return '<span class="presence-chip" style="--presence:' + presenceColor(p) +
+      '" title="' + escapeHtml(name) + ' is in this document">' +
+      escapeHtml(presenceInitials(name)) + '</span>';
+  }).join("");
+  var rest = presenceHere.slice(shown);
+  if (rest.length) {
+    var names = rest.map(presenceName).join(", ");
+    html += '<span class="presence-more" title="' + escapeHtml(names) +
+      (rest.length === 1 ? " is" : " are") + ' in this document">+' + rest.length + '</span>';
+  }
+  return html;
+}
+
+function fitPresenceBar(bar) {
+  var shown = Math.min(presenceHere.length, PRESENCE_MAX_SHOWN);
+  bar.innerHTML = presenceBarHtml(shown);
+  bar.hidden = !presenceHere.length;
+  var left = bar.closest(".topbar-left");
+  if (!left || bar.hidden) return;
+  while (shown > 0 && left.scrollWidth > left.clientWidth + 1) {
+    shown--;
+    bar.innerHTML = presenceBarHtml(shown);
+  }
+}
+
+var presenceFitFrame = 0;
+function refitPresenceBar() {
+  if (presenceFitFrame || !presenceHere.length) return;
+  presenceFitFrame = requestAnimationFrame(function () {
+    presenceFitFrame = 0;
+    var bar = document.getElementById("presence-bar");
+    if (bar) fitPresenceBar(bar);
   });
 }
 
@@ -368,6 +405,8 @@ export function __init() {
     window.addEventListener("pointerup", notePresenceActivity, true);
     window.addEventListener("focusin", notePresenceActivity, true);
     document.addEventListener("selectionchange", notePresenceActivity);
+    /* the header's avatars fold into "+N" to fit the row (fitPresenceBar) */
+    window.addEventListener("resize", refitPresenceBar);
     /* Coming back to the tab is being here again, and worth saying at once. */
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState !== "hidden") { notePresenceActivity(); presenceBeatSoon(); }
