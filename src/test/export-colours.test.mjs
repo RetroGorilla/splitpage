@@ -1,5 +1,6 @@
 /* Category colours in the exports (#171): the production breakdown's
- * Category column in the PDF (17-pdf.js buildPdf), the .docx breakdown's
+ * group heads and the script's tagged words in the PDF (17-pdf.js
+ * buildPdf, #169), the .docx breakdown's
  * category heads and its script's tags (15-docx.js buildDocx, #169), and
  * the packing list's heading (buildPackingListPdf), drawn in the light
  * theme's --tag-* colours through TAG_PRINT_COLORS (14-export.js;
