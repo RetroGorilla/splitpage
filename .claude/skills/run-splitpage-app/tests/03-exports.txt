@@ -41,7 +41,7 @@ expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') 
 
 # the docx is a store-only zip: walk it and confirm the XML parses and the
 # breakdown table has a Status column
-eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__docxOk = {parses:!doc.querySelector("parsererror"), hasStatus: xml.indexOf("<w:t>Status</w:t>")!==-1}; return true;})()
+eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__docxOk = {parses:!doc.querySelector("parsererror"), hasStatus: xml.indexOf(">Status</w:t>")!==-1}; return true;})()
 expect window.__docxOk.parses
 expect window.__docxOk.hasStatus
 
