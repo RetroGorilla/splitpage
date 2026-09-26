@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
-import { buildPublishHtml, migrateRows } from "./02-state.js";
+import { buildPublishHtml, escapeHtml, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "./02c-blobs.js";
 import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
@@ -481,14 +481,47 @@ export function docIdEvents() {
 
 /* The Standalone HTML export is a copy handed to someone else, not this
    document: carrying the id would make every such copy a duplicate of the
-   original the moment it is opened next to it. */
-export function standaloneHtmlFor(s) {
+   original the moment it is opened next to it.
+
+   `head` ({title, description}), when given, names the page for what is
+   in it rather than for the app: the <title> a browser tab, a history
+   list and a bookmark show, and the description a link preview reads
+   ("I Fixed a $40 Film Camera… — Splitpage", and the export's meta line).
+   buildFileData (18-local-files.js) passes it for File ▸ Export; the page
+   shell itself, and buildPublishHtml, are left exactly as they are. */
+export function standaloneHtmlFor(s, head) {
   var copy = migrateRows(cloneState(s || S.state));
   /* its pictures inline, like a .splitpage file (#82): the copy stands on
      its own. buildFileData awaits ensureBytes before this runs. */
   inlineStateImages(copy);
   delete copy.docId;
-  return buildPublishHtml(JSON.stringify(copy));
+  var html = buildPublishHtml(JSON.stringify(copy));
+  return head ? withPageHead(html, head) : html;
+}
+
+/* The shell's own <title> and description replaced, inside <head> only:
+   the document's JSON, which could hold any text at all, is in the body
+   (#state-data). A function replacer, because a title may hold "$&" or
+   "$1". A page exported from an exported page already carries the
+   previous script's, and is renamed the same way. Exported for
+   src/test/text-exports.test.mjs. */
+export function withPageHead(html, head) {
+  function oneLine(v) { return escapeHtml(String(v).replace(/\s+/g, " ").trim()); }
+  var headEnd = html.search(/<\/head>/i);
+  if (headEnd === -1) return html;
+  var top = html.slice(0, headEnd), rest = html.slice(headEnd);
+  if (head.title) {
+    top = top.replace(/<title>[^<]*<\/title>/i, function () {
+      return "<title>" + oneLine(head.title) + "</title>";
+    });
+  }
+  if (head.description) {
+    var meta = '<meta name="description" content="' + oneLine(head.description) + '">';
+    var had = false;
+    top = top.replace(/<meta name="description" content="[^"]*">/i, function () { had = true; return meta; });
+    if (!had) top = top.replace(/<\/title>/i, function (m) { return m + "\n" + meta; });
+  }
+  return top + rest;
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

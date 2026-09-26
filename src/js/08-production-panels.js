@@ -38,6 +38,7 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
+import { sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -1320,9 +1321,16 @@ export function breakdownRows() {
    pull list in a couple of clicks, and stays a single thing to send. */
 export function buildBreakdownCsv() {
   /* B-roll shots last, so a sheet built on the old columns' positions
-     still lines up */
-  var lines = [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots"].join(",")];
+     still lines up — and #169's two after them for the same reason: when
+     the item is first needed ("First scene at", the start timecode of the
+     first scene it is in, as the gutter shows it — a call sheet sorts on
+     it) and the category's own heading as the Production panel groups by
+     it ("Group", "Props & set dressing"). */
+  var starts = sceneFacts().map(function (f) { return f.start; });
+  var lines = [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
+                "First scene at", "Group"].join(",")];
   breakdownRows().forEach(function (r) {
+    var first = r.inScript === "no" ? "" : (starts[Number(r.scenes[0]) - 1] || "");
     lines.push([
       csvEscape(r.categoryLabel),
       csvEscape(r.name),
@@ -1332,7 +1340,9 @@ export function buildBreakdownCsv() {
       csvEscape(r.scenes.join(" ")),
       csvEscape(r.inScript),
       csvEscape(r.notes),
-      csvEscape(r.broll.join("; "))
+      csvEscape(r.broll.join("; ")),
+      csvEscape(first),
+      csvEscape(r.category)
     ].join(","));
   });
   if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));

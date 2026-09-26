@@ -51,6 +51,7 @@ import {
 } from "./13-hosted.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
+  exportMetaLine,
   markdownExportImages,
   saveDoc,
   slugify,
@@ -235,7 +236,9 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
   if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
-  if (kind === "md-table") return { data: toMarkdownTableDoc(), filename: filename };
+  /* export: true — the meta line, the gutter's columns and the Export tail,
+     none of which the saved .md project (the same table) may change */
+  if (kind === "md-table") return { data: toMarkdownTableDoc(null, { export: true }), filename: filename };
   /* The old save format, kept as an export only: one file that opens in
      any browser with nothing installed. PAGE_SHELL and buildPublishHtml
      exist for this and for nothing else now (HANDOFF §3.1). */
@@ -245,7 +248,15 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "html") {
     /* inline, like a .splitpage (#82): say so if a picture could not be */
     warnImagesLeftOut(missingInlineImages(S.state).length, baseName + ".html");
-    return { data: standaloneHtmlFor(S.state), filename: filename };
+    /* named for the script, not the app: the tab, the history list and a
+       link preview read "<title> — Splitpage" and the export's meta line */
+    return {
+      data: standaloneHtmlFor(S.state, {
+        title: (S.state.title || "Untitled Script") + " — Splitpage",
+        description: exportMetaLine()
+      }),
+      filename: filename
+    };
   }
   if (kind === "md" && opts.allowImageBundle) {
     /* A script with no pictures stays a single plain-text .md, same as
