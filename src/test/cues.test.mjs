@@ -184,6 +184,71 @@ test("the Production panel lists it under Music/SFX, with the tags of the same n
   });
 });
 
+test("an edited cue keeps its item: renamed in place with its status, no entry left per wording", () => {
+  /* Typing "Music: slow", " piano", " intro" with pauses used to leave
+     "slow" and "slow piano" as "Not in script" items, and a one-letter fix
+     to a cue set to "Have it" put a new item at Needed beside it. */
+  const s = cueDoc();
+  s.rows.push({ id: "r3", visualText: "", audioText: "", status: "todo" });
+  const sound = () => s.productionTags.filter((t) => t.cat === "sound").map((t) => t.name + "/" + t.status).sort();
+  withState(s, () => {
+    healTagRegistry();
+    s.rows[2].audioText = CUE("Music: slow");
+    healTagRegistry();
+    s.rows[2].audioText = CUE("Music: slow piano");
+    healTagRegistry();
+    s.rows[2].audioText = CUE("Music: slow piano intro");
+    healTagRegistry();
+    assert.deepEqual(sound(), ["door slam/needed", "slow piano intro/needed", "upbeat intro/needed"]);
+    const id = s.productionTags.find((t) => t.name === "slow piano intro").id;
+    s.productionTags.find((t) => t.name === "slow piano intro").status = "have";
+    s.productionTags.find((t) => t.name === "slow piano intro").notes = "the Rhodes take";
+    s.rows[2].audioText = CUE("Music: slow piano intros");
+    healTagRegistry();
+    assert.deepEqual(sound(), ["door slam/needed", "slow piano intros/have", "upbeat intro/needed"]);
+    const e = s.productionTags.find((t) => t.name === "slow piano intros");
+    assert.equal(e.id, id, "the same entry");
+    assert.equal(e.notes, "the Rhodes take");
+    assert.deepEqual(productionEntries().filter((x) => x.cat.id === "sound").map((x) => [x.name, x.orphaned]).sort(),
+      [["door slam", false], ["slow piano intros", false], ["upbeat intro", false]]);
+  });
+});
+
+test("an edited cue leaves the item alone while its old name is still in the script, or the new one is tracked", () => {
+  /* two cues of one name: editing one is a new item, the other keeps its own */
+  const s = cueDoc();
+  s.rows[1].audioText = CUE("SFX: door slam");
+  withState(s, () => {
+    healTagRegistry();
+    s.productionTags.find((t) => t.name === "door slam").status = "have";
+    s.rows[1].audioText = CUE("SFX: door slams");
+    healTagRegistry();
+    assert.deepEqual(s.productionTags.filter((t) => t.cat === "sound").map((t) => t.name + "/" + t.status).sort(),
+      ["door slam/have", "door slams/needed", "upbeat intro/needed"]);
+  });
+  /* the same sound tagged in the Visual column keeps the item too */
+  const v = cueDoc();
+  v.rows[0].visualText = 'Kitchen <span class="tag-anchor" data-tag-cat="sound" data-tag-name="door slam" contenteditable="false">door slam</span>';
+  withState(v, () => {
+    healTagRegistry();
+    v.rows[0].audioText = "Welcome back.<br>" + CUE("SFX: door bang");
+    healTagRegistry();
+    assert.deepEqual(v.productionTags.filter((t) => t.cat === "sound").map((t) => t.name).sort(),
+      ["door bang", "door slam", "upbeat intro"]);
+  });
+  /* edited to a name already tracked: that item, and the old one stays */
+  const t = cueDoc();
+  withState(t, () => {
+    healTagRegistry();
+    t.rows[1].audioText = CUE("Music: door slam");
+    t.rows[0].audioText = "Welcome back.";
+    healTagRegistry();
+    t.rows[0].audioText = "Welcome back.<br>" + CUE("SFX: upbeat intro");
+    healTagRegistry();
+    assert.deepEqual(t.productionTags.filter((x) => x.cat === "sound").map((x) => x.name).sort(), ["door slam", "upbeat intro"]);
+  });
+});
+
 test("renaming the item rewrites the cue's words; removing it makes the line plain words", () => {
   const s = cueDoc();
   withState(s, () => {
