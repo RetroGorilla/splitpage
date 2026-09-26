@@ -1639,14 +1639,18 @@ export function shotRecordForFile(e) {
 /* One row per shot — every shot, in script order, whatever the page is
    filtered to: a spreadsheet filters and sorts itself. Read without
    writing anything (brollEntries(true)), since building a file must not
-   be what adds a shot to the list. */
+   be what adds a shot to the list. "Scene start" (#169) — the timecode
+   the shot's scene starts at, as the list's scene heads show it — goes
+   last, so a sheet built on the columns before it still lines up. */
 export function buildBrollCsv() {
-  var head = ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description"];
+  var head = ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
+              "Scene start"];
   var lines = [head.join(",")];
+  var starts = sceneStarts();
   brollSortedForList(brollEntries(true)).forEach(function (e) {
     var r = shotRecordForFile(e);
     lines.push([r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location, r.props.join("; "),
-                r.cuts, r.owner, r.note, r.desc].map(csvEscape).join(","));
+                r.cuts, r.owner, r.note, r.desc, startOf(e, starts)].map(csvEscape).join(","));
   });
   if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
   return "﻿" + lines.join("\r\n");

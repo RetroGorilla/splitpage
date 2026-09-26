@@ -2,10 +2,11 @@ import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
 import { rowImage } from "./02c-blobs.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
 import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
+import { exportMetaLine, tagPrintColor, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
+import { commentNumbers, exportBrollScenes, exportFacts, exportRuns, sceneFacts } from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
@@ -67,7 +68,7 @@ export var EXPORT_FORMATS = [
   { id: "breakdown", group: "part", name: "Breakdown", ext: ".csv", icon: "i-tag",
     purpose: "Every tagged item, its status and owner", action: "export-breakdown" },
   { id: "packing", group: "part", name: "Packing list", ext: ".pdf", icon: "i-box",
-    purpose: "A checklist to tick off before the shoot",
+    purpose: "A checklist to tick off, out to the shoot and back",
     option: "List", choices: [
       { value: "gear", label: "Gear", action: "export-packing-gear" },
       { value: "prop", label: "Props", action: "export-packing-prop" }
@@ -209,73 +210,236 @@ function trunc(s, n) {
    narration with them switched off, not at all */
 function cellText(html, n, opts) { return escapeHtml(trunc(toPlainText(cellOf(html), opts), n)); }
 
-/* A sketch of the first page: the real title and the first scenes' words,
-   laid out the way the format lays them out. Escaped all the way — it is
-   the document's text going into markup. */
+/* ---- the page sketches ----
+
+   Each is the first page of what the format now makes (#169's look in
+   every export, DESIGN.md), small: the title block (the title and the
+   export's own meta line, exportMetaLine), the scene gutter — number,
+   start timecode, status lamp and word — the Read column (boxed when set
+   by hand), the tags in their category colours, the b-roll key as its
+   teal chip, and the open threads' numbers after their words, all read
+   off the same kit the writers read (14b-export-kit.js). The text formats
+   show their own first lines (toMarkdownDoc and toMarkdownTableDoc with a
+   scene limit), so the sketch cannot say one thing and the file another.
+   Escaped all the way — it is the document's text going into markup; a
+   colour is only ever a kit hex. */
+
+/* A cell's first `n` characters, drawn the way the script draws them. */
+function pvRuns(html, n, nums) {
+  var out = "", left = n;
+  var runs = exportRuns(html, nums);
+  for (var i = 0; i < runs.length && left > 0; i++) {
+    var r = runs[i];
+    if (r.broll) { out += '<span class="pv-broll">B-roll</span>'; continue; }
+    if (r.text === "\n") { out += "<br>"; continue; }
+    var t = r.text.replace(/\s+/g, " ");
+    if (t.length > left) t = t.slice(0, left).trimEnd() + "…";
+    left -= t.length;
+    var h = escapeHtml(t);
+    if (r.tag && r.tag.color) h = '<span class="pv-tag" style="--pv-c:#' + r.tag.color + '">' + h + '</span>';
+    else if (r.dir) h = '<span class="pv-dir">' + h + '</span>';
+    else if (r.cue) h = '<span class="pv-cue">' + h + '</span>';
+    if (r.markers && left > 0) h += r.markers.map(function (m) { return '<span class="pv-mk">' + m + '</span>'; }).join("");
+    out += h;
+  }
+  return out;
+}
+
+function pvTitleBlock(title) {
+  return '<div class="pv-title">' + title + '</div>' +
+    (S.state.rows.length ? '<div class="pv-meta">' + escapeHtml(exportMetaLine()) + '</div>' : '');
+}
+
+function pvLamp(id) { return '<i class="pv-lamp pv-lamp-' + escapeHtml(id) + '" aria-hidden="true"></i>'; }
+
+/* the script's length as the rundown strip draws it: a block a scene,
+   as wide as its read time, lit by its status, the target where it falls,
+   and under it how many scenes are at each status */
+function pvRundown(scenes, legend) {
+  if (!scenes.length) return "";
+  var facts = exportFacts();
+  var mark = facts.target && facts.seconds
+    ? '<b class="pv-rd-target" style="left:' + Math.min(100, facts.target.seconds / Math.max(facts.seconds, facts.target.seconds) * 100).toFixed(2) + '%"></b>'
+    : "";
+  return '<div class="pv-rundown">' + scenes.map(function (f) {
+    return '<i class="pv-rd pv-rd-' + escapeHtml(f.status.id) + '" style="flex-grow:' + Math.max(1, f.seconds) + '"></i>';
+  }).join("") + mark + '</div>' +
+    (legend ? '<div class="pv-legend">' + [["shot", "Shot"], ["ready", "Ready"], ["todo", "To do"]].map(function (s) {
+      return '<span>' + pvLamp(s[0]) + s[1] + ' ' + facts.status[s[0]] + '</span>';
+    }).join("") + '</div>' : '<div class="pv-legend"></div>');
+}
+
+/* The script as the PDF and the Word file lay it out, and as the app
+   itself does (opts.app: no title block — the page's header has it): the
+   gutter, Visual and Audio under their coloured dots, the Read column. */
+function pvScript(title, opts) {
+  var scenes = sceneFacts();
+  var nums = commentNumbers();
+  var html = (opts.app ? "" : pvTitleBlock(title)) + (opts.rundown ? pvRundown(scenes, !opts.app) : "");
+  if (!S.state.rows.length) return html + '<p class="pv-para pv-faint">(no scenes yet)</p>';
+  html += '<div class="pv-script' + (opts.word ? ' pv-script-word' : '') + '">' +
+    '<div class="pv-sh"><span>Scene</span><span><i class="pv-dot pv-dot-v"></i>Visual</span>' +
+    '<span><i class="pv-dot pv-dot-a"></i>Audio</span><span class="pv-read">Read</span></div>' +
+    S.state.rows.slice(0, 6).map(function (r, i) {
+      var f = scenes[i];
+      return '<div class="pv-sc">' +
+        '<div class="pv-gut"><b>' + f.number + '</b> <span class="pv-tc">' + f.start + '</span>' +
+          '<span class="pv-st">' + pvLamp(f.status.id) + escapeHtml(f.status.label) + '</span></div>' +
+        '<div>' + (rowImage(r) ? '<span class="pv-img"></span>' : '') + pvRuns(r.visualText, 90, nums) + '</div>' +
+        '<div class="pv-aud">' + pvRuns(r.audioText, 150, nums) + '</div>' +
+        '<div class="pv-read"><span' + (f.readSet ? ' class="pv-set"' : '') + '>' + f.read + '</span></div>' +
+      '</div>';
+    }).join("") + '</div>';
+  return html;
+}
+
+/* the page's running footer, as the paged formats print it */
+function pvFooter(title, what) {
+  return '<div class="pv-foot"><span>' + title + (what ? " — " + escapeHtml(what) : "") + '</span><span>Page 1</span></div>';
+}
+
+/* A text file's first lines, as they are: long ones cut short, Markdown's
+   own headings and quiet lines told apart the way an editor would. */
+function pvTextLines(text, n) {
+  return '<div class="pv-mono">' + String(text).split("\n").slice(0, n).map(function (l) {
+    var h = escapeHtml(trunc(l, 150)) || " ";
+    if (/^#{1,3} /.test(l)) return '<span class="pv-md-h">' + h + '</span>';
+    if (/^_.*_$/.test(l) || /^\*\*[^*]+\*\* · Read /.test(l)) return '<span class="pv-md-q">' + h + '</span>';
+    return h;
+  }).join("\n") + '</div>';
+}
+
+/* `widths`: each column's share, as a sheet's narrow number columns and
+   wide text ones would be */
+function pvGrid(head, rows, widths) {
+  return '<table class="pv-table pv-grid"><colgroup>' + widths.map(function (w) { return '<col style="width:' + w + '%">'; }).join("") +
+    '</colgroup><tr class="pv-gh">' + head.map(function (c) { return '<td>' + escapeHtml(c) + '</td>'; }).join("") + '</tr>' +
+    rows.map(function (r) {
+      return '<tr' + (r.cls ? ' class="' + r.cls + '"' : '') + '>' + r.cells.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>';
+    }).join("") + '</table>';
+}
+
 function previewHtml(action) {
   var title = escapeHtml(S.state.title || "Untitled Script");
   var rows = S.state.rows.slice(0, 7);
-  var table = function (withNo, picture) {
-    return '<table class="pv-table"><tr>' + (withNo ? '<th class="pv-no">No.</th>' : '') +
-      '<th>Visual</th><th>Audio</th></tr>' +
-      rows.map(function (r, i) {
-        return '<tr>' + (withNo ? '<td class="pv-no">' + pad2(i + 1) + '</td>' : '') +
-          '<td>' + (picture && rowImage(r) ? '<span class="pv-img"></span>' : '') + cellText(r.visualText, 70) + '</td>' +
-          '<td>' + cellText(r.audioText, 110) + '</td></tr>';
-      }).join("") + '</table>';
-  };
-  if (action === "export-pdf") return '<div class="pv-title">' + title + '</div>' + table(false, true);
-  if (action === "export-docx") return '<div class="pv-title">' + title + '</div>' + table(true, true);
-  if (action === "export-md") {
-    return '<div class="pv-mono">' + "# " + title + "\n\n" + rows.slice(0, 4).map(function (r, i) {
-      var v = cellText(r.visualText, 60), a = cellText(r.audioText, 120);
-      return "### Scene " + pad2(i + 1) + "\n" + (v ? "*Visual — " + v + "*\n" : "") + a + "\n";
-    }).join("\n") + '</div>';
-  }
-  if (action === "export-md-table") {
-    return '<div class="pv-mono">' + "# " + title + "\n\n| # | Visual | Audio |\n|---|---|---|\n" + rows.map(function (r, i) {
-      return "| " + pad2(i + 1) + " | " + cellText(r.visualText, 40) + " | " + cellText(r.audioText, 70) + " |";
-    }).join("\n") + '</div>';
-  }
+  if (action === "export-pdf") return pvScript(title, { rundown: true }) + pvFooter(title);
+  if (action === "export-docx") return pvScript(title, { word: true }) + pvFooter(title);
+  if (action === "export-md") return pvTextLines(toMarkdownDoc({ scenes: 3 }), 40);
+  if (action === "export-md-table") return pvTextLines(toMarkdownTableDoc(null, { export: true, scenes: 7 }), 20);
   if (action === "export-csv") {
-    return '<table class="pv-table pv-grid"><tr><td>Scene</td><td>Status</td><td>Visual</td><td>Audio</td></tr>' +
-      rows.map(function (r, i) {
-        return '<tr><td>' + pad2(i + 1) + '</td><td>' + escapeHtml(r.status || "todo") + '</td><td>' +
-          cellText(r.visualText, 30) + '</td><td>' + cellText(r.audioText, 45) + '</td></tr>';
-      }).join("") + '</table>';
+    var scenes = sceneFacts();
+    /* a few scenes, so the totals under them stay in sight */
+    return pvGrid(["Scene", "Start", "Status", "Read", "Visual", "Audio"], rows.slice(0, 5).map(function (r, i) {
+      var f = scenes[i];
+      return { cells: [f.number, f.start, escapeHtml(f.status.label), f.read,
+                       cellText(r.visualText, 34), cellText(r.audioText, 44)] };
+    }).concat(rows.length ? [
+      { cls: "pv-gap", cells: ["…", "", "", "", "", ""] },
+      { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts().status.shot + " of " + S.state.rows.length + " shot"),
+                                 escapeHtml(exportFacts().runtime), "", ""] }
+    ] : []), [12, 12, 14, 10, 25, 27]);
   }
   if (action === "export-html") {
-    return '<div class="pv-app"><div class="pv-app-bar">Splitpage / ' + title + '</div>' + table(false, true) + '</div>';
+    /* the page is the app, named for the script in the browser's tab */
+    return '<div class="pv-app"><div class="pv-tabbar"><span class="pv-tab">' + title + ' — Splitpage</span></div>' +
+      '<div class="pv-app-bar">Splitpage <span>' + title + '</span></div>' +
+      '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }) + '</div></div>';
   }
   if (action === "export-narration-docx" || action === "export-narration-txt") {
     var paras = narrationRows().slice(0, 8);
-    var mono = action === "export-narration-txt" ? ' pv-mono' : '';
+    var txt = action === "export-narration-txt";
     /* a sound cue (#219) is never in the narration */
     var said = narrationIncludesDirections() ? { cues: "omit" } : { directions: "omit", cues: "omit" };
-    return '<div class="pv-title">' + title + '</div><div class="' + mono.trim() + '">' +
-      (paras.length ? paras.map(function (r) { return '<p class="pv-para">' + cellText(r.audioText, 180, said) + '</p>'; }).join("")
-                    : '<p class="pv-para">(no narration yet)</p>') + '</div>';
+    var numbers = sceneFacts();
+    var words = String(exportFacts().words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    /* a text file's title is its first line, in the file's one font; the
+       .docx says what it is under its title */
+    return (txt ? '<div class="pv-mono pv-md-h">' + title + '</div><br>'
+      : '<div class="pv-title">' + title + '</div><div class="pv-meta">Narration · ' +
+        escapeHtml(plural(narrationRows().length, "scene") + " · " + words + " words") + '</div>') +
+      '<div class="' + (txt ? 'pv-mono' : 'pv-narr') + '">' +
+      (paras.length ? paras.map(function (r) {
+        /* the .docx sets each paragraph's scene number in the margin */
+        var n = txt ? "" : '<span class="pv-margin">' + numbers[S.state.rows.indexOf(r)].number + '</span>';
+        return '<p class="pv-para">' + n + cellText(r.audioText, 180, said) + '</p>';
+      }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
   if (action === "export-breakdown") {
+    var starts = sceneFacts().map(function (f) { return f.start; });
     var items = breakdownRows().slice(0, 14);
-    return '<table class="pv-table pv-grid"><tr><td>Category</td><td>Item</td><td>Status</td></tr>' +
-      (items.length ? items.map(function (b) {
-        return '<tr><td>' + escapeHtml(b.categoryLabel) + '</td><td>' + escapeHtml(trunc(b.name, 28)) + '</td><td>' + escapeHtml(b.statusLabel) + '</td></tr>';
-      }).join("") : '<tr><td colspan="3">(nothing tagged yet)</td></tr>') + '</table>';
+    return pvGrid(["Category", "Item", "Status", "Scenes", "First at"], items.map(function (b) {
+      var first = b.inScript === "no" ? "" : (starts[Number(b.scenes[0]) - 1] || "");
+      return { cells: [escapeHtml(b.categoryLabel), escapeHtml(trunc(b.name, 24)), escapeHtml(b.statusLabel),
+                       escapeHtml(trunc(b.scenes.join(" "), 14)), first] };
+    }), [17, 29, 17, 21, 16]) + (items.length ? "" : '<p class="pv-para pv-faint">(nothing tagged yet)</p>');
   }
   if (action === "export-packing-gear" || action === "export-packing-prop") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
     var cat = tagCategory(catId);
-    var list = productionEntries().filter(function (e) { return e.cat.id === catId; }).slice(0, 16);
-    return '<div class="pv-title">' + escapeHtml((cat ? cat.label : catId) + " packing list") + '</div>' +
-      '<div class="pv-sub">' + title + '</div>' +
-      (list.length ? list.map(function (e) { return '<div class="pv-check">' + escapeHtml(trunc(e.name, 40)) + '</div>'; }).join("")
-                   : '<p class="pv-para">(nothing tagged yet)</p>');
+    var color = tagPrintColor(catId);
+    var heading = cat ? cat.plural : catId;
+    /* the sheet lists them by name, and says what is in hand */
+    var all = breakdownRows().filter(function (b) { return b.catId === catId; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var list = all.slice(0, 12);
+    return '<div class="pv-eyebrow">Packing list</div>' +
+      '<div class="pv-pack-head"><i class="pv-dot" style="--pv-c:#' + (color || "171613") + '"></i>' +
+        escapeHtml(heading) + '</div>' +
+      '<div class="pv-meta">' + title + ' · ' + escapeHtml(exportFacts().date) +
+        (all.length ? '<br>' + escapeHtml(packingSummary(all)) : '') + '</div>' +
+      (list.length
+        ? '<div class="pv-pack"><div class="pv-pack-row pv-pack-h"><span>Out</span><span>Back</span><span>Item</span><span>Status</span>' +
+            '<span>Owner</span><span>Scenes</span></div>' +
+          list.map(function (b) {
+            return '<div class="pv-pack-row"><i class="pv-box"></i><i class="pv-box"></i>' +
+              '<span class="pv-pack-item"><b>' + escapeHtml(trunc(b.name, 30)) + '</b>' +
+                (b.notes ? '<span class="pv-faint">' + escapeHtml(trunc(b.notes, 44)) + '</span>' : '') + '</span>' +
+              '<span>' + pvLamp(b.status) + escapeHtml(b.statusLabel) + '</span>' +
+              '<span>' + escapeHtml(trunc(b.owner, 12)) + '</span>' +
+              '<span>' + escapeHtml(b.scenes.join(", ")) + '</span></div>';
+          }).join("") + '</div>' +
+          '<div class="pv-sign"><span>Packed by</span><i></i><span>Date</span><i></i>' +
+            '<span>Returned by</span><i></i><span>Date</span><i></i></div>'
+        : '<p class="pv-para">(nothing tagged yet)</p>') +
+      pvFooter(title, heading + " packing list");
   }
   return "";
 }
 
+/* "6 items · 5 have it · 1 sourcing" — the packing list's own line under
+   its heading (buildPackingListPdf, 17-pdf.js): what is in hand, on its
+   way, still needed, gone back, the ones there are. */
+function packingSummary(items) {
+  var n = {}, label = {};
+  items.forEach(function (e) {
+    n[e.status] = (n[e.status] || 0) + 1;
+    label[e.status] = e.statusLabel.toLowerCase();
+  });
+  var out = [plural(items.length, "item")];
+  ["have", "sourcing", "needed", "returned"].forEach(function (id) {
+    if (n[id]) out.push(n[id] + " " + label[id]);
+  });
+  return out.join(" · ");
+}
+
 function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
+
+/* "a, b and c" */
+function listed(parts) {
+  return parts.length < 2 ? parts.join("") : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+}
+
+/* What the whole-script documents carry after the script (#169): only the
+   sections this script has anything for, as the files leave the others
+   out. */
+function tailSummary() {
+  var parts = [];
+  if (breakdownRows().length) parts.push("breakdown");
+  if (exportBrollScenes().length) parts.push("b-roll shot list");
+  var comments = S.state.comments || [];
+  if (comments.length) parts.push(comments.some(function (c) { return !c.resolved; }) ? "numbered comments" : "comments");
+  return parts.length ? listed(parts) + " at the end" : "";
+}
 
 /* One line of what the chosen export will hold. */
 export function exportSummary(action) {
@@ -284,22 +448,35 @@ export function exportSummary(action) {
   var rows = S.state.rows;
   var bits = [];
   if (f.format.group === "whole") {
-    bits.push(plural(rows.length, "scene"));
     var pics = rows.filter(function (r) { return !!rowImage(r); }).length;
+    if (action === "export-csv") {
+      bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
+      if ((S.state.comments || []).length) bits.push("comments below");
+    } else if (action === "export-html") {
+      bits.push(plural(rows.length, "scene"));
+    } else {
+      bits.push(plural(rows.length, "scene") + (rows.length ? " with timecodes, status and read times" : ""));
+    }
     if (!f.format.pictures) bits.push("pictures not included");
     else if (pics) bits.push(plural(pics, "picture") + (action === "export-md" ? " in a zip beside it" : " included"));
-    if (f.format.extras) bits.push("breakdown and comments at the end");
+    if (f.format.extras) {
+      var tail = tailSummary();
+      if (tail) bits.push(tail);
+    }
     if (action === "export-html") bits.push("editable, with Splitpage around it");
   } else if (f.format.id === "narration") {
-    bits.push(plural(narrationRows().length, "scene") + " of narration");
+    bits.push(plural(narrationRows().length, "scene") + " of narration" +
+      (action === "export-narration-docx" ? ", numbered in the margin" : ""));
     bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
       : "no visuals, stage directions, breakdown or comments");
   } else if (f.format.id === "breakdown") {
     bits.push(plural(breakdownRows().length, "tagged item"));
-    bits.push("category, status, owner and scenes");
+    bits.push("category, status, owner, scenes and where each first appears");
   } else if (f.format.id === "packing") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
-    bits.push(plural(productionEntries().filter(function (e) { return e.cat.id === catId; }).length, "item") + " to pack");
+    var n = productionEntries().filter(function (e) { return e.cat.id === catId; }).length;
+    bits.push(plural(n, "item") + " to pack");
+    if (n) bits.push("Out and Back boxes, status, owner, scenes and a sign-off");
   }
   return bits.join(" · ");
 }
