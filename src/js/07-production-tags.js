@@ -280,11 +280,12 @@ export function contentMemo(compute) {
    reports (tag-panel-model.test.mjs pins each case).
 
    A sound cue line of the Audio column (#219, "SFX: door slam") is a
-   Music/SFX mention too, named by the words after its colon, after the
-   cell's tags: so a cue is an item of the Production panel's Music/SFX
-   list, merged with a tag of the same name, with the owner and status
-   every item has, and the registry heal tracks it like any live tag. A
-   bare "SFX:" names nothing and is no item. */
+   Music/SFX mention too, named by its own words after its colon (not a
+   tag's or a direction's, cuesInCell), after the cell's tags: so a cue is
+   an item of the Production panel's Music/SFX list, merged with a tag of
+   the same name, with the owner and status every item has, and the
+   registry heal tracks it like any live tag (and follows its edits,
+   retitleEditedCues). A bare "SFX:" names nothing and is no item. */
 export var tagsInField = contentMemo(function (html) {
   var out = [];
   var last = null;
