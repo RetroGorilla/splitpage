@@ -315,32 +315,57 @@ function updateFindCount() {
   el.textContent = (findIndex + 1) + " of " + findMatches.length;
 }
 
-/* Select the match in the live DOM rather than marking it up: the browser's
-   own selection highlight costs no document changes, and it leaves the
-   caret exactly where Replace needs to act. The match's offsets are found
-   in the stored cell and mapped onto the cell on screen, which is that
-   same HTML rendered (plus, perhaps, a zero-width caret spot the mapping
-   skips); a selection may start in one element and end in another. */
-function revealFindMatch() {
-  if (findIndex < 0 || !findMatches[findIndex]) return;
+/* The current match as {cell, range} in the live DOM, or null. Its offsets
+   are found in the stored cell and mapped onto the cell on screen, which is
+   that same HTML rendered (plus, perhaps, a zero-width caret spot the
+   mapping skips); the range may start in one element and end in another. */
+function currentMatchRange() {
+  if (findIndex < 0 || !findMatches[findIndex]) return null;
   var m = findMatches[findIndex];
-  revealRow(m.rowId);
   var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
-  if (!cell) return;
+  if (!cell) return null;
   var idx = findRowIndex(m.rowId);
-  if (idx === -1) return;
+  if (idx === -1) return null;
   var model = cellOf(S.state.rows[idx][m.field]);
   var hit = findInCell(model, findNeedle(), S.findMatchCase)[m.nth];
-  if (!hit) return;
+  if (!hit) return null;
   var range = domRangeFor(cell, hit.from, hit.to, projection(model));
-  if (range) {
-    var sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+  return range ? { cell: cell, range: range } : null;
+}
+
+var FIND_HL = "splitpage-find-match";
+
+function highlightsSupported() {
+  return !!(window.CSS && CSS.highlights && window.Highlight);
+}
+
+/* Show the match without touching focus or the selection. It used to be
+   selected and its cell focused, which moved the keyboard out of the find
+   box: the next Enter ("Next match") then typed a line break over the
+   match, and a letter typed to refine the search replaced it. Painted with
+   the CSS Custom Highlight API instead, as the untagged prompt is
+   (07-production-tags.js): a remark about the document, not a change to it.
+   A browser without the API scrolls to the match without marking it. */
+function revealFindMatch() {
+  var m = findMatches[findIndex];
+  if (m) revealRow(m.rowId);
+  var hit = currentMatchRange();
+  if (highlightsSupported()) {
+    if (hit) CSS.highlights.set(FIND_HL, new Highlight(hit.range));
+    else CSS.highlights.delete(FIND_HL);
   }
-  cell.focus();
-  var row = cell.closest(".row");
+  if (!hit) return;
+  var row = hit.cell.closest(".row");
   if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+/* The find box changed (typed, or match case flipped): the count names
+   match 1, so that is the one on screen, and Next goes on to 2. It used to
+   say "1 of N" with nothing shown, so the first Next skipped to 2 and a
+   Replace changed a match the user had never seen. */
+export function findQueryChanged() {
+  refreshFindMatches(false);
+  revealFindMatch();
 }
 
 export function stepFind(dir) {
@@ -402,6 +427,7 @@ export function replaceAll() {
   markDirty();
   render();
   refreshFindMatches(false);
+  revealFindMatch();
   queueAutoSave();
   showToast("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
 }
@@ -531,6 +557,7 @@ export function runBulkTag() {
   render();
   closeBulkTag();
   refreshFindMatches(false);
+  revealFindMatch();
   queueAutoSave();
   var note = "";
   if (done.inTags) note += " \u00b7 " + done.inTags + " already tagged";
@@ -546,9 +573,49 @@ export function openFindBar() {
   var sel = window.getSelection();
   var picked = sel && !sel.isCollapsed ? String(sel).trim() : "";
   if (picked && picked.length <= 200 && picked.indexOf("\n") === -1) input.value = picked;
+  /* read before the find box takes focus, which moves the selection */
+  var from = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
   input.focus();
   input.select();
   refreshFindMatches(false);
+  if (findMatches.length) {
+    findIndex = firstMatchFrom(from);
+    updateFindCount();
+  }
+  revealFindMatch();
+}
+
+/* Where find starts when it opens: the first match at or after the caret
+   (or the selection it was seeded from, which is that match), wrapping to
+   match 1 when there is none after it or the caret is not in the script.
+   Match 1 alone would scroll away from a word selected halfway down the
+   script to its first mention at the top. */
+function firstMatchFrom(range) {
+  if (!range || !findMatches.length) return 0;
+  var node = range.startContainer;
+  var el = node.nodeType === 1 ? node : node.parentNode;
+  var cell = el && el.closest ? el.closest("#rows .cell-editable[data-field]") : null;
+  var rowEl = cell && cell.closest(".row");
+  var rowIdx = rowEl ? findRowIndex(rowEl.getAttribute("data-id")) : -1;
+  if (rowIdx === -1) return 0;
+  var field = cell.getAttribute("data-field");
+  var model = cellOf(S.state.rows[rowIdx][field]);
+  var expect = projection(model);
+  var hits = findInCell(model, findNeedle(), S.findMatchCase);
+  var nth = 0;
+  while (nth < hits.length) {
+    var r = domRangeFor(cell, hits[nth].from, hits[nth].to, expect);
+    if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
+    nth++;
+  }
+  var order = {};
+  S.state.rows.forEach(function (row, i) { order[row.id] = i; });
+  var at = field === "visualText" ? 0 : 1;
+  for (var i = 0; i < findMatches.length; i++) {
+    var m = findMatches[i], mi = order[m.rowId], mf = m.field === "visualText" ? 0 : 1;
+    if (mi > rowIdx || (mi === rowIdx && (mf > at || (mf === at && m.nth >= nth)))) return i;
+  }
+  return 0;
 }
 
 export function closeFindBar() {
@@ -558,6 +625,22 @@ export function closeFindBar() {
   findIndex = -1;
   findInTags = 0;
   closeBulkTag();
+  if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
+}
+
+/* Esc in the find bar: the bar goes and the match it was showing is
+   selected in its cell, the way an editor's find leaves you on what it
+   found, so the next thing typed edits there. The close button only
+   closes: it is a mouse away from wherever the caret was left, and the
+   writer opening closes the bar with the split view's cells behind it. */
+export function leaveFindAtMatch() {
+  var hit = currentMatchRange();
+  closeFindBar();
+  if (!hit) return;
+  hit.cell.focus();
+  var sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(hit.range);
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

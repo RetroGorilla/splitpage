@@ -1,0 +1,58 @@
+# An edited sound cue keeps its Production item (#219; healTagRegistry,
+# 07-production-tags.js).
+#
+# A cue's item is named by its words and has no id of its own, so typing
+# "Music: slow", " piano", " intro" with pauses used to leave an item per
+# wording ("slow" and "slow piano" as "Not in script", the badge at 3), and
+# a one-letter fix to a cue set to "Have it" put a new item at Needed beside
+# it. The heal now takes a name that left a cell while a new one came in as
+# the same cue edited, and renames its entry in place. Two cues of one name,
+# a tag of the same name and a name already tracked are
+# src/test/cues.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.sound = function(){ return F.state().productionTags.filter(function(t){ return t.cat === 'sound'; }); }; window.names = function(){ return sound().map(function(t){ return t.name + '/' + t.status; }).join(' | '); }; window.pill = function(name){ var e = Array.from(document.querySelectorAll('#production-list .tag-entity')).filter(function(e){ var n = e.querySelector('.tag-entity-name'); return n && n.textContent === name; })[0]; if (!e) return 'no ' + name; e.querySelector('.tag-status-pill').click(); return true; }; return true; })()
+expect sound().length === 0
+
+# --- a cue typed with pauses: one item ---------------------------------------
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+key Enter
+press Music: slow
+sleep 1500
+press  piano
+sleep 1500
+press  intro
+sleep 1500
+eval names()
+expect names() == slow piano intro/needed
+expect document.getElementById('production-badge').textContent == 1
+
+# --- "Have it", then a one-letter fix: the same item, still "Have it" --------
+click #btn-production
+wait !document.getElementById('production-panel').hidden
+sleep 400
+eval pill('slow piano intro')
+sleep 300
+eval pill('slow piano intro')
+sleep 300
+expect names() == slow piano intro/have
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+press s
+sleep 300
+eval document.activeElement.blur()
+sleep 1500
+eval names()
+expect names() == slow piano intros/have
+expect document.querySelectorAll('#production-list .tag-entity.is-orphaned').length === 0
+expect document.getElementById('production-badge').textContent == 1
+
+# --- undone: the item goes back to the old words, still "Have it" -----------
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+key ctrl KeyZ
+sleep 1500
+eval names()
+expect names() == slow piano intro/have
+quit

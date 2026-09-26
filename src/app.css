@@ -339,9 +339,29 @@
      b), so the panel's is the only one at the window's edge and the
      header's line and the panel's edges meet the frame (#188). The page
      still scrolls — wheel, keys, the rundown strip — and the strip still
-     shows where you are in it. */
+     shows where you are in it.
+
+     Without its bar the page would be that much wider, and things would
+     step sideways as a panel opened: the toolbar under the pointer, and
+     below 1100px (where the panel lies over the script) the whole script
+     rewrapping. So the bar's width, measured as it goes (--page-gutter,
+     03b-side-panels.js), is handed back: to the header row as padding at
+     its right end, and below 1100px to the page as padding, with the row
+     reaching over it so its line still meets the window's edge. From
+     1100px the script narrows for the panel anyway, and #root's padding
+     for it (further down) stays exactly the panel's width, which suites 50
+     and 61 read. scrollbar-gutter cannot do any of this: a bar with
+     scrollbar-width: none has no gutter to keep. Not the phone's row,
+     which has its own padding and a sheet over it. */
   html:has(> body.panel-open) { scrollbar-width: none; }
   html:has(> body.panel-open)::-webkit-scrollbar { display: none; }
+  @media (min-width: 761px) {
+    body.panel-open .topbar-row { padding-right: calc(20px + var(--page-gutter, 0px)); }
+  }
+  @media (min-width: 761px) and (max-width: 1099px) {
+    html:has(> body.panel-open) { padding-right: var(--page-gutter, 0px); }
+    body.panel-open .topbar-row { margin-right: calc(-1 * var(--page-gutter, 0px)); }
+  }
 
   /* ---------- switching themes ----------
 
@@ -1883,6 +1903,21 @@
     z-index: 200;
     align-items: center;
   }
+  /* A toast never lies over an open menu or popover: on a phone the File
+     menu is a sheet rising from the foot of the screen, right where the
+     toasts are, and a toast over it hid its items and took the taps meant
+     for them. While one is open the toasts go under the floating layers
+     (and the phone sheet's scrim) and come back on top when it closes;
+     every menu here is a [role="menu"] that is hidden when shut, and the
+     clock's and name's popovers are only in the page while open. */
+  body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden]), .video-popover:not([hidden])) #toast-host {
+    z-index: 20;
+  }
+  /* A picture's full-size view (#216) has its size and name at the foot,
+     where a toast would sit: the toast rises clear of that caption. */
+  body:has(.scene-gallery-zoom:not([hidden])) #toast-host {
+    bottom: calc(60px + env(safe-area-inset-bottom));
+  }
   /* B's toast (#169, B-Identity): the floating layer — raised, the strong
      edge and the shadow, 8px corners — 40px tall, with the words always in
      --text. What kind of news it is rides on a mark in front of the words
@@ -2505,8 +2540,13 @@
     #cmdk-input { font-size: 16px; }
     .cmdk-item { min-height: 44px; }
   }
+  /* On a phone the panel fills the screen, the backdrop is a 10px rim and
+     there is no Esc: the close button the other dialogs have takes the Esc
+     cap's place at the end of the box, 44px to tap. */
+  .cmdk-close { display: none; }
   @media (max-width: 760px) and (hover: none) {
     .cmdk-keys, .cmdk-esc, .cmdk-foot { display: none; }
+    .cmdk-close { display: inline-flex; width: 44px; height: 44px; margin-right: -10px; }
   }
 
   /* ---------- the Export dialog (issue #146) ----------
@@ -2962,6 +3002,9 @@
   .tag-scene.jump-link { gap: 3px; color: var(--text-dim); white-space: nowrap; }
   /* "03, 04": the comma in the body face — the mono's sits mid-cell */
   .tag-scene-sep { font-family: var(--font-body); font-weight: 450; }
+  /* a scene number and the comma after it never part at a line's end
+     (joinSceneLinks, 08-production-panels.js) */
+  .tag-scene-unit { white-space: nowrap; }
   .tag-scene.jump-link:hover { color: var(--text); }
   .tag-owner {
     display: flex; align-items: center; gap: 6px;
@@ -3453,6 +3496,16 @@
     min-width: 62px; text-align: center; flex: none;
   }
   .find-count.none { color: var(--danger); }
+  /* The match find is showing, painted rather than selected so the keyboard
+     stays in the find box (09-find-replace.js revealFindMatch). The
+     selection's own colour, which is what it looked like when it was one,
+     with a rule under it so it still reads as found over a user highlight. */
+  ::highlight(splitpage-find-match) {
+    background-color: var(--selection);
+    color: var(--text);
+    text-decoration: underline solid var(--visual) 2px;
+    text-underline-offset: 3px;
+  }
   /* Tag all as… (#218): the question and the categories on a line of their
      own under the find bar's controls. */
   .find-tag-row {
@@ -3526,8 +3579,9 @@
     flex-direction: column;
     width: 380px;
     max-width: calc(100vw - 40px);
-    /* clear of the 52px header row, with the same 20px as the corner */
-    max-height: calc(100vh - 92px);
+    /* clear of the whole header, the rundown strip included, with the same
+       20px as the corner (--header-bottom is measured, 10-comments.js) */
+    max-height: calc(100vh - max(52px, var(--header-bottom, 124px)) - 40px);
     background: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border-strong);
@@ -4414,7 +4468,7 @@
      (personColor, 13a-presence.js — bright values, the same in both
      themes) with dark initials, overlapping a little, each ringed in the
      page colour. */
-  .presence-chip, .presence-mark {
+  .presence-chip, .presence-mark, .presence-more {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4431,6 +4485,20 @@
     box-shadow: 0 0 0 2px var(--bg);
   }
   .presence-chip + .presence-chip { margin-left: -6px; }
+  /* "+3": the people folded out of a row too short for every avatar
+     (fitPresenceBar, 13a-presence.js), in no one's colour */
+  .presence-more {
+    min-width: 24px;
+    width: auto;
+    box-sizing: border-box;
+    padding: 0 4px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    box-shadow: 0 0 0 2px var(--bg), inset 0 0 0 1px var(--border-strong);
+    font-variant-numeric: tabular-nums;
+    cursor: default;
+  }
+  .presence-chip + .presence-more { margin-left: -6px; }
   .presence-mark {
     width: 18px;
     height: 18px;
@@ -4628,6 +4696,19 @@
        panel: see "the document keeping step with the panel". */
     body.panel-open .topbar-row {
       margin-right: calc(-1 * min(var(--open-panel-width, 488px), 100vw));
+    }
+  }
+  /* Below 1100px the panel lies over the script rather than pushing it
+     over, but the rundown strip still ends at the panel's edge, as it does
+     from 1100px (#189): the panel starts under the header's row, level
+     with the strip, and otherwise covered its right end — the script's
+     length (#207) and the minimize chevron (#178). The strip's
+     ResizeObserver (05f-rundown.js) lays it out again for the width.
+     --page-gutter is the page padding given back for the scroll bar
+     above, which already moved the strip's end in that far. */
+  @media (min-width: 761px) and (max-width: 1099px) {
+    body.panel-open .topbar .rundown {
+      margin-right: calc(min(var(--open-panel-width, 488px), 100vw) - var(--page-gutter, 0px));
     }
   }
   /* A side panel (#169): flat — --surface with a hairline left edge and no
@@ -6227,6 +6308,8 @@
     .topbar-left .presence-bar { grid-column: 3; grid-row: 3; padding-left: 8px; }
     .presence-bar .presence-chip { width: 16px; height: 16px; font-size: 7.5px; box-shadow: 0 0 0 1.5px var(--bg); }
     .presence-bar .presence-chip + .presence-chip { margin-left: -4px; }
+    .presence-bar .presence-more { min-width: 16px; height: 16px; padding: 0 2px; font-size: 7.5px; box-shadow: 0 0 0 1.5px var(--bg), inset 0 0 0 1px var(--border-strong); }
+    .presence-bar .presence-chip + .presence-more { margin-left: -4px; }
     .doc-meta { grid-column: 4; grid-row: 3; font-size: 12px; line-height: 16px; }
     .doc-meta::before, .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: "·"; margin: 0 6px; color: var(--text-faint); }
     .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }

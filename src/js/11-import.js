@@ -49,7 +49,8 @@ var VISUAL_HEADER_RE = /^(visual|video|scene|shot|b-?roll|image|screen)s?$/i;
 var AUDIO_HEADER_RE = /^(audio|vo|voiceover|voice-over|narration|dialogue|script)s?$/i;
 
 export function detectTwoColumnFormat(text) {
-  var norm = String(text || "").replace(/\r\n/g, "\n");
+  if (parseStackedMarkdownExport(text)) return "stacked";
+  var norm = markdownExportScript(String(text || "")).replace(/\r\n/g, "\n");
   var lines = norm.split("\n");
   var nonBlank = lines.filter(function (l) { return l.trim() !== ""; });
   if (nonBlank.length < 2) return null;
@@ -113,6 +114,79 @@ function splitTableRowCells(line) {
   return cells;
 }
 
+/* A "Two columns" export (toMarkdownTableDoc, 14-export.js) ends at its
+   script: the breakdown and comments that follow sit under headings of
+   their own, are pipe tables and prose, and are not scenes (the comments'
+   lines even outvote the table's and stop the text reading as a table at
+   all). Cut there, but only after our own scene header, the way the .docx
+   reimport waits for its table style (exportTailStart, 15-docx.js), so a
+   table someone wrote with a "## Comments" heading of their own keeps what
+   follows it. */
+var MD_EXPORT_TAIL_RE = /^\s*##\s+(Production breakdown|Comments)\s*$/;
+
+function markdownExportScript(text) {
+  var lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  var sawHeader = false;
+  for (var i = 0; i < lines.length; i++) {
+    if (!sawHeader) {
+      sawHeader = lines[i].indexOf("|") !== -1 &&
+        splitTableRowCells(lines[i].trim()).join("|").toLowerCase() === "#|visual|audio|status";
+    } else if (MD_EXPORT_TAIL_RE.test(lines[i])) {
+      return lines.slice(0, i).join("\n");
+    }
+  }
+  return text;
+}
+
+/* The plain "Markdown" export (toMarkdownDoc, 14-export.js) reopened. It
+   is a script laid out to be read: a "# title", a "_30 scenes · est. …_"
+   line, then per scene a "### Scene 01" heading, its pictures and video
+   links, "*Visual —* " and the Visual cell up to a blank line, the Audio
+   cell, and "---"; the breakdown and comments come after. Read as plain
+   paragraphs, every paragraph was a scene, the headings and the Visual
+   lines among them. Recognised only by that exact opening (the title, at
+   most the one meta line, then a scene heading), so anybody else's
+   Markdown reads as it always did. Null when it is not one; otherwise
+   the scenes, a blank one kept. The pictures are files beside the export,
+   not in it, and do not come back. */
+var MD_SCENE_HEADING_RE = /^###\s+Scene\s+\d+\s*$/;
+var MD_SCENE_META_RE = /^_\d+ scenes? · est\. .* running time_$/;
+var MD_VISUAL_LEAD_RE = /^\*Visual —\*\s?/;
+var MD_SCENE_MEDIA_RE = /^(!\[visual [^\]]*\]\(images\/[^)]*\)|▶ .*)$/;
+
+function parseStackedMarkdownExport(text) {
+  var lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  var i = 0;
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (i === lines.length || !/^#\s+\S/.test(lines[i])) return null;
+  for (i++; i < lines.length && !MD_SCENE_HEADING_RE.test(lines[i].trim()); i++) {
+    if (lines[i].trim() && !MD_SCENE_META_RE.test(lines[i].trim())) return null;
+  }
+  if (i === lines.length) return null;
+
+  var scenes = [];
+  for (; i < lines.length; i++) {
+    if (MD_EXPORT_TAIL_RE.test(lines[i])) break;
+    if (MD_SCENE_HEADING_RE.test(lines[i].trim())) scenes.push([]);
+    else scenes[scenes.length - 1].push(lines[i]);
+  }
+  return scenes.map(function (sc) {
+    var end = sc.length;
+    while (end > 0 && !sc[end - 1].trim()) end--;
+    if (end > 0 && sc[end - 1].trim() === "---") end--;
+    sc = sc.slice(0, end);
+    var k = 0;
+    while (k < sc.length && (!sc[k].trim() || MD_SCENE_MEDIA_RE.test(sc[k].trim()))) k++;
+    var visual = [];
+    if (k < sc.length && MD_VISUAL_LEAD_RE.test(sc[k])) {
+      visual.push(sc[k].replace(MD_VISUAL_LEAD_RE, ""));
+      for (k++; k < sc.length && sc[k].trim(); k++) visual.push(sc[k]);
+    }
+    var audio = sc.slice(k).join("\n").trim();
+    return { visualText: visual.join("\n").trim(), audioText: audio === "_(blank scene)_" ? "" : audio };
+  });
+}
+
 /* opts.keepEmpty keeps a data row whose Visual and Audio cells are both
    empty. Off by default, because a foreign table's blank line carries no
    information; on when reading one of our OWN Markdown projects
@@ -121,7 +195,7 @@ function splitTableRowCells(line) {
    the file's own record. */
 export function parseMarkdownTable(text, opts) {
   opts = opts || {};
-  var lines = text.replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+  var lines = markdownExportScript(text).replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
   var rows = [];
   lines.forEach(function (line) {
     if (line.indexOf("|") === -1) return;
@@ -214,8 +288,11 @@ function parseAlternatingLines(text) {
 }
 
 function parseTwoColumnText(text) {
+  text = markdownExportScript(text);
   var detected = detectTwoColumnFormat(text);
   var rows;
+  /* the export's own scenes, a blank one included, as the file lists them */
+  if (detected === "stacked") return parseStackedMarkdownExport(text);
   if (detected === "table") rows = parseMarkdownTable(text);
   else if (detected === "tab") rows = parseTabDelimited(text);
   else if (detected === "labels") rows = parseLabeledLines(text);

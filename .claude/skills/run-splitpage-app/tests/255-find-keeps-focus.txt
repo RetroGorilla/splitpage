@@ -1,0 +1,124 @@
+# The find bar keeps the keyboard (09-find-replace.js revealFindMatch): a
+# match is shown by painting it (the splitpage-find-match highlight), never
+# by selecting it and focusing its cell. Enter used to move focus into the
+# cell with the match selected, so the next Enter typed a line break over
+# it and a letter typed to refine the search replaced it. Typing shows
+# match 1 (the count said "1 of N" with nothing shown, and Next skipped to
+# 2); Enter in the Replace box replaces and stays there; Esc leaves the
+# match selected in its cell; Ctrl+F on that selection starts at it; Aa
+# repaints.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.hl = function () { var h = CSS.highlights.get('splitpage-find-match'); if (!h) return ''; var s = ''; h.forEach(function (r) { s += r.toString(); }); return s; }; window.hlRow = function () { var h = CSS.highlights.get('splitpage-find-match'); if (!h || !h.size) return ''; var r = h.values().next().value; var n = r.startContainer; return (n.nodeType === 1 ? n : n.parentNode).closest('.row').getAttribute('data-id'); }; window.audio = function () { return F.state().rows.map(function (r) { return r.audioText; }).join(' | '); }; var doc = { schema: 2, title: 'Find', rows: [ { id: 'r1', status: 'todo', visualText: 'Wide shot', audioText: 'The camera is old.' }, { id: 'r2', status: 'todo', visualText: 'Close up', audioText: 'This camera still works. Another camera here.' }, { id: 'r3', status: 'todo', visualText: 'End', audioText: 'Last camera.' } ], comments: [] }; return F.openFile(new File([JSON.stringify(doc)], 'find.splitpage')); })()
+wait F.state().title === 'Find' && document.querySelector('#rows .row[data-id="r3"]')
+sleep 500
+eval window.__before = audio()
+
+# --- typing shows match 1, without taking the keyboard ----------------------
+caret #rows .row[data-id="r1"] .visual-cell .cell-editable
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+type camera
+sleep 300
+expect document.getElementById('find-count').textContent == 1 of 4
+expect hl() == camera
+expect hlRow() == r1
+expect document.activeElement.id == find-input
+
+# --- Enter steps on to 2, then 3; the script is untouched -------------------
+key Enter
+sleep 300
+expect document.getElementById('find-count').textContent == 2 of 4
+expect hlRow() == r2
+expect document.activeElement.id == find-input
+key Enter
+sleep 300
+expect document.getElementById('find-count').textContent == 3 of 4
+expect hl() == camera
+expect document.activeElement.id == find-input
+key shift Enter
+sleep 300
+expect document.getElementById('find-count').textContent == 2 of 4
+expect audio() === window.__before
+
+# --- the Next button is the same, and keeps nothing selected ----------------
+jsclick #find-next
+sleep 300
+expect document.getElementById('find-count').textContent == 3 of 4
+expect getSelection().toString() === ''
+
+# --- a letter typed after Enter refines the search, not the script ----------
+eval document.getElementById('find-input').focus()
+press s
+sleep 400
+expect document.getElementById('find-input').value == cameras
+expect document.getElementById('find-count').textContent == No matches
+expect hl() === ''
+expect audio() === window.__before
+key Backspace
+sleep 400
+expect document.getElementById('find-count').textContent == 1 of 4
+expect hlRow() == r1
+
+# --- Replace acts on the match on screen, and Enter there stays there -------
+eval (function(){ var r = document.getElementById('replace-input'); r.value = 'lens'; r.dispatchEvent(new Event('input', { bubbles: true })); r.focus(); return true; })()
+key Enter
+sleep 500
+expect F.state().rows[0].audioText == The lens is old.
+expect document.getElementById('find-count').textContent == 1 of 3
+expect hlRow() == r2
+expect document.activeElement.id == replace-input
+key Enter
+sleep 500
+expect F.state().rows[1].audioText == This lens still works. Another camera here.
+expect document.activeElement.id == replace-input
+expect document.getElementById('find-count').textContent == 1 of 2
+
+# --- Esc leaves the match selected in its cell ------------------------------
+eval document.getElementById('find-input').focus()
+key Enter
+sleep 300
+expect document.getElementById('find-count').textContent == 2 of 2
+expect hlRow() == r3
+key Escape
+sleep 300
+expect document.getElementById('findbar').hidden
+expect !CSS.highlights.has('splitpage-find-match')
+expect document.activeElement.closest('.row[data-id="r3"]') !== null
+expect getSelection().toString() == camera
+
+# --- Ctrl+F on that selection starts at it, not at match 1 ------------------
+key ctrl KeyF
+wait !document.getElementById('findbar').hidden
+sleep 300
+expect document.getElementById('find-input').value == camera
+expect document.getElementById('find-count').textContent == 2 of 2
+expect hlRow() == r3
+expect document.activeElement.id == find-input
+
+# --- match case repaints ----------------------------------------------------
+type CAMERA
+sleep 300
+expect document.getElementById('find-count').textContent == 1 of 2
+expect hlRow() == r2
+jsclick #find-case
+sleep 300
+expect document.getElementById('find-count').textContent == No matches
+expect hl() === ''
+jsclick #find-case
+sleep 300
+expect document.getElementById('find-count').textContent == 1 of 2
+expect hl() == camera
+
+# --- the close button takes the paint with it -------------------------------
+jsclick #find-close
+sleep 300
+expect document.getElementById('findbar').hidden
+expect !CSS.highlights.has('splitpage-find-match')
+expect F.state().rows[2].audioText == Last camera.
+
+shot 255-find-keeps-focus
+quit

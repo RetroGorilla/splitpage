@@ -1,0 +1,95 @@
+# The header with other people in a hosted document (bug hunt, 2026-09-25,
+# fitPresenceBar in 13a-presence.js).
+#
+# The avatars (#presence-bar) never shrink, and suite 85 leaves them out:
+# with 5-8 people they pushed your name, the title and the facts under
+# Search or Present (1280 by 15px, 770 by 22px, 761 by 31px, a 390px phone
+# by 10px, 360 as far as Present). Now, when the row's left half would
+# overflow, the last avatars fold into one "+N" chip, its tooltip naming
+# who is in it; with room to spare every avatar is shown, and past eight
+# the rest are always in the chip.
+#
+# Laid out the way 85 does it: the app a second time in an iframe on this
+# page, the IFRAME resized (a suite can set the device metrics only once),
+# its own media queries answering to its width. People are faked as 115
+# fakes them (__presenceTest.apply, /api/presence answered in the page),
+# and the hosted save is answered too: against this static server it would
+# fail, the session would lapse and the beat would clear everyone a few
+# seconds in. Each width is read three frames after the resize, once the
+# fit (on resize) has run.
+#
+# Every `eval` is one physical line.
+
+open
+viewport 1600 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ var f=document.createElement('iframe'); f.id='hf'; f.style.cssText='position:fixed;left:0;top:0;width:1440px;height:800px;border:0;z-index:99999;background:#fff'; f.src='/index.html'; document.body.appendChild(f); return true; })()
+wait document.getElementById('hf').contentDocument && document.getElementById('hf').contentDocument.querySelectorAll('#rows .row').length > 0
+sleep 800
+
+eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__frames=function(n){ return new Promise(function(res){ var w=W.__w(); var k=function(){ if(--n<=0) res(true); else w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); }); }; W.__at=async function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); await W.__frames(3); return true; }; W.__boxes=function(){ var d=W.__d(); var sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',presence:'#presence-bar',search:'#btn-command',panels:'.btn-group',write:'#btn-write',present:'#btn-present',length:'#length-status'}; var out=[]; Object.keys(sel).forEach(function(k){ var e=d.querySelector(sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__check=function(w){ var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['title','search','present','presence'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(w>760 && !bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); var left=d.querySelector('.topbar-left'); if(left.scrollWidth>left.clientWidth+1) bad.push('left half overflows by '+(left.scrollWidth-left.clientWidth)); return bad.length? w+': '+bad.join(', ') : ''; }; W.__chips=function(){ return W.__d().querySelectorAll('#presence-bar .presence-chip').length; }; W.__more=function(){ var m=W.__d().querySelector('#presence-bar .presence-more'); return m? m.textContent : ''; }; W.__sweep=async function(ws){ var bad=[]; for(var i=0;i<ws.length;i++){ await W.__at(ws[i]); var c=W.__check(ws[i]); if(c) bad.push(c+' ['+W.__chips()+W.__more()+']'); } W.__bad=bad.join('; '); return W.__bad || 'ok'; }; return true; })()
+expect true
+
+# a long title, b-roll and tags (so the panel toggles carry counts), the
+# name unset (so "Set your name" shows), 8 people
+eval (function(){ var w=window.__w(); var words=function(k){var a=[];for(var i=0;i<k;i++)a.push('word'+(i%7));return a.join(' ');}; var rows=[]; for(var i=0;i<60;i++) rows.push({id:'r'+i, visualText:(i%4===0?'B-roll: shot '+i+'<br>':'')+'Visual '+i+' [tripod] {gaffer}', audioText:'Scene '+i+' '+words(8+(i*7)%40), status:i%3===0?'shot':i%3===1?'ready':'todo'}); w.__splitpageFormats.openFile(new w.File([JSON.stringify({schema:2,title:'The Extraordinarily Long Script Title 40',rows:rows})],'people.splitpage')); var d=window.__d().getElementById('desktop-app-bar-dismiss'); if(d) d.click(); return true; })()
+wait window.__d().querySelectorAll('#rundown .rd-block').length === 60
+eval (function(){ var W=window; var w=W.__w(); var names=['Sam Okafor','Priya Malhotra','Jo Li','Alexandria Montgomery','Bo Diddley','Chen Wei','Dana Scully','Eve Polastri','Fox Mulder','Gus Fring']; W.__people=function(n){ W.__n=n; var out=[]; for(var i=0;i<n;i++) out.push({id:'p'+(i+1), name:names[i], rowId:'r'+(i*6), field:'audioText'}); w.__here=out; w.__presenceTest.apply(out); return true; }; var real=w.fetch; w.__rev=1; w.fetch=function(url, o){ var ok=function(b){ return Promise.resolve(new w.Response(JSON.stringify(b),{status:200,headers:{'Content-Type':'application/json'}})); }; if(String(url).indexOf('api/presence')!==-1) return ok({here:w.__here||[]}); if(String(url).indexOf('api/docs/')!==-1 && o && o.method==='PUT') return ok({rev:++w.__rev}); return real.apply(this, arguments); }; w.__hostedTest.setSession({role:'edit', docId:'shared-doc'}); return W.__people(8); })()
+wait window.__chips() + (window.__more() ? 1 : 0) > 0
+
+# =============================================================================
+# room to spare: every avatar, no chip
+# =============================================================================
+eval window.__at(1920)
+eval window.__people(8)
+wait window.__chips() === 8 && window.__more() === ''
+expect window.__check(1920) === ''
+
+# =============================================================================
+# the widths the hunt named, and a sweep across the rest (every 10px from
+# 761 to 1920, every px in 761-790, 881-910 and 1250-1299)
+# =============================================================================
+eval (function(){ var ws=[]; for(var w=761; w<=1920; w+=10) ws.push(w); for(var a=761;a<=790;a++) ws.push(a); for(var b=881;b<=910;b++) ws.push(b); for(var c=1250;c<=1299;c++) ws.push(c); window.__ws=ws; return ws.length; })()
+eval window.__sweep(window.__ws)
+expect window.__bad === ''
+eval window.__sweep([1280, 770, 761])
+expect window.__bad === ''
+
+# at 800 the row is short of room: some avatars are folded into "+N", and
+# its tooltip names exactly the people it holds
+eval window.__at(800)
+eval window.__people(8)
+sleep 100
+eval 'avatars ' + window.__chips() + ' chip ' + window.__more() + ' ' + JSON.stringify(window.__boxes().map(function(b){ return b.k + ':' + Math.round(b.l) + '-' + Math.round(b.r); }))
+expect window.__chips() < 8 && window.__more() === '+' + (8 - window.__chips())
+expect (function(){ var t=window.__d().querySelector('#presence-bar .presence-more').title; return t.indexOf('Eve Polastri')!==-1 && t.indexOf('Sam Okafor')===-1; })()
+# and your name is still the element at its own centre, clickable
+expect (function(){ var d=window.__d(); var c=d.getElementById('identity-chip').getBoundingClientRect(); var h=d.elementFromPoint(c.left+c.width/2, c.top+c.height/2); return !!h && d.getElementById('identity-chip').contains(h); })()
+eval (function(){ var f=document.getElementById('hf'); f.style.height='120px'; return true; })()
+shot 252-presence-800
+eval (function(){ var f=document.getElementById('hf'); f.style.height='800px'; return true; })()
+
+# widening again brings them back
+eval window.__at(1920)
+wait window.__chips() === 8 && window.__more() === ''
+
+# past eight the rest are in the chip, however wide
+eval window.__people(10)
+wait window.__chips() === 8 && window.__more() === '+2'
+expect window.__check(1920) === ''
+eval window.__sweep([1280, 1100, 900, 761])
+expect window.__bad === ''
+
+# =============================================================================
+# phone widths: the status line's avatars and length clear of Search
+# =============================================================================
+eval window.__people(8)
+eval window.__sweep([414, 390, 375, 360])
+expect window.__bad === ''
+eval window.__at(390)
+eval (function(){ var d=window.__d(); var s=d.getElementById('btn-command').getBoundingClientRect(); var bad=[]; ['#doc-title','.save-state','#presence-bar','#length-status'].forEach(function(q){ var e=d.querySelector(q); var r=e&&e.getBoundingClientRect(); if(r&&r.width>0&&r.right>s.left+0.5) bad.push(q+' ends '+Math.round(r.right)+' past Search at '+Math.round(s.left)); }); window.__bad=bad.join(', '); return window.__bad || 'ok'; })()
+expect window.__bad === ''
+eval (function(){ var f=document.getElementById('hf'); f.style.height='130px'; return true; })()
+shot 252-presence-390
+quit
