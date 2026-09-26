@@ -224,8 +224,10 @@ so your eye skips it while reading. It is **never on the teleprompter**
 (a pause for the sound is a stage direction's job), doesn't count toward
 the read time, and is left out of the narration export. The script exports
 print it as its own line. Each cue is an item in the Production panel's
-**Music & SFX** list, named by the words after the colon, with its own
-status and owner like any tag.
+**Music & SFX** list, named by the words after the colon (a tag or a stage
+direction on the line is not part of the name), with its own status and
+owner like any tag. Edit the cue's words and its item follows, keeping its
+status.
 
 ### Comments
 
