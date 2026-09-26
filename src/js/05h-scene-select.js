@@ -418,7 +418,6 @@ function pasteClip(clip, afterRowId, opts) {
     holdComments: hold,
     stamp: stampRow
   });
-  if (move) setLiveCut(null);
   if (opts.title) S.state.title = opts.title;
   markDirty();
   flushEdits();
