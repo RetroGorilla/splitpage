@@ -168,18 +168,23 @@ test("the PDF breakdown draws a note at the size it was wrapped at, a space betw
   assert.ok(Math.abs(words[1].x - words[0].x - 29.28) < 0.05, "from at +" + (words[1].x - words[0].x).toFixed(2));
 });
 
-test("the packing list's heading names its category in that category's colour", () => {
+test("the packing list's heading names its category after a dot in that category's colour", () => {
   load();
   for (const id of ["gear", "prop"]) {
     const cat = TAG_CATEGORIES.find((c) => c.id === id);
     const page = streams(buildPackingListPdf(id))[0].split("\n");
-    const i = page.indexOf("q " + rgb(TAG_PRINT_COLORS[id]) + " rg");
-    assert.ok(i > 0, id + ": no colour set");
-    assert.match(page[i - 1], /\(Colours {2}— {2}\) Tj ET$/, id + ": the title before it");
-    assert.match(page[i + 1], new RegExp("^BT /F2 15 Tf .* Tm \\(" + cat.plural.replace(/[&]/g, "\\$&") + "\\) Tj ET$"));
-    assert.equal(page[i + 2], "Q");
-    assert.match(page[i + 3], /\( packing list\) Tj ET$/);
-    /* the items are not coloured */
-    assert.equal(page.filter((op) => / rg$/.test(op)).length, 1, id + ": more than the heading coloured");
+    const colour = rgb(TAG_PRINT_COLORS[id]);
+    /* the dot, filled — and the only thing on the page in that colour: the
+       whole sheet is the one category, so the items are not coloured */
+    const dots = page.filter((op) => op.includes(colour));
+    assert.equal(dots.length, 1, id + ": the category's colour more than once");
+    assert.match(dots[0], new RegExp("^q " + colour + " rg [\\d. mc]+ h f Q$"), id + ": a filled dot");
+    /* then the category's plural, bold, 20pt, in the text colour */
+    const heading = page[page.indexOf(dots[0]) + 1];
+    assert.match(heading, new RegExp("^q " + rgb("171613") + " rg BT /F2 20 Tf .* Tm \\(" +
+      cat.plural.replace(/[&]/g, "\\$&") + "\\) Tj ET Q$"), id + ": " + heading);
+    /* the kicker over it, the script's title under it */
+    assert.ok(page.some((op) => /\(Packing list\) Tj/.test(op)), id + ": the kicker");
+    assert.ok(page.some((op) => /\(Colours · .+\) Tj/.test(op)), id + ": the title and the date");
   }
 });

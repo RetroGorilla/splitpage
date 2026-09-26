@@ -3,17 +3,11 @@ import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
 import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { cellOf, toDocxRuns } from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
-import {
-  TAG_STATUSES,
-  personById,
-  productionEntries,
-  tagCategory,
-  tagStatus
-} from "./07-production-tags.js";
+import { tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
-import { brollShotsByProp } from "./08c-broll.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, latin1Bytes, tagPrintColor } from "./14-export.js";
+import { PRINT_COLORS, TAG_STATUS_PRINT, breakdownGroups, exportDateText } from "./14b-export-kit.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { sniffImageMime } from "../../shared/blob-policy.js";
 
@@ -1060,108 +1054,285 @@ export function buildPdf(jpegs, commentJpegs) {
   return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: S.state.title || "Untitled Script" } });
 }
 
+/* ================= the lists: packing lists and the shot list =================
+
+   Two sheets people print and carry on a shoot day — a category's packing
+   list and the b-roll shot list (#150, below) — drawn as one family, in
+   the app's look (#169) and the script PDF's measure: Letter, its
+   margins, Helvetica. The head is a small faint kicker saying what the
+   sheet is, the heading large, and a line or two of what it covers and
+   the day it was printed (exportDateText: a date, never a time, so the
+   same list printed twice in a day is the same file); then the list; and
+   on every page the running footer (pdfFooterOps), so a page that has
+   come loose still says what it is from. Everything is drawn through the
+   pieces above — a lamp, a box, a pin where the app has an icon — so no
+   glyph outside WinAnsi reaches the page.
+
+   Deliberately not buildPdf()'s machinery: these need no pictures, no
+   two-column wrap and no links, and sharing a page-builder with the
+   script export would put a working, tested writer at risk for sheets
+   that are supposed to be simple. What the two share with each other is
+   here: the page, the head, a line of runs. */
+
+var LIST_PW = 612, LIST_PH = 792, LIST_M = 54;
+/* The footer's baseline: its hairline sits 11 above it, clear of the
+   bottom margin every list stops at. */
+var LIST_FOOT_Y = 30;
+
+/* A sheet as it is drawn: `ops` the page being drawn, `y` the cursor, top
+   down from the top margin, and `body` whether anything but heads is on
+   the page yet — a row too tall for a page is drawn where it is rather
+   than starting page after empty page. finish() puts the last page in and
+   gives every page its footer, last, since "Page n of N" wants N. */
+function listSheet() {
+  var sheet = { pages: [], ops: null, y: 0, body: false };
+  sheet.newPage = function () {
+    if (sheet.ops) sheet.pages.push(sheet.ops);
+    sheet.ops = [];
+    sheet.y = LIST_PH - LIST_M;
+    sheet.body = false;
+  };
+  sheet.text = function (str, x, y, font, size, hex) {
+    sheet.ops.push(pdfTextOp(str, x, y, font, size, hex));
+  };
+  sheet.push = function (ops) { Array.prototype.push.apply(sheet.ops, ops); };
+  sheet.finish = function (footTitle) {
+    if (sheet.ops) sheet.pages.push(sheet.ops);
+    sheet.ops = null;
+    var n = sheet.pages.length;
+    sheet.pages.forEach(function (ops, i) {
+      Array.prototype.push.apply(ops, pdfFooterOps(footTitle, i + 1, n, LIST_PW, LIST_M, LIST_FOOT_Y,
+        PRINT_COLORS.faint, PRINT_COLORS.border));
+    });
+    return sheet.pages;
+  };
+  sheet.newPage();
+  return sheet;
+}
+
+/* Words as they are printed: a line break or a run of spaces is one space
+   (a line feed is no WinAnsi character; it would print as "?"). */
+function listClean(s) {
+  return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+}
+
+/* Runs ({text, b, i}) wrapped to `width` at `size` — pdfWrapRuns, which
+   measures each weight as it is drawn — with each line's words put back
+   together, one piece per face: [[{text, b, i, width}]]. A line is then
+   one string, or two where a label leads it, which is what a reader's
+   copy and paste (and the tests) want. */
+function listWrap(runs, width, size) {
+  return pdfWrapRuns(runs, width, size).map(function (line) {
+    var out = [];
+    line.forEach(function (seg) {
+      var last = out[out.length - 1];
+      if (last && last.b === !!seg.b && last.i === !!seg.i) { last.text += seg.text; last.width += seg.width; }
+      else out.push({ text: seg.text, b: !!seg.b, i: !!seg.i, width: seg.width });
+    });
+    return out;
+  });
+}
+
+/* One of listWrap's lines, its baseline at (x, y): the bold pieces — a
+   name, a label, "Flagged" — in `boldHex`, the rest in `hex`. */
+function listLineOps(line, x, y, size, hex, boldHex) {
+  var ops = [], cx = x;
+  line.forEach(function (piece) {
+    var str = piece.text.replace(/\s+$/, "");
+    var font = piece.b ? (piece.i ? "F4" : "F2") : (piece.i ? "F3" : "F1");
+    if (str) ops.push(pdfTextOp(str, cx, y, font, size, piece.b ? boldHex || hex : hex));
+    cx += piece.width;
+  });
+  return ops;
+}
+
+/* A sheet's head, from the top of its first page: the kicker; the heading
+   at 20pt, wrapped — however long, it never runs off the page, as the
+   packing list's title once did — after a dot in `dotHex` when there is
+   one; then each line of `meta`, wrapped, the first dim and any after it
+   faint. Leaves the cursor under it. */
+function listHead(sheet, kicker, heading, dotHex, meta) {
+  var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
+  var y = sheet.y - 7;
+  sheet.text(kicker, M, y, "F1", 9, C.faint);
+  var hx = dotHex ? M + 16 : M;
+  listWrap([{ text: listClean(heading), b: true }], M + W - hx, 20).forEach(function (line, i) {
+    y -= i ? 24 : 26;
+    if (!i && dotHex) sheet.ops.push("q " + pdfRgb(dotHex) + " rg " + pdfCirclePath(M + 5, y + 7, 5) + " f Q");
+    sheet.push(listLineOps(line, hx, y, 20, C.text, C.text));
+  });
+  y -= 6;
+  meta.forEach(function (str, i) {
+    listWrap([{ text: listClean(str) }], W, 10.5).forEach(function (line) {
+      y -= 14.5;
+      sheet.push(listLineOps(line, M, y, 10.5, i ? C.faint : C.dim));
+    });
+  });
+  sheet.y = y - 24;
+}
+
 /* ================= packing list (gear, props — any category) =================
 
-   One line per item: a box to tick, the name, and who's got it. Meant to
-   be printed and physically checked off before a shoot day — the general
-   breakdown (above) is a six-column spreadsheet trying to be a checklist,
-   and that is not what "did we pack it" needs.
+   Meant to be printed and ticked off by hand: packed for the shoot, and
+   back after it — a box for each, under "Out" and "Back". The breakdown
+   (the script PDF's, the spreadsheet) is a table to read; this is what
+   "did we pack it, did it come back" needs. One row per item, in
+   alphabetical order: the two boxes, the name in bold, its status as the
+   panel shows it (a lamp and the word, TAG_STATUS_PRINT), who has it and
+   the scenes it is in; under the name, dim, its notes and the b-roll
+   shots that need it. An item not in hand yet — Needed, Sourcing — has
+   its status word in amber, the sheet's one warm colour, so it is what
+   the eye finds. At the end a line to sign for whoever packed it and
+   whoever brought it back. Blank where nobody has it: a printed sheet
+   invites the name in pen.
 
-   Deliberately its own small PDF writer rather than a call into buildPdf()
-   with different content: this needs one font pair and no images, where
-   the script export needs four fonts, embedded JPEGs and two-column line
-   wrapping. Sharing that machinery would mean either dragging the unused
-   parts along for a page nobody asked for, or extracting a page-builder
-   both could share — real refactor, real risk to a working, tested export,
-   for a feature that is supposed to be simple. The ~30 lines of PDF
-   object/xref plumbing below are the price of not touching buildPdf() to
-   get it. */
+   The items are the breakdown's (breakdownGroups, 14b-export-kit.js), so
+   the sheet says what the Production panel and every other export say
+   about them — the scenes, the owner, and for a prop the b-roll shots
+   that need it (#149: the packer then knows it goes out with the second
+   unit too). */
 export function buildPackingListPdf(catId) {
+  var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
   var cat = tagCategory(catId);
-  var PW = 612, PH = 792, M = 54, SIZE = 11, LEAD = 22;
-  var items = productionEntries()
-    .filter(function (e) { return e.cat.id === catId; })
+  var title = S.state.title || "Untitled Script";
+  var heading = cat ? cat.plural : catId;
+  var docTitle = title + " — " + heading + " packing list";
+  var group = breakdownGroups().filter(function (g) { return g.catId === catId; })[0];
+  var items = (group ? group.items : []).slice()
     .sort(function (a, b) { return a.name.localeCompare(b.name); });
 
-  var pages = [], ops = [], y = 0;
-  function newPage() {
-    if (ops.length) pages.push(ops);
-    ops = [];
-    y = PH - M;
-  }
-  function text(str, x, yy, font, size) {
-    ops.push("BT /" + font + " " + size + " Tf 1 0 0 1 " +
-      x.toFixed(2) + " " + yy.toFixed(2) + " Tm (" + pdfEscapeText(str) + ") Tj ET");
-  }
-  function box(x, yy, size) {
-    ops.push("q 0.4 0.4 0.4 RG 0.9 w " + x.toFixed(2) + " " + yy.toFixed(2) + " " +
-      size.toFixed(2) + " " + size.toFixed(2) + " re S Q");
-  }
-  function rule(x, yy, w) {
-    ops.push("q 0.85 0.84 0.81 RG 0.6 w " + x.toFixed(2) + " " + yy.toFixed(2) + " m " +
-      (x + w).toFixed(2) + " " + yy.toFixed(2) + " l S Q");
-  }
-  /* the category's name in its colour (#171), the rest of the heading in
-     black: every item on the sheet is that category, so one mark at the
-     top says it, where a dot on each line would only repeat it */
-  var catHex = cat ? tagPrintColor(cat.id) : null;
-  function header() {
-    var lead = (S.state.title || "Untitled Script") + "  —  ";
-    var name = cat ? cat.plural : catId;
-    if (!catHex) {
-      text(lead + name + " packing list", M, y - 20, "F2", 15);
-    } else {
-      var x = M;
-      text(lead, x, y - 20, "F2", 15);
-      x += pdfTextWidth(lead, true, 15);
-      ops.push("q " + pdfRgb(catHex) + " rg");
-      text(name, x, y - 20, "F2", 15);
-      ops.push("Q");
-      x += pdfTextWidth(name, true, 15);
-      text(" packing list", x, y - 20, "F2", 15);
-    }
-    y -= 40;
-  }
-
-  newPage();
-  header();
+  var sheet = listSheet();
+  /* the category's dot in its colour (#171): every item on the sheet is
+     that category, so one mark at the top says it, where a dot on each
+     line would only repeat it */
+  var meta = [title + " · " + exportDateText()];
+  if (items.length) meta.push(packingSummary(items));
+  listHead(sheet, "Packing list", heading, cat ? tagPrintColor(cat.id) : null, meta);
 
   if (!items.length) {
-    text("Nothing tagged " + (cat ? cat.label : catId) + " yet.", M, y - SIZE, "F1", SIZE);
-    y -= LEAD;
+    sheet.text("Nothing tagged " + (cat ? cat.label : catId) + " yet.", M, sheet.y + 4, "F1", 11, C.dim);
+    return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
   }
 
-  /* Unlike buildPdf()'s two columns, this line was never run through
-     pdfWrapRuns — a long item name/status/owner combination just ran
-     straight off the page's right edge (unwrapped, untruncated, simply
-     invisible past x=612) instead of wrapping to a second line. */
-  var ITEM_TEXT_W = PW - M * 2 - 18;
-  /* a prop a b-roll shot needs says which (#149): the packer then knows
-     it has to go out with the second unit too */
-  var shotsFor = brollShotsByProp();
-  items.forEach(function (item) {
-    var owner = personById(item.owner);
-    var st = tagStatus(item.status) || TAG_STATUSES[0];
-    var shots = shotsFor[item.key] || [];
-    var lineText = item.name + "   —   " + st.label + (owner ? "  ·  " + owner.name : "") +
-      (shots.length ? "  ·  B-roll: " + shots.join(", ") : "");
-    var wrapped = pdfWrapRuns([{ text: lineText }], ITEM_TEXT_W, SIZE);
-    var need = wrapped.length * LEAD;
-    if (y - need < M) { newPage(); header(); }
-    box(M, y - SIZE + 1, 10);
-    wrapped.forEach(function (lineSegs, li) {
-      var lineStr = lineSegs.map(function (s) { return s.text; }).join("");
-      text(lineStr, M + 18, y - SIZE, "F1", SIZE);
-      if (li < wrapped.length - 1) y -= LEAD;
+  /* The columns, from the margin: each box under its head ("Out" and
+     "Back" centred over them), then Item / Status / Owner / Scenes, each
+     wrapping to its own width. */
+  var BOX = 11, OUT_X = M + 1.4, BACK_X = M + 29.4;
+  var ITEM_X = M + 58, ITEM_W = 188;
+  var STATUS_X = M + 256;
+  /* room for a double-barrelled surname on one line */
+  var OWNER_X = M + 338, OWNER_W = 100;
+  var SCENES_X = M + 448, SCENES_W = W - 448;
+  /* the rows' measure: the first baseline under a row's top, the leads of
+     its name, of the lines under it and of the other columns, and the room
+     under its lowest line */
+  var TOP = 16, NAME_LEAD = 13.5, UNDER_GAP = 13, UNDER_LEAD = 11.5, COL_LEAD = 12.5, TAIL = 8;
+
+  function columnHeads(continued) {
+    var y = sheet.y;
+    if (continued) { sheet.text(heading + " (continued)", M, y - 7, "F1", 9, C.faint); y -= 24; }
+    y -= 8;
+    [["Out", M], ["Back", M + 25.4], ["Item", ITEM_X], ["Status", STATUS_X], ["Owner", OWNER_X], ["Scenes", SCENES_X]]
+      .forEach(function (h) { sheet.text(h[0], h[1], y, "F1", 8.5, C.dim); });
+    sheet.ops.push(pdfRuleOp(M, y - 6, M + W, C.borderStrong, 0.75));
+    sheet.y = y - 6;
+  }
+
+  function rowOf(item) {
+    var orphaned = item.inScript === "no";
+    var under = [];
+    if (listClean(item.notes)) {
+      listWrap([{ text: listClean(item.notes) }], ITEM_W, 9).forEach(function (l) { under.push({ line: l }); });
+    }
+    if (item.broll.length) {
+      listWrap([{ text: "B-roll: ", b: true }, { text: item.broll.map(listClean).join(", ") }], ITEM_W, 9)
+        .forEach(function (l) { under.push({ line: l, boldHex: C.broll }); });
+    }
+    var r = {
+      name: listWrap([{ text: listClean(item.name), b: true }], ITEM_W, 11),
+      under: under,
+      status: { id: item.status, label: item.statusLabel },
+      owner: item.owner ? listWrap([{ text: listClean(item.owner) }], OWNER_W, 10) : [],
+      /* still on the list, and still to pack, but flagged the way the
+         panel flags it rather than left looking like a scene list */
+      scenes: listWrap([{ text: orphaned ? "Not in script" : item.scenes.join(", ") }], SCENES_W, 9.5),
+      orphaned: orphaned
+    };
+    var depth = (r.name.length - 1) * NAME_LEAD;
+    if (under.length) depth += UNDER_GAP + (under.length - 1) * UNDER_LEAD;
+    r.height = TOP + Math.max(depth, (Math.max(1, r.owner.length, r.scenes.length) - 1) * COL_LEAD) + TAIL;
+    return r;
+  }
+
+  function drawRow(r) {
+    var base = sheet.y - TOP, low = base;
+    sheet.ops.push(pdfCheckboxOp(OUT_X, base - 1.5, BOX, false, C.faint));
+    sheet.ops.push(pdfCheckboxOp(BACK_X, base - 1.5, BOX, false, C.faint));
+    r.name.forEach(function (line, i) {
+      low = base - i * NAME_LEAD;
+      sheet.push(listLineOps(line, ITEM_X, low, 11, C.text, C.text));
     });
-    y -= LEAD;
-    rule(M, y + 8, PW - M * 2);
+    r.under.forEach(function (u, i) {
+      low -= i ? UNDER_LEAD : UNDER_GAP;
+      sheet.push(listLineOps(u.line, ITEM_X, low, 9, C.dim, u.boldHex));
+    });
+    var look = TAG_STATUS_PRINT[r.status.id] || TAG_STATUS_PRINT.needed;
+    var inHand = r.status.id === "have" || r.status.id === "returned";
+    sheet.ops.push(pdfLampOp(look.lamp, STATUS_X + 3.5, base + 3.4, 3.5, look.color));
+    sheet.text(r.status.label, STATUS_X + 11, base, "F1", 10, inHand ? look.color : C.audio);
+    r.owner.forEach(function (line, i) {
+      low = Math.min(low, base - i * COL_LEAD);
+      sheet.push(listLineOps(line, OWNER_X, base - i * COL_LEAD, 10, C.text));
+    });
+    r.scenes.forEach(function (line, i) {
+      low = Math.min(low, base - i * COL_LEAD);
+      sheet.push(listLineOps(line, SCENES_X, base - i * COL_LEAD, 9.5, r.orphaned ? C.faint : C.dim));
+    });
+    sheet.y = low - TAIL;
+    sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.border, 0.5));
+    sheet.body = true;
+  }
+
+  columnHeads(false);
+  items.map(rowOf).forEach(function (r) {
+    if (sheet.y - r.height < M && sheet.body) { sheet.newPage(); columnHeads(true); }
+    drawRow(r);
   });
 
-  pages.push(ops);
+  /* the sign-off, on one page: who packed it and when, who brought it all
+     back and when — lines to write on, not underscores */
+  var SIGN_GAP = 40, SIGN_LEAD = 30;
+  if (sheet.y - SIGN_GAP - SIGN_LEAD - 6 < M) {
+    sheet.newPage();
+    sheet.text(heading + " (continued)", M, sheet.y - 7, "F1", 9, C.faint);
+    sheet.y -= 10;
+  }
+  var sy = sheet.y - SIGN_GAP;
+  ["Packed by", "Returned by"].forEach(function (label) {
+    sheet.text(label, M, sy, "F1", 10, C.dim);
+    sheet.ops.push(pdfRuleOp(M + 62, sy - 2, M + 300, C.borderStrong, 0.75));
+    sheet.text("Date", M + 318, sy, "F1", 10, C.dim);
+    sheet.ops.push(pdfRuleOp(M + 344, sy - 2, M + W, C.borderStrong, 0.75));
+    sy -= SIGN_LEAD;
+  });
 
-  /* ---- assemble: no images — see the note above ---- */
-  return assembleTextPdf(pages, PW, PH, (S.state.title || "Untitled Script") + " — " + (cat ? cat.plural : catId) + " packing list");
+  return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
+}
+
+/* "6 items · 5 have it · 1 sourcing": what is in hand, what is on its
+   way, what is still needed, what has gone back — the ones there are.
+   `items` are breakdownRows(), each with its status's id and label. */
+function packingSummary(items) {
+  var n = {}, label = {};
+  items.forEach(function (e) {
+    n[e.status] = (n[e.status] || 0) + 1;
+    label[e.status] = e.statusLabel.toLowerCase();
+  });
+  var out = [items.length + (items.length === 1 ? " item" : " items")];
+  ["have", "sourcing", "needed", "returned"].forEach(function (id) {
+    if (n[id]) out.push(n[id] + " " + label[id]);
+  });
+  return out.join(" · ");
 }
 
 /* assemblePdf (above) for a PDF of text and lines only, no images: the
@@ -1180,114 +1351,136 @@ function assembleTextPdf(pages, PW, PH, title) {
 
    What the full-page shot list's "Print shot list" makes: the list as it
    is on screen — its filter and its grouping (brollShotListForPrint,
-   08d-broll-panel.js) — as a sheet to take on the day. A box per shot
-   (ticked when it is in the can), the shot in bold, and under it the
-   scene, who has it, the props it needs, the line it cuts against and the
-   note, with FLAGGED in red in front of a flagged one's.
+   08d-broll-panel.js) — as a sheet to take on the day. Each group headed
+   as the page heads it — a location after its pin, a scene with the
+   timecode it starts at — with how much of it is shot at the right, in
+   the b-roll teal once all of it is. Each shot a box, ticked in teal when
+   it is in the can (B's "done", #169); the shot in bold, dimmed once
+   shot, and the lines under its marker in the script; then, dim, what
+   else there is to know on the day: its scene and where that starts,
+   where, who has it, the props it needs (each with its status), the line
+   it cuts against in full, and "Flagged" in red in front of a flagged
+   one's note. What the group head already says — the location, the
+   scene, the person — the shots under it do not repeat.
 
    A PDF, the way the packing lists are, rather than the browser's print of
    the page: the same file in the browser and the desktop app, one that can
    be sent to whoever is shooting as well as printed, and a page laid out
-   for paper rather than a screen's table squeezed onto one. The cost is
-   the one the packing list already pays — Helvetica's WinAnsi, so a
-   character outside it prints as "?". */
+   for paper rather than a screen's table squeezed onto one. */
+var FLAG_PRINT = "C4302A";
+
 export function buildShotListPdf(data) {
-  var PW = 612, PH = 792, M = 54, W = PW - M * 2;
-  var TEXT_X = M + 20, TEXT_W = W - 20;
-  var pages = [], ops = [], y = 0;
-  function newPage() {
-    if (ops.length) pages.push(ops);
-    ops = [];
-    y = PH - M;
-  }
-  function text(str, x, yy, font, size, rgb) {
-    ops.push((rgb ? rgb + " rg " : "") + "BT /" + font + " " + size + " Tf 1 0 0 1 " +
-      x.toFixed(2) + " " + yy.toFixed(2) + " Tm (" + pdfEscapeText(str) + ") Tj ET" + (rgb ? " 0 g" : ""));
-  }
-  function rule(yy, gray) {
-    ops.push("q " + (gray || "0.85 0.84 0.81") + " RG 0.6 w " + M.toFixed(2) + " " + yy.toFixed(2) + " m " +
-      (M + W).toFixed(2) + " " + yy.toFixed(2) + " l S Q");
-  }
-  function box(x, yy, shot) {
-    ops.push("q 0.4 0.4 0.4 RG 0.9 w " + x.toFixed(2) + " " + yy.toFixed(2) + " 10 10 re S Q");
-    if (shot) {
-      /* The tick is the b-roll colour, B's "done" (#169): the light
-         theme's --broll, #00717F, since the sheet prints on white. It was
-         the old --ok green. */
-      ops.push("q 0 0.443 0.498 RG 1.6 w " + (x + 2).toFixed(2) + " " + (yy + 5).toFixed(2) + " m " +
-        (x + 4.3).toFixed(2) + " " + (yy + 2.4).toFixed(2) + " l " + (x + 8.4).toFixed(2) + " " + (yy + 8.2).toFixed(2) + " l S Q");
+  var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
+  var BOX = 11, TEXT_X = M + 22, TEXT_W = W - 22;
+  /* a shot's measure: its first baseline under its top, the leads of its
+     name, its description and its details, the gap before the details and
+     the room under its last line */
+  var TOP = 17, NAME_LEAD = 14, DESC_LEAD = 13, DETAIL_GAP = 13.5, DETAIL_LEAD = 12, TAIL = 10;
+  var docTitle = data.title + " — B-roll shot list";
+
+  var sheet = listSheet();
+  listHead(sheet, "B-roll shot list", data.title, null, [data.summary + " · " + data.scope + " · " + exportDateText()]);
+  if (!data.groups.length) sheet.text("No shots to list.", M, sheet.y + 4, "F1", 11, C.dim);
+
+  /* One shot's lines, laid out ahead so its room can be asked for before
+     any of it is drawn: [{line, size, dy (from the line above), hex,
+     boldHex}] and its height. */
+  function shotOf(r, g) {
+    var out = [], height = 0;
+    function add(runs, size, firstDy, lead, hex, boldHex) {
+      listWrap(runs, TEXT_W, size).forEach(function (line, i) {
+        var dy = out.length ? (i ? lead : firstDy) : TOP;
+        out.push({ line: line, size: size, dy: dy, hex: hex, boldHex: boldHex });
+        height += dy;
+      });
     }
-  }
-  function lines(str, bold, size, width) {
-    return pdfWrapRuns([{ text: str, b: bold }], width, size).map(function (segs) {
-      return segs.map(function (seg) { return seg.text; }).join("");
+    add([{ text: listClean(r.name), b: true }], 11, NAME_LEAD, NAME_LEAD, C.text, r.shot ? C.faint : C.text);
+    /* the description keeps its own lines, as the script has them */
+    String(r.desc || "").split("\n").forEach(function (para) {
+      if (listClean(para)) add([{ text: listClean(para) }], 10, DESC_LEAD, DESC_LEAD, r.shot ? C.faint : C.dim);
     });
-  }
-  function header(first) {
-    text(data.title + "  —  B-roll shot list", M, y - 16, "F2", first ? 15 : 11);
-    y -= first ? 24 : 18;
-    if (first) {
-      text(data.summary + "   ·   " + data.scope, M, y - 10, "F1", 10, "0.42 0.4 0.35");
-      y -= 24;
-    }
+    var meta = [];
+    if (r.scene && g.kind !== "scene") meta.push("Scene " + r.scene + (r.start ? " · " + r.start : ""));
+    if (r.location && g.kind !== "location") meta.push(listClean(r.location));
+    if (r.owner && g.kind !== "person") meta.push("Assigned: " + listClean(r.owner));
+    if (r.props.length) meta.push("Props: " + (r.propsWithStatus || r.props).map(listClean).join(", "));
+    var details = [];
+    if (meta.length) details.push([{ text: meta.join("  ·  ") }]);
+    /* the narration it runs under, in full and set in italic, so the
+       words to shoot and the words spoken over them read apart */
+    if (r.cuts) details.push([{ text: "Cuts against: " }, { text: "“" + listClean(r.cuts) + "”", i: true }]);
+    if (r.flagged) details.push([{ text: "Flagged", b: true }].concat(r.note ? [{ text: " — " + listClean(r.note) }] : []));
+    else if (listClean(r.note)) details.push([{ text: "Note: " + listClean(r.note) }]);
+    details.forEach(function (runs, i) {
+      add(runs, 9, i ? DETAIL_LEAD : DETAIL_GAP, DETAIL_LEAD, C.dim, FLAG_PRINT);
+    });
+    return { lines: out, shot: r.shot, height: height + TAIL };
   }
 
-  newPage();
-  header(true);
-  if (!data.groups.length) text("No shots to list.", M, y - 11, "F1", 11);
-
-  data.groups.forEach(function (g) {
-    /* a group's heading never ends a page on its own */
-    if (y - 60 < M) { newPage(); header(false); }
-    var count = g.done + "/" + g.total + " shot";
-    text(g.label, M, y - 12, "F2", 12);
-    text(count, M + W - pdfTextWidth(count, false, 10), y - 12, "F1", 10, "0.42 0.4 0.35");
-    y -= 18;
-    rule(y, "0.55 0.53 0.5");
-    y -= 4;
-    g.items.forEach(function (r) {
-      var name = lines(r.name, true, 11, TEXT_W);
-      var details = [];
-      var meta = [];
-      if (r.scene) meta.push("Scene " + r.scene);
-      if (r.location && g.label !== r.location) meta.push(r.location);
-      if (r.owner) meta.push("Assigned: " + r.owner);
-      if (r.props.length) meta.push("Props: " + (r.propsWithStatus || r.props).join(", "));
-      if (meta.length) details.push({ text: meta.join("   ·   ") });
-      if (r.cuts) details.push({ text: "Cuts against: \u201C" + r.cuts.replace(/\s+/g, " ") + "\u201D" });
-      if (r.flagged || r.note) details.push({ text: (r.note || "").replace(/\s+/g, " "), flag: r.flagged });
-      var wrapped = [];
-      details.forEach(function (d) {
-        var prefix = d.flag ? "FLAGGED" + (d.text ? "  —  " : "") : "";
-        lines(prefix + d.text, false, 9.5, TEXT_W).forEach(function (l, i) {
-          wrapped.push({ text: l, flag: d.flag && i === 0 ? prefix : "" });
-        });
-      });
-      var need = 8 + name.length * 14 + wrapped.length * 12.5 + 6;
-      if (y - need < M) { newPage(); header(false); }
-      y -= 8;
-      box(M, y - 10, r.shot);
-      name.forEach(function (l) {
-        text(l, TEXT_X, y - 9.5, "F2", 11, r.shot ? "0.42 0.4 0.35" : null);
-        y -= 14;
-      });
-      wrapped.forEach(function (l) {
-        if (l.flag) {
-          text(l.flag, TEXT_X, y - 8, "F2", 9.5, "0.70 0.15 0.12");
-          text(l.text.slice(l.flag.length), TEXT_X + pdfTextWidth(l.flag, true, 9.5), y - 8, "F1", 9.5, "0.3 0.29 0.26");
-        } else {
-          text(l.text, TEXT_X, y - 8, "F1", 9.5, "0.3 0.29 0.26");
-        }
-        y -= 12.5;
-      });
-      y -= 6;
-      rule(y);
+  function drawShot(s) {
+    var y = sheet.y;
+    s.lines.forEach(function (l, i) {
+      y -= l.dy;
+      if (!i) sheet.ops.push(pdfCheckboxOp(M, y - 1.5, BOX, s.shot, C.faint, C.broll));
+      sheet.push(listLineOps(l.line, TEXT_X, y, l.size, l.hex, l.boldHex));
     });
-    y -= 14;
+    sheet.y = y - TAIL;
+    sheet.body = true;
+  }
+
+  /* A group's head: its label in bold after a pin for a location, the
+     timecode a scene starts at after it, faint, and done/total at the
+     right; on a page it runs on to, "(continued)" in place of the count.
+     The flat list (no grouping) has none. */
+  var LABEL_LEAD = 15;
+  function pinned(g) { return g.kind === "location" && !g.none; }
+  function headLines(g) {
+    return listWrap([{ text: listClean(g.label), b: true }], W - 90 - (pinned(g) ? 13 : 0), 12);
+  }
+  function headHeight(g) { return g.label ? 13 + (headLines(g).length - 1) * LABEL_LEAD + 8 : 0; }
+  function drawHead(g, continued) {
+    if (!g.label) return;
+    var base = sheet.y - 13, x = pinned(g) ? M + 13 : M;
+    if (pinned(g)) sheet.ops.push(listPinOp(M + 4, base + 5.6, 3.2, tagPrintColor("location")));
+    var lines = headLines(g), last = base;
+    lines.forEach(function (line, i) {
+      last = base - i * LABEL_LEAD;
+      sheet.push(listLineOps(line, x, last, 12, C.text, C.text));
+    });
+    var end = x + lines[lines.length - 1].reduce(function (n, p) { return n + p.width; }, 0);
+    if (g.kind === "scene" && g.start) sheet.text(g.start, end + 7, last, "F1", 10, C.faint);
+    var right = continued ? "(continued)" : g.done + "/" + g.total + " shot";
+    var allShot = !continued && g.total && g.done === g.total;
+    sheet.text(right, M + W - pdfTextWidth(right, false, 9.5), base, "F1", 9.5, allShot ? C.broll : C.faint);
+    sheet.y = last - 8;
+    sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.borderStrong, 0.75));
+  }
+
+  data.groups.forEach(function (g, gi) {
+    var shots = g.items.map(function (r) { return shotOf(r, g); });
+    if (gi) sheet.y -= 22;
+    /* a group's head never ends a page on its own: it goes over with its
+       first shot */
+    if (sheet.y - headHeight(g) - (shots.length ? shots[0].height : 0) < M && sheet.body) sheet.newPage();
+    drawHead(g, false);
+    shots.forEach(function (s, i) {
+      if (sheet.y - s.height < M && sheet.body) { sheet.newPage(); drawHead(g, true); }
+      else if (i) sheet.ops.push(pdfRuleOp(TEXT_X, sheet.y, M + W, C.border, 0.5));
+      drawShot(s);
+    });
   });
 
-  pages.push(ops);
-  return assembleTextPdf(pages, PW, PH, data.title + " — B-roll shot list");
+  return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
+}
+
+/* The pin the shot list's page heads a location with (#169), as a shape —
+   a head and a point, in `hex`, with a hole — since WinAnsi has no glyph
+   for it. (cx, cy) is the centre of its head, r its radius; the point is
+   2.1 r below, its sides tangent to the head. */
+function listPinOp(cx, cy, r, hex) {
+  return "q " + pdfRgb(hex) + " rg " + pdfCirclePath(cx, cy, r) + " f " +
+    n2(cx - r * 0.88) + " " + n2(cy - r * 0.476) + " m " + n2(cx) + " " + n2(cy - r * 2.1) + " l " +
+    n2(cx + r * 0.88) + " " + n2(cy - r * 0.476) + " l h f 1 1 1 rg " + pdfCirclePath(cx, cy, r * 0.4) + " f Q";
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()
