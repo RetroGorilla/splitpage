@@ -339,9 +339,29 @@
      b), so the panel's is the only one at the window's edge and the
      header's line and the panel's edges meet the frame (#188). The page
      still scrolls — wheel, keys, the rundown strip — and the strip still
-     shows where you are in it. */
+     shows where you are in it.
+
+     Without its bar the page would be that much wider, and things would
+     step sideways as a panel opened: the toolbar under the pointer, and
+     below 1100px (where the panel lies over the script) the whole script
+     rewrapping. So the bar's width, measured as it goes (--page-gutter,
+     03b-side-panels.js), is handed back: to the header row as padding at
+     its right end, and below 1100px to the page as padding, with the row
+     reaching over it so its line still meets the window's edge. From
+     1100px the script narrows for the panel anyway, and #root's padding
+     for it (further down) stays exactly the panel's width, which suites 50
+     and 61 read. scrollbar-gutter cannot do any of this: a bar with
+     scrollbar-width: none has no gutter to keep. Not the phone's row,
+     which has its own padding and a sheet over it. */
   html:has(> body.panel-open) { scrollbar-width: none; }
   html:has(> body.panel-open)::-webkit-scrollbar { display: none; }
+  @media (min-width: 761px) {
+    body.panel-open .topbar-row { padding-right: calc(20px + var(--page-gutter, 0px)); }
+  }
+  @media (min-width: 761px) and (max-width: 1099px) {
+    html:has(> body.panel-open) { padding-right: var(--page-gutter, 0px); }
+    body.panel-open .topbar-row { margin-right: calc(-1 * var(--page-gutter, 0px)); }
+  }
 
   /* ---------- switching themes ----------
 
@@ -4663,6 +4683,19 @@
        panel: see "the document keeping step with the panel". */
     body.panel-open .topbar-row {
       margin-right: calc(-1 * min(var(--open-panel-width, 488px), 100vw));
+    }
+  }
+  /* Below 1100px the panel lies over the script rather than pushing it
+     over, but the rundown strip still ends at the panel's edge, as it does
+     from 1100px (#189): the panel starts under the header's row, level
+     with the strip, and otherwise covered its right end — the script's
+     length (#207) and the minimize chevron (#178). The strip's
+     ResizeObserver (05f-rundown.js) lays it out again for the width.
+     --page-gutter is the page padding given back for the scroll bar
+     above, which already moved the strip's end in that far. */
+  @media (min-width: 761px) and (max-width: 1099px) {
+    body.panel-open .topbar .rundown {
+      margin-right: calc(min(var(--open-panel-width, 488px), 100vw) - var(--page-gutter, 0px));
     }
   }
   /* A side panel (#169): flat — --surface with a hairline left edge and no

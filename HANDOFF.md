@@ -1910,9 +1910,14 @@ the header and the New Tab page both `<use>` — a new logo changes that
 symbol and nothing else. The title gives way before the facts and your
 name never does (#183). `#root` spans the window and only the script is
 held to 1800px (#190); the rundown strip runs the window's width, less an
-open panel (#189). One slim scroll-bar style app-wide, and the page's own
-bar hidden while a panel is open (#187, #188). `tests/85-header-fit.txt`
-measures all of it by resizing an iframe.
+open panel (#189), below 1100px too. One slim scroll-bar style app-wide,
+and the page's own bar hidden while a panel is open (#187, #188), its
+width handed back (`--page-gutter`, 03b-side-panels.js) so nothing steps
+sideways; a panel opening or closing keeps the scene at the top of the
+view put (`holdScriptPlace`, as the script zoom does). With people in a
+hosted document the avatars fold into a "+N" chip rather than overflow
+the row (`fitPresenceBar`, 13a-presence.js). `tests/85-header-fit.txt`
+measures all of it by resizing an iframe; 250–252 the rest.
 
 **Temporary code to delete (#83) — tracked in #100.** Each item has to
 ship in one release first, so an upgrading user skips nothing. #83 first

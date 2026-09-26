@@ -1,0 +1,119 @@
+# A side panel on a window under 1100px, and the tagging reference on a
+# short one (bug hunt, 2026-09-25).
+#
+# Below 1100px a panel lies over the script instead of pushing it over.
+#   * The page's scroll bar still goes while a panel is open (#187), but
+#     its width is handed back (--page-gutter, 03b-side-panels.js; app.css):
+#     the toolbar does not step sideways under the pointer and the script
+#     does not rewrap (at 900px it used to move the read row 58px).
+#   * The rundown strip ends at the panel's left edge, as it does from
+#     1100px (#189): the script's length (#207) and the minimize chevron
+#     (#178) used to be under the panel's head, now they are the element
+#     at their own centres, and a real click on the length opens its
+#     popover. Minimized (the thin bar) the same.
+#   * The tagging reference card (#205) on a 700px-tall window stays clear
+#     of the whole header, the rundown strip included (it reached up over
+#     the strip, the length label under its close button), condensed and
+#     minimized too, and its "VFX: glow" row keeps its category on the
+#     row's own line.
+#
+# Every `eval` is one physical line.
+
+open
+viewport 1000 700
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ var d = document.getElementById('desktop-app-bar-dismiss'); if (d) d.click(); var words = function(k){ var a = []; for (var i = 0; i < k; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 60; i++) rows.push({ id: 'r' + i, visualText: 'B-roll: shot ' + i, audioText: 'Scene ' + i + ' ' + words(8 + (i * 7) % 40), status: i % 3 === 0 ? 'shot' : i % 3 === 1 ? 'ready' : 'todo' }); window.__splitpageFormats.openFile(new File([JSON.stringify({ schema: 2, title: 'The Extraordinarily Long Script Title 40', rows: rows })], 'narrow.splitpage')); return true; })()
+wait document.querySelectorAll('#rundown .rd-block').length === 60
+sleep 400
+eval (function(){ var W = window; W.__snap = function(){ var p = document.getElementById('btn-present').getBoundingClientRect(); var r = document.querySelector('#rows .row[data-id="r16"]'); var a = r.querySelector('.cell-editable[data-field="audioText"]').getBoundingClientRect(); return { present: Math.round(p.left), rowTop: Math.round(r.getBoundingClientRect().top), audioW: Math.round(a.width), audioH: Math.round(a.height), sy: Math.round(scrollY) }; }; W.__hits = function(el){ var r = el.getBoundingClientRect(); var h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && el.contains(h); }; return true; })()
+expect true
+
+# =============================================================================
+# #187 kept, nothing shifts: the toolbar and the script stay where they were
+# =============================================================================
+eval window.scrollTo(0, 3000)
+sleep 800
+eval window.__a = window.__snap()
+eval JSON.stringify(window.__a)
+expect window.innerWidth - document.documentElement.clientWidth === 10
+click #btn-comments
+sleep 600
+eval window.__b = window.__snap()
+eval JSON.stringify(window.__b)
+expect !document.getElementById('comments-panel').hidden
+expect getComputedStyle(document.documentElement).scrollbarWidth == none
+expect window.__b.present === window.__a.present
+expect window.__b.rowTop === window.__a.rowTop && window.__b.sy === window.__a.sy
+expect window.__b.audioW === window.__a.audioW && window.__b.audioH === window.__a.audioH
+# the header's row still reaches the window's edge (its line meets the
+# frame, #188), and the panel still meets the window's right edge
+expect Math.abs(document.querySelector('.topbar-row').getBoundingClientRect().right - innerWidth) < 0.5
+expect Math.abs(document.getElementById('comments-panel').getBoundingClientRect().right - innerWidth) < 0.5
+
+# =============================================================================
+# #189 below 1100: the strip ends at the panel, the length and the chevron
+# are on it and clickable
+# =============================================================================
+wait Math.abs(document.getElementById('rundown').getBoundingClientRect().right - document.getElementById('comments-panel').getBoundingClientRect().left) < 1
+eval (function(){ var r = document.getElementById('runtime-chip').getBoundingClientRect(); var t = document.querySelector('#rundown .rundown-toggle').getBoundingClientRect(); var p = document.getElementById('comments-panel').getBoundingClientRect(); return 'length ' + Math.round(r.left) + '-' + Math.round(r.right) + ' chevron ' + Math.round(t.left) + '-' + Math.round(t.right) + ' panel from ' + Math.round(p.left); })()
+wait window.__hits(document.getElementById('runtime-chip'))
+expect window.__hits(document.querySelector('#rundown .rundown-toggle'))
+expect document.getElementById('runtime-chip').getBoundingClientRect().right <= document.getElementById('comments-panel').getBoundingClientRect().left
+shot 251-panel-strip
+# a real click on the length opens the reading speed and target popover
+click #runtime-chip
+wait !!document.querySelector('.anchor-popover #wpm-input')
+eval document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+eval (function(){ var p = document.querySelector('.anchor-popover'); if (p) p.remove(); return true; })()
+# minimized, the thin bar's length and chevron are clear of the panel too
+click #rundown .rundown-toggle
+wait document.getElementById('rundown').classList.contains('is-min')
+sleep 400
+wait window.__hits(document.getElementById('runtime-chip'))
+expect window.__hits(document.querySelector('#rundown .rundown-toggle'))
+expect document.getElementById('rundown').getBoundingClientRect().right <= document.getElementById('comments-panel').getBoundingClientRect().left + 1
+shot 251-panel-strip-min
+click #rundown .rundown-toggle
+wait !document.getElementById('rundown').classList.contains('is-min')
+
+# closing: the bar is back and still nothing moved
+click #btn-comments
+sleep 600
+eval JSON.stringify(window.__snap())
+expect document.getElementById('comments-panel').hidden
+expect window.innerWidth - document.documentElement.clientWidth === 10
+expect window.__snap().present === window.__a.present
+expect window.__snap().rowTop === window.__a.rowTop
+
+# =============================================================================
+# the tagging reference on a 700px-tall window
+# =============================================================================
+eval window.scrollTo(0, 0)
+sleep 600
+click #btn-file
+sleep 300
+click #file-menu [data-file-action="tagging-help"]
+wait !document.getElementById('tagging-help').hidden
+sleep 400
+eval (function(){ var t = document.getElementById('tagging-help').getBoundingClientRect(); var h = document.querySelector('.topbar').getBoundingClientRect(); return 'card ' + Math.round(t.top) + '-' + Math.round(t.bottom) + ' header to ' + Math.round(h.bottom); })()
+expect document.getElementById('tagging-help').getBoundingClientRect().top >= document.getElementById('rundown').getBoundingClientRect().bottom + 19
+expect window.__hits(document.getElementById('runtime-chip'))
+expect window.__hits(document.querySelector('#rundown .rundown-toggle'))
+# its body scrolls rather than the card reaching up
+expect (function(){ var b = document.querySelector('#tagging-help .tagging-help-body'); return b.scrollHeight > b.clientHeight; })()
+# the VFX: glow row: its category on the same line as its example
+expect (function(){ var li = document.querySelector('#tagging-help .tagging-help-row kbd').closest('li'); var s = li.querySelector('.tag-sample').getBoundingClientRect(); var c = li.querySelector('.tagging-help-cat').getBoundingClientRect(); return Math.abs(c.top - s.top) < 6 && c.left > s.right; })()
+shot 251-tagging-card
+# scrolled (the header condensed) and then minimized: still clear of it
+eval window.scrollTo(0, 2000)
+sleep 700
+wait document.getElementById('tagging-help').getBoundingClientRect().top >= document.querySelector('.topbar').getBoundingClientRect().bottom + 19
+click #rundown .rundown-toggle
+wait document.getElementById('rundown').classList.contains('is-min')
+sleep 400
+wait document.getElementById('tagging-help').getBoundingClientRect().top >= document.querySelector('.topbar').getBoundingClientRect().bottom + 19
+expect window.__hits(document.getElementById('runtime-chip'))
+click #rundown .rundown-toggle
+wait !document.getElementById('rundown').classList.contains('is-min')
+quit
