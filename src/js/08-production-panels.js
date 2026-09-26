@@ -206,8 +206,19 @@ export function applyGearQuickAdd() {
    the link's name says what is there ("Scene 03 · Visual and Audio · 2
    mentions"), which is what the old per-column chips showed as text. */
 /* The comma between two scene numbers, in the body face: in the mono it
-   takes a whole character cell and reads "03 , 04". */
-var SCENE_SEP = '<span class="tag-scene-sep">, </span>';
+   takes a whole character cell and reads "03 , 04". Each link is a box
+   the line may break either side of, so a plain ", " between two could
+   start a line with the comma ("01, 03, 09, 20" then ", 28"): the comma is
+   held to the number before it in a unit that does not wrap, and the line
+   breaks only at the space after it (outside the unit, or it could not
+   break there either; in the body face too). */
+function joinSceneLinks(links) {
+  return links.map(function (html, i) {
+    return i < links.length - 1
+      ? '<span class="tag-scene-unit">' + html + '<span class="tag-scene-sep">,</span></span>'
+      : html;
+  }).join('<span class="tag-scene-sep"> </span>');
+}
 
 function sceneLinksHtml(item) {
   var byRow = {}, order = [];
@@ -218,7 +229,7 @@ function sceneLinksHtml(item) {
     if (m.field === "visualText") s.visual = true; else s.audio = true;
   });
   order.sort(function (a, b) { return a.m.rowIndex - b.m.rowIndex; });
-  return order.map(function (s) {
+  return joinSceneLinks(order.map(function (s) {
     var num = pad2(s.m.rowIndex + 1);
     var label = "Scene " + num + " · " +
       (s.visual && s.audio ? "Visual and Audio" : s.visual ? "Visual" : "Audio") +
@@ -226,7 +237,7 @@ function sceneLinksHtml(item) {
     return '<button type="button" class="tag-scene jump-link" data-action="jump-tag" data-row="' +
       escapeHtml(s.m.rowId) + '" data-key="' + escapeHtml(item.key) + '" title="' +
       escapeHtml(label) + '" aria-label="' + escapeHtml(label) + '">' + num + '</button>';
-  }).join(SCENE_SEP);
+  }));
 }
 
 /* The open Gear item's "Mentions" (B-PanelGear): one link per scene AND
@@ -664,7 +675,7 @@ function renderProductionByShoot(entries) {
       '<dl class="shoot-detail">' +
         '<dt>Scenes</dt>' +
         '<dd class="tag-scenes">' +
-          g.rows.map(function (i) {
+          joinSceneLinks(g.rows.map(function (i) {
             var row = S.state.rows[i];
             var st = rowStatus(row.status) || ROW_STATUSES[0];
             var label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
@@ -672,7 +683,7 @@ function renderProductionByShoot(entries) {
               '" data-action="jump-row" data-row="' + escapeHtml(row.id) + '" title="' + escapeHtml(label) +
               '" aria-label="' + escapeHtml(label) + '">' + pad2(i + 1) +
               (row.status === "shot" ? iconHtml("i-check", "tag-scene-tick") : '') + '</button>';
-          }).join(SCENE_SEP) +
+          })) +
         '</dd>' +
         (g.needOrder.length
           ? '<dt>Needs on the day</dt>' +
