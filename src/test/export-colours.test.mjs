@@ -120,7 +120,10 @@ test("a .docx with coloured categories reopens as exactly its script, highlight 
   }
 });
 
-test("the PDF breakdown fills a dot and draws the label in each category's colour", () => {
+/* The breakdown by category, as the Production panel groups it: each
+   category's group headed by a dot in its colour and its plural in bold,
+   in the text colour — the colour is the dot's, as the panel's is. */
+test("the PDF breakdown heads each category's group with a dot in its colour and its plural", () => {
   load();
   const pages = streams(buildPdf([null, null]));
   const all = pages.join("\n");
@@ -129,24 +132,37 @@ test("the PDF breakdown fills a dot and draws the label in each category's colou
   const breakdown = all.slice(at).split("\n");
   const seen = new Set();
   for (let i = 0; i < breakdown.length; i++) {
-    const m = /^q ([\d.]+ [\d.]+ [\d.]+) rg (.*) f$/.exec(breakdown[i]);
+    const m = /^q ([\d.]+ [\d.]+ [\d.]+) rg (.*) f Q$/.exec(breakdown[i]);
     if (!m) continue;
     const cat = TAG_CATEGORIES.find((c) => rgb(TAG_PRINT_COLORS[c.id]) === m[1]);
     assert.ok(cat, "a fill in a colour no category has: " + m[1]);
     /* a closed circle: a moveto, four curves */
     assert.equal((m[2].match(/ c\b/g) || []).length, 4, "not four curves: " + m[2]);
     assert.match(m[2], /^[\d.]+ [-\d.]+ m .* c h$/, "not one closed path: " + m[2]);
-    /* the label is drawn inside the same q ... Q, so in the same colour */
-    const label = /^BT \/F1 9\.5 Tf 1 0 0 1 ([\d.]+) [\d.]+ Tm \((.*)\) Tj ET$/.exec(breakdown[i + 1]);
-    assert.ok(label, "no label after the dot: " + breakdown[i + 1]);
-    assert.equal(label[2], cat.label);
-    assert.equal(+label[1], 62, "label 8pt right of the margin");
-    assert.equal(breakdown[i + 2], "Q", "the colour does not end after the label");
+    /* then the group's name, bold, in the text colour, 11pt right of the margin */
+    const label = /^BT \/F2 10 Tf 1 0 0 1 ([\d.]+) [\d.]+ Tm \((.*)\) Tj ET$/.exec(breakdown[i + 1]);
+    assert.ok(label, "no name after the dot: " + breakdown[i + 1]);
+    assert.equal(label[2], cat.plural.replace(/[()]/g, "\\$&"));
+    assert.equal(+label[1], 65);
     seen.add(cat.id);
   }
-  assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category's colour drawn");
-  /* nothing in the script pages before it changed colour */
-  assert.doesNotMatch(all.slice(0, at), /\d rg (?:BT|[\d.]+ [\d.]+ m )/, "a colour leaked into the script pages");
+  assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category's group drawn");
+});
+
+/* In the script itself each tagged word is drawn as the app draws it: in
+   its category's colour, with a thin rule under it in that colour. */
+test("the PDF script draws each tagged word in its category's colour, underlined in it", () => {
+  load();
+  const pages = streams(buildPdf([null, null]));
+  const script = pages[0].split("\n");
+  for (const [word, id] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
+    const re = new RegExp("^q " + rgb(TAG_PRINT_COLORS[id]) + " rg BT /F1 [\\d.]+ Tf 1 0 0 1 ([\\d.]+) [\\d.]+ Tm \\(" + word + "\\) Tj ET Q$");
+    const drawn = script.map((op) => re.exec(op)).find(Boolean);
+    assert.ok(drawn, word + " is not drawn in " + id + "'s colour");
+    assert.ok(script.some((op) => op.startsWith("q " + rgb(TAG_PRINT_COLORS[id]) + " rg " + drawn[1] + " ") && / re f Q$/.test(op)), word + " has no rule under it in " + id + "'s colour");
+  }
+  /* and the words that are not tags stay in the page's text colour */
+  assert.ok(script.some((op) => /^BT \/F1 [\d.]+ Tf .* Tm \(The\) Tj ET$/.test(op)));
 });
 
 /* Found rendering the breakdown for #171: a note is wrapped at 8.5pt but was
