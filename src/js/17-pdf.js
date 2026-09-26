@@ -1785,8 +1785,8 @@ function assembleTextPdf(pages, PW, PH, title) {
    it is in the can (B's "done", #169); the shot in bold, dimmed once
    shot, and the lines under its marker in the script; then, dim, what
    else there is to know on the day: its scene and where that starts,
-   where, who has it, the props it needs (each with its status), the line
-   it cuts against in full, and "Flagged" in red in front of a flagged
+   where, who has it, the props it needs (each with its status), the
+   opening of the line it cuts against, and "Flagged" in red in front of a flagged
    one's note. What the group head already says — the location, the
    scene, the person — the shots under it do not repeat.
 
@@ -1795,6 +1795,17 @@ function assembleTextPdf(pages, PW, PH, title) {
    be sent to whoever is shooting as well as printed, and a page laid out
    for paper rather than a screen's table squeezed onto one. */
 var FLAG_PRINT = "C4302A";
+
+/* The start of a "cuts against" line, cut at a word end with "…" once it
+   is longer than about two lines of the sheet's detail text. */
+var SHOT_CUTS_MAX = 170;
+function shotCutsOpening(text) {
+  if (text.length <= SHOT_CUTS_MAX) return text;
+  var cut = text.slice(0, SHOT_CUTS_MAX);
+  var space = cut.lastIndexOf(" ");
+  if (space > SHOT_CUTS_MAX / 2) cut = cut.slice(0, space);
+  return cut.replace(/[\s,;:.–—-]+$/, "") + "…";
+}
 
 export function buildShotListPdf(data) {
   var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
@@ -1833,9 +1844,12 @@ export function buildShotListPdf(data) {
     if (r.props.length) meta.push("Props: " + (r.propsWithStatus || r.props).map(listClean).join(", "));
     var details = [];
     if (meta.length) details.push([{ text: meta.join("  ·  ") }]);
-    /* the narration it runs under, in full and set in italic, so the
-       words to shoot and the words spoken over them read apart */
-    if (r.cuts) details.push([{ text: "Cuts against: " }, { text: "“" + listClean(r.cuts) + "”", i: true }]);
+    /* the narration it runs under, set in italic so the words to shoot
+       and the words spoken over them read apart — its opening only, two
+       lines at most: on the day it says which moment this is, and the
+       whole paragraph (it is often a scene's entire Audio) turned one
+       shot into a block of prose */
+    if (r.cuts) details.push([{ text: "Cuts against: " }, { text: "“" + shotCutsOpening(listClean(r.cuts)) + "”", i: true }]);
     if (r.flagged) details.push([{ text: "Flagged", b: true }].concat(r.note ? [{ text: " — " + listClean(r.note) }] : []));
     else if (listClean(r.note)) details.push([{ text: "Note: " + listClean(r.note) }]);
     details.forEach(function (runs, i) {

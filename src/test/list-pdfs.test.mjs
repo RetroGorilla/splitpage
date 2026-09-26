@@ -326,7 +326,10 @@ test("the shot list: the head, groups by location after a pin, done/total at the
 
   const all = pages.map(textsOf).flat();
   const heads = all.filter((t) => t.font === "F2" && t.size === 12).map((t) => t.str);
-  assert.deepEqual(heads, ["Camera shop", "Riverside park", "workbench", "No location"]);
+  /* a group that runs over a page break is headed again there, with
+     "(continued)" where its count was */
+  assert.deepEqual(heads.filter((h, i) => heads.indexOf(h) === i), ["Camera shop", "Riverside park", "workbench", "No location"]);
+  assert.equal(all.filter((t) => t.str === "(continued)" && t.size === 9.5).length, heads.length - 4);
   const counts = all.filter((t) => / shot$/.test(t.str) && t.size === 9.5);
   assert.deepEqual(counts.map((t) => t.str), ["1/1 shot", "0/2 shot", "0/1 shot", "2/5 shot"]);
   assert.deepEqual(counts.map((t) => t.rgb), [rgb(C.broll), rgb(C.faint), rgb(C.faint), rgb(C.faint)]);
@@ -354,11 +357,17 @@ test("the shot list: a box ticked in teal when shot, the name dimmed, what else 
   assert.equal(under[0].str, "Scene 16 · 05:11");
   assert.equal(under[0].rgb, rgb(C.dim));
   assert.ok(!all.some((t) => t.str.includes("Camera shop") && t.size === 9));
-  /* the line it cuts against, in full, the words in italic */
+  /* the line it cuts against, the words in italic — a short one whole */
   const label = under.find((t) => t.str === "Cuts against:");
   const quote = all.find((t) => t.y === label.y && t.x > label.x);
   assert.equal(quote.font, "F3");
   assert.equal(quote.str, "“Next stop: film.”");
+  /* a long one (the heron's is its scene's whole Audio) only its opening,
+     cut at a word end, in two lines at most */
+  const heronLabel = all.find((t) => t.str === "Cuts against:" && t.y < heron.y && t.y > heron.y - 40);
+  const heronQuote = all.filter((t) => t.font === "F3" && t.y <= heronLabel.y && t.y > heronLabel.y - 30);
+  assert.ok(heronQuote.length >= 1 && heronQuote.length <= 2, heronQuote.length + " lines");
+  assert.match(heronQuote[heronQuote.length - 1].str, /\w…”$/);
   /* "Flagged" in sentence case, bold and red, the note after it */
   const flag = one(all, "Flagged");
   assert.deepEqual([flag.font, flag.size, flag.rgb], ["F2", 9, rgb("C4302A")]);
