@@ -1,0 +1,120 @@
+# A side panel opening or closing keeps your place (bug hunt, 2026-09-25,
+# 03b-side-panels.js holdScriptPlace / sidePanelOpening).
+#
+# From 1100px a panel pushes the script over (body.panel-open #root's
+# padding), every row rewraps taller, and the browser's scroll anchoring
+# does not step in for a padding change: at 1440x800 with 60 scenes,
+# scrolled to 4000, the scene at the top of the view went to 1700px below
+# it. Now the first line of the scene at the top of the view stays put,
+# through the slide as well as after it, the way the script zoom (#191)
+# keeps its place. Checked here:
+#   * opening Comments, then closing it: the first scene starting below the
+#     header keeps its top to 3px in every frame after the click (sampled
+#     after each frame's own work, so what was painted)
+#   * switching to a panel of another width (Production dragged to 700px)
+#   * at the top of the page nothing scrolls
+#   * scrolling yourself during the slide is not fought
+#   * the toolbar does not step sideways as the page's scroll bar goes and
+#     comes back (#187 kept: no page bar while a panel is open)
+#   * a toast rises clear of the gallery's full-size caption (#216)
+#
+# Every `eval` is one physical line.
+
+open
+viewport 1440 800
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ try { localStorage.setItem('splitpage-panel-widths', JSON.stringify({ 'production-panel': 700 })); } catch (e) {} var d = document.getElementById('desktop-app-bar-dismiss'); if (d) d.click(); var words = function(k){ var a = []; for (var i = 0; i < k; i++) a.push('word' + (i % 7)); return a.join(' '); }; var rows = []; for (var i = 0; i < 60; i++) rows.push({ id: 'r' + i, visualText: 'B-roll: shot ' + i, audioText: 'Scene ' + i + ' ' + words(8 + (i * 7) % 40), status: i % 3 === 0 ? 'shot' : i % 3 === 1 ? 'ready' : 'todo' }); window.__splitpageFormats.openFile(new File([JSON.stringify({ schema: 2, title: 'Anchor', rows: rows })], 'anchor.splitpage')); return true; })()
+wait document.querySelectorAll('#rundown .rd-block').length === 60
+sleep 400
+
+# the point at the header's bottom edge: which row, and where in it
+eval (function(){ var W = window; W.__line = function(){ return document.querySelector('.topbar').getBoundingClientRect().bottom + 1; }; W.__note = function(){ var y = W.__line(); var rows = document.querySelectorAll('#rows > .row'); for (var i = 0; i < rows.length; i++) { var r = rows[i].getBoundingClientRect(); if (r.top >= y) { W.__a = { el: rows[i], y: r.top, above: rows[i - 1], aboveTop: rows[i - 1].getBoundingClientRect().top }; return rows[i].getAttribute('data-id') + ' at ' + Math.round(r.top) + ' (line ' + Math.round(y) + ')'; } } return 'none'; }; W.__off = function(){ return W.__a.el.getBoundingClientRect().top - W.__a.y; }; W.__sample = function(ms){ W.__worst = 0; W.__frames = 0; W.__sampling = true; var t0 = performance.now(); var tick = function(){ setTimeout(function(){ W.__worst = Math.max(W.__worst, Math.abs(W.__off())); W.__frames++; if (performance.now() - t0 < ms) requestAnimationFrame(tick); else W.__sampling = false; }, 0); }; requestAnimationFrame(tick); return true; }; W.__present = function(){ return Math.round(document.getElementById('btn-present').getBoundingClientRect().left); }; return true; })()
+expect true
+
+# =============================================================================
+# opening and closing Comments, scrolled into the script
+# =============================================================================
+eval window.scrollTo(0, 4000)
+sleep 800
+eval window.__note()
+eval window.__p0 = window.__present()
+eval window.__sample(700)
+click #btn-comments
+wait !window.__sampling
+expect !document.getElementById('comments-panel').hidden
+eval 'worst ' + window.__worst.toFixed(1) + ' over ' + window.__frames + ' frames, scrollY ' + Math.round(scrollY)
+expect window.__frames >= 5
+expect window.__worst <= 3
+# the page really did rewrap (or this proves nothing): it scrolled to keep up
+expect scrollY > 4400
+# the toolbar did not step sideways as the page's bar went
+expect window.__present() === window.__p0
+expect window.innerWidth - document.documentElement.clientWidth === 0
+shot 250-open
+eval window.__note()
+eval window.__sample(700)
+click #btn-comments
+wait !window.__sampling
+expect document.getElementById('comments-panel').hidden
+eval 'worst ' + window.__worst.toFixed(1) + ' over ' + window.__frames + ' frames'
+expect window.__worst <= 3
+expect window.__present() === window.__p0
+expect window.innerWidth - document.documentElement.clientWidth === 10
+
+# =============================================================================
+# switching from Comments (488px) to Production (700px): the script narrows
+# again with the panel still open
+# =============================================================================
+click #btn-comments
+sleep 600
+eval window.__note()
+eval window.__y0 = scrollY
+eval window.__sample(700)
+click #btn-production
+wait !window.__sampling
+expect !document.getElementById('production-panel').hidden && document.getElementById('comments-panel').hidden
+expect Math.round(document.getElementById('production-panel').getBoundingClientRect().width) === 700
+eval 'worst ' + window.__worst.toFixed(1) + ', scrollY ' + Math.round(window.__y0) + ' -> ' + Math.round(scrollY)
+expect scrollY > window.__y0 + 100
+expect window.__worst <= 3
+expect window.__present() === window.__p0
+click #btn-production
+sleep 600
+expect document.getElementById('production-panel').hidden
+
+# =============================================================================
+# at the top nothing scrolls, and your own scroll during the slide is yours
+# =============================================================================
+eval window.scrollTo(0, 0)
+sleep 600
+click #btn-comments
+sleep 600
+expect scrollY === 0
+click #btn-comments
+sleep 600
+eval window.scrollTo(0, 3000)
+sleep 600
+eval (function(){ document.getElementById('btn-comments').click(); window.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 })); window.scrollTo(0, 1000); return true; })()
+sleep 600
+eval 'scrollY after my own scroll ' + Math.round(scrollY)
+expect Math.abs(scrollY - 1000) < 2
+eval document.getElementById('btn-comments').click()
+sleep 600
+
+# =============================================================================
+# a toast in the gallery's full-size view (#216) rises clear of its caption
+# =============================================================================
+eval (function(){ var c = document.createElement('canvas'); c.width = 3000; c.height = 1800; var g = c.getContext('2d'); g.fillStyle = '#36c'; g.fillRect(0, 0, 3000, 1800); var doc = { schema: 2, title: 'Zoom', comments: [], rows: [{ id: 'z1', visualText: 'one', audioText: 'A', status: 'todo', visualImage: c.toDataURL('image/png'), imageName: 'wide shot.png' }] }; window.__splitpageFormats.openFile(new File([JSON.stringify(doc)], 'zoom.splitpage')); return true; })()
+wait window.__splitpageFormats.state().title === 'Zoom' && !!document.querySelector('#rows .row[data-id="z1"] .scene-gallery-tile')
+eval document.querySelector('#rows .row[data-id="z1"] .scene-gallery-tile').click()
+wait !document.getElementById('gallery-modal').hidden
+click .scene-gallery-preview-pic
+wait !document.getElementById('gallery-zoom').hidden && document.getElementById('gallery-zoom-info').textContent.indexOf('wide shot.png') !== -1
+eval (function(){ var t = document.createElement('div'); t.className = 'toast ok'; t.id = 'test-toast'; t.textContent = 'A toast in the zoom'; document.getElementById('toast-host').appendChild(t); return true; })()
+sleep 300
+eval (function(){ var t = document.getElementById('test-toast').getBoundingClientRect(); var c = document.getElementById('gallery-zoom-info').getBoundingClientRect(); return 'toast ' + Math.round(t.top) + '-' + Math.round(t.bottom) + ' caption ' + Math.round(c.top) + '-' + Math.round(c.bottom); })()
+expect document.getElementById('test-toast').getBoundingClientRect().bottom <= document.getElementById('gallery-zoom-info').getBoundingClientRect().top - 4
+expect document.getElementById('test-toast').getBoundingClientRect().bottom > innerHeight - 120
+shot 250-zoom-toast
+quit

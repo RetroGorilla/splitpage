@@ -1,0 +1,70 @@
+# A phone's command menu and toasts (bug hunt, 2026-09-25).
+#
+#   * The command menu (#cmdk, the Search magnifier) fills a phone's screen
+#     and hides its Esc cap and footer, and had no way to close it but a
+#     10px rim of backdrop. Now it has the close button the other dialogs
+#     have (page.html #cmdk-close): visible, 44px, clear of the search box,
+#     and a real tap on it closes the menu with nothing run.
+#   * A toast (#toast-host, z 200) drew over the open File menu, a sheet
+#     rising from the foot of the screen (z 160), and took the taps meant
+#     for its items. While a menu is open the toasts go under the floating
+#     layers; closing the menu brings them back on top.
+#
+# Every `eval` is one physical line.
+
+open
+viewport 360 640 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 500
+eval (function(){ window.__hits = function(el){ var r = el.getBoundingClientRect(); var h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && el.contains(h); }; return true; })()
+expect true
+
+# =============================================================================
+# the command menu's close button
+# =============================================================================
+click #btn-command
+wait document.getElementById('cmdk').hidden === false
+sleep 300
+eval (function(){ var p = document.querySelector('.cmdk-panel').getBoundingClientRect(); var c = document.getElementById('cmdk-close').getBoundingClientRect(); return 'panel ' + Math.round(p.left) + ',' + Math.round(p.top) + '-' + Math.round(p.right) + ',' + Math.round(p.bottom) + ' close ' + Math.round(c.left) + ',' + Math.round(c.top) + ' ' + Math.round(c.width) + 'x' + Math.round(c.height); })()
+expect getComputedStyle(document.querySelector('.cmdk-esc')).display == none
+expect document.getElementById('cmdk-close').getAttribute('aria-label') == Close
+expect Math.round(document.getElementById('cmdk-close').getBoundingClientRect().width) === 44 && Math.round(document.getElementById('cmdk-close').getBoundingClientRect().height) === 44
+expect document.getElementById('cmdk-close').getBoundingClientRect().right <= document.querySelector('.cmdk-panel').getBoundingClientRect().right
+expect document.getElementById('cmdk-input').getBoundingClientRect().right <= document.getElementById('cmdk-close').getBoundingClientRect().left
+expect window.__hits(document.getElementById('cmdk-close'))
+shot 253-cmdk-close
+click #cmdk-close
+wait document.getElementById('cmdk').hidden === true
+expect document.getElementById('file-menu').hidden && document.getElementById('comments-panel').hidden
+# it opens again as before
+click #btn-command
+wait document.getElementById('cmdk').hidden === false
+eval document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+eval (function(){ if (!document.getElementById('cmdk').hidden) document.getElementById('cmdk-close').click(); return true; })()
+wait document.getElementById('cmdk').hidden === true
+
+# =============================================================================
+# a toast and the File menu's sheet
+# =============================================================================
+eval (function(){ var t = document.createElement('div'); t.className = 'toast ok'; t.id = 'test-toast'; t.textContent = 'Opened a script with a long enough name to be wide - 20 rows'; document.getElementById('toast-host').appendChild(t); return true; })()
+sleep 300
+expect window.__hits(document.getElementById('test-toast'))
+click #btn-file
+wait !document.getElementById('file-menu').hidden
+sleep 500
+eval (function(){ var t = document.getElementById('test-toast').getBoundingClientRect(); var m = document.getElementById('file-menu').getBoundingClientRect(); return 'toast ' + Math.round(t.top) + '-' + Math.round(t.bottom) + ' z ' + getComputedStyle(document.getElementById('toast-host')).zIndex + ', menu ' + Math.round(m.top) + '-' + Math.round(m.bottom); })()
+# the toast is where the sheet is (or this proves nothing) ...
+expect (function(){ var t = document.getElementById('test-toast').getBoundingClientRect(); var m = document.getElementById('file-menu').getBoundingClientRect(); return t.top < m.bottom && t.bottom > m.top; })()
+# ... and no point of it is the toast: it is under the sheet
+expect (function(){ var d = document.getElementById('test-toast'); var r = d.getBoundingClientRect(); for (var x = r.left + 4; x < r.right; x += 12) for (var y = r.top + 4; y < r.bottom; y += 8) { var h = document.elementFromPoint(x, y); if (h && d.contains(h)) return false; } return true; })()
+# every menu item the sheet shows at the toast's height is its own element
+expect (function(){ var t = document.getElementById('test-toast').getBoundingClientRect(); var bad = 0; document.querySelectorAll('#file-menu .mi').forEach(function(e){ var r = e.getBoundingClientRect(); if (!r.width || r.bottom < t.top || r.top > t.bottom) return; var h = document.elementFromPoint(r.left + r.width / 2, Math.max(r.top, t.top) + 2); if (h && document.getElementById('test-toast').contains(h)) bad++; }); return bad === 0; })()
+shot 253-toast-file-menu
+# closed, the toast is on top again
+eval document.getElementById('file-menu-backdrop').click()
+wait document.getElementById('file-menu').hidden
+sleep 300
+expect getComputedStyle(document.getElementById('toast-host')).zIndex == 200
+expect window.__hits(document.getElementById('test-toast'))
+quit
