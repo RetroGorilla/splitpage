@@ -1,0 +1,110 @@
+# A scene cut and Ctrl+Z (src/js/05g-scene-clip.js isMove, 05h-scene-select.js
+# pasteClip). Whether a paste of cut scenes is the MOVE (the same rows, their
+# comments following their words, the b-roll keys finding their records) or a
+# COPY (everything its own) must follow the undo stack:
+#
+#   * cut, paste in the wrong place, Ctrl+Z, paste again: still the move —
+#     not fresh row ids, the comments copied with the originals left "No
+#     longer in script", and the shot's record orphaned beside a new unshot
+#     one (all autosaved);
+#   * cut, Ctrl+Z the cut (the scenes come back), paste: a copy whose
+#     comments are its own — not the originals' marks in a second scene,
+#     which deleting the comment then left behind;
+#   * a paste of the same cut once its scenes are in the script again is a
+#     copy.
+# Real mouse drags and real keys. The model is src/test/scene-clip.test.mjs.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.T = window.__sceneSelectTest; var tag = function(cat, name){ return '<span class="tag-anchor" data-tag-cat="' + cat + '" data-tag-name="' + name + '" contenteditable="false">' + name + '</span>'; }; window.load = function(){ var rows = [ { id: 'r1', visualText: 'Opening shot', audioText: 'Hello and welcome.', status: 'todo' }, { id: 'r2', visualText: 'Wide of the ' + tag('location', 'Harbour') + '<br><span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> gulls at dawn', audioText: 'Every <span class="cmt-anchor" data-cmt="c1">morning</span> the town wakes.', status: 'shot' }, { id: 'r3', visualText: 'Mara with the ' + tag('prop', 'Kettle'), audioText: 'She has mended <span class="cmt-anchor" data-cmt="c2">nets</span> for thirty years.', status: 'ready' }, { id: 'r4', visualText: 'Closing ' + tag('prop', 'Kettle'), audioText: 'Good<span class="cmt-anchor" data-cmt="c3">bye</span>.', status: 'todo' }, { id: 'r5', visualText: 'Tail five', audioText: 'Line five.', status: 'todo' }, { id: 'r6', visualText: 'Tail six', audioText: 'Line six.', status: 'todo' } ]; var doc = { schema: 2, title: 'Harbour film', rows: rows, comments: [ { id: 'c1', rowId: 'r2', field: 'audioText', anchorId: 'c1', quotedText: 'morning', author: 'Ann', body: 'Warmer light here?', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [ { id: 'rp1', author: 'Ben', body: 'Yes.', createdAt: '2026-09-01T11:00:00Z' } ] }, { id: 'c2', rowId: 'r3', field: 'audioText', anchorId: 'c2', quotedText: 'nets', author: 'Ann', body: 'Which nets?', createdAt: '2026-09-01T10:05:00Z', kind: 'anchor', replies: [] }, { id: 'c3', rowId: 'r4', field: 'audioText', anchorId: 'c3', quotedText: 'bye', author: 'Ann', body: 'Too abrupt', createdAt: '2026-09-01T10:06:00Z', kind: 'anchor', replies: [] } ], people: [ { id: 'p1', name: 'Jordan' } ], productionTags: [ { cat: 'location', name: 'Harbour', status: 'sourcing', owner: 'p1' }, { cat: 'prop', name: 'Kettle', status: 'have' } ], brollShots: [ { id: 'bs1', name: 'gulls at dawn', status: 'shot', notes: 'Got it on day 2' } ] }; window.__loaded = F.state(); F.openFile(new File([JSON.stringify(doc)], 'harbour.splitpage')); return true; }; return load(); })()
+wait F.state() !== __loaded && F.state().title === 'Harbour film' && document.querySelector('#rows .row[data-id="r6"]')
+eval (function(){ window.row = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.cell = function(id, f){ return row(id).querySelector('.' + (f === 'visualText' ? 'visual' : 'audio') + '-cell .cell-editable'); }; window.pt = function(el, fx, fy){ var r = el.getBoundingClientRect(); return { x: r.left + r.width * fx, y: r.top + r.height * fy }; }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.calm = function(){ document.activeElement && document.activeElement.blur(); getSelection().removeAllRanges(); T.clear(); window.scrollTo(0, 0); return true; }; window.marks = function(){ var out = {}; F.state().rows.forEach(function(r){ ['visualText','audioText'].forEach(function(f){ var re = /data-cmt="([^"]+)"/g, m; while ((m = re.exec(r[f] || ''))) { (out[m[1]] = out[m[1]] || []).push(r.id); } }); }); return out; }; window.shared = function(){ var m = marks(); return Object.keys(m).filter(function(k){ return m[k].length > 1; }); }; window.unbacked = function(){ return Object.keys(marks()).filter(function(id){ return !F.state().comments.some(function(c){ return c.id === id; }); }); }; window.keys = function(){ var out = []; F.state().rows.forEach(function(r){ var re = /data-broll-id="([^"]+)"/g, m; while ((m = re.exec(r.visualText || ''))) out.push(m[1]); }); return out.join(); }; window.shots = function(){ return F.state().brollShots.map(function(b){ return b.id + ':' + b.status + ':' + (b.notes || ''); }).join('|'); }; window.cmts = function(){ return F.state().comments.map(function(c){ return c.id + '@' + c.rowId; }).sort().join(); }; window.scrollTo(0, 0); return true; })()
+
+# ---- 1. cut, paste in the wrong place, Ctrl+Z, paste again: the move --------
+sleep 300
+mouse down pt(cell('r2', 'audioText'), 0.1, 0.5)
+mouse move pt(cell('r2', 'audioText'), 0.3, 0.5)
+mouse move pt(cell('r3', 'audioText'), 0.5, 0.5)
+mouse up pt(cell('r3', 'audioText'), 0.5, 0.5)
+expect T.ids().join() === 'r2,r3'
+key ctrl KeyX
+wait ids() === 'r1,r4,r5,r6'
+caret #rows .row[data-id="r6"] .audio-cell .cell-editable
+key ctrl KeyV
+wait ids() === 'r1,r4,r5,r6,r2,r3'
+expect cmts() === 'c1@r2,c2@r3,c3@r4'
+# taken back
+eval calm()
+key ctrl KeyZ
+wait ids() === 'r1,r4,r5,r6'
+# and pasted in the right place: the move again
+caret #rows .row[data-id="r1"] .audio-cell .cell-editable
+key ctrl KeyV
+wait F.state().rows.length === 6
+eval ids() + ' / ' + cmts() + ' / ' + keys() + ' / ' + shots()
+expect ids() === 'r1,r2,r3,r4,r5,r6'
+expect cmts() === 'c1@r2,c2@r3,c3@r4'
+expect F.state().comments.filter(function(c){ return c.id === 'c1'; })[0].replies.length === 1
+expect keys() === 'bs1'
+expect shots() === 'bs1:shot:Got it on day 2'
+expect shared().length === 0
+# nothing "No longer in script" in the Comments panel
+eval calm()
+eval (function(){ window.openComments = function(){ if (document.getElementById('comments-panel').hidden) document.getElementById('btn-comments').click(); return true; }; return openComments(); })()
+wait !document.getElementById('comments-panel').hidden && document.querySelector('#comments-list .comment-card[data-id="c1"]')
+sleep 300
+expect document.querySelectorAll('#comments-panel .comment-state-tag').length === 0
+
+# ---- 2. the same cut pasted once more, its scenes in the script: a copy ------
+caret #rows .row[data-id="r6"] .audio-cell .cell-editable
+key ctrl KeyV
+wait F.state().rows.length === 8
+eval ids() + ' / ' + cmts() + ' / ' + keys() + ' / ' + shots()
+expect ids().indexOf('r1,r2,r3,r4,r5,r6,') === 0
+expect F.state().rows[6].id !== 'r2' && F.state().rows[7].id !== 'r3'
+expect F.state().comments.length === 5
+expect shared().length === 0
+expect unbacked().length === 0
+expect keys().split(',').length === 2 && keys().split(',')[0] === 'bs1' && keys().split(',')[1] !== 'bs1'
+expect F.state().brollShots.filter(function(b){ return b.id === 'bs1'; })[0].status === 'shot'
+expect F.state().brollShots.filter(function(b){ return b.id !== 'bs1'; })[0].status === 'unshot'
+eval calm()
+key ctrl KeyZ
+wait ids() === 'r1,r2,r3,r4,r5,r6'
+expect cmts() === 'c1@r2,c2@r3,c3@r4'
+
+# ---- 3. cut, Ctrl+Z the cut, paste: a copy with comments of its own ---------
+eval load()
+wait F.state() !== __loaded && document.querySelector('#rows .row[data-id="r6"]')
+eval calm()
+sleep 300
+mouse down pt(cell('r2', 'audioText'), 0.1, 0.5)
+mouse move pt(cell('r2', 'audioText'), 0.3, 0.5)
+mouse move pt(cell('r3', 'audioText'), 0.5, 0.5)
+mouse up pt(cell('r3', 'audioText'), 0.5, 0.5)
+expect T.ids().join() === 'r2,r3'
+key ctrl KeyX
+wait ids() === 'r1,r4,r5,r6'
+eval calm()
+key ctrl KeyZ
+wait ids() === 'r1,r2,r3,r4,r5,r6'
+caret #rows .row[data-id="r6"] .audio-cell .cell-editable
+key ctrl KeyV
+wait F.state().rows.length === 8
+eval ids() + ' / ' + cmts() + ' / ' + JSON.stringify(marks())
+expect F.state().comments.length === 5
+expect shared().length === 0
+expect unbacked().length === 0
+expect marks().c1.join() === 'r2' && marks().c2.join() === 'r3'
+# deleting the original comment leaves no words marked for it anywhere
+eval calm()
+eval openComments()
+wait !document.getElementById('comments-panel').hidden && document.querySelector('[data-action="comment-menu"][data-id="c1"]')
+eval (function(){ var sel = '[data-action="delete-comment"][data-id="c1"]'; document.querySelector('[data-action="comment-menu"][data-id="c1"]').click(); document.querySelector(sel).click(); if (document.querySelector(sel)) document.querySelector(sel).click(); return true; })()
+wait !F.state().comments.some(function(c){ return c.id === 'c1'; })
+expect unbacked().length === 0
+expect document.querySelectorAll('#rows .cmt-anchor[data-cmt="c1"]').length === 0
+expect F.state().comments.length === 4
+
+quit

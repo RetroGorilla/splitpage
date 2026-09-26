@@ -263,6 +263,9 @@ function deleteRow(id) {
   var idx = findRowIndex(id);
   if (idx === -1) return;
   S.state.rows.splice(idx, 1);
+  /* a comment whose words are also in another scene (a phrase split
+     across two) points at those now, in the same undo entry */
+  syncCommentAnchors(S.state);
   markDirty();
   render();
 }

@@ -1146,9 +1146,45 @@ export function cueLines(cell) {
   return lines;
 }
 
+/* The cue's own name on a cue line: the stretches of words after its colon
+   that are not a tag, a stage direction or a b-roll key, as [{from, to}]
+   with the spaces round each left out. "SFX: door [slam] ((loud))" is the
+   sound "door": the tag is an item of its own and the direction is for
+   the performer, so neither is part of what the sound is called, and a
+   rename (editCues) rewrites only these stretches, leaving both where
+   they are. */
+function cueNameSpans(runs, from, to) {
+  var other = [];
+  runs.forEach(function (r) {
+    if (r.atom) { other.push(true); return; }
+    var inOther = !!(r.marks.tag || r.marks.dir);
+    for (var i = 0; i < r.text.length; i++) other.push(inOther);
+  });
+  var p = projection(runs);
+  var spans = [], at = -1;
+  for (var i = from; i <= to; i++) {
+    var plain = i < to && !other[i];
+    if (plain && at === -1) at = i;
+    if (!plain && at !== -1) {
+      var s = at, e = i;
+      while (s < e && /[\s\u00a0]/.test(p.charAt(s))) s++;
+      while (e > s && /[\s\u00a0]/.test(p.charAt(e - 1))) e--;
+      if (e > s) spans.push({ from: s, to: e });
+      at = -1;
+    }
+  }
+  return spans;
+}
+
+function cueNameOf(p, spans) {
+  return spans.map(function (s) { return p.slice(s.from, s.to); }).join(" ")
+    .replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /* Each cue in the cell, in order, as {kind, name, text}: kind "sfx" or
-   "music" (the keyword, lower case), name the words after its colon (what
-   the Production panel lists it by), text the whole line. */
+   "music" (the keyword, lower case), name the words after its colon that
+   are its own (cueNameSpans: what the Production panel lists it by), text
+   the whole line. */
 export function cuesInCell(cell) {
   var runs = normalizeCell(cell);
   if (!runs.some(isCueRun)) return [];
@@ -1156,13 +1192,13 @@ export function cuesInCell(cell) {
   var out = [];
   cueLines(runs).forEach(function (l) {
     if (!l.cue) return;
-    var text = p.slice(l.from, l.to).replace(/\uFFFC/g, "").replace(/\u00a0/g, " ");
-    var m = CUE_LINE_RE.exec(text);
+    var line = p.slice(l.from, l.to).replace(/\u00a0/g, " ");
+    var m = CUE_LINE_RE.exec(line);
     if (!m) return;
     out.push({
       kind: m[1].toLowerCase(),
-      name: text.slice(m[0].length).replace(/\s+/g, " ").trim(),
-      text: text.trim()
+      name: cueNameOf(p, cueNameSpans(runs, l.from + m[0].length, l.to)),
+      text: line.replace(/\uFFFC/g, "").trim()
     });
   });
   return out;
@@ -1222,10 +1258,11 @@ export function importCues(cell) {
 
 /* Rename or take off the cues whose name `match(name)` accepts — the
    Production panel's rename and remove for a Music/SFX item that is a cue
-   (07-production-tags.js): a rename rewrites the words after the colon,
-   the keyword and its spacing kept; a remove (newName null) makes the line
-   plain words again, as Ctrl+Z after typing one does, so the item does not
-   come straight back. */
+   (07-production-tags.js): a rename rewrites the cue's own name
+   (cueNameSpans), the keyword and its spacing kept and any tag or
+   direction on the line left as it is; a remove (newName null) makes the
+   line plain words again, as Ctrl+Z after typing one does, so the item
+   does not come straight back. */
 export function editCues(cell, match, newName) {
   var out = normalizeCell(cell);
   if (!out.some(isCueRun)) return out;
@@ -1233,19 +1270,29 @@ export function editCues(cell, match, newName) {
   for (var i = lines.length - 1; i >= 0; i--) {
     var l = lines[i];
     if (!l.cue) continue;
-    var text = projection(out).slice(l.from, l.to);
+    var p = projection(out);
+    var text = p.slice(l.from, l.to);
     var m = CUE_LINE_RE.exec(text.replace(/\u00a0/g, " "));
     if (!m) continue;
-    var name = text.slice(m[0].length).replace(/\uFFFC/g, "").replace(/\s+/g, " ").trim();
-    if (!match(name)) continue;
+    var start = l.from + m[0].length;
+    var spans = cueNameSpans(out, start, l.to);
+    if (!match(cueNameOf(p, spans))) continue;
     if (newName === null) {
       out = setMark(out, l.from, l.to, "cue", false);
-    } else {
-      var lead = text.slice(m[0].length).length - text.slice(m[0].length).replace(/^[ \t\u00a0]+/, "").length;
-      var at = l.from + m[0].length + lead;
-      out = replaceText(out, at, l.to, newName);
-      if (at === l.from + m[0].length) out = insertText(out, at, " ");
+      continue;
     }
+    /* a cue with no name of its own is no item, so nothing renames one */
+    if (!spans.length) continue;
+    /* the later stretches go, each with the spaces before it, then the
+       first takes the new name */
+    for (var k = spans.length - 1; k > 0; k--) {
+      var from = spans[k].from;
+      while (from > spans[k - 1].to && /[ \t\u00a0]/.test(p.charAt(from - 1))) from--;
+      out = deleteRange(out, from, spans[k].to);
+    }
+    var at = spans[0].from;
+    out = replaceText(out, at, spans[0].to, newName);
+    if (at === start) out = insertText(out, at, " ");
   }
   return out;
 }

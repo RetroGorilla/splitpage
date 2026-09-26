@@ -127,10 +127,24 @@ function caretRectForCover() {
   return box ? { left: box.left, right: box.left + 2, top: box.top, bottom: Math.min(box.bottom, box.top + 24) } : null;
 }
 
+/* The card is docked at the bottom and as tall as it needs, up to the
+   header. The header is more than its 52px row: the rundown strip under it
+   takes it to 124px, less once condensed or minimized, and the page can
+   have a bar above it until you scroll. So its real bottom edge is measured
+   whenever this check runs (scrolling, resizing, and the header changing
+   size, below) and app.css keeps the card 20px under it. On a short window
+   the card used to reach up over the strip and its length label. */
+function fitTaggingHelp(card) {
+  var bar = document.querySelector(".topbar");
+  var bottom = bar ? Math.max(0, Math.round(bar.getBoundingClientRect().bottom)) : 52;
+  card.style.setProperty("--header-bottom", bottom + "px");
+}
+
 export function updateTaggingHelpCover() {
   var card = document.getElementById("tagging-help");
   if (!card) return;
   if (card.hidden) { card.classList.remove("is-covering"); return; }
+  fitTaggingHelp(card);
   var caret = caretRectForCover();
   var covering = false;
   if (caret) {
@@ -168,6 +182,8 @@ function initTaggingHelp() {
   document.addEventListener("input", scheduleTaggingHelpCover, true);
   window.addEventListener("scroll", scheduleTaggingHelpCover, true);
   window.addEventListener("resize", scheduleTaggingHelpCover);
+  var bar = document.querySelector(".topbar");
+  if (bar && typeof ResizeObserver === "function") new ResizeObserver(scheduleTaggingHelpCover).observe(bar);
 }
 
 export var COMMENT_NAME_KEY = "splitpage-comment-author";

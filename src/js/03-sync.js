@@ -23,7 +23,9 @@ import {
 import {
   SIDE_PANEL_IDS,
   applySidePanelWidth,
-  readSidePanelWidth
+  holdScriptPlace,
+  readSidePanelWidth,
+  sidePanelOpening
 } from "./03b-side-panels.js";
 import { safeId, storedImageHtml } from "./04-richtext.js";
 import { fromHtml, mergeCells, sameCell, toHtml } from "./04c-doc-model.js";
@@ -1319,6 +1321,8 @@ function openClockPopover(focusOn) {
    in the DOM wins the pixels) and closing the top one leaves the one
    underneath still "open" with nothing accounting for its layout space. */
 export function openSidePanel(id) {
+  /* before the width below can move the script (03b-side-panels.js) */
+  holdScriptPlace();
   SIDE_PANEL_IDS.forEach(function (pid) {
     if (pid !== id) {
       var el = document.getElementById(pid);
@@ -1359,6 +1363,7 @@ export function syncPanelClass() {
     var el = document.getElementById(pid);
     return el && !el.hidden;
   });
+  if (open !== document.body.classList.contains("panel-open")) sidePanelOpening(open);
   document.body.classList.toggle("panel-open", open);
   /* The header's panel toggles read as pressed while their panel is open
      (#169) — every open and close of a panel already ends here. */
