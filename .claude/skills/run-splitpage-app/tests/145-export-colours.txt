@@ -37,13 +37,15 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="export-pdf"]
 sleep 2000
 expect window.__blobs[window.__blobs.length-1].type == application/pdf
-eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var at=t.indexOf('(Production breakdown) Tj');var bd=t.slice(at);var out={};[['prop','Prop','764AA2'],['location','Location','2A7449'],['vfx','VFX','5E6C00'],['gear','Gear','44693C']].forEach(function(c){var i=bd.indexOf('q '+window.__rgb(c[2])+' rg ');var line=i<0?'':bd.slice(i,bd.indexOf('\n',bd.indexOf('\n',i)+1));out[c[0]]={dot:i>=0&&/ c h f\n/.test(line),label:line.indexOf('('+c[1]+') Tj ET')!==-1};});window.__pdfCol={at:at,cats:out,scriptPlain:!/\d rg (BT|[\d.]+ [\d.]+ m )/.test(t.slice(0,at))};return JSON.stringify(window.__pdfCol);})()
+# the breakdown groups by category, as the Production panel does: a dot in
+# the category's colour, then its plural in bold; in the script each tagged
+# word is drawn in its category's colour (the Audio column's 10pt)
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var at=t.indexOf('(Production breakdown) Tj');var bd=t.slice(at),script=t.slice(0,at);var out={};[['prop','Props & set dressing','764AA2','gaffer'],['location','Locations & shots','2A7449','kitchen'],['vfx','VFX & graphics','5E6C00','title'],['gear','Gear','44693C','boom']].forEach(function(c){var i=bd.indexOf('q '+window.__rgb(c[2])+' rg ');var line=i<0?'':bd.slice(i,bd.indexOf('\n',bd.indexOf('\n',i)+1));out[c[0]]={dot:i>=0&&/ c h f Q\n/.test(line),label:line.indexOf('BT /F2 10 Tf')!==-1&&line.indexOf('('+c[1]+') Tj ET')!==-1,word:new RegExp('q '+window.__rgb(c[2])+' rg BT /F1 10 Tf [^\\n]*\\('+c[3]+'\\) Tj ET Q').test(script)};});window.__pdfCol={at:at,cats:out};return JSON.stringify(window.__pdfCol);})()
 expect window.__pdfCol.at > 0
-expect window.__pdfCol.cats.prop.dot && window.__pdfCol.cats.prop.label
-expect window.__pdfCol.cats.location.dot && window.__pdfCol.cats.location.label
-expect window.__pdfCol.cats.vfx.dot && window.__pdfCol.cats.vfx.label
-expect window.__pdfCol.cats.gear.dot && window.__pdfCol.cats.gear.label
-expect window.__pdfCol.scriptPlain
+expect window.__pdfCol.cats.prop.dot && window.__pdfCol.cats.prop.label && window.__pdfCol.cats.prop.word
+expect window.__pdfCol.cats.location.dot && window.__pdfCol.cats.location.label && window.__pdfCol.cats.location.word
+expect window.__pdfCol.cats.vfx.dot && window.__pdfCol.cats.vfx.label && window.__pdfCol.cats.vfx.word
+expect window.__pdfCol.cats.gear.dot && window.__pdfCol.cats.gear.label && window.__pdfCol.cats.gear.word
 
 # --- .docx -------------------------------------------------------------------
 # a highlighted phrase, so the export has a Word highlight to keep yellow
