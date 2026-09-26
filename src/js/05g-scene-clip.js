@@ -72,8 +72,9 @@ import { normalizeBrollProps, recordPastedBroll } from "./08c-broll.js";
    (the live cut, below): the rows keep their ids where they are free, the
    comments — which a cut leaves in the document, as deleting a scene does
    — are not copied again but follow their anchors back to the words, and
-   the b-roll keys keep their ids and find their records. A second paste of
-   the same cut is a copy. */
+   the b-roll keys keep their ids and find their records. A paste of the
+   same cut while its scenes are in the document again (pasted once
+   already, or the cut undone) is a copy (isMove). */
 
 export var SCENES_MIME = "application/x-splitpage-scenes";
 export var SCENES_ATTR = "data-splitpage-scenes";
@@ -97,9 +98,23 @@ export function setLiveCut(nonce, docId) { liveCut = nonce ? { nonce: String(non
 export function liveCutNonce() { return liveCut ? liveCut.nonce : null; }
 
 /* Whether a paste of `clip` into the document `state` is the move the
-   live cut began: the same cut, into the document it was cut from. */
+   live cut began: the same cut, into the document it was cut from, while
+   none of its scenes are in it. That last part is read from the document
+   each time rather than kept, so it follows Ctrl+Z and Ctrl+Shift+Z: undo
+   the move's paste and the scenes are out again, and the next paste is
+   the move again; undo the cut itself, or paste once already, and they
+   are back, so a paste is a copy with comments and b-roll records of its
+   own, never a second claim on the originals. */
 export function isMove(clip, state) {
-  return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId);
+  return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId) &&
+    scenesAway(clip, state);
+}
+
+/* Whether none of the scenes of `clip` are in `state`. */
+function scenesAway(clip, state) {
+  var here = Object.create(null);
+  (state.rows || []).forEach(function (r) { if (r) here[r.id] = true; });
+  return !clip.rows.some(function (r) { return here[r.id]; });
 }
 
 /* ---- building the payload ---- */
@@ -332,7 +347,9 @@ export function insertScenes(clip, opts) {
   opts = opts || {};
   var state = S.state;
   var mint = opts.mint || makeId;
-  var move = !!opts.move;
+  /* all or nothing: with any of the scenes back, their comments are in the
+     document with their words, and a "move" would mark the copy with them */
+  var move = !!opts.move && scenesAway(clip, state);
   var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
 
   /* rows */
@@ -490,7 +507,8 @@ export function insertScenes(clip, opts) {
 /* The scenes `rowIds` out of S.state, in place; how many went. A cut and a
    delete take the scenes only: their comments stay in the document, as
    deleting one scene from its menu leaves them (detached until a move's
-   paste brings their words back). */
+   paste brings their words back). A comment whose words are also in a
+   scene that stays (a phrase split across two) is pointed at them. */
 export function removeScenes(rowIds) {
   var gone = Object.create(null);
   (rowIds || []).forEach(function (id) { gone[id] = true; });
@@ -499,6 +517,7 @@ export function removeScenes(rowIds) {
   for (var i = S.state.rows.length - 1; i >= 0; i--) {
     if (gone[S.state.rows[i].id]) { S.state.rows.splice(i, 1); n++; }
   }
+  if (n) syncCommentAnchors(S.state);
   return n;
 }
 

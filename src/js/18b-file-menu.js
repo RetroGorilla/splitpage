@@ -460,6 +460,13 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
   var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
+  /* That snapshot is filed under the old script's id, where its file finds
+     it when it is opened again; but the Version history panel lists the
+     document on screen, and a script never saved has no file to go back
+     to. So the new document's history gets the same snapshot too, and
+     restoring it there brings the old script back (a restore keeps the
+     identity it lands in, 03-sync.js). */
+  if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
   S.state = next;
   setBaseState(cloneState(S.state), reason);
   setHome("none");
