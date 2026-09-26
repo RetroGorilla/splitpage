@@ -297,7 +297,96 @@ test("a move whose rows came back meanwhile (the cut undone) is a copy where it 
   assert.equal(new Set(ids).size, ids.length);
   const keys = S.state.rows.map((r) => (r.visualText.match(/data-broll-id="([^"]+)"/) || [])[1]).filter(Boolean);
   assert.equal(new Set(keys).size, keys.length, "never two keys with one id");
+  /* and its comment is a copy of its own, not a second mark of the original */
+  const copyCmts = commentIds(fromHtml(S.state.rows[4].audioText));
+  assert.equal(copyCmts.length, 1);
+  assert.notEqual(copyCmts[0], "c1");
+  assert.ok(S.state.comments.some((x) => x.id === copyCmts[0] && x.rowId === "rnew1"));
   setLiveCut(null);
+});
+
+/* which rows mark each comment, over the whole document */
+const markedIn = (state) => {
+  const out = {};
+  state.rows.forEach((r) => ["visualText", "audioText"].forEach((f) => {
+    commentIds(fromHtml(r[f] || "")).forEach((id) => { (out[id] = out[id] || []).push(r.id); });
+  }));
+  return out;
+};
+
+test("the live cut follows undo: the move's paste undone, the next paste is the move again", () => {
+  S.state = source();
+  const history = createUndoHistory();
+  const built = buildScenePayload(S.state, ["r2", "r3"], { cut: "ef56" });
+  setLiveCut("ef56", S.state.docId);
+  let base = JSON.parse(JSON.stringify(S.state));
+  removeScenes(["r2", "r3"]);
+  history.record(diffStates(base, S.state), Date.now());
+  const c = clip(built);
+  assert.equal(isMove(c, S.state), true);
+  /* pasted in the wrong place */
+  base = JSON.parse(JSON.stringify(S.state));
+  n = 0;
+  insertScenes(c, { afterRowId: "r4", move: isMove(c, S.state), mint });
+  history.record(diffStates(base, S.state), Date.now());
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r4", "r2", "r3"]);
+  assert.equal(isMove(c, S.state), false, "its scenes are back: another paste is a copy");
+  /* taken back, and pasted in the right place: the move, as before */
+  assert.equal(history.undo(S.state).ok, true);
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r4"]);
+  assert.equal(isMove(c, S.state), true, "the undo put the cut back");
+  const res = insertScenes(c, { afterRowId: "r1", move: isMove(c, S.state), mint });
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  assert.equal(res.comments, 0);
+  assert.deepEqual(S.state.comments.map((x) => x.id + "@" + x.rowId).sort(), ["c1@r2", "c2@r3", "c4@r4", "c9@r3"]);
+  assert.deepEqual(res.broll, { kept: ["bs1"], minted: [] });
+  assert.deepEqual(S.state.brollShots.map((b) => b.id + ":" + b.status), ["bs1:shot", "bs9:unshot"], "the shot found its record, nothing orphaned");
+  setLiveCut(null);
+});
+
+test("the cut undone, its paste is a copy: comments and b-roll records of its own, never the originals' marks", () => {
+  S.state = source();
+  const history = createUndoHistory();
+  const built = buildScenePayload(S.state, ["r2", "r3"], { cut: "ab78" });
+  setLiveCut("ab78", S.state.docId);
+  const base = JSON.parse(JSON.stringify(S.state));
+  removeScenes(["r2", "r3"]);
+  history.record(diffStates(base, S.state), Date.now());
+  assert.equal(history.undo(S.state).ok, true);
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  const c = clip(built);
+  assert.equal(isMove(c, S.state), false, "the scenes came back with the undo");
+  n = 0;
+  const res = insertScenes(c, { afterRowId: "r4", move: isMove(c, S.state), mint });
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4", "rnew1", "rnew2"]);
+  assert.equal(res.comments, 3);
+  assert.equal(S.state.comments.length, 7);
+  const marks = markedIn(S.state);
+  assert.deepEqual(marks.c1, ["r2"], "the original is marked only in its own scene");
+  assert.deepEqual(marks.c2, ["r3"]);
+  assert.ok(Object.keys(marks).every((id) => marks[id].length === 1), JSON.stringify(marks));
+  assert.ok(Object.keys(marks).every((id) => S.state.comments.some((x) => x.id === id)), "every mark has its comment");
+  assert.equal(res.broll.minted.length, 1);
+  assert.equal(S.state.brollShots.find((b) => b.id === res.broll.minted[0]).status, "unshot");
+  assert.equal(S.state.brollShots.find((b) => b.id === "bs1").status, "shot");
+  setLiveCut(null);
+});
+
+test("deleting or cutting a scene points a comment split across it at the words that stay", () => {
+  S.state = migrateRows({
+    schema: 2, title: "Split",
+    rows: [
+      { id: "r1", visualText: "", audioText: "Every " + cmt("c1", "morn"), status: "todo" },
+      { id: "r2", visualText: "", audioText: cmt("c1", "ing") + " the town wakes.", status: "todo" },
+      { id: "r3", visualText: "", audioText: "Bye.", status: "todo" }
+    ],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "morning", author: "Ann", body: "Warmer?" }]
+  });
+  assert.equal(removeScenes(["r1"]), 1);
+  assert.equal(S.state.comments[0].rowId, "r2", "its surviving words");
+  assert.equal(S.state.comments[0].field, "audioText");
+  removeScenes(["r2"]);
+  assert.equal(S.state.comments[0].rowId, "r2", "no words left anywhere: detached, as it was");
 });
 
 test("a paste onto a blank scene takes its place; comments can be held back for a second step", () => {
