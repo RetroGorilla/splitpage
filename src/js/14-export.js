@@ -2,7 +2,6 @@ import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { fileHome, home, restoreHome, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
-import { formatDuration, totalSeconds } from "./01-scene-status.js";
 import { migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
@@ -50,6 +49,16 @@ import {
   saveToServer,
   serverSessionExpired
 } from "./13-hosted.js";
+import {
+  breakdownGroups,
+  brollSummaryText,
+  commentNumbers,
+  exportBrollScenes,
+  exportComments,
+  exportFacts,
+  exportSummaryParts,
+  sceneFacts
+} from "./14b-export-kit.js";
 import {
   checkFileConflict,
   deliverFile,
@@ -692,8 +701,18 @@ function mdCell(value) {
 }
 
 /* Shared by both Markdown shapes below: the breakdown and comments always
-   follow the script, however the scenes themselves were laid out. */
-function appendMarkdownTail(lines) {
+   follow the script, however the scenes themselves were laid out.
+
+   opts.export: the tail an Export writes (appendExportTail below) — the
+   breakdown by category, the b-roll shot list, the comments numbered as
+   the script's markers are. Without it, the tail exactly as it has always
+   been written, because the saved .md PROJECT is toMarkdownTableDoc() plus
+   its data block (buildMarkdownProject, 20d-formats.js) and has to stay
+   the same bytes from one version to the next: a file kept under version
+   control would otherwise show every save after an update as a change to
+   its whole second half. */
+function appendMarkdownTail(lines, opts) {
+  if (opts && opts.export) { appendExportTail(lines); return; }
   var breakdown = breakdownRows();
   if (breakdown.length) {
     lines.push("## Production breakdown");
@@ -714,6 +733,184 @@ function appendMarkdownTail(lines) {
     lines.push("");
     comments.forEach(function (c) {
       lines.push("**" + c.location + "**" +
+                 (c.resolved ? " _(resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")_" : "") +
+                 (c.assignee ? " _(assigned to " + c.assignee + ")_" : "") +
+                 " — " + c.author + (c.when ? " · " + c.when : ""));
+      lines.push("");
+      if (c.quoted) {
+        lines.push("> " + c.quoted.split(/\r\n|\r|\n/).join("  \n> "));
+        lines.push("");
+      }
+      lines.push((commentBodyText(c) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
+      c.replies.forEach(function (rp) {
+        lines.push("");
+        lines.push("> ↳ **" + rp.author + "**" + (rp.when ? " · " + rp.when : "") + ":  " +
+                   (commentBodyText(rp) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
+      });
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+  }
+}
+
+/* ---- what an export says besides the words (#169's look, in text) ----
+
+   The title block's one line, as every whole-script export has it
+   (DESIGN.md): the kit's summary phrases and the date — "30 scenes · 9:44
+   running time · Target 9:00 · 0:44 over · 13 of 30 shot · 26 September
+   2026". The date is to the day, so two exports of one script on one day
+   are the same bytes (the Export dialog suite holds every route to that).
+   Also the standalone page's description (buildFileData, 18-local-files.js). */
+export function exportMetaLine(facts) {
+  facts = facts || exportFacts();
+  return exportSummaryParts(facts).concat(facts.date).join(" · ");
+}
+
+/* A scene's line under its heading: the status and the read time, as the
+   gutter and the Read column show them — "**Shot** · Read 0:10", and a
+   read time set by hand (#179, boxed in the app) says so in the app's own
+   words. parseStackedMarkdownExport (11-import.js, MD_SCENE_FACTS_RE)
+   knows it and leaves it out. */
+function mdSceneFactsLine(f) {
+  return "**" + f.status.label + "** · Read " + f.read + (f.readSet ? ", set by hand" : "");
+}
+
+/* "0:06, set by hand" — the two-column export's Read cell. */
+function mdReadCell(f) {
+  return f.read + (f.readSet ? ", set by hand" : "");
+}
+
+/* A cell's Markdown with each open thread's number after its words, where
+   the script draws its marker (commentNumbers, exportRuns): "<sup>1</sup>",
+   which every Markdown reader shows raised and small, the way the app's
+   marker sits, and which nobody types into a script by accident — the
+   reader takes exactly that back out (parseStackedMarkdownExport,
+   MD_MARKER_RE), so a reopened export is its scenes' words and nothing
+   else. The marker goes into the cell as text before toMarkdown() writes
+   it, so the delimiters are laid out round it: a mark the words carry on
+   under (bold running past the thread's end) keeps the marker inside it,
+   one that ends with the thread leaves it outside. A thread ending on
+   white space is marked before the space, not at the start of the next
+   line. Resolved threads have no number and no marker, as in the app. */
+function mdMarkerRun(numbers, marks) {
+  return {
+    text: numbers.map(function (n) { return "<sup>" + n + "</sup>"; }).join(""),
+    marks: marks
+  };
+}
+
+function markdownWithMarkers(html, nums) {
+  var cell = cellOf(html);
+  if (!cell.some(function (r) { return r.marks && r.marks.cmt; })) return toMarkdown(cell);
+  var out = [];
+  cell.forEach(function (r, i) {
+    var ids = r.marks && r.marks.cmt;
+    var next = cell[i + 1];
+    var nextIds = (next && next.marks && next.marks.cmt) || [];
+    var ending = (ids || []).filter(function (id) { return nextIds.indexOf(id) === -1 && nums[id]; })
+      .map(function (id) { return nums[id]; })
+      .sort(function (a, b) { return a - b; });
+    if (!ending.length) { out.push(r); return; }
+    /* everything but the thread itself, which ends here */
+    var own = {};
+    Object.keys(r.marks).forEach(function (k) { if (k !== "cmt") own[k] = r.marks[k]; });
+    /* \s takes in the no-break space a cell keeps typed spaces as */
+    var tail = r.atom ? null : /\s+$/.exec(r.text);
+    if (tail && tail.index > 0) {
+      /* the space after the words is still the run's: the marks go on */
+      out.push({ text: r.text.slice(0, tail.index), marks: r.marks });
+      out.push(mdMarkerRun(ending, own));
+      out.push({ text: tail[0], marks: r.marks });
+      return;
+    }
+    out.push(r);
+    var carried = {};
+    Object.keys(own).forEach(function (k) {
+      if (k !== "tag" && next && !next.atom && next.marks && next.marks[k] === own[k]) carried[k] = own[k];
+    });
+    out.push(mdMarkerRun(ending, carried));
+  });
+  return toMarkdown(out);
+}
+
+/* A line break inside a cell as Markdown's hard break, "  \n": a single
+   newline is only a space to a renderer, so a Visual cell's "Lower
+   third: …" and "B-roll: …" lines ran together into one paragraph on
+   GitHub. A blank line (a new paragraph) is left as it is. The reader
+   takes the two spaces off again (parseStackedMarkdownExport). */
+function mdHardBreaks(md) {
+  return md.replace(/([^\n])\n(?=[^\n])/g, "$1  \n");
+}
+
+/* The tail an Export writes (appendMarkdownTail with opts.export), in the
+   Production panel's and the b-roll list's shapes (#169, DESIGN.md):
+
+   - the breakdown by category, a sub-heading per category — its plural
+     and how many — over a table of its own (Item, Status, Scenes,
+     Assigned to, Notes), in the panel's order (breakdownGroups);
+   - the b-roll shot list by scene, as task lists GitHub and most
+     Markdown editors draw as checkboxes, ticked when the shot is in the
+     can: the shot's words, then where, who, the props it needs, whether
+     it is flagged and its note (exportBrollScenes);
+   - the comments, each open thread headed by the number its marker
+     carries in the scenes above, "Scene 03 · Audio" where the app says
+     it (exportComments).
+
+   A section with nothing in it is left out, as before. The headings are
+   the ones the readers stop at (MD_EXPORT_TAIL_RE, 11-import.js). */
+function mdLine(value) {
+  return String(value == null ? "" : value).replace(/\s*(\r\n|\r|\n)\s*/g, " ").trim();
+}
+
+function mdBrollTask(r) {
+  var parts = [];
+  if (r.location) parts.push(mdLine(r.location));
+  if (r.owner) parts.push(mdLine(r.owner));
+  if (r.props.length) parts.push("Props: " + r.props.map(mdLine).join(", "));
+  if (r.flagged) parts.push("**Flagged**");
+  if (r.note) parts.push("Note: " + mdLine(r.note));
+  return "- [" + (r.shot ? "x" : " ") + "] " + mdLine(r.name) + (parts.length ? " — " + parts.join(" · ") : "");
+}
+
+function appendExportTail(lines) {
+  var groups = breakdownGroups();
+  if (groups.length) {
+    lines.push("## Production breakdown");
+    lines.push("");
+    groups.forEach(function (g) {
+      lines.push("### " + g.label + " (" + g.items.length + ")");
+      lines.push("");
+      lines.push("| Item | Status | Scenes | Assigned to | Notes |");
+      lines.push("| --- | --- | --- | --- | --- |");
+      g.items.forEach(function (r) {
+        lines.push("| " + [r.name, r.statusLabel, r.scenes.join(", "), r.owner || "—", r.notes].map(mdCell).join(" | ") + " |");
+      });
+      lines.push("");
+    });
+  }
+
+  var broll = exportBrollScenes();
+  if (broll.length) {
+    lines.push("## B-roll shot list");
+    lines.push("");
+    lines.push("_" + brollSummaryText(broll) + "_");
+    lines.push("");
+    broll.forEach(function (g) {
+      lines.push("**" + g.label + "**" + (g.start ? " · " + g.start : "") + " · " + g.done + "/" + g.total + " shot");
+      lines.push("");
+      g.items.forEach(function (r) { lines.push(mdBrollTask(r)); });
+      lines.push("");
+    });
+  }
+
+  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
+  var comments = exportComments({ pieces: true });
+  if (comments.length) {
+    lines.push("## Comments");
+    lines.push("");
+    comments.forEach(function (c) {
+      lines.push("**" + (c.number ? c.number + " · " : "") + c.where + "**" +
                  (c.resolved ? " _(resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")_" : "") +
                  (c.assignee ? " _(assigned to " + c.assignee + ")_" : "") +
                  " — " + c.author + (c.when ? " · " + c.when : ""));
@@ -811,21 +1008,38 @@ export function markdownExportImages() {
    nesting the way htmlToMarkdown() does ("**a****b**", "**a **b" and the
    like came out of that). This file is only ever read, by people and
    Markdown renderers, so writing it better changes nothing anyone relies
-   on — unlike the table of a saved .md project (mdSceneCellSource below). */
-export function toMarkdownDoc() {
+   on — unlike the table of a saved .md project (mdSceneCellSource below).
+
+   What the app shows round the words comes too (#169): the meta line
+   under the title, each scene's start timecode in its heading ("### Scene
+   04 · 01:03"), its status and read time on the line under it, the open
+   threads' numbers after their words, a cell's line breaks as breaks a
+   renderer keeps (mdHardBreaks), and the Export tail. The reader
+   (parseStackedMarkdownExport, 11-import.js) skips all of it, and still
+   reads a file written before any of it was here.
+
+   opts.scenes: only the first so many scenes and no tail — the Export
+   dialog's sketch of the file's first page (18c-export-dialog.js), which
+   is then this file's own first lines rather than a copy of its layout. */
+export function toMarkdownDoc(opts) {
+  var limit = opts && opts.scenes;
+  var facts = exportFacts();
+  var scenes = sceneFacts();
+  var nums = commentNumbers();
   var lines = [];
-  lines.push("# " + (S.state.title || "Untitled Script"));
+  lines.push("# " + facts.title);
   lines.push("");
   if (!S.state.rows.length) {
-    lines.push("_No rows yet._");
+    lines.push("_No scenes yet._");
     lines.push("");
   } else {
-    lines.push("_" + S.state.rows.length + " scene" + (S.state.rows.length === 1 ? "" : "s") +
-               " · est. " + formatDuration(totalSeconds()) + " running time_");
+    lines.push("_" + exportMetaLine(facts) + "_");
     lines.push("");
   }
-  S.state.rows.forEach(function (row, i) {
-    lines.push("### Scene " + pad2(i + 1));
+  (limit ? S.state.rows.slice(0, limit) : S.state.rows).forEach(function (row, i) {
+    lines.push("### Scene " + scenes[i].number + " · " + scenes[i].start);
+    lines.push("");
+    lines.push(mdSceneFactsLine(scenes[i]));
     lines.push("");
     if (markdownHasPicture(row)) {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
@@ -844,12 +1058,12 @@ export function toMarkdownDoc() {
         : "▶ " + l.name.replace(/([\\`*_[\]<>])/g, "\\$1") + " _(video file)_");
     });
     if (vlinks.length) lines.push("");
-    var vmd = toMarkdown(cellOf(row.visualText));
+    var vmd = mdHardBreaks(markdownWithMarkers(row.visualText, nums));
     if (vmd) {
       lines.push("*Visual —* " + vmd);
       lines.push("");
     }
-    var amd = toMarkdown(cellOf(row.audioText));
+    var amd = mdHardBreaks(markdownWithMarkers(row.audioText, nums));
     if (amd) {
       lines.push(amd);
       lines.push("");
@@ -860,7 +1074,7 @@ export function toMarkdownDoc() {
     lines.push("---");
     lines.push("");
   });
-  appendMarkdownTail(lines);
+  if (!limit) appendMarkdownTail(lines, { export: true });
   return lines.join("\n");
 }
 
@@ -929,14 +1143,39 @@ export function mdSceneCellSource(row, i, model) {
    table shape Import ▸ Two columns already knows how to read back in, so
    round-tripping through this export doesn't lose the split, and it is the
    human-readable half of a saved .splitpage-in-Markdown project
-   (buildMarkdownProject, 20d-formats.js). */
-export function toMarkdownTableDoc(s) {
+   (buildMarkdownProject, 20d-formats.js).
+
+   opts.export — File ▸ Export, never the project: the meta line under the
+   title, each scene's start timecode, status (by its label) and read time
+   in columns of their own round the two the reader maps by name
+   (parseMarkdownTable; markdownExportScript, 11-import.js, knows this
+   header as well as the project's), and the Export tail. The cells are
+   the same either way. Without it, the bytes a project has always had —
+   see appendMarkdownTail. opts.scenes with it, as toMarkdownDoc's: the
+   dialog's sketch. */
+export function toMarkdownTableDoc(s, opts) {
   s = s || S.state;
+  var exporting = !!(opts && opts.export);
+  var limit = exporting && opts.scenes;
   var lines = [];
   lines.push("# " + (s.title || "Untitled Script"));
   lines.push("");
+  if (exporting && s.rows.length) {
+    lines.push("_" + exportMetaLine() + "_");
+    lines.push("");
+  }
   if (!s.rows.length) {
-    lines.push("_No rows yet._");
+    lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
+  } else if (exporting) {
+    var scenes = sceneFacts();
+    lines.push("| # | Start | Status | Visual | Audio | Read |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
+    (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
+      var cell = mdSceneCellSource(row, i);
+      lines.push("| " + [scenes[i].number, scenes[i].start, scenes[i].status.label].join(" | ") + " | " +
+                 mdRichTableCell(cell.visual) + " | " + mdRichTableCell(cell.audio) + " | " +
+                 mdReadCell(scenes[i]) + " |");
+    });
   } else {
     lines.push("| # | Visual | Audio | Status |");
     lines.push("| --- | --- | --- | --- |");
@@ -947,7 +1186,7 @@ export function toMarkdownTableDoc(s) {
     });
   }
   lines.push("");
-  appendMarkdownTail(lines);
+  if (!limit) appendMarkdownTail(lines, { export: exporting });
   return lines.join("\n");
 }
 

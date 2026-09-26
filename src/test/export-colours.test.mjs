@@ -1,7 +1,9 @@
 /* Category colours in the exports (#171): the production breakdown's
- * Category column in the PDF (17-pdf.js buildPdf) and the .docx (15-docx.js
- * buildDocx), and the packing list's heading (buildPackingListPdf), drawn in
- * the light theme's --tag-* colours through TAG_PRINT_COLORS (14-export.js;
+ * group heads and the script's tagged words in the PDF (17-pdf.js
+ * buildPdf, #169), the .docx breakdown's
+ * category heads and its script's tags (15-docx.js buildDocx, #169), and
+ * the packing list's heading (buildPackingListPdf), drawn in the light
+ * theme's --tag-* colours through TAG_PRINT_COLORS (14-export.js;
  * palette.test.mjs keeps that table equal to app.css :root).
  *
  * Read back the way the other export tests do: the .docx with the app's own
@@ -70,41 +72,70 @@ test("breakdownRows says which category each row is", () => {
     [["cast", "Cast"], ["gear", "Gear"], ["location", "Location"], ["prop", "Prop"], ["prop", "Prop"], ["sound", "Music/SFX"], ["vfx", "VFX"]]);
 });
 
-test("the .docx breakdown draws each category's dot and label in its colour; the header and the highlight are unchanged", async () => {
+/* Since #169 the breakdown is grouped as the Production panel groups it:
+   a head per category spanning the table — a dot and the category's
+   plural in its colour, then a faint count — over that category's items,
+   whose own cells are not coloured (a status lamp is its status's colour,
+   TAG_STATUS_PRINT, never a category's). */
+test("the .docx breakdown heads each category with its dot and name in its colour; the highlight is unchanged", async () => {
   load();
   const doc = await documentXml(buildDocx());
   const tables = doc.getElementsByTagNameNS(W, "tbl");
   assert.equal(tables.length, 2, "script table and breakdown table");
   const trs = Array.from(tables[1].getElementsByTagNameNS(W, "tr"));
+  const val = (el) => el.getAttributeNS(W, "val") || el.getAttribute("w:val");
 
-  /* the header row is exactly the words the importer recognises, in black */
+  /* the header row is the words the importer recognises */
   const head = Array.from(trs[0].getElementsByTagNameNS(W, "tc")).map((tc) => tc.textContent);
-  assert.deepEqual(head, ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"]);
-  assert.equal(trs[0].getElementsByTagNameNS(W, "color").length, 0, "the header row got a colour");
+  assert.deepEqual(head, ["Item", "Status", "Scenes", "Assigned to", "Notes"]);
 
   const seen = new Set();
+  let current = null;
   for (const tr of trs.slice(1)) {
     const cells = Array.from(tr.getElementsByTagNameNS(W, "tc"));
-    const cat = TAG_CATEGORIES.find((c) => "● " + c.label === cells[0].textContent);
-    assert.ok(cat, "category cell reads " + JSON.stringify(cells[0].textContent));
-    seen.add(cat.id);
-    const runs = Array.from(cells[0].getElementsByTagNameNS(W, "r"));
-    assert.deepEqual(runs.map((r) => r.textContent), ["● ", cat.label]);
-    for (const r of runs) {
-      const color = r.getElementsByTagNameNS(W, "color")[0];
-      assert.ok(color, cat.id + ": a run with no colour");
-      assert.equal(color.getAttributeNS(W, "val") || color.getAttribute("w:val"), TAG_PRINT_COLORS[cat.id]);
+    if (tr.getElementsByTagNameNS(W, "gridSpan").length) {
+      const runs = Array.from(cells[0].getElementsByTagNameNS(W, "r"));
+      current = TAG_CATEGORIES.find((c) => runs[1].textContent === c.plural);
+      assert.ok(current, "a group head reads " + JSON.stringify(cells[0].textContent));
+      seen.add(current.id);
+      assert.deepEqual(runs.map((r) => r.textContent.trim()),
+        ["●", current.plural, String(breakdownRows().filter((r) => r.catId === current.id).length)]);
+      for (const r of runs.slice(0, 2)) assert.equal(val(r.getElementsByTagNameNS(W, "color")[0]), TAG_PRINT_COLORS[current.id]);
+      continue;
     }
-    /* the other columns stay black */
-    for (const tc of cells.slice(1)) assert.equal(tc.getElementsByTagNameNS(W, "color").length, 0);
+    assert.ok(current, "an item before any group head");
+    assert.ok(breakdownRows().some((r) => r.catId === current.id && r.name === cells[0].textContent), cells[0].textContent + " under " + current.id);
+    /* nothing in an item's row is in a category's colour */
+    for (const c of Array.from(tr.getElementsByTagNameNS(W, "color"))) {
+      assert.ok(!Object.values(TAG_PRINT_COLORS).includes(val(c)), "an item cell in a category colour");
+    }
   }
   assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category drawn");
 
   /* the script's highlight is still Word's yellow, and nothing else is */
   const hl = Array.from(doc.getElementsByTagNameNS(W, "highlight"));
   assert.equal(hl.length, 1);
-  assert.equal(hl[0].getAttributeNS(W, "val") || hl[0].getAttribute("w:val"), "yellow");
+  assert.equal(val(hl[0]), "yellow");
   assert.equal(hl[0].parentNode.parentNode.textContent, "hello");
+});
+
+test("the .docx script draws each tag in its category's colour and reopens without it", async () => {
+  load();
+  const doc = await documentXml(buildDocx());
+  const runs = Array.from(doc.getElementsByTagNameNS(W, "tbl")[0].getElementsByTagNameNS(W, "r"));
+  const tagged = runs.filter((r) => {
+    const s = r.getElementsByTagNameNS(W, "rStyle")[0];
+    return s && (s.getAttributeNS(W, "val") || s.getAttribute("w:val")) === "SplitpageTag";
+  });
+  const byName = Object.fromEntries(tagged.map((r) => [r.textContent, r]));
+  for (const [name, cat] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
+    const r = byName[name];
+    assert.ok(r, name + " is not drawn as a tag");
+    const color = r.getElementsByTagNameNS(W, "color")[0];
+    const u = r.getElementsByTagNameNS(W, "u")[0];
+    assert.equal(color.getAttributeNS(W, "val") || color.getAttribute("w:val"), TAG_PRINT_COLORS[cat], name);
+    assert.equal(u.getAttributeNS(W, "color") || u.getAttribute("w:color"), TAG_PRINT_COLORS[cat], name);
+  }
 });
 
 test("a .docx with coloured categories reopens as exactly its script, highlight included", async () => {
@@ -115,12 +146,15 @@ test("a .docx with coloured categories reopens as exactly its script, highlight 
   assert.deepEqual(parsed.rows.map((r) => ({ v: htmlToPlainText(r.visualText), a: htmlToPlainText(r.audioText) })), expected);
   assert.match(parsed.rows[0].audioText, /<mark>hello<\/mark>/, "the highlight no longer reads back as a mark");
   const all = JSON.stringify(parsed.rows);
-  for (const word of ["●", "Production breakdown", "Music/SFX", "Category"]) {
+  for (const word of ["●", "Production breakdown", "Music & SFX", "Item", "<u>"]) {
     assert.equal(all.indexOf(word), -1, word + " leaked into a row");
   }
 });
 
-test("the PDF breakdown fills a dot and draws the label in each category's colour", () => {
+/* The breakdown by category, as the Production panel groups it: each
+   category's group headed by a dot in its colour and its plural in bold,
+   in the text colour — the colour is the dot's, as the panel's is. */
+test("the PDF breakdown heads each category's group with a dot in its colour and its plural", () => {
   load();
   const pages = streams(buildPdf([null, null]));
   const all = pages.join("\n");
@@ -129,24 +163,37 @@ test("the PDF breakdown fills a dot and draws the label in each category's colou
   const breakdown = all.slice(at).split("\n");
   const seen = new Set();
   for (let i = 0; i < breakdown.length; i++) {
-    const m = /^q ([\d.]+ [\d.]+ [\d.]+) rg (.*) f$/.exec(breakdown[i]);
+    const m = /^q ([\d.]+ [\d.]+ [\d.]+) rg (.*) f Q$/.exec(breakdown[i]);
     if (!m) continue;
     const cat = TAG_CATEGORIES.find((c) => rgb(TAG_PRINT_COLORS[c.id]) === m[1]);
     assert.ok(cat, "a fill in a colour no category has: " + m[1]);
     /* a closed circle: a moveto, four curves */
     assert.equal((m[2].match(/ c\b/g) || []).length, 4, "not four curves: " + m[2]);
     assert.match(m[2], /^[\d.]+ [-\d.]+ m .* c h$/, "not one closed path: " + m[2]);
-    /* the label is drawn inside the same q ... Q, so in the same colour */
-    const label = /^BT \/F1 9\.5 Tf 1 0 0 1 ([\d.]+) [\d.]+ Tm \((.*)\) Tj ET$/.exec(breakdown[i + 1]);
-    assert.ok(label, "no label after the dot: " + breakdown[i + 1]);
-    assert.equal(label[2], cat.label);
-    assert.equal(+label[1], 62, "label 8pt right of the margin");
-    assert.equal(breakdown[i + 2], "Q", "the colour does not end after the label");
+    /* then the group's name, bold, in the text colour, 11pt right of the margin */
+    const label = /^BT \/F2 10 Tf 1 0 0 1 ([\d.]+) [\d.]+ Tm \((.*)\) Tj ET$/.exec(breakdown[i + 1]);
+    assert.ok(label, "no name after the dot: " + breakdown[i + 1]);
+    assert.equal(label[2], cat.plural.replace(/[()]/g, "\\$&"));
+    assert.equal(+label[1], 65);
     seen.add(cat.id);
   }
-  assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category's colour drawn");
-  /* nothing in the script pages before it changed colour */
-  assert.doesNotMatch(all.slice(0, at), /\d rg (?:BT|[\d.]+ [\d.]+ m )/, "a colour leaked into the script pages");
+  assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category's group drawn");
+});
+
+/* In the script itself each tagged word is drawn as the app draws it: in
+   its category's colour, with a thin rule under it in that colour. */
+test("the PDF script draws each tagged word in its category's colour, underlined in it", () => {
+  load();
+  const pages = streams(buildPdf([null, null]));
+  const script = pages[0].split("\n");
+  for (const [word, id] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
+    const re = new RegExp("^q " + rgb(TAG_PRINT_COLORS[id]) + " rg BT /F1 [\\d.]+ Tf 1 0 0 1 ([\\d.]+) [\\d.]+ Tm \\(" + word + "\\) Tj ET Q$");
+    const drawn = script.map((op) => re.exec(op)).find(Boolean);
+    assert.ok(drawn, word + " is not drawn in " + id + "'s colour");
+    assert.ok(script.some((op) => op.startsWith("q " + rgb(TAG_PRINT_COLORS[id]) + " rg " + drawn[1] + " ") && / re f Q$/.test(op)), word + " has no rule under it in " + id + "'s colour");
+  }
+  /* and the words that are not tags stay in the page's text colour */
+  assert.ok(script.some((op) => /^BT \/F1 [\d.]+ Tf .* Tm \(The\) Tj ET$/.test(op)));
 });
 
 /* Found rendering the breakdown for #171: a note is wrapped at 8.5pt but was
@@ -168,18 +215,23 @@ test("the PDF breakdown draws a note at the size it was wrapped at, a space betw
   assert.ok(Math.abs(words[1].x - words[0].x - 29.28) < 0.05, "from at +" + (words[1].x - words[0].x).toFixed(2));
 });
 
-test("the packing list's heading names its category in that category's colour", () => {
+test("the packing list's heading names its category after a dot in that category's colour", () => {
   load();
   for (const id of ["gear", "prop"]) {
     const cat = TAG_CATEGORIES.find((c) => c.id === id);
     const page = streams(buildPackingListPdf(id))[0].split("\n");
-    const i = page.indexOf("q " + rgb(TAG_PRINT_COLORS[id]) + " rg");
-    assert.ok(i > 0, id + ": no colour set");
-    assert.match(page[i - 1], /\(Colours {2}— {2}\) Tj ET$/, id + ": the title before it");
-    assert.match(page[i + 1], new RegExp("^BT /F2 15 Tf .* Tm \\(" + cat.plural.replace(/[&]/g, "\\$&") + "\\) Tj ET$"));
-    assert.equal(page[i + 2], "Q");
-    assert.match(page[i + 3], /\( packing list\) Tj ET$/);
-    /* the items are not coloured */
-    assert.equal(page.filter((op) => / rg$/.test(op)).length, 1, id + ": more than the heading coloured");
+    const colour = rgb(TAG_PRINT_COLORS[id]);
+    /* the dot, filled — and the only thing on the page in that colour: the
+       whole sheet is the one category, so the items are not coloured */
+    const dots = page.filter((op) => op.includes(colour));
+    assert.equal(dots.length, 1, id + ": the category's colour more than once");
+    assert.match(dots[0], new RegExp("^q " + colour + " rg [\\d. mc]+ h f Q$"), id + ": a filled dot");
+    /* then the category's plural, bold, 20pt, in the text colour */
+    const heading = page[page.indexOf(dots[0]) + 1];
+    assert.match(heading, new RegExp("^q " + rgb("171613") + " rg BT /F2 20 Tf .* Tm \\(" +
+      cat.plural.replace(/[&]/g, "\\$&") + "\\) Tj ET Q$"), id + ": " + heading);
+    /* the kicker over it, the script's title under it */
+    assert.ok(page.some((op) => /\(Packing list\) Tj/.test(op)), id + ": the kicker");
+    assert.ok(page.some((op) => /\(Colours · .+\) Tj/.test(op)), id + ": the title and the date");
   }
 });

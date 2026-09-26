@@ -22,6 +22,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { __init as initStatus } from "../js/01-scene-status.js";
 import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, normalizeCell } from "../js/04c-doc-model.js";
@@ -33,9 +34,13 @@ import { renameTag } from "../js/07-production-tags.js";
 import { buildBreakdownCsv } from "../js/08-production-panels.js";
 import { brollShotListForPrint, buildBrollCsv } from "../js/08d-broll-panel.js";
 import { buildShotListPdf } from "../js/17-pdf.js";
+import { sceneFacts } from "../js/14b-export-kit.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 brollInit();
+/* the printed shot list says where each scene starts (rowSeconds, which
+   counts words) */
+initStatus();
 
 /* ---- the old code, verbatim but for its imports ---- */
 
@@ -589,15 +594,17 @@ test("a pasted copy of a shot's line gets none of its hand-added props", () => {
   assert.equal(s.brollShots[0].props.length, 1, "the original keeps its own");
 });
 
-test("the breakdown CSV names the b-roll shots each prop is needed for, in a last column", () => {
+test("the breakdown CSV names the b-roll shots each prop is needed for, after the old columns", () => {
   propsDoc();
   addBrollProp("b2", "Kettle");
   const lines = buildBreakdownCsv().replace(/^\uFEFF/, "").split("\r\n");
-  assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots");
+  /* #169's two columns go after the ones a sheet may have been built on */
+  assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group");
   const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
-  assert.ok(kettle.endsWith(",drone over the pier"), kettle);
+  /* only a shot's prop, in no scene: no first scene */
+  assert.ok(kettle.endsWith(",drone over the pier,,Props & set dressing"), kettle);
   const mug = lines.find((l) => l.startsWith("Prop,Red mug,"));
-  assert.ok(mug.endsWith(",the red mug on the sill"), mug);
+  assert.ok(mug.endsWith(",the red mug on the sill,00:00,Props & set dressing"), mug);
 });
 
 /* ---- the full-page shot list's files (#150) ---- */
@@ -611,11 +618,14 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   const before = JSON.stringify(s.brollShots);
   const lines = buildBrollCsv().replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
-  assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description");
+  /* the scene's start timecode last (#169), after the columns a sheet may
+     already be built on */
+  assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
-  assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,");
-  assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",');
-  assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,");
+  const at = (i) => sceneFacts()[i].start;
+  assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
+  assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
+  assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,," + at(2));
 });
 
 test("the printed shot list is a PDF of the shots as shown, flagged ones marked", () => {
@@ -626,8 +636,14 @@ test("the printed shot list is a PDF of the shots as shown, flagged ones marked"
   assert.ok(text.startsWith("%PDF-1.4"));
   assert.ok(text.includes("(the red mug on the sill) Tj"));
   assert.ok(text.includes("(drone over the pier) Tj"));
-  assert.ok(text.includes("(FLAGGED  \u0097  ) Tj"), "FLAGGED in front of the note");
-  /* the PDF string escapes its parentheses */
-  assert.ok(text.includes("Props: Red mug \\(have it\\)"), "each prop with its status in words");
+  /* "Flagged" in sentence case and bold red, and under it the reason —
+     the note, which is what raising the flag asks for */
+  assert.ok(text.includes("0.769 0.188 0.165 rg BT /F2 8.5 Tf") && text.includes("(Flagged) Tj"), "Flagged, bold and red");
+  assert.ok(text.includes("(too dark) Tj"), "the reason under it");
+  assert.ok(!text.includes("FLAGGED"));
+  /* a prop a line, its status in words; the PDF string escapes its parentheses */
+  assert.ok(text.includes("(Red mug \\(have it\\)) Tj"), "each prop with its status in words");
+  /* one landscape page */
   assert.match(text, /\/Count 1 >>/);
+  assert.match(text, /\/MediaBox \[0 0 792 612\]/);
 });

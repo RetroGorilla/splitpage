@@ -69,16 +69,26 @@ expect window.__stylesXml.indexOf('asciiTheme="minorHAnsi"') !== -1
 # the table itself uses the named table style
 expect window.__docXml.indexOf('<w:tblStyle w:val="SplitpageTable"/>') !== -1
 
-# page numbers in the footer: a real PAGE field, referenced from the section
+# page numbers in the footer: "Page X of Y", real PAGE and NUMPAGES fields,
+# referenced from the section (#169)
 expect window.__docXml.indexOf('<w:footerReference') !== -1
 eval (function(){window.__footerXml = new TextDecoder().decode(window.__parts['word/footer1.xml']); return true;})()
-expect window.__footerXml.indexOf('PAGE') !== -1
+expect window.__footerXml.indexOf(' PAGE ') !== -1 && window.__footerXml.indexOf(' NUMPAGES ') !== -1 && window.__footerXml.indexOf('>Page <') !== -1
 expect window.__footerXml.indexOf('w:fldCharType="begin"') !== -1
 
-# scene numbering visible in the document: a "No." header and "01"/"02" cells
-expect window.__docXml.indexOf('>No.<') !== -1
+# the package describes itself (#169): File > Info shows the script's title,
+# Splitpage made it
+expect window.__names.indexOf('docProps/core.xml') !== -1 && window.__names.indexOf('docProps/app.xml') !== -1
+expect new TextDecoder().decode(window.__parts['docProps/core.xml']).indexOf('<dc:title>' + F.state().title + '</dc:title>') !== -1
+
+# the scene gutter visible in the document (#169): a "Scene" header, "01"/"02"
+# cells, a start timecode each; a "Read" header on the right
+expect window.__docXml.indexOf('>Scene<') !== -1 && window.__docXml.indexOf('>Read<') !== -1
 expect window.__docXml.indexOf('>01<') !== -1
 expect window.__docXml.indexOf('>02<') !== -1
+expect window.__docXml.indexOf('>00:00<') !== -1
+# the line under the title, in the export's own paragraph style
+expect window.__docXml.indexOf('<w:pStyle w:val="SplitpageMeta"/>') !== -1 && window.__docXml.indexOf('running time') !== -1
 
 # --- a script exported to .docx and reimported still splits into the same
 # visual/audio rows (Done bullet 4) — the seed's own two rows, untagged, so
@@ -89,8 +99,8 @@ eval (async function(){ await F.openFile(new File([window.__blobs[window.__blobs
 expect F.state().rows.length === 2
 expect F.state().rows[0].audioText.indexOf('welcome back') !== -1
 expect F.state().rows[0].visualText.indexOf('Host on camera') !== -1
-# the scene-number column never leaks into either cell's text
-expect F.state().rows[0].visualText.indexOf('No.') === -1
+# the scene gutter and the meta line never leak into either cell's text
+expect F.state().rows.every(function(r){ var t = r.visualText + r.audioText; return t.indexOf('00:00') === -1 && t.indexOf('running time') === -1 && t.indexOf('To do') === -1; })
 # and they come back as the same text AND the same formatting — the seed's
 # second scene carries <em>, <strong>, a highlight, <u> and a link, which a
 # reopen used to store escaped, as visible "<strong>" in the cell
@@ -120,12 +130,12 @@ eval (async function(){var bytes=new Uint8Array(await window.__blobs[window.__bl
 expect window.__grids.length === 2
 # kept for the reopen section at the end: an export with a breakdown section
 eval (function(){ window.__bdDocx = window.__blobs[window.__blobs.length-1]; window.__bdRows = F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText) }; }); return JSON.stringify(window.__bdRows); })()
-expect window.__grids[0].length === 3
-expect window.__grids[1].length === 7
-# Notes (index 6) beats Mentions (index 4) and Status (index 2) given a real
+expect window.__grids[0].length === 4
+expect window.__grids[1].length === 5
+# Notes (index 4) beats Scenes (index 2) and Status (index 1) given a real
 # long note — the old export hard-coded Notes narrower than several others
-expect window.__grids[1][6] > window.__grids[1][4]
-expect window.__grids[1][6] > window.__grids[1][2]
+expect window.__grids[1][4] > window.__grids[1][2]
+expect window.__grids[1][4] > window.__grids[1][1]
 # the grid still sums to the usable page width exactly (no drift from rounding)
 eval (function(){window.__gridSum = window.__grids[1].reduce(function(a,b){return a+b;}, 0); return window.__gridSum;})()
 expect window.__gridSum === 10080
@@ -174,14 +184,17 @@ expect window.__mdZipNames.indexOf('images/scene-01.png') !== -1
 expect window.__mdFromZip.indexOf('images/scene-01.png') !== -1
 expect window.__mdFromZip.indexOf('data:image') === -1
 
-# the two-column export is untouched: still one file, still base64 inline —
-# it is what the .md project format (20d-formats.js) round-trips on
+# the two-column export's cells are untouched: still one file, still base64
+# inline — they are what the .md project format (20d-formats.js) round-trips
+# on. The export adds the gutter's columns round them (#169); the project's
+# own table keeps its four.
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md-table"]
 sleep 1200
 eval (async function(){window.__mdTable = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__mdTable.indexOf('data:image/png;base64,') !== -1
-expect window.__mdTable.indexOf('| # | Visual | Audio | Status |') !== -1
+expect window.__mdTable.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
+expect F.buildMarkdown().indexOf('| # | Visual | Audio | Status |') !== -1
 
 # a script with no picture still exports as a plain single .md file
 eval (function(){F.state().rows[0].visualImage = null; return true;})()
@@ -204,23 +217,23 @@ expect window.__blobs[window.__blobs.length-1].type == text/markdown
 # canvas PNGs, so they go through the real PNG -> JPEG conversion.
 # =============================================================================
 
-eval (function(){ window.__pdfLayout = function(t){ var pages = [], re = /obj\n<< \/Length (\d+) >>\nstream\n/g, m; while ((m = re.exec(t))) { var s = t.substr(re.lastIndex, +m[1]); pages.push(s.split('\n').map(function(op){ var x; if ((x = /^q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([-\d.]+) cm \/(Im\d+) Do Q$/.exec(op))) return { k: 'img', n: x[5], w: +x[1], h: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2] }; if ((x = /^BT \/F\d ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((.*)\) Tj ET$/.exec(op))) return { k: 'text', s: x[4], y: +x[3], top: +x[3] + +x[1] }; if ((x = /^q 0\.90 0\.89 0\.86 RG 0\.5 w [\d.]+ ([-\d.]+) m /.exec(op))) return { k: 'rule', y: +x[1], top: +x[1] }; if ((x = / ([-\d.]+) [\d.]+ [\d.]+ re f Q$/.exec(op))) return { k: 'fill', y: +x[1], top: +x[1] }; return { k: 'other' }; })); } var imgs = [], bad = []; pages.forEach(function(ops, p){ ops.forEach(function(op, i){ if (op.k !== 'img') return; op.page = p; op.prevRule = null; for (var q = i - 1; q >= 0; q--) if (ops[q].k === 'rule') { op.prevRule = ops[q].y; break; } imgs.push(op); if (op.y < 53.99 || op.top > 738.01) bad.push(op.n + ' off the page'); var r = -1; for (var k = i + 1; k < ops.length; k++) if (ops[k].k === 'rule') { r = k; break; } if (r < 0) { bad.push(op.n + ' has no row rule'); return; } if (!(ops[r].y < op.y)) bad.push(op.n + ' rule not below it'); for (var k2 = r + 1; k2 < ops.length; k2++) { var o = ops[k2]; if (o.top !== undefined && o.top > op.y + 0.01) bad.push(o.k + ' ' + (o.s || o.n || '') + ' at ' + o.top.toFixed(2) + ' over ' + op.n + ' (bottom ' + op.y.toFixed(2) + ')'); } }); }); for (var a = 0; a < imgs.length; a++) for (var b = a + 1; b < imgs.length; b++) { var A = imgs[a], B = imgs[b]; if (A.page === B.page && A.x < B.x + B.w && B.x < A.x + A.w && A.y < B.top && B.y < A.top) bad.push(A.n + ' and ' + B.n + ' overlap'); } return { pages: pages, imgs: imgs, bad: bad, lastRule: pages.map(function(ops){ var y = null; ops.forEach(function(o){ if (o.k === 'rule') y = o.y; }); return y; }) }; }; return true; })()
+eval (function(){ window.__pdfLayout = function(t){ var pages = [], re = /obj\n<< \/Length (\d+) >>\nstream\n/g, m; while ((m = re.exec(t))) { var s = t.substr(re.lastIndex, +m[1]); var art = false; pages.push(s.split('\n').map(function(op){ var x; if (/^\/Artifact /.test(op)) { art = true; return { k: 'other' }; } if (op === 'EMC') { art = false; return { k: 'other' }; } if (art) return { k: 'other' }; if ((x = /^q ([\d.]+) 0 0 ([\d.]+) ([\d.]+) ([-\d.]+) cm \/(Im\d+) Do Q$/.exec(op))) return { k: 'img', n: x[5], w: +x[1], h: +x[2], x: +x[3], y: +x[4], top: +x[4] + +x[2] }; if ((x = /^BT \/F\d ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((.*)\) Tj ET$/.exec(op))) return { k: 'text', s: x[4], y: +x[3], top: +x[3] + +x[1] }; if ((x = /^q 0\.863 0\.855 0\.831 RG 0\.5 w 54\.00 ([-\d.]+) m 558\.00 /.exec(op))) return { k: 'rule', y: +x[1], top: +x[1] }; if ((x = / ([-\d.]+) [\d.]+ [\d.]+ re f Q$/.exec(op))) return { k: 'fill', y: +x[1], top: +x[1] }; return { k: 'other' }; })); } var imgs = [], bad = []; pages.forEach(function(ops, p){ ops.forEach(function(op, i){ if (op.k !== 'img') return; op.page = p; op.prevRule = null; for (var q = i - 1; q >= 0; q--) if (ops[q].k === 'rule') { op.prevRule = ops[q].y; break; } imgs.push(op); if (op.y < 53.99 || op.top > 738.01) bad.push(op.n + ' off the page'); var r = -1; for (var k = i + 1; k < ops.length; k++) if (ops[k].k === 'rule') { r = k; break; } if (r < 0) { bad.push(op.n + ' has no row rule'); return; } if (!(ops[r].y < op.y)) bad.push(op.n + ' rule not below it'); for (var k2 = r + 1; k2 < ops.length; k2++) { var o = ops[k2]; if (o.top !== undefined && o.top > op.y + 0.01) bad.push(o.k + ' ' + (o.s || o.n || '') + ' at ' + o.top.toFixed(2) + ' over ' + op.n + ' (bottom ' + op.y.toFixed(2) + ')'); } }); }); for (var a = 0; a < imgs.length; a++) for (var b = a + 1; b < imgs.length; b++) { var A = imgs[a], B = imgs[b]; if (A.page === B.page && A.x < B.x + B.w && B.x < A.x + A.w && A.y < B.top && B.y < A.top) bad.push(A.n + ' and ' + B.n + ' overlap'); } return { pages: pages, imgs: imgs, bad: bad, lastRule: pages.map(function(ops){ var y = null; ops.forEach(function(o){ if (o.k === 'rule') y = o.y; }); return y; }) }; }; return true; })()
 eval (function(){ var c = document.createElement('canvas'); c.width = 60; c.height = 40; var g = c.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 60, 40); var P = c.toDataURL('image/png'); var L = function(n){ var a = []; for (var i = 1; i <= n; i++) a.push('Line ' + i); return a.join('<br>'); }; var spec = [[P, ''], [P, ''], [P, 'Short.'], [P, L(40)], [null, L(40)], [P, ''], [null, 'After.']]; F.state().rows = spec.map(function(s, i){ return { id: 'pdf-row-' + i, visualText: '', visualImage: s[0], audioText: s[1], status: 'todo' }; }); return F.state().rows.length; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-pdf"]
 wait (function(){ var b = window.__blobs[window.__blobs.length - 1]; return !!b && b.type === 'application/pdf'; })()
 eval (async function(){ var t = new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length - 1].arrayBuffer())); window.__lay = __pdfLayout(t); return JSON.stringify({ imgs: __lay.imgs.map(function(i){ return i.n + '@p' + (i.page + 1) + ' ' + i.w.toFixed(2) + 'x' + i.h.toFixed(2) + ' y=' + i.y.toFixed(2); }), bad: __lay.bad }); })()
-# all five pictures drawn, full column width, 3:2
-expect __lay.imgs.length === 5 && __lay.imgs.every(function(i){ return i.w === 229 && i.h.toFixed(2) === '152.67'; })
+# all five pictures drawn, the Visual column's full width (184pt), 3:2
+expect __lay.imgs.length === 5 && __lay.imgs.every(function(i){ return i.w === 184 && i.h.toFixed(2) === '122.67'; })
 # no picture overlaps another, runs off a page, or has anything after its row drawn over it
 expect __lay.bad.length === 0
 # the report's pair: two picture-only rows one after the other, the second
-# a whole picture plus the row gap lower, not 14pt
-expect __lay.imgs[0].page === __lay.imgs[1].page && Math.abs(__lay.imgs[0].y - __lay.imgs[1].top - 37.5) < 0.02
+# a whole picture plus the row gap lower (8 + 4 to the rule, 10 after it)
+expect __lay.imgs[0].page === __lay.imgs[1].page && Math.abs(__lay.imgs[0].y - __lay.imgs[1].top - 22) < 0.02
 # the picture after the filler did not fit in what the filler left and so
-# starts the next page, under its column headers
-expect __lay.imgs[4].page > __lay.imgs[3].page && __lay.imgs[4].prevRule === null && __lay.imgs[4].top.toFixed(2) === '708.00'
-expect __lay.lastRule[__lay.imgs[4].page - 1] > 54 && __lay.lastRule[__lay.imgs[4].page - 1] - 14 - 54 < __lay.imgs[4].h
+# starts the next page, under its column heads (their rule is not a row's)
+expect __lay.imgs[4].page > __lay.imgs[3].page && __lay.imgs[4].prevRule === null && __lay.imgs[4].top.toFixed(2) === '715.00'
+expect __lay.lastRule[__lay.imgs[4].page - 1] > 54 && __lay.lastRule[__lay.imgs[4].page - 1] - 10 - 54 < __lay.imgs[4].h
 
 # =============================================================================
 # PDF — pictures in comments and replies. A comment or reply body keeps its
@@ -255,10 +268,11 @@ expect __cl.bad.length === 0
 expect [__cl.at('BEFOREPIC'), __cl.at(__cl.imgs[1].n), __cl.at('BETWEENPICS'), __cl.at(__cl.imgs[2].n), __cl.at('AFTERPICS'), __cl.at('REPLYBEFORE'), __cl.at(__cl.imgs[3].n), __cl.at('REPLYAFTER')].every(function(v, i, a){ return v >= 0 && (i === 0 || v > a[i - 1]); })
 # sized in the column: the small PNG at its own size (120 x 80 px at 96 dpi),
 # never enlarged; the portrait JPEG kept portrait; the reply's large JPEG
-# at 60% of the reply column, 4:3; each at its body's indent
-expect __cl.imgs[1].w === 90 && __cl.imgs[1].h === 60 && __cl.imgs[1].x === 66
+# at 60% of the reply column (470pt), 4:3; each at its body's indent (a
+# thread's 20pt, its number badge in front; a reply's 34)
+expect __cl.imgs[1].w === 90 && __cl.imgs[1].h === 60 && __cl.imgs[1].x === 74
 expect __cl.imgs[2].w === 150 && __cl.imgs[2].h === 225
-expect __cl.imgs[3].w === 288 && __cl.imgs[3].h === 216 && __cl.imgs[3].x === 78
+expect __cl.imgs[3].w === 282 && __cl.imgs[3].h === 211.5 && __cl.imgs[3].x === 88
 # thread 1's picture did not fit under its 36 lines, so it starts the
 # next page, whole, under the continued heading — and the text after it follows it
 expect (function(){ var i = __cl.at(__cl.imgs[0].n), p = __cl.ops[i - 1], im = __cl.imgs[0]; return p.s === '36' && p.page < im.page && p.y - 13 - 3 - im.h < 54 && im.top > 738 - 60 && __cl.ops[i + 1].s === 'PUSHAFTER' && __cl.ops[i + 1].page === im.page; })()

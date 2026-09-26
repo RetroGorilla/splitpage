@@ -17,17 +17,29 @@
  * through a canvas, which jsdom does not have. Browser suite
  * 41-export-polish drives the same through the real File menu and open
  * path, breakdown and PNG pictures included.
+ *
+ * Since #169 the export draws round the words — tags in their colours, an
+ * open comment's number after its words, the b-roll key as a chip, a line
+ * of what the document is under the title, a scene gutter and a read time
+ * either side of the script, a b-roll shot list, the narration's scene
+ * numbers in the margin — and every piece of that is skipped on the way
+ * back in. fixtures/ holds a script and a narration exported by the writer
+ * before #169 (3.0.0-beta.8, c816264) from roundTripState below, and
+ * OLD_READ is what the reader of that day read back from them: those files
+ * must still read exactly so, and the same script exported now must read
+ * back as exactly the same rows.
  */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../js/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { htmlToPlainText, strBytes, zipWrite } from "../js/14-export.js";
-import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
+import { htmlToPlainText, strBytes, zipRead, zipWrite } from "../js/14-export.js";
+import { __init as initDocx, buildDocx, buildNarrationDocx, docxToRows } from "../js/15-docx.js";
 
 initTags();
 initStatus();
@@ -132,10 +144,293 @@ test("only the export's own headings, in its own style, after its own table end 
   assert.deepEqual(await read(para("Notes", "Heading1") + para("kept")), [
     { v: "Shot", a: "Line." }, { v: "Notes", a: "" }, { v: "", a: "kept" }
   ]);
-  /* the export's breakdown heading ends it as the comments heading does */
+  /* the export's breakdown heading ends it as the comments heading does,
+     and so does its b-roll shot list's (#169) */
   assert.deepEqual(await read(para("Production breakdown", "Heading1") + para("dropped") +
     para("Comments", "Heading1") + para("dropped too")), [{ v: "Shot", a: "Line." }]);
+  assert.deepEqual(await read(para("B-roll shot list", "Heading1") + para("Scene 01") + para("a shot")),
+    [{ v: "Shot", a: "Line." }]);
   /* and before the table, the same heading is the user's */
   const before = await docxToRows(asFile(foreignDocx(para("T", "Title") + para("Comments", "Heading1") + script)));
   assert.deepEqual(plainRows(before.rows), [{ v: "Comments", a: "" }, { v: "Shot", a: "Line." }]);
+});
+
+/* ---- #169: what the export draws round the words, and back again ---- */
+
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const wAttr = (el, name) => el.getAttributeNS(W, name) || el.getAttribute("w:" + name);
+const kids = (el, name) => Array.from(el.childNodes).filter((n) => n.localName === name);
+const runStyle = (r) => { const s = r.getElementsByTagNameNS(W, "rStyle")[0]; return s ? wAttr(s, "val") : ""; };
+const paraStyle = (p) => { const s = p.getElementsByTagNameNS(W, "pStyle")[0]; return s ? wAttr(s, "val") : ""; };
+const prop = (r, name, a) => { const e = r.getElementsByTagNameNS(W, name)[0]; return e ? wAttr(e, a || "val") : null; };
+const THIN = String.fromCharCode(0x2009);
+
+async function parts(bytes) {
+  const zip = await zipRead(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  const text = async (name) => { const b = await zip.get(name); return b ? new TextDecoder().decode(b) : null; };
+  const xml = (s) => {
+    const x = new DOMParser().parseFromString(s, "application/xml");
+    assert.equal(x.getElementsByTagName("parsererror").length, 0);
+    return x;
+  };
+  const doc = xml(await text("word/document.xml"));
+  return { text, xml, doc, body: doc.getElementsByTagNameNS(W, "body")[0] };
+}
+
+const tagSpan = (cat, name, inner) => `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${inner || name}</span>`;
+const cmtSpan = (id, inner) => `<span class="cmt-anchor" data-cmt="${id}">${inner}</span>`;
+const DIR = (inner) => `<span class="stage-dir">${inner}</span>`;
+const CUE = (inner) => `<span class="audio-cue">${inner}</span>`;
+const KEY = (id) => `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
+
+/* Every shape the writer draws differently since #169: tags (one bold in
+   part, one in a sound cue, one under a comment), the b-roll key, open and
+   resolved comments, a direction, the writer's own underline, strike,
+   highlight and link, a picture and a video link, a read time set by
+   hand, a scene with no audio and one with no visual. The fixtures were
+   exported from exactly this. */
+function roundTripState(pic) {
+  return {
+    schema: 2, title: "Round trip, then and now", wordsPerMinute: 150, targetSeconds: 60,
+    rows: [
+      { id: "r0", status: "shot",
+        visualText: "Wide on the " + tagSpan("location", "workbench") + ", the " + tagSpan("prop", "Pentax K1000", "<strong>Pentax</strong> K1000") + " in frame.<br>" + KEY("bs_1") + " dust in the light",
+        audioText: "Forty dollars. " + DIR("beat") + " " + cmtSpan("c0", "The meter's <em>dead</em>,") + " the seals are <u>gone</u>, <s>sadly</s> and the <mark>shutter</mark> sticks. See <a href=\"https://example.com/k1000\">the manual</a>." },
+      { id: "r1", status: "ready", lengthSeconds: 12, imageRef: pic, imageLinks: [{ href: "https://www.youtube.com/watch?v=abc123", poster: true }],
+        visualText: tagSpan("vfx", "Title card") + " over the montage.",
+        audioText: "Welcome back.<br>" + CUE("SFX: " + tagSpan("sound", "door slam")) + "<br>" + cmtSpan("c1", "Old oil") + " has gone gummy." },
+      { id: "r2", status: "todo", visualText: "Close on the needle.", audioText: "" },
+      { id: "r3", status: "todo", visualText: "", audioText: cmtSpan("c2", tagSpan("cast", "Rita") + " says hello") + " and waves." }
+    ],
+    comments: [
+      { id: "c0", rowId: "r0", field: "audioText", author: "Jo", createdAt: "2026-09-20T10:00:00Z", quotedText: "The meter's dead,", body: "Hold here.",
+        replies: [{ id: "rp0", author: "Sam", createdAt: "2026-09-20T11:00:00Z", body: "OK." }] },
+      { id: "c1", rowId: "r1", field: "audioText", author: "Jo", createdAt: "2026-09-21T10:00:00Z", quotedText: "Old oil", body: "Check this.",
+        resolved: true, resolvedBy: "Sam", replies: [] },
+      { id: "c2", rowId: "r3", field: "audioText", author: "Ann", createdAt: "2026-09-22T10:00:00Z", quotedText: "Rita says hello", body: "Nice.", replies: [] }
+    ]
+  };
+}
+
+const PIC = intern(jpegBytes(320, 180, 7));
+const loadRoundTrip = () => { S.state = migrateRows(roundTripState(PIC)); };
+
+/* What the reader of 3.0.0-beta.8 read back from the fixtures. */
+const MANUAL = '<a href="https://example.com/k1000" target="_blank" rel="noopener">the manual</a>';
+const R0_AUDIO = 'Forty dollars. <span class="stage-dir">beat</span> The meter\'s <em>dead</em>, the seals are <u>gone</u>, <s>sadly</s> and the <mark>shutter</mark> sticks. See ' + MANUAL + ".";
+const OLD_READ = {
+  script: {
+    title: "Round trip, then and now",
+    rows: [
+      { v: "Wide on the workbench, the <strong>Pentax</strong> K1000 in frame.<br>B-roll: dust in the light", a: R0_AUDIO, pic: null, more: [] },
+      { v: "Title card over the montage.", a: 'Welcome back.<br><span class="audio-cue">SFX: door slam</span><br>Old oil has gone gummy.',
+        pic: PIC.sha256, more: [[{ href: "https://www.youtube.com/watch?v=abc123", poster: true }]] },
+      { v: "Close on the needle.", a: "", pic: null, more: [] },
+      { v: "", a: "Rita says hello and waves.", pic: null, more: [] }
+    ]
+  },
+  narration: {
+    title: "Round trip, then and now",
+    rows: [
+      { v: "", a: R0_AUDIO, pic: null, more: [] },
+      { v: "", a: "Welcome back.<br>Old oil has gone gummy.", pic: null, more: [] },
+      { v: "", a: "Rita says hello and waves.", pic: null, more: [] }
+    ]
+  }
+};
+
+async function readBack(bytes) {
+  const r = await docxToRows(asFile(bytes));
+  return {
+    title: r.title,
+    rows: r.rows.map((x) => ({
+      v: x.visualText, a: x.audioText, pic: x.imageRef ? x.imageRef.sha256 : null,
+      more: (x.moreImages || []).map((m) => m.imageRef ? m.imageRef.sha256 : m.links)
+    }))
+  };
+}
+
+const fixture = (name) => new Uint8Array(readFileSync(new URL("./fixtures/" + name, import.meta.url)));
+
+test("a .docx exported before #169 reopens exactly as it did, script and narration", async () => {
+  assert.deepEqual(await readBack(fixture("splitpage-3.0.0-beta.8.docx")), OLD_READ.script);
+  assert.deepEqual(await readBack(fixture("splitpage-3.0.0-beta.8-narration.docx")), OLD_READ.narration);
+});
+
+test("the same script exported now reopens as exactly the same rows: nothing drawn round the words comes back", async () => {
+  loadRoundTrip();
+  assert.deepEqual(await readBack(buildDocx()), OLD_READ.script);
+  loadRoundTrip();
+  assert.deepEqual(await readBack(buildNarrationDocx({ directions: true })), OLD_READ.narration);
+});
+
+test("the title's meta line, tags, markers, the b-roll chip and the comments' underlines are each in their own style", async () => {
+  loadRoundTrip();
+  const { body } = await parts(buildDocx());
+  const paras = kids(body, "p");
+  assert.equal(paraStyle(paras[0]), "Title");
+  assert.equal(paraStyle(paras[1]), "SplitpageMeta");
+  assert.match(paras[1].textContent, /^4 scenes · 0:\d\d running time · Target 1:00 · 0:\d\d under · 1 of 4 shot · .+$/);
+
+  const script = kids(body, "tbl")[0];
+  const runs = Array.from(script.getElementsByTagNameNS(W, "r"));
+  const run = (text) => runs.find((r) => r.textContent === text);
+  /* open threads numbered down the script; the resolved one has none */
+  assert.deepEqual(runs.filter((r) => runStyle(r) === "SplitpageMarker").map((r) => r.textContent.split(THIN).join("")), ["1", "2"]);
+  /* a tag: its words in its colour, underlined in it */
+  const bench = run("workbench");
+  assert.equal(runStyle(bench), "SplitpageTag");
+  assert.equal(prop(bench, "color"), "2A7449");
+  assert.equal(prop(bench, "u"), "single");
+  assert.equal(prop(bench, "u", "color"), "2A7449");
+  assert.equal(runStyle(run("Pentax")), "SplitpageTag");
+  assert.ok(run("Pentax").getElementsByTagNameNS(W, "b").length, "the writer's bold inside a tag stays");
+  /* a tag in a cue line keeps the cue's style, and the tag's underline */
+  assert.equal(runStyle(run("door slam")), "SplitpageCue");
+  assert.equal(prop(run("door slam"), "u", "color"), "AB413E");
+  /* the b-roll key as its chip */
+  const key = runs.find((r) => runStyle(r) === "SplitpageBroll");
+  assert.equal(key.textContent, THIN + "B-roll:" + THIN);
+  assert.equal(prop(key, "bdr", "color"), "00717F");
+  /* commented words: amber dotted while open, faint once resolved; a tag
+     under a comment keeps its colour and takes the comment's underline */
+  assert.equal(prop(run("The meter's "), "u"), "dotted");
+  assert.equal(prop(run("The meter's "), "u", "color"), "9E5800");
+  assert.equal(prop(run("Old oil"), "u", "color"), "64635E");
+  assert.equal(prop(run("Rita"), "color"), "A53C75");
+  assert.equal(prop(run("Rita"), "u"), "dotted");
+  /* the writer's own underline has no colour of its own */
+  assert.equal(prop(run("gone"), "u"), "single");
+  assert.equal(prop(run("gone"), "u", "color"), null);
+});
+
+test("the scene gutter and the read time sit either side of the script and are read past", async () => {
+  loadRoundTrip();
+  const { body } = await parts(buildDocx());
+  const trs = kids(kids(body, "tbl")[0], "tr");
+  const cells = (tr) => kids(tr, "tc");
+  assert.deepEqual(cells(trs[0]).map((tc) => tc.textContent), ["Scene", "Visual", "Audio", "Read"]);
+  assert.ok(trs[0].getElementsByTagNameNS(W, "tblHeader").length, "the header repeats on every page");
+  /* the words in their column's colour */
+  assert.equal(prop(cells(trs[0])[1].getElementsByTagNameNS(W, "r")[0], "color"), "2863AB");
+  assert.equal(prop(cells(trs[0])[2].getElementsByTagNameNS(W, "r")[0], "color"), "9E5800");
+  const gutter = kids(cells(trs[2])[0], "p").map((p) => p.textContent);
+  assert.deepEqual(gutter, ["02", "00:07", "● Ready"]);
+  assert.deepEqual(kids(cells(trs[1])[0], "p").map((p) => p.textContent)[2], "✓ Shot");
+  assert.deepEqual(kids(cells(trs[3])[0], "p").map((p) => p.textContent)[2], "○ To do");
+  /* the read time set by hand is boxed, an estimate is not */
+  const read = (tr) => cells(tr)[3].getElementsByTagNameNS(W, "r")[0];
+  assert.equal(read(trs[2]).textContent.split(THIN).join(""), "0:12");
+  assert.ok(read(trs[2]).getElementsByTagNameNS(W, "bdr").length);
+  assert.equal(read(trs[1]).getElementsByTagNameNS(W, "bdr").length, 0);
+  /* short scenes are kept whole on a page */
+  assert.ok(trs.slice(1).every((tr) => tr.getElementsByTagNameNS(W, "cantSplit").length));
+});
+
+test("the breakdown is grouped by category and no item's row splits across a page", async () => {
+  loadRoundTrip();
+  const { body } = await parts(buildDocx());
+  const paras = kids(body, "p");
+  const heading = paras.find((p) => p.textContent === "Production breakdown");
+  assert.equal(paraStyle(heading), "Heading1");
+  assert.ok(heading.getElementsByTagNameNS(W, "pageBreakBefore").length, "the appendix starts a page of its own");
+  const trs = kids(kids(body, "tbl")[1], "tr");
+  assert.deepEqual(kids(trs[0], "tc").map((tc) => tc.textContent), ["Item", "Status", "Scenes", "Assigned to", "Notes"]);
+  assert.ok(trs.every((tr) => tr.getElementsByTagNameNS(W, "cantSplit").length), "a row that can split");
+  const groups = trs.filter((tr) => tr.getElementsByTagNameNS(W, "gridSpan").length);
+  assert.deepEqual(groups.map((tr) => tr.textContent), [
+    "● Props & set dressing  1", "● Locations & shots  1", "● Cast & wardrobe  1", "● VFX & graphics  1", "● Music & SFX  1"
+  ]);
+  /* each head in its category's colour, kept with the item under it */
+  assert.equal(prop(groups[0].getElementsByTagNameNS(W, "r")[1], "color"), "764AA2");
+  assert.ok(groups.every((tr) => tr.getElementsByTagNameNS(W, "keepNext").length));
+  const pentax = trs.find((tr) => kids(tr, "tc")[0].textContent === "Pentax K1000");
+  assert.deepEqual(kids(pentax, "tc").slice(1, 3).map((tc) => tc.textContent), ["○ Needed", "01"]);
+});
+
+test("the b-roll shot list, by scene, with a box for each shot", async () => {
+  loadRoundTrip();
+  S.state.brollShots = [{ id: "bs_1", name: "dust in the light", status: "shot", location: "Workbench", reshoot: true, notes: "Needs a haze.", props: [] }];
+  S.state = migrateRows(S.state);
+  const { body } = await parts(buildDocx());
+  const paras = kids(body, "p").map((p) => p.textContent);
+  const at = paras.indexOf("B-roll shot list");
+  assert.ok(at > 0);
+  assert.deepEqual(paras.slice(at + 1, at + 6), [
+    "1 of 1 shot · 1 flagged", "Scene 01  00:001/1 shot", "☑dust in the light", "Workbench  ·  Flagged", "Needs a haze."
+  ]);
+  /* and none of it comes back as a scene */
+  assert.deepEqual(plainRows((await docxToRows(asFile(buildDocx()))).rows).map((r) => r.v),
+    ["Wide on the workbench, the Pentax K1000 in frame.\nB-roll: dust in the light", "Title card over the montage.", "Close on the needle.", ""]);
+});
+
+test("the narration: its meta line and each scene's number in the margin, none of it read back", async () => {
+  loadRoundTrip();
+  const { body } = await parts(buildNarrationDocx({ directions: true }));
+  const paras = kids(body, "p");
+  assert.equal(paraStyle(paras[1]), "SplitpageMeta");
+  assert.match(paras[1].textContent, /^Narration · 3 scenes · \d+ words · about 0:\d\d at 150 wpm$/);
+  const scenes = paras.slice(2);
+  assert.ok(scenes.every((p) => paraStyle(p) === "SplitpageNarration"));
+  /* the number is the scene's own, so "03" (no narration) is missing */
+  assert.deepEqual(scenes.map((p) => {
+    const r = p.getElementsByTagNameNS(W, "r")[0];
+    return runStyle(r) + ":" + r.textContent;
+  }), ["SplitpageSceneNo:01", "SplitpageSceneNo:02", "SplitpageSceneNo:04"]);
+  /* hung out in the margin, a tab to the text's own edge */
+  assert.ok(scenes.every((p) => prop(p, "ind", "hanging") && p.getElementsByTagNameNS(W, "tab").length));
+  assert.equal(body.getElementsByTagNameNS(W, "tbl").length, 0, "prose, not a table");
+});
+
+test("the package says what it is: a title Word shows, Splitpage, the day; page X of Y in the footer", async () => {
+  loadRoundTrip();
+  const { text, xml } = await parts(buildDocx());
+  const core = xml(await text("docProps/core.xml"));
+  const one = (ns, name) => core.getElementsByTagNameNS(ns, name)[0].textContent;
+  assert.equal(one("http://purl.org/dc/elements/1.1/", "title"), "Round trip, then and now");
+  assert.equal(one("http://purl.org/dc/elements/1.1/", "creator"), "Splitpage");
+  /* the day only: two exports of the same script are the same bytes */
+  assert.match(one("http://purl.org/dc/terms/", "created"), /^\d{4}-\d\d-\d\dT00:00:00Z$/);
+  assert.match(await text("docProps/app.xml"), /<Application>Splitpage<\/Application>/);
+  const types = await text("[Content_Types].xml");
+  assert.ok(types.includes('PartName="/docProps/core.xml"') && types.includes('PartName="/docProps/app.xml"') && types.includes('PartName="/word/settings.xml"'));
+  const rels = await text("_rels/.rels");
+  assert.ok(rels.includes('Target="docProps/core.xml"') && rels.includes('Target="docProps/app.xml"'));
+  assert.match(await text("word/settings.xml"), /compatibilityMode" w:uri="http:\/\/schemas.microsoft.com\/office\/word" w:val="15"/);
+  const footer = xml(await text("word/footer1.xml"));
+  assert.deepEqual(Array.from(footer.getElementsByTagNameNS(W, "instrText")).map((i) => i.textContent.trim()), ["PAGE", "NUMPAGES"]);
+  assert.equal(Array.from(footer.getElementsByTagNameNS(W, "t")).map((t) => t.textContent).join(""), "Round trip, then and nowPage 1 of 1");
+});
+
+test("a long title wraps on the page and is cut short in the footer; an empty script reopens empty", async () => {
+  const long = "A title that goes on and on: " + "and on ".repeat(20).trim();
+  S.state = migrateRows({ schema: 2, title: long, rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });
+  const { text, xml, body } = await parts(buildDocx());
+  assert.equal(kids(body, "p")[0].textContent, long);
+  const foot = xml(await text("word/footer1.xml")).getElementsByTagNameNS(W, "t")[0].textContent;
+  assert.ok(foot.length <= 90 && foot.endsWith("…") && long.startsWith(foot.slice(0, -1)), foot);
+
+  S.state = migrateRows({ schema: 2, title: "Empty", rows: [], comments: [] });
+  const empty = await parts(buildDocx());
+  assert.match(kids(empty.body, "p")[1].textContent, /^0 scenes · 0:00 running time · /);
+  const back = await docxToRows(asFile(buildDocx()));
+  assert.equal(back.title, "Empty");
+  assert.deepEqual(back.rows, []);
+});
+
+test("a coloured underline is the export's drawing only in the export's own file; in anyone else's it is an underline", async () => {
+  const run = '<w:r><w:rPr><w:u w:val="single" w:color="FF0000"/></w:rPr><w:t>red line</w:t></w:r>';
+  const tableOf = (style) => "<w:tbl><w:tblPr>" + (style ? '<w:tblStyle w:val="' + style + '"/>' : "") + "</w:tblPr>" +
+    "<w:tr>" + cell("Visual") + cell("Audio") + "</w:tr><w:tr>" + cell("Shot") + "<w:tc><w:p>" + run + "</w:p></w:tc></w:tr></w:tbl>";
+  const mine = await docxToRows(asFile(foreignDocx(tableOf("TableGrid"))));
+  assert.equal(mine.rows[0].audioText, "<u>red line</u>");
+  const ours = await docxToRows(asFile(foreignDocx(tableOf("SplitpageTable"))));
+  assert.equal(ours.rows[0].audioText, "red line");
+});
+
+test("the breakdown's heads, old and new, are never read as a scene", async () => {
+  for (const head of [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"], ["Item", "Status", "Scenes", "Assigned to", "Notes"]]) {
+    const body = table(null, [["Visual", "Audio"], ["Shot", "Line."]]) + table(null, [head, head.map((h) => h + " value")]);
+    assert.deepEqual(plainRows((await docxToRows(asFile(foreignDocx(body)))).rows), [{ v: "Shot", a: "Line." }], head.join("|"));
+  }
 });

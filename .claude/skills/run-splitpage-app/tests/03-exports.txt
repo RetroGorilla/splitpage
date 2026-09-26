@@ -22,7 +22,23 @@ expect window.__blobs.length >= 1
 eval (async function(){window.__md = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__md.indexOf('## Production breakdown') !== -1
 expect window.__md.indexOf('gaffer tape') !== -1
-expect window.__md.indexOf('| Category | Item | Status | Assigned to |') !== -1
+# #169's look: the meta line, the gutter under each heading, the breakdown by
+# category with a table of its own
+expect /^_\d+ scenes? · \d+:\d\d running time · \d+ of \d+ shot · [^_\n]+_$/m.test(window.__md)
+expect /^### Scene 01 · 00:00\n\n\*\*(To do|Ready|Shot)\*\* · Read \d+:\d\d/m.test(window.__md)
+expect window.__md.indexOf('### Props & set dressing (1)') !== -1
+expect window.__md.indexOf('| Item | Status | Scenes | Assigned to | Notes |') !== -1
+expect window.__md.indexOf('| gaffer tape | Needed | 01 | — |  |') !== -1
+expect window.__md.indexOf('| Category | Item |') === -1
+
+# --- Markdown, two columns ----------------------------------------------------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-md-table"]
+sleep 1200
+eval (async function(){window.__mdt = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+expect window.__mdt.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
+expect /^\| 01 \| 00:00 \| (To do|Ready|Shot) \| /m.test(window.__mdt)
+expect window.__mdt.indexOf('### Props & set dressing (1)') !== -1
 
 # --- breakdown CSV ----------------------------------------------------------
 jsclick #btn-file
@@ -31,6 +47,9 @@ sleep 1200
 eval (async function(){window.__csv = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__csv.indexOf('Category,Item,Status,Assigned to') !== -1
 expect window.__csv.indexOf('Needed') !== -1
+# #169's columns only at the end, where a sheet built on the old ones never looks
+expect /^﻿?Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group\r\n/.test(window.__csv)
+expect window.__csv.indexOf('Prop,gaffer tape,Needed,,1,01,yes,,,00:00,Props & set dressing') !== -1
 
 # --- Word -------------------------------------------------------------------
 jsclick #btn-file
@@ -41,7 +60,7 @@ expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') 
 
 # the docx is a store-only zip: walk it and confirm the XML parses and the
 # breakdown table has a Status column
-eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__docxOk = {parses:!doc.querySelector("parsererror"), hasStatus: xml.indexOf("<w:t>Status</w:t>")!==-1}; return true;})()
+eval (async function(){var buf=new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer());var dv=new DataView(buf.buffer);var off=0,files={};while(off+4<=buf.length&&dv.getUint32(off,true)===0x04034b50){var cs=dv.getUint32(off+18,true),nl=dv.getUint16(off+26,true),el=dv.getUint16(off+28,true);var nm=new TextDecoder().decode(buf.subarray(off+30,off+30+nl));var d=off+30+nl+el;files[nm]=buf.subarray(d,d+cs);off=d+cs;}var xml=new TextDecoder().decode(files['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');window.__docxOk = {parses:!doc.querySelector("parsererror"), hasStatus: xml.indexOf(">Status</w:t>")!==-1}; return true;})()
 expect window.__docxOk.parses
 expect window.__docxOk.hasStatus
 
@@ -51,15 +70,51 @@ jsclick #file-menu [data-file-action="export-pdf"]
 sleep 2000
 expect window.__blobs[window.__blobs.length-1].type == application/pdf
 expect window.__blobs[window.__blobs.length-1].size > 3000
-eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdf = {hdr:t.indexOf('%PDF')===0, status:t.indexOf('STATUS')!==-1}; return true;})()
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));window.__pdf = {hdr:t.indexOf('%PDF')===0, breakdown:t.indexOf('(Production breakdown) Tj')!==-1, status:t.indexOf('(Status) Tj')!==-1, tape:t.slice(t.indexOf('(Production breakdown) Tj')).indexOf('(gaffer) Tj')!==-1, footer:/\(Page 1 of \d+\) Tj/.test(t)}; return JSON.stringify(window.__pdf);})()
 expect window.__pdf.hdr
-expect window.__pdf.status
+# the breakdown at the end, under its column heads (sentence case), the tag in it
+expect window.__pdf.breakdown && window.__pdf.status && window.__pdf.tape
+expect window.__pdf.footer
 
 # --- script CSV -------------------------------------------------------------
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-csv"]
 sleep 1200
 eval (async function(){window.__scsv = await window.__blobs[window.__blobs.length-1].text(); return true;})()
-expect window.__scsv.indexOf('Scene,Status,Est. time,Visual,Audio') !== -1
+# #169: where each scene starts, its status and read time, the tags in it,
+# its b-roll and open threads — "Scene" first, Visual and Audio by name
+expect /^\uFEFF?Scene,Start,Status,Read,Read set by hand,Visual,Audio,Tags,B-roll,Open comments\r\n/.test(window.__scsv)
+expect /\r\n02,\d\d:\d\d,To do,\d+:\d\d,,[^\r]*word for word[^\r]*,,,1\r\n/.test(window.__scsv)
+expect /\r\n01,00:00,(To do|Ready|Shot),\d+:\d\d,,/.test(window.__scsv)
+expect window.__scsv.indexOf(',Prop: gaffer tape; Location: kitchen,,') !== -1
+expect /\r\nTotal,,\d+ of \d+ shot,\d+:\d\d,,,,,,/.test(window.__scsv)
+
+# --- the SplitShare page: named for the script, and saying what it is --------
+jsclick #btn-file
+jsclick #file-menu [data-file-action="export-html"]
+sleep 1500
+eval (async function(){window.__html = await window.__blobs[window.__blobs.length-1].text(); return true;})()
+eval (function(){ var d = new DOMParser().parseFromString(window.__html, 'text/html'); window.__htmlHead = { title: d.title, desc: d.querySelector('meta[name="description"]').getAttribute('content') }; return window.__htmlHead; })()
+expect window.__htmlHead.title === (window.__splitpageFormats.state().title || 'Untitled Script') + ' — SplitShare'
+expect /- SplitShare\.html$/.test(window.__exportTest.fileName('export-html'))
+expect /^\d+ scenes? · \d+:\d\d running time · \d+ of \d+ shot · /.test(window.__htmlHead.desc)
+# the app's own page is left as it is
+expect document.title == Splitpage
+
+# --- each text export reopens as its scenes, nothing round them ---------------
+# (last: opening a file makes it the document). The words compared as words:
+# how each format spells a highlight or a link on the way back is its own
+# business; what may not happen is a meta line, a status, a read time, a
+# thread's number, a total or a comment coming back as script.
+eval (function(){ window.F = window.__splitpageFormats; window.__words = function(h){ return String(h).replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/[^A-Za-z0-9]+/g, ' ').trim(); }; window.__before = F.state().rows.map(function(r){ return __words(r.visualText) + ' / ' + __words(r.audioText); }); return window.__before; })()
+eval (async function(){ await F.openFile(new File([window.__scsv], 'reopen.csv')); window.__backCsv = F.state().rows.map(function(r){ return __words(r.visualText) + ' / ' + __words(r.audioText); }); return window.__backCsv; })()
+wait window.__backCsv.length === window.__before.length
+expect window.__backCsv.join('|') === window.__before.join('|')
+eval (async function(){ await F.openFile(new File([window.__md], 'reopen.md')); window.__backMd = F.state().rows.map(function(r){ return r.visualText + ' / ' + r.audioText; }).join('|'); return window.__backMd; })()
+wait F.state().rows.length === window.__before.length
+expect !/sup&gt;|<sup|Read \d|running time|Production breakdown|Priya/.test(window.__backMd)
+eval (async function(){ await F.openFile(new File([window.__mdt], 'reopen-two.md')); window.__backMdt = F.state().rows.map(function(r){ return r.visualText + ' / ' + r.audioText; }).join('|'); return window.__backMdt; })()
+wait F.state().rows.length === window.__before.length && window.__backMdt
+expect !/sup&gt;|<sup|running time|Production breakdown|Priya|00:00/.test(window.__backMdt)
 
 quit

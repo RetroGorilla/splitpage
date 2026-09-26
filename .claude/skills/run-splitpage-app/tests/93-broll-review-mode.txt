@@ -192,7 +192,7 @@ expect untoast()
 click #broll-page [data-action="broll-page-csv"]
 wait window.__blobs.length === 1
 eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
-expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description'
+expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start'
 expect window.__csv.length === 9
 click #broll-page [data-action="broll-page-print"]
 wait window.__blobs.length === 2

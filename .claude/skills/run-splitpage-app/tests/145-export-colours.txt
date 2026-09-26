@@ -1,9 +1,11 @@
 # Category colours in the exports (#171), through the real File menu: the
-# PDF breakdown fills each category's dot and draws its label in the light
-# theme's --tag-* (TAG_PRINT_COLORS, 14-export.js), the .docx breakdown's
-# Category cells carry that colour as <w:color>, the script's highlight is
-# still Word's "yellow", the Gear packing list names its category in Gear's
-# colour, and the .docx reopens as exactly its script.
+# PDF breakdown heads each category's group with a dot and its plural name
+# in the light theme's --tag-* (TAG_PRINT_COLORS, 14-export.js), and draws
+# the script's tagged words in that colour (#169), the .docx breakdown's
+# category heads and the script's tags carry that colour as <w:color>
+# (#169), the script's highlight is still Word's "yellow", the Gear packing
+# list names its category in Gear's colour, and the .docx reopens as
+# exactly its script.
 #
 # Files are caught at URL.createObjectURL, as 03-exports does. The unit
 # tests (src/test/export-colours.test.mjs) cover every category and the
@@ -37,13 +39,15 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="export-pdf"]
 sleep 2000
 expect window.__blobs[window.__blobs.length-1].type == application/pdf
-eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var at=t.indexOf('(Production breakdown) Tj');var bd=t.slice(at);var out={};[['prop','Prop','764AA2'],['location','Location','2A7449'],['vfx','VFX','5E6C00'],['gear','Gear','44693C']].forEach(function(c){var i=bd.indexOf('q '+window.__rgb(c[2])+' rg ');var line=i<0?'':bd.slice(i,bd.indexOf('\n',bd.indexOf('\n',i)+1));out[c[0]]={dot:i>=0&&/ c h f\n/.test(line),label:line.indexOf('('+c[1]+') Tj ET')!==-1};});window.__pdfCol={at:at,cats:out,scriptPlain:!/\d rg (BT|[\d.]+ [\d.]+ m )/.test(t.slice(0,at))};return JSON.stringify(window.__pdfCol);})()
+# the breakdown groups by category, as the Production panel does: a dot in
+# the category's colour, then its plural in bold; in the script each tagged
+# word is drawn in its category's colour (the Audio column's 10pt)
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var at=t.indexOf('(Production breakdown) Tj');var bd=t.slice(at),script=t.slice(0,at);var out={};[['prop','Props & set dressing','764AA2','gaffer'],['location','Locations & shots','2A7449','kitchen'],['vfx','VFX & graphics','5E6C00','title'],['gear','Gear','44693C','boom']].forEach(function(c){var i=bd.indexOf('q '+window.__rgb(c[2])+' rg ');var line=i<0?'':bd.slice(i,bd.indexOf('\n',bd.indexOf('\n',i)+1));out[c[0]]={dot:i>=0&&/ c h f Q\n/.test(line),label:line.indexOf('BT /F2 10 Tf')!==-1&&line.indexOf('('+c[1]+') Tj ET')!==-1,word:new RegExp('q '+window.__rgb(c[2])+' rg BT /F1 10 Tf [^\\n]*\\('+c[3]+'\\) Tj ET Q').test(script)};});window.__pdfCol={at:at,cats:out};return JSON.stringify(window.__pdfCol);})()
 expect window.__pdfCol.at > 0
-expect window.__pdfCol.cats.prop.dot && window.__pdfCol.cats.prop.label
-expect window.__pdfCol.cats.location.dot && window.__pdfCol.cats.location.label
-expect window.__pdfCol.cats.vfx.dot && window.__pdfCol.cats.vfx.label
-expect window.__pdfCol.cats.gear.dot && window.__pdfCol.cats.gear.label
-expect window.__pdfCol.scriptPlain
+expect window.__pdfCol.cats.prop.dot && window.__pdfCol.cats.prop.label && window.__pdfCol.cats.prop.word
+expect window.__pdfCol.cats.location.dot && window.__pdfCol.cats.location.label && window.__pdfCol.cats.location.word
+expect window.__pdfCol.cats.vfx.dot && window.__pdfCol.cats.vfx.label && window.__pdfCol.cats.vfx.word
+expect window.__pdfCol.cats.gear.dot && window.__pdfCol.cats.gear.label && window.__pdfCol.cats.gear.word
 
 # --- .docx -------------------------------------------------------------------
 # a highlighted phrase, so the export has a Word highlight to keep yellow
@@ -52,14 +56,18 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="export-docx"]
 sleep 2000
 expect window.__blobs[window.__blobs.length-1].type.indexOf('wordprocessingml') !== -1
-eval (async function(){window.__docx=window.__blobs[window.__blobs.length-1];var xml=new TextDecoder().decode(window.__unzip(new Uint8Array(await window.__docx.arrayBuffer()))['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');var W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';var tbl=doc.getElementsByTagNameNS(W,'tbl')[1];var trs=Array.from(tbl.getElementsByTagNameNS(W,'tr'));var cells={};trs.slice(1).forEach(function(tr){var tc=tr.getElementsByTagNameNS(W,'tc')[0];var cols=Array.from(tc.getElementsByTagNameNS(W,'color')).map(function(c){return c.getAttribute('w:val');});cells[tc.textContent]=cols.join(',');});var hl=Array.from(doc.getElementsByTagNameNS(W,'highlight')).map(function(h){return h.getAttribute('w:val');});window.__docxCol={parses:!doc.getElementsByTagName('parsererror').length,head:Array.from(trs[0].getElementsByTagNameNS(W,'tc')).map(function(t){return t.textContent;}).join('|'),headPlain:!trs[0].getElementsByTagNameNS(W,'color').length,cells:cells,hl:hl};return JSON.stringify(window.__docxCol);})()
+# since #169 the breakdown is grouped by category, as the Production panel
+# groups it: each group's head spans the table, its dot and plural name in
+# the category's colour; the tags in the script are drawn in it too
+eval (async function(){window.__docx=window.__blobs[window.__blobs.length-1];var xml=new TextDecoder().decode(window.__unzip(new Uint8Array(await window.__docx.arrayBuffer()))['word/document.xml']);var doc=new DOMParser().parseFromString(xml,'application/xml');var W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';var val=function(e){return e?e.getAttribute('w:val'):'';};var tbl=doc.getElementsByTagNameNS(W,'tbl')[1];var trs=Array.from(tbl.getElementsByTagNameNS(W,'tr'));var cells={};trs.slice(1).forEach(function(tr){if(!tr.getElementsByTagNameNS(W,'gridSpan').length)return;var runs=Array.from(tr.getElementsByTagNameNS(W,'r'));cells[runs[1].textContent]=runs.slice(0,2).map(function(r){return val(r.getElementsByTagNameNS(W,'color')[0]);}).join(',');});var tags={};Array.from(doc.getElementsByTagNameNS(W,'tbl')[0].getElementsByTagNameNS(W,'r')).forEach(function(r){if(val(r.getElementsByTagNameNS(W,'rStyle')[0])==='SplitpageTag')tags[r.textContent]=val(r.getElementsByTagNameNS(W,'color')[0]);});var cats=['764AA2','2A7449','A53C75','5E6C00','AB413E','44693C'];var hl=Array.from(doc.getElementsByTagNameNS(W,'highlight')).map(function(h){return h.getAttribute('w:val');});window.__docxCol={parses:!doc.getElementsByTagName('parsererror').length,head:Array.from(trs[0].getElementsByTagNameNS(W,'tc')).map(function(t){return t.textContent;}).join('|'),headPlain:!Array.from(trs[0].getElementsByTagNameNS(W,'color')).some(function(c){return cats.indexOf(val(c))!==-1;}),cells:cells,tags:tags,hl:hl};return JSON.stringify(window.__docxCol);})()
 expect window.__docxCol.parses
-expect window.__docxCol.head === 'Category|Item|Status|Assigned to|Mentions|Scenes|Notes'
+expect window.__docxCol.head === 'Item|Status|Scenes|Assigned to|Notes'
 expect window.__docxCol.headPlain
-expect window.__docxCol.cells['● Prop'] === '764AA2,764AA2'
-expect window.__docxCol.cells['● Location'] === '2A7449,2A7449'
-expect window.__docxCol.cells['● VFX'] === '5E6C00,5E6C00'
-expect window.__docxCol.cells['● Gear'] === '44693C,44693C'
+expect window.__docxCol.cells['Props & set dressing'] === '764AA2,764AA2'
+expect window.__docxCol.cells['Locations & shots'] === '2A7449,2A7449'
+expect window.__docxCol.cells['VFX & graphics'] === '5E6C00,5E6C00'
+expect window.__docxCol.cells['Gear'] === '44693C,44693C'
+expect window.__docxCol.tags['gaffer tape'] === '764AA2' && window.__docxCol.tags['kitchen'] === '2A7449' && window.__docxCol.tags['title card'] === '5E6C00' && window.__docxCol.tags['boom pole'] === '44693C'
 # two: the demo's own "word for word" and the one added above
 expect window.__docxCol.hl.join(',') === 'yellow,yellow'
 
@@ -68,10 +76,12 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="export-packing-gear"]
 sleep 1500
 expect window.__blobs[window.__blobs.length-1].type == application/pdf
-eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var i=t.indexOf('q '+window.__rgb('44693C')+' rg\n');window.__pack={colour:i>0,name:t.slice(i).split('\n')[1]||'',count:(t.match(/ rg\n/g)||[]).length};return JSON.stringify(window.__pack);})()
-expect window.__pack.colour
-expect /\(Gear\) Tj ET$/.test(window.__pack.name)
-expect window.__pack.count === 1
+# the heading's dot is filled in Gear's colour, the one thing that is; the
+# heading after it is the category's name, bold, in the text colour
+eval (async function(){var t=new TextDecoder('latin1').decode(new Uint8Array(await window.__blobs[window.__blobs.length-1].arrayBuffer()));var ops=t.split('\n');var c=window.__rgb('44693C');var dots=ops.filter(function(op){return op.indexOf(c)!==-1;});window.__pack={dots:dots.length,dot:dots[0]||'',name:ops[ops.indexOf(dots[0])+1]||''};return JSON.stringify(window.__pack);})()
+expect window.__pack.dots === 1
+expect window.__pack.dot.indexOf('q ' + window.__rgb('44693C') + ' rg ') === 0 && / f Q$/.test(window.__pack.dot)
+expect /BT \/F2 20 Tf .*\(Gear\) Tj ET Q$/.test(window.__pack.name)
 
 # --- the .docx reopens as its script, highlight and all ----------------------
 # (read as the text on screen, a no-break space as a space: the space typed
