@@ -262,8 +262,15 @@ press  a [zebra lamp]
 sleep 300
 # mid-screen first: a scroll puts the ghost away, and typing low on the
 # screen scrolls to follow the caret
-eval (function(){ cell(5).scrollIntoView({ block: 'center' }); return true; })()
+# — and ANY scroll event on the page (the window listens in the capture
+# phase) puts the ghost away, including late ones from that scroll settling
+# the header; on a loaded run one arrived after the last key. A fixed
+# couple of frames wasn't always enough, so wait until nothing has
+# scrolled for 400 ms before typing.
+eval (function(){ window.__lastScroll = performance.now(); window.addEventListener('scroll', function(){ window.__lastScroll = performance.now(); }, true); return true; })()
+eval (function(){ cell(5).scrollIntoView({ block: 'center' }); window.__lastScroll = performance.now(); return true; })()
 caret #rows .row:nth-child(6) .visual-cell .cell-editable
+wait performance.now() - window.__lastScroll > 400
 press  VFX: glow [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
 expect kw() == 1
@@ -272,7 +279,9 @@ sleep 300
 expect kw() == 0
 expect JSON.stringify(tags(cell(5))) == ["vfx:glow [zeb"]
 expect cell(5).querySelectorAll('.tag-anchor[data-tag-name="zebra lamp"]').length == 0
-# with nothing open the ghost has Tab, as before
+# with nothing open the ghost has Tab, as before (and the same quiet wait:
+# closing the tag can nudge the caret-follow scroll)
+wait performance.now() - window.__lastScroll > 400
 press  [zeb
 wait document.getElementById('tag-ghost').classList.contains('is-visible')
 key Tab
