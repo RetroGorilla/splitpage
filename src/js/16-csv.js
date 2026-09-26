@@ -1,15 +1,9 @@
 import { S } from "./_state.js";
-import {
-  ROW_STATUSES,
-  formatDuration,
-  rowSeconds,
-  rowStatus,
-  totalSeconds
-} from "./01-scene-status.js";
 import { escapeHtml, makeId } from "./02-state.js";
-import { pad2 } from "./05-render.js";
-import { commentBodyText, commentEntries } from "./10-comments.js";
+import { breakdownRows } from "./08-production-panels.js";
+import { commentBodyText } from "./10-comments.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
+import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 
 /* ================= csv ================= */
 
@@ -18,29 +12,105 @@ export function csvEscape(v) {
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-export function buildCsv() {
-  var lines = [["Scene", "Status", "Est. time", "Visual", "Audio"].join(",")];
-  S.state.rows.forEach(function (row, i) {
-    var st = rowStatus(row.status) || ROW_STATUSES[0];
-    lines.push([
-      csvEscape(pad2(i + 1)),
-      csvEscape(st.label),
-      csvEscape(formatDuration(rowSeconds(row))),
-      csvEscape(toPlainText(cellOf(row.visualText))),
-      csvEscape(toPlainText(cellOf(row.audioText)))
-    ].join(","));
-  });
-  lines.push(["", "", csvEscape(formatDuration(totalSeconds())), "", ""].join(","));
+/* The script as a sheet: a row per scene with what the app shows round it
+   (#169) — where it starts, its status, its read time and whether that
+   was set by hand (#179), then the two columns, then what is in the
+   scene: its tags as the breakdown lists them ("Prop: Pentax K1000;
+   Location: workbench"), its b-roll shots and how far along each is, and
+   the numbers of the open threads on it (commentNumbers, the script's own
+   markers). "Scene" stays first and Visual and Audio keep their names, so
+   csvToRows finds them wherever they sit. A labelled "Total" row (and a
+   "Target" one when the script has a target) closes the scenes, with the
+   figures in the Status and Read columns; the comments follow under a
+   "Comments" line, each open one with its number and "Scene 03 · Audio".
+   Neither of those comes back in as a scene. */
+var CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
+/* Each scene's tags, as the breakdown has them, a category at a time in
+   the Production panel's order — "Prop: toothpick, naphtha; Gear:
+   overhead rig" — tags and sound cues (#219) alike, every item once.
+   Keyed by row index. */
+function sceneTagLists() {
+  var byScene = Object.create(null);
+  breakdownRows().forEach(function (r) {
+    if (r.inScript === "no") return;
+    r.scenes.forEach(function (n) {
+      var i = Number(n) - 1;
+      var list = byScene[i] = byScene[i] || [];
+      var last = list[list.length - 1];
+      if (last && last.label === r.categoryLabel) last.names.push(r.name);
+      else list.push({ label: r.categoryLabel, names: [r.name] });
+    });
+  });
+  Object.keys(byScene).forEach(function (i) {
+    byScene[i] = byScene[i].map(function (g) { return g.label + ": " + g.names.join(", "); });
+  });
+  return byScene;
+}
+
+/* Each scene's b-roll shots, read without writing (exportBrollScenes):
+   "the heron taking off (to shoot)", "… (shot, flagged)". */
+function sceneBrollLists() {
+  var byScene = Object.create(null);
+  exportBrollScenes().forEach(function (g) {
+    if (!g.scene) return;
+    byScene[Number(g.scene) - 1] = g.items.map(function (r) {
+      return r.name + " (" + (r.shot ? "shot" : "to shoot") + (r.flagged ? ", flagged" : "") + ")";
+    });
+  });
+  return byScene;
+}
+
+export function buildCsv() {
+  var facts = exportFacts();
+  var scenes = sceneFacts();
+  var tags = sceneTagLists();
+  var broll = sceneBrollLists();
   /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
-  var comments = commentEntries({ pieces: true });
+  var comments = exportComments({ pieces: true });
+  var open = Object.create(null);
+  comments.forEach(function (c) {
+    if (c.number && c.rowIndex >= 0) (open[c.rowIndex] = open[c.rowIndex] || []).push(c.number);
+  });
+  var blank = CSV_HEAD.map(function () { return ""; });
+  function summary(label, status, read) {
+    var cells = blank.slice();
+    cells[0] = label;
+    cells[2] = status;
+    cells[3] = read;
+    return cells.map(csvEscape).join(",");
+  }
+
+  var lines = [CSV_HEAD.join(",")];
+  S.state.rows.forEach(function (row, i) {
+    var f = scenes[i];
+    lines.push([
+      f.number,
+      f.start,
+      f.status.label,
+      f.read,
+      f.readSet ? "yes" : "",
+      toPlainText(cellOf(row.visualText)),
+      toPlainText(cellOf(row.audioText)),
+      (tags[i] || []).join("; "),
+      (broll[i] || []).join("; "),
+      (open[i] || []).sort(function (a, b) { return a - b; }).join(", ")
+    ].map(csvEscape).join(","));
+  });
+  lines.push(summary("Total", facts.scenes ? facts.status.shot + " of " + facts.scenes + " shot" : "", facts.runtime));
+  if (facts.target) {
+    lines.push(summary("Target", facts.target.delta === "0:00" ? "on target"
+      : facts.target.delta + (facts.target.over ? " over" : " under"), facts.target.text));
+  }
+
   if (comments.length) {
     lines.push("");
     lines.push(csvEscape("Comments"));
-    lines.push(["Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"].join(","));
+    lines.push(["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"].join(","));
     comments.forEach(function (c) {
       lines.push([
-        csvEscape(c.location),
+        csvEscape(c.number || ""),
+        csvEscape(c.where),
         csvEscape(c.resolved ? "Resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") : "Open"),
         csvEscape(c.assignee),
         csvEscape(c.author),
@@ -50,7 +120,7 @@ export function buildCsv() {
       ].join(","));
       c.replies.forEach(function (rp) {
         lines.push([
-          csvEscape(""), csvEscape(""), csvEscape(""),
+          csvEscape(""), csvEscape(""), csvEscape(""), csvEscape(""),
           csvEscape("↳ " + rp.author), csvEscape(rp.when),
           csvEscape(""), csvEscape(commentBodyText(rp))
         ].join(","));
@@ -128,9 +198,20 @@ export function csvToRows(text) {
   }
   if (looksLikeHeader && start === 0) start = 1;
 
+  /* Our own export (buildCsv) — "Scene" first, Status, Visual and Audio
+     named — ends its scenes at a "Comments" line: the comments below it
+     are not scenes, though their Author and Date columns can sit where
+     Visual and Audio are and used to come back as rows. Only after our own
+     header, the way the Markdown and .docx readers wait for theirs, so
+     somebody else's sheet keeps a row that happens to say "Comments". The
+     totals rows above it ("Total", "Target") have neither column and are
+     skipped like any empty row. */
+  var ours = head[0] === "scene" && head.indexOf("status") !== -1 && hv !== -1 && ha !== -1;
+
   var out = [];
   for (var i = start; i < table.length; i++) {
     var r = table[i];
+    if (ours && (r[0] || "").trim() === "Comments" && r.slice(1).every(function (c) { return !c.trim(); })) break;
     var v = (r[vi] || "").trim(), a = (r[ai] || "").trim();
     if (!v && !a) continue;
     out.push({

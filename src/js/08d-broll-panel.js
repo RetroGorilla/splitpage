@@ -1614,7 +1614,7 @@ export function renderBrollPage() {
 
 /* ---- the sheet, as files: a CSV, and a PDF to print ---- */
 
-function shotRecordForFile(e) {
+export function shotRecordForFile(e) {
   var who = personById(e.owner);
   return {
     scene: e.rowId ? sceneLabel(e) : "",
@@ -1639,36 +1639,59 @@ function shotRecordForFile(e) {
 /* One row per shot — every shot, in script order, whatever the page is
    filtered to: a spreadsheet filters and sorts itself. Read without
    writing anything (brollEntries(true)), since building a file must not
-   be what adds a shot to the list. */
+   be what adds a shot to the list. "Scene start" (#169) — the timecode
+   the shot's scene starts at, as the list's scene heads show it — goes
+   last, so a sheet built on the columns before it still lines up. */
 export function buildBrollCsv() {
-  var head = ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description"];
+  var head = ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
+              "Scene start"];
   var lines = [head.join(",")];
+  var starts = sceneStarts();
   brollSortedForList(brollEntries(true)).forEach(function (e) {
     var r = shotRecordForFile(e);
     lines.push([r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location, r.props.join("; "),
-                r.cuts, r.owner, r.note, r.desc].map(csvEscape).join(","));
+                r.cuts, r.owner, r.note, r.desc, startOf(e, starts)].map(csvEscape).join(","));
   });
   if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
   return "﻿" + lines.join("\r\n");
 }
 
 /* What the printed sheet shows: the page as it is — its filter and its
-   grouping — so what is printed is what was being looked at. */
-export function brollShotListForPrint() {
+   grouping — so what is printed is what was being looked at. Each group
+   says what kind it is (brollGroups' kind: "location", "scene", "added",
+   "person") and a scene group where its scene starts; each shot where its
+   own scene starts ("" for one with no scene), as the group heads on
+   screen read "Scene 04 · 01:03"; `none` is the group of shots with no
+   location or nobody assigned, which the page heads with no pin or
+   avatar. */
+/* `as` ({filter, group}), when given, is the list asked for rather than
+   the page's: the Export dialog's shot list and the script PDF's appendix
+   are every shot, by scene, whatever the page was last left showing. */
+export function brollShotListForPrint(as) {
+  var filterId = as && as.filter ? oneOf(FILTERS, as.filter, "all") : view.filter;
+  var groupId = as && as.group ? oneOf(PAGE_GROUPS, as.group, "scene") : pageView.group;
   var entries = brollEntries(true);
-  var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
-  var filter = FILTERS.filter(function (f) { return f.id === view.filter; })[0];
-  var group = PAGE_GROUPS.filter(function (g) { return g.id === pageView.group; })[0];
+  var shown = entries.filter(function (e) { return matchesFilter(e, filterId); });
+  var filter = FILTERS.filter(function (f) { return f.id === filterId; })[0];
+  var group = PAGE_GROUPS.filter(function (g) { return g.id === groupId; })[0];
+  var starts = sceneStarts();
   return {
     title: S.state.title || "Untitled Script",
     summary: pageSummaryText(entries),
     scope: (filter && filter.id !== "all" ? filter.label + ", " : "") + "by " + group.label.toLowerCase(),
-    groups: brollGroups(shown, pageView.group).map(function (g) {
+    groups: brollGroups(shown, groupId).map(function (g) {
       return {
         label: g.label,
+        kind: g.kind,
+        none: !!g.none,
+        start: g.row && starts[g.row.id] !== undefined ? formatTimecode(starts[g.row.id]) : "",
         done: g.items.filter(function (e) { return e.status === "shot"; }).length,
         total: g.items.length,
-        items: g.items.map(shotRecordForFile)
+        items: g.items.map(function (e) {
+          var rec = shotRecordForFile(e);
+          rec.start = startOf(e, starts);
+          return rec;
+        })
       };
     })
   };

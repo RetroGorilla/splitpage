@@ -574,6 +574,13 @@ export function commentEntries(opts) {
   list.sort(commentPositionCompare);
   return list.map(function (c) {
     var entry = {
+      /* the thread's id and where it sits, for the exports' kit
+         (14b-export-kit.js), which numbers the open ones the way the
+         script's markers are numbered and names the place as the panel
+         does, "Scene 03 · Audio" */
+      id: c.id,
+      rowIndex: c.field === "title" ? -1 : findRowIndex(c.rowId),
+      field: c.field,
       location: findAnchorLocationLabel(c.rowId, c.field),
       author: c.author || "Anonymous",
       body: htmlToPlainText(c.body),

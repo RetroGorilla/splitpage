@@ -1710,6 +1710,49 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     clones a shot whole and folds the other side in field by field) and
     `newBrollRecord`; `state-fields.test.mjs` checks the record's keys
     survive a merge and a save.
+57. **Every document export says what it says besides the words through
+    the kit** (`14b-export-kit.js`, 2026-09-26): the facts line, each
+    scene's number / start timecode / status / read time, the open
+    threads' numbers (counted as the script's markers count them), a
+    cell's tags, b-roll keys and markers, the breakdown by category and the
+    b-roll by scene. A format that works any of these out for itself will
+    drift from the others and from the app. The print colours are a second
+    copy of `:root` (`PRINT_COLORS`, `TAG_PRINT_COLORS`) that
+    palette.test.mjs holds to it.
+58. **Anything an export prints that is not script is skipped on the way
+    back in, for files exported before and after.** .docx: named styles —
+    `SplitpageMeta` (paragraph, skipped anywhere), `SplitpageMarker` and
+    `SplitpageSceneNo` (runs dropped), `SplitpageBroll` (its text kept, the
+    chip's bold and padding dropped), `SplitpageTag` (its words kept); in a
+    Splitpage .docx (a `SplitpageTable` table or a `SplitpageMeta`
+    paragraph) a `w:u` carrying `w:color` is the export's drawing, so the
+    writer's own underline is always written without one;
+    `EXPORT_SECTION_HEADINGS` is Production breakdown / B-roll shot list /
+    Comments; `isBreakdownHeader` knows the old seven-column head and the
+    new five. Markdown: `MD_SCENE_META_RE`, `MD_SCENE_FACTS_RE`,
+    `MD_MARKER_RE` (`<sup>N</sup>`), the hard breaks after a timed heading,
+    and the `MD_EXPORT_TAIL_RE` headings (11-import.js). CSV: our header,
+    then a cut at our own "Comments" line; the Total/Target rows read as
+    empty. The .docx fixtures in `src/test/fixtures/` are the old writer's
+    output — the "old files still reopen" contract; never regenerate them
+    with the new writer. The narration .txt stays exactly title, blank
+    line, a paragraph a scene: it has no styles to hide anything else in.
+59. **The saved .md project's human half is frozen byte for byte.**
+    `toMarkdownTableDoc(s)` without `opts.export`, and the tail without
+    it, write what they wrote before the exports changed; everything
+    export-only (the meta line, the Start/Status/Read columns, the grouped
+    breakdown, the b-roll list, numbered comments) sits behind
+    `opts.export`. `formats.test.mjs` keeps the pre-change writer verbatim
+    and compares. (See also the comment above `mdSceneCellSource`.)
+60. **An export is the same bytes all day.** Suite 98 exports every format
+    twice, by two routes, and compares the bytes (zeroing only a zip
+    entry's own timestamp): a PDF's `/CreationDate` and a .docx's
+    `docProps` dates are the day, never the second, and nothing prints a
+    time of export. The comments' own posted times are data, and fine.
+61. **The PDFs' footer is a pagination artifact** (`/Artifact <<
+    /Type /Pagination /Subtype /Footer >> BDC … EMC`, `pdfFooterOps`):
+    text extraction skips it, and a test that reads the content streams
+    must too — its hairline is the same operator as a scene's rule.
 ---
 
 ## 6. Map of the source
@@ -1726,7 +1769,7 @@ evaluation order via `_entry.js`):
 | `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`; the save status's words `savedStatusText` and tooltip time `savedWhenText`, #208), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
-| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel |
+| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel; `standaloneHtmlFor(s, head)` and `withPageHead`, which give the Standalone page export the script's `<title>` and a `<meta name="description">` (the app's own page and `buildPublishHtml` unchanged) |
 | `02c-blobs.js` | image blob registry (#82): `intern`/`internDataUrl` (sync hash, sniff, measure), `recordFor`/`urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`/`queuePersist`, a row's picture (`rowImage`, `rowImageUrl`, `rowImageBytes`, `blobImgHtml`), the file writers' `inlineStateImages`/`inlineStateJson`, the document-wide hydrator for `img[data-blob]` ("Image unavailable" when nobody has it), IndexedDB `splitpage-blobs` + memory backends (`setBackend` for the desktop folder), `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
@@ -1756,19 +1799,20 @@ evaluation order via `_entry.js`):
 | `08d-broll-panel.js` | how the b-roll list is shown and edited (#148): the side panel — one line per shot, summary bar, filter chips and Group menu (remembered per device, `splitpage-broll-view`), the compact detail card, multi-select and the bulk bar (one change, one undo); and the full-page shot list (#150) — a table over the script at the writer's z-index that closes the side panels and traps the focus (invariants #16, #19), edited through the panel's own handlers (`wireBrollRoot`), with its CSV (`buildBrollCsv`) and printable PDF (`buildShotListPdf` in 17-pdf.js, the packing list's writer) |
 | `09-find-replace.js` | find & replace |
 | `10-comments.js` | comments: composer, panel, cards |
-| `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import |
+| `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import; the Markdown exports reopened (`parseStackedMarkdownExport`, `markdownExportScript`), old shapes and new (invariant 58) |
 | `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
 | `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
 | `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` and `rundownEdge()` (a dot whose block the sliding lens has carried off the track is hidden) being exported; `paintRundownPresence()` is called from `paintPresence()` |
-| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171) |
-| `15-docx.js` | .docx read/write, narration-only export |
-| `16-csv.js` | csv |
-| `17-pdf.js` | pdf, packing lists |
+| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171). The Markdown exports: `exportMetaLine()` (also the standalone page's description), timed scene headings with a status/read line, open threads' `<sup>N</sup>` markers (`markdownWithMarkers`), hard breaks (`mdHardBreaks`), and `appendExportTail` — the breakdown by category, the b-roll shot list as task lists, numbered comments — all behind `opts.export` (invariant 59); `opts.scenes` for the dialog's sketch |
+| `14b-export-kit.js` | what every document export says besides the words, so they all say it alike and as the app does: the document's facts (`exportFacts`, `exportSummaryParts` — scenes, running time, target, shot count, date), each scene's gutter (`sceneFacts` — number, start timecode, read time and whether it was set by hand, status), the open threads' numbers counted as the script's markers count them (`commentNumbers`) and the comments in that numbering (`exportComments`, "Scene 03 · Audio"), a cell's runs with their tag and its colour, the comments over them, the markers after them and the b-roll key (`exportRuns`, over `toDocxRuns(cell, {annotate})`), the breakdown by category (`breakdownGroups`), the b-roll by scene (`exportBrollScenes`), and the rest of the light palette the exports print with (`PRINT_COLORS`, `STATUS_PRINT`, `TAG_STATUS_PRINT`; palette.test.mjs holds `PRINT_COLORS` to `:root`) |
+| `15-docx.js` | .docx read/write, narration-only export. The script export draws the app's look (#169) — the facts line, the Scene/Visual/Audio/Read table ruled across only, each scene's gutter, tags, b-roll chips and comment markers, the grouped breakdown (rows that cannot split), the b-roll shot list and numbered comments, "Page X of Y", `docProps` — in named styles the reader skips (invariant 58); the narration .docx hangs each scene's number in the margin (`SplitpageSceneNo`) and reopens as the rows it always did |
+| `16-csv.js` | the script spreadsheet — Scene, Start, Status, Read, Read set by hand, Visual, Audio, Tags (`sceneTagLists`), B-roll (`sceneBrollLists`), Open comments; a Total row and a Target row; the Comments block numbered — and `csvToRows`, which maps Visual/Audio by header and stops at our own "Comments" line |
+| `17-pdf.js` | every PDF, through one assembler (`assemblePdf`: Info title and `/DisplayDocTitle`, link annotations, bookmarks) and shared pieces (`pdfTextOp`, `pdfLampOp`, `pdfCheckboxOp`, `pdfRoundRectPath`, `pdfFooterOps`, `pdfWrapRuns` carrying a run's annotations and making room for its markers). `buildPdf`: the script as the app lays it out — title block (facts line, rundown strip, status legend), column heads per page, each scene's gutter, annotated runs, clickable links, then the breakdown by category, the b-roll by scene and the numbered comments, each bookmarked, and a footer artifact (invariant 61) per page. The packing list and the b-roll shot list share the list-sheet helpers (`listSheet`, `listHead`, `listWrap`, `listLineOps`): a kicker and heading, Out/Back boxes and a sign-off block on the packing list (items from `breakdownGroups()`), groups as on screen on the shot list (`brollShotListForPrint()`), the opening of a shot's "cuts against" only |
 | `18-local-files.js` | `openProjectFile`/`adoptProjectState`, save-back, File menu dispatch |
 | `18a-local-merge.js` | the on-disk conflict modal's "Merge them": the mergeable-file probe, the retained ancestor (`diskBase`), the field-by-field review pane and its word-level diff |
 | `18b-file-menu.js` | the File menu as a dropdown (#145): `toggleFileMenu`, the file card, `refreshFileMenu` (what is offered right now), `setMenuItemReason`/`setMenuItemLabel` (the second line and the label, never the button's textContent), shortcut chips from `data-keys`, submenus opening in place, Open recent, New script (`startNewScript`), the keyboard, and the browser's Ctrl+S / Ctrl+Shift+S / Ctrl+O (the desktop's are main's accelerators) |
-| `18c-export-dialog.js` | File ▸ Export… (#146): the `EXPORT_FORMATS` table the cards and options are built from, the page sketch, summary and file name (`exportFileName`, 18-local-files.js, which `buildFileData` names every file with), `exportActionReason`, the remembered format (`splitpage-last-export`, per device) and Export again, Ctrl/Cmd+E. Builds nothing itself: Export clicks the format's own hidden `data-file-action` button |
+| `18c-export-dialog.js` | File ▸ Export… (#146): the `EXPORT_FORMATS` table the cards and options are built from, the page sketch, summary and file name (`exportFileName`, 18-local-files.js, which `buildFileData` names every file with), `exportActionReason`, the remembered format (`splitpage-last-export`, per device) and Export again, Ctrl/Cmd+E. Builds nothing itself: Export clicks the format's own hidden `data-file-action` button. Each sketch shows its file's first page, from the kit and the writers themselves (the Markdown one is `toMarkdownDoc({scenes: 3})`), drawn in the print palette whatever the theme and escaped all the way; `exportSummary` names only the sections the script has |
 | `18d-command-menu.js` | the command menu (#147, Ctrl/Cmd+K and File ▸ Search commands…): the `COMMANDS` list (File-menu buttons, each export format, the header's panel/Write/Present/Save buttons) with the words each is found by, ranking, recently run (`splitpage-recent-commands`, per device), and where it will not open (teleprompter, writer, a modal, the tour). Runs every command by clicking the button the menu or header already has, and reads whether it is offered and why not off that same button |
 | `19-writer.js` | the writer (word-processor view of the audio column) |
 | `20-teleprompter.js` | teleprompter and voice follow |

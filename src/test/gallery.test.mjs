@@ -167,8 +167,10 @@ test("Markdown and PDF name every picture and every link", () => {
   const jpegs = [jpeg(300, 200)];
   jpegs.more = [[jpeg(200, 300)]];
   const t = new TextDecoder("latin1").decode(buildPdf(jpegs));
-  /* a word to a text op */
-  assert.ok(t.indexOf("(Video:) Tj") !== -1 && t.indexOf("(https://youtu.be/abc) Tj") !== -1);
+  /* a word to a text op: the site, then the address without its scheme,
+     which can be clicked through to the whole of it */
+  assert.ok(t.indexOf("(YouTube) Tj") !== -1 && t.indexOf("(youtu.be/abc) Tj") !== -1);
+  assert.ok(t.indexOf("/Subtype /Link") !== -1 && t.indexOf("/URI (https://youtu.be/abc)") !== -1);
   assert.ok(t.indexOf("(b.mov) Tj") !== -1);
   assert.ok(/ cm \/Im1 Do Q/.test(t) && / cm \/Im2 Do Q/.test(t), "both pictures drawn");
 });

@@ -102,9 +102,13 @@ expect rec('bs4').status === 'shot'
 click #broll-page [data-action="broll-page-csv"]
 wait window.__blobs.length === 1
 eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
-expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description'
+expect window.__csv[0] === 'Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start'
 expect window.__csv.length === 9
 expect window.__csv[1].indexOf('01,gulls wheeling over the nets,Shot,,Harbour,Fishing nets; Drone,') === 0
+# the scene's start last (#169), after the columns a sheet may be built on;
+# a shot added by hand has no scene and no start
+expect /,00:00$/.test(window.__csv[1])
+expect window.__csv.slice(1).every(function(l){ return /,(\d\d:\d\d)?$/.test(l); })
 expect window.__csv.filter(function(l){ return l.indexOf('boats coming in at dawn,To shoot,yes,') !== -1; }).length === 1
 expect window.__csv.filter(function(l){ return l.indexOf(',hands mending a net,Shot,,Harbour,Fishing nets,,Ada Brenner,') !== -1; }).length === 1
 expect window.__csv[8].indexOf(',Establisher of the street, blue hour') === -1 && window.__csv[8].indexOf('"Establisher of the street, blue hour"') !== -1
@@ -117,7 +121,16 @@ expect window.__blobs[1].type === 'application/pdf'
 expect window.__pdf.indexOf('%PDF') === 0
 expect window.__pdf.indexOf('B-roll shot list') !== -1
 expect window.__pdf.indexOf('(Ada Brenner) Tj') !== -1 && window.__pdf.indexOf('(Jordan Sato) Tj') !== -1
-expect window.__pdf.indexOf('hands mending a net') !== -1 && window.__pdf.indexOf('FLAGGED') !== -1
+expect window.__pdf.indexOf('hands mending a net') !== -1
+# the sheet's head, landscape, the table's columns, a shot's scene and
+# where it starts in the Scene column, "Flagged" in sentence case (never
+# "FLAGGED") with its reason (the note) under it, the footer
+expect window.__pdf.indexOf('(B-roll shot list) Tj') !== -1 && window.__pdf.indexOf('(Harbour town) Tj') !== -1
+expect window.__pdf.indexOf('/MediaBox [0 0 792 612]') !== -1 && window.__pdf.indexOf('(Notes) Tj') !== -1
+expect window.__pdf.indexOf('(01) Tj') !== -1 && window.__pdf.indexOf('(00:00) Tj') !== -1
+expect window.__pdf.indexOf('(Flagged) Tj') !== -1 && window.__pdf.indexOf('light was gone.) Tj') !== -1
+expect window.__pdf.indexOf('FLAGGED') === -1
+expect window.__pdf.indexOf('(Page 1 of 1) Tj') !== -1
 
 # ---- 7. dark mode takes the dark tokens --------------------------------
 eval document.documentElement.setAttribute('data-theme', 'dark')

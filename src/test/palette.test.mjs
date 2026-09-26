@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TAG_CATEGORIES } from "../js/07-production-tags.js";
 import { TAG_PRINT_COLORS, tagPrintColor } from "../js/14-export.js";
+import { PRINT_COLORS, PRINT_TOKENS } from "../js/14b-export-kit.js";
 
 const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
 
@@ -124,6 +125,21 @@ test("the exports' category colours are the light theme's --tag-* values, and re
   }
   assert.equal(tagPrintColor("nope"), null);
   assert.equal(tagPrintColor("__proto__"), null);
+});
+
+/* The rest of the light palette the exports print with (PRINT_COLORS,
+   14b-export-kit.js): the text greys, the rules, the Visual blue, the Audio
+   amber, the b-roll teal — the same second copy, held to the same tokens. */
+test("the exports' print palette is the light theme's :root values", () => {
+  for (const [key, token] of Object.entries(PRINT_TOKENS)) {
+    assert.match(PRINT_COLORS[key], /^[0-9A-F]{6}$/, key + ": six upper-case hex digits");
+    assert.equal("#" + PRINT_COLORS[key], LIGHT[token], key + ": has drifted from :root's " + token);
+  }
+  assert.deepEqual(Object.keys(PRINT_COLORS).sort(), Object.keys(PRINT_TOKENS).sort());
+  for (const key of ["text", "dim", "faint", "visual", "audio", "broll"]) {
+    const onWhite = contrast("#" + PRINT_COLORS[key], "#FFFFFF");
+    assert.ok(onWhite >= 4.5, key + " prints at " + onWhite.toFixed(2) + ":1 on white");
+  }
 });
 
 test("--text-faint is 4.5:1 on the page in both themes", () => {
