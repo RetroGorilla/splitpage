@@ -121,7 +121,8 @@ key Enter
 sleep 300
 expect Array.from(document.querySelectorAll('#rows .row')).some(function(r){return r.textContent.indexOf('zephyrion')!==-1;})
 expect document.querySelectorAll('.hidden-shot-strip').length == 0
-expect getSelection().toString().toLowerCase() == zephyrion
+# the match is painted, not selected: the find box keeps the keyboard (suite 255)
+expect (function(){var h=CSS.highlights.get('splitpage-find-match');var s='';if(h)h.forEach(function(r){s+=r.toString();});return s.toLowerCase();})() == zephyrion
 click #find-close
 
 # --- reset, then comments "jump to" expands the run too --------------------
