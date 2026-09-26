@@ -187,10 +187,13 @@ function pdfInfoString(s) {
   return "<" + hex + ">";
 }
 
+/* The day, not the second (PDF allows "D:YYYYMMDD"): the same script
+   exported twice in a day is the same bytes, which is how the Export
+   dialog's suite proves every route runs the one code path — and all a
+   reader needs is the day, which the title block prints anyway. */
 function pdfDate(d) {
   function p(v) { return (v < 10 ? "0" : "") + v; }
-  return "D:" + d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) +
-    p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + "Z";
+  return "D:" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
 }
 
 /* ---- one assembler for every PDF here ----
