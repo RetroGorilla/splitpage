@@ -674,8 +674,11 @@ export function productionEntries() {
 export function healTagRegistry() {
   if (!S.state) return 0;
   var ix = productionIndex();
+  var cuesWere = cueSnapshot;
+  cueSnapshot = snapshotCues();
   if (!ix.unregistered.length) return 0;
   var n = ix.unregistered.length;
+  var retitled = retitleEditedCues(cuesWere, cueSnapshot, ix);
   ix.unregistered.forEach(function (t) {
     registerProductionTag(t.cat.id, t.name);
     /* the one thing registering changes about the entry: it has an id now */
@@ -684,6 +687,65 @@ export function healTagRegistry() {
   });
   ix.unregistered = [];
   ix.tagSig = registrySignature(S.state.productionTags);
+  /* a retitled entry is no longer an orphan beside the live item: read
+     the whole thing again */
+  if (retitled) prodIndex = null;
+  return n;
+}
+
+/* An edited sound cue keeps its item (#219). A cue has no id of its own:
+   its item is named by its words, so typing "Music: slow", then " piano",
+   then " intro" with a pause between registered "slow", "slow piano" and
+   "slow piano intro", the first two left "Not in script", and a one-letter
+   fix to a cue set to "Have it" put a new item at Needed beside the old
+   one. So the heal remembers each Audio cell's cue names as it last saw
+   them, and a name that went from a cell while a new one came into it is
+   the same cue edited: its entry takes the new name, keeping its status,
+   owner and notes (and its id, as a rename from the panel does). Only
+   while the old name is in the script nowhere else, so a second cue or a
+   tag of that name keeps it, and only when the new name is not tracked
+   already. The names are per document, so opening another one pairs
+   nothing. */
+var cueSnapshot = null;       /* {docId, cells: {rowId: [cue names]}} */
+
+var cueNamesInField = contentMemo(function (html) {
+  if (html.indexOf("audio-cue") === -1) return [];
+  /* named as tagsInField names a cue's item */
+  return cuesInCell(cellOf(html)).map(function (c) { return c.name.slice(0, 80).trim(); }).filter(Boolean);
+});
+
+function snapshotCues() {
+  var cells = {};
+  S.state.rows.forEach(function (r) {
+    var names = cueNamesInField(r.audioText);
+    if (names.length) cells[r.id] = names;
+  });
+  return { docId: S.state.docId, cells: cells };
+}
+
+function retitleEditedCues(was, now, ix) {
+  if (!was || was.docId !== now.docId) return 0;
+  var fresh = {}, orphan = {};
+  ix.unregistered.forEach(function (t) { if (t.cat.id === "sound") fresh[registryKey("sound", t.name)] = true; });
+  ix.entries.forEach(function (e) { if (e.orphaned && e.cat.id === "sound") orphan[e.key] = true; });
+  var n = 0;
+  Object.keys(now.cells).forEach(function (rowId) {
+    var before = was.cells[rowId];
+    if (!before) return;
+    var after = now.cells[rowId];
+    var gone = before.filter(function (name) { return after.indexOf(name) === -1; });
+    var came = after.filter(function (name) { return before.indexOf(name) === -1; });
+    for (var i = 0; i < gone.length && i < came.length; i++) {
+      var oldKey = registryKey("sound", gone[i]), newKey = registryKey("sound", came[i]);
+      if (!fresh[newKey] || !orphan[oldKey]) continue;
+      var entry = registryEntry("sound", gone[i]);
+      if (!entry) continue;
+      entry.name = came[i];
+      delete fresh[newKey];
+      delete orphan[oldKey];
+      n++;
+    }
+  });
   return n;
 }
 
