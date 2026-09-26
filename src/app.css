@@ -2962,6 +2962,9 @@
   .tag-scene.jump-link { gap: 3px; color: var(--text-dim); white-space: nowrap; }
   /* "03, 04": the comma in the body face — the mono's sits mid-cell */
   .tag-scene-sep { font-family: var(--font-body); font-weight: 450; }
+  /* a scene number and the comma after it never part at a line's end
+     (joinSceneLinks, 08-production-panels.js) */
+  .tag-scene-unit { white-space: nowrap; }
   .tag-scene.jump-link:hover { color: var(--text); }
   .tag-owner {
     display: flex; align-items: center; gap: 6px;
