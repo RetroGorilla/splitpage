@@ -1030,7 +1030,13 @@ export function typePendingMarks(cellEl, text) {
   var typed = false;
   var fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || !pendingAt(cellEl, sel.from)) return null;
-    var next = insertText(cell, sel.from, text, marksForTyping(cellEl, cell, sel.from));
+    /* A space typed last on its line is a no-break space, as the browser
+       types it and as typeAtDirectionEdge below does: a plain one there is
+       not drawn, and the browser would put the caret back outside the new
+       bold and type the next letters there. */
+    var after = projection(cell).charAt(sel.from);
+    var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
+    var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
     var at = sel.from + cellLength(next) - cellLength(cell);
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
