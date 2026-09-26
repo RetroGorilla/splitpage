@@ -19,7 +19,9 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { detectTwoColumnFormat, parseImportRows, parseMarkdownTable } from "../js/11-import.js";
-import { toMarkdownTableDoc } from "../js/14-export.js";
+import { cellOf, toMarkdown } from "../js/04c-doc-model.js";
+import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14-export.js";
+import { LONG_DEMO } from "../js/_starters.js";
 
 initTags();
 initStatus();
@@ -179,4 +181,46 @@ test("someone else's table keeps what follows its own Comments heading", () => {
      table at those headings, as only our table style does in a .docx. */
   const md = "| Visual | Audio |\n| --- | --- |\n| a | b |\n\n## Comments\n\n| c | d |";
   assert.deepEqual(cells(parseMarkdownTable(md)), [["a", "b"], ["c", "d"]]);
+});
+
+/* The plain (stacked) Markdown export reopened: every paragraph used to be
+   a scene, the title, the meta line and each "### Scene 01" among them,
+   and "*Visual —* …" landed in the Audio column. */
+test("the stacked Markdown export of the long demo reads back as its 30 scenes", () => {
+  S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
+  const orig = S.state.rows;
+  const md = toMarkdownDoc();
+  assert.match(md, /## Production breakdown/);
+  assert.match(md, /## Comments/);
+  assert.equal(detectTwoColumnFormat(md), "stacked");
+  const out = parseImportRows(md, "twocolumn");
+  assert.equal(out.length, 30);
+  /* each cell exactly as the export wrote it */
+  out.forEach((r, i) => {
+    assert.equal(r.visualText, toMarkdown(cellOf(orig[i].visualText)), "scene " + (i + 1) + " Visual");
+    assert.equal(r.audioText, toMarkdown(cellOf(orig[i].audioText)), "scene " + (i + 1) + " Audio");
+  });
+});
+
+test("a stacked export's blank scene, video link and multi-line cells", () => {
+  S.state = migrateRows({
+    schema: 2, title: "Stack",
+    rows: [
+      { id: "r1", visualText: "Wide<br>then close", audioText: "Hello <strong>there</strong>.<br><br>Second para.", status: "todo",
+        imageLinks: ["https://www.youtube.com/watch?v=aqz-KE-bpKQ"] },
+      { id: "r2", visualText: "", audioText: "", status: "todo" },
+      { id: "r3", visualText: "", audioText: "Just audio.", status: "todo" }
+    ]
+  });
+  const md = toMarkdownDoc();
+  assert.deepEqual(cells(parseImportRows(md, "twocolumn")), [
+    ["Wide\nthen close", "Hello **there**.\n\nSecond para."],
+    ["", ""],
+    ["", "Just audio."]
+  ]);
+});
+
+test("Markdown that only looks like the stacked export reads as it always did", () => {
+  assert.equal(detectTwoColumnFormat("# Notes\n\nSome intro.\n\n### Scene 01\n\nWords."), null);
+  assert.equal(detectTwoColumnFormat("### Scene 01\n\nWords.\n\n### Scene 02\n\nMore."), null);
 });
