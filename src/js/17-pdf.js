@@ -47,13 +47,13 @@ function pdfCharWidth(ch, bold) {
   return bold ? 611 : 556;
 }
 
-function pdfTextWidth(text, bold, size) {
+export function pdfTextWidth(text, bold, size) {
   var w = 0;
   for (var i = 0; i < text.length; i++) w += pdfCharWidth(text[i], bold);
   return w * size / 1000;
 }
 
-function pdfEscapeText(s) {
+export function pdfEscapeText(s) {
   var out = "";
   for (var i = 0; i < s.length; i++) {
     var code = pdfEncodeChar(s[i]);
@@ -66,13 +66,13 @@ function pdfEscapeText(s) {
 
 /* A category's print colour (#171; TAG_PRINT_COLORS, 14-export.js) as the
    operands of a PDF colour operator: "RRGGBB" to "0.463 0.290 0.635". */
-function pdfRgb(hex) {
+export function pdfRgb(hex) {
   return [0, 2, 4].map(function (i) { return (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3); }).join(" ");
 }
 
 /* A filled circle's path, centred on (cx, cy): four Bézier quarters, the
    usual 0.5523 control distance. The caller sets the colour and fills. */
-function pdfCirclePath(cx, cy, r) {
+export function pdfCirclePath(cx, cy, r) {
   var k = r * 0.5523;
   function p(x, y) { return x.toFixed(2) + " " + y.toFixed(2); }
   return p(cx + r, cy) + " m " +
@@ -80,6 +80,245 @@ function pdfCirclePath(cx, cy, r) {
     p(cx - k, cy + r) + " " + p(cx - r, cy + k) + " " + p(cx - r, cy) + " c " +
     p(cx - r, cy - k) + " " + p(cx - k, cy - r) + " " + p(cx, cy - r) + " c " +
     p(cx + k, cy - r) + " " + p(cx + r, cy - k) + " " + p(cx + r, cy) + " c h";
+}
+
+/* ---- the pieces every PDF here draws with ----
+
+   Each returns content-stream operators as one string, wrapped in q/Q
+   where it sets a colour, so a caller can push it anywhere. Colours are
+   print hexes (PRINT_COLORS, 14b-export-kit.js; TAG_PRINT_COLORS). */
+
+function n2(v) { return (+v).toFixed(2); }
+
+/* One string of Helvetica: F1 regular, F2 bold, F3 oblique, F4 bold
+   oblique. With a colour it is wrapped so the colour does not leak. The
+   uncoloured form is byte for byte the text op the writers always
+   emitted, which the tests read. */
+export function pdfTextOp(str, x, y, font, size, hex) {
+  var op = "BT /" + font + " " + size + " Tf 1 0 0 1 " + n2(x) + " " + n2(y) +
+    " Tm (" + pdfEscapeText(str) + ") Tj ET";
+  return hex ? "q " + pdfRgb(hex) + " rg " + op + " Q" : op;
+}
+
+/* A rounded rectangle's path, (x, y) its lower-left corner. */
+export function pdfRoundRectPath(x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  var k = r * 0.5523;
+  return n2(x + r) + " " + n2(y) + " m " +
+    n2(x + w - r) + " " + n2(y) + " l " +
+    n2(x + w - r + k) + " " + n2(y) + " " + n2(x + w) + " " + n2(y + r - k) + " " + n2(x + w) + " " + n2(y + r) + " c " +
+    n2(x + w) + " " + n2(y + h - r) + " l " +
+    n2(x + w) + " " + n2(y + h - r + k) + " " + n2(x + w - r + k) + " " + n2(y + h) + " " + n2(x + w - r) + " " + n2(y + h) + " c " +
+    n2(x + r) + " " + n2(y + h) + " l " +
+    n2(x + r - k) + " " + n2(y + h) + " " + n2(x) + " " + n2(y + h - r + k) + " " + n2(x) + " " + n2(y + h - r) + " c " +
+    n2(x) + " " + n2(y + r) + " l " +
+    n2(x) + " " + n2(y + r - k) + " " + n2(x + r - k) + " " + n2(y) + " " + n2(x + r) + " " + n2(y) + " c h";
+}
+
+/* A hairline from (x1, y) to (x2, y). */
+export function pdfRuleOp(x1, y, x2, hex, width) {
+  return "q " + pdfRgb(hex) + " RG " + (width || 0.5) + " w " + n2(x1) + " " + n2(y) + " m " + n2(x2) + " " + n2(y) + " l S Q";
+}
+
+/* A status lamp centred on (cx, cy), radius r (#169's lamps, which
+   STATUS_PRINT / TAG_STATUS_PRINT name): "outline" an unlit ring,
+   "fill" lit, "half" the left half lit inside a ring, "check" lit with a
+   small white check, "ring" a thin ring with a dot (Returned). */
+export function pdfLampOp(kind, cx, cy, r, hex) {
+  var c = pdfRgb(hex);
+  if (kind === "fill") return "q " + c + " rg " + pdfCirclePath(cx, cy, r) + " f Q";
+  if (kind === "outline") return "q " + c + " RG 0.9 w " + pdfCirclePath(cx, cy, r - 0.45) + " S Q";
+  if (kind === "ring") {
+    return "q " + c + " RG 0.7 w " + pdfCirclePath(cx, cy, r - 0.35) + " S " + c + " rg " +
+      pdfCirclePath(cx, cy, r * 0.32) + " f Q";
+  }
+  if (kind === "half") {
+    var k = r * 0.5523;
+    return "q " + c + " RG 0.9 w " + pdfCirclePath(cx, cy, r - 0.45) + " S " + c + " rg " +
+      n2(cx) + " " + n2(cy + r) + " m " +
+      n2(cx - k) + " " + n2(cy + r) + " " + n2(cx - r) + " " + n2(cy + k) + " " + n2(cx - r) + " " + n2(cy) + " c " +
+      n2(cx - r) + " " + n2(cy - k) + " " + n2(cx - k) + " " + n2(cy - r) + " " + n2(cx) + " " + n2(cy - r) + " c h f Q";
+  }
+  /* check */
+  return "q " + c + " rg " + pdfCirclePath(cx, cy, r) + " f 1 1 1 RG " + n2(r * 0.32) + " w 1 J 1 j " +
+    n2(cx - r * 0.45) + " " + n2(cy + r * 0.02) + " m " + n2(cx - r * 0.1) + " " + n2(cy - r * 0.34) + " l " +
+    n2(cx + r * 0.48) + " " + n2(cy + r * 0.36) + " l S Q";
+}
+
+/* A box to tick, lower-left (x, y), `size` square; ticked in `tickHex`. */
+export function pdfCheckboxOp(x, y, size, ticked, boxHex, tickHex) {
+  var op = "q " + pdfRgb(boxHex || "64635E") + " RG 0.9 w " + pdfRoundRectPath(x, y, size, size, size * 0.18) + " S Q";
+  if (ticked) {
+    op += " q " + pdfRgb(tickHex || "00717F") + " RG " + n2(size * 0.16) + " w 1 J 1 j " +
+      n2(x + size * 0.2) + " " + n2(y + size * 0.5) + " m " + n2(x + size * 0.43) + " " + n2(y + size * 0.24) + " l " +
+      n2(x + size * 0.84) + " " + n2(y + size * 0.82) + " l S Q";
+  }
+  return op;
+}
+
+/* The running footer every page of these PDFs carries: the title at the
+   left, "Page n of N" at the right, small and faint, over a hairline —
+   so a printed page that has come loose still says what it is from. `y`
+   is the footer's baseline. */
+export function pdfFooterOps(title, pageNo, pageCount, PW, M, y, hex, ruleHex) {
+  var size = 7.5;
+  var right = "Page " + pageNo + " of " + pageCount;
+  var room = PW - 2 * M - pdfTextWidth(right, false, size) - 24;
+  var t = String(title || "");
+  if (pdfTextWidth(t, false, size) > room) {
+    while (t.length > 1 && pdfTextWidth(t + "…", false, size) > room) t = t.slice(0, -1);
+    t = t.replace(/\s+$/, "") + "…";
+  }
+  return [
+    pdfRuleOp(M, y + 11, PW - M, ruleHex || "DCDAD4", 0.5),
+    pdfTextOp(t, M, y, "F1", size, hex || "64635E"),
+    pdfTextOp(right, PW - M - pdfTextWidth(right, false, size), y, "F1", size, hex || "64635E")
+  ];
+}
+
+/* A PDF text string for the document information dictionary: plain
+   ASCII as a literal, anything else as UTF-16BE with its byte-order mark,
+   which is how PDF says "Unicode". */
+function pdfInfoString(s) {
+  s = String(s || "");
+  if (/^[\x20-\x7e]*$/.test(s)) return "(" + s.replace(/([()\\])/g, "\\$1") + ")";
+  var hex = "FEFF";
+  for (var i = 0; i < s.length; i++) hex += ("000" + s.charCodeAt(i).toString(16).toUpperCase()).slice(-4);
+  return "<" + hex + ">";
+}
+
+function pdfDate(d) {
+  function p(v) { return (v < 10 ? "0" : "") + v; }
+  return "D:" + d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) +
+    p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + "Z";
+}
+
+/* ---- one assembler for every PDF here ----
+
+   spec.pages     [{ops: [operator strings], images: [image names used],
+                    links: [{x, y, w, h, uri}]}], in order
+   spec.size      [PW, PH]
+   spec.images    [{name, bytes, w, h}] — JPEG streams (/DCTDecode)
+   spec.info      {title} — the document information dictionary: its
+                  title (which a viewer shows in place of the file name,
+                  /DisplayDocTitle), Splitpage as its creator, and when
+   spec.outline   [{title, page (index), y}] — bookmarks, a viewer's
+                  sidebar of the document's sections
+
+   Four Helvetica faces as F1..F4 (regular, bold, oblique, bold oblique),
+   on every page. Content streams are uncompressed, one operator a line:
+   the tests read them back as text. */
+export function assemblePdf(spec) {
+  var PW = spec.size[0], PH = spec.size[1];
+  var pages = spec.pages, images = spec.images || [];
+  var chunks = [], offsets = [], length = 0;
+  function put(data) {
+    var bytes = typeof data === "string" ? latin1Bytes(data) : data;
+    chunks.push(bytes);
+    length += bytes.length;
+  }
+  function startObj(num) { offsets[num] = length; put(num + " 0 obj\n"); }
+
+  var numPages = pages.length;
+  var OBJ_CATALOG = 1, OBJ_PAGES = 2, OBJ_F1 = 3, OBJ_F2 = 4, OBJ_F3 = 5, OBJ_F4 = 6, OBJ_INFO = 7;
+  var firstPageObj = 8;
+  var contentObjBase = firstPageObj + numPages;
+  var imageObjBase = contentObjBase + numPages;
+  var next = imageObjBase + images.length;
+  /* each link its own annotation object, numbered in page order */
+  var annotObjs = pages.map(function (pg) {
+    return (pg.links || []).map(function () { return next++; });
+  });
+  var outline = (spec.outline || []).filter(function (o) { return o && o.page >= 0 && o.page < numPages; });
+  var outlineRoot = outline.length ? next++ : 0;
+  var outlineItems = outline.map(function () { return next++; });
+  var totalObjs = next - 1;
+
+  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+
+  startObj(OBJ_CATALOG);
+  put("<< /Type /Catalog /Pages " + OBJ_PAGES + " 0 R /ViewerPreferences << /DisplayDocTitle true >>" +
+    (outlineRoot ? " /Outlines " + outlineRoot + " 0 R /PageMode /UseOutlines" : "") + " >>\nendobj\n");
+
+  startObj(OBJ_PAGES);
+  var kids = [];
+  for (var i = 0; i < numPages; i++) kids.push((firstPageObj + i) + " 0 R");
+  put("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + numPages + " >>\nendobj\n");
+
+  [[OBJ_F1, "Helvetica"], [OBJ_F2, "Helvetica-Bold"],
+   [OBJ_F3, "Helvetica-Oblique"], [OBJ_F4, "Helvetica-BoldOblique"]].forEach(function (f) {
+    startObj(f[0]);
+    put("<< /Type /Font /Subtype /Type1 /BaseFont /" + f[1] + " /Encoding /WinAnsiEncoding >>\nendobj\n");
+  });
+
+  var info = spec.info || {};
+  startObj(OBJ_INFO);
+  put("<< " + (info.title ? "/Title " + pdfInfoString(info.title) + " " : "") +
+    "/Creator (Splitpage) /Producer (Splitpage) /CreationDate (" + pdfDate(info.date || new Date()) + ") >>\nendobj\n");
+
+  pages.forEach(function (pg, idx) {
+    startObj(firstPageObj + idx);
+    var xobj = "";
+    if (pg.images && pg.images.length) {
+      xobj = " /XObject << " + pg.images.map(function (name) {
+        var oi = images.findIndex(function (im) { return im.name === name; });
+        return "/" + name + " " + (imageObjBase + oi) + " 0 R";
+      }).join(" ") + " >>";
+    }
+    var annots = annotObjs[idx].length ? " /Annots [" + annotObjs[idx].map(function (o) { return o + " 0 R"; }).join(" ") + "]" : "";
+    put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + PW + " " + PH + "]" +
+      " /Resources << /Font << /F1 " + OBJ_F1 + " 0 R /F2 " + OBJ_F2 + " 0 R" +
+      " /F3 " + OBJ_F3 + " 0 R /F4 " + OBJ_F4 + " 0 R >>" + xobj + " >>" + annots +
+      " /Contents " + (contentObjBase + idx) + " 0 R >>\nendobj\n");
+  });
+
+  pages.forEach(function (pg, idx) {
+    var stream = pg.ops.join("\n");
+    startObj(contentObjBase + idx);
+    put("<< /Length " + latin1Bytes(stream).length + " >>\nstream\n");
+    put(stream);
+    put("\nendstream\nendobj\n");
+  });
+
+  images.forEach(function (im, idx) {
+    startObj(imageObjBase + idx);
+    put("<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h +
+      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
+    put(im.bytes);
+    put("\nendstream\nendobj\n");
+  });
+
+  pages.forEach(function (pg, idx) {
+    (pg.links || []).forEach(function (l, k) {
+      startObj(annotObjs[idx][k]);
+      put("<< /Type /Annot /Subtype /Link /Rect [" + [l.x, l.y, l.x + l.w, l.y + l.h].map(n2).join(" ") + "]" +
+        " /Border [0 0 0] /A << /S /URI /URI " + pdfInfoString(l.uri) + " >> >>\nendobj\n");
+    });
+  });
+
+  if (outlineRoot) {
+    startObj(outlineRoot);
+    put("<< /Type /Outlines /First " + outlineItems[0] + " 0 R /Last " + outlineItems[outlineItems.length - 1] +
+      " 0 R /Count " + outlineItems.length + " >>\nendobj\n");
+    outline.forEach(function (o, k) {
+      startObj(outlineItems[k]);
+      put("<< /Title " + pdfInfoString(o.title) + " /Parent " + outlineRoot + " 0 R" +
+        (k > 0 ? " /Prev " + outlineItems[k - 1] + " 0 R" : "") +
+        (k < outline.length - 1 ? " /Next " + outlineItems[k + 1] + " 0 R" : "") +
+        " /Dest [" + (firstPageObj + o.page) + " 0 R /XYZ 0 " + n2(o.y == null ? PH : o.y) + " 0] >>\nendobj\n");
+    });
+  }
+
+  var xrefAt = length;
+  var xref = "xref\n0 " + (totalObjs + 1) + "\n0000000000 65535 f \n";
+  for (var o = 1; o <= totalObjs; o++) {
+    var off = offsets[o] || 0;
+    xref += ("0000000000" + off).slice(-10) + " 00000 n \n";
+  }
+  put(xref);
+  put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R /Info " + OBJ_INFO + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
+
+  return concatBytes(chunks);
 }
 
 /* break styled runs into lines that fit maxWidth. A stage direction's
@@ -90,8 +329,16 @@ function pdfCirclePath(cx, cy, r) {
    is its own line on the page. */
 var CUE_SCALE = 0.85;
 
-function pdfWrapRuns(runs, maxWidth, size) {
+/* The annotations an export's runs carry (exportRuns, 14b-export-kit.js)
+   ride along on every piece of the run they came from — href, tag, cmt,
+   broll — except `markers`, the comment numbers drawn after a thread's
+   words, which only the run's last word takes. opts.markerWidth(markers),
+   when given, is the room those need, counted into that word's line so a
+   marker never runs past the column: it lands on the segment as
+   `markerWidth`, beside its own `width`. */
+export function pdfWrapRuns(runs, maxWidth, size, opts) {
   var lines = [], line = [], lineWidth = 0;
+  var markerWidth = opts && opts.markerWidth;
 
   function pushLine() { lines.push(line); line = []; lineWidth = 0; }
 
@@ -102,8 +349,13 @@ function pdfWrapRuns(runs, maxWidth, size) {
       var s = { text: text, b: run.b, i: run.i, u: run.u, s: run.s, mark: run.mark, width: width };
       if (run.dir) s.dir = true;
       if (run.cue) s.cue = true;
+      if (run.href) s.href = run.href;
+      if (run.tag) s.tag = run.tag;
+      if (run.cmt) s.cmt = run.cmt;
+      if (run.broll) s.broll = run.broll;
       return s;
     };
+    var lastWord = null;
     if (run.text === "\n") { pushLine(); return; }
     var words = run.text.split(/(\s+)/);
     words.forEach(function (word) {
@@ -125,14 +377,37 @@ function pdfWrapRuns(runs, maxWidth, size) {
         }
         if (chunk) {
           var cw = pdfTextWidth(chunk, run.b, sz);
-          line.push(seg(chunk, cw));
+          lastWord = seg(chunk, cw);
+          line.push(lastWord);
           lineWidth += cw;
         }
         return;
       }
-      line.push(seg(word, w));
+      var piece = seg(word, w);
+      if (!isSpace) lastWord = piece;
+      line.push(piece);
       lineWidth += w;
     });
+    /* the thread markers after the run's last word: counted into its line,
+       and when they would not fit there that word goes to the next line
+       with them (whatever followed it on the line, spaces, goes too) */
+    if (run.markers && lastWord) {
+      var extra = markerWidth ? markerWidth(run.markers) : 0;
+      lastWord.markers = run.markers;
+      lastWord.markerWidth = extra;
+      var at = line.indexOf(lastWord);
+      if (at !== -1) {
+        lineWidth += extra;
+        if (lineWidth > maxWidth && at > 0) {
+          var moved = line.splice(at);
+          lineWidth = line.reduce(function (n, x) { return n + x.width; }, 0);
+          while (line.length && /^\s+$/.test(line[line.length - 1].text)) lineWidth -= line.pop().width;
+          pushLine();
+          moved.forEach(function (x) { line.push(x); lineWidth += x.width; });
+          lineWidth += extra;
+        }
+      }
+    }
   });
   if (line.length) pushLine();
   return lines;
@@ -779,79 +1054,7 @@ export function buildPdf(jpegs, commentJpegs) {
 
   pages.push({ ops: ops, images: pageImages });
 
-  /* ---- assemble the file ---- */
-  var chunks = [], offsets = [], length = 0;
-  function put(data) {
-    var bytes = typeof data === "string" ? latin1Bytes(data) : data;
-    chunks.push(bytes);
-    length += bytes.length;
-  }
-  function startObj(num) { offsets[num] = length; put(num + " 0 obj\n"); }
-
-  var numPages = pages.length;
-  var OBJ_CATALOG = 1, OBJ_PAGES = 2, OBJ_F1 = 3, OBJ_F2 = 4, OBJ_F3 = 5, OBJ_F4 = 6;
-  var firstPageObj = 7;
-  var contentObjBase = firstPageObj + numPages;
-  var imageObjBase = contentObjBase + numPages;
-  var totalObjs = imageObjBase + images.length - 1;
-
-  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
-
-  startObj(OBJ_CATALOG);
-  put("<< /Type /Catalog /Pages " + OBJ_PAGES + " 0 R >>\nendobj\n");
-
-  startObj(OBJ_PAGES);
-  var kids = [];
-  for (var i = 0; i < numPages; i++) kids.push((firstPageObj + i) + " 0 R");
-  put("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + numPages + " >>\nendobj\n");
-
-  [[OBJ_F1, "Helvetica"], [OBJ_F2, "Helvetica-Bold"],
-   [OBJ_F3, "Helvetica-Oblique"], [OBJ_F4, "Helvetica-BoldOblique"]].forEach(function (f) {
-    startObj(f[0]);
-    put("<< /Type /Font /Subtype /Type1 /BaseFont /" + f[1] + " /Encoding /WinAnsiEncoding >>\nendobj\n");
-  });
-
-  pages.forEach(function (pg, idx) {
-    startObj(firstPageObj + idx);
-    var xobj = "";
-    if (pg.images.length) {
-      xobj = " /XObject << " + pg.images.map(function (name) {
-        var oi = images.findIndex(function (im) { return im.name === name; });
-        return "/" + name + " " + (imageObjBase + oi) + " 0 R";
-      }).join(" ") + " >>";
-    }
-    put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + PW + " " + PH + "]" +
-      " /Resources << /Font << /F1 " + OBJ_F1 + " 0 R /F2 " + OBJ_F2 + " 0 R" +
-      " /F3 " + OBJ_F3 + " 0 R /F4 " + OBJ_F4 + " 0 R >>" + xobj + " >>" +
-      " /Contents " + (contentObjBase + idx) + " 0 R >>\nendobj\n");
-  });
-
-  pages.forEach(function (pg, idx) {
-    var stream = pg.ops.join("\n");
-    startObj(contentObjBase + idx);
-    put("<< /Length " + latin1Bytes(stream).length + " >>\nstream\n");
-    put(stream);
-    put("\nendstream\nendobj\n");
-  });
-
-  images.forEach(function (im, idx) {
-    startObj(imageObjBase + idx);
-    put("<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h +
-      " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
-    put(im.bytes);
-    put("\nendstream\nendobj\n");
-  });
-
-  var xrefAt = length;
-  var xref = "xref\n0 " + (totalObjs + 1) + "\n0000000000 65535 f \n";
-  for (var o = 1; o <= totalObjs; o++) {
-    var off = offsets[o] || 0;
-    xref += ("0000000000" + off).slice(-10) + " 00000 n \n";
-  }
-  put(xref);
-  put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
-
-  return concatBytes(chunks);
+  return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: S.state.title || "Untitled Script" } });
 }
 
 /* ================= packing list (gear, props — any category) =================
@@ -954,63 +1157,20 @@ export function buildPackingListPdf(catId) {
 
   pages.push(ops);
 
-  /* ---- assemble: one font pair, no images — see the note above ---- */
-  return assembleTextPdf(pages, PW, PH);
+  /* ---- assemble: no images — see the note above ---- */
+  return assembleTextPdf(pages, PW, PH, (S.state.title || "Untitled Script") + " — " + (cat ? cat.plural : catId) + " packing list");
 }
 
-/* The object and xref plumbing for a PDF of text and lines only — one
-   Helvetica pair (F1 regular, F2 bold), no images: the packing list's, and
-   the b-roll shot list's (#150), which is the same kind of page. `pages`
-   is one array of content-stream operators per page. */
-function assembleTextPdf(pages, PW, PH) {
-  var chunks = [], offsets = [], length = 0;
-  function put(data) {
-    var bytes = typeof data === "string" ? latin1Bytes(data) : data;
-    chunks.push(bytes);
-    length += bytes.length;
-  }
-  function startObj(num) { offsets[num] = length; put(num + " 0 obj\n"); }
-
-  var numPages = pages.length;
-  var OBJ_CATALOG = 1, OBJ_PAGES = 2, OBJ_F1 = 3, OBJ_F2 = 4;
-  var firstPageObj = 5;
-  var contentObjBase = firstPageObj + numPages;
-  var totalObjs = contentObjBase + numPages - 1;
-
-  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
-  startObj(OBJ_CATALOG);
-  put("<< /Type /Catalog /Pages " + OBJ_PAGES + " 0 R >>\nendobj\n");
-  startObj(OBJ_PAGES);
-  var kids = [];
-  for (var i = 0; i < numPages; i++) kids.push((firstPageObj + i) + " 0 R");
-  put("<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + numPages + " >>\nendobj\n");
-  [[OBJ_F1, "Helvetica"], [OBJ_F2, "Helvetica-Bold"]].forEach(function (f) {
-    startObj(f[0]);
-    put("<< /Type /Font /Subtype /Type1 /BaseFont /" + f[1] + " /Encoding /WinAnsiEncoding >>\nendobj\n");
+/* assemblePdf (above) for a PDF of text and lines only, no images: the
+   packing list's, and the b-roll shot list's (#150), which is the same
+   kind of page. `pages` is one array of content-stream operators per
+   page; `title` is the document's, for a viewer's title bar. */
+function assembleTextPdf(pages, PW, PH, title) {
+  return assemblePdf({
+    size: [PW, PH],
+    pages: pages.map(function (ops) { return { ops: ops }; }),
+    info: { title: title }
   });
-  pages.forEach(function (pg, idx) {
-    startObj(firstPageObj + idx);
-    put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + PW + " " + PH + "]" +
-      " /Resources << /Font << /F1 " + OBJ_F1 + " 0 R /F2 " + OBJ_F2 + " 0 R >> >>" +
-      " /Contents " + (contentObjBase + idx) + " 0 R >>\nendobj\n");
-  });
-  pages.forEach(function (pg, idx) {
-    var stream = pg.join("\n");
-    startObj(contentObjBase + idx);
-    put("<< /Length " + latin1Bytes(stream).length + " >>\nstream\n");
-    put(stream);
-    put("\nendstream\nendobj\n");
-  });
-  var xrefAt = length;
-  var xref = "xref\n0 " + (totalObjs + 1) + "\n0000000000 65535 f \n";
-  for (var o = 1; o <= totalObjs; o++) {
-    var off = offsets[o] || 0;
-    xref += ("0000000000" + off).slice(-10) + " 00000 n \n";
-  }
-  put(xref);
-  put("trailer\n<< /Size " + (totalObjs + 1) + " /Root " + OBJ_CATALOG + " 0 R >>\nstartxref\n" + xrefAt + "\n%%EOF\n");
-
-  return concatBytes(chunks);
 }
 
 /* ================= the b-roll shot list (#150) =================
@@ -1124,7 +1284,7 @@ export function buildShotListPdf(data) {
   });
 
   pages.push(ops);
-  return assembleTextPdf(pages, PW, PH);
+  return assembleTextPdf(pages, PW, PH, data.title + " — B-roll shot list");
 }
 
 /* Eval-time work for this module. _entry.js calls every module's __init()

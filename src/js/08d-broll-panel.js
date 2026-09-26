@@ -1614,7 +1614,7 @@ export function renderBrollPage() {
 
 /* ---- the sheet, as files: a CSV, and a PDF to print ---- */
 
-function shotRecordForFile(e) {
+export function shotRecordForFile(e) {
   var who = personById(e.owner);
   return {
     scene: e.rowId ? sceneLabel(e) : "",
