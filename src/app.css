@@ -1883,6 +1883,21 @@
     z-index: 200;
     align-items: center;
   }
+  /* A toast never lies over an open menu or popover: on a phone the File
+     menu is a sheet rising from the foot of the screen, right where the
+     toasts are, and a toast over it hid its items and took the taps meant
+     for them. While one is open the toasts go under the floating layers
+     (and the phone sheet's scrim) and come back on top when it closes;
+     every menu here is a [role="menu"] that is hidden when shut, and the
+     clock's and name's popovers are only in the page while open. */
+  body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden]), .video-popover:not([hidden])) #toast-host {
+    z-index: 20;
+  }
+  /* A picture's full-size view (#216) has its size and name at the foot,
+     where a toast would sit: the toast rises clear of that caption. */
+  body:has(.scene-gallery-zoom:not([hidden])) #toast-host {
+    bottom: calc(60px + env(safe-area-inset-bottom));
+  }
   /* B's toast (#169, B-Identity): the floating layer — raised, the strong
      edge and the shadow, 8px corners — 40px tall, with the words always in
      --text. What kind of news it is rides on a mark in front of the words
