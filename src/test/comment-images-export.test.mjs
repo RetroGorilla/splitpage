@@ -180,18 +180,24 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
     { kind: "conflict", rowId: "r1", field: "visualImage", conflictField: "Visual image", imageValue: c.rec, body: "" },
     { rowId: "r1", body: "Missing <img class=\"comment-img\" data-blob=\"" + MISSING + "\">" }
   ]);
-  for (const md of [toMarkdownDoc(), toMarkdownTableDoc()]) {
+  /* both export shapes (#169: "Scene 01 · Audio") and the saved project's
+     table, whose tail is what it always was ("Row 01 · Audio") */
+  for (const md of [toMarkdownDoc(), toMarkdownTableDoc(null, { export: true }), toMarkdownTableDoc()]) {
     const tail = md.slice(md.indexOf("## Comments"));
     assert.ok(tail.includes("Before  \n[image]  \nafter"), tail);
     assert.ok(tail.includes("> ↳ **Bob** · ") && /\*\*Bob\*\* · [^\n]*: {2}\[image\]/.test(tail), tail);
     assert.ok(tail.includes("Missing  \n[image]"), tail);
     assert.ok(!tail.includes("_(empty)_"), tail);
   }
+  assert.ok(toMarkdownDoc().includes("**Scene 01 · Audio** — Ann"));
+  assert.ok(toMarkdownTableDoc().includes("**Row 01 · Audio** — Ann"));
 
   const csv = buildCsv();
   assert.ok(csv.includes(',"Before\n[image]\nafter"'), csv);
   assert.ok(/,↳ Bob,[^\n]*,,\[image\]/.test(csv), csv);
   assert.equal(csv.split("\r\n").filter((l) => /,\[image\]$/.test(l)).length, 2, "the reply and the conflict card");
+  /* no words marked for these threads, so no numbers: the No. column is empty */
+  assert.ok(csv.includes("\r\n,Scene 01 · Audio,Open,,Ann,"), csv);
 
   const [one, conflict, missing] = commentEntries({ pieces: true });
   assert.equal(commentBodyText(one), "Before\n[image]\nafter");

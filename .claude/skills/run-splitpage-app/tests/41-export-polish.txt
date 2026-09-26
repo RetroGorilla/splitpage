@@ -184,14 +184,17 @@ expect window.__mdZipNames.indexOf('images/scene-01.png') !== -1
 expect window.__mdFromZip.indexOf('images/scene-01.png') !== -1
 expect window.__mdFromZip.indexOf('data:image') === -1
 
-# the two-column export is untouched: still one file, still base64 inline —
-# it is what the .md project format (20d-formats.js) round-trips on
+# the two-column export's cells are untouched: still one file, still base64
+# inline — they are what the .md project format (20d-formats.js) round-trips
+# on. The export adds the gutter's columns round them (#169); the project's
+# own table keeps its four.
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-md-table"]
 sleep 1200
 eval (async function(){window.__mdTable = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 expect window.__mdTable.indexOf('data:image/png;base64,') !== -1
-expect window.__mdTable.indexOf('| # | Visual | Audio | Status |') !== -1
+expect window.__mdTable.indexOf('| # | Start | Status | Visual | Audio | Read |') !== -1
+expect F.buildMarkdown().indexOf('| # | Visual | Audio | Status |') !== -1
 
 # a script with no picture still exports as a plain single .md file
 eval (function(){F.state().rows[0].visualImage = null; return true;})()

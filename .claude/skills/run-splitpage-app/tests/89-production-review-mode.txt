@@ -213,7 +213,7 @@ wait document.getElementById('toast-host').textContent.indexOf('Exported') !== -
 expect window.__names[0] === 'breakdown-review - breakdown.csv'
 expect window.__blobs[0].type === 'text/csv'
 eval (async function(){ window.__csv = (await window.__blobs[0].text()).replace(/^﻿/, '').split('\r\n'); return window.__csv.length; })()
-expect window.__csv[0] === 'Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots'
+expect window.__csv[0] === 'Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group'
 expect window.__csv.length === 7
 expect window.__csv.some(function(l){ return l.indexOf('Kettle,Sourcing,Jordan Sato') !== -1; })
 expect JSON.stringify(F.state()) === window.__state0

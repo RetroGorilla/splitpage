@@ -18,10 +18,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { S } from "../js/_state.js";
+import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { htmlToMarkdown } from "../js/04-richtext.js";
+import { pad2 } from "../js/05-render.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { mdSceneCellSource } from "../js/14-export.js";
+import { breakdownRows } from "../js/08-production-panels.js";
+import { commentBodyText, commentEntries } from "../js/10-comments.js";
+import { mdSceneCellSource, toMarkdownTableDoc } from "../js/14-export.js";
+import { LONG_DEMO } from "../js/_starters.js";
 import {
   applyMarkdownProject,
   buildMarkdownProject,
@@ -35,6 +40,8 @@ import { STORED } from "./_stored-cells.mjs";
 /* See migrate-rows.test.mjs: this __init() only builds the memoised tag
    reader, and the Markdown writer's production breakdown needs it. */
 initTags();
+/* the read times an export's meta line adds up (the last test's export) */
+initStatus();
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");
@@ -497,4 +504,111 @@ test("writing a .md lists shots without adding any to the list", () => {
   const before = JSON.stringify(s.brollShots);
   withState(s, buildMarkdownProject);
   assert.equal(JSON.stringify(s.brollShots), before);
+});
+
+/* ---- the saved .md project is not an export (#169) ----------------------
+
+   The exports' Markdown changed (a meta line, the gutter's columns, the
+   breakdown by category, the b-roll shot list, numbered comments), but a
+   saved .md PROJECT is toMarkdownTableDoc() plus its data block, and must
+   be the same bytes it has always been: a file under version control would
+   otherwise show its whole human half as changed on the first save after
+   an update, and every copy of the app compares the table with its own
+   rendering of it (mdSceneCellSource). So the writer the project used
+   before the change is kept here verbatim, and the project is held to it
+   byte for byte, over every kind of document. */
+
+function oldMdCell(value) {
+  return String(value == null ? "" : value)
+    .replace(/\|/g, "\\|")
+    .replace(/\r\n|\r|\n/g, " ");
+}
+function oldAppendMarkdownTail(lines) {
+  var breakdown = breakdownRows();
+  if (breakdown.length) {
+    lines.push("## Production breakdown");
+    lines.push("");
+    lines.push("| Category | Item | Status | Assigned to | Mentions | Scenes | Notes |");
+    lines.push("| --- | --- | --- | --- | --- | --- | --- |");
+    breakdown.forEach(function (r) {
+      lines.push("| " + [r.categoryLabel, r.name, r.statusLabel, r.owner, r.mentions,
+                         r.scenes.join(", "), r.notes].map(oldMdCell).join(" | ") + " |");
+    });
+    lines.push("");
+  }
+  var comments = commentEntries({ pieces: true });
+  if (comments.length) {
+    lines.push("## Comments");
+    lines.push("");
+    comments.forEach(function (c) {
+      lines.push("**" + c.location + "**" +
+                 (c.resolved ? " _(resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")_" : "") +
+                 (c.assignee ? " _(assigned to " + c.assignee + ")_" : "") +
+                 " — " + c.author + (c.when ? " · " + c.when : ""));
+      lines.push("");
+      if (c.quoted) {
+        lines.push("> " + c.quoted.split(/\r\n|\r|\n/).join("  \n> "));
+        lines.push("");
+      }
+      lines.push((commentBodyText(c) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
+      c.replies.forEach(function (rp) {
+        lines.push("");
+        lines.push("> ↳ **" + rp.author + "**" + (rp.when ? " · " + rp.when : "") + ":  " +
+                   (commentBodyText(rp) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
+      });
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+  }
+}
+function oldMdRichTableCell(md) {
+  return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
+}
+function oldToMarkdownTableDoc(s) {
+  s = s || S.state;
+  var lines = [];
+  lines.push("# " + (s.title || "Untitled Script"));
+  lines.push("");
+  if (!s.rows.length) {
+    lines.push("_No rows yet._");
+  } else {
+    lines.push("| # | Visual | Audio | Status |");
+    lines.push("| --- | --- | --- | --- |");
+    s.rows.forEach(function (row, i) {
+      var cell = mdSceneCellSource(row, i);
+      lines.push("| " + pad2(i + 1) + " | " + oldMdRichTableCell(cell.visual) + " | " +
+                 oldMdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
+    });
+  }
+  lines.push("");
+  oldAppendMarkdownTail(lines);
+  return lines.join("\n");
+}
+
+test("a saved .md project is byte for byte what it was before the exports changed", () => {
+  const docs = [
+    migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))),
+    fixture(),
+    withBrollProps(),
+    migrateRows({ schema: 2, title: "Empty", rows: [] }),
+    migrateRows({
+      schema: 2, title: "Pipes | and\nbreaks",
+      rows: [{ id: "r1", visualText: "a | b<br>c", audioText: TAG + " said", status: "ready", lengthSeconds: 12 }],
+      productionTags: [{ cat: "prop", name: "gaffer tape", notes: "one | two\nthree", status: "sourcing" }],
+      comments: [{ id: "c1", rowId: "r1", field: "visualText", author: "A", body: "x", resolved: true, resolvedBy: "B",
+                   createdAt: "2026-01-01T00:00:00.000Z", replies: [{ id: "p1", author: "C", body: "y", createdAt: "2026-01-02T00:00:00.000Z" }] }],
+      targetSeconds: 60
+    })
+  ];
+  docs.forEach((s) => withState(s, () => {
+    const was = oldToMarkdownTableDoc(s);
+    assert.equal(toMarkdownTableDoc(s), was, s.title);
+    const project = buildMarkdownProject(s);
+    assert.ok(project.startsWith(was + "\n<!-- splitpage: "), s.title);
+    /* and none of the export's own lines leaked into it */
+    assert.ok(!/^## B-roll shot list$|^\| # \| Start \||^### .* \(\d+\)$|<sup>\d+<\/sup>|running time · /m.test(project.slice(0, was.length)), s.title);
+  }));
+  /* the export of the same table is a different thing, on purpose */
+  withState(docs[0], (s) => assert.notEqual(toMarkdownTableDoc(s, { export: true }), oldToMarkdownTableDoc(s)));
 });
