@@ -1,0 +1,34 @@
+# The Production panel's scene lists keep each comma with the number
+# before it (08-production-panels.js joinSceneLinks). Each scene link is a
+# box the line may break either side of, so the old ", " between two let a
+# line end after "20" and the next start with ", 28". The list is narrowed
+# to end exactly after a number, where the comma after it does not fit:
+# every comma must still sit on its number's line, just after it. Both the
+# Category view's Scenes column and the Shoot view's Scenes list.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; var tag = '<span class="tag-anchor" data-tag-cat="location" data-tag-name="workbench" contenteditable="false">workbench</span>'; var rows = []; for (var i = 1; i <= 14; i++) rows.push({ id: 'r' + i, status: 'todo', visualText: 'Shot ' + i + ' at the ' + tag + '.', audioText: 'Line ' + i + '.' }); var doc = { schema: 2, title: 'Commas', rows: rows, comments: [], productionTags: [ { cat: 'location', name: 'workbench', owner: '', notes: '', status: 'needed' } ] }; return F.openFile(new File([JSON.stringify(doc)], 'commas.splitpage')); })()
+wait F.state().title === 'Commas' && document.querySelectorAll('#rows .row').length === 14
+sleep 400
+eval window.probe = function (dd) { if (!dd) return 'no list'; dd.style.flex = 'none'; dd.style.maxWidth = 'none'; dd.style.width = '2000px'; var links = dd.querySelectorAll('.tag-scene'); if (links.length < 6) return 'only ' + links.length + ' links'; var left = dd.getBoundingClientRect().left; dd.style.width = Math.ceil(links[3].getBoundingClientRect().right - left) + 1 + 'px'; var bad = [], tops = {}; Array.prototype.forEach.call(links, function (a) { tops[Math.round(a.getBoundingClientRect().top)] = 1; }); Array.prototype.filter.call(dd.querySelectorAll('.tag-scene-sep'), function (s) { return s.textContent.indexOf(',') !== -1; }).forEach(function (s) { var a = s.previousElementSibling, r = s.getBoundingClientRect(); if (!a || !a.classList.contains('tag-scene')) { bad.push('comma not after a link'); return; } var ar = a.getBoundingClientRect(); if (Math.abs(ar.bottom - r.bottom) > 4 || r.left < ar.right - 1) bad.push(a.textContent + ',  lands at ' + Math.round(r.left) + ',' + Math.round(r.top) + ' vs ' + Math.round(ar.right) + ',' + Math.round(ar.top)); }); var lines = Object.keys(tops).length; return lines < 2 ? 'did not wrap' : bad.length ? bad.join(' | ') : 'ok ' + lines + ' lines'; }; true
+
+# --- the Category view's Scenes column -------------------------------------
+click #btn-production
+wait !document.getElementById('production-panel').hidden
+wait document.querySelectorAll('#production-list .tag-entity .tag-scene').length === 14
+eval window.__cat = probe(document.querySelector('#production-list .tag-entity .tag-scenes'))
+expect window.__cat.indexOf('ok ') === 0
+expect document.querySelector('#production-list .tag-entity .tag-scenes').textContent.indexOf('01, 02, 03') === 0
+shot 256-scene-list-commas
+
+# --- the Shoot view's Scenes list ------------------------------------------
+jsclick #production-modes [data-group="shoot"]
+wait document.querySelectorAll('#production-list .shoot-group .tag-scene').length === 14
+eval window.__shoot = probe(document.querySelector('#production-list .shoot-group .tag-scenes'))
+expect window.__shoot.indexOf('ok ') === 0
+expect document.querySelector('#production-list .shoot-group .tag-scenes').textContent.indexOf('01, 02, 03') === 0
+
+quit
