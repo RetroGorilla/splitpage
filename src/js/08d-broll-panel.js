@@ -1664,17 +1664,22 @@ export function buildBrollCsv() {
    screen read "Scene 04 · 01:03"; `none` is the group of shots with no
    location or nobody assigned, which the page heads with no pin or
    avatar. */
-export function brollShotListForPrint() {
+/* `as` ({filter, group}), when given, is the list asked for rather than
+   the page's: the Export dialog's shot list and the script PDF's appendix
+   are every shot, by scene, whatever the page was last left showing. */
+export function brollShotListForPrint(as) {
+  var filterId = as && as.filter ? oneOf(FILTERS, as.filter, "all") : view.filter;
+  var groupId = as && as.group ? oneOf(PAGE_GROUPS, as.group, "scene") : pageView.group;
   var entries = brollEntries(true);
-  var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
-  var filter = FILTERS.filter(function (f) { return f.id === view.filter; })[0];
-  var group = PAGE_GROUPS.filter(function (g) { return g.id === pageView.group; })[0];
+  var shown = entries.filter(function (e) { return matchesFilter(e, filterId); });
+  var filter = FILTERS.filter(function (f) { return f.id === filterId; })[0];
+  var group = PAGE_GROUPS.filter(function (g) { return g.id === groupId; })[0];
   var starts = sceneStarts();
   return {
     title: S.state.title || "Untitled Script",
     summary: pageSummaryText(entries),
     scope: (filter && filter.id !== "all" ? filter.label + ", " : "") + "by " + group.label.toLowerCase(),
-    groups: brollGroups(shown, pageView.group).map(function (g) {
+    groups: brollGroups(shown, groupId).map(function (g) {
       return {
         label: g.label,
         kind: g.kind,

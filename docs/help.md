@@ -379,7 +379,8 @@ description.
 - **Add a shot** at the foot of the panel for one the script doesn't have.
 - **The shot list**: the arrows button beside the panel's **×** opens every
   shot on one page, grouped by location, scene or person, with **CSV** and
-  **Print shot list**. **← Script** or <kbd>Esc</kbd> goes back.
+  **Print shot list**, which prints it as you see it there. **← Script** or
+  <kbd>Esc</kbd> goes back.
 
 ## Saving your script
 
@@ -428,8 +429,10 @@ yours is kept as an **Unmerged edit** comment.
 
 ### Sending it to someone
 
-- **Nothing installed?** **File ▸ Export… ▸ Standalone page** writes one page
-  with Splitpage built in. It's a copy: their edits stay in their file.
+- **Nothing installed?** **File ▸ Export… ▸ SplitShare** writes one `.html`
+  file with the script and the whole app in it. It opens in any browser, on
+  any device, with nothing to install, and they can read, edit and present
+  it. It's a copy: their edits stay in their file.
 - **Want their edits back?** **File ▸ Publish & copy a link** puts the script
   on the server you're connected to and copies a link. Everyone who opens it
   edits the same document.
@@ -466,9 +469,12 @@ under **Older history** for 90 days.
 format, with a preview and the file name.
 
 - **The whole script**: **PDF**, **Word**, **Markdown**, **Spreadsheet**
-  (a row per scene), or **Standalone page**.
-- **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, or
-  a **Packing list** of gear or props.
+  (a row per scene), or **SplitShare** (the script with the whole app built
+  in, for any device).
+- **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, a
+  **Packing list** of gear or props, or the **B-roll shot list**: a
+  landscape table of every shot with its scene, props, flags and their
+  reasons, and lines for notes (or the same as a spreadsheet).
 
 **PDF** and **Word** lay the script out the way the app does: the running
 time and target at the top (the PDF adds the rundown strip), each scene's

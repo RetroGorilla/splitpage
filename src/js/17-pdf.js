@@ -3,6 +3,7 @@ import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
 import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { videoHostLabel } from "./05-render.js";
 import { TAG_STATUSES, tagCategory } from "./07-production-tags.js";
+import { brollShotListForPrint } from "./08d-broll-panel.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, latin1Bytes, tagPrintColor } from "./14-export.js";
 import {
@@ -10,9 +11,7 @@ import {
   STATUS_PRINT,
   TAG_STATUS_PRINT,
   breakdownGroups,
-  brollSummaryText,
   commentNumbers,
-  exportBrollScenes,
   exportComments,
   exportDateText,
   exportFacts,
@@ -207,7 +206,9 @@ function pdfDate(d) {
 /* ---- one assembler for every PDF here ----
 
    spec.pages     [{ops: [operator strings], images: [image names used],
-                    links: [{x, y, w, h, uri}]}], in order
+                    links: [{x, y, w, h, uri}], size}], in order — a
+                  page's own `size` [PW, PH] (the script PDF's landscape
+                  shot-list pages) in place of the document's
    spec.size      [PW, PH]
    spec.images    [{name, bytes, w, h}] — JPEG streams (/DCTDecode)
    spec.info      {title} — the document information dictionary: its
@@ -277,7 +278,8 @@ export function assemblePdf(spec) {
       }).join(" ") + " >>";
     }
     var annots = annotObjs[idx].length ? " /Annots [" + annotObjs[idx].map(function (o) { return o + " 0 R"; }).join(" ") + "]" : "";
-    put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + PW + " " + PH + "]" +
+    var box = pg.size || [PW, PH];
+    put("<< /Type /Page /Parent " + OBJ_PAGES + " 0 R /MediaBox [0 0 " + box[0] + " " + box[1] + "]" +
       " /Resources << /Font << /F1 " + OBJ_F1 + " 0 R /F2 " + OBJ_F2 + " 0 R" +
       " /F3 " + OBJ_F3 + " 0 R /F4 " + OBJ_F4 + " 0 R >>" + xobj + " >>" + annots +
       " /Contents " + (contentObjBase + idx) + " 0 R >>\nendobj\n");
@@ -1241,53 +1243,22 @@ export function buildPdf(jpegs, commentJpegs) {
 
   /* ---- the b-roll shot list ----
 
-     By scene, as the B-roll panel lists it (exportBrollScenes): "Scene
-     04" and where it starts, how many of its shots are in the can; each
-     shot a box, ticked in the b-roll teal once it is shot, its words, and
-     under them where, who and which props — "Flagged" in red at the right
-     of one that has to be shot again. */
-  var shotGroups = exportBrollScenes();
-  if (shotGroups.length) {
-    section("B-roll shot list", brollSummaryText(shotGroups));
-    var SL = 12;
-    var shotItem = function (r) {
-      var flagW = r.flagged ? pdfTextWidth("Flagged", true, 8) + 12 : 0;
-      var bits = [];
-      if (r.location) bits.push("Location: " + r.location);
-      if (r.owner) bits.push("Assigned to: " + r.owner);
-      if (r.props.length) bits.push("Props: " + r.propsWithStatus.join(", "));
-      var more = bits.length ? pdfWrapRuns([{ text: bits.join(" · ") }], TW - 16, 8.5) : [];
-      if (r.note) {
-        more = more.concat(pdfWrapRuns(linesToRuns(r.note).map(function (run) { return Object.assign(run, { i: true }); }), TW - 16, 8.5));
-      }
-      var name = pdfWrapRuns([{ text: r.name }], TW - 16 - flagW, SIZE);
-      return { r: r, name: name, more: tint(more, C.dim), h: 15 + (name.length + more.length - 1) * SL + 9 };
-    };
-    var shotHead = function (gr) {
-      var b = y - 16;
-      text(gr.label, M, b, "F2", 9.5);
-      if (gr.start) text(gr.start, M + pdfTextWidth(gr.label, true, 9.5) + 6, b, "F1", 8.5, C.faint);
-      var count = gr.done + "/" + gr.total + " shot";
-      text(count, PW - M - pdfTextWidth(count, false, 8.5), b, "F1", 8.5, C.faint);
-      ops.push(pdfRuleOp(M, b - 6, PW - M, C.borderStrong, 0.6));
-      y = b - 6;
-    };
-    shotGroups.forEach(function (gr) {
-      var list = gr.items.map(shotItem);
-      if (y - 22 - list[0].h < M) sectionGoesOn("B-roll shot list");
-      shotHead(gr);
-      list.forEach(function (it, k) {
-        if (y - it.h < M) { sectionGoesOn("B-roll shot list"); shotHead(gr); }
-        var r = it.r, b = y - 15;
-        ops.push(pdfCheckboxOp(M, b - 1.2, 8.5, r.shot, C.faint, C.broll));
-        drawLines(it.name, M + 16, b, SIZE, SL);
-        if (r.flagged) text("Flagged", PW - M - pdfTextWidth("Flagged", true, 8), b, "F2", 8, "C4302A");
-        drawLines(it.more, M + 16, b - it.name.length * SL, 8.5, SL);
-        y -= it.h;
-        if (k < list.length - 1) ops.push(pdfRuleOp(M + 16, y, PW - M, C.border, 0.5));
-      });
-      y -= 12;
+     The shot list the b-roll page prints and the Export dialog makes
+     (shotListAppendixPages): every shot, by scene, as a table on
+     landscape pages of their own — the one sheet, wherever it is printed
+     from, and one that can be pulled out of the script and taken on the
+     day. The page drawn so far goes in first; nothing is left pending, so
+     the next part's newPage() adds no empty page. */
+  var shotData = brollShotListForPrint({ filter: "all", group: "scene" });
+  if (shotData.groups.length) {
+    pages.push({ ops: ops, images: pageImages, links: pageLinks });
+    outline.push({ title: "B-roll shot list", page: pages.length, y: SHOT_PH });
+    shotListAppendixPages(shotData).forEach(function (pageOps) {
+      pages.push({ ops: [pdfRgb(C.text) + " rg"].concat(pageOps), images: [], links: [], size: [SHOT_PW, SHOT_PH], margin: SHOT_M });
     });
+    ops = [];
+    pageImages = [];
+    pageLinks = [];
   }
 
   /* ---- comments ----
@@ -1464,14 +1435,17 @@ export function buildPdf(jpegs, commentJpegs) {
     });
   }
 
-  pages.push({ ops: ops, images: pageImages, links: pageLinks });
+  /* (nothing pending when the b-roll's landscape pages were the last part) */
+  if (ops.length) pages.push({ ops: ops, images: pageImages, links: pageLinks });
 
   /* The running footer, now the pages are counted. Marked as a pagination
      artifact, which is what it is: a reader that extracts or reads the
-     text aloud leaves it out. */
+     text aloud leaves it out. A landscape page's footer spans its own
+     width, inside its own margin. */
   pages.forEach(function (pg, i) {
     pg.ops.push("/Artifact << /Type /Pagination /Subtype /Footer >> BDC");
-    pdfFooterOps(title, i + 1, pages.length, PW, M, FOOT_Y, C.faint, C.border).forEach(function (op) { pg.ops.push(op); });
+    pdfFooterOps(title, i + 1, pages.length, pg.size ? pg.size[0] : PW, pg.margin || M, FOOT_Y, C.faint, C.border)
+      .forEach(function (op) { pg.ops.push(op); });
     pg.ops.push("EMC");
   });
 
@@ -1511,24 +1485,35 @@ var LIST_FOOT_Y = 30;
    the page yet — a row too tall for a page is drawn where it is rather
    than starting page after empty page. finish() puts the last page in and
    gives every page its footer, last, since "Page n of N" wants N. */
-function listSheet() {
+/* `size` [PW, PH, M], when given, is the sheet's page and margin — the
+   shot list is landscape — otherwise the lists' Letter portrait. */
+function listSheet(size) {
   var sheet = { pages: [], ops: null, y: 0, body: false };
+  sheet.PW = size ? size[0] : LIST_PW;
+  sheet.PH = size ? size[1] : LIST_PH;
+  sheet.M = size ? size[2] : LIST_M;
   sheet.newPage = function () {
     if (sheet.ops) sheet.pages.push(sheet.ops);
     sheet.ops = [];
-    sheet.y = LIST_PH - LIST_M;
+    sheet.y = sheet.PH - sheet.M;
     sheet.body = false;
   };
   sheet.text = function (str, x, y, font, size, hex) {
     sheet.ops.push(pdfTextOp(str, x, y, font, size, hex));
   };
   sheet.push = function (ops) { Array.prototype.push.apply(sheet.ops, ops); };
-  sheet.finish = function (footTitle) {
+  /* the pages as drawn, with no footer: for a document that numbers its
+     own pages (the script PDF's appendix) */
+  sheet.bare = function () {
     if (sheet.ops) sheet.pages.push(sheet.ops);
     sheet.ops = null;
+    return sheet.pages;
+  };
+  sheet.finish = function (footTitle) {
+    sheet.bare();
     var n = sheet.pages.length;
     sheet.pages.forEach(function (ops, i) {
-      Array.prototype.push.apply(ops, pdfFooterOps(footTitle, i + 1, n, LIST_PW, LIST_M, LIST_FOOT_Y,
+      Array.prototype.push.apply(ops, pdfFooterOps(footTitle, i + 1, n, sheet.PW, sheet.M, LIST_FOOT_Y,
         PRINT_COLORS.faint, PRINT_COLORS.border));
     });
     return sheet.pages;
@@ -1579,7 +1564,7 @@ function listLineOps(line, x, y, size, hex, boldHex) {
    one; then each line of `meta`, wrapped, the first dim and any after it
    faint. Leaves the cursor under it. */
 function listHead(sheet, kicker, heading, dotHex, meta) {
-  var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
+  var C = PRINT_COLORS, M = sheet.M, W = sheet.PW - 2 * sheet.M;
   var y = sheet.y - 7;
   sheet.text(kicker, M, y, "F1", 9, C.faint);
   var hx = dotHex ? M + 16 : M;
@@ -1604,12 +1589,11 @@ function listHead(sheet, kicker, heading, dotHex, meta) {
    back after it — a box for each, under "Out" and "Back". The breakdown
    (the script PDF's, the spreadsheet) is a table to read; this is what
    "did we pack it, did it come back" needs. One row per item, in
-   alphabetical order: the two boxes, the name in bold, its status as the
-   panel shows it (a lamp and the word, TAG_STATUS_PRINT), who has it and
-   the scenes it is in; under the name, dim, its notes and the b-roll
-   shots that need it. An item not in hand yet — Needed, Sourcing — has
-   its status word in amber, the sheet's one warm colour, so it is what
-   the eye finds. At the end a line to sign for whoever packed it and
+   alphabetical order: the two boxes, the name in bold, its status as a
+   four-level pill filled as far as it has got, to fill in further by
+   hand (packingPillOp, below — amber while it is not in hand yet), who
+   has it and the scenes it is in; under the name, dim, its notes and the
+   b-roll shots that need it. At the end a line to sign for whoever packed it and
    whoever brought it back. Blank where nobody has it: a printed sheet
    invites the name in pen.
 
@@ -1641,9 +1625,23 @@ export function buildPackingListPdf(catId) {
     return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
   }
 
+  /* The pill's key, once, under the heading: the four levels at full
+     size with their names, so the pill on each row can be half that and
+     need no words. */
+  var ky = sheet.y - 4;
+  var KEY_X = M + 40, KEY_W = 46, KEY_GAP = 2, KEY_H = 9;
+  sheet.ops.push(pdfTextOp("Status", M, ky, "F1", 8.5, C.dim));
+  sheet.ops.push(packingPillOp(null, KEY_X, ky - 1, { seg: KEY_W, gap: KEY_GAP, h: KEY_H }));
+  TAG_STATUSES.forEach(function (st, i) {
+    var cx = KEY_X + i * (KEY_W + KEY_GAP) + KEY_W / 2;
+    sheet.ops.push(pdfTextOp(st.label, cx - pdfTextWidth(st.label, false, 7.5) / 2, ky - 12, "F1", 7.5, C.dim));
+  });
+  sheet.ops.push(pdfTextOp("Fill in each step as it happens", KEY_X + 4 * KEY_W + 3 * KEY_GAP + 12, ky, "F3", 8, C.faint));
+  sheet.y = ky - 26;
+
   /* The columns, from the margin: each box under its head ("Out" and
-     "Back" centred over them), then Item / Status / Owner / Scenes, each
-     wrapping to its own width. */
+     "Back" centred over them), then Item / Status (the pill) / Owner /
+     Scenes, each wrapping to its own width. */
   var BOX = 11, OUT_X = M + 1.4, BACK_X = M + 29.4;
   var ITEM_X = M + 58, ITEM_W = 188;
   var STATUS_X = M + 256;
@@ -1703,10 +1701,7 @@ export function buildPackingListPdf(catId) {
       low -= i ? UNDER_LEAD : UNDER_GAP;
       sheet.push(listLineOps(u.line, ITEM_X, low, 9, C.dim, u.boldHex));
     });
-    var look = TAG_STATUS_PRINT[r.status.id] || TAG_STATUS_PRINT.needed;
-    var inHand = r.status.id === "have" || r.status.id === "returned";
-    sheet.ops.push(pdfLampOp(look.lamp, STATUS_X + 3.5, base + 3.4, 3.5, look.color));
-    sheet.text(r.status.label, STATUS_X + 11, base, "F1", 10, inHand ? look.color : C.audio);
+    sheet.ops.push(packingPillOp(r.status.id, STATUS_X, base + 1.5, { seg: 12, gap: 1, h: 5 }));
     r.owner.forEach(function (line, i) {
       low = Math.min(low, base - i * COL_LEAD);
       sheet.push(listLineOps(line, OWNER_X, base - i * COL_LEAD, 10, C.text));
@@ -1746,6 +1741,61 @@ export function buildPackingListPdf(catId) {
   return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
 }
 
+/* ---- the packing list's status pill ----
+
+   An item's status as a row of four segments, one per level in
+   TAG_STATUSES' order — Needed, Sourcing, Have it, Returned — filled up to
+   and including the one the item is at, and the rest left empty to fill
+   in by hand as it moves along on the day: a printed word goes stale the
+   moment the sheet is in someone's hand, a half-filled pill does not. The
+   fill says how far along it is at a glance: amber while it is not in hand
+   yet (Needed, Sourcing — the sheet's one warm colour, what the eye should
+   find), the dim text colour once it is (Have it), faint once it has gone
+   back (Returned). An empty segment is an outline a pen can fill. The
+   key under the sheet's heading draws it once at full size with each
+   level's name, so the one on each row can be half that, with no words. */
+/* read when drawn, not when this module is evaluated: PRINT_COLORS is
+   another module's, and the bundle's order is not the import order */
+function pillFill(id) {
+  var C = PRINT_COLORS;
+  return { needed: C.audio, sourcing: C.audio, have: C.dim, returned: C.faint }[id] || C.audio;
+}
+
+/* One segment's outline, (x, y) its lower-left corner: the pill's round
+   ends on the first and the last, square sides between. */
+function pillSegmentPath(x, y, w, h, roundLeft, roundRight) {
+  var r = h / 2, k = r * 0.5523;
+  function p(a, b) { return a.toFixed(2) + " " + b.toFixed(2); }
+  var out = p(x + (roundLeft ? r : 0), y) + " m " + p(x + w - (roundRight ? r : 0), y) + " l ";
+  out += roundRight
+    ? p(x + w - r + k, y) + " " + p(x + w, y + r - k) + " " + p(x + w, y + r) + " c " +
+      p(x + w, y + r + k) + " " + p(x + w - r + k, y + h) + " " + p(x + w - r, y + h) + " c "
+    : p(x + w, y + h) + " l ";
+  out += p(x + (roundLeft ? r : 0), y + h) + " l ";
+  out += roundLeft
+    ? p(x + r - k, y + h) + " " + p(x, y + r + k) + " " + p(x, y + r) + " c " +
+      p(x, y + r - k) + " " + p(x + r - k, y) + " " + p(x + r, y) + " c "
+    : p(x, y) + " l ";
+  return out + "h";
+}
+
+/* The pill for status `id`, its lower-left corner at (x, y); size.seg
+   each segment's width, size.gap between them, size.h its height. A null
+   `id` is the key's pill: every segment empty. */
+function packingPillOp(id, x, y, size) {
+  var level = id === null ? -1 : Math.max(0, TAG_STATUSES.map(function (st) { return st.id; }).indexOf(id));
+  var fill = level === -1 ? "" : pdfRgb(pillFill(TAG_STATUSES[level].id));
+  /* the faint text colour, not a rule's grey: an empty segment has to
+     survive a cheap printer to be filled in */
+  var edge = pdfRgb(PRINT_COLORS.faint);
+  return TAG_STATUSES.map(function (st, i) {
+    var path = pillSegmentPath(x + i * (size.seg + size.gap), y, size.seg, size.h, i === 0, i === TAG_STATUSES.length - 1);
+    return i <= level
+      ? "q " + fill + " rg " + path + " f Q"
+      : "q " + edge + " RG 0.6 w " + path + " S Q";
+  }).join(" ");
+}
+
 /* "6 items · 5 have it · 1 sourcing": what is in hand, what is on its
    way, what is still needed, what has gone back — the ones there are.
    `items` are breakdownRows(), each with its status's id and label. */
@@ -1776,19 +1826,12 @@ function assembleTextPdf(pages, PW, PH, title) {
 
 /* ================= the b-roll shot list (#150) =================
 
-   What the full-page shot list's "Print shot list" makes: the list as it
-   is on screen — its filter and its grouping (brollShotListForPrint,
-   08d-broll-panel.js) — as a sheet to take on the day. Each group headed
-   as the page heads it — a location after its pin, a scene with the
-   timecode it starts at — with how much of it is shot at the right, in
-   the b-roll teal once all of it is. Each shot a box, ticked in teal when
-   it is in the can (B's "done", #169); the shot in bold, dimmed once
-   shot, and the lines under its marker in the script; then, dim, what
-   else there is to know on the day: its scene and where that starts,
-   where, who has it, the props it needs (each with its status), the
-   opening of the line it cuts against, and "Flagged" in red in front of a flagged
-   one's note. What the group head already says — the location, the
-   scene, the person — the shots under it do not repeat.
+   A sheet to take on the day, landscape, one row a shot (drawShotTable,
+   below): what the full-page shot list's "Print shot list" makes — the
+   list as it is on screen, its filter and its grouping
+   (brollShotListForPrint, 08d-broll-panel.js) — and what File ▸ Export… ▸
+   B-roll shot list makes, every shot by scene; the script PDF's appendix
+   is the same table (shotListAppendixPages).
 
    A PDF, the way the packing lists are, rather than the browser's print of
    the page: the same file in the browser and the desktop app, one that can
@@ -1797,121 +1840,190 @@ function assembleTextPdf(pages, PW, PH, title) {
 var FLAG_PRINT = "C4302A";
 
 /* The start of a "cuts against" line, cut at a word end with "…" once it
-   is longer than about two lines of the sheet's detail text. */
-var SHOT_CUTS_MAX = 170;
-function shotCutsOpening(text) {
-  if (text.length <= SHOT_CUTS_MAX) return text;
-  var cut = text.slice(0, SHOT_CUTS_MAX);
+   is longer than `max` characters — about two lines of the column it is
+   printed in. */
+function shotCutsOpening(text, max) {
+  if (text.length <= max) return text;
+  var cut = text.slice(0, max);
   var space = cut.lastIndexOf(" ");
-  if (space > SHOT_CUTS_MAX / 2) cut = cut.slice(0, space);
+  if (space > max / 2) cut = cut.slice(0, space);
   return cut.replace(/[\s,;:.–—-]+$/, "") + "…";
 }
 
-export function buildShotListPdf(data) {
-  var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
-  var BOX = 11, TEXT_X = M + 22, TEXT_W = W - 22;
-  /* a shot's measure: its first baseline under its top, the leads of its
-     name, its description and its details, the gap before the details and
-     the room under its last line */
-  var TOP = 17, NAME_LEAD = 14, DESC_LEAD = 13, DETAIL_GAP = 13.5, DETAIL_LEAD = 12, TAIL = 10;
-  var docTitle = data.title + " — B-roll shot list";
+/* Landscape Letter, a narrower margin than the portrait lists, and a
+   bottom that keeps clear of the footer's hairline. */
+var SHOT_PW = 792, SHOT_PH = 612, SHOT_M = 36, SHOT_BOTTOM = 54;
 
-  var sheet = listSheet();
+export function buildShotListPdf(data) {
+  var C = PRINT_COLORS, M = SHOT_M;
+  var docTitle = data.title + " — B-roll shot list";
+  var sheet = listSheet([SHOT_PW, SHOT_PH, SHOT_M]);
   listHead(sheet, "B-roll shot list", data.title, null, [data.summary + " · " + data.scope + " · " + exportDateText()]);
   if (!data.groups.length) sheet.text("No shots to list.", M, sheet.y + 4, "F1", 11, C.dim);
+  else drawShotTable(sheet, data, "B-roll shot list");
+  return assembleTextPdf(sheet.finish(docTitle), SHOT_PW, SHOT_PH, docTitle);
+}
 
-  /* One shot's lines, laid out ahead so its room can be asked for before
-     any of it is drawn: [{line, size, dy (from the line above), hex,
-     boldHex}] and its height. */
-  function shotOf(r, g) {
-    var out = [], height = 0;
-    function add(runs, size, firstDy, lead, hex, boldHex) {
-      listWrap(runs, TEXT_W, size).forEach(function (line, i) {
-        var dy = out.length ? (i ? lead : firstDy) : TOP;
-        out.push({ line: line, size: size, dy: dy, hex: hex, boldHex: boldHex });
-        height += dy;
-      });
-    }
-    add([{ text: listClean(r.name), b: true }], 11, NAME_LEAD, NAME_LEAD, C.text, r.shot ? C.faint : C.text);
-    /* the description keeps its own lines, as the script has them */
-    String(r.desc || "").split("\n").forEach(function (para) {
-      if (listClean(para)) add([{ text: listClean(para) }], 10, DESC_LEAD, DESC_LEAD, r.shot ? C.faint : C.dim);
-    });
-    var meta = [];
-    if (r.scene && g.kind !== "scene") meta.push("Scene " + r.scene + (r.start ? " · " + r.start : ""));
-    if (r.location && g.kind !== "location") meta.push(listClean(r.location));
-    if (r.owner && g.kind !== "person") meta.push("Assigned: " + listClean(r.owner));
-    if (r.props.length) meta.push("Props: " + (r.propsWithStatus || r.props).map(listClean).join(", "));
-    var details = [];
-    if (meta.length) details.push([{ text: meta.join("  ·  ") }]);
-    /* the narration it runs under, set in italic so the words to shoot
-       and the words spoken over them read apart — its opening only, two
-       lines at most: on the day it says which moment this is, and the
-       whole paragraph (it is often a scene's entire Audio) turned one
-       shot into a block of prose */
-    if (r.cuts) details.push([{ text: "Cuts against: " }, { text: "“" + shotCutsOpening(listClean(r.cuts)) + "”", i: true }]);
-    if (r.flagged) details.push([{ text: "Flagged", b: true }].concat(r.note ? [{ text: " — " + listClean(r.note) }] : []));
-    else if (listClean(r.note)) details.push([{ text: "Note: " + listClean(r.note) }]);
-    details.forEach(function (runs, i) {
-      add(runs, 9, i ? DETAIL_LEAD : DETAIL_GAP, DETAIL_LEAD, C.dim, FLAG_PRINT);
-    });
-    return { lines: out, shot: r.shot, height: height + TAIL };
-  }
+/* The script PDF's appendix part (buildPdf): the same table on landscape
+   pages of its own, headed as the script PDF heads a part — its name and
+   one line that sums it up — with no footer, which buildPdf adds when it
+   numbers every page. [ops, …], a page each. */
+export function shotListAppendixPages(data) {
+  var C = PRINT_COLORS, M = SHOT_M;
+  var sheet = listSheet([SHOT_PW, SHOT_PH, SHOT_M]);
+  sheet.text("B-roll shot list", M, sheet.y - 16, "F2", 16, C.text);
+  sheet.text(data.summary + " · " + data.scope, M, sheet.y - 33, "F1", 8.5, C.dim);
+  sheet.y -= 46;
+  drawShotTable(sheet, data, "B-roll shot list");
+  return sheet.bare();
+}
 
-  function drawShot(s) {
-    var y = sheet.y;
-    s.lines.forEach(function (l, i) {
-      y -= l.dy;
-      if (!i) sheet.ops.push(pdfCheckboxOp(M, y - 1.5, BOX, s.shot, C.faint, C.broll));
-      sheet.push(listLineOps(l.line, TEXT_X, y, l.size, l.hex, l.boldHex));
-    });
-    sheet.y = y - TAIL;
-    sheet.body = true;
-  }
+/* The shot list as a table, one row a shot, the whole width of a
+   landscape page (Adam, 2026-09-26: denser, room for notes, a flag's
+   reason beside it, the props always there to see):
 
-  /* A group's head: its label in bold after a pin for a location, the
-     timecode a scene starts at after it, faint, and done/total at the
-     right; on a page it runs on to, "(continued)" in place of the count.
-     The flat list (no grouping) has none. */
-  var LABEL_LEAD = 15;
-  function pinned(g) { return g.kind === "location" && !g.none; }
-  function headLines(g) {
-    return listWrap([{ text: listClean(g.label), b: true }], W - 90 - (pinned(g) ? 13 : 0), 12);
-  }
-  function headHeight(g) { return g.label ? 13 + (headLines(g).length - 1) * LABEL_LEAD + 8 : 0; }
-  function drawHead(g, continued) {
-    if (!g.label) return;
-    var base = sheet.y - 13, x = pinned(g) ? M + 13 : M;
-    if (pinned(g)) sheet.ops.push(listPinOp(M + 4, base + 5.6, 3.2, tagPrintColor("location")));
-    var lines = headLines(g), last = base;
-    lines.forEach(function (line, i) {
-      last = base - i * LABEL_LEAD;
-      sheet.push(listLineOps(line, x, last, 12, C.text, C.text));
-    });
-    var end = x + lines[lines.length - 1].reduce(function (n, p) { return n + p.width; }, 0);
-    if (g.kind === "scene" && g.start) sheet.text(g.start, end + 7, last, "F1", 10, C.faint);
-    var right = continued ? "(continued)" : g.done + "/" + g.total + " shot";
-    var allShot = !continued && g.total && g.done === g.total;
-    sheet.text(right, M + W - pdfTextWidth(right, false, 9.5), base, "F1", 9.5, allShot ? C.broll : C.faint);
-    sheet.y = last - 8;
+     Done | Scene | B-roll shot | Location | Props | Assigned | Flagged | Notes
+
+   Done is a box, ticked in the b-roll teal once the shot is in the can
+   (B's "done", #169). The shot in bold (faint once shot), the lines under
+   its marker in the script, and the opening of the line it cuts against,
+   in italic. Props one to a line, each with its status. Flagged says so in
+   red and gives the reason — the note, which is what raising the flag
+   asks for (08d-broll-panel.js). Notes is a note that is not a flag's
+   reason, then lines to write on to the foot of the row: every row keeps
+   room for a pen. A column with nothing in it is left empty, to fill in.
+
+   By scene, the Scene column groups the rows: a scene's number and where
+   it starts on its first shot only, and a stronger rule between scenes.
+   Grouped any other way (location, person, as the b-roll page can be),
+   each group is a band — its label after a pin for a location, done/total
+   at the right — and every row names its scene. Column heads on every
+   page; a page the table runs on to says so at its top. */
+function drawShotTable(sheet, data, name) {
+  var C = PRINT_COLORS, M = sheet.M, W = sheet.PW - 2 * sheet.M;
+  /* Notes the widest after the shot itself: it is the column a pen goes in */
+  var COLS = {
+    done: { x: 0, w: 16 }, scene: { x: 22, w: 40 }, shot: { x: 66, w: 184 },
+    location: { x: 258, w: 72 }, props: { x: 338, w: 102 }, owner: { x: 448, w: 58 },
+    flag: { x: 514, w: 80 }, notes: { x: 602, w: W - 602 }
+  };
+  var HEADS = [["done", "Done"], ["scene", "Scene"], ["shot", "B-roll shot"], ["location", "Location"],
+    ["props", "Props"], ["owner", "Assigned"], ["flag", "Flagged"], ["notes", "Notes"]];
+  /* a row's first baseline under its top, the room under its last line,
+     and the least a row is — two lines to write on in Notes */
+  var TOP = 12, TAIL = 8, MIN_ROW = 34, WRITE_LEAD = 11;
+
+  function heads(continued) {
+    if (continued) { sheet.text(name + " (continued)", M, sheet.y - 7, "F1", 9, C.faint); sheet.y -= 20; }
+    var b = sheet.y - 10;
+    HEADS.forEach(function (h) { sheet.text(h[1], M + COLS[h[0]].x, b, "F1", 7.5, C.dim); });
+    sheet.y = b - 5;
     sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.borderStrong, 0.75));
   }
 
+  /* a column's lines: [{line, size, hex, boldHex, lead}] — lead is the
+     step down from the line above */
+  function col(runs, w, size, hex, lead, boldHex) {
+    return listWrap(runs, w, size).map(function (line) {
+      return { line: line, size: size, hex: hex, boldHex: boldHex || hex, lead: lead };
+    });
+  }
+  function depth(lines) {
+    return lines.reduce(function (n, l, i) { return n + (i ? l.lead : 0); }, 0);
+  }
+
+  /* `g` the row's group: what its band already says — the location, the
+     person — the row does not repeat */
+  function rowOf(r, showScene, g) {
+    var cells = {};
+    var nameHex = r.shot ? C.faint : C.text;
+    if (showScene && r.scene) {
+      cells.scene = col([{ text: r.scene, b: true }], COLS.scene.w, 9.5, C.text, 0)
+        .concat(r.start ? col([{ text: r.start }], COLS.scene.w, 7.5, C.faint, 10) : []);
+    }
+    var shot = col([{ text: listClean(r.name), b: true }], COLS.shot.w, 9.5, nameHex, 11.5);
+    String(r.desc || "").split("\n").forEach(function (para) {
+      if (listClean(para)) shot = shot.concat(col([{ text: listClean(para) }], COLS.shot.w, 8, r.shot ? C.faint : C.dim, 10));
+    });
+    /* which moment it is, not the paragraph (often a scene's whole Audio) */
+    if (r.cuts) shot = shot.concat(col([{ text: "“" + shotCutsOpening(listClean(r.cuts), 84) + "”", i: true }], COLS.shot.w, 7.5, C.faint, 9.5));
+    cells.shot = shot;
+    if (r.location && g.kind !== "location") cells.location = col([{ text: listClean(r.location) }], COLS.location.w, 8.5, C.dim, 10.5);
+    var props = r.propsWithStatus || r.props;
+    if (props.length) {
+      cells.props = [];
+      props.forEach(function (p) { cells.props = cells.props.concat(col([{ text: listClean(p) }], COLS.props.w, 8.5, C.dim, 10.5)); });
+    }
+    if (r.owner && g.kind !== "person") cells.owner = col([{ text: listClean(r.owner) }], COLS.owner.w, 8.5, C.dim, 10.5);
+    var note = listClean(r.note);
+    if (r.flagged) {
+      cells.flag = col([{ text: "Flagged", b: true }], COLS.flag.w, 8.5, FLAG_PRINT, 0)
+        .concat(note ? col([{ text: note }], COLS.flag.w, 8, C.dim, 10) : []);
+    } else if (note) {
+      cells.notes = col([{ text: note }], COLS.notes.w, 8, C.dim, 10);
+    }
+    var tallest = 0;
+    Object.keys(cells).forEach(function (k) { tallest = Math.max(tallest, depth(cells[k])); });
+    return { r: r, cells: cells, height: Math.max(MIN_ROW, TOP + tallest + TAIL) };
+  }
+
+  function drawRow(row) {
+    var top = sheet.y, base = top - TOP, bottom = top - row.height;
+    sheet.ops.push(pdfCheckboxOp(M + COLS.done.x + 1, base - 1.2, 9, row.r.shot, C.faint, C.broll));
+    var notesLow = base + WRITE_LEAD - 2;
+    Object.keys(row.cells).forEach(function (k) {
+      var y = base;
+      row.cells[k].forEach(function (l, i) {
+        y -= i ? l.lead : 0;
+        sheet.push(listLineOps(l.line, M + COLS[k].x, y, l.size, l.hex, l.boldHex));
+      });
+      if (k === "notes") notesLow = y;
+    });
+    /* lines to write on, under whatever the Notes column already says,
+       down to the foot of the row */
+    for (var wy = notesLow - WRITE_LEAD + 1; wy > bottom + 4; wy -= WRITE_LEAD) {
+      sheet.ops.push(pdfRuleOp(M + COLS.notes.x, wy, M + W, C.borderStrong, 0.5));
+    }
+    sheet.y = bottom;
+    sheet.body = true;
+  }
+
+  function band(g, continued) {
+    var b = sheet.y - 14, x = M;
+    if (g.kind === "location" && !g.none) {
+      sheet.ops.push(listPinOp(M + 3.5, b + 4.6, 2.8, tagPrintColor("location")));
+      x = M + 11;
+    }
+    sheet.push(listLineOps(listWrap([{ text: listClean(g.label), b: true }], W - 120, 9.5)[0], x, b, 9.5, C.text, C.text));
+    var right = continued ? "(continued)" : g.done + "/" + g.total + " shot";
+    var allShot = !continued && g.total && g.done === g.total;
+    sheet.text(right, M + W - pdfTextWidth(right, false, 8.5), b, "F1", 8.5, allShot ? C.broll : C.faint);
+    sheet.y = b - 6;
+    sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.borderStrong, 0.6));
+  }
+
+  heads(false);
   data.groups.forEach(function (g, gi) {
-    var shots = g.items.map(function (r) { return shotOf(r, g); });
-    if (gi) sheet.y -= 22;
-    /* a group's head never ends a page on its own: it goes over with its
-       first shot */
-    if (sheet.y - headHeight(g) - (shots.length ? shots[0].height : 0) < M && sheet.body) sheet.newPage();
-    drawHead(g, false);
-    shots.forEach(function (s, i) {
-      if (sheet.y - s.height < M && sheet.body) { sheet.newPage(); drawHead(g, true); }
-      else if (i) sheet.ops.push(pdfRuleOp(TEXT_X, sheet.y, M + W, C.border, 0.5));
-      drawShot(s);
+    var byScene = g.kind === "scene";
+    var rows = g.items.map(function (r, i) { return rowOf(r, !byScene || i === 0, g); });
+    var bandH = byScene ? 0 : 20;
+    /* a band, or a scene's first row, never ends a page on its own */
+    if (sheet.y - bandH - (rows.length ? rows[0].height : 0) < SHOT_BOTTOM && sheet.body) { sheet.newPage(); heads(true); }
+    else if (gi && byScene) sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.borderStrong, 0.6));
+    if (!byScene) band(g, false);
+    rows.forEach(function (row, i) {
+      if (sheet.y - row.height < SHOT_BOTTOM && sheet.body) {
+        sheet.newPage();
+        heads(true);
+        if (!byScene) band(g, true);
+        /* a scene carried over names itself again */
+        else if (i) row = rowOf(row.r, true, g);
+      } else if (i) {
+        sheet.ops.push(pdfRuleOp(M + COLS.shot.x, sheet.y, M + W, C.border, 0.5));
+      }
+      drawRow(row);
     });
   });
-
-  return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
 }
 
 /* The pin the shot list's page heads a location with (#169), as a shape —

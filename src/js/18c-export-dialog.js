@@ -6,7 +6,7 @@ import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { exportMetaLine, tagPrintColor, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
-import { commentNumbers, exportBrollScenes, exportFacts, exportRuns, sceneFacts } from "./14b-export-kit.js";
+import { brollSummaryText, commentNumbers, exportBrollScenes, exportFacts, exportRuns, sceneFacts } from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
@@ -51,8 +51,10 @@ export var EXPORT_FORMATS = [
     ] },
   { id: "csv", group: "whole", name: "Spreadsheet", ext: ".csv", icon: "i-file",
     purpose: "A row per scene, for Excel or Sheets", action: "export-csv" },
-  { id: "html", group: "whole", name: "Standalone page", ext: ".html", icon: "i-globe",
-    purpose: "Opens in any browser, nothing to install", action: "export-html", pictures: true },
+  /* SplitShare (Adam's name for it, 2026-09-26): the script with the whole
+     app built in, one file — what the card has to get across in a line */
+  { id: "html", group: "whole", name: "SplitShare", ext: ".html", icon: "i-globe",
+    purpose: "The script and the whole app in one file. Any device, nothing to install", action: "export-html", pictures: true },
   { id: "narration", group: "part", name: "Narration only", ext: ".docx / .txt", icon: "i-mic",
     purpose: "The Audio column, for a voice artist",
     option: "Format", choices: [
@@ -72,6 +74,14 @@ export var EXPORT_FORMATS = [
     option: "List", choices: [
       { value: "gear", label: "Gear", action: "export-packing-gear" },
       { value: "prop", label: "Props", action: "export-packing-prop" }
+    ] },
+  /* the b-roll page's own two files (#150), every shot by scene (Adam,
+     2026-09-26: the shot list as an export of its own) */
+  { id: "broll", group: "part", name: "B-roll shot list", ext: ".pdf / .csv", icon: "i-camera",
+    purpose: "Every shot, with props, flags and room for notes",
+    option: "Format", choices: [
+      { value: "pdf", label: "PDF, landscape", action: "export-broll-pdf" },
+      { value: "csv", label: "Spreadsheet (.csv)", action: "export-broll-csv" }
     ] }
 ];
 
@@ -83,12 +93,14 @@ export var EXPORT_ACTION_NAMES = {
   "export-md": "Markdown",
   "export-md-table": "Markdown, two columns",
   "export-csv": "Spreadsheet",
-  "export-html": "Standalone page",
+  "export-html": "SplitShare",
   "export-narration-docx": "Narration (.docx)",
   "export-narration-txt": "Narration (.txt)",
   "export-breakdown": "Breakdown",
   "export-packing-gear": "Gear packing list",
-  "export-packing-prop": "Props packing list"
+  "export-packing-prop": "Props packing list",
+  "export-broll-pdf": "B-roll shot list",
+  "export-broll-csv": "B-roll shot list (.csv)"
 };
 
 /* buildFileData's kind for each action (18-local-files.js). */
@@ -96,7 +108,8 @@ var ACTION_KINDS = {
   "export-pdf": "pdf", "export-docx": "docx", "export-md": "md", "export-md-table": "md-table",
   "export-csv": "csv", "export-html": "html", "export-narration-docx": "narration-docx",
   "export-narration-txt": "narration-txt", "export-breakdown": "breakdown",
-  "export-packing-gear": "packing-gear", "export-packing-prop": "packing-prop"
+  "export-packing-gear": "packing-gear", "export-packing-prop": "packing-prop",
+  "export-broll-pdf": "b-roll pdf", "export-broll-csv": "b-roll csv"
 };
 
 export function isExportAction(action) {
@@ -128,6 +141,9 @@ export function exportActionReason(action) {
     var has = productionEntries().some(function (e) { return e.cat.id === catId; });
     var cat = tagCategory(catId);
     return has ? "" : "Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack";
+  }
+  if (action === "export-broll-pdf" || action === "export-broll-csv") {
+    return exportBrollScenes().length ? "" : "No b-roll yet — start a Visual line with B-roll:";
   }
   return "";
 }
@@ -252,6 +268,16 @@ function pvTitleBlock(title) {
 
 function pvLamp(id) { return '<i class="pv-lamp pv-lamp-' + escapeHtml(id) + '" aria-hidden="true"></i>'; }
 
+/* the packing list's status pill (packingPillOp, 17-pdf.js): four
+   segments, filled up to the item's level, the rest left to fill in; a
+   null id is the key's, all empty */
+function pvPill(id) {
+  var ids = ["needed", "sourcing", "have", "returned"];
+  var level = id === null ? -1 : Math.max(0, ids.indexOf(id));
+  return '<span class="pv-pill' + (level === -1 ? ' pv-pill-key' : ' pv-pill-' + ids[level]) + '" aria-hidden="true">' +
+    ids.map(function (x, i) { return '<i' + (i <= level ? ' class="is-on"' : '') + '></i>'; }).join("") + '</span>';
+}
+
 /* the script's length as the rundown strip draws it: a block a scene,
    as wide as its read time, lit by its status, the target where it falls,
    and under it how many scenes are at each status */
@@ -319,9 +345,45 @@ function pvGrid(head, rows, widths) {
     }).join("") + '</table>';
 }
 
+/* the b-roll shot list (drawShotTable, 17-pdf.js), on its landscape page:
+   a row a shot, its box ticked once it is shot, the scene on a scene's
+   first shot, props, the flag and its reason, and room for notes */
+function pvShotList(title) {
+  var groups = exportBrollScenes();
+  var rows = [];
+  groups.forEach(function (g) {
+    g.items.forEach(function (r, i) {
+      rows.push({ cells: [
+        '<i class="pv-box' + (r.shot ? ' is-ticked' : '') + '"></i>',
+        i ? "" : '<b>' + escapeHtml(g.scene) + '</b>',
+        '<b' + (r.shot ? ' class="pv-faint"' : '') + '>' + escapeHtml(trunc(r.name, 34)) + '</b>',
+        escapeHtml(trunc(r.location, 14)),
+        escapeHtml(trunc((r.props || []).join(", "), 18)),
+        r.flagged ? '<b class="pv-flag">Flagged</b>' : "",
+        '<i class="pv-write"></i>'
+      ] });
+    });
+  });
+  return '<div class="pv-eyebrow">B-roll shot list</div><div class="pv-title">' + title + '</div>' +
+    '<div class="pv-meta">' + escapeHtml(brollSummaryText(groups)) + ' · by scene · ' + escapeHtml(exportFacts().date) + '</div>' +
+    pvGrid(["Done", "Scene", "B-roll shot", "Location", "Props", "Flagged", "Notes"], rows.slice(0, 12), [6, 7, 30, 13, 16, 10, 18]) +
+    pvFooter(title, "B-roll shot list");
+}
+
 function previewHtml(action) {
   var title = escapeHtml(S.state.title || "Untitled Script");
   var rows = S.state.rows.slice(0, 7);
+  if (action === "export-broll-pdf") return pvShotList(title);
+  if (action === "export-broll-csv") {
+    var shots = [];
+    exportBrollScenes().forEach(function (g) {
+      g.items.forEach(function (r) {
+        shots.push({ cells: [escapeHtml(g.scene), escapeHtml(trunc(r.name, 24)), r.shot ? "Shot" : "To shoot",
+                             r.flagged ? "yes" : "", escapeHtml(trunc(r.location, 12)), escapeHtml(g.start)] });
+      });
+    });
+    return pvGrid(["Scene", "Shot", "Status", "Flagged", "Location", "Scene start"], shots.slice(0, 14), [11, 33, 15, 13, 16, 12]);
+  }
   if (action === "export-pdf") return pvScript(title, { rundown: true }) + pvFooter(title);
   if (action === "export-docx") return pvScript(title, { word: true }) + pvFooter(title);
   if (action === "export-md") return pvTextLines(toMarkdownDoc({ scenes: 3 }), 40);
@@ -341,7 +403,7 @@ function previewHtml(action) {
   }
   if (action === "export-html") {
     /* the page is the app, named for the script in the browser's tab */
-    return '<div class="pv-app"><div class="pv-tabbar"><span class="pv-tab">' + title + ' — Splitpage</span></div>' +
+    return '<div class="pv-app"><div class="pv-tabbar"><span class="pv-tab">' + title + ' — SplitShare</span></div>' +
       '<div class="pv-app-bar">Splitpage <span>' + title + '</span></div>' +
       '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }) + '</div></div>';
   }
@@ -388,13 +450,14 @@ function previewHtml(action) {
       '<div class="pv-meta">' + title + ' · ' + escapeHtml(exportFacts().date) +
         (all.length ? '<br>' + escapeHtml(packingSummary(all)) : '') + '</div>' +
       (list.length
-        ? '<div class="pv-pack"><div class="pv-pack-row pv-pack-h"><span>Out</span><span>Back</span><span>Item</span><span>Status</span>' +
+        ? '<div class="pv-pill-legend">Status ' + pvPill(null) + '<span class="pv-faint">Needed · Sourcing · Have it · Returned</span></div>' +
+          '<div class="pv-pack"><div class="pv-pack-row pv-pack-h"><span>Out</span><span>Back</span><span>Item</span><span>Status</span>' +
             '<span>Owner</span><span>Scenes</span></div>' +
           list.map(function (b) {
             return '<div class="pv-pack-row"><i class="pv-box"></i><i class="pv-box"></i>' +
               '<span class="pv-pack-item"><b>' + escapeHtml(trunc(b.name, 30)) + '</b>' +
                 (b.notes ? '<span class="pv-faint">' + escapeHtml(trunc(b.notes, 44)) + '</span>' : '') + '</span>' +
-              '<span>' + pvLamp(b.status) + escapeHtml(b.statusLabel) + '</span>' +
+              '<span>' + pvPill(b.status) + '</span>' +
               '<span>' + escapeHtml(trunc(b.owner, 12)) + '</span>' +
               '<span>' + escapeHtml(b.scenes.join(", ")) + '</span></div>';
           }).join("") + '</div>' +
@@ -463,7 +526,7 @@ export function exportSummary(action) {
       var tail = tailSummary();
       if (tail) bits.push(tail);
     }
-    if (action === "export-html") bits.push("editable, with Splitpage around it");
+    if (action === "export-html") bits.push("the whole app built in — read, edit and present it in any browser, on any device");
   } else if (f.format.id === "narration") {
     bits.push(plural(narrationRows().length, "scene") + " of narration");
     /* the .docx sets each scene's number in the margin; the .txt stays
@@ -481,6 +544,13 @@ export function exportSummary(action) {
     /* what still has to be found before anything can go in the box */
     var missing = items.filter(function (b) { return b.status === "needed" || b.status === "sourcing"; }).length;
     if (missing) bits.push(missing + " not in hand yet");
+  } else if (f.format.id === "broll") {
+    var shotGroups = exportBrollScenes();
+    var shotCount = shotGroups.reduce(function (n, g) { return n + g.items.length; }, 0);
+    bits.push(plural(shotCount, "shot") + ", by scene");
+    if (shotCount) bits.push(brollSummaryText(shotGroups));
+    bits.push(action === "export-broll-pdf" ? "props, flags and their reasons, and room for notes"
+      : "a row a shot: status, flag, location, props, who, notes");
   }
   return bits.join(" · ");
 }
@@ -499,6 +569,8 @@ function renderSide() {
   var action = chosenAction();
   if (!action) return;
   el("export-preview").innerHTML = previewHtml(action);
+  /* the shot list's sheet is landscape, so its sketch is too */
+  el("export-preview").classList.toggle("is-landscape", action === "export-broll-pdf");
   el("export-summary").textContent = exportSummary(action);
   el("export-filename").textContent = exportFileNameFor(action);
   var why = exportActionReason(action);

@@ -89,13 +89,14 @@ expect /\r\n01,00:00,(To do|Ready|Shot),\d+:\d\d,,/.test(window.__scsv)
 expect window.__scsv.indexOf(',Prop: gaffer tape; Location: kitchen,,') !== -1
 expect /\r\nTotal,,\d+ of \d+ shot,\d+:\d\d,,,,,,/.test(window.__scsv)
 
-# --- the standalone page: named for the script --------------------------------
+# --- the SplitShare page: named for the script, and saying what it is --------
 jsclick #btn-file
 jsclick #file-menu [data-file-action="export-html"]
 sleep 1500
 eval (async function(){window.__html = await window.__blobs[window.__blobs.length-1].text(); return true;})()
 eval (function(){ var d = new DOMParser().parseFromString(window.__html, 'text/html'); window.__htmlHead = { title: d.title, desc: d.querySelector('meta[name="description"]').getAttribute('content') }; return window.__htmlHead; })()
-expect window.__htmlHead.title === (window.__splitpageFormats.state().title || 'Untitled Script') + ' — Splitpage'
+expect window.__htmlHead.title === (window.__splitpageFormats.state().title || 'Untitled Script') + ' — SplitShare'
+expect /- SplitShare\.html$/.test(window.__exportTest.fileName('export-html'))
 expect /^\d+ scenes? · \d+:\d\d running time · \d+ of \d+ shot · /.test(window.__htmlHead.desc)
 # the app's own page is left as it is
 expect document.title == Splitpage

@@ -2685,6 +2685,7 @@
     line-height: 1.4;
     position: relative;
   }
+  .export-preview.is-landscape { width: 258px; height: 200px; padding: 12px 14px; }
   .export-preview::after {
     content: "";
     position: absolute;
@@ -2827,8 +2828,25 @@
   .pv-pack-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pv-pack-h > span { overflow: visible; }
   .pv-pack-item b { display: block; font-size: 6px; color: #171613; overflow: hidden; text-overflow: ellipsis; }
+  /* the status pill: amber while not in hand yet, dim once it is, faint once back */
+  .pv-pill { display: inline-flex; gap: 0.5px; vertical-align: 0.5px; }
+  .pv-pill i { width: 6px; height: 3.5px; box-sizing: border-box; border: 0.4px solid #64635E; }
+  .pv-pill i:first-child { border-radius: 2px 0 0 2px; }
+  .pv-pill i:last-child { border-radius: 0 2px 2px 0; }
+  .pv-pill i.is-on { border: 0; background: #9E5800; }
+  .pv-pill-have i.is-on { background: #4E4D48; }
+  .pv-pill-returned i.is-on { background: #64635E; }
+  /* the key over the rows, at twice their size */
+  .pv-pill-legend { display: flex; align-items: center; gap: 3px; margin-top: 3px; font-size: 4.6px; color: #4E4D48; }
+  .pv-pill-key i { width: 12px; height: 4.5px; }
   .pv-pack-item .pv-faint { display: block; overflow: hidden; text-overflow: ellipsis; }
   .pv-box { width: 6px; height: 6px; margin-top: 0.5px; border: 0.6px solid #4E4D48; border-radius: 1.2px; box-sizing: border-box; }
+  /* the shot list's sketch: a box ticked in the b-roll teal, the flag in
+     red, and a line to write on */
+  .pv-grid .pv-box { display: inline-block; width: 4.5px; height: 4.5px; }
+  .pv-box.is-ticked { border-color: #00717F; background: linear-gradient(135deg, transparent 40%, #00717F 40% 60%, transparent 60%); }
+  .pv-flag { color: #C4302A; }
+  .pv-write { display: block; height: 0; margin-top: 4px; border-bottom: 0.5px solid #C9C7C1; }
   .pv-sign { display: grid; grid-template-columns: auto minmax(0, 1.6fr) auto minmax(0, 1fr); gap: 6px 4px; align-items: end; margin-top: 10px; font-size: 5px; color: #4E4D48; }
   .pv-sign i { display: block; border-bottom: 0.5px solid #C9C7C1; height: 5px; }
 

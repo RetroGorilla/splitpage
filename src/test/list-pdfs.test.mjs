@@ -17,7 +17,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
 import { __init as initBrollPanel, brollShotListForPrint } from "../js/08d-broll-panel.js";
 import { TAG_PRINT_COLORS } from "../js/14-export.js";
-import { PRINT_COLORS, TAG_STATUS_PRINT, exportDateText, sceneFacts } from "../js/14b-export-kit.js";
+import { PRINT_COLORS, exportDateText, sceneFacts } from "../js/14b-export-kit.js";
 import { buildPackingListPdf, buildShotListPdf, pdfTextWidth } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
 
@@ -59,29 +59,53 @@ const one = (texts, str) => {
   return all[0];
 };
 
-/* nothing drawn left of the margin or past the right one */
-function assertInsideMargins(pages) {
+/* the shot list's landscape page and margin */
+const SPW = 792, SM = 36;
+
+/* nothing drawn left of the margin or past the right one — the packing
+   list's portrait page unless told the shot list's */
+function assertInsideMargins(pages, pw = PW, m = M) {
   pages.forEach((page, i) => {
     textsOf(page).forEach((t) => {
       const w = pdfTextWidth(t.str, t.font === "F2" || t.font === "F4", t.size);
-      assert.ok(t.x >= M - 0.01, "page " + (i + 1) + ": " + t.str + " starts at " + t.x);
-      assert.ok(t.x + w <= PW - M + 0.01, "page " + (i + 1) + ": " + t.str + " runs to " + (t.x + w).toFixed(2));
+      assert.ok(t.x >= m - 0.01, "page " + (i + 1) + ": " + t.str + " starts at " + t.x);
+      assert.ok(t.x + w <= pw - m + 0.01, "page " + (i + 1) + ": " + t.str + " runs to " + (t.x + w).toFixed(2));
     });
   });
 }
 
 /* each page's running footer: the title at the left, "Page n of N" at the
    right, 7.5pt and faint, over a hairline */
-function assertFooters(pages, titleStart) {
+function assertFooters(pages, titleStart, m = M) {
   pages.forEach((page, i) => {
     const texts = textsOf(page);
     const right = one(texts, "Page " + (i + 1) + " of " + pages.length);
     assert.equal(right.size, 7.5);
     assert.equal(right.rgb, rgb(C.faint));
-    const left = texts.filter((t) => t.size === 7.5 && t.x === M && t.y === right.y);
+    const left = texts.filter((t) => t.size === 7.5 && t.x === m && t.y === right.y);
     assert.equal(left.length, 1, "page " + (i + 1) + ": the footer's title");
     assert.ok(left[0].str.startsWith(titleStart.slice(0, 20)), left[0].str);
   });
+}
+
+/* Each status pill on a page (packingPillOp: one operator line of four
+   segments, each a filled or an outlined path), top to bottom: its
+   baseline-ish y (the first segment's start), how many segments are
+   filled and in what colour, and how many are left empty to fill in. */
+function pillsOf(page, withKey) {
+  return page.split("\n").filter((op) => (op.match(/ h [fS] Q/g) || []).length === 4).map((op) => {
+    const fills = [...op.matchAll(/q ([\d.]+ [\d.]+ [\d.]+) rg [^Q]*? h f Q/g)].map((m) => m[1]);
+    return {
+      y: +/ ([-\d.]+) m /.exec(op)[1],
+      filled: fills.length,
+      fill: fills[0] || null,
+      empty: (op.match(/ h S Q/g) || []).length,
+      /* the first segment's height: its bottom edge's end, then up its
+         square right side */
+      height: (function (m) { return +(m[3] - m[1]).toFixed(2); })(/ ([-\d.]+) m [-\d.]+ ([-\d.]+) l [-\d.]+ ([-\d.]+) l /.exec(op))
+    };
+  /* the key's pill, every segment empty, is nobody's row */
+  }).filter((p) => withKey || p.filled > 0);
 }
 
 /* ---- the packing list ---- */
@@ -107,14 +131,30 @@ test("the packing list: a kicker, the category large after its dot, the script a
   const summary = one(texts, "6 items · 5 have it · 1 sourcing");
   assert.ok(summary.y < meta.y && summary.rgb === rgb(C.faint));
 
-  /* the column heads, in sentence case, on one line */
-  const heads = ["Out", "Back", "Item", "Status", "Owner", "Scenes"].map((h) => one(texts, h));
+  /* the status pill's key, once, under the heading: an empty pill at full
+     size with each level's name under its segment, and how to use it */
+  const key = ["Needed", "Sourcing", "Have it", "Returned"].map((h) => one(texts, h));
+  assert.ok(key.every((k) => k.y === key[0].y && k.size === 7.5 && k.rgb === rgb(C.dim)));
+  assert.ok(key.every((k, i) => !i || k.x > key[i - 1].x), "in the order a thing gets packed");
+  assert.ok(key[0].y < summary.y);
+  const keyPill = pillsOf(pages[0], true)[0];
+  assert.deepEqual([keyPill.filled, keyPill.empty, keyPill.height], [0, 4, 9]);
+  assert.ok(keyPill.y > key[0].y, "the names under it");
+  const hint = one(texts, "Fill in each step as it happens");
+  assert.equal(hint.font, "F3");
+
+  /* the column heads, in sentence case, on one line, under the key */
+  const statusHeads = find(texts, "Status");
+  assert.equal(statusHeads.length, 2, "the key's label and the column's head");
+  const heads = ["Out", "Back", "Item", "Owner", "Scenes"].map((h) => one(texts, h));
+  heads.splice(3, 0, statusHeads[1]);
   assert.ok(heads.every((h) => h.y === heads[0].y && h.size === 8.5 && h.rgb === rgb(C.dim)));
   assert.ok(heads.every((h, i) => !i || h.x > heads[i - 1].x), "left to right");
+  assert.ok(heads[0].y < key[0].y);
   assert.ok(!texts.some((t) => t.str === t.str.toUpperCase() && /[A-Z]{3}/.test(t.str)), "nothing uppercased");
 });
 
-test("the packing list: a row per item, alphabetical, two boxes, the status as a lamp and a word, who has it, where", () => {
+test("the packing list: a row per item, alphabetical, two boxes, the status as a pill to fill in, who has it, where", () => {
   demo();
   const page = pagesOf(buildPackingListPdf("prop"))[0];
   const texts = textsOf(page);
@@ -131,20 +171,24 @@ test("the packing list: a row per item, alphabetical, two boxes, the status as a
     const n = one(texts, name);
     return texts.filter((t) => t.y === n.y && t.str !== name);
   };
-  /* status: Have it in the text colour, Sourcing — not in hand yet — in amber */
+  /* no status word — it would go stale the moment the sheet is in a hand */
   const battery = row("button cell battery");
-  assert.deepEqual(battery.map((t) => t.str), ["Sourcing", "Sam", "13"]);
-  assert.equal(battery[0].rgb, rgb(C.audio));
-  assert.equal(battery[1].rgb, rgb(C.text));
-  assert.equal(battery[2].rgb, rgb(C.dim));
-  assert.deepEqual(row("Pentax K1000").map((t) => t.str), ["Have it", "Sam", "01, 28"]);
-  assert.equal(row("Pentax K1000")[0].rgb, rgb(C.text));
+  assert.deepEqual(battery.map((t) => t.str), ["Sam", "13"]);
+  assert.equal(battery[0].rgb, rgb(C.text));
+  assert.equal(battery[1].rgb, rgb(C.dim));
+  assert.deepEqual(row("Pentax K1000").map((t) => t.str), ["Sam", "01, 28"]);
   /* nobody has it: nothing printed there, room to write a name in */
-  assert.deepEqual(row("naphtha").map((t) => t.str), ["Have it", "05"]);
-  /* a lamp a row: five lit (Have it), one half lit (Sourcing) */
-  const lamps = ops.filter((op) => / f Q$/.test(op) && !/ l /.test(op) && !op.includes(" BT "));
-  assert.equal(lamps.filter((op) => op.startsWith("q " + rgb(TAG_STATUS_PRINT.have.color) + " rg ")).length, 5);
-  assert.equal(ops.filter((op) => op.startsWith("q " + rgb(TAG_STATUS_PRINT.sourcing.color) + " RG 0.9 w ")).length, 1);
+  assert.deepEqual(row("naphtha").map((t) => t.str), ["05"]);
+  /* a pill a row, half the key's size, filled up to its level: Sourcing
+     two segments in amber (not in hand yet), Have it three in the dim
+     text colour, the rest outlined to fill in by hand */
+  const pills = pillsOf(page);
+  assert.equal(pills.length, 6);
+  assert.deepEqual([pills[0].filled, pills[0].fill, pills[0].empty], [2, rgb(C.audio), 2]);
+  pills.slice(1).forEach((p) => assert.deepEqual([p.filled, p.fill, p.empty], [3, rgb(C.dim), 1]));
+  assert.ok(pills.every((p) => p.height === 5));
+  /* each on its row */
+  assert.ok(Math.abs(pills[0].y - (one(texts, "button cell battery").y + 1.5)) < 0.01);
 
   /* the notes under the name, small and dim */
   const note = one(texts, "SR44 silver oxide.");
@@ -172,10 +216,12 @@ test("the packing list ends with lines to sign, and a footer; the gear list is t
     assertFooters(pages, LONG_DEMO.state.title);
     one(textsOf(pages[0]), plural);
   }
-  /* the gear list: its Returned item faint, word and lamp */
-  const gear = textsOf(pagesOf(buildPackingListPdf("gear"))[0]);
-  assert.equal(one(gear, "Returned").rgb, rgb(C.faint));
-  one(gear, "3 items · 2 have it · 1 returned");
+  /* the gear list: its Returned item (the gimbal, first) all four
+     segments, faint — done with */
+  const gearPage = pagesOf(buildPackingListPdf("gear"))[0];
+  const gearPills = pillsOf(gearPage);
+  assert.deepEqual([gearPills[0].filled, gearPills[0].fill, gearPills[0].empty], [4, rgb(C.faint), 0]);
+  one(textsOf(gearPage), "3 items · 2 have it · 1 returned");
 });
 
 test("the packing list's file: its title for a viewer, and the same bytes built twice", () => {
@@ -227,7 +273,10 @@ test("the packing list: a long title wraps, notes and the b-roll shots under the
   assert.equal(metas.map((t) => t.str).join(" "), LONG_TITLE + " · " + exportDateText());
   /* a line break in a note is a space, never a "?" */
   assert.ok(!texts.some((t) => t.str.includes("?")));
-  one(texts, "The red one from the shop, not the steel one.");
+  /* (over two lines: the note's lines between the name and the b-roll line) */
+  const kettle = one(texts, "Kettle"), brollLine = one(texts, "B-roll:");
+  const noteLines = texts.filter((t) => t.x === kettle.x && t.font === "F1" && t.size === 9 && t.y < kettle.y && t.y > brollLine.y);
+  assert.equal(noteLines.map((t) => t.str).join(" "), "The red one from the shop, not the steel one.");
   /* the b-roll shot that needs it, after its label in the b-roll teal */
   const label = one(texts, "B-roll:");
   assert.deepEqual([label.font, label.size, label.rgb], ["F2", 9, rgb(C.broll)]);
@@ -238,8 +287,9 @@ test("the packing list: a long title wraps, notes and the b-roll shots under the
   const gone = one(texts, "Not in script");
   assert.ok(gone.y === teapot.y && gone.rgb === rgb(C.faint));
   one(texts, "3 items · 1 have it · 1 sourcing · 1 returned");
-  assert.equal(one(texts, "Returned").rgb, rgb(C.faint));
-  assert.equal(one(texts, "Sourcing").rgb, rgb(C.audio));
+  /* Kettle (sourcing), Mug (have), Teapot (returned), alphabetical */
+  assert.deepEqual(pillsOf(pages[0]).map((p) => [p.filled, p.fill]),
+    [[2, rgb(C.audio)], [3, rgb(C.dim)], [4, rgb(C.faint)]]);
 });
 
 test("the packing list runs onto more pages: the heads again, a footer on every page, the lines to sign once, at the end", () => {
@@ -267,8 +317,10 @@ test("the packing list runs onto more pages: the heads again, a footer on every 
   const names = all.flat().filter((t) => t.font === "F2" && t.size === 11).map((t) => t.str);
   assert.equal(names.length, 63);
   assert.deepEqual(names, names.slice().sort((a, b) => a.localeCompare(b)));
-  /* Needed is not in hand: amber */
-  assert.ok(all.flat().filter((t) => t.str === "Needed").every((t) => t.rgb === rgb(C.audio)));
+  /* a pill for every item, the 60 spares Needed: one segment, amber */
+  const pills = pages.map(pillsOf).flat();
+  assert.equal(pills.length, 63);
+  assert.equal(pills.filter((p) => p.filled === 1 && p.fill === rgb(C.audio) && p.empty === 3).length, 60);
 });
 
 test("an empty category keeps its one line, under the new head", () => {
@@ -310,13 +362,30 @@ test("the print data says what each group is and where each scene starts", () =>
   assert.equal(byPlace[0].items[0].start, "05:11");
 });
 
-test("the shot list: the head, groups by location after a pin, done/total at the right, teal once all shot", () => {
+/* The shot list's table (drawShotTable, 17-pdf.js): where each column
+   starts, from the margin. */
+const COL = { done: 0, scene: 22, shot: 66, location: 258, props: 338, owner: 448, flag: 514, notes: 602 };
+const HEADS = ["Done", "Scene", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"];
+/* what a column holds — its head (7.5pt and dim) left out */
+const at = (texts, col) => texts.filter((t) => Math.abs(t.x - (SM + COL[col])) < 0.01 && !(t.size === 7.5 && t.rgb === rgb(C.dim)));
+/* the texts in one row, by the row's shot name: everything from its
+   baseline down to the next row's */
+function rowTexts(all, name) {
+  const n = one(all, name);
+  const names = all.filter((t) => t.x === n.x && t.font === "F2" && t.size === 9.5 && t.y < n.y).map((t) => t.y);
+  const next = names.length ? Math.max(...names) : -Infinity;
+  return all.filter((t) => t.y <= n.y + 0.01 && t.y > next + 0.01);
+}
+
+test("the shot list: a landscape table under the head, its columns on every page, a band per place", () => {
   demo();
   groupBy("location");
-  const pages = pagesOf(buildShotListPdf(brollShotListForPrint()));
-  assert.equal(pages.length, 2);
-  assertInsideMargins(pages);
-  assertFooters(pages, LONG_DEMO.state.title);
+  const bytes = buildShotListPdf(brollShotListForPrint());
+  const raw = new TextDecoder("latin1").decode(bytes);
+  const pages = pagesOf(bytes);
+  assert.equal((raw.match(/\/MediaBox \[0 0 792 612\]/g) || []).length, pages.length, "every page landscape");
+  assertInsideMargins(pages, SPW, SM);
+  assertFooters(pages, LONG_DEMO.state.title, SM);
   const texts = textsOf(pages[0]);
   const kicker = one(texts, "B-roll shot list");
   assert.deepEqual([kicker.size, kicker.rgb], [9, rgb(C.faint)]);
@@ -324,71 +393,98 @@ test("the shot list: the head, groups by location after a pin, done/total at the
   assert.deepEqual([title.font, title.size, title.rgb], ["F2", 20, rgb(C.text)]);
   one(texts, "3 of 9 shot · 1 flagged · by location · " + exportDateText());
 
+  /* the column heads, small and dim, left to right, on every page */
+  pages.map(textsOf).forEach((pt) => {
+    const heads = HEADS.map((h) => one(pt.filter((t) => t.size === 7.5), h));
+    assert.ok(heads.every((h) => h.y === heads[0].y && h.rgb === rgb(C.dim)));
+    assert.ok(heads.every((h, i) => !i || h.x > heads[i - 1].x));
+  });
+
   const all = pages.map(textsOf).flat();
-  const heads = all.filter((t) => t.font === "F2" && t.size === 12).map((t) => t.str);
-  /* a group that runs over a page break is headed again there, with
-     "(continued)" where its count was */
-  assert.deepEqual(heads.filter((h, i) => heads.indexOf(h) === i), ["Camera shop", "Riverside park", "workbench", "No location"]);
-  assert.equal(all.filter((t) => t.str === "(continued)" && t.size === 9.5).length, heads.length - 4);
-  const counts = all.filter((t) => / shot$/.test(t.str) && t.size === 9.5);
+  /* a band per place: its name in bold at the left (after a pin), a group
+     that runs over a page break banded again, "(continued)" for its count */
+  const bands = all.filter((t) => t.font === "F2" && t.size === 9.5 && t.x < SM + 20).map((t) => t.str);
+  assert.deepEqual(bands.filter((h, i) => bands.indexOf(h) === i), ["Camera shop", "Riverside park", "workbench", "No location"]);
+  assert.equal(all.filter((t) => t.str === "(continued)" && t.size === 8.5).length, bands.length - 4);
+  const counts = all.filter((t) => / shot$/.test(t.str) && t.size === 8.5);
   assert.deepEqual(counts.map((t) => t.str), ["1/1 shot", "0/2 shot", "0/1 shot", "2/5 shot"]);
   assert.deepEqual(counts.map((t) => t.rgb), [rgb(C.broll), rgb(C.faint), rgb(C.faint), rgb(C.faint)]);
-  counts.forEach((t) => assert.ok(Math.abs(t.x + pdfTextWidth(t.str, false, 9.5) - (PW - M)) < 0.01, "right-aligned"));
+  counts.forEach((t) => assert.ok(Math.abs(t.x + pdfTextWidth(t.str, false, 8.5) - (SPW - SM)) < 0.01, "right-aligned"));
+  /* the band says the place, so no row repeats it */
+  assert.equal(at(all, "location").length, 0);
   /* a pin, in the location colour, before each place — not before "No location" */
   const pins = pages.join("\n").split("\n").filter((op) => op.startsWith("q " + rgb(TAG_PRINT_COLORS.location) + " rg "));
   assert.equal(pins.length, 3);
   assert.ok(pins.every((op) => / l h f 1 1 1 rg .* f Q$/.test(op)), "a head, a point and a hole");
 });
 
-test("the shot list: a box ticked in teal when shot, the name dimmed, what else there is to know in dim", () => {
+test("the shot list's rows: done, the scene, the shot, its props, the flag and why, a note, and lines to write on", () => {
   demo();
-  groupBy("location");
-  const pages = pagesOf(buildShotListPdf(brollShotListForPrint()));
-  const joined = pages.join("\n").split("\n");
+  /* props on one shot, and a note that is not a flag's reason on another */
+  const shot = (name) => S.state.brollShots.find((r) => r.name === name);
+  shot("slow-motion shutter firing at one second").props = [{ name: "button cell battery" }, { name: "naphtha" }];
+  shot("battery dropping into the base plate").notes = "Ask the shop first.";
+  const pages = pagesOf(buildShotListPdf(brollShotListForPrint({ filter: "all", group: "scene" })));
+  assert.equal(pages.length, 1, "nine shots, one page");
+  assertInsideMargins(pages, SPW, SM);
+  const ops = pages[0].split("\n");
+  const all = textsOf(pages[0]);
+
   /* three shot, three ticks, in the b-roll teal */
-  assert.equal(joined.filter((op) => op.includes(" q " + rgb(C.broll) + " RG ")).length, 3);
-  const all = pages.map(textsOf).flat();
+  assert.equal(ops.filter((op) => op.includes(" q " + rgb(C.broll) + " RG ")).length, 3);
+  /* the shot in bold, faint once it is shot */
   const shop = one(all, "shop sign and window display");
-  assert.deepEqual([shop.font, shop.size, shop.rgb], ["F2", 11, rgb(C.faint)]);
-  const heron = one(all, "the heron taking off");
-  assert.equal(heron.rgb, rgb(C.text));
-  /* grouped by location, a shot says its scene and where it starts, not its place again */
-  const under = all.filter((t) => t.x === shop.x && t.y < shop.y && t.y > shop.y - 40);
-  assert.equal(under[0].str, "Scene 16 · 05:11");
-  assert.equal(under[0].rgb, rgb(C.dim));
-  assert.ok(!all.some((t) => t.str.includes("Camera shop") && t.size === 9));
-  /* the line it cuts against, the words in italic — a short one whole */
-  const label = under.find((t) => t.str === "Cuts against:");
-  const quote = all.find((t) => t.y === label.y && t.x > label.x);
-  assert.equal(quote.font, "F3");
-  assert.equal(quote.str, "“Next stop: film.”");
-  /* a long one (the heron's is its scene's whole Audio) only its opening,
-     cut at a word end, in two lines at most */
-  const heronLabel = all.find((t) => t.str === "Cuts against:" && t.y < heron.y && t.y > heron.y - 40);
-  const heronQuote = all.filter((t) => t.font === "F3" && t.y <= heronLabel.y && t.y > heronLabel.y - 30);
+  assert.deepEqual([shop.font, shop.size, shop.rgb, shop.x], ["F2", 9.5, rgb(C.faint), SM + COL.shot]);
+  assert.equal(one(all, "the heron taking off").rgb, rgb(C.text));
+  /* its scene and where that starts */
+  const row = rowTexts(all, "shop sign and window display");
+  const sc = at(row, "scene");
+  assert.deepEqual(sc.map((t) => [t.str, t.font, t.size]), [["16", "F2", 9.5], ["05:11", "F1", 7.5]]);
+  assert.equal(sc[1].rgb, rgb(C.faint));
+  assert.deepEqual(at(row, "location").map((t) => t.str), ["Camera shop"]);
+  /* the line it cuts against, in italic — a short one whole */
+  const quote = row.find((t) => t.font === "F3");
+  assert.deepEqual([quote.str, quote.size, quote.x], ["“Next stop: film.”", 7.5, SM + COL.shot]);
+  /* a long one (the heron's is its scene's whole Audio): its opening, cut
+     at a word end, in two lines at most */
+  const heronQuote = rowTexts(all, "the heron taking off").filter((t) => t.font === "F3");
   assert.ok(heronQuote.length >= 1 && heronQuote.length <= 2, heronQuote.length + " lines");
   assert.match(heronQuote[heronQuote.length - 1].str, /\w…”$/);
-  /* "Flagged" in sentence case, bold and red, the note after it */
-  const flag = one(all, "Flagged");
-  assert.deepEqual([flag.font, flag.size, flag.rgb], ["F2", 9, rgb("C4302A")]);
-  const note = all.find((t) => t.y === flag.y && t.x > flag.x);
-  assert.equal(note.str, " — Soft focus — grab it again on the macro day.");
-  assert.equal(note.rgb, rgb(C.dim));
-  assert.ok(!pages.join("").includes("FLAGGED"));
+
+  /* props, each starting a line of its own, each with its status */
+  const props = at(rowTexts(all, "slow-motion shutter firing at one second"), "props").map((t) => t.str);
+  assert.equal(props.join(" "), "button cell battery (sourcing) naphtha (have it)");
+  assert.equal(props[0], "button cell battery");
+  assert.ok(props.includes("naphtha (have it)"));
+  /* "Flagged", bold and red, and under it why — the note */
+  const flagRow = rowTexts(all, "the toothpick lifting a long strand of goo");
+  const flag = at(flagRow, "flag");
+  assert.deepEqual([flag[0].str, flag[0].font, flag[0].size, flag[0].rgb], ["Flagged", "F2", 8.5, rgb("C4302A")]);
+  assert.equal(flag.slice(1).map((t) => t.str).join(" "), "Soft focus — grab it again on the macro day.");
+  assert.ok(flag.slice(1).every((t) => t.rgb === rgb(C.dim)));
+  assert.equal(at(flagRow, "notes").length, 0, "the reason is not a note too");
+  assert.ok(!pages[0].includes("FLAGGED"));
+  /* a note that is no flag's reason, in Notes */
+  assert.deepEqual(at(rowTexts(all, "battery dropping into the base plate"), "notes").map((t) => t.str), ["Ask the shop first."]);
+  /* and every row keeps lines to write on in Notes */
+  const writing = ops.filter((op) => op.startsWith("q " + rgb(C.borderStrong) + " RG 0.5 w " + (SM + COL.notes).toFixed(2) + " "));
+  assert.ok(writing.length >= 9 * 2 - 1, writing.length + " lines to write on");
 });
 
-test("by scene: each head the scene and where it starts, which the shots under it do not repeat", () => {
-  demo();
+test("by scene: no bands — the Scene column groups the rows, a scene named on its first shot only", () => {
+  shotsDoc(0);
   groupBy("scene");
   const pages = pagesOf(buildShotListPdf(brollShotListForPrint()));
-  assertInsideMargins(pages);
+  assertInsideMargins(pages, SPW, SM);
   const all = pages.map(textsOf).flat();
-  const head = one(all, "Scene 04");
-  assert.deepEqual([head.font, head.size], ["F2", 12]);
-  const start = all.find((t) => t.y === head.y && t.str === "01:03");
-  assert.ok(start && start.x > head.x && start.rgb === rgb(C.faint) && start.size === 10);
-  assert.ok(!all.some((t) => /^Scene \d\d · /.test(t.str)), "no scene in a shot's details");
-  one(all, "3 of 9 shot · 1 flagged · by scene · " + exportDateText());
+  /* a scene has no band; the shots added by hand, with no scene, do */
+  assert.deepEqual(all.filter((t) => t.font === "F2" && t.size === 9.5 && t.x < SM + 20).map((t) => t.str), ["Added here"]);
+  assert.deepEqual(all.filter((t) => / shot$/.test(t.str) && t.size === 8.5).map((t) => t.str), ["0/1 shot"]);
+  /* scene 01's number and start once, on its first shot; scene 02's on its */
+  const numbers = at(all, "scene").filter((t) => t.font === "F2").map((t) => t.str);
+  assert.deepEqual(numbers, ["01", "02"]);
+  assert.deepEqual(at(all, "scene").filter((t) => t.font === "F1" && t.rgb === rgb(C.faint)).map((t) => t.str), sceneFacts().slice(0, 2).map((f) => f.start));
+  one(all, "1 of 3 shot · 1 flagged · by scene · " + exportDateText());
 });
 
 /* shots with everything a shot can have, `n` more in one place to run
@@ -419,24 +515,27 @@ test("by person: a shot's description on its own lines, its props with their sta
   const data = brollShotListForPrint();
   assert.deepEqual(data.groups.map((g) => g.label), ["Ada Brenner", "Jordan Sato", "Unassigned"]);
   const pages = pagesOf(buildShotListPdf(data));
-  assertInsideMargins(pages);
+  assertInsideMargins(pages, SPW, SM);
   const all = pages.map(textsOf).flat();
-  const gulls = one(all, "gulls over the nets");
-  const below = all.filter((t) => t.x === gulls.x && t.y < gulls.y).sort((a, b) => b.y - a.y);
-  assert.deepEqual(below.slice(0, 3).map((t) => [t.str, t.size]), [["wide first", 10], ["then tight on one bird", 10], ["Scene 01 · 00:00  ·  Harbour  ·  Props: Drone (needed), Fishing nets (have it)", 9]]);
-  /* grouped by person, the person is the head's to say */
-  assert.ok(!all.some((t) => /Assigned:/.test(t.str)));
+  /* the lines under the shot's marker, under its name */
+  const gulls = rowTexts(all, "gulls over the nets");
+  assert.deepEqual(at(gulls, "shot").filter((t) => t.font === "F1").map((t) => [t.str, t.size]), [["wide first", 8], ["then tight on one bird", 8]]);
+  assert.deepEqual(at(gulls, "scene").map((t) => t.str), ["01", "00:00"]);
+  assert.deepEqual(at(gulls, "location").map((t) => t.str), ["Harbour"]);
+  assert.deepEqual(at(gulls, "props").map((t) => t.str), ["Drone (needed)", "Fishing nets (have it)"]);
+  /* grouped by person, the person is the band's to say */
+  assert.equal(at(all, "owner").length, 0);
   /* flagged with no note: the word alone */
-  const flag = one(all, "Flagged");
-  assert.ok(!all.some((t) => t.y === flag.y && t.x > flag.x));
-  /* an unflagged note says what it is */
-  one(all, "Note: Ask the harbourmaster first.");
+  assert.deepEqual(at(rowTexts(all, "boats at dawn"), "flag").map((t) => t.str), ["Flagged"]);
+  /* a note that is no flag's reason, in Notes */
+  assert.deepEqual(at(rowTexts(all, "Crowd at the auction"), "notes").map((t) => t.str), ["Ask the harbourmaster first."]);
   /* an added shot has no scene */
-  const crowd = one(all, "Crowd at the auction");
-  assert.ok(!all.some((t) => t.x === crowd.x && t.y < crowd.y && t.y > crowd.y - 20 && /^Scene/.test(t.str)));
+  assert.equal(at(rowTexts(all, "Crowd at the auction"), "scene").length, 0);
   groupBy("location");
   const byPlace = pagesOf(buildShotListPdf(brollShotListForPrint())).map(textsOf).flat();
-  one(byPlace, "Scene 02 · " + sceneFacts()[1].start + "  ·  Assigned: Ada Brenner");
+  const boats = rowTexts(byPlace, "boats at dawn");
+  assert.deepEqual(at(boats, "scene").map((t) => t.str), ["02", sceneFacts()[1].start]);
+  assert.deepEqual(at(boats, "owner").map((t) => t.str), ["Ada Brenner"]);
 });
 
 test("a long shot list runs onto more pages: the group's head again, continued, and a footer on each", () => {
@@ -444,15 +543,20 @@ test("a long shot list runs onto more pages: the group's head again, continued, 
   groupBy("location");
   const pages = pagesOf(buildShotListPdf(brollShotListForPrint()));
   assert.ok(pages.length >= 2);
-  assertInsideMargins(pages);
-  assertFooters(pages, LONG_TITLE);
+  assertInsideMargins(pages, SPW, SM);
+  assertFooters(pages, LONG_TITLE, SM);
   const second = textsOf(pages[1]);
-  one(second, "Harbour");
+  /* the page says it goes on, the heads again, and the band again */
+  assert.equal(one(second, "B-roll shot list (continued)").rgb, rgb(C.faint));
+  HEADS.forEach((h) => one(second, h));
   const cont = one(second, "(continued)");
   assert.equal(cont.y, one(second, "Harbour").y);
   /* the first page's head wrapped the long title rather than running off */
   assert.ok(textsOf(pages[0]).filter((t) => t.size === 20).length >= 2);
-  pages.forEach((page) => textsOf(page).filter((t) => t.size !== 7.5).forEach((t) => assert.ok(t.y >= M, t.str + " at " + t.y)));
+  /* nothing below the bottom but the footer */
+  pages.forEach((page) => textsOf(page).filter((t) => t.size !== 7.5).forEach((t) => assert.ok(t.y >= 54, t.str + " at " + t.y)));
+  /* every shot once */
+  assert.equal(pages.map(textsOf).flat().filter((t) => /^Extra shot \d+$/.test(t.str)).length, 40);
 });
 
 test("no shots to list: the head and one line", () => {
@@ -462,5 +566,6 @@ test("no shots to list: the head and one line", () => {
   const texts = textsOf(pages[0]);
   one(texts, "No shots to list.");
   one(texts, "Empty");
-  assertFooters(pages, "Empty");
+  assert.equal(find(texts, "Notes").length, 0, "no table");
+  assertFooters(pages, "Empty", SM);
 });

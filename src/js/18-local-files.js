@@ -30,6 +30,7 @@ import {
   tagCategory
 } from "./07-production-tags.js";
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
+import { brollEntries } from "./08c-broll.js";
 import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
 import { openFindBar } from "./09-find-replace.js";
 import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
@@ -207,6 +208,8 @@ export function exportFileName(kind, baseName, opts) {
     return baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf";
   }
   if (kind === "md-table") return baseName + " - two column.md";
+  /* a SplitShare says what it is in its name, for whoever it is sent to */
+  if (kind === "html") return baseName + " - SplitShare.html";
   if (kind === "md" && opts.imageBundle) return baseName + " (with images).zip";
   return baseName + "." + kind;
 }
@@ -230,7 +233,9 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
   /* the b-roll shot list's own two (#150, 08d-broll-panel.js) */
   if (kind === "b-roll csv") return { data: buildBrollCsv(), filename: filename };
-  if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint()), filename: filename };
+  /* opts.brollView: every shot by scene from the Export dialog; without
+     it, the list as the b-roll page shows it, which is what its Print is */
+  if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint(opts.brollView)), filename: filename };
   if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: filename };
   if (kind === "txt") return { data: htmlToPlainScript(), filename: filename };
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
@@ -247,12 +252,12 @@ export async function buildFileData(kind, baseName, opts) {
      it a duplicate of this document the moment both are open. */
   if (kind === "html") {
     /* inline, like a .splitpage (#82): say so if a picture could not be */
-    warnImagesLeftOut(missingInlineImages(S.state).length, baseName + ".html");
-    /* named for the script, not the app: the tab, the history list and a
-       link preview read "<title> — Splitpage" and the export's meta line */
+    warnImagesLeftOut(missingInlineImages(S.state).length, filename);
+    /* a SplitShare, named for the script: the tab, the history list and
+       a link preview read "<title> — SplitShare" and the export's meta line */
     return {
       data: standaloneHtmlFor(S.state, {
-        title: (S.state.title || "Untitled Script") + " — Splitpage",
+        title: (S.state.title || "Untitled Script") + " — SplitShare",
         description: exportMetaLine()
       }),
       filename: filename
@@ -989,12 +994,14 @@ export async function reloadProjectFromDisk() {
    know a long script takes a noticeable moment to build. withBusy raises
    the top bar (04b-busy.js) only if the build actually takes long enough
    to need it, which on a short script means nothing appears at all. */
-export async function exportAs(kind) {
+/* `more`: anything else buildFileData should know for this one (the
+   Export dialog's b-roll list asks for every shot, by scene) */
+export async function exportAs(kind, more) {
   var base = exportBaseName();
   var built;
   try {
     built = await withBusyBar("Building the " + kind.toUpperCase() + " file…", function () {
-      return buildFileData(kind, base, { allowImageBundle: true });
+      return buildFileData(kind, base, Object.assign({ allowImageBundle: true }, more));
     });
   } catch (e) {
     showToast("Could not build the " + kind.toUpperCase() + " file.", "error");
@@ -1023,6 +1030,19 @@ export async function exportPackingList(catId) {
     return;
   }
   await exportAs("packing-" + catId);
+}
+
+/* File ▸ Export… ▸ B-roll shot list: the landscape sheet, or the
+   spreadsheet, of every shot, by scene, however the b-roll page was last
+   left filtered or grouped — printing the list as it is on screen is that
+   page's own Print. With no shots at all it says so, as the page does. */
+export async function exportBrollList(action) {
+  if (!brollEntries(true).length) {
+    showToast("There is no b-roll to export yet — start a Visual line with B-roll:", "warn");
+    return;
+  }
+  if (action === "export-broll-csv") await exportAs("b-roll csv");
+  else await exportAs("b-roll pdf", { brollView: { filter: "all", group: "scene" } });
 }
 
 export function handleFileMenuAction(action) {
@@ -1060,6 +1080,7 @@ export function handleFileMenuAction(action) {
   else if (action === "export-narration-txt") exportNarration("narration-txt");
   else if (action === "export-packing-gear") exportPackingList("gear");
   else if (action === "export-packing-prop") exportPackingList("prop");
+  else if (action === "export-broll-pdf" || action === "export-broll-csv") exportBrollList(action);
   else if (action === "drive-open") openDriveModal();
   else if (action === "server-open") openServerPicker();
   else if (action === "server-publish") publishToServer();
