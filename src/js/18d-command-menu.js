@@ -464,6 +464,13 @@ export function __init() {
     if (row) runAt(+row.getAttribute("data-index"));
   });
   modal.addEventListener("mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } });
+  /* the phone's close button (page.html); mousedown kept off it so the
+     focus stays in the box until the click has landed */
+  var closeBtn = el("cmdk-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    closeBtn.addEventListener("click", function () { closeCommandMenu(); });
+  }
   /* Focus leaving for somewhere else (another shortcut, a click through)
      takes the box with it — it is a question asked of this moment, not
      something to come back to. */

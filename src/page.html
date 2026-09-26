@@ -671,6 +671,9 @@
       <svg class="cmdk-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
       <input type="text" id="cmdk-input" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search commands…" aria-label="Search commands">
       <kbd class="cmdk-esc" aria-hidden="true">Esc</kbd>
+      <!-- A touch screen has no Esc and the menu fills it: the close the
+           other dialogs have, drawn only there (app.css). -->
+      <button type="button" class="modal-close cmdk-close" id="cmdk-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Commands"></div>
     <!-- B-Command's footer (#169): the arrow keys' caps hold the sprite's
