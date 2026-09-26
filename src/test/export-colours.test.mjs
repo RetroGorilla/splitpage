@@ -1,7 +1,8 @@
 /* Category colours in the exports (#171): the production breakdown's
- * Category column in the PDF (17-pdf.js buildPdf) and the .docx (15-docx.js
- * buildDocx), and the packing list's heading (buildPackingListPdf), drawn in
- * the light theme's --tag-* colours through TAG_PRINT_COLORS (14-export.js;
+ * Category column in the PDF (17-pdf.js buildPdf), the .docx breakdown's
+ * category heads and its script's tags (15-docx.js buildDocx, #169), and
+ * the packing list's heading (buildPackingListPdf), drawn in the light
+ * theme's --tag-* colours through TAG_PRINT_COLORS (14-export.js;
  * palette.test.mjs keeps that table equal to app.css :root).
  *
  * Read back the way the other export tests do: the .docx with the app's own
@@ -70,41 +71,70 @@ test("breakdownRows says which category each row is", () => {
     [["cast", "Cast"], ["gear", "Gear"], ["location", "Location"], ["prop", "Prop"], ["prop", "Prop"], ["sound", "Music/SFX"], ["vfx", "VFX"]]);
 });
 
-test("the .docx breakdown draws each category's dot and label in its colour; the header and the highlight are unchanged", async () => {
+/* Since #169 the breakdown is grouped as the Production panel groups it:
+   a head per category spanning the table — a dot and the category's
+   plural in its colour, then a faint count — over that category's items,
+   whose own cells are not coloured (a status lamp is its status's colour,
+   TAG_STATUS_PRINT, never a category's). */
+test("the .docx breakdown heads each category with its dot and name in its colour; the highlight is unchanged", async () => {
   load();
   const doc = await documentXml(buildDocx());
   const tables = doc.getElementsByTagNameNS(W, "tbl");
   assert.equal(tables.length, 2, "script table and breakdown table");
   const trs = Array.from(tables[1].getElementsByTagNameNS(W, "tr"));
+  const val = (el) => el.getAttributeNS(W, "val") || el.getAttribute("w:val");
 
-  /* the header row is exactly the words the importer recognises, in black */
+  /* the header row is the words the importer recognises */
   const head = Array.from(trs[0].getElementsByTagNameNS(W, "tc")).map((tc) => tc.textContent);
-  assert.deepEqual(head, ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "Notes"]);
-  assert.equal(trs[0].getElementsByTagNameNS(W, "color").length, 0, "the header row got a colour");
+  assert.deepEqual(head, ["Item", "Status", "Scenes", "Assigned to", "Notes"]);
 
   const seen = new Set();
+  let current = null;
   for (const tr of trs.slice(1)) {
     const cells = Array.from(tr.getElementsByTagNameNS(W, "tc"));
-    const cat = TAG_CATEGORIES.find((c) => "● " + c.label === cells[0].textContent);
-    assert.ok(cat, "category cell reads " + JSON.stringify(cells[0].textContent));
-    seen.add(cat.id);
-    const runs = Array.from(cells[0].getElementsByTagNameNS(W, "r"));
-    assert.deepEqual(runs.map((r) => r.textContent), ["● ", cat.label]);
-    for (const r of runs) {
-      const color = r.getElementsByTagNameNS(W, "color")[0];
-      assert.ok(color, cat.id + ": a run with no colour");
-      assert.equal(color.getAttributeNS(W, "val") || color.getAttribute("w:val"), TAG_PRINT_COLORS[cat.id]);
+    if (tr.getElementsByTagNameNS(W, "gridSpan").length) {
+      const runs = Array.from(cells[0].getElementsByTagNameNS(W, "r"));
+      current = TAG_CATEGORIES.find((c) => runs[1].textContent === c.plural);
+      assert.ok(current, "a group head reads " + JSON.stringify(cells[0].textContent));
+      seen.add(current.id);
+      assert.deepEqual(runs.map((r) => r.textContent.trim()),
+        ["●", current.plural, String(breakdownRows().filter((r) => r.catId === current.id).length)]);
+      for (const r of runs.slice(0, 2)) assert.equal(val(r.getElementsByTagNameNS(W, "color")[0]), TAG_PRINT_COLORS[current.id]);
+      continue;
     }
-    /* the other columns stay black */
-    for (const tc of cells.slice(1)) assert.equal(tc.getElementsByTagNameNS(W, "color").length, 0);
+    assert.ok(current, "an item before any group head");
+    assert.ok(breakdownRows().some((r) => r.catId === current.id && r.name === cells[0].textContent), cells[0].textContent + " under " + current.id);
+    /* nothing in an item's row is in a category's colour */
+    for (const c of Array.from(tr.getElementsByTagNameNS(W, "color"))) {
+      assert.ok(!Object.values(TAG_PRINT_COLORS).includes(val(c)), "an item cell in a category colour");
+    }
   }
   assert.deepEqual([...seen].sort(), TAG_CATEGORIES.map((c) => c.id).sort(), "every category drawn");
 
   /* the script's highlight is still Word's yellow, and nothing else is */
   const hl = Array.from(doc.getElementsByTagNameNS(W, "highlight"));
   assert.equal(hl.length, 1);
-  assert.equal(hl[0].getAttributeNS(W, "val") || hl[0].getAttribute("w:val"), "yellow");
+  assert.equal(val(hl[0]), "yellow");
   assert.equal(hl[0].parentNode.parentNode.textContent, "hello");
+});
+
+test("the .docx script draws each tag in its category's colour and reopens without it", async () => {
+  load();
+  const doc = await documentXml(buildDocx());
+  const runs = Array.from(doc.getElementsByTagNameNS(W, "tbl")[0].getElementsByTagNameNS(W, "r"));
+  const tagged = runs.filter((r) => {
+    const s = r.getElementsByTagNameNS(W, "rStyle")[0];
+    return s && (s.getAttributeNS(W, "val") || s.getAttribute("w:val")) === "SplitpageTag";
+  });
+  const byName = Object.fromEntries(tagged.map((r) => [r.textContent, r]));
+  for (const [name, cat] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
+    const r = byName[name];
+    assert.ok(r, name + " is not drawn as a tag");
+    const color = r.getElementsByTagNameNS(W, "color")[0];
+    const u = r.getElementsByTagNameNS(W, "u")[0];
+    assert.equal(color.getAttributeNS(W, "val") || color.getAttribute("w:val"), TAG_PRINT_COLORS[cat], name);
+    assert.equal(u.getAttributeNS(W, "color") || u.getAttribute("w:color"), TAG_PRINT_COLORS[cat], name);
+  }
 });
 
 test("a .docx with coloured categories reopens as exactly its script, highlight included", async () => {
@@ -115,7 +145,7 @@ test("a .docx with coloured categories reopens as exactly its script, highlight 
   assert.deepEqual(parsed.rows.map((r) => ({ v: htmlToPlainText(r.visualText), a: htmlToPlainText(r.audioText) })), expected);
   assert.match(parsed.rows[0].audioText, /<mark>hello<\/mark>/, "the highlight no longer reads back as a mark");
   const all = JSON.stringify(parsed.rows);
-  for (const word of ["●", "Production breakdown", "Music/SFX", "Category"]) {
+  for (const word of ["●", "Production breakdown", "Music & SFX", "Item", "<u>"]) {
     assert.equal(all.indexOf(word), -1, word + " leaked into a row");
   }
 });

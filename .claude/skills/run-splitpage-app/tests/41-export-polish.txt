@@ -69,16 +69,26 @@ expect window.__stylesXml.indexOf('asciiTheme="minorHAnsi"') !== -1
 # the table itself uses the named table style
 expect window.__docXml.indexOf('<w:tblStyle w:val="SplitpageTable"/>') !== -1
 
-# page numbers in the footer: a real PAGE field, referenced from the section
+# page numbers in the footer: "Page X of Y", real PAGE and NUMPAGES fields,
+# referenced from the section (#169)
 expect window.__docXml.indexOf('<w:footerReference') !== -1
 eval (function(){window.__footerXml = new TextDecoder().decode(window.__parts['word/footer1.xml']); return true;})()
-expect window.__footerXml.indexOf('PAGE') !== -1
+expect window.__footerXml.indexOf(' PAGE ') !== -1 && window.__footerXml.indexOf(' NUMPAGES ') !== -1 && window.__footerXml.indexOf('>Page <') !== -1
 expect window.__footerXml.indexOf('w:fldCharType="begin"') !== -1
 
-# scene numbering visible in the document: a "No." header and "01"/"02" cells
-expect window.__docXml.indexOf('>No.<') !== -1
+# the package describes itself (#169): File > Info shows the script's title,
+# Splitpage made it
+expect window.__names.indexOf('docProps/core.xml') !== -1 && window.__names.indexOf('docProps/app.xml') !== -1
+expect new TextDecoder().decode(window.__parts['docProps/core.xml']).indexOf('<dc:title>' + F.state().title + '</dc:title>') !== -1
+
+# the scene gutter visible in the document (#169): a "Scene" header, "01"/"02"
+# cells, a start timecode each; a "Read" header on the right
+expect window.__docXml.indexOf('>Scene<') !== -1 && window.__docXml.indexOf('>Read<') !== -1
 expect window.__docXml.indexOf('>01<') !== -1
 expect window.__docXml.indexOf('>02<') !== -1
+expect window.__docXml.indexOf('>00:00<') !== -1
+# the line under the title, in the export's own paragraph style
+expect window.__docXml.indexOf('<w:pStyle w:val="SplitpageMeta"/>') !== -1 && window.__docXml.indexOf('running time') !== -1
 
 # --- a script exported to .docx and reimported still splits into the same
 # visual/audio rows (Done bullet 4) — the seed's own two rows, untagged, so
@@ -89,8 +99,8 @@ eval (async function(){ await F.openFile(new File([window.__blobs[window.__blobs
 expect F.state().rows.length === 2
 expect F.state().rows[0].audioText.indexOf('welcome back') !== -1
 expect F.state().rows[0].visualText.indexOf('Host on camera') !== -1
-# the scene-number column never leaks into either cell's text
-expect F.state().rows[0].visualText.indexOf('No.') === -1
+# the scene gutter and the meta line never leak into either cell's text
+expect F.state().rows.every(function(r){ var t = r.visualText + r.audioText; return t.indexOf('00:00') === -1 && t.indexOf('running time') === -1 && t.indexOf('To do') === -1; })
 # and they come back as the same text AND the same formatting — the seed's
 # second scene carries <em>, <strong>, a highlight, <u> and a link, which a
 # reopen used to store escaped, as visible "<strong>" in the cell
@@ -120,12 +130,12 @@ eval (async function(){var bytes=new Uint8Array(await window.__blobs[window.__bl
 expect window.__grids.length === 2
 # kept for the reopen section at the end: an export with a breakdown section
 eval (function(){ window.__bdDocx = window.__blobs[window.__blobs.length-1]; window.__bdRows = F.state().rows.map(function(r){ return { v: __text(r.visualText), a: __text(r.audioText) }; }); return JSON.stringify(window.__bdRows); })()
-expect window.__grids[0].length === 3
-expect window.__grids[1].length === 7
-# Notes (index 6) beats Mentions (index 4) and Status (index 2) given a real
+expect window.__grids[0].length === 4
+expect window.__grids[1].length === 5
+# Notes (index 4) beats Scenes (index 2) and Status (index 1) given a real
 # long note — the old export hard-coded Notes narrower than several others
-expect window.__grids[1][6] > window.__grids[1][4]
-expect window.__grids[1][6] > window.__grids[1][2]
+expect window.__grids[1][4] > window.__grids[1][2]
+expect window.__grids[1][4] > window.__grids[1][1]
 # the grid still sums to the usable page width exactly (no drift from rounding)
 eval (function(){window.__gridSum = window.__grids[1].reduce(function(a,b){return a+b;}, 0); return window.__gridSum;})()
 expect window.__gridSum === 10080
