@@ -88,7 +88,8 @@ expect !document.querySelector('.find-count').title
 # --- a match across a formatting boundary (#85) -----------------------------
 # Half plain, half bold is two text nodes, and find used to search one text
 # node at a time, so it never found the word. It searches the cell's text
-# now: found, selected on screen across both, and replaced as one.
+# now: found, shown on screen across both (painted, not selected: the find
+# box keeps the keyboard, suite 255), and replaced as one.
 jsclick #find-close
 sleep 200
 caret #rows .row .visual-cell .cell-editable
@@ -106,13 +107,9 @@ sleep 400
 expect document.getElementById('find-count').textContent == 1 of 1
 jsclick #find-next
 sleep 300
-expect getSelection().toString() == zorblix
+expect (function(){var h=CSS.highlights.get('splitpage-find-match');var s='';if(h)h.forEach(function(r){s+=r.toString();});return s;})() == zorblix
+expect document.activeElement.id == find-input
 eval (function(){var r=document.getElementById('replace-input');r.value='quux';r.dispatchEvent(new Event('input',{bubbles:true}));return true;})()
-# A person's mouse-down on Replace takes focus off the cell the match was
-# selected in; jsclick does not, so blur it first. (With the cell still
-# focused, repainting it fires its focusout, which writes the old DOM back
-# over the replacement — true before #85 too.)
-eval document.activeElement.blur()
 jsclick #find-replace
 sleep 500
 expect document.querySelector('#rows .row .visual-cell .cell-editable').textContent.indexOf('quux') !== -1

@@ -152,9 +152,10 @@ import {
   closeBulkTag,
   closeFindBar,
   findOpen,
+  findQueryChanged,
+  leaveFindAtMatch,
   openFindBar,
   pickBulkTagCat,
-  refreshFindMatches,
   replaceAll,
   replaceCurrent,
   runBulkTag,
@@ -1632,17 +1633,15 @@ function init() {
     S.findMatchCase = !S.findMatchCase;
     e.currentTarget.classList.toggle("is-active", S.findMatchCase);
     e.currentTarget.setAttribute("aria-pressed", S.findMatchCase ? "true" : "false");
-    refreshFindMatches(false);
+    findQueryChanged();
   });
-  document.getElementById("find-input").addEventListener("input", function () {
-    refreshFindMatches(false);
-  });
+  document.getElementById("find-input").addEventListener("input", findQueryChanged);
   document.getElementById("findbar").addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
       e.preventDefault(); e.stopPropagation();
       /* the Tag all row first, then the bar */
       if (bulkTagOpen()) { closeBulkTag(); document.getElementById("find-tag").focus(); return; }
-      closeFindBar();
+      leaveFindAtMatch();
       return;
     }
     if (e.key !== "Enter") return;
