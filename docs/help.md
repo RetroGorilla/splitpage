@@ -17,14 +17,16 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   script under the header, each scene's status as a lamp, and side panels
   that open beside the script instead of over it.
 - **A start screen for every new tab**: a blank script, three starter
-  scripts, your recent documents and a drop zone for a file.
+  scripts, a long demo that shows off every feature, your recent documents
+  and a drop zone for a file.
 - **One undo for everything.** Ctrl+Z and Ctrl+Shift+Z take back typing,
   tags, scene moves, statuses, pictures, comments and Production changes.
 - **Stage directions**: type `((beat))` in the Audio column.
 - **Sound cues**: start an Audio line with `SFX:` or `Music:`.
 - **Timing**: set a target length for the piece, or a scene's length by hand.
 - **Several pictures and videos per scene**, with YouTube, Vimeo and dropped
-  video files playing in the scene's gallery.
+  video files playing in the scene's gallery. Click a picture to see it
+  full size.
 - **Settings in one place** (File ▸ Settings), **script zoom**
   (Ctrl + mouse wheel), **Search commands** (Ctrl+K) and **one Export
   dialog** (Ctrl+E).
@@ -34,6 +36,8 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   unless they changed the same words.
 - **Plain-language tags**: type `VFX:` or `Prop:` in the Visual column and
   press Tab. The tagging reference is now a card that floats beside you.
+- **Tag every mention at once**: find a word (Ctrl+F) and press
+  **Tag all as…**.
 - **Whole scenes**: drag out of a text box to select scenes, then copy, cut,
   paste or delete them, comments and pictures included.
 - **The rundown** magnifies the scenes under the pointer, shows the script's
