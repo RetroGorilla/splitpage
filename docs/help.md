@@ -32,6 +32,10 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   dialog** (Ctrl+E).
 - **A B-roll panel built for the shoot**, with prop statuses and a
   full-page shot list.
+- **Exports that match the app**: the PDF and Word script carry each
+  scene's status, timecode and read time, tags in their colours, numbered
+  comments, the breakdown and a b-roll shot list. Markdown and spreadsheets
+  gain the same, and the packing list has sign-off lines.
 - **Merging a word at a time**: two people's edits to one scene combine
   unless they changed the same words.
 - **Plain-language tags**: type `VFX:` or `Prop:` in the Visual column and
