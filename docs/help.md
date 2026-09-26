@@ -292,7 +292,8 @@ In the desktop app, Follow My Voice uses Windows' speech recognition; see
 ### Getting the narration out
 
 **File ▸ Export… ▸ Narration only** writes the Audio column as `.docx` or
-`.txt`, one paragraph per scene. **Include stage directions** puts them in as
+`.txt`, one paragraph per scene; the `.docx` puts each scene's number in the
+margin, so a session can pick up "from 14". **Include stage directions** puts them in as
 *(beat)*. Sound cues are never in it. **Paste a script…** reads that shape back in.
 
 ## Tagging and the production breakdown
@@ -356,7 +357,8 @@ category's colour.
 **Gear** in the header lists equipment: cameras, mics, lights. Gear that's
 never written in the script goes in the **Add gear** box at the foot of the
 panel, one item per line; press **Update list**. **List** or **Scene**
-changes the view. **Packing list** prints a checklist to tick off.
+changes the view. **Packing list** prints a checklist with a box for going
+out and one for coming back, and lines to sign.
 
 ### B-roll
 
@@ -468,14 +470,23 @@ format, with a preview and the file name.
 - **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, or
   a **Packing list** of gear or props.
 
-**Markdown** comes in two shapes. **Stacked** reads like a script, one
-heading per scene; with pictures it becomes a `.zip` with an `images`
-folder. **Two columns** is a table, Visual beside Audio, that **Paste a
-script…** can read back in.
+**PDF** and **Word** lay the script out the way the app does: the running
+time and target at the top (the PDF adds the rundown strip), each scene's
+number, start time, status and read time, tags in their colours, b-roll
+keys, and each open comment's number beside its words. At the end come the
+breakdown by category, the b-roll shot list and the numbered comments. The
+PDF's links can be clicked, and every page says "Page 2 of 8".
 
-Exports are copies. They don't carry tags, comment anchors or statuses the
-way a saved file does. Opening a Word export again brings back its scenes
-only. **Export again** in the File menu repeats the last format.
+**Markdown** comes in two shapes. **Stacked** reads like a script, one
+heading per scene with its start time, status and read time; with pictures
+it becomes a `.zip` with an `images` folder. **Two columns** is a table,
+Visual beside Audio, that **Paste a script…** can read back in. The
+**Spreadsheet** has a column each for start time, status, read time, tags,
+b-roll and open comments.
+
+Exports are copies to read, print or send. Opening one again brings back
+its scenes only, not the tags, comment anchors or statuses a saved file
+keeps. **Export again** in the File menu repeats the last format.
 
 ## The File menu
 

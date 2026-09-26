@@ -1,6 +1,7 @@
 # Category colours in the exports (#171), through the real File menu: the
-# PDF breakdown fills each category's dot and draws its label in the light
-# theme's --tag-* (TAG_PRINT_COLORS, 14-export.js), the .docx breakdown's
+# PDF breakdown heads each category's group with a dot and its plural name
+# in the light theme's --tag-* (TAG_PRINT_COLORS, 14-export.js), and draws
+# the script's tagged words in that colour (#169), the .docx breakdown's
 # category heads and the script's tags carry that colour as <w:color>
 # (#169), the script's highlight is still Word's "yellow", the Gear packing
 # list names its category in Gear's colour, and the .docx reopens as
