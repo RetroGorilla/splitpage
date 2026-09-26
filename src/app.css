@@ -2505,8 +2505,13 @@
     #cmdk-input { font-size: 16px; }
     .cmdk-item { min-height: 44px; }
   }
+  /* On a phone the panel fills the screen, the backdrop is a 10px rim and
+     there is no Esc: the close button the other dialogs have takes the Esc
+     cap's place at the end of the box, 44px to tap. */
+  .cmdk-close { display: none; }
   @media (max-width: 760px) and (hover: none) {
     .cmdk-keys, .cmdk-esc, .cmdk-foot { display: none; }
+    .cmdk-close { display: inline-flex; width: 44px; height: 44px; margin-right: -10px; }
   }
 
   /* ---------- the Export dialog (issue #146) ----------
