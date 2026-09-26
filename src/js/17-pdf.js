@@ -1,8 +1,7 @@
 import { S } from "./_state.js";
 import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
 import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
-import { cellOf, toDocxRuns } from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
+import { videoHostLabel } from "./05-render.js";
 import {
   TAG_STATUSES,
   personById,
@@ -10,10 +9,23 @@ import {
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
-import { breakdownRows } from "./08-production-panels.js";
 import { brollShotsByProp } from "./08c-broll.js";
 import { commentEntries } from "./10-comments.js";
 import { concatBytes, latin1Bytes, tagPrintColor } from "./14-export.js";
+import {
+  PRINT_COLORS,
+  STATUS_PRINT,
+  TAG_STATUS_PRINT,
+  breakdownGroups,
+  brollSummaryText,
+  commentNumbers,
+  exportBrollScenes,
+  exportComments,
+  exportFacts,
+  exportRuns,
+  exportSummaryParts,
+  sceneFacts
+} from "./14b-export-kit.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { sniffImageMime } from "../../shared/blob-policy.js";
 
@@ -35,9 +47,11 @@ function pdfEncodeChar(ch) {
 }
 
 /* widths for those same high codes — an em dash is a full em wide, and
-   guessing it narrow silently swallows the space that follows it */
-var HELV_HIGH = { 133: 1000, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000 };
-var HELVB_HIGH = { 133: 1000, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000 };
+   guessing it narrow silently swallows the space that follows it; the
+   middle dot the exports join their facts with (183) is narrow, and
+   guessed a letter's width it left a gap after it */
+var HELV_HIGH = { 133: 1000, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000, 183: 278 };
+var HELVB_HIGH = { 133: 1000, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000, 183: 278 };
 
 function pdfCharWidth(ch, bold) {
   var code = pdfEncodeChar(ch);
@@ -528,36 +542,120 @@ export function pdfCommentImagesFor() {
   });
 }
 
+/* ================= the script, as a PDF =================
+
+   File ▸ Export… ▸ PDF: the whole script, to print or to send someone to
+   read, laid out the way the app lays it out (#169), so a page on a desk
+   reads like the screen it came from. Page 1 opens with a title block:
+   the title, one line of the document's facts (exportSummaryParts,
+   14b-export-kit.js) and a rundown strip — a block per scene as wide as
+   its read time, filled by its status, the target a line across it. Then
+   the scenes, under column heads every page of the script repeats: each
+   scene's gutter (its number, the timecode it starts at, its status), its
+   Visual and its Audio, and its read time at the right edge, boxed when
+   it was set by hand. In the words, what the app draws round them: a tag
+   in its category's colour and underlined in it, the b-roll key as a
+   chip, a link in the Visual blue that can be clicked, a comment's dotted
+   underline with its thread's number after it. Then an appendix, each
+   part on a page of its own with a bookmark: the production breakdown by
+   category, the b-roll shots by scene, and the comments, numbered as the
+   script numbers them. Every page has a footer: the title, "Page 2 of 9".
+
+   Helvetica's WinAnsi throughout, so every mark (a lamp, a dot, a box, a
+   tick) is drawn rather than typed. */
+
+/* A thread's marker as the script draws it (app.css .cmt-anchor::after):
+   a rounded box whose lower-left corner is nearly square, like a speech
+   bubble's tail. (x, y) its lower-left corner; `r` the other corners'
+   radius and `low` that one's. */
+function pdfBubblePath(x, y, w, h, r, low) {
+  var kr = r * 0.5523, kl = low * 0.5523;
+  return n2(x + low) + " " + n2(y) + " m " +
+    n2(x + w - r) + " " + n2(y) + " l " +
+    n2(x + w - r + kr) + " " + n2(y) + " " + n2(x + w) + " " + n2(y + r - kr) + " " + n2(x + w) + " " + n2(y + r) + " c " +
+    n2(x + w) + " " + n2(y + h - r) + " l " +
+    n2(x + w) + " " + n2(y + h - r + kr) + " " + n2(x + w - r + kr) + " " + n2(y + h) + " " + n2(x + w - r) + " " + n2(y + h) + " c " +
+    n2(x + r) + " " + n2(y + h) + " l " +
+    n2(x + r - kr) + " " + n2(y + h) + " " + n2(x) + " " + n2(y + h - r + kr) + " " + n2(x) + " " + n2(y + h - r) + " c " +
+    n2(x) + " " + n2(y + low) + " l " +
+    n2(x) + " " + n2(y + low - kl) + " " + n2(x + low - kl) + " " + n2(y) + " " + n2(x + low) + " " + n2(y) + " c h";
+}
+
+/* `str` cut short with an ellipsis where it would not fit `width` — at a
+   word's end, when that loses no more than a few letters. */
+function pdfFitText(str, bold, size, width) {
+  str = String(str || "");
+  if (pdfTextWidth(str, bold, size) <= width) return str;
+  while (str.length > 1 && pdfTextWidth(str + "…", bold, size) > width) str = str.slice(0, -1);
+  var sp = str.lastIndexOf(" ");
+  if (sp > str.length * 0.7) str = str.slice(0, sp);
+  return str.replace(/[\s,;:]+$/, "") + "…";
+}
+
+/* A web address as the page prints it: without its scheme or "www.", as
+   the scene's gallery captions it (videoLinkLabel, 02d-gallery.js) — but
+   whole, since on paper it is the only way to find the thing. */
+function pdfAddress(href) {
+  return String(href).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+}
+
+function pdfCount(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
+
 /* `jpegs` is pdfImagesFor(S.state.rows)'s answer and `commentJpegs`
    pdfCommentImagesFor()'s. Without them only pictures that are already
    JPEG are drawn. */
 export function buildPdf(jpegs, commentJpegs) {
   var PW = 612, PH = 792, M = 54;
-  var GUT = 30, GAP = 16;
-  var COLW = (PW - M * 2 - GUT - GAP) / 2;
+  var C = PRINT_COLORS;
+  var TW = PW - 2 * M;
+  /* The script's columns, left to right: each scene's gutter, its Visual,
+     its Audio, and its read time at the right edge. Audio a step larger
+     than Visual, as the app sets them: the words someone reads aloud are
+     the ones to make easy to read. */
+  var GUT = 46, VW = 184, GAP = 14, RW = 32;
+  var VX = M + GUT, AX = VX + VW + GAP, AW = PW - M - RW - AX;
+  var VS = 9, VL = 12.5, AS = 10, AL = 14;
+  /* the appendix's text */
   var SIZE = 9.5, LEAD = 13;
-  /* A row's rule sits ROW_TAIL below the bottom of its columns: a column
-     of n lines from cursor c ends (drawLines' return) at c - SIZE - n*LEAD,
-     and the rule goes 6 under the lower column's end — so a column's last
-     baseline sits LEAD + 6 = 19 above the rule, and the row as a whole
-     (its taller column, picture included) plus ROW_TAIL is the height its
-     rule needs to stay on or above the bottom margin. */
-  var ROW_TAIL = SIZE + 6;
-  /* The room a row gets on a fresh page: newPage() lands at PH - M, and
-     the row loop's own "y -= 6" plus drawColumnHeaders()'s 8 + 16 take
-     30 of it. */
-  var PAGE_ROOM = PH - 2 * M - 30;
+  /* A scene's rhythm. Its top is ROW_GAP under the rule above it (or the
+     column heads' rule), every column's first baseline TOPB under its
+     top, and its own rule TAIL under the last baseline of its longest
+     column — or EMPTY under a column with nothing in it, which for a
+     picture with no words under it is PIC_GAP + EMPTY under the picture.
+     The gutter is a column too: the number's line, then the status's. */
+  var ROW_GAP = 10, TOPB = 10, TAIL = 14, PIC_GAP = 8, EMPTY = 4;
+  /* the column heads: their baseline 8 under the top of the page, their
+     rule 5 under that, the first scene ROW_GAP under the rule */
+  var HEADS_H = 13 + ROW_GAP;
+  /* where a scene starts on a fresh page, and so the most room it gets */
+  var ROW_TOP = PH - M - HEADS_H;
+  var PAGE_ROOM = ROW_TOP - M;
+  var FOOT_Y = 28;
+  /* the read time's right edge, inside the box a time set by hand gets */
+  var READ_R = PW - M - 3.5;
+  var CUE = tagPrintColor("sound") || "AB413E";
+  var HIGHLIGHT = "FCE38A";
+
+  var facts = exportFacts();
+  var scenes = sceneFacts();
+  var nums = commentNumbers();
+  var title = facts.title;
 
   var pages = [];
   var ops = [];
   var images = [];      /* {bytes, w, h, name} */
   var pageImages = [];  /* image names used on the current page */
+  var pageLinks = [];   /* {x, y, w, h, uri} clickable on the current page */
+  var outline = [{ title: "Script", page: 0, y: PH }];
   var y = 0;
 
+  /* Every page starts in the text colour; whatever draws in another
+     wraps itself in q ... Q (pdfTextOp), so the page comes back to it. */
   function newPage() {
-    if (ops.length) pages.push({ ops: ops, images: pageImages });
-    ops = [];
+    if (ops.length) pages.push({ ops: ops, images: pageImages, links: pageLinks });
+    ops = [pdfRgb(C.text) + " rg"];
     pageImages = [];
+    pageLinks = [];
     y = PH - M;
   }
 
@@ -568,87 +666,309 @@ export function buildPdf(jpegs, commentJpegs) {
     return "F1";
   }
 
-  function text(str, x, yy, font, size) {
-    ops.push("BT /" + font + " " + size + " Tf 1 0 0 1 " +
-      x.toFixed(2) + " " + yy.toFixed(2) + " Tm (" + pdfEscapeText(str) + ") Tj ET");
+  function text(str, x, yy, font, size, hex) { ops.push(pdfTextOp(str, x, yy, font, size, hex)); }
+  function fill(hex, path) { ops.push("q " + pdfRgb(hex) + " rg " + path + " f Q"); }
+  function stroke(hex, width, path) { ops.push("q " + pdfRgb(hex) + " RG " + width + " w " + path + " S Q"); }
+  /* a filled bar: an underline, a strikethrough, a highlight */
+  function bar(x, yy, w, h, hex) {
+    ops.push("q " + pdfRgb(hex) + " rg " + x.toFixed(2) + " " + yy.toFixed(2) + " " +
+      w.toFixed(2) + " " + h.toFixed(2) + " re f Q");
   }
 
-  function rule(x, yy, w, thickness) {
-    ops.push("q 0 0 0 rg " + x.toFixed(2) + " " + yy.toFixed(2) + " " +
-      w.toFixed(2) + " " + thickness + " re f Q");
+  /* ---- the words, and what the app draws round them ---- */
+
+  /* A thread's number after its words (exportRuns' markers): an amber
+     outlined bubble each. pdfWrapRuns keeps markersWidth() of room for
+     them on their word's line, so they never run past the column. */
+  var MK_SIZE = 6, MK_PAD = 2, MK_H = 7.8, MK_GAP = 1.5;
+  function markerW(n) { return Math.max(8, pdfTextWidth(String(n), false, MK_SIZE) + 2 * MK_PAD); }
+  function markersWidth(markers) {
+    return markers.reduce(function (w, n) { return w + MK_GAP + markerW(n); }, 0);
+  }
+  var WRAP = { markerWidth: markersWidth };
+
+  /* A cell's runs, annotated (exportRuns): what the page draws round
+     them rides along on every segment pdfWrapRuns makes. The b-roll key's
+     own run ("B-roll:") becomes "B-roll", the width of the chip drawn in
+     its place. */
+  function cellRuns(html) {
+    return exportRuns(html, nums).map(function (r) {
+      return r.broll ? Object.assign({}, r, { text: "B-roll" }) : r;
+    });
   }
 
-  /* `size` is the size the lines were wrapped at (SIZE unless given): the
-     breakdown's notes wrap at SIZE - 1, and drawn at SIZE their words ran
-     into each other, the spaces between them swallowed */
-  function drawLines(lines, x, startY, size) {
-    var fs = size || SIZE;
+  /* the b-roll key (#148): a small outlined chip in the b-roll teal */
+  var CHIP_SIZE = 6.5, CHIP_PAD = 2.4;
+  function chip(x, b, room) {
+    var tw = pdfTextWidth("B-roll", false, CHIP_SIZE);
+    var w = Math.min(room, tw + 2 * CHIP_PAD);
+    stroke(C.broll, 0.6, pdfRoundRectPath(x + 0.3, b - 1.9, w - 0.6, 8.4, 1.6));
+    text("B-roll", x + (w - tw) / 2, b + 0.3, "F1", CHIP_SIZE, C.broll);
+  }
+
+  /* A segment's colour: its own (a caption, a quote), a link's blue, its
+     tag's category colour, a stage direction's grey (#167), a sound
+     cue's brick (#219) — or null, the page's text colour. */
+  function segHex(seg) {
+    if (seg.color) return seg.color;
+    if (seg.href) return C.visual;
+    if (seg.tag && seg.tag.color) return seg.tag.color;
+    if (seg.dir) return C.faint;
+    if (seg.cue) return CUE;
+    return null;
+  }
+
+  function blank(seg) { return !seg.text.trim(); }
+  /* Whether segment i carries a mark that `test` looks for — a space only
+     when the words both sides of it do: the one inside a two-word tag is
+     underlined, the one after it is not. */
+  function marked(line, i, test) {
+    if (!blank(line[i])) return test(line[i]);
+    return i > 0 && i < line.length - 1 && test(line[i - 1]) && test(line[i]) && test(line[i + 1]);
+  }
+
+  /* One line of pdfWrapRuns' segments from x, its baseline at b, set at
+     `size` (the size it was wrapped at). */
+  function drawSegs(line, x, b, size) {
+    var cx = x, link = null;
+    line.forEach(function (seg, i) {
+      var sp = blank(seg);
+      var hex = segHex(seg), ink = hex || C.text;
+      if (seg.mark) bar(cx, b - 2.5, seg.width, size + 1, HIGHLIGHT);
+      if (!sp) {
+        if (seg.broll) chip(cx, b, seg.width);
+        /* a cue is set smaller (CUE_SCALE, as pdfWrapRuns measured it) */
+        else text(seg.text, cx, b, fontFor(seg), seg.cue ? size * CUE_SCALE : size, hex);
+      }
+      /* underlined, or a link — which the app underlines in its blue */
+      if (marked(line, i, function (s) { return (s.u || s.href) && s.href === seg.href; })) {
+        bar(cx, b - 1.7, seg.width, 0.5, ink);
+      }
+      /* a tag: underlined in its category's colour */
+      if (seg.tag && seg.tag.color && marked(line, i, function (s) { return s.tag && s.tag.name === seg.tag.name; })) {
+        bar(cx, b - 2.2, seg.width, 0.6, seg.tag.color);
+      }
+      if (seg.s && !sp) bar(cx, b + size * 0.28, seg.width, 0.5, ink);
+      /* a comment's words: a dotted underline, amber while its thread is
+         open and faint once it is resolved (app.css .cmt-anchor) */
+      if (seg.cmt && marked(line, i, function (s) { return !!s.cmt; })) {
+        var open = seg.cmt.some(function (id) { return nums[id]; });
+        ops.push("q " + pdfRgb(open ? C.audio : C.faint) + " RG 0.9 w 1 J [0 1.8] 0 d " +
+          n2(cx + 0.5) + " " + n2(b - 3.8) + " m " + n2(cx + seg.width) + " " + n2(b - 3.8) + " l S Q");
+      }
+      /* a link, a rectangle to click: one per run of its words on a line */
+      if (seg.href) {
+        if (link && link.uri === seg.href && Math.abs(link.x + link.w - cx) < 0.01) link.w += seg.width;
+        else {
+          link = { x: cx, y: b - 2.5, w: seg.width, h: size + 2, uri: seg.href };
+          pageLinks.push(link);
+        }
+      }
+      cx += seg.width;
+      /* the numbers of the open threads whose words end here */
+      (seg.markers || []).forEach(function (n) {
+        var s = String(n), w = markerW(n);
+        cx += MK_GAP;
+        stroke(C.audio, 0.6, pdfBubblePath(cx + 0.3, b - 1.2, w - 0.6, MK_H, 2, 0.6));
+        text(s, cx + (w - pdfTextWidth(s, false, MK_SIZE)) / 2, b + 0.9, "F1", MK_SIZE, C.audio);
+        cx += w;
+      });
+    });
+  }
+
+  /* Lines from x, the first baseline at startY, `lead` apart (the
+     appendix's SIZE and LEAD unless given); returns where the next line's
+     baseline would go. */
+  function drawLines(lines, x, startY, size, lead) {
     var yy = startY;
     lines.forEach(function (line) {
-      var cx = x;
-      line.forEach(function (seg) {
-        if (seg.mark) {
-          ops.push("q 0.988 0.890 0.541 rg " + cx.toFixed(2) + " " + (yy - 2.5).toFixed(2) +
-            " " + seg.width.toFixed(2) + " " + (SIZE + 1).toFixed(2) + " re f Q");
-        }
-        if (seg.text.trim()) {
-          /* a stage direction (#167): grey, as the editor shows it */
-          if (seg.dir) ops.push("0.42 0.42 0.40 rg");
-          /* a sound cue (#219): smaller, in the Music/SFX brick */
-          else if (seg.cue) ops.push("0.671 0.255 0.243 rg");
-          text(seg.text, cx, yy, fontFor(seg), seg.cue ? fs * CUE_SCALE : fs);
-          if (seg.dir || seg.cue) ops.push("0 g");
-          if (seg.u) rule(cx, yy - 1.6, seg.width, 0.5);
-          if (seg.s) rule(cx, yy + SIZE * 0.28, seg.width, 0.5);
-        }
-        cx += seg.width;
-      });
-      yy -= LEAD;
+      drawSegs(line, x, yy, size || SIZE);
+      yy -= lead || LEAD;
     });
     return yy;
   }
 
-  function columnHeight(lines) { return lines.length * LEAD; }
+  /* ---- a scene's columns, in one arithmetic ----
 
-  /* Where drawLines() would leave a column of n lines started at cursor
-     c (c - SIZE when n is 0), in the same arithmetic. */
-  function columnEnd(c, n) {
-    var yy = c - SIZE;
-    for (var i = 0; i < n; i++) yy -= LEAD;
-    return yy;
+     A column of n lines `lead` apart, from cursor c: its first baseline
+     c - TOPB, its last c - TOPB - (n-1)*lead, and the scene's rule TAIL
+     under that — or EMPTY under c when it has no lines. colFit is the
+     most lines that fit from c with every baseline on or above M. */
+  function colHeight(n, lead) { return n ? TOPB + (n - 1) * lead + TAIL : EMPTY; }
+  function colBottom(c, n, lead) { return c - colHeight(n, lead); }
+  function colFit(c, lead) { return Math.max(0, Math.floor((c - TOPB - M) / lead) + 1); }
+
+  /* ---- the title block ---- */
+
+  function titleBlock() {
+    var TS = 20, TLEAD = 24;
+    /* the title, two lines at most — the second cut short when it would
+       need a third, so a long one never runs off the page */
+    var tl = pdfWrapRuns([{ text: title, b: true }], TW, TS).map(function (l) {
+      return l.map(function (s) { return s.text; }).join("").trim();
+    });
+    if (tl.length > 2) tl = [tl[0], pdfFitText(tl.slice(1).join(" "), true, TS, TW)];
+    var b = PH - M - 16;
+    tl.forEach(function (s, i) { text(s, M, b - i * TLEAD, "F2", TS); });
+    b -= (tl.length - 1) * TLEAD + 17;
+    /* the facts, then the date */
+    pdfWrapRuns([{ text: exportSummaryParts(facts).concat(facts.date).join(" · ") }], TW, 8.5).forEach(function (l, i) {
+      if (i) b -= 11;
+      text(l.map(function (s) { return s.text; }).join("").trim(), M, b, "F1", 8.5, C.dim);
+    });
+    if (!scenes.length) {
+      text("No scenes yet.", M, b - 28, "F1", SIZE, C.faint);
+      y = b - 28;
+      return;
+    }
+    y = rundownStrip(b - 14);
   }
 
-  function drawColumnHeaders() {
-    text("VISUAL", M + GUT, y, "F2", 8);
-    text("AUDIO", M + GUT + COLW + GAP, y, "F2", 8);
-    y -= 8;
-    ops.push("q 0.85 0.84 0.81 RG 0.7 w " + M + " " + y.toFixed(2) + " m " + (PW - M) + " " + y.toFixed(2) + " l S Q");
-    y -= 16;
+  /* The rundown, as the strip over the app's script shows it: a block per
+     scene across the text width, as wide as its read time — a sliver at
+     least, so every scene shows — filled by its status (shot dark, ready
+     amber, to do the raised grey), its number in it where it fits. With a
+     target, a line at the target and the strip as long as the target or
+     the script, whichever is longer. Under it the statuses' lamps and
+     counts. `top` is the strip's top; returns where the script starts. */
+  function rundownStrip(top) {
+    var SH = 15, R = 1.5, NS = 6.5;
+    var n = scenes.length;
+    var total = facts.seconds, target = facts.target ? facts.target.seconds : 0;
+    var span = Math.max(total, target);
+    if (facts.target) top -= 12;          /* the target's label goes above */
+    var G = n > 1 ? Math.min(1.5, TW * 0.2 / (n - 1)) : 0;
+    var avail = TW - G * (n - 1);
+    var minW = Math.min(2.5, avail / n);
+    var room = Math.max(span > 0 ? avail * total / span : avail, n * minW);
+    /* widths in proportion to the seconds, with the slivers held at minW
+       and the rest sharing what they leave */
+    var secs = scenes.map(function (f) { return f.seconds; });
+    var small = secs.map(function () { return false; });
+    var k = 0;
+    for (var pass = 0; total > 0 && pass <= n; pass++) {
+      var fixed = 0, rest = 0;
+      secs.forEach(function (s, i) { if (small[i]) fixed += minW; else rest += s; });
+      k = rest > 0 ? (room - fixed) / rest : 0;
+      var changed = false;
+      secs.forEach(function (s, i) {
+        if (!small[i] && s * k < minW) { small[i] = true; changed = true; }
+      });
+      if (!changed) break;
+    }
+    var widths = secs.map(function (s, i) { return total > 0 ? (small[i] ? minW : s * k) : room / n; });
+    var FILL = { shot: C.dim, ready: C.audioSoft, todo: C.surface2 };
+    var INK = { shot: "FFFFFF", ready: C.audio, todo: C.dim };
+    var bottom = top - SH, x = M, at = 0, tx = null;
+    scenes.forEach(function (f, i) {
+      var w = widths[i], id = FILL[f.status.id] ? f.status.id : "todo", r = Math.min(R, w / 2);
+      fill(FILL[id], pdfRoundRectPath(x, bottom, w, SH, r));
+      if (id === "ready") stroke(C.audio, 0.6, pdfRoundRectPath(x + 0.3, bottom + 0.3, w - 0.6, SH - 0.6, r));
+      if (w >= pdfTextWidth(f.number, false, NS) + 5) text(f.number, x + 2.5, bottom + 5.2, "F1", NS, INK[id]);
+      if (facts.target && tx === null && target >= at && target < at + f.seconds) {
+        tx = x + w * (target - at) / f.seconds;
+      }
+      at += f.seconds;
+      x += w + G;
+    });
+    if (facts.target) {
+      /* on or past the script's end: the strip's end, which is the target */
+      if (tx === null) tx = M + TW;
+      stroke(C.text, 0.8, n2(tx) + " " + n2(top + 9) + " m " + n2(tx) + " " + n2(bottom - 2.5) + " l");
+      var label = "Target " + facts.target.text, lw = pdfTextWidth(label, false, 7);
+      text(label, tx - 3 - lw < M ? tx + 3 : tx - 3 - lw, top + 3, "F1", 7, C.dim);
+    }
+    var lb = bottom - 13, lx = M;
+    [["shot", "Shot"], ["ready", "Ready"], ["todo", "To do"]].forEach(function (p) {
+      var sp = STATUS_PRINT[p[0]], s = p[1] + " " + facts.status[p[0]];
+      ops.push(pdfLampOp(sp.lamp, lx + 3, lb + 2.6, 3, sp.color));
+      text(s, lx + 9, lb, "F1", 7.5, C.dim);
+      lx += 9 + pdfTextWidth(s, false, 7.5) + 12;
+    });
+    return lb - 20;
+  }
+
+  /* ---- the column heads, on every page of the script ---- */
+
+  function drawHeads() {
+    var b = y - 8;
+    text("Scene", M, b, "F2", 8, C.dim);
+    fill(C.visual, pdfCirclePath(VX + 2.4, b + 2.8, 2.4));
+    text("Visual", VX + 8, b, "F2", 8, C.dim);
+    fill(C.audio, pdfCirclePath(AX + 2.4, b + 2.8, 2.4));
+    text("Audio", AX + 8, b, "F2", 8, C.dim);
+    text("Read", READ_R - pdfTextWidth("Read", true, 8), b, "F2", 8, C.dim);
+    ops.push(pdfRuleOp(M, y - 13, PW - M, C.borderStrong, 0.6));
+    y -= HEADS_H;
+  }
+
+  function scriptPage() { newPage(); drawHeads(); }
+
+  /* ---- a scene's gutter ---- */
+
+  var NUM_SIZE = 12, TC_SIZE = 7, ST_SIZE = 7.5, READ_SIZE = 8.5;
+  /* The number, the timecode it starts at beside it (under it, when the
+     two would not fit side by side — a hundredth scene an hour in), and
+     its status a line lower. */
+  function gutterOf(f) {
+    var nw = pdfTextWidth(f.number, true, NUM_SIZE);
+    var stacked = nw + 4 + pdfTextWidth(f.start, false, TC_SIZE) > GUT - 6;
+    var drop = stacked ? 22 : 12;
+    return { nw: nw, stacked: stacked, drop: drop, h: TOPB + drop + TAIL };
+  }
+
+  function drawGutter(f, g, top) {
+    var b = top - TOPB;
+    text(f.number, M, b, "F2", NUM_SIZE);
+    if (g.stacked) text(f.start, M, b - 10, "F1", TC_SIZE, C.faint);
+    else text(f.start, M + g.nw + 4, b, "F1", TC_SIZE, C.faint);
+    var sb = b - g.drop, sp = STATUS_PRINT[f.status.id] || STATUS_PRINT.todo;
+    ops.push(pdfLampOp(sp.lamp, M + 3, sb + 2.6, 3, sp.color));
+    text(f.status.label, M + 9, sb, "F1", ST_SIZE, C.dim);
+    /* the read time at the right edge, boxed when it was set by hand
+       (#179), as the app boxes it */
+    var rw = pdfTextWidth(f.read, false, READ_SIZE);
+    text(f.read, READ_R - rw, b, "F1", READ_SIZE, C.dim);
+    if (f.readSet) stroke(C.borderStrong, 0.6, pdfRoundRectPath(READ_R - rw - 3.5, b - 3, rw + 7, 11.5, 2));
+  }
+
+  /* a scene carried onto another page says which it is, faint */
+  function drawGutterCont(f, top) {
+    var b = top - TOPB;
+    text(f.number, M, b, "F2", NUM_SIZE, C.faint);
+    text("cont.", M + pdfTextWidth(f.number, true, NUM_SIZE) + 4, b, "F1", TC_SIZE, C.faint);
   }
 
   newPage();
-
-  /* title */
-  text(S.state.title || "Untitled Script", M, y - 18, "F2", 18);
-  y -= 40;
-  drawColumnHeaders();
+  titleBlock();
+  if (scenes.length) drawHeads();
 
   S.state.rows.forEach(function (row, idx) {
-    /* Runs from the document model (#85). Neighbours in one format that
-       the stored markup kept in separate elements come out as one run, so
-       a word split across two <strong>s is one word to wrap, never broken
-       between its halves at the end of a line. */
-    /* the scene's video links (#135) head its visual column, under its
-       pictures, as the addresses themselves: a printed page has no link
-       to click */
-    var vRuns = toDocxRuns(cellOf(row.visualText));
-    var videoRuns = [];
+    var f = scenes[idx];
+    var g = gutterOf(f);
+    /* The scene's video links (#135) head its Visual column, under its
+       pictures: the site's name, faint, then the address in the Visual
+       blue — whole, since on paper it is all there is to go on, and a
+       link besides, since a PDF on a screen can be clicked. The name only
+       when the two fit on one line: alone on a line of its own it reads
+       as a heading, and the address says the same. */
+    var vLines = [];
     rowVideoLinks(row).forEach(function (l) {
-      videoRuns.push({ text: "Video: " + videoLinkText(l), i: true }, { text: "\n" });
+      var runs = l.href ? [{ text: pdfAddress(l.href), href: l.href }] : [{ text: videoLinkText(l) }];
+      var label = l.href ? videoHostLabel(l) + " " : "";
+      if (label && pdfTextWidth(label + runs[0].text, false, VS) <= VW) runs.unshift({ text: label });
+      pdfWrapRuns(runs, VW, VS).forEach(function (line) {
+        line.forEach(function (seg) { if (!seg.href) seg.color = C.faint; });
+        vLines.push(line);
+      });
     });
-    if (videoRuns.length && !vRuns.length) videoRuns.pop();
-    var vLines = pdfWrapRuns(videoRuns.concat(vRuns), COLW, SIZE);
-    var aLines = pdfWrapRuns(toDocxRuns(cellOf(row.audioText)), COLW, SIZE);
+    /* Runs from the document model (#85), annotated (exportRuns).
+       Neighbours in one format that the stored markup kept in separate
+       elements come out as one run, so a word split across two <strong>s
+       is one word to wrap, never broken between its halves at the end of
+       a line. */
+    vLines = vLines.concat(pdfWrapRuns(cellRuns(row.visualText), VW, VS, WRAP));
+    var aLines = pdfWrapRuns(cellRuns(row.audioText), AW, AS, WRAP);
 
     var imgH = 0, imgRef = null;
     var jpeg = jpegs ? jpegs[idx] : null;
@@ -662,34 +982,29 @@ export function buildPdf(jpegs, commentJpegs) {
         var dim = safeAspect(jpeg.size);
         var name = "Im" + (images.length + 1);
         images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
-        var natW = COLW, natH = COLW * dim.ratio;
+        var natW = VW, natH = VW * dim.ratio;
         /* A tall/portrait image (a phone-screenshot crop, say) can have a
            natural height that alone exceeds a WHOLE page's usable height
            — safeAspect() only guards against a zero/negative width, not
            an extreme ratio. The draw guard further down only checks
            whether it fits from the current y, with no fallback if it
            can't fit ANYWHERE — even a fresh page — so it was silently
-           skipped: never drawn, no warning. Cap it to the full usable
-           page height here (PH - 2*M), shrinking width to match, so
-           there's always at least one page it fits on. */
-        /* The most vertical room an image can ever get is right after a
-           forced page break: newPage() lands at PH - M, then the row
-           loop's own "y -= 6" plus drawColumnHeaders()'s 8pt + 16pt of
-           header/rule/gap eat 30pt of that before the image is drawn —
-           capping to the whole page's height (PH - 2*M) still left it
-           30pt short of fitting even there. */
+           skipped: never drawn, no warning. Cap it to the most room a
+           scene ever gets — PAGE_ROOM, a fresh page's under its column
+           heads — shrinking width to match, so there's always at least
+           one page it fits on. */
         var maxH = PAGE_ROOM;
         /* ...and when nothing will follow the picture onto a later page —
            no visual text under it, and all the audio beside it fits on
-           its page — the row's rule is ROW_TAIL + 8 under the picture on
-           that same page, so the cap leaves room for that too, or the
-           rule would fall up to 23.5pt below the bottom margin (30.5 for
-           a picture at the old cap). With visual text the picture keeps
-           the whole page and the text (and the rule) carry on overleaf. */
-        if (!vLines.length && columnHeight(aLines) + ROW_TAIL <= PAGE_ROOM) maxH = PAGE_ROOM - 8 - ROW_TAIL;
+           its page — the scene's rule is PIC_GAP + EMPTY under the
+           picture on that same page, so the cap leaves room for that too,
+           or the rule would fall under the bottom margin. With visual
+           text the picture keeps the whole page and the text (and the
+           rule) carry on overleaf. */
+        if (!vLines.length && colHeight(aLines.length, AL) <= PAGE_ROOM) maxH = PAGE_ROOM - PIC_GAP - EMPTY;
         if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
         imgRef = { name: name, w: natW, h: natH };
-        imgH = imgRef.h + 8;
+        imgH = imgRef.h + PIC_GAP;
       } catch (e) { /* skip an unreadable image */ }
     }
 
@@ -705,7 +1020,7 @@ export function buildPdf(jpegs, commentJpegs) {
       });
     }
     var STRIP_GAP = 6, STRIP_N = 3;
-    var thumbW = (COLW - STRIP_GAP * (STRIP_N - 1)) / STRIP_N;
+    var thumbW = (VW - STRIP_GAP * (STRIP_N - 1)) / STRIP_N;
     var stripLines = [];
     moreJpegs.forEach(function (mj, k) {
       try {
@@ -722,188 +1037,285 @@ export function buildPdf(jpegs, commentJpegs) {
     });
     stripLines.forEach(function (line) { imgH += line.h + STRIP_GAP; });
 
-    /* ROW_TAIL, not the 14 of the row gap below the rule: with 14 a row
-       that passed this check by less than 1.5pt had its rule drawn up to
-       1.5pt under the bottom margin. A row with nothing in it keeps the
-       14 — it never enters the text loop, so its rule is drawn at its top
-       (y), which the 14 already keeps inside the margin. */
-    var empty = !vLines.length && !aLines.length && !imgRef && !stripLines.length;
-    var need = Math.max(columnHeight(vLines) + imgH, columnHeight(aLines)) + (empty ? 14 : ROW_TAIL);
-    if (y - need < M && y < PH - M - 40) { newPage(); y -= 6; drawColumnHeaders(); }
+    /* The first scene stays on page 1 (see below), so its picture shrinks
+       to fit under the title block with the rest of its gallery — unless
+       that would leave it smaller than a thumbnail, when the scene goes
+       over to page 2 after all. */
+    var stay = idx === 0;
+    if (stay && imgRef) {
+      var room1 = y - M - (imgH - imgRef.h) - (vLines.length ? 0 : EMPTY);
+      if (imgRef.h > room1) {
+        if (room1 < 72) stay = false;
+        else {
+          imgH -= imgRef.h - room1;
+          imgRef.w *= room1 / imgRef.h;
+          imgRef.h = room1;
+        }
+      }
+    }
 
-    text(pad2(idx + 1), M, y - SIZE, "F2", 8);
+    /* The scene's height to its rule: its tallest column — Visual with its
+       pictures, Audio, or the gutter. One that does not fit in what is
+       left of the page starts the next page, where it gets PAGE_ROOM —
+       unless it is already at the top of one, or it is the first scene:
+       going over would leave page 1 its title block and nothing else, so
+       it starts there and carries on overleaf if it must. */
+    var need = Math.max(imgH + colHeight(vLines.length, VL), colHeight(aLines.length, AL), g.h);
+    if (y - need < M && y < ROW_TOP - 0.01 && !stay) scriptPage();
 
-    var vy = y;
+    var top = y;
+    drawGutter(f, g, top);
+
+    var vy = top;
     if (imgRef && vy - imgRef.h >= M) {
       pageImages.push(imgRef.name);
       ops.push("q " + imgRef.w.toFixed(2) + " 0 0 " + imgRef.h.toFixed(2) + " " +
-        (M + GUT).toFixed(2) + " " + (vy - imgRef.h).toFixed(2) + " cm /" + imgRef.name + " Do Q");
-      vy -= imgRef.h + 8;
+        VX.toFixed(2) + " " + (vy - imgRef.h).toFixed(2) + " cm /" + imgRef.name + " Do Q");
+      vy -= imgRef.h + PIC_GAP;
     }
     stripLines.forEach(function (line) {
       if (vy - line.h < M) return;
       line.items.forEach(function (it) {
         pageImages.push(it.name);
         ops.push("q " + it.w.toFixed(2) + " 0 0 " + it.h.toFixed(2) + " " +
-          (M + GUT + it.x).toFixed(2) + " " + (vy - it.h).toFixed(2) + " cm /" + it.name + " Do Q");
+          (VX + it.x).toFixed(2) + " " + (vy - it.h).toFixed(2) + " cm /" + it.name + " Do Q");
       });
       vy -= line.h + STRIP_GAP;
     });
 
     /* The loop below is the only thing that moves y past the picture, and
-       a row with no text in either column never enters it — so y dropped
-       by the 14pt row gap alone and the next row was drawn over this
-       row's picture. End such a row where the loop would have ended it
-       with nothing to draw: its empty visual column starts below the
-       picture (vy), so min(vCursor, aCursor) - SIZE - 6 = vy - SIZE - 6.
-       A row with any text already gets that from the loop; a row with no
-       picture (vy === y) is left exactly as it was. */
-    if (vy !== y && !vLines.length && !aLines.length) y = vy - SIZE - 6;
+       a scene with no words in either column never enters it — so the
+       next scene was once drawn over this one's picture. End such a scene
+       where the loop would have ended it with nothing to draw: EMPTY
+       under its pictures (vy), or under its gutter, whichever is lower. */
+    if (!vLines.length && !aLines.length) y = Math.min(vy - EMPTY, top - g.h);
 
-    /* A row can be taller than a page. Draw what fits, break, and continue —
-       otherwise the overflow is emitted below the page edge and disappears. */
+    /* A scene can be taller than a page. Draw what fits, break, and
+       continue — otherwise the overflow is emitted below the page edge and
+       disappears. Each column fits as many lines as keep every baseline
+       on or above M (colFit), in its own leading. */
     var vRest = vLines, aRest = aLines;
-    var vCursor = vy, aCursor = y;
-    var drewPic = vy !== y;
+    var vCursor = vy, aCursor = top;
+    var drewPic = vy !== top;
+    var onFirst = true;
     var guard = 0;
     while ((vRest.length || aRest.length) && guard++ < 400) {
-      /* A block of n lines starting at startY = cursor - SIZE has its
-         last baseline at cursor - SIZE - (n-1)*LEAD, so the largest n
-         whose baseline still clears the bottom margin M is
-         floor((cursor - SIZE - M) / LEAD) + 1, not the bare floor() —
-         the missing +1 undercounted by exactly one line on every
-         multi-page row, forcing an unnecessary early page break and an
-         ~LEAD-tall blank gap at the bottom of the column. */
-      var vFit = Math.max(0, Math.floor((vCursor - SIZE - M) / LEAD) + 1);
-      var aFit = Math.max(0, Math.floor((aCursor - SIZE - M) / LEAD) + 1);
-      var vTake = vRest.slice(0, vFit), aTake = aRest.slice(0, aFit);
-      /* A chunk that finishes the row puts the row's rule 6 under the
-         lower column's end — 19 under its last baseline. Every baseline
-         clearing M does not make that rule clear it: a row finishing on a
-         continuation page could put it at M - 11.5, one starting a fresh
-         page under a picture anywhere down to M - 19. So when the rule
-         would fall below M, the lower column's last line goes overleaf
-         instead and the rule follows it there — never alone at the top
-         of a page. Only a chunk that would finish the row: a row that
-         fits whole passed the `need` check and never gets here short. */
+      var vTake = vRest.slice(0, colFit(vCursor, VL)), aTake = aRest.slice(0, colFit(aCursor, AL));
+      /* A chunk that finishes the scene puts its rule TAIL under the lower
+         column's last baseline. Every baseline clearing M does not make
+         that rule clear it: so when the rule would fall below M, the lower
+         column's last line goes overleaf instead and the rule follows it
+         there — never alone at the top of a page. Only a chunk that would
+         finish the scene: one that fits whole passed the `need` check and
+         never gets here short. */
       if (vTake.length === vRest.length && aTake.length === aRest.length) {
-        var vLow = columnEnd(vCursor, vTake.length), aLow = columnEnd(aCursor, aTake.length);
-        if (Math.min(vLow, aLow) - 6 < M - 1e-6) {
+        var vLow = colBottom(vCursor, vTake.length, VL), aLow = colBottom(aCursor, aTake.length, AL);
+        if (Math.min(vLow, aLow) < M - 1e-6) {
           if (vTake.length && (vLow <= aLow || !aTake.length)) vTake = vTake.slice(0, -1);
           else if (aTake.length) aTake = aTake.slice(0, -1);
         }
       }
-      var vEnd = vTake.length ? drawLines(vTake, M + GUT, vCursor - SIZE) : vCursor - SIZE;
-      var aEnd = aTake.length ? drawLines(aTake, M + GUT + COLW + GAP, aCursor - SIZE) : aCursor - SIZE;
+      if (vTake.length) drawLines(vTake, VX, vCursor - TOPB, VS, VL);
+      if (aTake.length) drawLines(aTake, AX, aCursor - TOPB, AS, AL);
+      var vEnd = colBottom(vCursor, vTake.length, VL), aEnd = colBottom(aCursor, aTake.length, AL);
       vRest = vRest.slice(vTake.length);
       aRest = aRest.slice(aTake.length);
       if (!vRest.length && !aRest.length) {
-        y = Math.min(vEnd, aEnd) - 6;
+        y = Math.min(vEnd, aEnd);
+        if (onFirst) y = Math.min(y, top - g.h);
         break;
       }
-      /* nothing fits — bail out safely. Unless this page holds the row's
+      /* nothing fits — bail out safely. Unless this page holds the scene's
          picture: a picture filling its page left no room for a first line
          of visual text under it, and bailing here dropped that text and
          drew the rule at the top of the page, across the picture. */
       if (!vTake.length && !aTake.length && !drewPic) break;
       drewPic = false;
-      newPage();
-      y -= 6;
-      drawColumnHeaders();
+      onFirst = false;
+      scriptPage();
+      drawGutterCont(f, y);
       vCursor = y;
       aCursor = y;
     }
 
-    ops.push("q 0.90 0.89 0.86 RG 0.5 w " + M + " " + y.toFixed(2) + " m " + (PW - M) + " " + y.toFixed(2) + " l S Q");
-    y -= 14;
+    ops.push(pdfRuleOp(M, y, PW - M, C.border, 0.5));
+    y -= ROW_GAP;
   });
 
-  /* ---- production breakdown ---- */
-  var breakdown = breakdownRows();
-  if (breakdown.length) {
+  /* ---- the appendix ----
+
+     Each part on a page of its own, headed by its name and one line that
+     sums it up, and a bookmark to it; a part that runs onto another page
+     says so at the top of that page. */
+  function section(name, summary) {
     newPage();
-    text("Production breakdown", M, y - 18, "F2", 16);
-    y -= 36;
+    outline.push({ title: name, page: pages.length, y: PH });
+    text(name, M, y - 16, "F2", 16);
+    text(summary, M, y - 33, "F1", 8.5, C.dim);
+    y -= 52;
+  }
+  function sectionGoesOn(name) {
+    newPage();
+    text(name + " (continued)", M, y - 10, "F2", 10, C.dim);
+    y -= 26;
+  }
 
-    /* squeezed to make room for STATUS — 504pt of usable width between the
-       margins, so every column here is already at its narrowest readable
-       size; anything else new has to become a second line, not a column */
-    var CATW = 62, NAMEW = 118, STATW = 62, OWNW = 82, NUMW = 44;
-    var STATX = M + CATW + NAMEW;
-    var OWNX = STATX + STATW;
-    var NUMX = OWNX + OWNW;
-    var SCENEX = NUMX + NUMW;
-    var SCENEW = PW - M - SCENEX;
+  /* split into discrete "\n" runs so pdfWrapRuns treats them as real
+     line breaks, same convention toDocxRuns() uses for a line break */
+  function linesToRuns(str) {
+    return String(str || "").split(/\r\n|\r|\n/).reduce(function (runs, line, i) {
+      if (i > 0) runs.push({ text: "\n" });
+      if (line) runs.push({ text: line });
+      return runs;
+    }, []);
+  }
+  function tint(lines, hex) {
+    lines.forEach(function (l) { l.forEach(function (s) { if (!s.broll) s.color = hex; }); });
+    return lines;
+  }
 
-    function breakdownHeader() {
-      text("CATEGORY", M, y, "F2", 8);
-      text("ITEM", M + CATW, y, "F2", 8);
-      text("STATUS", STATX, y, "F2", 8);
-      text("ASSIGNED TO", OWNX, y, "F2", 8);
-      text("MENTIONS", NUMX, y, "F2", 8);
-      text("SCENES", SCENEX, y, "F2", 8);
-      y -= 8;
-      ops.push("q 0.85 0.84 0.81 RG 0.7 w " + M + " " + y.toFixed(2) + " m " +
-        (PW - M) + " " + y.toFixed(2) + " l S Q");
-      y -= 14;
-    }
-    breakdownHeader();
+  /* ---- production breakdown ----
 
-    breakdown.forEach(function (r) {
-      var nameLines = pdfWrapRuns([{ text: r.name }], NAMEW - 10, SIZE);
-      var statLines = pdfWrapRuns([{ text: r.statusLabel }], STATW - 10, SIZE);
-      var ownLines = pdfWrapRuns([{ text: r.owner }], OWNW - 10, SIZE);
-      var sceneLines = pdfWrapRuns([{ text: r.scenes.join(", ") }], SCENEW, SIZE);
-      /* notes run the full width underneath rather than squeezing into a
-         sixth column — they're free prose and would wrap to nothing usable */
-      var noteLines = r.notes ? pdfWrapRuns([{ text: r.notes }], PW - M * 2 - CATW, SIZE - 1) : [];
-      var bodyLines = Math.max(nameLines.length, statLines.length, ownLines.length,
-                               sceneLines.length, 1);
-      var need = (bodyLines + noteLines.length) * LEAD + 6;
-      if (y - need < M) { newPage(); y -= 6; breakdownHeader(); }
+     By category, as the Production panel groups it (breakdownGroups): a
+     head per category — its dot, its plural, how many — then its items
+     under the panel's columns, Item, Status (a lamp and its word),
+     Scenes and Assigned to; under an item its notes, and the b-roll shots
+     that need it (#149). */
+  var groups = breakdownGroups();
+  if (groups.length) {
+    var bdItems = [];
+    groups.forEach(function (gr) { bdItems = bdItems.concat(gr.items); });
+    section("Production breakdown", [pdfCount(bdItems.length, "item")].concat(TAG_STATUSES.map(function (st) {
+      var n = bdItems.filter(function (r) { return r.status === st.id; }).length;
+      return n ? n + " " + st.label.toLowerCase() : "";
+    }).filter(Boolean)).join(" · "));
 
-      /* the category in its colour (#171): a dot, then the label, in the
-         light theme's --tag-* — the same swatch the breakdown panel draws.
-         "Music/SFX", the longest label, ends ~54pt in: the column is 62. */
-      var catHex = tagPrintColor(r.catId);
-      if (catHex) {
-        ops.push("q " + pdfRgb(catHex) + " rg " + pdfCirclePath(M + 2.6, y - SIZE + 3.3, 2.6) + " f");
-        text(r.categoryLabel, M + 8, y - SIZE, "F1", SIZE);
-        ops.push("Q");
-      } else {
-        text(r.categoryLabel, M, y - SIZE, "F1", SIZE);
-      }
-      drawLines(nameLines, M + CATW, y - SIZE);
-      drawLines(statLines, STATX, y - SIZE);
-      drawLines(ownLines, OWNX, y - SIZE);
-      text(String(r.mentions), NUMX, y - SIZE, "F1", SIZE);
-      drawLines(sceneLines, SCENEX, y - SIZE);
-      if (noteLines.length) {
-        drawLines(noteLines, M + CATW, y - SIZE - bodyLines * LEAD, SIZE - 1);
-      }
-      y -= need;
-      ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 6).toFixed(2) + " m " +
-        (PW - M) + " " + (y + 6).toFixed(2) + " l S Q");
+    var IW = 186, SX = M + 194, CX = SX + 86, OX = CX + 118;
+    var CW = OX - CX - 8, OW = PW - M - OX, BL = 12.5;
+    var bdHeads = function () {
+      var b = y - 8;
+      text("Item", M, b, "F2", 8, C.dim);
+      text("Status", SX, b, "F2", 8, C.dim);
+      text("Scenes", CX, b, "F2", 8, C.dim);
+      text("Assigned to", OX, b, "F2", 8, C.dim);
+      ops.push(pdfRuleOp(M, y - 13, PW - M, C.borderStrong, 0.6));
+      y -= 13;
+    };
+    var bdItem = function (r) {
+      var it = {
+        r: r,
+        name: pdfWrapRuns([{ text: r.name }], IW - 8, SIZE),
+        scenes: tint(pdfWrapRuns([{ text: r.scenes.join(", ") }], CW, 8.5), C.dim),
+        owner: tint(pdfWrapRuns([{ text: r.owner || "—" }], OW, 8.5), r.owner ? C.dim : C.faint),
+        more: r.notes ? tint(pdfWrapRuns(linesToRuns(r.notes), TW, 8.5), C.dim) : []
+      };
+      r.broll.forEach(function (shot) {
+        it.more = it.more.concat(tint(pdfWrapRuns([{ text: "B-roll", broll: true }, { text: " " + shot }], TW, 8.5), C.dim));
+      });
+      it.main = Math.max(it.name.length, it.scenes.length, it.owner.length, 1);
+      it.h = 16 + (it.main + it.more.length - 1) * BL + 9;
+      return it;
+    };
+    var bdGroupHead = function (gr) {
+      var b = y - 18;
+      fill(gr.color || C.faint, pdfCirclePath(M + 3.2, b + 3.3, 3.2));
+      text(gr.label, M + 11, b, "F2", 10);
+      text(String(gr.items.length), M + 11 + pdfTextWidth(gr.label, true, 10) + 6, b, "F1", 8.5, C.faint);
+      y = b - 6;
+    };
+    bdHeads();
+    groups.forEach(function (gr) {
+      var list = gr.items.map(bdItem);
+      /* a group's head never ends a page on its own */
+      if (y - 24 - list[0].h < M) { sectionGoesOn("Production breakdown"); bdHeads(); }
+      bdGroupHead(gr);
+      list.forEach(function (it) {
+        if (y - it.h < M) { sectionGoesOn("Production breakdown"); bdHeads(); bdGroupHead(gr); }
+        var r = it.r, b = y - 16;
+        drawLines(it.name, M, b, SIZE, BL);
+        var sp = TAG_STATUS_PRINT[r.status] || TAG_STATUS_PRINT.needed;
+        ops.push(pdfLampOp(sp.lamp, SX + 3, b + 2.6, 3, sp.color));
+        text(r.statusLabel, SX + 9, b, "F1", 8.5, C.dim);
+        drawLines(it.scenes, CX, b, 8.5, BL);
+        drawLines(it.owner, OX, b, 8.5, BL);
+        drawLines(it.more, M, b - it.main * BL, 8.5, BL);
+        y -= it.h;
+        ops.push(pdfRuleOp(M, y, PW - M, C.border, 0.5));
+      });
     });
   }
 
-  /* ---- comments ---- */
-  var comments = commentEntries({ pieces: true });
-  if (comments.length) {
-    newPage();
-    text("Comments", M, y - 18, "F2", 16);
-    y -= 44;
-    var FULLW = PW - M * 2;
+  /* ---- the b-roll shot list ----
 
-    /* split into discrete "\n" runs so pdfWrapRuns treats them as real
-       line breaks, same convention toDocxRuns() uses for a line break */
-    function linesToRuns(str) {
-      return String(str || "").split(/\r\n|\r|\n/).reduce(function (runs, line, i) {
-        if (i > 0) runs.push({ text: "\n" });
-        if (line) runs.push({ text: line });
-        return runs;
-      }, []);
-    }
+     By scene, as the B-roll panel lists it (exportBrollScenes): "Scene
+     04" and where it starts, how many of its shots are in the can; each
+     shot a box, ticked in the b-roll teal once it is shot, its words, and
+     under them where, who and which props — "Flagged" in red at the right
+     of one that has to be shot again. */
+  var shotGroups = exportBrollScenes();
+  if (shotGroups.length) {
+    section("B-roll shot list", brollSummaryText(shotGroups));
+    var SL = 12;
+    var shotItem = function (r) {
+      var flagW = r.flagged ? pdfTextWidth("Flagged", true, 8) + 12 : 0;
+      var bits = [];
+      if (r.location) bits.push("Location: " + r.location);
+      if (r.owner) bits.push("Assigned to: " + r.owner);
+      if (r.props.length) bits.push("Props: " + r.propsWithStatus.join(", "));
+      var more = bits.length ? pdfWrapRuns([{ text: bits.join(" · ") }], TW - 16, 8.5) : [];
+      if (r.note) {
+        more = more.concat(pdfWrapRuns(linesToRuns(r.note).map(function (run) { return Object.assign(run, { i: true }); }), TW - 16, 8.5));
+      }
+      var name = pdfWrapRuns([{ text: r.name }], TW - 16 - flagW, SIZE);
+      return { r: r, name: name, more: tint(more, C.dim), h: 15 + (name.length + more.length - 1) * SL + 9 };
+    };
+    var shotHead = function (gr) {
+      var b = y - 16;
+      text(gr.label, M, b, "F2", 9.5);
+      if (gr.start) text(gr.start, M + pdfTextWidth(gr.label, true, 9.5) + 6, b, "F1", 8.5, C.faint);
+      var count = gr.done + "/" + gr.total + " shot";
+      text(count, PW - M - pdfTextWidth(count, false, 8.5), b, "F1", 8.5, C.faint);
+      ops.push(pdfRuleOp(M, b - 6, PW - M, C.borderStrong, 0.6));
+      y = b - 6;
+    };
+    shotGroups.forEach(function (gr) {
+      var list = gr.items.map(shotItem);
+      if (y - 22 - list[0].h < M) sectionGoesOn("B-roll shot list");
+      shotHead(gr);
+      list.forEach(function (it, k) {
+        if (y - it.h < M) { sectionGoesOn("B-roll shot list"); shotHead(gr); }
+        var r = it.r, b = y - 15;
+        ops.push(pdfCheckboxOp(M, b - 1.2, 8.5, r.shot, C.faint, C.broll));
+        drawLines(it.name, M + 16, b, SIZE, SL);
+        if (r.flagged) text("Flagged", PW - M - pdfTextWidth("Flagged", true, 8), b, "F2", 8, "C4302A");
+        drawLines(it.more, M + 16, b - it.name.length * SL, 8.5, SL);
+        y -= it.h;
+        if (k < list.length - 1) ops.push(pdfRuleOp(M + 16, y, PW - M, C.border, 0.5));
+      });
+      y -= 12;
+    });
+  }
+
+  /* ---- comments ----
+
+     Numbered as the script's markers number them (exportComments): an
+     open thread's number in a filled amber badge, then where it is —
+     "Scene 03 · Audio" — who and when; a resolved one no number, and who
+     resolved it. The words it is about, its body, its replies indented
+     under it. */
+  var comments = exportComments({ pieces: true });
+  if (comments.length) {
+    var openN = comments.filter(function (c) { return !c.resolved; }).length;
+    section("Comments", [openN + " open"].concat(comments.length > openN ? [(comments.length - openN) + " resolved"] : []).join(" · "));
+    var FULLW = TW;
+    /* a thread's own lines sit CI in, its badge in front of them; a
+       reply's RI */
+    var CI = 20, RI = CI + 14;
+    var badge = function (n, x, b) {
+      var s = String(n), tw = pdfTextWidth(s, true, 7), w = Math.max(13, tw + 7);
+      fill(C.audio, pdfBubblePath(x, b - 2.8, w, 11, 2.6, 0.8));
+      text(s, x + (w - tw) / 2, b, "F2", 7, "FFFFFF");
+    };
 
     /* Pictures in comments (#82 P6 stores them in the body as <img
        data-blob>). Each is a block of its own in the thread, in the order
@@ -972,19 +1384,21 @@ export function buildPdf(jpegs, commentJpegs) {
     }
 
     comments.forEach(function (c) {
-      var headerLines = pdfWrapRuns([{ text: c.location +
-        (c.resolved ? " (resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")" : "") +
-        (c.assignee ? " [assigned to " + c.assignee + "]" : "") +
-        "  —  " + c.author + (c.when ? ", " + c.when : ""), b: true }], FULLW, SIZE);
-      var quoteLines = c.quoted ? pdfWrapRuns(linesToRuns("“" + c.quoted + "”"), FULLW - 12, SIZE) : [];
-      var bodyItems = commentBodyItems(c, M + 12);
+      /* where, in bold; who, when, whom it is assigned to and who
+         resolved it, faint */
+      var meta = [c.author + (c.when ? " · " + c.when : "")];
+      if (c.assignee) meta.push("Assigned to " + c.assignee);
+      if (c.resolved) meta.push("Resolved" + (c.resolvedBy ? " by " + c.resolvedBy : ""));
+      var headerLines = pdfWrapRuns([{ text: c.where, b: true }, { text: "   " + meta.join(" · ") }], FULLW - CI, SIZE);
+      headerLines.forEach(function (l) { l.forEach(function (s) { if (!s.b) s.color = C.faint; }); });
+      var quoteLines = c.quoted ? tint(pdfWrapRuns(linesToRuns("“" + c.quoted + "”").map(function (run) {
+        return Object.assign(run, { i: true });
+      }), FULLW - CI, SIZE), C.dim) : [];
+      var bodyItems = commentBodyItems(c, M + CI);
       var replyBlocks = c.replies.map(function (rp) {
-        return {
-          /* "↳" isn't in this PDF's WinAnsi glyph set (only the chars in
-             WINANSI_MAP + 0x20-0xFF render) — plain ">" instead of "?" */
-          headerLines: pdfWrapRuns([{ text: "> " + rp.author + (rp.when ? ", " + rp.when : "") + ":", b: true }], FULLW - 24, SIZE),
-          bodyItems: commentBodyItems(rp, M + 24)
-        };
+        var hl = pdfWrapRuns([{ text: rp.author, b: true }].concat(rp.when ? [{ text: "   " + rp.when }] : []), FULLW - RI, SIZE);
+        hl.forEach(function (l) { l.forEach(function (s) { if (!s.b) s.color = C.faint; }); });
+        return { headerLines: hl, bodyItems: commentBodyItems(rp, M + RI) };
       });
 
       /* Flattened into one ordered (line, indent) list and drawn one line
@@ -1004,11 +1418,13 @@ export function buildPdf(jpegs, commentJpegs) {
           threadLines.push(it.pic ? it : { line: it.line || it, x: it.line ? it.x : x, block: block });
         });
       }
-      addBlock(headerLines, M);
-      addBlock(quoteLines, M + 12);
+      addBlock(headerLines, M + CI);
+      /* an open thread's number, in front of its header's first line */
+      if (c.number) threadLines[0].badge = c.number;
+      addBlock(quoteLines, M + CI);
       addBlock(bodyItems);
       replyBlocks.forEach(function (rb) {
-        addBlock(rb.headerLines, M + 24);
+        addBlock(rb.headerLines, M + RI);
         addBlock(rb.bodyItems);
       });
 
@@ -1017,9 +1433,7 @@ export function buildPdf(jpegs, commentJpegs) {
          it started a new page. */
       function ensureCommentRoom(need) {
         if (y - (need || LEAD) < M) {
-          newPage(); y -= 6;
-          text("Comments (continued)", M, y - 12, "F2", 12);
-          y -= 34;
+          sectionGoesOn("Comments");
           return true;
         }
         return false;
@@ -1045,19 +1459,32 @@ export function buildPdf(jpegs, commentJpegs) {
         }
         var follows = b.block === prevBlock;
         if (ensureCommentRoom(follows ? LEAD - SIZE : LEAD)) follows = false;
-        y = drawLines([b.line], b.x, follows ? y : y - SIZE);
+        var base = follows ? y : y - SIZE;
+        if (b.badge) badge(b.badge, M, base);
+        y = drawLines([b.line], b.x, base);
         prevBlock = b.block;
       });
       y -= 6;
-      ops.push("q 0.93 0.92 0.90 RG 0.5 w " + M + " " + (y + 4).toFixed(2) + " m " +
-        (PW - M) + " " + (y + 4).toFixed(2) + " l S Q");
+      ops.push(pdfRuleOp(M, y + 4, PW - M, C.border, 0.5));
       y -= 10;
     });
   }
 
-  pages.push({ ops: ops, images: pageImages });
+  pages.push({ ops: ops, images: pageImages, links: pageLinks });
 
-  return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: S.state.title || "Untitled Script" } });
+  /* The running footer, now the pages are counted. Marked as a pagination
+     artifact, which is what it is: a reader that extracts or reads the
+     text aloud leaves it out. */
+  pages.forEach(function (pg, i) {
+    pg.ops.push("/Artifact << /Type /Pagination /Subtype /Footer >> BDC");
+    pdfFooterOps(title, i + 1, pages.length, PW, M, FOOT_Y, C.faint, C.border).forEach(function (op) { pg.ops.push(op); });
+    pg.ops.push("EMC");
+  });
+
+  /* bookmarks only when there is somewhere to go: a script with no
+     appendix is one part, and a sidebar with its one name in it is noise */
+  return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: title },
+    outline: outline.length > 1 ? outline : [] });
 }
 
 /* ================= packing list (gear, props — any category) =================
