@@ -68,7 +68,7 @@ export var EXPORT_FORMATS = [
   { id: "breakdown", group: "part", name: "Breakdown", ext: ".csv", icon: "i-tag",
     purpose: "Every tagged item, its status and owner", action: "export-breakdown" },
   { id: "packing", group: "part", name: "Packing list", ext: ".pdf", icon: "i-box",
-    purpose: "A checklist to tick off, out to the shoot and back",
+    purpose: "A checklist for the shoot: out, back, and signed off",
     option: "List", choices: [
       { value: "gear", label: "Gear", action: "export-packing-gear" },
       { value: "prop", label: "Props", action: "export-packing-prop" }
@@ -465,8 +465,10 @@ export function exportSummary(action) {
     }
     if (action === "export-html") bits.push("editable, with Splitpage around it");
   } else if (f.format.id === "narration") {
-    bits.push(plural(narrationRows().length, "scene") + " of narration" +
-      (action === "export-narration-docx" ? ", numbered in the margin" : ""));
+    bits.push(plural(narrationRows().length, "scene") + " of narration");
+    /* the .docx sets each scene's number in the margin; the .txt stays
+       plain paragraphs, as the paragraph import reads it back */
+    if (action === "export-narration-docx") bits.push("scene numbers in the margin");
     bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
       : "no visuals, stage directions, breakdown or comments");
   } else if (f.format.id === "breakdown") {
@@ -474,9 +476,11 @@ export function exportSummary(action) {
     bits.push("category, status, owner, scenes and where each first appears");
   } else if (f.format.id === "packing") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
-    var n = productionEntries().filter(function (e) { return e.cat.id === catId; }).length;
-    bits.push(plural(n, "item") + " to pack");
-    if (n) bits.push("Out and Back boxes, status, owner, scenes and a sign-off");
+    var items = breakdownRows().filter(function (b) { return b.catId === catId; });
+    bits.push(plural(items.length, "item") + " to pack");
+    /* what still has to be found before anything can go in the box */
+    var missing = items.filter(function (b) { return b.status === "needed" || b.status === "sourcing"; }).length;
+    if (missing) bits.push(missing + " not in hand yet");
   }
   return bits.join(" · ");
 }

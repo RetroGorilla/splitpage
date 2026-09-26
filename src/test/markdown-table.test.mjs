@@ -252,6 +252,9 @@ test("the stacked export of the long demo: meta line, scene headings, status and
   assert.ok(md.includes("### Scene 02 · 00:10\n\n**Shot** · Read 0:06, set by hand\n"));
   assert.equal((md.match(/, set by hand$/gm) || []).length, 2);
   assert.ok(!/\bRow\b/.test(md), "the app says Scene");
+  /* a cell's line breaks as hard breaks, so a renderer keeps each line its own */
+  assert.ok(md.includes("*Visual —* Close-up: the back door open, crumbling foam in the channels.  \n" +
+    "Lower third: “Problem 1 — light seals”  \nB-roll: fingertip pushing on the sticky old foam\n\nFirst problem."));
 });
 
 test("the stacked export numbers each open thread after its words, and a resolved one not at all", () => {

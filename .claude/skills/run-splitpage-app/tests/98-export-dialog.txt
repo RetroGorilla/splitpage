@@ -131,7 +131,11 @@ jsclick .export-card[data-format="narration"] input
 jsclick .export-seg input[value="docx"]
 sleep 150
 expect document.querySelector('#export-preview .pv-margin').textContent === '01'
-expect document.getElementById('export-summary').textContent.indexOf('numbered in the margin') !== -1
+expect document.getElementById('export-summary').textContent.indexOf('2 scenes of narration · scene numbers in the margin · ') === 0
+jsclick .export-seg input[value="txt"]
+sleep 150
+expect document.getElementById('export-summary').textContent.indexOf('margin') === -1 && !document.querySelector('#export-preview .pv-margin')
+jsclick .export-seg input[value="docx"]
 jsclick .export-card[data-format="breakdown"] input
 sleep 150
 expect document.querySelector('#export-preview .pv-gh').textContent.indexOf('First at') !== -1
@@ -141,7 +145,7 @@ jsclick .export-seg input[value="gear"]
 sleep 150
 expect document.querySelector('#export-preview .pv-pack-head').textContent == Gear
 expect document.querySelectorAll('#export-preview .pv-pack-row .pv-box').length === 2 && !!document.querySelector('#export-preview .pv-sign')
-expect document.getElementById('export-summary').textContent == 1 item to pack · Out and Back boxes, status, owner, scenes and a sign-off
+expect document.getElementById('export-summary').textContent == 1 item to pack · 1 not in hand yet
 # the document's text goes in escaped, the title included
 eval (function(){ window.__title0 = window.__splitpageFormats.state().title; window.__splitpageFormats.state().title = '<img src=x class=pv-evil>'; return true; })()
 jsclick .export-card[data-format="pdf"] input
