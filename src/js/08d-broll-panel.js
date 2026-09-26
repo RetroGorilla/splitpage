@@ -1653,12 +1653,19 @@ export function buildBrollCsv() {
 }
 
 /* What the printed sheet shows: the page as it is — its filter and its
-   grouping — so what is printed is what was being looked at. */
+   grouping — so what is printed is what was being looked at. Each group
+   says what kind it is (brollGroups' kind: "location", "scene", "added",
+   "person") and a scene group where its scene starts; each shot where its
+   own scene starts ("" for one with no scene), as the group heads on
+   screen read "Scene 04 · 01:03"; `none` is the group of shots with no
+   location or nobody assigned, which the page heads with no pin or
+   avatar. */
 export function brollShotListForPrint() {
   var entries = brollEntries(true);
   var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
   var filter = FILTERS.filter(function (f) { return f.id === view.filter; })[0];
   var group = PAGE_GROUPS.filter(function (g) { return g.id === pageView.group; })[0];
+  var starts = sceneStarts();
   return {
     title: S.state.title || "Untitled Script",
     summary: pageSummaryText(entries),
@@ -1666,9 +1673,16 @@ export function brollShotListForPrint() {
     groups: brollGroups(shown, pageView.group).map(function (g) {
       return {
         label: g.label,
+        kind: g.kind,
+        none: !!g.none,
+        start: g.row && starts[g.row.id] !== undefined ? formatTimecode(starts[g.row.id]) : "",
         done: g.items.filter(function (e) { return e.status === "shot"; }).length,
         total: g.items.length,
-        items: g.items.map(shotRecordForFile)
+        items: g.items.map(function (e) {
+          var rec = shotRecordForFile(e);
+          rec.start = startOf(e, starts);
+          return rec;
+        })
       };
     })
   };
