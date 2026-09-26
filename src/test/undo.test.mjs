@@ -164,6 +164,32 @@ test("caretAfterStep: a common character right at the edit doesn't grow the matc
   assert.equal(caretAfterStep(typed), "Alpha mid".length, "redo: end of the retyped word");
 });
 
+test("caretAfterStep: a change of marks alone lands at the end of it, not at 0", () => {
+  // The two texts agree throughout, so a match on the text alone ran the
+  // whole cell and put the caret before the first character.
+  const bold = { op: "rowField", rowId: "r1", key: "audioText",
+    before: "one two three four five", after: "one two three <strong>four</strong> five" };
+  assert.equal(caretAfterStep(bold), "one two three four".length, "redo: after the bolded word");
+  assert.equal(caretAfterStep(invertSteps([bold])[0]), "one two three four".length, "undo: the same");
+  // The typed "SFX:" making a line a cue, and the Direction button
+  const cue = { op: "rowField", rowId: "r1", key: "audioText",
+    before: "Line one<br>SFX:", after: "Line one<br><span class=\"audio-cue\">SFX:</span>" };
+  assert.equal(caretAfterStep(invertSteps([cue])[0]), "Line oneSFX:".length);
+  const dir = { op: "rowField", rowId: "r1", key: "audioText",
+    before: "Hi there. Go", after: "Hi <span class=\"stage-dir\">there.</span> Go" };
+  assert.equal(caretAfterStep(invertSteps([dir])[0]), "Hi there.".length);
+  assert.equal(caretAfterStep(dir), "Hi there.".length);
+});
+
+test("caretAfterStep: Tab closing a plain-language tag, undone and redone (#210)", () => {
+  // The keyword goes and the words become a tag: the text alone matched
+  // on through the tag's words and stopped at the keyword.
+  const tagged = { op: "rowField", rowId: "r1", key: "visualText", before: "Wide VFX: lens flare",
+    after: "Wide <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"lens flare\" contenteditable=\"false\">lens flare</span>" };
+  assert.equal(caretAfterStep(invertSteps([tagged])[0]), "Wide VFX: lens flare".length, "undo: where the caret was when Tab closed it");
+  assert.equal(caretAfterStep(tagged), "Wide lens flare".length, "redo: after the tag");
+});
+
 test("caretAfterStep: never lands between the two halves of an emoji's surrogate pair", () => {
   // "a😀b" -> undoing an insertion right after the emoji must not offer an
   // offset that sits inside it.
