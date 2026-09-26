@@ -11,9 +11,18 @@
  * through an import in a real browser, where a wrong answer shows up as
  * mangled rows several steps later.
  */
+import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseMarkdownTable } from "../js/11-import.js";
+import { S } from "../js/_state.js";
+import { __init as initStatus } from "../js/01-scene-status.js";
+import { migrateRows } from "../js/02-state.js";
+import { __init as initTags } from "../js/07-production-tags.js";
+import { detectTwoColumnFormat, parseImportRows, parseMarkdownTable } from "../js/11-import.js";
+import { toMarkdownTableDoc } from "../js/14-export.js";
+
+initTags();
+initStatus();
 
 const cells = (rows) => rows.map((r) => [r.visualText, r.audioText]);
 
@@ -139,4 +148,35 @@ test("a short row does not read a neighbour's column", () => {
   const out = parseMarkdownTable("| Visual | Audio | Status |\n| --- | --- | --- |\n| a |");
   assert.deepEqual(cells(out), [["a", ""]]);
   assert.equal(out[0].statusText, "");
+});
+
+/* A "Two columns" Markdown export reopened (Import, no data block): the
+   breakdown and comments after the script are pipe tables and lines too,
+   and used to come back as extra scenes, "Item | Status" among them. */
+test("a Two columns export reads back as its scenes only, not its breakdown or comments", () => {
+  const tag = (cat, name) =>
+    `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
+  S.state = migrateRows({
+    schema: 2, title: "Two col",
+    rows: [
+      { id: "r1", visualText: "Wide " + tag("vfx", "explosion"), audioText: "Hello there.", status: "todo" },
+      { id: "r2", visualText: "Close on the " + tag("prop", "mug"), audioText: "Coffee time.", status: "todo" }
+    ],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", author: "Ann", body: "a | b | c",
+      createdAt: "2026-09-01T10:00:00Z", replies: [] }]
+  });
+  const md = toMarkdownTableDoc();
+  assert.match(md, /## Production breakdown/);
+  assert.match(md, /## Comments/);
+  const expected = [["Wide explosion", "Hello there."], ["Close on the mug", "Coffee time."]];
+  assert.deepEqual(cells(parseMarkdownTable(md)), expected);
+  assert.equal(detectTwoColumnFormat(md), "table");
+  assert.deepEqual(cells(parseImportRows(md, "twocolumn")), expected);
+});
+
+test("someone else's table keeps what follows its own Comments heading", () => {
+  /* Only our own scene header ("# | Visual | Audio | Status") ends the
+     table at those headings, as only our table style does in a .docx. */
+  const md = "| Visual | Audio |\n| --- | --- |\n| a | b |\n\n## Comments\n\n| c | d |";
+  assert.deepEqual(cells(parseMarkdownTable(md)), [["a", "b"], ["c", "d"]]);
 });

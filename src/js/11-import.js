@@ -49,7 +49,7 @@ var VISUAL_HEADER_RE = /^(visual|video|scene|shot|b-?roll|image|screen)s?$/i;
 var AUDIO_HEADER_RE = /^(audio|vo|voiceover|voice-over|narration|dialogue|script)s?$/i;
 
 export function detectTwoColumnFormat(text) {
-  var norm = String(text || "").replace(/\r\n/g, "\n");
+  var norm = markdownExportScript(String(text || "")).replace(/\r\n/g, "\n");
   var lines = norm.split("\n");
   var nonBlank = lines.filter(function (l) { return l.trim() !== ""; });
   if (nonBlank.length < 2) return null;
@@ -113,6 +113,30 @@ function splitTableRowCells(line) {
   return cells;
 }
 
+/* A "Two columns" export (toMarkdownTableDoc, 14-export.js) ends at its
+   script: the breakdown and comments that follow sit under headings of
+   their own, are pipe tables and prose, and are not scenes (the comments'
+   lines even outvote the table's and stop the text reading as a table at
+   all). Cut there, but only after our own scene header, the way the .docx
+   reimport waits for its table style (exportTailStart, 15-docx.js), so a
+   table someone wrote with a "## Comments" heading of their own keeps what
+   follows it. */
+var MD_EXPORT_TAIL_RE = /^\s*##\s+(Production breakdown|Comments)\s*$/;
+
+function markdownExportScript(text) {
+  var lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  var sawHeader = false;
+  for (var i = 0; i < lines.length; i++) {
+    if (!sawHeader) {
+      sawHeader = lines[i].indexOf("|") !== -1 &&
+        splitTableRowCells(lines[i].trim()).join("|").toLowerCase() === "#|visual|audio|status";
+    } else if (MD_EXPORT_TAIL_RE.test(lines[i])) {
+      return lines.slice(0, i).join("\n");
+    }
+  }
+  return text;
+}
+
 /* opts.keepEmpty keeps a data row whose Visual and Audio cells are both
    empty. Off by default, because a foreign table's blank line carries no
    information; on when reading one of our OWN Markdown projects
@@ -121,7 +145,7 @@ function splitTableRowCells(line) {
    the file's own record. */
 export function parseMarkdownTable(text, opts) {
   opts = opts || {};
-  var lines = text.replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+  var lines = markdownExportScript(text).replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
   var rows = [];
   lines.forEach(function (line) {
     if (line.indexOf("|") === -1) return;
@@ -214,6 +238,7 @@ function parseAlternatingLines(text) {
 }
 
 function parseTwoColumnText(text) {
+  text = markdownExportScript(text);
   var detected = detectTwoColumnFormat(text);
   var rows;
   if (detected === "table") rows = parseMarkdownTable(text);
