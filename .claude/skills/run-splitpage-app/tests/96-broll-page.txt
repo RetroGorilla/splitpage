@@ -117,7 +117,14 @@ expect window.__blobs[1].type === 'application/pdf'
 expect window.__pdf.indexOf('%PDF') === 0
 expect window.__pdf.indexOf('B-roll shot list') !== -1
 expect window.__pdf.indexOf('(Ada Brenner) Tj') !== -1 && window.__pdf.indexOf('(Jordan Sato) Tj') !== -1
-expect window.__pdf.indexOf('hands mending a net') !== -1 && window.__pdf.indexOf('FLAGGED') !== -1
+expect window.__pdf.indexOf('hands mending a net') !== -1
+# the sheet's head, a shot's scene with where it starts, "Flagged" in
+# sentence case (never "FLAGGED") before its note, the footer
+expect window.__pdf.indexOf('(B-roll shot list) Tj') !== -1 && window.__pdf.indexOf('(Harbour town) Tj') !== -1
+expect window.__pdf.indexOf('(Scene 01 · 00:00') !== -1
+expect window.__pdf.indexOf('(Flagged) Tj') !== -1 && window.__pdf.indexOf('( — Too late last time, the light was gone.) Tj') !== -1
+expect window.__pdf.indexOf('FLAGGED') === -1
+expect window.__pdf.indexOf('(Page 1 of 1) Tj') !== -1
 
 # ---- 7. dark mode takes the dark tokens --------------------------------
 eval document.documentElement.setAttribute('data-theme', 'dark')
