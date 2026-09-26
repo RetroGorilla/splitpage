@@ -201,6 +201,8 @@ test("assemblePdf: a title the viewer shows, links, bookmarks, every stream stil
   assert.match(t, /\/DisplayDocTitle true/);
   assert.match(t, /\/Title <FEFF00430061006600E9/);
   assert.match(t, /\/Creator \(Splitpage\)/);
+  /* the day only: the same script exported twice in a day is the same bytes */
+  assert.match(t, /\/CreationDate \(D:\d{8}\)/);
   assert.match(t, /\/Subtype \/Link \/Rect \[54\.00 690\.00 94\.00 702\.00\]/);
   assert.match(t, /\/URI \(https:\/\/example\.com\/a\?b=\\\(c\\\)\)/);
   assert.match(t, /\/Type \/Outlines/);
