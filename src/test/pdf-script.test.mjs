@@ -232,12 +232,18 @@ test("the appendix: the breakdown by category, the b-roll by scene, a summary li
     assert.ok(bdWords.some((o) => o.str === label && o.font === "F2" && o.size === 10), label);
     assert.ok(bd.some((p) => p.ops.some((op) => op.startsWith("q " + rgb(TAG_PRINT_COLORS[id]) + " rg ") && / c h f Q$/.test(op))), id + "'s dot");
   }
-  /* the b-roll: each scene's head, a box per shot, ticked in teal when shot */
+  /* the b-roll: the shot list's own table (17-pdf.js drawShotTable), on a
+     landscape page of its own — each scene's number in the Scene column,
+     a box per shot, ticked in teal when shot, the flag in red */
   const bat = pageWith(doc, "B-roll shot list", 16);
+  assert.equal((doc.t.match(/\/MediaBox \[0 0 792 612\]/g) || []).length, 1, "one landscape page, the shot list's");
   const groups = exportBrollScenes();
   const brollWords = doc.pages.slice(bat, pageWith(doc, "Comments", 16)).flatMap((p) => p.texts);
-  groups.forEach((g) => assert.ok(brollWords.some((o) => o.str === g.label && o.font === "F2"), g.label));
-  assert.ok(brollWords.some((o) => o.str === "3 of 9 shot \xB7 1 flagged"));
+  groups.forEach((g) => assert.ok(brollWords.some((o) => o.str === g.scene && o.font === "F2"), g.label));
+  assert.ok(brollWords.some((o) => o.str === "3 of 9 shot \xB7 1 flagged \xB7 by scene"));
+  for (const head of ["Done", "Scene", "B-roll shot", "Location", "Props", "Assigned", "Flagged", "Notes"]) {
+    assert.ok(brollWords.some((o) => o.str === head && o.size === 7.5), head);
+  }
   assert.equal(brollWords.filter((o) => o.str === "Flagged" && o.color === rgb("C4302A")).length, 1);
   const boxes = doc.pages.slice(bat).flatMap((p) => p.ops).filter((op) => op.startsWith("q " + rgb(PRINT_COLORS.faint) + " RG 0.9 w "));
   assert.equal(boxes.length, 9);

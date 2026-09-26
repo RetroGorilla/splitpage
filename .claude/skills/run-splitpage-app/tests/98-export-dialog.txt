@@ -1,6 +1,6 @@
 # File ▸ Export… (issue #146): one dialog in place of thirteen export menu
 # items. Formats as radio cards in two groups (Whole script: PDF, Word,
-# Markdown, Spreadsheet, Standalone page; Part of it: Narration only,
+# Markdown, Spreadsheet, SplitShare; Part of it: Narration only,
 # Breakdown, Packing list), each with a name, a purpose and its extension;
 # the right side a page sketch, a summary line, the file name and the
 # options the exporter already has (Markdown's shape, narration's .docx or
@@ -28,7 +28,7 @@ sleep 200
 # one item where there were thirteen; the formats' own buttons are still
 # there, hidden, for the dialog, the command menu and the desktop menu
 expect Array.prototype.filter.call(document.querySelectorAll('#file-menu [data-menu-group="export"] .mi'), function(b){return b.getClientRects().length > 0;}).length === 1
-expect document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action^="export-"]').length === 11
+expect document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action^="export-"]').length === 13
 expect document.querySelector('#file-menu .menu-hidden-actions').getBoundingClientRect().height == 0
 expect document.getElementById('menu-export-again').hidden
 click #menu-export
@@ -45,7 +45,7 @@ expect document.getElementById('export-go').textContent == Export PDF
 
 # --- the cards: two groups, a name, a purpose and an extension each ---------
 expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-group-head'), function(h){return h.textContent;}).join('|') === 'Whole script|Part of it'
-expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.getAttribute('data-format');}).join(',') === 'pdf,docx,md,csv,html,narration,breakdown,packing'
+expect Array.prototype.map.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.getAttribute('data-format');}).join(',') === 'pdf,docx,md,csv,html,narration,breakdown,packing,broll'
 expect Array.prototype.every.call(document.querySelectorAll('#export-formats .export-card'), function(c){return c.querySelector('.export-card-name').textContent && c.querySelector('.export-card-purpose').textContent && /^\./.test(c.querySelector('.export-card-ext').textContent) && c.querySelector('input[type="radio"]');})
 expect getComputedStyle(document.querySelector('.export-card-ext')).fontFamily.indexOf('Mono') !== -1
 # the right-hand side for PDF: a sketch with the real title, a summary, the name
@@ -67,6 +67,18 @@ expect !document.getElementById('export-why').hidden
 expect document.getElementById('export-why').textContent == Nothing tagged Gear yet — nothing to pack
 expect document.getElementById('export-go').disabled === true
 expect X.reason('export-packing-gear') !== ''
+# the b-roll shot list, a PDF (landscape, so its sketch is) or a spreadsheet,
+# with no b-roll in the script yet
+jsclick .export-card[data-format="broll"]
+sleep 200
+expect document.querySelector('input[name="export-format"]:checked').value == broll
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF, landscape|Spreadsheet (.csv)'
+expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with B-roll:
+expect document.getElementById('export-go').disabled === true
+expect document.getElementById('export-preview').classList.contains('is-landscape')
+jsclick .export-card[data-format="packing"]
+sleep 150
+expect !document.getElementById('export-preview').classList.contains('is-landscape')
 
 # --- Esc closes it and hands the focus back ---------------------------------
 key Escape
@@ -126,7 +138,9 @@ expect document.querySelector('#export-preview .pv-total').textContent.indexOf('
 expect document.getElementById('export-summary').textContent == 2 scenes, with start and read times, tags and b-roll · comments below · pictures not included
 jsclick .export-card[data-format="html"] input
 sleep 150
-expect document.querySelector('#export-preview .pv-tab').textContent == Untitled Script — Splitpage
+expect document.querySelector('#export-preview .pv-tab').textContent == Untitled Script — SplitShare
+expect document.querySelector('.export-card[data-format="html"] .export-card-name').textContent == SplitShare
+expect document.getElementById('export-summary').textContent.indexOf('the whole app built in') !== -1
 jsclick .export-card[data-format="narration"] input
 jsclick .export-seg input[value="docx"]
 sleep 150
@@ -157,23 +171,36 @@ sleep 300
 expect document.getElementById('export-modal').hidden
 expect window.__files.length === 0
 
+# --- a b-roll line, for the shot list's two files ----------------------------
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return true;})()
+press B-roll: steam off the kettle
+sleep 600
+eval document.activeElement.blur()
+expect document.querySelectorAll('#rows .broll-key').length === 1
+expect X.reason('export-broll-pdf') === '' && X.reason('export-broll-csv') === ''
+
 # --- every card makes exactly what the old action made -----------------------
 # For each format: the old button, then the dialog with that card (and
 # option) chosen, then both files compared — same name, same type, same
 # size, and the same bytes — every format, binary ones included. A zip
 # (Word) stamps each entry with the time it was written, two seconds at a
 # time, so those two fields are zeroed on both sides before comparing.
-eval (function(){window.__pairs=[['pdf',null,'export-pdf'],['docx',null,'export-docx'],['md','stacked','export-md'],['md','table','export-md-table'],['csv',null,'export-csv'],['html',null,'export-html'],['narration','docx','export-narration-docx'],['narration','txt','export-narration-txt'],['breakdown',null,'export-breakdown'],['packing','gear','export-packing-gear'],['packing','prop','export-packing-prop']];window.__results=[];window.__runPair=async function(p){var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};var waitFile=async function(n){for(var i=0;i<80&&window.__files.length<n;i++)await sleep(50);return window.__files[n-1];};var n0=window.__files.length;document.querySelector('#file-menu [data-file-action="'+p[2]+'"]').click();var a=await waitFile(n0+1);document.querySelector('#file-menu [data-file-action="export"]').click();await sleep(50);var card=document.querySelector('.export-card[data-format="'+p[0]+'"] input');card.click();if(p[1]){document.querySelector('input[name="export-choice"][value="'+p[1]+'"]').click();}var fileName=document.getElementById('export-filename').textContent;var label=document.getElementById('export-go').textContent;document.getElementById('export-go').click();var b=await waitFile(n0+2);var norm=function(u){var dv=new DataView(u.buffer);for(var k=0;k+16<=u.length;k++){var sig=dv.getUint32(k,true);if(sig===0x04034b50){u[k+10]=u[k+11]=u[k+12]=u[k+13]=0;}else if(sig===0x02014b50){u[k+12]=u[k+13]=u[k+14]=u[k+15]=0;}}return u;};var ba=norm(new Uint8Array(await a.blob.arrayBuffer())),bb=norm(new Uint8Array(await b.blob.arrayBuffer()));var same=ba.length===bb.length;var diff=-1;for(var i=0;same&&i<ba.length;i++){if(ba[i]!==bb[i]){same=false;diff=i;}}var r={action:p[2],oldName:a.name,newName:b.name,shown:fileName,label:label,type:a.blob.type===b.blob.type,size:ba.length,sameBytes:same,diff:diff,closed:document.getElementById('export-modal').hidden,remembered:localStorage.getItem('splitpage-last-export')};window.__results.push(r);return r;};return true;})()
+eval (function(){window.__pairs=[['pdf',null,'export-pdf'],['docx',null,'export-docx'],['md','stacked','export-md'],['md','table','export-md-table'],['csv',null,'export-csv'],['html',null,'export-html'],['narration','docx','export-narration-docx'],['narration','txt','export-narration-txt'],['breakdown',null,'export-breakdown'],['packing','gear','export-packing-gear'],['packing','prop','export-packing-prop'],['broll','pdf','export-broll-pdf'],['broll','csv','export-broll-csv']];window.__results=[];window.__runPair=async function(p){var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};var waitFile=async function(n){for(var i=0;i<80&&window.__files.length<n;i++)await sleep(50);return window.__files[n-1];};var n0=window.__files.length;document.querySelector('#file-menu [data-file-action="'+p[2]+'"]').click();var a=await waitFile(n0+1);document.querySelector('#file-menu [data-file-action="export"]').click();await sleep(50);var card=document.querySelector('.export-card[data-format="'+p[0]+'"] input');card.click();if(p[1]){document.querySelector('input[name="export-choice"][value="'+p[1]+'"]').click();}var fileName=document.getElementById('export-filename').textContent;var label=document.getElementById('export-go').textContent;document.getElementById('export-go').click();var b=await waitFile(n0+2);var norm=function(u){var dv=new DataView(u.buffer);for(var k=0;k+16<=u.length;k++){var sig=dv.getUint32(k,true);if(sig===0x04034b50){u[k+10]=u[k+11]=u[k+12]=u[k+13]=0;}else if(sig===0x02014b50){u[k+12]=u[k+13]=u[k+14]=u[k+15]=0;}}return u;};var ba=norm(new Uint8Array(await a.blob.arrayBuffer())),bb=norm(new Uint8Array(await b.blob.arrayBuffer()));var same=ba.length===bb.length;var diff=-1;for(var i=0;same&&i<ba.length;i++){if(ba[i]!==bb[i]){same=false;diff=i;}}var r={action:p[2],oldName:a.name,newName:b.name,shown:fileName,label:label,type:a.blob.type===b.blob.type,size:ba.length,sameBytes:same,diff:diff,closed:document.getElementById('export-modal').hidden,remembered:localStorage.getItem('splitpage-last-export')};window.__results.push(r);return r;};return true;})()
 eval (async function(){ for (var i = 0; i < window.__pairs.length; i++) await window.__runPair(window.__pairs[i]); return JSON.stringify(window.__results.map(function(r){return r.action+':'+r.sameBytes+(r.diff>=0?'@'+r.diff:'')+':'+r.newName;})); })()
-expect window.__results.length === 11
+expect window.__results.length === 13
 expect window.__results.every(function(r){return r.oldName && r.oldName === r.newName;})
 expect window.__results.every(function(r){return r.shown === r.newName;})
 expect window.__results.every(function(r){return r.type && r.size > 0;})
 expect window.__results.every(function(r){return r.sameBytes;})
 expect window.__results.every(function(r){return r.closed;})
 expect window.__results.every(function(r){return r.remembered === r.action;})
-expect window.__results.map(function(r){return r.label;}).join('|') === 'Export PDF|Export Word|Export Markdown|Export Markdown, two columns|Export Spreadsheet|Export Standalone page|Export Narration (.docx)|Export Narration (.txt)|Export Breakdown|Export Gear packing list|Export Props packing list'
-expect window.__results.map(function(r){return r.newName;}).join('|') === 'untitled-script.pdf|untitled-script.docx|untitled-script.md|untitled-script - two column.md|untitled-script.csv|untitled-script.html|untitled-script - narration.docx|untitled-script - narration.txt|untitled-script - breakdown.csv|untitled-script - Gear packing list.pdf|untitled-script - Prop packing list.pdf'
+expect window.__results.map(function(r){return r.label;}).join('|') === 'Export PDF|Export Word|Export Markdown|Export Markdown, two columns|Export Spreadsheet|Export SplitShare|Export Narration (.docx)|Export Narration (.txt)|Export Breakdown|Export Gear packing list|Export Props packing list|Export B-roll shot list|Export B-roll shot list (.csv)'
+expect window.__results.map(function(r){return r.newName;}).join('|') === 'untitled-script.pdf|untitled-script.docx|untitled-script.md|untitled-script - two column.md|untitled-script.csv|untitled-script - SplitShare.html|untitled-script - narration.docx|untitled-script - narration.txt|untitled-script - breakdown.csv|untitled-script - Gear packing list.pdf|untitled-script - Prop packing list.pdf|untitled-script - b-roll shot list.pdf|untitled-script - b-roll shot list.csv'
+# the shot list's PDF is landscape, every page
+eval (async function(){var r=window.__results.filter(function(x){return x.action==='export-broll-pdf';})[0];var f=window.__files.filter(function(x){return x.name===r.newName;}).pop();var t=new TextDecoder('latin1').decode(new Uint8Array(await f.blob.arrayBuffer()));window.__brollPdf={boxes:(t.match(/\/MediaBox \[0 0 792 612\]/g)||[]).length,portrait:(t.match(/\/MediaBox \[0 0 612 792\]/g)||[]).length,shot:t.indexOf('(steam off the kettle) Tj')!==-1,notes:t.indexOf('(Notes) Tj')!==-1};return window.__brollPdf;})()
+expect window.__brollPdf.boxes >= 1 && window.__brollPdf.portrait === 0
+expect window.__brollPdf.shot && window.__brollPdf.notes
 
 # --- the remembered choice ---------------------------------------------------
 # Kept per device, never in the document; the dialog opens on it with its

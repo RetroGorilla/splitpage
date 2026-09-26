@@ -4407,13 +4407,16 @@ function buildMenu() {
     { label: "Breakdown only (.csv)", click: () => sendMenuCommand("export-breakdown") },
     { label: "PDF (.pdf)", click: () => sendMenuCommand("export-pdf") },
     { type: "separator" },
-    { label: "Standalone HTML (.html)", click: () => sendMenuCommand("export-html") },
+    { label: "SplitShare (.html)", click: () => sendMenuCommand("export-html") },
     { type: "separator" },
     { label: "Narration only (.docx)", click: () => sendMenuCommand("export-narration-docx") },
     { label: "Narration only (.txt)", click: () => sendMenuCommand("export-narration-txt") },
     { type: "separator" },
     { label: "Gear (.pdf)", click: () => sendMenuCommand("export-packing-gear") },
-    { label: "Props (.pdf)", click: () => sendMenuCommand("export-packing-prop") }
+    { label: "Props (.pdf)", click: () => sendMenuCommand("export-packing-prop") },
+    { type: "separator" },
+    { label: "B-roll shot list (.pdf)", click: () => sendMenuCommand("export-broll-pdf") },
+    { label: "B-roll shot list (.csv)", click: () => sendMenuCommand("export-broll-csv") }
   ];
 
   /* Order and grouping mirror the in-app File menu's sections (issue #51):

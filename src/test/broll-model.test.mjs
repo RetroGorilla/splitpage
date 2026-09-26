@@ -636,11 +636,14 @@ test("the printed shot list is a PDF of the shots as shown, flagged ones marked"
   assert.ok(text.startsWith("%PDF-1.4"));
   assert.ok(text.includes("(the red mug on the sill) Tj"));
   assert.ok(text.includes("(drone over the pier) Tj"));
-  /* "Flagged" in sentence case and bold red, the note after it (#169) */
-  assert.ok(text.includes("0.769 0.188 0.165 rg BT /F2 9 Tf") && text.includes("(Flagged) Tj"), "Flagged in front of the note");
-  assert.ok(text.includes("( \u0097 too dark) Tj"), "the note after it");
+  /* "Flagged" in sentence case and bold red, and under it the reason —
+     the note, which is what raising the flag asks for */
+  assert.ok(text.includes("0.769 0.188 0.165 rg BT /F2 8.5 Tf") && text.includes("(Flagged) Tj"), "Flagged, bold and red");
+  assert.ok(text.includes("(too dark) Tj"), "the reason under it");
   assert.ok(!text.includes("FLAGGED"));
-  /* the PDF string escapes its parentheses */
-  assert.ok(text.includes("Props: Red mug \\(have it\\)"), "each prop with its status in words");
+  /* a prop a line, its status in words; the PDF string escapes its parentheses */
+  assert.ok(text.includes("(Red mug \\(have it\\)) Tj"), "each prop with its status in words");
+  /* one landscape page */
   assert.match(text, /\/Count 1 >>/);
+  assert.match(text, /\/MediaBox \[0 0 792 612\]/);
 });
