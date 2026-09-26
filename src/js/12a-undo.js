@@ -568,16 +568,31 @@ export function lastUndoEntry() { flushEdits(); return history.top(); }
    single, contiguous edits: matching from the end finds the exact point
    past which the two strings agree, which is where the caret belongs
    whichever direction produced it — the end of newly (re)typed text on
-   redo, and the start of what typing undid on undo. */
+   redo, and the start of what typing undid on undo.
+
+   Each character is compared with its marks, not as bare text: an edit
+   that changes formatting (Ctrl+B, the Direction button, a typed "SFX:"
+   making a line a cue) or turns words into a tag (Tab closing a
+   plain-language tag, #210, which also takes the keyword out) changes
+   what the characters are without changing, or while changing less of,
+   the text. Text alone put the caret at 0 for the first (the two texts
+   agree throughout) and short of the tag for the second (the match ran
+   on through the tag's words). With the marks, the match stops at the
+   last character the edit touched, so the caret lands at the end of it. */
 export function caretAfterStep(step) {
-  function domText(h) {
-    var out = "";
-    normalizeCell(fromHtml(h == null ? "" : h)).forEach(function (r) { out += r.text.replace(/\n/g, ""); });
-    return out;
+  function domChars(h) {
+    var text = "", keys = [];
+    normalizeCell(fromHtml(h == null ? "" : h)).forEach(function (r) {
+      var t = r.text.replace(/\n/g, "");
+      var key = (r.atom ? r.atom + ":" + r.id : "") + JSON.stringify(r.marks || {});
+      for (var i = 0; i < t.length; i++) keys.push(t[i] + key);
+      text += t;
+    });
+    return { text: text, keys: keys };
   }
-  var a = domText(step.before), b = domText(step.after);
+  var a = domChars(step.before).keys, bc = domChars(step.after), b = bc.text, bk = bc.keys;
   var s = 0;
-  while (s < a.length && s < b.length && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  while (s < a.length && s < bk.length && a[a.length - 1 - s] === bk[bk.length - 1 - s]) s++;
   var offset = b.length - s;
   /* Never land between the two halves of a surrogate pair (an emoji): if
      the match stopped one code unit short of a whole pair, count that

@@ -11,9 +11,20 @@
  * through an import in a real browser, where a wrong answer shows up as
  * mangled rows several steps later.
  */
+import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseMarkdownTable } from "../js/11-import.js";
+import { S } from "../js/_state.js";
+import { __init as initStatus } from "../js/01-scene-status.js";
+import { migrateRows } from "../js/02-state.js";
+import { __init as initTags } from "../js/07-production-tags.js";
+import { detectTwoColumnFormat, parseImportRows, parseMarkdownTable } from "../js/11-import.js";
+import { cellOf, toMarkdown } from "../js/04c-doc-model.js";
+import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14-export.js";
+import { LONG_DEMO } from "../js/_starters.js";
+
+initTags();
+initStatus();
 
 const cells = (rows) => rows.map((r) => [r.visualText, r.audioText]);
 
@@ -139,4 +150,77 @@ test("a short row does not read a neighbour's column", () => {
   const out = parseMarkdownTable("| Visual | Audio | Status |\n| --- | --- | --- |\n| a |");
   assert.deepEqual(cells(out), [["a", ""]]);
   assert.equal(out[0].statusText, "");
+});
+
+/* A "Two columns" Markdown export reopened (Import, no data block): the
+   breakdown and comments after the script are pipe tables and lines too,
+   and used to come back as extra scenes, "Item | Status" among them. */
+test("a Two columns export reads back as its scenes only, not its breakdown or comments", () => {
+  const tag = (cat, name) =>
+    `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
+  S.state = migrateRows({
+    schema: 2, title: "Two col",
+    rows: [
+      { id: "r1", visualText: "Wide " + tag("vfx", "explosion"), audioText: "Hello there.", status: "todo" },
+      { id: "r2", visualText: "Close on the " + tag("prop", "mug"), audioText: "Coffee time.", status: "todo" }
+    ],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", author: "Ann", body: "a | b | c",
+      createdAt: "2026-09-01T10:00:00Z", replies: [] }]
+  });
+  const md = toMarkdownTableDoc();
+  assert.match(md, /## Production breakdown/);
+  assert.match(md, /## Comments/);
+  const expected = [["Wide explosion", "Hello there."], ["Close on the mug", "Coffee time."]];
+  assert.deepEqual(cells(parseMarkdownTable(md)), expected);
+  assert.equal(detectTwoColumnFormat(md), "table");
+  assert.deepEqual(cells(parseImportRows(md, "twocolumn")), expected);
+});
+
+test("someone else's table keeps what follows its own Comments heading", () => {
+  /* Only our own scene header ("# | Visual | Audio | Status") ends the
+     table at those headings, as only our table style does in a .docx. */
+  const md = "| Visual | Audio |\n| --- | --- |\n| a | b |\n\n## Comments\n\n| c | d |";
+  assert.deepEqual(cells(parseMarkdownTable(md)), [["a", "b"], ["c", "d"]]);
+});
+
+/* The plain (stacked) Markdown export reopened: every paragraph used to be
+   a scene, the title, the meta line and each "### Scene 01" among them,
+   and "*Visual —* …" landed in the Audio column. */
+test("the stacked Markdown export of the long demo reads back as its 30 scenes", () => {
+  S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
+  const orig = S.state.rows;
+  const md = toMarkdownDoc();
+  assert.match(md, /## Production breakdown/);
+  assert.match(md, /## Comments/);
+  assert.equal(detectTwoColumnFormat(md), "stacked");
+  const out = parseImportRows(md, "twocolumn");
+  assert.equal(out.length, 30);
+  /* each cell exactly as the export wrote it */
+  out.forEach((r, i) => {
+    assert.equal(r.visualText, toMarkdown(cellOf(orig[i].visualText)), "scene " + (i + 1) + " Visual");
+    assert.equal(r.audioText, toMarkdown(cellOf(orig[i].audioText)), "scene " + (i + 1) + " Audio");
+  });
+});
+
+test("a stacked export's blank scene, video link and multi-line cells", () => {
+  S.state = migrateRows({
+    schema: 2, title: "Stack",
+    rows: [
+      { id: "r1", visualText: "Wide<br>then close", audioText: "Hello <strong>there</strong>.<br><br>Second para.", status: "todo",
+        imageLinks: ["https://www.youtube.com/watch?v=aqz-KE-bpKQ"] },
+      { id: "r2", visualText: "", audioText: "", status: "todo" },
+      { id: "r3", visualText: "", audioText: "Just audio.", status: "todo" }
+    ]
+  });
+  const md = toMarkdownDoc();
+  assert.deepEqual(cells(parseImportRows(md, "twocolumn")), [
+    ["Wide\nthen close", "Hello **there**.\n\nSecond para."],
+    ["", ""],
+    ["", "Just audio."]
+  ]);
+});
+
+test("Markdown that only looks like the stacked export reads as it always did", () => {
+  assert.equal(detectTwoColumnFormat("# Notes\n\nSome intro.\n\n### Scene 01\n\nWords."), null);
+  assert.equal(detectTwoColumnFormat("### Scene 01\n\nWords.\n\n### Scene 02\n\nMore."), null);
 });
