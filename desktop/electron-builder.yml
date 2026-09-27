@@ -50,12 +50,8 @@ files:
   # ship for the same reason drafts.js does.
   - chromium-browsers.js
   # Version history on disk (issue #83): the fs backend the shared store runs
-  # over in main, and the one-time v1 migration it runs first. Listed before
-  # main.js requires them (step 3a) so that switch-over cannot ship without
-  # them; history-fs-backend.js itself requires ./blob-store.js. The migrator
-  # goes in the release after (owner decision #83-3) — delete the line then.
+  # over in main. history-fs-backend.js itself requires ./blob-store.js.
   - history-fs-backend.js
-  - history-v1-migrate.js
   - package.json
 
 extraResources:

@@ -98,13 +98,9 @@ jobs:
       - name: Desktop blob store unit tests
         run: node desktop/test/blob-store.test.mjs
 
-      # Version history on disk (#83): the fs backend under the shared store,
-      # and the one-time v1 folder migration with its interruption points.
+      # Version history on disk (#83): the fs backend under the shared store.
       - name: Desktop history backend unit tests
         run: node desktop/test/history-fs-backend.test.mjs
-
-      - name: Desktop history v1 migration unit tests
-        run: node desktop/test/history-v1-migrate.test.mjs
 
       - name: Desktop teleprompter share listener
         run: node desktop/test/prompter-share.test.mjs
