@@ -421,16 +421,21 @@ that proves #76's `shared/` staging and #77's `files` entry.
   refuse consent once (the app should say sign-in was cancelled) and leave
   the consent tab open for over 5 minutes once (it should say it timed out).
 
-- **Version history moving to the new layout** (#83), on your real
-  profile. Before installing the new build, open two or three documents
-  that have history and note how many versions each lists (File ▸ History),
-  and the Older group's if there is one. Install, launch, and open the
-  same documents: the same versions, same labels and dates, and restoring
-  one works. `%APPDATA%\Splitpage\history\` now holds `FORMAT` (`2`),
-  `index.json`, `index.prev.json` after the first new snapshot, `bodies\`,
-  and `v1-backup\` with the old `docs\` and `older\` folders (kept for one
-  release; nothing in it is deleted). A launch that is quit while the move
-  runs must finish it on the next launch with nothing missing.
+- **Version history after 3.0.0's move is cleaned up** (#100, which
+  removed #83's one-time migration), on your real profile. 3.0.0 moved the
+  old history into the new layout and kept the old folders in
+  `%APPDATA%\Splitpage\history\v1-backup\`. Before installing the new
+  build, open two or three documents that have history and note how many
+  versions each lists (File ▸ History), and the Older group's if there is
+  one. Install, launch, and open the same documents: the same versions,
+  same labels and dates, and restoring one works. A few seconds after
+  launch `v1-backup\` is gone; `history\` holds `FORMAT` (`2`),
+  `index.json`, `index.prev.json`, `bodies\` and nothing else. If a file
+  in `v1-backup\` is held open (an Explorer window inside it), the launch
+  still works and the folder goes on a later launch. A profile that
+  skipped 3.0.0 still has raw `docs\` and `older\` folders: those are
+  **not** moved or deleted — the app starts a fresh history beside them
+  and leaves them exactly as they were.
 - **Pictures as references** (#82), in the desktop app. Drop two or three
   pictures into scenes, add one to a comment, save as `.splitpage`, quit,
   relaunch: all still show. `%APPDATA%\Splitpage\blobs\sha256\` holds
@@ -498,7 +503,8 @@ Anything changed since then is due again in run 2.
 | #73, #71, #98, #11 | dev + packaged smoke, `run-tests.ps1` | **Windows x64, run 2** |
 | #10 Drive, packaged | packaged smoke (fake Google) | **Windows x64, run 2**; real Google sign-in never run (no client ID) |
 | #86 Open in browser | by hand, desktop app | save-first **Windows x64, run 2**; real browser launch **unverified** (that machine's default browser is broken); the menu route and the covered control bar were fixed after run 2 — re-check |
-| #83 history move on a real profile | by hand, desktop app | **Windows x64, run 2b** (incl. kills mid-move) |
+| #83 history move on a real profile | by hand, desktop app | **Windows x64, run 2b** (incl. kills mid-move); the move itself removed by #100 |
+| #100 `v1-backup\` deleted at launch, raw v1 left alone | dev + packaged smoke; by hand on a real 3.0.0 profile (§3) | dev smoke **Windows x64** (804/804, 2026-09-27); packaged smoke and by hand **never run** |
 | #82 pictures in the desktop app | by hand + packaged smoke | **Windows x64, run 2b**; the PDF overlap it found was fixed after — re-check |
 | #8 Follow My Voice (desktop) | by hand, packaged app (§3) | fake listener passes on Linux smoke; the real `listen.ps1` **never run** |
 | browser suites | `run-tests.ps1` | pass on Linux; **Windows x64, run 2b** (66 suites, 3039 checks) |
