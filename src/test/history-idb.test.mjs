@@ -1,6 +1,6 @@
 /* src/js/03c-history-idb.js — the browser's IndexedDB backend for the one
- * history store (#83), and its TEMPORARY v1 → v2 migrator — over
- * fake-indexeddb (a devDependency, owner decision 5 on #83).
+ * history store (#83), and its v3 upgrade (#100) — over fake-indexeddb (a
+ * devDependency, owner decision 5 on #83).
  *
  * fake-indexeddb keeps IndexedDB's auto-commit rule: a transaction with no
  * request pending when a macrotask ends commits, and the next request
@@ -24,14 +24,12 @@ import {
   HISTORY_IDB_NAME,
   HISTORY_IDB_VERSION,
   createIdbHistoryBackend,
-  hashText,
-  seedV1HistoryDb
+  hashText
 } from "../js/03c-history-idb.js";
 
 const DOC_A = "d" + "a".repeat(32);
 const DOC_B = "d" + "b".repeat(32);
 const DOC_C = "d" + "c".repeat(32);
-const DOC_D = "d" + "d".repeat(32);
 
 const sha = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 const meta = (id, atMs, over = {}) => ({ id, atMs, label: "L " + id, title: "T", ...over });
@@ -232,18 +230,18 @@ test("hashText is SHA-256 of the UTF-8, synchronously", () => {
   for (const s of ["", "abc", "héllo — ✓ 😀", body("x", 70_000)]) assert.equal(hashText(s), sha(s));
 });
 
-test("schema: v2 creates only index and bodies (no v1 stores on a fresh profile)", async () => {
+test("schema: a fresh profile gets v3 with only index and bodies", async () => {
   const { factory, backend } = idbFixture();
   await backend.open();
   await backend.close();
+  assert.equal(HISTORY_IDB_VERSION, 3);
   const db = await req(factory.open(HISTORY_IDB_NAME));
-  assert.equal(db.version, HISTORY_IDB_VERSION);
+  assert.equal(db.version, 3);
   assert.deepEqual([...db.objectStoreNames].sort(), ["bodies", "index"]);
   const t = db.transaction(["index", "bodies"], "readonly");
   assert.equal(t.objectStore("index").keyPath, "bucket");
   assert.equal(t.objectStore("bodies").keyPath, "sha");
   db.close();
-  assert.equal(backend.migration.state, "none");
 });
 
 test("strict tx: a non-tx await inside exclusive() fails the job, as the rule says it must", async () => {
@@ -350,31 +348,209 @@ for (const how of ["transaction", "request"]) {
   });
 }
 
+/* ---- test-only fixtures: the databases older builds left behind ----
+
+   seedOld(factory, version, {v1, stores}) writes 'splitpage-history' as
+   2.1 (version 1: docs, snapMeta, snapBody, meta — 2.1's openHistoryDb
+   schema) or 3.0.0 (version 2: those four, unless v1 is false, plus index
+   and bodies) laid it out, then puts stores[name]'s rows. Not shipped: the
+   builds that wrote these are what the upgrade has to meet. */
+const V1_STORES = ["docs", "meta", "snapBody", "snapMeta"];
+
+async function seedOld(factory, version, { v1 = true, stores = {} } = {}) {
+  const r = factory.open(HISTORY_IDB_NAME, version);
+  r.onupgradeneeded = () => {
+    const d = r.result;
+    if (v1) {
+      d.createObjectStore("docs", { keyPath: "docId" }).createIndex("byLastOpened", "lastOpenedAt");
+      d.createObjectStore("snapMeta", { keyPath: ["docId", "id"] }).createIndex("byDocAt", ["docId", "atMs"]);
+      d.createObjectStore("snapBody", { keyPath: ["docId", "id"] });
+      d.createObjectStore("meta", { keyPath: "key" });
+    }
+    if (version >= 2) {
+      d.createObjectStore("index", { keyPath: "bucket" });
+      d.createObjectStore("bodies", { keyPath: "sha" });
+    }
+  };
+  const d = await req(r);
+  const names = Object.keys(stores).filter((n) => stores[n].length);
+  if (names.length) {
+    const t = d.transaction(names, "readwrite");
+    for (const n of names) for (const row of stores[n]) t.objectStore(n).put(row);
+    await new Promise((resolve, reject) => { t.oncomplete = resolve; t.onabort = () => reject(t.error); });
+  }
+  d.close();
+}
+
+/* {version, stores: {name: every row}} of the database as it is now. */
+async function dump(factory) {
+  const d = await req(factory.open(HISTORY_IDB_NAME));
+  const names = [...d.objectStoreNames].sort();
+  const out = { version: d.version, stores: {} };
+  if (names.length) {
+    const t = d.transaction(names, "readonly");
+    for (const n of names) out.stores[n] = await req(t.objectStore(n).getAll());
+  }
+  d.close();
+  return out;
+}
+
+/* v1 rows as 2.1 wrote them: a docs record with its counters, and each
+   snapshot as a snapMeta row plus its snapBody row. */
+function v1Rows(snaps, docs = []) {
+  return {
+    docs: docs.map((r) => ({ bytes: 0, count: 0, ...r })),
+    snapMeta: snaps.map((s) => ({ docId: s.docId, ...meta(s.id, s.atMs), sizeBytes: historyUtf8Length(s.text) })),
+    snapBody: snaps.map((s) => ({ docId: s.docId, id: s.id, stateJson: s.text }))
+  };
+}
+
+/* v2 rows as 3.0.0 wrote them: one index record naming its bodies by sha. */
+function v2Rows(bucket, snaps) {
+  return {
+    index: [{
+      bucket, title: "Two", lastOpenedAt: 500,
+      snapshots: snaps.map((s) => ({ ...meta(s.id, s.atMs), sizeBytes: historyUtf8Length(s.text), sha: sha(s.text) }))
+    }],
+    bodies: snaps.map((s) => ({ sha: sha(s.text), stateJson: s.text }))
+  };
+}
+
+const V1_SNAPS = [
+  { docId: DOC_A, id: "a01", atMs: 100, text: body("v1-a1") },
+  { docId: DOC_A, id: "a02", atMs: 200, text: body("v1-a2") },
+  { docId: HISTORY_OLDER_KEY, id: "leg-1", atMs: 50, text: body("v1-o1") }
+];
+const V2_SNAPS = [
+  { id: "b01", atMs: 300, text: body("v2-b1") },
+  { id: "b02", atMs: 400, text: body("v2-b2") }
+];
+
+/* ---- the v3 upgrade, from each state a profile can be in ---- */
+
+test("v3 from a finished 3.0.0 move (v2, v1 stores empty): the v1 stores go, v2 history is intact", async () => {
+  const factory = new IDBFactory();
+  await seedOld(factory, 2, { stores: v2Rows(DOC_B, V2_SNAPS) });
+  const before = await dump(factory);
+  const { backend, store } = idbFixture({ factory });
+  await backend.open();
+  const after = await dump(factory);
+  assert.equal(after.version, 3);
+  assert.deepEqual(Object.keys(after.stores), ["bodies", "index"], "docs, meta, snapBody, snapMeta dropped");
+  assert.deepEqual(after.stores.index, before.stores.index, "index untouched");
+  assert.deepEqual(after.stores.bodies, before.stores.bodies, "bodies untouched");
+  assert.deepEqual(await ids(store, DOC_B), ["b02", "b01"]);
+  for (const s of V2_SNAPS) assert.equal((await store.get(DOC_B, s.id)).stateJson, s.text);
+  assert.equal((await store.put(DOC_B, meta("b03", 500), body("new"))).stored, true);
+  assert.equal(backend.readOnly, false);
+});
+
+test("v3 from an unfinished 3.0.0 move (v2 with v1 rows left): v1 kept byte for byte, dormant; v2 works", async () => {
+  const factory = new IDBFactory();
+  const rows = { ...v2Rows(DOC_B, V2_SNAPS), ...v1Rows(V1_SNAPS, [{ docId: DOC_A, title: "One", lastOpenedAt: 9 }]) };
+  await seedOld(factory, 2, { stores: rows });
+  const before = await dump(factory);
+  const { backend, store } = idbFixture({ factory });
+  await backend.open();
+  const after = await dump(factory);
+  assert.equal(after.version, 3);
+  assert.deepEqual(Object.keys(after.stores), ["bodies", "docs", "index", "meta", "snapBody", "snapMeta"]);
+  for (const n of V1_STORES) assert.deepEqual(after.stores[n], before.stores[n], n + " unchanged");
+
+  /* v2 reads and writes as usual; the v1 rows are never read (no reader) */
+  assert.deepEqual(await ids(store, DOC_B), ["b02", "b01"]);
+  assert.deepEqual(await ids(store, DOC_A), [], "v1-only history is not shown");
+  assert.equal((await store.put(DOC_A, meta("n01", 900), body("n1"))).stored, true);
+  assert.equal((await store.put(DOC_B, meta("b03", 901), body("b3"))).stored, true);
+  assert.deepEqual(await ids(store, DOC_A), ["n01"]);
+  await store.evict(Infinity);
+
+  /* …and never written: still identical after all that, and after a reopen */
+  await backend.close();
+  const again = idbFixture({ factory });
+  await again.backend.open();
+  const later = await dump(factory);
+  for (const n of V1_STORES) assert.deepEqual(later.stores[n], before.stores[n], n + " still unchanged");
+});
+
+test("v3 from a v1-only database (2.1, never ran 3.0.0): v1 kept, index and bodies created and usable", async () => {
+  const factory = new IDBFactory();
+  const rows = v1Rows(V1_SNAPS, [{ docId: DOC_A, title: "One", lastOpenedAt: 9 }]);
+  await seedOld(factory, 1, { stores: rows });
+  const before = await dump(factory);
+  assert.equal(before.version, 1);
+  const { backend, store } = idbFixture({ factory });
+  await backend.open();
+  const after = await dump(factory);
+  assert.equal(after.version, 3);
+  assert.deepEqual(Object.keys(after.stores), ["bodies", "docs", "index", "meta", "snapBody", "snapMeta"]);
+  for (const n of V1_STORES) assert.deepEqual(after.stores[n], before.stores[n], n + " unchanged");
+  assert.deepEqual([after.stores.index, after.stores.bodies], [[], []], "v2 stores start empty");
+  assert.equal((await store.put(DOC_C, meta("c01", 1), body("c1"))).stored, true);
+  assert.equal((await store.get(DOC_C, "c01")).stateJson, body("c1"));
+  assert.deepEqual(await ids(store, DOC_A), []);
+});
+
+test("v3 from an empty v1 database (2.1, no snapshot ever taken): the v1 stores go", async () => {
+  const factory = new IDBFactory();
+  await seedOld(factory, 1, { stores: { docs: [{ docId: DOC_A, title: "One", lastOpenedAt: 9, bytes: 0, count: 0 }] } });
+  const { backend } = idbFixture({ factory });
+  await backend.open();
+  const after = await dump(factory);
+  assert.equal(after.version, 3);
+  assert.deepEqual(Object.keys(after.stores), ["bodies", "index"], "a docs record alone is not history");
+});
+
+test("v3 keeps the v1 stores when only snapBody still holds rows", async () => {
+  const factory = new IDBFactory();
+  await seedOld(factory, 2, { stores: { snapBody: [{ docId: DOC_A, id: "a01", stateJson: body("orphan") }] } });
+  const { backend } = idbFixture({ factory });
+  await backend.open();
+  const after = await dump(factory);
+  assert.deepEqual(Object.keys(after.stores), ["bodies", "docs", "index", "meta", "snapBody", "snapMeta"]);
+  assert.equal(after.stores.snapBody.length, 1);
+});
+
+test("v3 from a v2 database with no v1 stores at all (a 3.0.0 fresh profile): nothing to drop", async () => {
+  const factory = new IDBFactory();
+  await seedOld(factory, 2, { v1: false, stores: v2Rows(DOC_B, V2_SNAPS) });
+  const { backend, store } = idbFixture({ factory });
+  await backend.open();
+  const after = await dump(factory);
+  assert.equal(after.version, 3);
+  assert.deepEqual(Object.keys(after.stores), ["bodies", "index"]);
+  assert.deepEqual(await ids(store, DOC_B), ["b02", "b01"]);
+});
+
 /* ---- other tabs, other versions ---- */
 
-/* A v1 connection as 03a's openHistoryDb holds it: onversionchange closes. */
-async function openV1(factory, { closes = true } = {}) {
-  await seedV1HistoryDb(factory, {});
-  const db = await req(factory.open(HISTORY_IDB_NAME, 1));
+/* An older build's connection: 2.1's (v1) and 3.0.0's (v2) both close on
+   versionchange. */
+async function openOld(factory, version, { closes = true } = {}) {
+  await seedOld(factory, version);
+  const db = await req(factory.open(HISTORY_IDB_NAME, version));
   const seen = { versionchange: 0 };
   db.onversionchange = () => { seen.versionchange++; if (closes) db.close(); };
   return { db, seen };
 }
 
-test("an old-build (v1) connection gets versionchange, closes, and the v2 upgrade goes through", async () => {
-  const factory = new IDBFactory();
-  const old = await openV1(factory);
-  const { backend } = idbFixture({ factory });
-  await backend.open();
-  assert.equal(old.seen.versionchange, 1);
-  assert.equal(backend.readOnly, false);
-  /* the old build's next open fails with a VersionError — 03a then falls back to memory */
-  await assert.rejects(req(factory.open(HISTORY_IDB_NAME, 1)), (e) => e.name === "VersionError");
-});
+for (const version of [1, 2]) {
+  test(`an old-build (v${version}) connection gets versionchange, closes, and the v3 upgrade goes through`, async () => {
+    const factory = new IDBFactory();
+    const old = await openOld(factory, version);
+    const { backend } = idbFixture({ factory });
+    await backend.open();
+    assert.equal(old.seen.versionchange, 1);
+    assert.equal(backend.readOnly, false);
+    /* the old build's next open fails with a VersionError: 2.1 then falls
+       back to memory, and 3.0.0 serves the database read-only (below) */
+    await assert.rejects(req(factory.open(HISTORY_IDB_NAME, version)), (e) => e.name === "VersionError");
+  });
+}
 
 test("an old connection that will NOT close: this open fails at once with 'io', and a late success is not adopted", async () => {
   const factory = new IDBFactory();
-  const old = await openV1(factory, { closes: false });
+  const old = await openOld(factory, 1, { closes: false });
   /* the factory as the backend sees it, keeping every open request */
   const opened = [];
   const spy = {
@@ -389,7 +565,7 @@ test("an old connection that will NOT close: this open fails at once with 'io', 
   assert.equal(opened.length, 1);
   assert.equal(opened[0].readyState, "done");
   assert.equal(opened[0].result._closePending, true, "the late connection was closed, not adopted");
-  /* a later job opens afresh, at v2 */
+  /* a later job opens afresh, at v3 */
   await backend.open();
   assert.equal(opened.length, 2);
   assert.equal(opened[1].result.version, HISTORY_IDB_VERSION);
@@ -399,11 +575,11 @@ test("an old connection that will NOT close: this open fails at once with 'io', 
 test("this connection closes on versionchange; a NEWER database is then served read-only", async () => {
   const { factory, backend, store } = idbFixture();
   await store.put(DOC_A, meta("s01", 1), body("a"));
-  /* a newer build upgrades to v3, keeping index + bodies */
-  const v3req = factory.open(HISTORY_IDB_NAME, 3);
-  v3req.onupgradeneeded = () => { /* a v3 might drop the v1 stores; ours has none */ };
-  const v3 = await req(v3req);
-  v3.close();
+  /* a newer build upgrades to v4, keeping index + bodies */
+  const v4req = factory.open(HISTORY_IDB_NAME, 4);
+  v4req.onupgradeneeded = () => { v4req.result.createObjectStore("somethingNew"); };
+  const v4 = await req(v4req);
+  v4.close();
   assert.equal(backend.readOnly, false, "not known until the next job reopens");
   assert.deepEqual(await ids(store, DOC_A), ["s01"], "reads still work");
   assert.equal(backend.readOnly, true);
@@ -424,222 +600,10 @@ test("a newer database this build cannot read (no index store) fails the open �
   await assert.rejects(backend.open(), (e) => e.code === "io");
 });
 
-test("deleteDatabase (resetForTest) is not blocked; the next job starts a fresh v2", async () => {
+test("deleteDatabase (resetForTest) is not blocked; the next job starts a fresh v3", async () => {
   const { factory, store } = idbFixture();
   await store.put(DOC_A, meta("s01", 1), body("a"));
   await req(factory.deleteDatabase(HISTORY_IDB_NAME));
   assert.deepEqual(await ids(store, DOC_A), []);
   assert.equal((await store.put(DOC_A, meta("s02", 2), body("b"))).stored, true);
-});
-
-/* ================= TEMPORARY: the v1 → v2 migration ================= */
-
-const T0 = 1_700_000_000_000;
-/* A pre-#82 profile: bodies with an inline image (2 MB of base64 in the
-   state, as documents carried images before the blob store). */
-const IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA" + "QUJD".repeat(512 * 1024);
-const bigBody = JSON.stringify({ rows: [{ id: "r1", image: IMAGE, text: "héllo ✓" }], title: "Big" });
-
-function v1Meta(bucket, id, atMs, extra = {}) {
-  return { docId: bucket, id, label: "L " + id, at: new Date(atMs).toISOString(), atMs, by: "Ann", rows: 3, title: "Doc " + bucket.slice(1, 3), kind: "snapshot", formatVersion: 1, ...extra };
-}
-
-function v1Spec() {
-  return {
-    docs: [
-      { docId: DOC_A, title: "Alpha", lastOpenedAt: T0 - 5000 },
-      { docId: DOC_B, title: "Beta", lastOpenedAt: T0 - 9000 },
-      { docId: DOC_D, title: "Delta, no history", lastOpenedAt: T0 - 1 },   /* an empty record: dropped */
-      { docId: HISTORY_OLDER_KEY, title: "", lastOpenedAt: 0, migratedAt: T0 - 86_400_000, expiresAt: T0 - 86_400_000 + HISTORY_OLDER_TTL_MS }
-    ],
-    snaps: [
-      { meta: v1Meta(DOC_A, "a01", T0 - 300), stateJson: body("a1") },
-      { meta: v1Meta(DOC_A, "a02", T0 - 200), stateJson: bigBody },
-      { meta: v1Meta(DOC_A, "a03", T0 - 100), stateJson: body("a3") },
-      { meta: v1Meta(DOC_B, "b01", T0 - 900), stateJson: body("same") },
-      { meta: v1Meta(DOC_B, "b02", T0 - 800), stateJson: body("same") },   /* same bytes: one body */
-      { meta: v1Meta(DOC_B, "b03", T0 - 700), stateJson: bigBody },        /* same as A's: one body */
-      { meta: v1Meta(DOC_B, "b04", T0 - 600), stateJson: null },           /* body lost in v1: unreachable there, dropped */
-      { meta: v1Meta(DOC_C, "c01", T0 - 50), stateJson: body("c1") },      /* no docs row */
-      { meta: v1Meta(HISTORY_OLDER_KEY, "leg-1", 1000, { kind: "legacy", legacyId: "x1" }), stateJson: body("o1") },
-      { meta: v1Meta(HISTORY_OLDER_KEY, "leg-2", 2000, { kind: "legacy", legacyId: "x2" }), stateJson: body("o2") }
-    ]
-  };
-}
-const V1_ROWS = v1Spec().snaps.length;
-const V1_READABLE = v1Spec().snaps.filter((s) => s.stateJson != null);
-
-async function seeded(opts = {}) {
-  const factory = opts.factory || new IDBFactory();
-  await seedV1HistoryDb(factory, v1Spec());
-  return idbFixture({ factory, t: T0, backend: opts.backend });
-}
-
-/* The v2 state an uninterrupted migration of v1Spec() ends in. */
-async function referenceState() {
-  const { backend } = await seeded();
-  await backend.open();
-  return backend.inspect();
-}
-
-test("migration: every readable v1 snapshot moves to v2, bodies deduped, docs records carried, v1 emptied", async () => {
-  const { factory, backend, store } = await seeded();
-  await backend.open();
-  assert.deepEqual(backend.migration, { state: "done", migrated: V1_READABLE.length, skipped: 1, code: null });
-  assert.deepEqual(await backend.v1Counts(), { docs: 0, snapMeta: 0, snapBody: 0 }, "v1 emptied, its stores kept");
-
-  /* every snapshot reads back byte for byte, with its meta */
-  for (const s of V1_READABLE) {
-    const got = await store.get(s.meta.docId, s.meta.id);
-    assert.ok(got, s.meta.id);
-    assert.equal(got.stateJson, s.stateJson);
-    assert.equal(got.meta.atMs, s.meta.atMs, "migration does not re-stamp");
-    assert.equal(got.meta.label, s.meta.label);
-    assert.equal(got.meta.sizeBytes, historyUtf8Length(s.stateJson));
-  }
-  assert.equal((await store.get(DOC_A, "a02")).stateJson.length, bigBody.length);
-  assert.equal(await store.get(DOC_B, "b04"), null);
-  assert.deepEqual(await ids(store, DOC_A), ["a03", "a02", "a01"]);
-  assert.deepEqual(await ids(store, DOC_B), ["b03", "b02", "b01"]);
-  const older = await store.list(null);
-  assert.deepEqual(older.older.map((m) => [m.id, m.kind, m.legacyId]), [["leg-2", "legacy", "x2"], ["leg-1", "legacy", "x1"]]);
-  assert.equal(older.olderExpiresAt, T0 - 86_400_000 + HISTORY_OLDER_TTL_MS, "the Older bucket keeps its 90 days");
-
-  /* the docs records came across; the empty one did not */
-  const { index, bodies } = await backend.inspect();
-  assert.deepEqual(Object.keys(index).sort(), [HISTORY_OLDER_KEY, DOC_A, DOC_B, DOC_C].sort());
-  assert.deepEqual([index[DOC_A].title, index[DOC_A].lastOpenedAt], ["Alpha", T0 - 5000]);
-  assert.deepEqual([index[DOC_B].title, index[DOC_B].lastOpenedAt], ["Beta", T0 - 9000]);
-  assert.deepEqual([index[DOC_C].title, index[DOC_C].lastOpenedAt], ["Doc cc", T0 - 50], "no docs row: from the entry");
-  assert.equal(index[HISTORY_OLDER_KEY].migratedAt, T0 - 86_400_000);
-  assert.equal(new Set(V1_READABLE.map((s) => s.stateJson)).size, Object.keys(bodies).length, "one body per distinct text");
-  assert.equal(await backend.bodyCount(), 7);
-  assert.equal(index[DOC_A].snapshots[1].sha, index[DOC_B].snapshots[2].sha, "the image body is shared across buckets");
-
-  /* writes work afterwards, and the listing is the store's */
-  assert.equal((await store.put(DOC_A, meta("a04", T0), body("a4"))).stored, true);
-  assert.deepEqual((await store.listDocs()).map((d) => d.docId), [DOC_A, DOC_B, DOC_C]);
-
-  /* a reload finds nothing left to move */
-  await backend.close();
-  const again = idbFixture({ factory, t: T0 });
-  await again.backend.open();
-  assert.deepEqual(again.backend.migration, { state: "done", migrated: 0, skipped: 0, code: null });
-  assert.deepEqual(await ids(again.store, DOC_A), ["a04", "a03", "a02", "a01"]);
-});
-
-test("migration: an Older bucket without an expiry gets a fresh 90 days", async () => {
-  const factory = new IDBFactory();
-  await seedV1HistoryDb(factory, {
-    snaps: [{ meta: v1Meta(HISTORY_OLDER_KEY, "leg-1", 1000, { kind: "legacy" }), stateJson: body("o1") }]
-  });
-  const { store, backend } = idbFixture({ factory, t: T0 });
-  const listed = await store.list(null);
-  assert.deepEqual(listed.older.map((m) => m.id), ["leg-1"]);
-  assert.equal(listed.olderExpiresAt, T0 + HISTORY_OLDER_TTL_MS);
-  assert.equal((await backend.inspect()).index[HISTORY_OLDER_KEY].migratedAt, T0);
-});
-
-/* ---- interruption: stopped between snapshots (a closed tab, a crash) ---- */
-
-for (const n of [0, 1, 3, 6, V1_ROWS - 1, V1_ROWS]) {
-  test(`migration interrupted after ${n} snapshot(s): nothing disappears meanwhile, and a reopen resumes to the same end`, async () => {
-    const reference = await referenceState();
-    const factory = new IDBFactory();
-    const { backend, store } = await seeded({ factory, backend: { fault: "migrate-stop-after:" + n } });
-    await backend.open();
-    const m = backend.migration;
-    assert.equal(m.migrated + m.skipped, n);
-    assert.equal(m.state, "incomplete");
-    assert.equal(m.code, "stopped");
-    assert.equal((await backend.v1Counts()).snapMeta, V1_ROWS - n);
-
-    /* reads: v2 plus the read-only v1 reader — every readable snapshot is there */
-    for (const s of V1_READABLE) {
-      const got = await store.get(s.meta.docId, s.meta.id);
-      assert.ok(got, `${s.meta.id} readable after ${n}`);
-      assert.equal(got.stateJson, s.stateJson);
-    }
-    assert.deepEqual(await ids(store, DOC_A), ["a03", "a02", "a01"]);
-    assert.deepEqual((await store.list(null)).older.map((x) => x.id), ["leg-2", "leg-1"]);
-    assert.deepEqual((await store.listDocs()).map((d) => [d.docId, d.title]), [[DOC_A, "Alpha"], [DOC_B, "Beta"], [DOC_C, "Doc cc"]]);
-
-    /* writes answer io (03a keeps them pending) and change nothing */
-    assert.deepEqual(await store.put(DOC_A, meta("new", T0), body("new")), { stored: false, code: "io" });
-    assert.equal((await store.copy(DOC_A, DOC_D)).code, "io");
-
-    /* the reload: a fresh backend over the same database resumes */
-    await backend.close();
-    const next = idbFixture({ factory, t: T0 });
-    await next.backend.open();
-    assert.equal(next.backend.migration.state, "done");
-    assert.equal(next.backend.migration.migrated + next.backend.migration.skipped, V1_ROWS - n);
-    assert.deepEqual(await next.backend.inspect(), reference, "ends identical to an uninterrupted migration");
-    assert.deepEqual(await next.backend.v1Counts(), { docs: 0, snapMeta: 0, snapBody: 0 });
-  });
-}
-
-/* ---- interruption: a step that fails half way (quota at its body put) ---- */
-
-test("migration: a step aborted mid-way lands nothing, and the retry on the next write finishes it", async (t) => {
-  const reference = await referenceState();
-  const { backend, store } = await seeded();
-  const restore = patchBodiesPut("transaction", 1);
-  t.after(() => restore());
-  await backend.open();
-  restore();
-  assert.deepEqual(backend.migration, { state: "incomplete", migrated: 0, skipped: 0, code: "quota" });
-  assert.equal((await backend.v1Counts()).snapMeta, V1_ROWS, "the first step's deletes rolled back with its body");
-  assert.deepEqual((await backend.inspect()).index, {});
-  assert.deepEqual(await ids(store, DOC_A), ["a03", "a02", "a01"], "the v1 reader still shows it all");
-
-  /* space came back: the next write job retries the migration first */
-  const r = await store.put(DOC_D, meta("d01", T0), body("d1"));
-  assert.equal(r.stored, true);
-  assert.equal(backend.migration.state, "done");
-  const now = await backend.inspect();
-  delete now.index[DOC_D];
-  delete now.bodies[sha(body("d1"))];
-  assert.deepEqual(now, reference);
-});
-
-/* ---- two tabs of this build migrating at once ---- */
-
-test("two connections racing over the same v1 rows: each row moves exactly once", async () => {
-  const reference = await referenceState();
-  const factory = new IDBFactory();
-  await seedV1HistoryDb(factory, v1Spec());
-  const a = idbFixture({ factory, t: T0 });
-  const b = idbFixture({ factory, t: T0 });
-  await Promise.all([a.backend.open(), b.backend.open()]);
-  const ma = a.backend.migration, mb = b.backend.migration;
-  assert.equal(ma.state, "done");
-  assert.equal(mb.state, "done");
-  assert.equal(ma.migrated + mb.migrated, V1_READABLE.length, "no row moved twice, none lost");
-  assert.equal(ma.skipped + mb.skipped, 1);
-  assert.ok(ma.migrated > 0 && mb.migrated > 0, "they really did interleave");
-  assert.deepEqual(await a.backend.inspect(), reference);
-  for (const f of [a, b]) {
-    for (const bucket of [DOC_A, DOC_B, DOC_C]) {
-      const list = await ids(f.store, bucket);
-      assert.equal(new Set(list).size, list.length, "no duplicate ids");
-    }
-  }
-});
-
-test("one tab stopped mid-way, another finishes: the first sees it all and can write again", async () => {
-  const factory = new IDBFactory();
-  await seedV1HistoryDb(factory, v1Spec());
-  const a = idbFixture({ factory, t: T0, backend: { fault: "migrate-stop-after:2" } });
-  await a.backend.open();
-  assert.equal(a.backend.migration.state, "incomplete");
-  const b = idbFixture({ factory, t: T0 });
-  await b.backend.open();
-  assert.equal(b.backend.migration.state, "done");
-  assert.deepEqual(await ids(a.store, DOC_B), ["b03", "b02", "b01"]);
-  /* a test-fault stop is final for its backend (like a crash), so a stays incomplete */
-  assert.equal((await a.store.put(DOC_A, meta("x01", T0), body("x"))).code, "io");
-  a.backend.injectFault(null);
-  assert.equal((await a.store.put(DOC_A, meta("x01", T0), body("x"))).stored, true, "cleared: the retry finds v1 empty");
-  assert.equal(a.backend.migration.state, "done");
 });
