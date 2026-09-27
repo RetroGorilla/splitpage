@@ -23,6 +23,8 @@
  *                                buckets: {bucket: DocRecord},
  *                                trash: [sha],
  *                                migratedFrom?: 1}
+ *                             (migratedFrom: written by 3.0.0's v1
+ *                             migration; carried forward, never acted on)
  *                             DocRecord is the store's ({title,
  *                             lastOpenedAt, migratedAt?, expiresAt?,
  *                             snapshots: [meta + sha] oldest first}).
@@ -36,10 +38,12 @@
  *                             image folder <userData>/blobs, because images
  *                             are never deleted (#82 D4) and history evicts).
  *                             Its own FORMAT "1", sha256/<aa>/<sha>.
- *   docs/, older/             the v1 layout, until desktop/history-v1-
- *                             migrate.js has moved it into v1-backup/
- *   v1-backup/                v1's docs/ and older/ after a verified
- *                             migration; deleted by the NEXT release
+ *   docs/, older/             the v1 layout (before #83), left DORMANT:
+ *                             never read, written, moved or deleted here
+ *                             (see "A RAW v1 TREE" below)
+ *   v1-backup/                where 3.0.0's one-time migration put v1's
+ *                             docs/ and older/; main deletes it at launch
+ *                             (removeHistoryV1Backup), never this file
  *
  * THE INDEX is read once (open()) and kept in memory; main is its single
  * writer (the single-instance lock). Totals are never stored — the store
@@ -77,15 +81,18 @@
  * but cannot be read (a scanner holding it) is an 'io' error instead, never
  * null, or a transient lock would delete history.
  *
- * MIGRATION. createHistoryFsBackend({migrate}) runs migrate(api) as the
- * first thing open() does — i.e. as the first job on the history queue —
- * before the index is loaded. desktop/history-v1-migrate.js is that job
- * (temporary; see its header). While it works, backend.migrating is true
- * and backend.state is "migrating", so main can answer a list with
- * {migrating: true} instead of "No snapshots". If it fails (a full disk),
- * open() fails and every job rejects with its code for the rest of this
- * process — the store answers 'enospc', the renderer keeps its entries
- * pending, and the next launch tries again with v1 untouched.
+ * A RAW v1 TREE. 3.0.0 moved the v1 layout (FORMAT "1", docs/d-<docId>/
+ * and older/ with .snap files) into v2 once and put it in v1-backup/; that
+ * migrator is gone (#100). A folder that still has docs/ or older/ and no
+ * index.json belongs to someone who skipped 3.0.0. It is opened like an
+ * empty folder: no index → an empty history, FORMAT rewritten to "2", and
+ * the first commit starts index.json beside the v1 folders. Nothing here
+ * can reach them — sweepTemps() unlinks only top-level `.tmp-*` files,
+ * moveAsideCorrupt() only renames index*.json, and every body lives under
+ * bodies/ — so that history stays on disk untouched rather than destroyed.
+ * If open() fails (a full disk), every job rejects with its code for the
+ * rest of this process — the store answers it, the renderer keeps its
+ * entries pending, and the next launch tries again.
  *
  * ONE QUEUE. exclusive() runs jobs strictly one after another — the
  * process-wide history queue (the store's rule: fn awaits only tx.* calls).
@@ -169,7 +176,6 @@ function createHistoryFsBackend(opts) {
   if (typeof dir !== "string" || !dir) throw new TypeError("createHistoryFsBackend: dir is required");
   if (!fs || !fsp || !path || !crypto) throw new TypeError("createHistoryFsBackend: fs, fsp, path and crypto are required");
   const now = typeof o.now === "function" ? o.now : Date.now;
-  const migrate = typeof o.migrate === "function" ? o.migrate : null;
   /* testHooks (unit tests; main passes them only under SPLITPAGE_TEST=1):
        afterBodyPut(sha)     a body is durable, the index does not name it
        beforeIndexWrite()    a commit is about to write its generation
@@ -192,11 +198,10 @@ function createHistoryFsBackend(opts) {
     maxBytes: Number.isInteger(o.maxBodyBytes) && o.maxBodyBytes > 0 ? o.maxBodyBytes : MAX_BODY_BYTES
   });
 
-  let state = "idle";          /* idle | opening | migrating | ready | failed | dead */
+  let state = "idle";          /* idle | opening | ready | failed | dead */
   let readOnly = false;
   let openPromise = null;
   let openError = null;
-  let migrateResult = null;
   let loadedFrom = null;       /* "current" | "prev" | "empty" */
   let doc = emptyDoc();        /* the cached current generation */
   /* shas whose unlink succeeded after the last durable write; the next
@@ -361,20 +366,6 @@ function createHistoryFsBackend(opts) {
     return emptyDoc();
   }
 
-  /* The API a migrate() hook gets: the same bodies folder and the same
-     durable index write this backend uses, before the index is loaded. */
-  const migrateApi = {
-    dir, fs, fsp, path, crypto, now, bodies,
-    readFormat,
-    writeFormat: (text) => writeSmallDurable(formatPath, String(text).trim() + "\n"),
-    /* → the parsed current index document, or null (missing or torn) */
-    readIndex: async () => (await readIndexFile(indexPath)).doc || null,
-    indexExists: () => exists(indexPath),
-    moveIndexAside: () => moveAsideCorrupt(indexPath),
-    writeIndex: (d) => writeGeneration(d),
-    setMigrating: (on) => { if (state === "opening" || state === "migrating") state = on ? "migrating" : "opening"; }
-  };
-
   async function doOpen() {
     state = "opening";
     await fsp.mkdir(dir, { recursive: true });
@@ -387,8 +378,6 @@ function createHistoryFsBackend(opts) {
       await sweepTemps();
       if (bodies.init().readOnly) readOnly = true;
     }
-    if (migrate && !readOnly) migrateResult = await migrate(migrateApi);
-    state = "opening";
     doc = await loadIndex();
     if (Number(doc.formatVersion) > FORMAT_VERSION) readOnly = true;
     if (!readOnly) {
@@ -401,7 +390,7 @@ function createHistoryFsBackend(opts) {
 
   function open() {
     if (!openPromise) {
-      openPromise = doOpen().then(() => ({ readOnly, loadedFrom, migrated: migrateResult }), (err) => {
+      openPromise = doOpen().then(() => ({ readOnly, loadedFrom }), (err) => {
         openError = err;
         if (!dead) state = "failed";
         throw err;
@@ -541,9 +530,8 @@ function createHistoryFsBackend(opts) {
     name: typeof o.name === "string" ? o.name : "desktop",
     persistent: true,
     get readOnly() { return readOnly; },
-    /* "idle" | "opening" | "migrating" | "ready" | "failed" | "dead" */
+    /* "idle" | "opening" | "ready" | "failed" | "dead" */
     get state() { return state; },
-    get migrating() { return state === "migrating"; },
     get openError() { return openError; },
     exclusive,
     open,
@@ -552,7 +540,6 @@ function createHistoryFsBackend(opts) {
        Never sent to a renderer. */
     inspect: () => ({
       state, readOnly, loadedFrom,
-      migrated: migrateResult,
       index: JSON.parse(JSON.stringify(doc)),
       gone: [...gone],
       orphans: [...orphans]

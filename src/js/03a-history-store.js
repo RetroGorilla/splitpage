@@ -9,7 +9,7 @@ import {
   readLegacySnapshotsRaw,
   renderHistory
 } from "./03-sync.js";
-import { createIdbHistoryBackend, hashText as historyHashText, seedV1HistoryDb } from "./03c-history-idb.js";
+import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
 import { checksumText, seedCheckPasses } from "./20b-onboarding.js";
 /* The policy half of version history — what is kept and what is thrown
@@ -62,7 +62,7 @@ var historyChain;
                shared/history-store.js over desktop/history-fs-backend.js),
                and desktopHistoryBackend below is a thin IPC client
      idb       shared/history-store.js over 03c-history-idb.js's IndexedDB
-               backend (database 'splitpage-history' v2), once it has opened
+               backend (database 'splitpage-history' v3), once it has opened
      memory    the same store over the shared memory backend — kept only
                until this page closes
 
@@ -75,9 +75,9 @@ var historyChain;
        Eight callers replace `state` on the very next line (invariant #39),
        so any await before the capture would snapshot the wrong document.
        The write itself is queued; its outcome arrives on ticket.done.
-     * A capture the store refuses (quota, io, read-only, a v1 migration
-       that has not finished) stays PENDING in this page — listed, restorable,
-       retried after the next successful write.
+     * A capture the store refuses (quota, io, read-only) stays PENDING in
+       this page — listed, restorable, retried after the next successful
+       write.
      * The images a snapshot names are made durable before it is written
        (historyPersistRefs, invariant #52).
      * No promise handed out here ever rejects (exportHistoryAll aside). A
@@ -162,31 +162,13 @@ function historyStripMeta(m) {
    io-always become failNext() on the idb and memory backends (so the
    shared store's quota retry is what runs, exactly as it would for a real
    full disk). The gates and import-fail stay here: they hold or refuse a
-   call at this file's edge. migrate-stop-after:N is 03c's, handed to its
-   backend at creation, and outlives a reload (sessionStorage) because the
-   migration it stops is the first thing a page does. */
+   call at this file's edge. */
 var historyFault = null;
 var historyDelayGate = null;
 var historyDelayRelease = null;
 var historyImportGate = null;
 var historyImportRelease = null;
 var historyImportGateHit = false;
-var HISTORY_TEST_FAULT_KEY = "splitpage-history-test-fault";
-var HISTORY_STOP_FAULT_RE = /^migrate-stop-after:\d+$/;
-
-function historyStoredFault() {
-  try {
-    var v = sessionStorage.getItem(HISTORY_TEST_FAULT_KEY);
-    return typeof v === "string" && HISTORY_STOP_FAULT_RE.test(v) ? v : null;
-  } catch (e) { return null; }
-}
-
-function historyStoreFault(name) {
-  try {
-    if (name) sessionStorage.setItem(HISTORY_TEST_FAULT_KEY, name);
-    else sessionStorage.removeItem(HISTORY_TEST_FAULT_KEY);
-  } catch (e) { /* storage blocked: the fault lasts this page only */ }
-}
 
 /* Arms (or clears) the put faults on one backend. */
 function historyArmFaults(backend) {
@@ -437,22 +419,21 @@ function historyMemory() {
   return historyMem;
 }
 
-/* 03c's backend and its store, opened once per page. open() resolves after
-   the v1 → v2 migration has run as far as it will go (the backend's first
-   job), and rejects when IndexedDB cannot be opened at all — the caller's
-   cue for memory. */
+/* 03c's backend and its store, opened once per page. open() resolves once
+   the database is usable (upgraded, or a newer one adopted read-only), and
+   rejects when IndexedDB cannot be opened at all — the caller's cue for
+   memory. */
 function historyOpenIdb() {
   if (historyIdb) return historyIdb.ready;
   if (historyFault === "idb-open-fail") return Promise.reject(new Error("Injected idb-open-fail"));
   var factory;
   try { factory = window.indexedDB || null; } catch (e) { factory = null; }
-  var backend = createIdbHistoryBackend({ indexedDB: factory, now: historyNow, fault: historyStoredFault() });
+  var backend = createIdbHistoryBackend({ indexedDB: factory });
   historyArmFaults(backend);
   var store = historyMakeStore(backend, historyIdbCap);
-  var entry = { backend: backend, store: store, adapter: historyStoreAdapter(store), ready: null, opening: true };
+  var entry = { backend: backend, store: store, adapter: historyStoreAdapter(store), ready: null };
   historyIdb = entry;
   entry.ready = backend.open().then(function () {
-    entry.opening = false;
     /* Ask once for persistent storage so the browser does not evict
        history under storage pressure. Only where userAgentData exists
        (Chromium), which grants or refuses silently; elsewhere persist()
@@ -463,11 +444,8 @@ function historyOpenIdb() {
       historyPersistAsked = true;
       try { navigator.storage.persist().then(historyNoop, historyNoop); } catch (e) {}
     }
-    /* a panel drawn while the migration ran showed only its notice */
-    historyRenderSoon();
     return entry.adapter;
   }, function (e) {
-    entry.opening = false;
     if (historyIdb === entry) historyIdb = null;
     backend.close().then(historyNoop, historyNoop);
     throw e;
@@ -476,18 +454,11 @@ function historyOpenIdb() {
 }
 
 /* The notice line for the panel (and the one toast) while the IndexedDB
-   store cannot take writes: the v1 migration still running or unfinished,
-   or a database a newer build wrote (read-only). null otherwise. */
+   store cannot take writes: a database a newer build wrote (read-only).
+   null otherwise. */
 function historyIdbNotice() {
   var e = historyIdb;
   if (!e) return null;
-  var m = e.backend.migration;
-  if (m.state === "running") {
-    return { kind: "migrating", text: "Moving version history to its new format… Snapshots taken meanwhile are kept in this window until it finishes." };
-  }
-  if (m.state === "incomplete") {
-    return { kind: "incomplete", text: "Version history could not finish moving to its new format. Everything is still readable; new snapshots are kept in this window and tried again." };
-  }
   if (e.backend.readOnly) {
     return { kind: "read-only", text: "Version history is read-only here: a newer version of Splitpage wrote it. New snapshots are kept in this window." };
   }
@@ -522,7 +493,7 @@ var historyDesktopTimeoutOverride = null;
 
 /* Main's usage, as it rides on a history-list answer: {totalBytes,
    capBytes, overCap, docCount, readOnly}, or null when main could not read
-   it (or the list was answered while the v1 migration held the store). */
+   it. */
 function historyDesktopUsage(u) {
   if (!u || typeof u !== "object") return null;
   return {
@@ -599,10 +570,8 @@ var desktopHistoryBackend = {
       return S.DESKTOP.historyList(docId || null);
     }, failed, failed).then(function (r) {
       if (!r || typeof r !== "object") return failed;
-      /* an answer with no entries array cannot say "no history" either —
-         nor can one given while main is still moving v1 history into its
-         new format (#83): it lists nothing until that has finished */
-      if (opts && opts.strict && ((docId && !Array.isArray(r.entries)) || r.migrating)) return null;
+      /* an answer with no entries array cannot say "no history" either */
+      if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
       /* Main sends metas with no document id in them (on disk the folder
          IS the document), so stamp it back on for the panel — the
          browser's store carries it on every meta it hands out. */
@@ -610,14 +579,12 @@ var desktopHistoryBackend = {
       if (docId) entries.forEach(function (m) { m.docId = docId; });
       var older = (r.older || []).map(historyStripMeta).filter(Boolean);
       older.forEach(function (m) { m.docId = HISTORY_OLDER_KEY; });
-      var out = {
+      return {
         entries: entries,
         older: older,
         olderExpiresAt: r.olderExpiresAt == null ? null : Number(r.olderExpiresAt),
         usage: historyDesktopUsage(r.usage)
       };
-      if (r.migrating) out.migrating = true;
-      return out;
     });
   },
 
@@ -785,15 +752,6 @@ function resolveHistoryBackend() {
   });
 }
 
-/* True while resolveHistoryBackend() is waiting on the v1 → v2 move (the
-   IndexedDB backend's first job) — a read then answers from this page at
-   once instead of waiting behind it. */
-function historyIdbMigrating() {
-  if (historyForced === "memory" || historyIdbFailed) return false;
-  if (!historyForced && S.DESKTOP && typeof S.DESKTOP.historyPut === "function") return false;
-  return !!historyIdb && historyIdb.opening && historyIdb.backend.migration.state === "running";
-}
-
 /* ---- capture ---- */
 
 /* The one pristine test (shared with the tab shell): the demo document
@@ -835,9 +793,9 @@ function historyRenderSoon() {
    at most HISTORY_PENDING_PER_DOC of them — the newest.
 
    One warning per document — or, when the IndexedDB store itself cannot
-   take writes (its v1 migration has not finished, or a newer build made it
-   read-only), ONE warning for the page naming that, since every document's
-   captures will wait for the same thing. */
+   take writes (a newer build made it read-only), ONE warning for the page
+   naming that, since every document's captures will wait for the same
+   thing. */
 function historyMarkPending(entry) {
   entry.status = "pending";
   var mine = historyLocalEntries(entry.docId, "pending");
@@ -1005,21 +963,9 @@ function historyLocalMetas(docId, lists, seen) {
    ('stored') snapshots, newest first, one per id. Not queued: a read must
    not wait behind a slow write, and the local entries already show what is
    queued. notice (or null) is the one line the panel shows while the store
-   is being moved to its new format, could not finish that, or is read-only
-   (#83). */
+   is read-only (#83). */
 export function listDocHistory(docId) {
   docId = normalizeDocId(docId);
-  /* The v1 → v2 move runs before IndexedDB answers anything, and a big
-     profile takes a while: answer from this page meanwhile, with the
-     notice, rather than leave the panel waiting. historyOpenIdb() redraws
-     it when the move is done. */
-  if (historyIdbMigrating()) {
-    var mine = docId ? historyLocalMetas(docId, historyLocalEntries(docId), {}) : [];
-    mine.sort(function (a, b) { return b.atMs - a.atMs; });
-    var n = historyIdbNotice();
-    return Promise.resolve({ entries: mine, older: [], olderExpiresAt: null, backend: "idb", persistent: true,
-                             usage: null, notice: n ? n.text : null });
-  }
   /* Local entries are read both BEFORE the backend read and after it. A
      write that commits in between is gone from historyLocal by the time
      the second read runs, yet may be missing from the backend read that
@@ -1040,13 +986,8 @@ export function listDocHistory(docId) {
       });
       if (docId) entries = entries.concat(historyLocalMetas(docId, historyLocalEntries(docId).concat(localBefore), seen));
       entries.sort(function (a, b) { return b.atMs - a.atMs; });
-      var notice = null;
-      if (backend.name === "idb") {
-        var n = historyIdbNotice();
-        notice = n ? n.text : null;
-      } else if (backend.name === "desktop" && listed.migrating) {
-        notice = "Moving version history to its new format… Snapshots taken meanwhile are kept in this window until it finishes.";
-      }
+      var n = backend.name === "idb" ? historyIdbNotice() : null;
+      var notice = n ? n.text : null;
       return {
         entries: entries,
         older: (listed.older || []).map(function (m) { m.status = "stored"; return m; }),
@@ -1846,7 +1787,6 @@ function historyDropIdb() {
 
 function historyResetForTest() {
   historyFault = null;
-  historyStoreFault(null);
   releaseDelayedPut();
   /* A migration still parked on the import gate would hold the queue, and
      historyIdle() below would never settle. */
@@ -1905,29 +1845,19 @@ export function __init() {
       return historyCapOverride;
     },
     /* 'idb-open-fail' | 'quota-once' | 'quota-always' | 'io-always' |
-       'delay-put' | 'delay-import' | 'import-fail' | 'migrate-stop-after:N'
-       | null. Clearing a fault drains any pending snapshots, the way the
-       next successful write would.
-
-       migrate-stop-after:N stops the IndexedDB v1 → v2 move after N rows,
-       like a crash — for the NEXT page load: it is kept in sessionStorage
-       and handed to the backend when it is created (at boot), and stays set
-       across reloads until cleared here or by resetForTest(). */
+       'delay-put' | 'delay-import' | 'import-fail' | null. Clearing a
+       fault drains any pending snapshots, the way the next successful
+       write would. */
     injectFault: function (name) {
       var known = ["idb-open-fail", "quota-once", "quota-always", "io-always", "delay-put", "delay-import", "import-fail"];
       if (name == null) {
         if (historyFault === "delay-put") releaseDelayedPut();
         if (historyFault === "delay-import") releaseDelayedImport();
         historyFault = null;
-        historyStoreFault(null);
         if (historyIdb) historyArmFaults(historyIdb.backend);
         if (historyMem) historyArmFaults(historyMem.backend);
         if (historyLocalEntries(null, "pending").length) retryPendingSnapshots();
         return null;
-      }
-      if (HISTORY_STOP_FAULT_RE.test(String(name))) {
-        historyStoreFault(String(name));
-        return String(name);
       }
       if (name === "delay-import") historyImportGateHit = false;
       historyFault = known.indexOf(name) !== -1 ? name : null;
@@ -1988,28 +1918,6 @@ export function __init() {
     },
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
-    /* ---- the IndexedDB v1 → v2 move (#83, 03c-history-idb.js) ----
-       seedV1(spec): closes this page's backend, deletes the database and
-       writes a raw v1 one ({docs:[docsRow], snaps:[{meta (with its bucket
-       as docId), stateJson}]} — seedV1HistoryDb's spec), leaving it closed:
-       the next history call (or the next page load) opens it, and the move
-       runs as that backend's first job. */
-    seedV1: function (spec) {
-      return historyIdle().then(function () {
-        historyIdbFailed = false;
-        return historyDropIdb();
-      }).then(function () {
-        return seedV1HistoryDb(window.indexedDB, spec || {});
-      }).then(function () { return true; });
-    },
-    /* {state, migrated, skipped, code} — 'unknown' until opened, then
-       'none' | 'running' | 'done' | 'incomplete'; null with no backend */
-    migration: function () { return historyIdb ? historyIdb.backend.migration : null; },
-    /* rows left in the v1 stores, {docs, snapMeta, snapBody}, or null when
-       the database has none */
-    v1Counts: function () {
-      return historyOpenIdb().then(function () { return historyIdb.backend.v1Counts(); }, function () { return null; });
-    },
     /* the panel/toast notice text now, or null */
     notice: function () { var n = historyIdbNotice(); return n ? n.text : null; },
     /* ms, or null for the real 30 s — how long a desktop bridge call may hang */

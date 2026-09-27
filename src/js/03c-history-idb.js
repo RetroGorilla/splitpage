@@ -1,7 +1,6 @@
 /* ---------------------------------------------------------------------
  * 03c-history-idb.js: the browser's storage for version history (#83),
- * as a backend for shared/history-store.js — and, clearly marked below and
- * TEMPORARY, the one-time move of the v1 IndexedDB rows into it.
+ * as a backend for shared/history-store.js.
  *
  * 03a-history-store.js builds the browser's one createHistoryStore() on top
  * of it (step 3b), falling back to the shared memory backend when IndexedDB
@@ -9,7 +8,7 @@
  * time — the factory is handed its indexedDB, so node --test runs it over
  * fake-indexeddb (src/test/history-idb.test.mjs).
  *
- * ---- THE SCHEMA: database 'splitpage-history', version 2 ----
+ * ---- THE SCHEMA: database 'splitpage-history', version 3 ----
  *
  *   index   keyPath 'bucket'   one DocRecord per bucket (a docId, or
  *                              HISTORY_OLDER_KEY): {bucket, title,
@@ -18,10 +17,16 @@
  *   bodies  keyPath 'sha'      {sha, stateJson}; one row per distinct body,
  *                              shared by every entry (in any bucket) naming it
  *
- * The v2 upgrade only CREATES those two stores. The v1 stores (docs,
- * snapMeta [docId,id] + index byDocAt, snapBody [docId,id], and the unused
- * meta / byLastOpened) are left in place for the migrator below, and a
- * fresh profile never gets them at all; a later v3 deletes them.
+ * Versions. v1 (2.1) had four other stores: docs, snapMeta [docId,id],
+ * snapBody [docId,id] and an unused meta. v2 (3.0.0) added index and bodies
+ * and moved the v1 rows into them, one snapshot at a time, emptying v1 as
+ * it went (#83). v3 (#100) retires the v1 stores — see upgradeDb() below:
+ * they are dropped only when they hold no snapshot, which is what a
+ * finished 3.0.0 move leaves. v1 stores that still hold rows (a profile
+ * that skipped 3.0.0, or whose move never finished) are KEPT, dormant:
+ * this build has no reader for them, so dropping them would destroy
+ * history nobody can see any more; keeping them loses nothing. Nothing
+ * here ever reads or writes them.
  *
  * ---- TRANSACTIONS ----
  *
@@ -56,15 +61,18 @@
  *
  *   * onversionchange closes this connection (and forgets it; the next job
  *     reopens), so a tab running a newer build — or resetForTest's
- *     deleteDatabase — is never blocked by this one. 03a's v1 connection
- *     does the same, which is what lets this build's v1 → v2 upgrade
- *     through: an old-build tab closes, its next open(…, 1) fails with a
- *     VersionError, and 03a falls back to memory for that page.
+ *     deleteDatabase — is never blocked by this one. Older builds do the
+ *     same (3.0.0's copy of this file, and 2.1's v1 connection in its
+ *     03a), which is what lets this build's upgrade to v3 through: the
+ *     old tab closes; a 3.0.0 tab's next open(…, 2) then fails with a
+ *     VersionError and it serves the v3 database read-only (the rule
+ *     below — v3 keeps index and bodies as they were), and a 2.1 tab's
+ *     open(…, 1) fails the same way and it falls back to memory.
  *   * onblocked (an old connection that will not close) fails THIS open at
  *     once with 'io' instead of hanging every snapshot behind it; a success
  *     that arrives later is closed, not adopted — the caller has already
  *     chosen another backend (03a's rule).
- *   * VersionError (the database is NEWER than 2 — a newer build ran here,
+ *   * VersionError (the database is NEWER than 3 — a newer build ran here,
  *     and this tab is stale or a downgrade): reopen WITHOUT a version and,
  *     when it still has the index and bodies stores, serve it READ-ONLY
  *     (backend.readOnly = true; every write answers 'read-only'). Why not
@@ -75,38 +83,27 @@
  *     database without those stores (a format this build cannot read) fails
  *     the open instead, and 03a falls back to memory.
  *
- * open() resolves once the database is usable (and the migration below has
- * run), or rejects — 03a's resolveHistoryBackend() chooses memory on that,
- * as it does today.
+ * open() resolves once the database is usable, or rejects — 03a's
+ * resolveHistoryBackend() chooses memory on that.
  * --------------------------------------------------------------------- */
 
 import { sha256Bytes } from "./02b-doc-id.js";
 import { DOC_ID_RE } from "../../shared/doc-id-policy.js";
-import {
-  HISTORY_OLDER_KEY,
-  HISTORY_OLDER_TTL_MS,
-  HISTORY_SNAP_ID_RE,
-  historyClip,
-  historyUtf8Length,
-  sanitizeHistoryMeta
-} from "../../shared/history-policy.js";
+import { HISTORY_OLDER_KEY } from "../../shared/history-policy.js";
 
 export var HISTORY_IDB_NAME = "splitpage-history";
-export var HISTORY_IDB_VERSION = 2;
+export var HISTORY_IDB_VERSION = 3;
 
 var INDEX_STORE = "index";
 var BODY_STORE = "bodies";
-/* The v1 stores (03a-history-store.js's openHistoryDb). */
-var V1_DOCS = "docs";
-var V1_META = "snapMeta";
-var V1_BODY = "snapBody";
-/* A v1 entry seen through the read-only v1 reader carries this pseudo-sha
-   instead of a real one; tx.get() resolves it from snapBody. */
-var V1_SHA_PREFIX = "v1:";
+/* 2.1's stores (see THE SCHEMA). Named only by upgradeDb(), which decides
+   whether they go; the two that hold snapshots decide it. */
+var V1_STORES = ["docs", "snapMeta", "snapBody", "meta"];
+var V1_SNAPSHOT_STORES = ["snapMeta", "snapBody"];
 
 /* The content address the store hands every body: SHA-256 of its UTF-8, as
    64 lowercase hex — synchronous (02b's core over TextEncoder output), so
-   the store can run it before a transaction and the migrator INSIDE one. */
+   the store can run it before a transaction opens. */
 export function hashText(text) {
   return sha256Bytes(new TextEncoder().encode(String(text)));
 }
@@ -142,15 +139,6 @@ function isBucket(v) {
   return v === HISTORY_OLDER_KEY || (typeof v === "string" && DOC_ID_RE.test(v));
 }
 
-function finiteOr(v, dflt) {
-  var n = Number(v);
-  return isFinite(n) ? n : dflt;
-}
-
-function byAtAscending(a, b) {
-  return (a.atMs - b.atMs) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-}
-
 /* An index row → the DocRecord the store sees (the key field dropped). */
 function recordOf(row) {
   var out = {};
@@ -170,25 +158,61 @@ function hasStores(db, names) {
   return names.every(function (n) { return db.objectStoreNames.contains(n); });
 }
 
+/* ================= the upgrade (onupgradeneeded) =================
+
+   Runs inside the versionchange transaction `t`, whatever the version
+   found (0 = no database yet, 1 = 2.1's, 2 = 3.0.0's):
+     1. index and bodies are created if absent (so a fresh profile gets
+        only these two, and a 2.1 profile gets them alongside its v1 ones);
+     2. if any v1 store is there, snapMeta and snapBody are COUNTED in the
+        same transaction, and the four v1 stores are deleted only when both
+        counts are 0 (a finished 3.0.0 move empties them; 2.1 never wrote
+        meta, and a docs row alone is a title, not history). Any rows → all
+        four stay, dormant. A count that fails keeps them too (the error is
+        swallowed so the upgrade itself still completes).
+   deleteObjectStore from a request's success callback is legal: the
+   versionchange transaction is active while its events are dispatched,
+   and the open's success waits for the transaction to complete — so by
+   the time open() resolves, the decision has landed. */
+function upgradeDb(d, t) {
+  if (!d.objectStoreNames.contains(INDEX_STORE)) d.createObjectStore(INDEX_STORE, { keyPath: "bucket" });
+  if (!d.objectStoreNames.contains(BODY_STORE)) d.createObjectStore(BODY_STORE, { keyPath: "sha" });
+  var v1 = V1_STORES.filter(function (n) { return d.objectStoreNames.contains(n); });
+  if (!v1.length) return;
+  function dropV1() {
+    v1.forEach(function (n) { if (d.objectStoreNames.contains(n)) d.deleteObjectStore(n); });
+  }
+  var counted = V1_SNAPSHOT_STORES.filter(function (n) { return d.objectStoreNames.contains(n); });
+  var left = counted.length, rows = 0, failed = false;
+  if (!left) { dropV1(); return; }
+  counted.forEach(function (n) {
+    var r = t.objectStore(n).count();
+    r.onsuccess = function () {
+      rows += Number(r.result) || 0;
+      if (--left === 0 && !failed && rows === 0) dropV1();
+    };
+    r.onerror = function (ev) {
+      failed = true;
+      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+      if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
+    };
+  });
+}
+
 /* ================= the backend ================= */
 
-/* createIdbHistoryBackend({indexedDB, name, now, hashText, fault})
+/* createIdbHistoryBackend({indexedDB, name})
      indexedDB  the IDBFactory (default: window.indexedDB)
      name       the database name (default 'splitpage-history')
-     now()      the migrator's clock (default Date.now)
-     hashText   SYNCHRONOUS text → sha (default: hashText above)
-     fault      a test fault, as injectFault() below takes it
 
    The interface is shared/history-store.js's; the extras are open(),
-   close(), migration, injectFault(), and test helpers mirroring the memory
-   backend's (failNext, clearFaults, counts, and — as promises here —
-   bodyCount, hasBody, dropBody, inspect, seed, v1Counts). */
+   close(), and test helpers mirroring the memory backend's (failNext,
+   clearFaults, counts, and — as promises here — bodyCount, hasBody,
+   dropBody, inspect, seed). */
 export function createIdbHistoryBackend(o) {
   o = o || {};
   var factory = o.indexedDB || (typeof window !== "undefined" ? window.indexedDB : null) || null;
   var dbName = typeof o.name === "string" && o.name ? o.name : HISTORY_IDB_NAME;
-  var now = typeof o.now === "function" ? o.now : Date.now;
-  var hash = typeof o.hashText === "function" ? o.hashText : hashText;
 
   var db = null;
   var opening = null;
@@ -196,11 +220,6 @@ export function createIdbHistoryBackend(o) {
   var chain = Promise.resolve();
   var faults = { put: [], commit: [] };
   var counts = { exclusive: 0, put: 0, commit: 0 };
-  /* state: 'unknown' (not checked yet) | 'none' (no v1 stores) | 'running'
-     | 'done' | 'incomplete' (a step failed or was stopped; see below) */
-  var migration = { state: "unknown", migrated: 0, skipped: 0, code: null };
-  var stopAfter = null;      /* test fault: migrate-stop-after:N */
-  var stopped = false;       /* …which then also stops the retry */
 
   function takeFault(op) {
     var q = faults[op];
@@ -256,12 +275,7 @@ export function createIdbHistoryBackend(o) {
       if (!factory) { fail(codedError("io", "history: no IndexedDB")); return; }
       var req;
       try { req = factory.open(dbName, HISTORY_IDB_VERSION); } catch (e) { fail(e); return; }
-      req.onupgradeneeded = function () {
-        /* Creates only. The v1 stores stay where they are for the migrator. */
-        var d = req.result;
-        if (!d.objectStoreNames.contains(INDEX_STORE)) d.createObjectStore(INDEX_STORE, { keyPath: "bucket" });
-        if (!d.objectStoreNames.contains(BODY_STORE)) d.createObjectStore(BODY_STORE, { keyPath: "sha" });
-      };
+      req.onupgradeneeded = function () { upgradeDb(req.result, req.transaction); };
       req.onsuccess = function () {
         var d = req.result;
         if (failed) { try { d.close(); } catch (e) {} return; }
@@ -327,7 +341,7 @@ export function createIdbHistoryBackend(o) {
 
   /* ---- the tx handed to the store ---- */
 
-  function makeTx(t, write, withV1) {
+  function makeTx(t, write) {
     var index = t.objectStore(INDEX_STORE);
     var bodies = t.objectStore(BODY_STORE);
     var committed = false;
@@ -337,27 +351,14 @@ export function createIdbHistoryBackend(o) {
     }
     return {
       list: function () {
-        var main = idbReq(index.getAll()).then(function (rows) {
+        return idbReq(index.getAll()).then(function (rows) {
           var out = {};
           (rows || []).forEach(function (row) { if (row && isBucket(row.bucket)) out[row.bucket] = recordOf(row); });
           return out;
         });
-        if (!withV1) return main;
-        return Promise.all([
-          main,
-          idbReq(t.objectStore(V1_DOCS).getAll()),
-          idbReq(t.objectStore(V1_META).getAll())
-        ]).then(function (res) { return mergeV1(res[0], res[1], res[2], now()); });
       },
       get: function (sha) {
         if (typeof sha !== "string") return Promise.resolve(null);
-        if (sha.indexOf(V1_SHA_PREFIX) === 0) {
-          var key = v1KeyOf(sha);
-          if (!withV1 || !key) return Promise.resolve(null);
-          return idbReq(t.objectStore(V1_BODY).get(key)).then(function (row) {
-            return row && typeof row.stateJson === "string" ? row.stateJson : null;
-          });
-        }
         return idbReq(bodies.get(sha)).then(function (row) {
           return row && typeof row.stateJson === "string" ? row.stateJson : null;
         });
@@ -393,7 +394,7 @@ export function createIdbHistoryBackend(o) {
           reqs.push(idbReq(rec ? index.put(rowOf(bucket, rec)) : index.delete(bucket)));
         });
         (Array.isArray(dropped) ? dropped : []).forEach(function (sha) {
-          if (typeof sha === "string" && sha.indexOf(V1_SHA_PREFIX) !== 0) reqs.push(idbReq(bodies.delete(sha)));
+          if (typeof sha === "string") reqs.push(idbReq(bodies.delete(sha)));
         });
         return Promise.all(reqs).then(noop);
       }
@@ -401,153 +402,11 @@ export function createIdbHistoryBackend(o) {
   }
 
   function runTx(fn, write) {
-    var withV1 = migration.state === "incomplete";
-    if (withV1 && write) {
-      return Promise.reject(codedError("io", "history: the move to the new history format has not finished"));
-    }
-    var stores = [INDEX_STORE, BODY_STORE];
-    if (withV1) stores = stores.concat([V1_DOCS, V1_META, V1_BODY]);
     var mode = write && !readOnly ? "readwrite" : "readonly";
-    return transaction(stores, mode).then(function (t) {
-      withV1 = withV1 && hasStores(t.db || db, [V1_DOCS, V1_META, V1_BODY]);
-      return runIn(t, function () { return fn(makeTx(t, write, withV1)); });
+    return transaction([INDEX_STORE, BODY_STORE], mode).then(function (t) {
+      return runIn(t, function () { return fn(makeTx(t, write)); });
     });
   }
-
-  /* Opened, and migrated as far as it will go. A write job retries an
-     incomplete migration first (quota freed since, another tab finished
-     it); the test fault's stop is final for this backend, like a crash. */
-  function ready(write) {
-    return openDb().then(function (d) {
-      if (readOnly) return d;
-      if (migration.state === "unknown" || (migration.state === "incomplete" && write && !stopped)) {
-        return runMigration(d).then(function () { return d; });
-      }
-      return d;
-    });
-  }
-
-  /* ================= TEMPORARY: the v1 → v2 migration (#83) =================
-
-     Delete with the v1 stores in the v3 that drops them.
-
-     One v1 snapshot per transaction, as this backend's first job (every
-     other job waits behind it in the chain). Each step, in ONE readwrite
-     transaction over the five stores:
-       1. take the first snapMeta row (key order [docId, id], so a bucket's
-          rows are contiguous) and peek at the next, to know whether this is
-          the bucket's last;
-       2. read its snapBody row, the bucket's v1 docs row and its index row;
-       3. hash the body (synchronously, inside the transaction), put it into
-          bodies if absent, and merge meta + sha into index[bucket] —
-          creating that record from the v1 docs row (title, lastOpenedAt,
-          migratedAt, expiresAt) the first time;
-       4. delete the v1 snapMeta + snapBody rows, and the docs row when this
-          was the bucket's last snapshot.
-     A row that was never readable in v1 (no body, an unusable meta or
-     bucket) is dropped in step 4 without an entry. When no snapMeta row is
-     left, the last step clears docs and snapBody (rows nothing reaches).
-
-     RESUMABLE: every step is atomic, so what is left in v1 is exactly what
-     remains to move. Another tab of this build running the same loop is
-     serialised by IndexedDB (same scope, readwrite), and each step reads
-     its row inside its own transaction — a row the other tab has already
-     moved is simply not there any more; an id already in the index is not
-     added twice.
-
-     IF IT CANNOT FINISH (a step fails: quota, io, or the test fault), the
-     state is 'incomplete': write jobs answer 'io' (03a keeps the capture
-     pending and toasts once) after retrying the migration, and read jobs
-     see the v2 index merged with a read-only view of the v1 rows, so
-     nothing disappears from the panel meanwhile. */
-
-  function runMigration(d) {
-    if (!hasStores(d, [V1_DOCS, V1_META, V1_BODY])) {
-      migration.state = "none";
-      return Promise.resolve();
-    }
-    migration.state = "running";
-    migration.code = null;
-    function step() {
-      if (stopAfter != null && migration.migrated + migration.skipped >= stopAfter) {
-        stopped = true;
-        migration.state = "incomplete";
-        migration.code = "stopped";
-        return undefined;
-      }
-      return migrateOne().then(function (outcome) {
-        if (!outcome) {
-          migration.state = "done";
-          return undefined;
-        }
-        /* Counted only once the step's transaction has completed. */
-        if (outcome === "moved") migration.migrated++; else migration.skipped++;
-        return step();
-      });
-    }
-    return Promise.resolve().then(step).then(null, function (e) {
-      migration.state = "incomplete";
-      migration.code = historyIdbError(e).code;
-      if (typeof console !== "undefined" && console.warn) console.warn("Version history: moving to the new format stopped", e);
-    });
-  }
-
-  /* One step. → 'moved' (an entry and its body landed in v2), 'skipped'
-     (an unreadable v1 row was dropped), or false when no row was left. */
-  function migrateOne() {
-    return transaction([INDEX_STORE, BODY_STORE, V1_DOCS, V1_META, V1_BODY], "readwrite").then(function (t) {
-      return runIn(t, function () {
-        var metaStore = t.objectStore(V1_META);
-        var v1Bodies = t.objectStore(V1_BODY);
-        var docsStore = t.objectStore(V1_DOCS);
-        var index = t.objectStore(INDEX_STORE);
-        var bodies = t.objectStore(BODY_STORE);
-        return firstTwo(metaStore).then(function (pair) {
-          if (!pair) {
-            /* Nothing left to move: what remains in v1 is unreachable. */
-            return Promise.all([idbReq(docsStore.clear()), idbReq(v1Bodies.clear())]).then(function () { return false; });
-          }
-          var row = pair.row, key = pair.key, bucket = key[0], id = key[1];
-          var last = !pair.next || pair.next[0] !== bucket;
-          return Promise.all([
-            idbReq(v1Bodies.get(key)),
-            idbReq(docsStore.get(bucket)),
-            isBucket(bucket) ? idbReq(index.get(bucket)) : null
-          ]).then(function (res) {
-            var body = res[0], docsRow = res[1], indexRow = res[2];
-            var jobs = [];
-            var entry = isBucket(bucket) && HISTORY_SNAP_ID_RE.test(String(id)) ? sanitizeHistoryMeta(row) : null;
-            if (entry && body && typeof body.stateJson === "string") {
-              var text = body.stateJson;
-              entry.sha = hash(text);
-              if (typeof entry.sha !== "string" || !entry.sha) throw codedError("io", "history: hashText gave no sha");
-              entry.sizeBytes = historyUtf8Length(text);
-              var rec = indexRow ? recordOf(indexRow) : v1Record(docsRow, bucket, entry, now());
-              if (!rec.snapshots.some(function (s) { return s && s.id === entry.id; })) {
-                rec.snapshots = rec.snapshots.concat([entry]).sort(byAtAscending);
-              }
-              jobs.push(idbReq(bodies.count(entry.sha)).then(function (n) {
-                return n > 0 ? null : idbReq(bodies.put({ sha: entry.sha, stateJson: text }));
-              }));
-              jobs.push(idbReq(index.put(rowOf(bucket, rec))));
-            }
-            var outcome = jobs.length ? "moved" : "skipped";
-            jobs.push(idbReq(metaStore.delete(key)));
-            jobs.push(idbReq(v1Bodies.delete(key)));
-            if (last) jobs.push(idbReq(docsStore.delete(bucket)));
-            return Promise.all(jobs).then(function () { return outcome; });
-          });
-        });
-      });
-    });
-  }
-
-  function injectFault(name) {
-    var m = /^migrate-stop-after:(\d+)$/.exec(String(name || ""));
-    stopAfter = m ? Number(m[1]) : null;
-    if (!m) stopped = false;
-  }
-  if (o.fault) injectFault(o.fault);
 
   /* ---- the backend object ---- */
 
@@ -560,9 +419,7 @@ export function createIdbHistoryBackend(o) {
   /* A test helper's read, in the chain like a job. */
   function peek(stores, body) {
     return enqueue(function () {
-      return ready(false).then(function () {
-        return transaction(stores, "readonly").then(function (t) { return runIn(t, body); });
-      });
+      return transaction(stores, "readonly").then(function (t) { return runIn(t, body); });
     });
   }
 
@@ -571,23 +428,18 @@ export function createIdbHistoryBackend(o) {
     persistent: true,
     get readOnly() { return readOnly; },
     counts: counts,
-    /* {state, migrated, skipped, code} — a copy. */
-    get migration() {
-      return { state: migration.state, migrated: migration.migrated, skipped: migration.skipped, code: migration.code };
-    },
 
     exclusive: function (fn, xo) {
       var write = !(xo && xo.write === false);
       counts.exclusive++;
-      return enqueue(function () {
-        return ready(write).then(function () { return runTx(fn, write); });
-      }).then(null, function (e) { throw historyIdbError(e); });
+      return enqueue(function () { return runTx(fn, write); }).then(null, function (e) { throw historyIdbError(e); });
     },
 
-    /* Resolves once usable (and migrated as far as it goes); rejects when
-       the database cannot be opened at all — the caller's cue for memory. */
+    /* Resolves once usable (upgraded to v3, or a newer database adopted
+       read-only); rejects when the database cannot be opened at all — the
+       caller's cue for memory. */
     open: function () {
-      return enqueue(function () { return ready(false).then(noop); });
+      return enqueue(function () { return openDb().then(noop); });
     },
 
     /* Closes the connection after the queued jobs (a reload in the tests;
@@ -598,8 +450,6 @@ export function createIdbHistoryBackend(o) {
         if (d) { try { d.close(); } catch (e) {} forget(d); }
       });
     },
-
-    injectFault: injectFault,
 
     failNext: function (op, code, times) {
       if (!faults[op]) throw new TypeError("failNext: unknown op " + op);
@@ -627,19 +477,6 @@ export function createIdbHistoryBackend(o) {
         });
       });
     },
-    /* Rows left in the v1 stores ({docs, snapMeta, snapBody}; null when the
-       database has none). */
-    v1Counts: function () {
-      return enqueue(function () {
-        return openDb().then(function (d) {
-          if (!hasStores(d, [V1_DOCS, V1_META, V1_BODY])) return null;
-          return runIn(d.transaction([V1_DOCS, V1_META, V1_BODY], "readonly"), function (t) {
-            return Promise.all([V1_DOCS, V1_META, V1_BODY].map(function (n) { return idbReq(t.objectStore(n).count()); }))
-              .then(function (c) { return { docs: c[0], snapMeta: c[1], snapBody: c[2] }; });
-          });
-        });
-      });
-    },
     dropBody: function (sha) {
       return enqueue(function () {
         return transaction([BODY_STORE], "readwrite").then(function (t) {
@@ -647,10 +484,10 @@ export function createIdbHistoryBackend(o) {
         });
       });
     },
-    /* Replace everything in the v2 stores (a fixture). */
+    /* Replace everything in index and bodies (a fixture). */
     seed: function (idx, bods) {
       return enqueue(function () {
-        return ready(true).then(function () { return transaction([INDEX_STORE, BODY_STORE], "readwrite"); }).then(function (t) {
+        return transaction([INDEX_STORE, BODY_STORE], "readwrite").then(function (t) {
           return runIn(t, function () {
             var index = t.objectStore(INDEX_STORE), bodies = t.objectStore(BODY_STORE);
             return Promise.all([idbReq(index.clear()), idbReq(bodies.clear())]).then(function () {
@@ -665,150 +502,4 @@ export function createIdbHistoryBackend(o) {
     }
   };
   return backend;
-}
-
-/* ---- TEMPORARY: v1 helpers (the migrator and the read-only v1 reader) ---- */
-
-/* [first row, its key, the next row's key] of a store, in key order, or
-   null when it is empty — the next key tells the migrator whether this is
-   its bucket's last row, without a key range. */
-function firstTwo(store) {
-  return new Promise(function (resolve, reject) {
-    var req = store.openCursor();
-    var out = null;
-    req.onsuccess = function () {
-      var cur = req.result;
-      if (!out) {
-        if (!cur) { resolve(null); return; }
-        out = { row: cur.value, key: cur.primaryKey, next: null };
-        cur.continue();
-        return;
-      }
-      out.next = cur ? cur.primaryKey : null;
-      resolve(out);
-    };
-    req.onerror = function () { reject(req.error); };
-  });
-}
-
-/* A v2 DocRecord for a bucket first met in v1: the v1 docs row's title,
-   lastOpenedAt, migratedAt and expiresAt. No docs row (never written that
-   way by 03a, but a profile is what it is) → the first entry's title and
-   date. An Older bucket without a valid expiry gets a fresh 90 days — the
-   desktop migration's rule — rather than none (v2 reads ≤ 0 as never). */
-function v1Record(docsRow, bucket, entry, nowMs) {
-  var rec = { title: "", lastOpenedAt: 0, snapshots: [] };
-  if (docsRow) {
-    rec.title = historyClip(docsRow.title, 300);
-    rec.lastOpenedAt = finiteOr(docsRow.lastOpenedAt, 0);
-    if (docsRow.migratedAt != null && isFinite(Number(docsRow.migratedAt))) rec.migratedAt = Number(docsRow.migratedAt);
-    if (docsRow.expiresAt != null && isFinite(Number(docsRow.expiresAt))) rec.expiresAt = Number(docsRow.expiresAt);
-  } else if (entry) {
-    rec.title = entry.title || "";
-    rec.lastOpenedAt = finiteOr(entry.atMs, 0);
-  }
-  if (bucket === HISTORY_OLDER_KEY) {
-    rec.lastOpenedAt = 0;
-    if (!(Number(rec.expiresAt) > 0)) {
-      if (!(Number(rec.migratedAt) > 0)) rec.migratedAt = nowMs;
-      rec.expiresAt = nowMs + HISTORY_OLDER_TTL_MS;
-    }
-  }
-  return rec;
-}
-
-function v1ShaOf(bucket, id) { return V1_SHA_PREFIX + JSON.stringify([bucket, id]); }
-
-function v1KeyOf(sha) {
-  try {
-    var k = JSON.parse(sha.slice(V1_SHA_PREFIX.length));
-    return Array.isArray(k) && k.length === 2 && typeof k[0] === "string" && typeof k[1] === "string" ? k : null;
-  } catch (e) { return null; }
-}
-
-/* The read-only v1 reader: the v2 index with every v1 row still waiting
-   laid over it (a v2 entry wins by id). v1 entries name a pseudo-sha that
-   tx.get() resolves from snapBody. A v1 meta whose body is gone shows until
-   get() answers null — the store then tries to heal it, which is a write,
-   and a write is refused while this view is in use: harmless. */
-function mergeV1(index, docsRows, metas, nowMs) {
-  var out = {};
-  Object.keys(index).forEach(function (b) { out[b] = index[b]; });
-  var docs = {};
-  (docsRows || []).forEach(function (r) { if (r && typeof r.docId === "string") docs[r.docId] = r; });
-  var touched = {};
-  (metas || []).forEach(function (row) {
-    var bucket = row && row.docId;
-    if (!isBucket(bucket)) return;
-    var entry = sanitizeHistoryMeta(row);
-    if (!entry) return;
-    entry.sha = v1ShaOf(bucket, entry.id);
-    if (!touched[bucket]) {
-      out[bucket] = out[bucket] ? recordOf(out[bucket]) : v1Record(docs[bucket] || null, bucket, entry, nowMs);
-      out[bucket].snapshots = out[bucket].snapshots.slice();
-      touched[bucket] = true;
-    }
-    var rec = out[bucket];
-    if (!rec.snapshots.some(function (s) { return s && s.id === entry.id; })) rec.snapshots.push(entry);
-  });
-  Object.keys(touched).forEach(function (b) { out[b].snapshots.sort(byAtAscending); });
-  return out;
-}
-
-/* ---- TEMPORARY test hook: a raw v1 database, exactly as 03a's
-   openHistoryDb() lays it out (schema and row shapes), so the migration can
-   be driven from a real-looking profile. Tests and step 3b's browser suite
-   only.
-
-   seedV1HistoryDb(indexedDB, {name?, docs: [docsRow], snaps: [{meta,
-   stateJson}]}) — each meta carries its bucket as meta.docId; a docs row
-   missing bytes/count gets them computed; a snap with stateJson null gets
-   no body row (a meta whose body is lost). Resolves once written and
-   closed. */
-export function seedV1HistoryDb(factory, spec) {
-  spec = spec || {};
-  var name = typeof spec.name === "string" && spec.name ? spec.name : HISTORY_IDB_NAME;
-  return new Promise(function (resolve, reject) {
-    var req = factory.open(name, 1);
-    req.onupgradeneeded = function (e) {
-      var d = req.result;
-      if ((e.oldVersion || 0) < 1) {
-        /* Spelled in single quotes like 03a's: 17-formats searches the
-           standalone export for the double-quoted JSON key. */
-        var K = 'docId';
-        var docs = d.createObjectStore("docs", { keyPath: K });
-        docs.createIndex("byLastOpened", "lastOpenedAt");
-        var metaStore = d.createObjectStore("snapMeta", { keyPath: [K, "id"] });
-        metaStore.createIndex("byDocAt", [K, "atMs"]);
-        d.createObjectStore("snapBody", { keyPath: [K, "id"] });
-        d.createObjectStore("meta", { keyPath: "key" });
-      }
-    };
-    req.onerror = function () { reject(req.error); };
-    req.onsuccess = function () {
-      var d = req.result;
-      var t = d.transaction(["docs", "snapMeta", "snapBody"], "readwrite");
-      var sums = {};
-      (spec.snaps || []).forEach(function (s) {
-        var m = JSON.parse(JSON.stringify(s.meta));
-        if (m.sizeBytes == null && typeof s.stateJson === "string") m.sizeBytes = historyUtf8Length(s.stateJson);
-        t.objectStore("snapMeta").put(m);
-        if (typeof s.stateJson === "string") {
-          t.objectStore("snapBody").put({ docId: m.docId, id: m.id, stateJson: s.stateJson });
-        }
-        var sum = sums[m.docId] || (sums[m.docId] = { bytes: 0, count: 0 });
-        sum.bytes += Number(m.sizeBytes) || 0;
-        sum.count++;
-      });
-      (spec.docs || []).forEach(function (r) {
-        var row = JSON.parse(JSON.stringify(r));
-        var sum = sums[row.docId] || { bytes: 0, count: 0 };
-        if (row.bytes == null) row.bytes = sum.bytes;
-        if (row.count == null) row.count = sum.count;
-        t.objectStore("docs").put(row);
-      });
-      t.oncomplete = function () { d.close(); resolve(); };
-      t.onabort = function () { d.close(); reject(t.error || new Error("seed aborted")); };
-    };
-  });
 }
