@@ -833,8 +833,8 @@ export function createMemoryBackend() {
    of its own rather than a store in 'splitpage-history': adding a store
    there means a version upgrade of a database every open tab holds a
    connection to, and blobs are shared by history, drafts and the open
-   document alike. Opened the way openHistoryDb opens its database, for the
-   same reasons (upgrade by oldVersion, close on versionchange, fail rather
+   document alike. Opened the way 03c-history-idb.js opens its database,
+   for the same reasons (upgrade by oldVersion, close on versionchange, fail rather
    than hang when blocked). */
 function openBlobDb() {
   if (blobDb) return Promise.resolve(blobDb);
