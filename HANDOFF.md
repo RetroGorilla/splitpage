@@ -1226,7 +1226,7 @@ per-document history, drafts, duplicate-tab detection. Invariants #35–#37.
 snapshot id, the stamp after the bucket's newest, the trim to 50, cap
 eviction, the quota retry, Older's creation and expiry, holds, index-only
 copy, which bodies may go), run over a backend per place: in the browser
-over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v2: an `index`
+over `03c-history-idb.js`'s IndexedDB (`splitpage-history` v3: an `index`
 store, one DocRecord `{bucket, title, lastOpenedAt, migratedAt?,
 expiresAt?, snapshots:[meta + sha]}` per bucket, and a `bodies` store,
 `{sha, stateJson}`, one row per distinct content, shared by every entry
@@ -1242,16 +1242,16 @@ Eviction order: expired Older, trim every doc to 50, Older oldest-first,
 then docs by `lastOpenedAt` ascending — a doc's newest snapshot is never
 evicted.
 
-The browser's v1 layout (`docs` with byte/count counters, `snapMeta`
-`[docId, id]` + `byDocAt`, `snapBody` `[docId, id]`) is moved into v2 by
-03c's migrator, TEMPORARY until a v3 drops those stores: the backend's
-first job, one snapshot per transaction (body put if absent, meta + sha
-merged into the bucket's record, the v1 rows deleted), so it resumes from
-whatever is left. While it runs, the panel answers from the page with one
-line saying so; if it cannot finish (quota, io), reads merge the v2 index
-with a read-only view of the v1 rows and every write answers `io`, so
-captures stay pending in the page with ONE toast and one panel line (the
-same for a database a newer build wrote, served read-only).
+3.0.0 moved the browser's v1 layout (`docs`, `snapMeta`, `snapBody`,
+`meta`) into v2 with a one-time migrator; #100 deleted it. The v3 upgrade
+(`upgradeDb`) counts `snapMeta` and `snapBody` inside the versionchange
+transaction and drops the four v1 stores only when both are empty, which
+is what a finished 3.0.0 move leaves. v1 stores that still hold rows
+(3.0.0 skipped, or its move unfinished) are kept dormant, never read or
+written: there is no reader left, and dropping them would destroy
+history. A database a newer build wrote is served read-only: every write
+answers `read-only`, and captures stay pending in the page with ONE toast
+and one panel line.
 
 **Crash-safe drafts** (desktop only, §3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
@@ -1775,7 +1775,7 @@ evaluation order via `_entry.js`):
 | `02c-blobs.js` | image blob registry (#82): `intern`/`internDataUrl` (sync hash, sniff, measure), `recordFor`/`urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`/`queuePersist`, a row's picture (`rowImage`, `rowImageUrl`, `rowImageBytes`, `blobImgHtml`), the file writers' `inlineStateImages`/`inlineStateJson`, the document-wide hydrator for `img[data-blob]` ("Image unavailable" when nobody has it), IndexedDB `splitpage-blobs` + memory backends (`setBackend` for the desktop folder), `setRemoteSource` (the hosted client's server fetch, asked after the backend); record gate and `refsIn` in `shared/blob-policy.js` |
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
-| `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v2: `index` + `bodies`, one strict transaction per job), `hashText`, and — TEMPORARY until v3 — the v1 → v2 migrator, its read-only v1 reader and `seedV1HistoryDb` (tests) |
+| `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v3: `index` + `bodies`, one strict transaction per job; the v3 upgrade drops 2.1's v1 stores only when they hold no snapshot), `hashText` |
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
@@ -1963,17 +1963,15 @@ hosted document the avatars fold into a "+N" chip rather than overflow
 the row (`fitPresenceBar`, 13a-presence.js). `tests/85-header-fit.txt`
 measures all of it by resizing an iframe; 250–252 the rest.
 
-**Temporary code to delete (#83) — tracked in #100.** Each item has to
-ship in one release first, so an upgrading user skips nothing. #83 first
-shipped in the 3.0.0 betas, but 2.1 copies aren't offered betas, so most
-users only get the migration with 3.0.0 itself: when the release after
-3.0.0 is being cut (not before), delete all four together: `desktop/history-v1-migrate.js` and
-its call in `main.js`'s `initHistoryStore` (plus its unit suite and the
-smoke v1-migration cases); `<userData>/history/v1-backup/` (delete it at
-launch, once, from main); 03c's v1 → v2 migrator and its read-only v1
-reader (and `seedV1HistoryDb`, suite 70); and an IndexedDB v3 upgrade of
-`splitpage-history` that drops the v1 stores (`docs`, `snapMeta`,
-`snapBody`, `meta`). #100 has the full list and how to verify it.
+**#83's temporary migration code is gone (#100, after 3.0.0).** Both
+migrators, their faults and tests are deleted; desktop main deletes
+`history/v1-backup/` at launch, and IndexedDB v3 drops the v1 stores. One
+deliberate difference from the issue's plan: history that was never
+migrated (a user who skipped 3.0.0) is kept dormant, not deleted — the
+desktop's raw `docs/`/`older/` and any v1 IndexedDB store with rows. It
+isn't shown; installing 3.0.0 first is the way to carry it over. A
+recovery tool, if ever wanted, finds it by `docs/`/`older/` with no
+`migratedFrom` in `index.json`, or by v1 stores surviving in v3.
 
 **Decided and changed (issue #7):** opening a `.docx`/`.md`/`.txt`/`.csv`
 starts a **new document** — `loadFileIntoEditor` (`src/js/18-local-files.js`)
