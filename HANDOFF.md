@@ -663,19 +663,21 @@ tabs**.
   per entry); `history-list(docId|null)` → `{entries, older,
   olderExpiresAt, usage}`, `usage` = `{totalBytes, capBytes, overCap,
   docCount, readOnly}` or null (what `history-usage` was; the panel always
-  asked for both), `{…, usage:null, migrating:true}` at once while the
-  one-time `desktop/history-v1-migrate.js` moves the v1 tree
-  (`docs/d-<docId>/`, `older/`) in and then into `history/v1-backup/`;
+  asked for both);
   `history-get({docId}|{older:true}, snapshotId)` (the query also carries
   the page's holds as `protect`) → `{meta, stateJson}` or null; `history-copy(from, to)` → `{ok, copied, code?}`;
   `history-touch(docId, title)` → nothing; `history-list-docs()` →
   `[{docId, title, lastOpenedAt}]`, Older excluded. Wire metas carry no
   docId (the renderer stamps it). A malformed call rejects (the renderer
   reads that as `invalid` and drops the entry); everything a retry could
-  fix is a code. The migrator and `v1-backup/` go in the release after
-  3.0.0 (see §8, "Temporary code to delete"). Test-mode faults:
-  `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `exit-mid-migration`,
-  `exit-after-migration-index`, `enospc-once`/`-always`;
+  fix is a code. #83's one-time move of the v1 folder tree shipped in
+  3.0.0 and was deleted in #100. Since then main deletes 3.0.0's
+  `history/v1-backup/` at launch (`removeHistoryV1Backup`, fire-and-forget
+  3 s after the folder opens, skipped when read-only, retried next launch
+  on failure). A raw v1 `docs/`/`older/` (someone who skipped 3.0.0) is
+  left dormant: never read or deleted, and a fresh index starts beside
+  it. Test-mode faults:
+  `SPLITPAGE_TEST_HISTORY_FAULT` = `exit-after-body`, `enospc-once`/`-always`;
   `SPLITPAGE_TEST_HISTORY_CAP_BYTES`.
 - **Content-addressed blobs** (#82, `desktop/blob-store.js`, `main.js`
   §8c). Images leave the document state and live in `<userData>/blobs`:
@@ -1846,8 +1848,7 @@ evaluation order via `_entry.js`):
 | `shared/blob-policy.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#82): `normalizeImageRef` (the record gate), `refsIn(state)` (every sha a state names), `sniffImageMime`/`imageDims` (PNG/JPEG/GIF/WebP by magic, never SVG). `server/server.js` keeps its own copy of the walker and sniffer — change both |
 | `shared/video-embed.js` | pure CommonJS shared by the page, `desktop/main.js` and the unit tests (#141, #168): which links are a YouTube or Vimeo video (`parseVideoLink`), the player's address (`playerUrl`; `PLAYER_ORIGINS` is build.mjs's `frame-src`), the desktop IPC's `videoRef`/`parseVideoRef`, and `fetchVideoThumbnail` over a fetch it is handed — fixed hosts, no redirects/cookies/referrer, JPEG/PNG/WebP ≤ 1 MiB. Staged into the desktop build by `stage.mjs` |
 | `desktop/blob-store.js` | content-addressed blob folder (`<userData>/blobs`, images since #82), plain CommonJS, no Electron dependency; also the IPC door's image rule (§3.13) |
-| `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency |
-| `desktop/history-v1-migrate.js` | one-time move of the pre-#83 folder tree into it, then into `history/v1-backup/`; temporary (§3.13) |
+| `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
 | `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
@@ -1859,8 +1860,7 @@ evaluation order via `_entry.js`):
 | `desktop/test/smoke.mjs` | integration suite over CDP (§3.13) |
 | `desktop/test/drafts.test.mjs` | unit suite for `desktop/drafts.js` alone |
 | `desktop/test/blob-store.test.mjs` | unit suite for `desktop/blob-store.js` alone (atomic put, hash checks, damaged-file delete, temp sweep, the image rule) |
-| `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks) |
-| `desktop/test/history-v1-migrate.test.mjs` | unit suite for `desktop/history-v1-migrate.js` over a real v1 fixture (broken index, orphan and truncated `.snap`, unstamped Older; kills at every step, rerun ends identical) |
+| `desktop/test/history-fs-backend.test.mjs` | unit suite for `desktop/history-fs-backend.js` (two-generation write, torn index → prev, deferred unlink, kills via test hooks, a raw v1 tree left untouched) |
 | `desktop/test/verify-dist-payload.test.mjs` | unit suite for verify-dist-payload.mjs's comparison logic, no 7-Zip or real build needed (#6) |
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
