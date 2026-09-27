@@ -516,40 +516,67 @@ test("exclusive: jobs never interleave; a read job cannot write; a tx dies with 
   await assert.rejects(backend.exclusive(async (tx) => { await tx.commit({}, []); await tx.commit({}, []); }), /twice/);
 });
 
-test("migrate hook: runs first, reports 'migrating' while it works; a failure is sticky with its code", async () => {
+/* #100: the v1 migrator is gone. A folder still in the v1 layout (someone
+   who skipped 3.0.0) opens as an empty history and v1's docs/ and older/
+   stay exactly as they were — through puts, an eviction that unlinks
+   bodies, a relaunch and a torn index — even a v1 file named like one of
+   this backend's temp files. */
+test("a raw v1 tree: opened as an empty history; docs/ and older/ never touched", async () => {
   const dir = freshDir();
-  let release;
-  const gate = new Promise((r) => { release = r; });
-  const seen = [];
-  const b = launch(dir, {
-    backend: {
-      migrate: async (api) => {
-        seen.push(b.backend.state);
-        api.setMigrating(true);
-        seen.push(b.backend.migrating);
-        await gate;
-        api.setMigrating(false);
-        return { state: "none" };
+  const v1 = {
+    [`docs/d-${DOC_A.slice(1)}/index.json`]: JSON.stringify({ formatVersion: 1, title: "Alpha", snapshots: [] }),
+    [`docs/d-${DOC_A.slice(1)}/s-a01.snap`]: "splitpage-snapshot 1\n{\"id\":\"a01\",\"atMs\":1}\n{\"rows\":[]}",
+    [`docs/d-${DOC_A.slice(1)}/.tmp-left-by-v1`]: "not ours",
+    "older/index.json": JSON.stringify({ formatVersion: 1, expiresAt: 0, snapshots: [] }),
+    "older/s-o01.snap": "splitpage-snapshot 1\n{\"id\":\"o01\",\"atMs\":2}\n{}"
+  };
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "FORMAT"), "1\n");
+  for (const [rel, text] of Object.entries(v1)) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  }
+  const v1Tree = () => {
+    const out = {};
+    for (const top of ["docs", "older"]) {
+      for (const rel of walk(path.join(dir, top))) {
+        const p = path.join(dir, top, rel);
+        out[top + "/" + rel.split(path.sep).join("/")] = fs.statSync(p).isDirectory() ? "<dir>" : fs.readFileSync(p, "utf8");
       }
     }
-  });
-  const listing = b.store.list(DOC_A);
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(b.backend.migrating, true);
-  assert.equal(b.backend.state, "migrating");
-  release();
-  assert.deepEqual(await listing, { entries: [], older: [], olderExpiresAt: null });
-  assert.deepEqual(seen, ["opening", true]);
-  assert.equal(b.backend.state, "ready");
-  assert.deepEqual(b.backend.inspect().migrated, { state: "none" });
+    return out;
+  };
+  const before = v1Tree();
+  assert.equal(Object.values(before).filter((v) => v !== "<dir>").length, 5);
 
-  const failing = launch(freshDir(), {
-    backend: { migrate: async () => { throw Object.assign(new Error("disk full"), { code: "enospc" }); } }
-  });
-  assert.deepEqual(await failing.store.put(DOC_A, meta("s01", 1), body("one")), { stored: false, code: "enospc", evicted: 0, overCap: true });
-  await assert.rejects(failing.store.list(DOC_A), (e) => e.code === "enospc");
-  assert.equal(failing.backend.state, "failed");
-  assert.equal(failing.backend.openError.code, "enospc");
+  const cap = { bytes: 1e9 };
+  const a = launch(dir, { store: { capBytes: () => cap.bytes } });
+  assert.deepEqual(await a.store.list(DOC_A), { entries: [], older: [], olderExpiresAt: null });
+  assert.equal(a.backend.inspect().loadedFrom, "empty");
+  assert.equal(a.backend.readOnly, false);
+  assert.equal(fs.readFileSync(path.join(dir, "FORMAT"), "utf8").trim(), String(FORMAT_VERSION));
+  for (let i = 1; i <= 4; i++) {
+    a.clock.t += 1000;
+    assert.equal((await a.store.put(DOC_A, meta("s0" + i, a.clock.t), body("v" + i, 400))).stored, true);
+  }
+  /* an eviction: shas go into trash and are unlinked a generation later */
+  cap.bytes = 1000;
+  a.clock.t += 1000;
+  const r = await a.store.put(DOC_B, meta("b01", a.clock.t), body("b", 400));
+  assert.ok(r.evicted > 0, JSON.stringify(r));
+  await a.store.put(DOC_B, meta("b02", a.clock.t + 1), body("b2", 10));
+  assert.ok(a.backend.counts.unlinked > 0);
+  assert.deepEqual(v1Tree(), before);
+
+  /* relaunch over a torn index.json: it is moved aside, prev loads */
+  fs.writeFileSync(path.join(dir, "index.json"), "{\"formatVersion\":2,\"buck");
+  const b = launch(dir, { store: { capBytes: () => cap.bytes } });
+  assert.ok((await ids(b.store, DOC_B)).length > 0);
+  assert.equal(b.backend.inspect().loadedFrom, "prev");
+  assert.deepEqual(v1Tree(), before);
+  const idx = readJson(path.join(dir, "index.prev.json"));
+  assert.equal(idx.migratedFrom, undefined, "no migration happened, so none is recorded");
+  assert.ok(fs.readdirSync(dir).includes("docs") && fs.readdirSync(dir).includes("older"));
 });
 
 /* ------------------------------------------------------------------ */

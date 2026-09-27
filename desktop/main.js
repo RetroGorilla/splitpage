@@ -63,14 +63,11 @@ const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = req
 const {
   createBlobStore, imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY
 } = require("./blob-store");
-/* desktop/history-fs-backend.js and desktop/history-v1-migrate.js: version
-   history on disk (issue #83, section 8b) — the backend shared/history-
-   store.js runs over here, and the one-time move of the v1 folder layout
-   into it (temporary: removed in the release after the one that ships it).
-   Plain Node, no Electron, in electron-builder.yml's `files` for the same
-   reason drafts.js is. */
+/* desktop/history-fs-backend.js: version history on disk (issue #83,
+   section 8b) — the backend shared/history-store.js runs over here. Plain
+   Node, no Electron, in electron-builder.yml's `files` for the same reason
+   drafts.js is. */
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
-const { migrateHistoryV1 } = require("./history-v1-migrate");
 /* desktop/ipc-channels.js is the one list of channels that cross this
    process boundary, and the one validator every inbound message goes
    through (section 14). Plain CommonJS data and pure functions, no Electron
@@ -1564,16 +1561,20 @@ async function atomicWrite(absPath, buffer) {
  *         bodies/         the snapshot bodies, content-addressed (a
  *                         createBlobStore folder of its own, not <userData>/
  *                         blobs: images are never deleted, history evicts)
- *         v1-backup/      the v1 layout (docs/, older/) after the one-time
- *                         migration (desktop/history-v1-migrate.js);
- *                         deleted by the NEXT release
+ *         docs/, older/   the v1 layout (before #83). 3.0.0 migrated it once;
+ *                         nothing migrates it now (#100). Still here means
+ *                         the person skipped 3.0.0: left DORMANT — never
+ *                         read, moved or deleted — and history starts a
+ *                         fresh index beside it.
+ *         v1-backup/      where 3.0.0's migration put docs/ and older/.
+ *                         Deleted at launch by removeHistoryV1Backup(),
+ *                         off the queue; gone after the first launch that
+ *                         manages it.
  *
  *     The renderer names a document only by docId and a snapshot only by
  *     its snapshot id (invariant #38): it can never name a file, and a docId
  *     that does not match DOC_ID_RE is refused at the IPC door below. Every
- *     read and write runs on the backend's one queue; the migration is the
- *     first job on it, and while it runs a list answers {migrating: true}
- *     at once instead of "No snapshots".
+ *     read and write runs on the backend's one queue.
  * --------------------------------------------------------------------- */
 
 /* The cap is 500 MB, overridable in TEST_MODE so an eviction case does not
@@ -1591,10 +1592,6 @@ function historyCapBytes() {
 /* TEST_MODE only (HISTORY-IPC). Read once — a normal launch has no faults.
      exit-after-body      SIGKILL between a snapshot's body and the index
                           that names it (a power cut mid-snapshot)
-     exit-mid-migration   SIGKILL after the v1 migration's 2nd body
-     exit-after-migration-index
-                          SIGKILL once the migration's index.json is durable,
-                          before FORMAT and the move into v1-backup/
      enospc-once / enospc-always
                           body writes fail the way a full disk does */
 const HISTORY_TEST_FAULT = TEST_MODE ? String(process.env.SPLITPAGE_TEST_HISTORY_FAULT || "") : "";
@@ -1610,14 +1607,6 @@ function historyTestKill() {
 function historyTestBackendHooks() {
   if (HISTORY_TEST_FAULT !== "exit-after-body") return undefined;
   return { afterBodyPut: historyTestKill };
-}
-
-function historyTestMigrateHooks() {
-  if (HISTORY_TEST_FAULT === "exit-mid-migration") {
-    return { afterBody: (k) => { if (k >= 2) historyTestKill(); } };
-  }
-  if (HISTORY_TEST_FAULT === "exit-after-migration-index") return { afterIndex: historyTestKill };
-  return undefined;
 }
 
 /* enospc-once / enospc-always: the backend with its tx.put refusing like a
@@ -1641,7 +1630,6 @@ function historyWithEnospcFault(backend) {
   };
 }
 
-let historyBackend = null;
 let historyStore = null;
 
 /* EVERY TAB'S held snapshots, not just the caller's. Eviction is process-wide
@@ -1677,20 +1665,42 @@ function historyProtectList(protect) {
   return out;
 }
 
+/* 3.0.0's one-time v1 migration left the old folders in <userData>/history/
+   v1-backup/ for one release; this release deletes them (#100). Fire and
+   forget, off the history queue: nothing waits for it, and a failure (a
+   scanner or an Explorer window holding a file) is logged and swallowed —
+   the folder is simply tried again next launch, so "once" means "until it
+   is gone". The path is built from the history folder alone, never from
+   anything a page sent; fs.rm removes a symlink or junction itself, never
+   what it points to; `force` makes an absent folder a no-op. Only the
+   backup: a raw docs/ or older/ beside it is dormant v1 history (someone
+   who skipped 3.0.0) and is never deleted. */
+const HISTORY_V1_BACKUP_DIR = "v1-backup";
+/* Started a little after launch so the first window's own disk reads do
+   not queue behind thousands of unlinks. */
+const HISTORY_V1_BACKUP_DELAY_MS = 3000;
+
+function removeHistoryV1Backup(historyDir) {
+  const target = path.join(historyDir, HISTORY_V1_BACKUP_DIR);
+  const timer = setTimeout(() => {
+    fsp.rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch((err) => {
+      if (TEST_MODE) process.stderr.write(`[splitpage] history v1-backup not removed (next launch tries again): ${err && err.stack || err}\n`);
+    });
+  }, HISTORY_V1_BACKUP_DELAY_MS);
+  if (timer && typeof timer.unref === "function") timer.unref();
+}
+
 /* Called once from whenReady, before registerIpc: open() starts at once, so
-   the v1 migration (when there is one) is the first job on the queue and
-   every IPC call waits behind it. Not awaited — a first launch after the
-   upgrade may take a while to migrate, and the window must not wait for it. */
+   the folder is ready (or its error known) before the first IPC call, and
+   every call waits behind it on the one queue. Not awaited — the window
+   must not wait for the disk. */
 function initHistoryStore() {
+  const historyDir = path.join(app.getPath("userData"), "history");
   const backend = createHistoryFsBackend({
-    dir: path.join(app.getPath("userData"), "history"),
+    dir: historyDir,
     fs, fsp, path, crypto,
-    migrate: (api) => migrateHistoryV1(api, {
-      policy: historyPolicy, DOC_ID_RE, testHooks: historyTestMigrateHooks()
-    }),
     testHooks: historyTestBackendHooks()
   });
-  historyBackend = backend;
   historyStore = createHistoryStore({
     backend: /^enospc-/.test(HISTORY_TEST_FAULT) ? historyWithEnospcFault(backend) : backend,
     now: Date.now,
@@ -1701,10 +1711,13 @@ function initHistoryStore() {
     maxBodyBytes: HISTORY_MAX_BODY_BYTES,
     holds: historyAllHolds
   });
-  backend.open().catch((err) => {
+  backend.open().then((r) => {
+    /* A folder a newer build owns (read-only) is not ours to tidy. */
+    if (!r.readOnly) removeHistoryV1Backup(historyDir);
+  }, (err) => {
     /* Every job now rejects with this error: reads report "could not read"
        (never an empty list), writes answer its code and stay pending in the
-       renderer, and the next launch tries again with v1 untouched. */
+       renderer, and the next launch tries again. */
     if (TEST_MODE) process.stderr.write(`[splitpage] history open failed: ${err && err.stack || err}\n`);
   });
 }
@@ -5492,9 +5505,6 @@ function registerIpc() {
     /* null is "just the Older bucket, please" — the panel asks for it on a
        document that has no id yet. Anything else must be a real docId. */
     const id = docId == null ? null : historyDocIdArg(docId);
-    /* The v1 migration holds the queue: say so now rather than wait behind
-       it (the panel shows a line instead of "No snapshots"). */
-    if (historyBackend.migrating) return { entries: [], older: [], olderExpiresAt: null, usage: null, migrating: true };
     const r = await historyStore.list(id);
     const usage = await historyStore.usage().catch(() => null);
     return {
@@ -5885,9 +5895,9 @@ app.whenReady().then(async () => {
      for an image — and its temp sweep has to run before any put of this
      process could have a temp file of its own in flight. */
   initBlobStore();
-  /* Version history (section 8b): its folder opens now, so the v1
-     migration, when there is one, is the first job on its queue and every
-     history IPC call waits behind it. */
+  /* Version history (section 8b): its folder opens now, as the first job on
+     its queue, so every history IPC call waits behind it. Once it is open,
+     3.0.0's leftover history/v1-backup/ is deleted in the background. */
   initHistoryStore();
   registerProtocol();
   registerIpc();
