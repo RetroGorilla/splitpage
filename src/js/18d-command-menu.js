@@ -46,7 +46,11 @@ import { writerOpen } from "./19-writer.js";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
-var GROUP_ORDER = ["Recent", "File", "Share", "Export", "View", "This document", "Help"];
+/* "Tags" sits right under Recent (Adam, 2026-09-27: the tag reference
+   wants to be near the top, not the last thing under Help). Being early
+   in this order also wins it the ties when a query scores two groups the
+   same. */
+var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This document", "Help"];
 
 function el(id) { return document.getElementById(id); }
 
@@ -196,7 +200,7 @@ function commands() {
     },
     fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),
     fromMenu("about", "Help", "version about", "About Splitpage"),
-    fromMenu("tagging-help", "Help", "tags tagging reference shortcuts brackets"),
+    fromMenu("tagging-help", "Tags", "tags tagging reference shortcuts brackets help"),
     fromMenu("export-app-data", "Help", "backup move desktop app data history bookmarks"),
     fromMenu("import-app-data", "Help", "restore move desktop app data history bookmarks")
   ];
@@ -221,7 +225,10 @@ function noteRecent(id) {
 
    Every word typed has to be found: at the start of a word of the label
    (best), anywhere in the label, or at the start of one of the command's
-   other words. Ranked by how well, then the menu's own order. */
+   other words. Ranked by how well, then the menu's own order. A plural
+   counts as its singular at the start of a label word, so "tags" finds
+   Tagging reference by its name and not only by a keyword — otherwise
+   every tag command tied and the reference came last. */
 function scoreFor(view, cmd, terms) {
   var label = view.label.toLowerCase();
   var labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
@@ -229,8 +236,9 @@ function scoreFor(view, cmd, terms) {
   var total = 0;
   for (var i = 0; i < terms.length; i++) {
     var t = terms[i];
+    var one = t.length > 3 && /s$/.test(t) ? t.slice(0, -1) : t;
     var s = 0;
-    if (labelWords.some(function (w) { return w.indexOf(t) === 0; })) s = 3;
+    if (labelWords.some(function (w) { return w.indexOf(t) === 0 || w.indexOf(one) === 0; })) s = 3;
     else if (label.indexOf(t) !== -1) s = 2;
     else if (otherWords.some(function (w) { return w.indexOf(t) === 0; })) s = 1;
     if (!s) return 0;
@@ -295,6 +303,14 @@ function labelHtml(label, terms) {
     var re = /[a-z0-9]+/g, m;
     while ((m = re.exec(lower))) {
       if (m[0].indexOf(t) === 0) { at = m.index; break; }
+    }
+    /* a plural matched as its singular (scoreFor) marks the singular */
+    if (at === -1 && t.length > 3 && /s$/.test(t)) {
+      var one = t.slice(0, -1);
+      re.lastIndex = 0;
+      while ((m = re.exec(lower))) {
+        if (m[0].indexOf(one) === 0) { at = m.index; t = one; break; }
+      }
     }
     if (at === -1) at = lower.indexOf(t);
     if (at === -1) return;

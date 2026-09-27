@@ -540,7 +540,8 @@ are along the bottom. An item that can't work right now says why.
 Press <kbd>Ctrl</kbd>+<kbd>K</kbd>, or click the search box in the header,
 and type part of what you want: *pdf*, *gear*, *history*, *teleprompter*.
 <kbd>↑</kbd> / <kbd>↓</kbd> choose, <kbd>Enter</kbd> runs, <kbd>Esc</kbd>
-closes. With nothing typed, your recent commands come first.
+closes. With nothing typed, your recent commands come first, then the
+tagging reference.
 
 ### Settings
 
