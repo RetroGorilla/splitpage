@@ -19,6 +19,13 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   gives you the original back. See [Annotating a picture](#annotating-a-picture).
 - **Search commands** (Ctrl+K) puts the tagging reference first, and
   searching *tags* finds it.
+- **Export to Excel.** File ▸ Export… ▸ **Spreadsheet** now makes an Excel
+  workbook: sized columns, wrapped text, a frozen header with filters, a
+  Notes column to write in, and a sheet for each part. **CSV** is the
+  second choice on the same card, and the Breakdown and the B-roll shot
+  list offer both. See [Exporting](#exporting).
+- **The writer's tools are at the top**, under the title, where the
+  script's formatting bar is, and **Close** is beside **Save**.
 - **The tagging reference lists every word form**: `Prop:`, `Location:` or
   `Loc:`, `Cast:`, `VFX:`, `Gear:`, and `SFX:` or `Music:`, each with its
   tag colour, beside the bracket shortcuts.
@@ -205,7 +212,9 @@ count.
 ### The writer
 
 **Write** in the header opens the Audio column as one flowing document, for
-when the job is writing narration. One paragraph is one scene.
+when the job is writing narration. One paragraph is one scene. Its tools
+sit along the top, under the title, and **Close** (or <kbd>Esc</kbd>) is
+beside **Save**.
 
 - <kbd>Enter</kbd> starts a new scene, <kbd>Shift</kbd>+<kbd>Enter</kbd> is
   a line break, and <kbd>Backspace</kbd> at the start of a paragraph joins it
@@ -518,8 +527,8 @@ under **Older history** for 90 days.
 format, with a preview and the file name.
 
 - **The whole script**: **PDF**, **Word**, **Markdown**, **Spreadsheet**
-  (a row per scene), or **SplitShare** (the script with the whole app built
-  in, for any device).
+  (a row per scene, as Excel or CSV), or **SplitShare** (the script with the
+  whole app built in, for any device).
 - **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, a
   **Packing list** of gear or props, or the **B-roll shot list**: a
   landscape table of every shot with its scene, props, flags and their
@@ -538,6 +547,17 @@ it becomes a `.zip` with an `images` folder. **Two columns** is a table,
 Visual beside Audio, that **Paste a script…** can read back in. The
 **Spreadsheet** has a column each for start time, status, read time, tags,
 b-roll and open comments.
+
+Every spreadsheet — the script, the Breakdown and the B-roll shot list —
+comes two ways. Pick one under **Format**:
+
+- **Excel (.xlsx)** opens laid out and ready to read or print: columns sized
+  to fit, long lines wrapped, the header row frozen with filters on it, a
+  blank **Notes** column beside the scenes to write in, and a sheet each for
+  the script, the comments, the breakdown and the b-roll (only the ones your
+  script has). It opens in Excel, Google Sheets and Numbers.
+- **CSV (.csv)** is the plain values and nothing else, for another tool to
+  read. Splitpage can open a CSV of the script again.
 
 Exports are copies to read, print or send. Opening one again brings back
 its scenes only, not the tags, comment anchors or statuses a saved file

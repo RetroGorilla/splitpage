@@ -278,12 +278,15 @@
                 <button type="button" data-file-action="export-docx">Word (.docx)</button>
                 <button type="button" data-file-action="export-md">Markdown (.md)</button>
                 <button type="button" data-file-action="export-md-table">Markdown, two columns (.md)</button>
+                <button type="button" data-file-action="export-xlsx">Spreadsheet (.xlsx)</button>
                 <button type="button" data-file-action="export-csv">Spreadsheet (.csv)</button>
                 <button type="button" data-file-action="export-html">SplitShare (.html)</button>
                 <button type="button" data-file-action="export-broll-pdf">B-roll shot list (.pdf)</button>
+                <button type="button" data-file-action="export-broll-xlsx">B-roll shot list (.xlsx)</button>
                 <button type="button" data-file-action="export-broll-csv">B-roll shot list (.csv)</button>
                 <button type="button" data-file-action="export-narration-docx">Narration only (.docx)</button>
                 <button type="button" data-file-action="export-narration-txt">Narration only (.txt)</button>
+                <button type="button" data-file-action="export-breakdown-xlsx">Breakdown (.xlsx)</button>
                 <button type="button" data-file-action="export-breakdown">Breakdown (.csv)</button>
                 <button type="button" data-file-action="export-packing-gear">Gear packing list (.pdf)</button>
                 <button type="button" data-file-action="export-packing-prop">Props packing list (.pdf)</button>
@@ -877,9 +880,9 @@
     </span>
     <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
-  </div>
-  <div class="writer-scroll" id="writer-scroll">
-    <div class="writer-doc" id="writer-doc"></div>
+    <!-- Close beside Save, and the tools under this row (Adam, 2026-09-28:
+         where the script keeps them — its toolbar sits above the text) -->
+    <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">
     <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
@@ -896,8 +899,9 @@
     <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
     <button type="button" id="wr-export">Export narration</button>
     <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
-    <div class="spacer"></div>
-    <button type="button" id="wr-close">Close (Esc)</button>
+  </div>
+  <div class="writer-scroll" id="writer-scroll">
+    <div class="writer-doc" id="writer-doc"></div>
   </div>
 </div>
 

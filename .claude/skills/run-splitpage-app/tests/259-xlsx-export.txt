@@ -1,0 +1,200 @@
+# Excel export (Adam, 2026-09-28: "an xlsx export that comes out cleanly
+# with enough space for notes stuff ... a submenu/second click under the
+# spreadsheet option"). The Spreadsheet, Breakdown and B-roll shot list
+# cards each offer Excel (.xlsx) beside CSV (.csv) under Format — Excel
+# first, so a first visit picks it; the b-roll list keeps its PDF first.
+# Each choice runs its own hidden File-menu button (export-xlsx,
+# export-breakdown-xlsx, export-broll-xlsx, 18-local-files.js) over the
+# builders in 16b-xlsx.js. The sketch is the CSV's grid dressed as a
+# workbook: the header row ruled off, the sheet tabs under it — only the
+# sheets the file will have. 18c-export-dialog.js, 18d-command-menu.js.
+#
+# Files are caught at deliverFile's URL.createObjectURL, named from the
+# <a download> (as 98 does); a workbook is unzipped in the page from its
+# central directory (stored or deflated) and xl/workbook.xml's sheet names
+# read. Every `eval` is one physical line (the driver splits on newlines).
+
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.__files=[];var r=URL.createObjectURL.bind(URL);URL.createObjectURL=function(b){window.__files.push({blob:b,name:null});return r(b);};var c=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download){var f=window.__files[window.__files.length-1];if(f&&!f.name)f.name=this.download;return;}return c.apply(this,arguments);};window.D=window.__desktopTest;window.X=window.__exportTest;window.C=window.__commandTest;window.__lastFile=function(){return window.__files[window.__files.length-1];};return !!(D&&X&&C);})()
+expect true
+eval (function(){window.__unzip=async function(bytes){var dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);var e=bytes.length-22;while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;if(e<0)return null;var n=dv.getUint16(e+10,true),off=dv.getUint32(e+16,true),files={};for(var i=0;i<n;i++){var method=dv.getUint16(off+10,true),cs=dv.getUint32(off+20,true),nl=dv.getUint16(off+28,true),xl=dv.getUint16(off+30,true),cl=dv.getUint16(off+32,true),lo=dv.getUint32(off+42,true);var name=new TextDecoder().decode(bytes.subarray(off+46,off+46+nl));var d=lo+30+dv.getUint16(lo+26,true)+dv.getUint16(lo+28,true);var raw=bytes.subarray(d,d+cs);files[name]=method===8?new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()):raw;off+=46+nl+xl+cl;}return files;};window.__book=async function(f){var u=new Uint8Array(await f.blob.arrayBuffer());var z=await window.__unzip(u);var wb=z&&z['xl/workbook.xml']?new TextDecoder().decode(z['xl/workbook.xml']):'';var names=[],re=/<sheet\b[^>]*\bname="([^"]*)"/g,m;while((m=re.exec(wb))!==null)names.push(m[1]);return {name:f.name,type:f.blob.type,pk:u[0]===0x50&&u[1]===0x4B,sheets:names.join('|')};};window.__export=async function(card,choice){var sleep=function(ms){return new Promise(function(r){setTimeout(r,ms);});};var n0=window.__files.length;document.querySelector('#file-menu [data-file-action="export"]').click();await sleep(80);document.querySelector('.export-card[data-format="'+card+'"] input').click();if(choice)document.querySelector('input[name="export-choice"][value="'+choice+'"]').click();document.getElementById('export-go').click();for(var i=0;i<80&&window.__files.length<n0+1;i++)await sleep(50);return window.__files.length>n0?window.__lastFile():null;};return 'ready';})()
+expect window.__unzip && window.__book && window.__export
+expect localStorage.getItem('splitpage-last-export') === null
+
+# --- the Spreadsheet card: Excel first, and picked ---------------------------
+click #btn-file
+sleep 200
+click #menu-export
+sleep 400
+jsclick .export-card[data-format="csv"] input
+sleep 150
+expect document.querySelector('.export-card[data-format="csv"] .export-card-name').textContent == Spreadsheet
+expect document.querySelector('.export-card[data-format="csv"] .export-card-ext').textContent == .xlsx / .csv
+expect document.querySelector('.export-card[data-format="csv"] .export-card-purpose').textContent == A row per scene, for Excel, Sheets or Numbers
+expect document.querySelector('#export-options .export-option-label').textContent == Format
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'Excel (.xlsx)|CSV (.csv)'
+expect document.querySelector('input[name="export-choice"]:checked').value == xlsx
+expect X.chosen() == export-xlsx
+expect document.getElementById('export-go').textContent == Export Excel
+expect document.getElementById('export-filename').textContent == untitled-script.xlsx
+expect X.fileName('export-xlsx') == untitled-script.xlsx
+# the sketch: the grid, its header row ruled off, and the sheets the file
+# will have — the demo has comments but nothing tagged and no b-roll
+expect !!document.querySelector('#export-preview .pv-xl .pv-gh')
+expect getComputedStyle(document.querySelector('#export-preview .pv-xl .pv-gh td')).backgroundColor == rgb(228, 226, 220)
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sheets .pv-sheet'), function(s){return s.textContent;}).join('|') === 'Script|Comments'
+expect document.querySelectorAll('#export-preview .pv-sheet.is-on').length === 1 && document.querySelector('#export-preview .pv-sheet.is-on').textContent === 'Script'
+# the tabs sit at the page's foot, inside it
+expect (function(){var p=document.getElementById('export-preview').getBoundingClientRect(),t=document.querySelector('#export-preview .pv-sheets').getBoundingClientRect();return t.bottom<=p.bottom+0.5&&t.bottom>=p.bottom-2&&t.left>=p.left&&t.right<=p.right;})()
+expect document.getElementById('export-summary').textContent == 2 scenes, with start and read times, tags and b-roll · a sheet for comments · a Notes column to write in · columns sized, header frozen, filters on · pictures not included
+# the script sheet's blank Notes column, the room to write in
+expect document.querySelector('#export-preview .pv-gh').textContent == SceneStartStatusReadVisualAudioNotes
+shot 259-xlsx-export
+# CSV is the second click: no tabs, its own name and summary
+jsclick .export-seg input[value="csv"]
+sleep 150
+expect !document.querySelector('#export-preview .pv-sheets') && !document.querySelector('#export-preview .pv-xl')
+expect document.getElementById('export-go').textContent == Export CSV
+expect document.getElementById('export-filename').textContent == untitled-script.csv
+expect document.getElementById('export-summary').textContent.indexOf('comments below') !== -1
+jsclick .export-seg input[value="xlsx"]
+sleep 150
+key Escape
+sleep 300
+expect document.getElementById('export-modal').hidden
+expect window.__files.length === 0
+
+# --- Export makes a workbook: the name, the type, a zip, its sheets ----------
+eval (async function(){window.__f=await window.__export('csv','xlsx');window.__b=window.__f?await window.__book(window.__f):null;return window.__b;})()
+expect window.__b.name == untitled-script.xlsx
+expect window.__b.type == application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+expect window.__b.pk === true
+expect window.__b.sheets == Script|Comments
+expect document.getElementById('export-modal').hidden
+expect localStorage.getItem('splitpage-last-export') === 'export-xlsx'
+# and the CSV, from the same card
+eval (async function(){window.__f=await window.__export('csv','csv');window.__b=window.__f?await window.__book(window.__f):null;return window.__b;})()
+expect window.__b.name == untitled-script.csv
+expect window.__b.type == text/csv
+expect window.__b.pk === false
+expect localStorage.getItem('splitpage-last-export') === 'export-csv'
+
+# --- nothing tagged, no b-roll -----------------------------------------------
+# The Breakdown's Excel, like its CSV, is still a file with nothing tagged;
+# the b-roll list's says why not, on the card and as a toast
+eval (async function(){window.__f=await window.__export('breakdown','xlsx');window.__b=window.__f?await window.__book(window.__f):null;return window.__b;})()
+expect window.__b.name == untitled-script - breakdown.xlsx
+expect window.__b.pk === true && window.__b.sheets === 'Breakdown'
+expect X.reason('export-breakdown-xlsx') === ''
+expect X.reason('export-broll-xlsx') == No b-roll yet — start a Visual line with B-roll:
+key ctrl KeyE
+sleep 400
+jsclick .export-card[data-format="broll"] input
+sleep 150
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF, landscape|Excel (.xlsx)|CSV (.csv)'
+expect document.querySelector('input[name="export-choice"]:checked').value == pdf
+jsclick .export-seg input[value="xlsx"]
+sleep 150
+expect document.getElementById('export-go').disabled === true
+expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with B-roll:
+expect !document.getElementById('export-preview').classList.contains('is-landscape')
+key Escape
+sleep 300
+eval (function(){window.__n=window.__files.length;document.querySelector('#file-menu [data-file-action="export-broll-xlsx"]').click();return true;})()
+sleep 500
+expect window.__files.length === window.__n
+expect Array.prototype.some.call(document.querySelectorAll('.toast'), function(t){return t.textContent.indexOf('There is no b-roll to export yet') !== -1;})
+
+# --- tags and a b-roll line, for every sheet ---------------------------------
+caret #rows .row .audio-cell .cell-editable
+press  Bring the [gaffer tape] and the <tripod> to the {kitchen}.
+sleep 500
+eval document.activeElement.blur()
+expect document.querySelectorAll('#rows .tag-anchor').length >= 3
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);document.execCommand('delete');return true;})()
+press B-roll: steam off the kettle
+sleep 600
+eval document.activeElement.blur()
+expect document.querySelectorAll('#rows .broll-key').length === 1
+expect X.reason('export-broll-xlsx') === ''
+
+# the whole script's workbook now has a sheet for every part
+key ctrl KeyE
+sleep 400
+jsclick .export-card[data-format="csv"] input
+jsclick .export-seg input[value="xlsx"]
+sleep 150
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sheets .pv-sheet'), function(s){return s.textContent;}).join('|') === 'Script|Comments|Breakdown|B-roll'
+expect document.getElementById('export-summary').textContent.indexOf('sheets for comments, breakdown and b-roll') !== -1
+# the Breakdown card: Excel first, its sketch one Breakdown sheet
+jsclick .export-card[data-format="breakdown"] input
+sleep 150
+expect document.querySelector('.export-card[data-format="breakdown"] .export-card-ext').textContent == .xlsx / .csv
+expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'Excel (.xlsx)|CSV (.csv)'
+expect document.querySelector('input[name="export-choice"]:checked').value == xlsx
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sheet'), function(s){return s.textContent;}).join('|') === 'Breakdown'
+expect document.querySelector('#export-preview .pv-gh').textContent.indexOf('First at') !== -1
+expect document.getElementById('export-go').textContent == Export Breakdown (Excel)
+expect document.getElementById('export-filename').textContent == untitled-script - breakdown.xlsx
+# the B-roll card's Excel: one B-roll sheet, on a portrait page like the CSV's
+jsclick .export-card[data-format="broll"] input
+jsclick .export-seg input[value="xlsx"]
+sleep 150
+expect document.getElementById('export-go').disabled === false
+expect Array.prototype.map.call(document.querySelectorAll('#export-preview .pv-sheet'), function(s){return s.textContent;}).join('|') === 'B-roll'
+expect document.querySelector('#export-preview .pv-gh').textContent.indexOf('Shot') !== -1
+expect !document.getElementById('export-preview').classList.contains('is-landscape')
+expect document.getElementById('export-go').textContent == Export B-roll shot list (Excel)
+expect document.getElementById('export-filename').textContent == untitled-script - b-roll shot list.xlsx
+key Escape
+sleep 300
+
+eval (async function(){var out={};var f=await window.__export('csv','xlsx');out.script=f?await window.__book(f):null;f=await window.__export('breakdown','xlsx');out.breakdown=f?await window.__book(f):null;f=await window.__export('broll','xlsx');out.broll=f?await window.__book(f):null;f=await window.__export('breakdown','csv');out.bcsv=f?await window.__book(f):null;f=await window.__export('broll','csv');out.rcsv=f?await window.__book(f):null;window.__all=out;return out;})()
+expect window.__all.script.name === 'untitled-script.xlsx' && window.__all.script.pk && window.__all.script.sheets === 'Script|Comments|Breakdown|B-roll'
+expect window.__all.breakdown.name === 'untitled-script - breakdown.xlsx' && window.__all.breakdown.pk && window.__all.breakdown.sheets === 'Breakdown'
+expect window.__all.broll.name === 'untitled-script - b-roll shot list.xlsx' && window.__all.broll.pk && window.__all.broll.sheets === 'B-roll'
+expect [window.__all.script, window.__all.breakdown, window.__all.broll].every(function(b){return b.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';})
+expect window.__all.bcsv.name === 'untitled-script - breakdown.csv' && window.__all.bcsv.type === 'text/csv' && !window.__all.bcsv.pk
+expect window.__all.rcsv.name === 'untitled-script - b-roll shot list.csv' && window.__all.rcsv.type === 'text/csv' && !window.__all.rcsv.pk
+
+# --- the command menu finds "excel" ------------------------------------------
+expect C.results('excel')[0].group == Export
+expect C.results('excel')[0].items[0].id == export-xlsx
+expect C.results('excel')[0].items[0].label == Export as Excel
+expect ['export-xlsx','export-breakdown-xlsx','export-broll-xlsx'].every(function(id){return C.results('xlsx')[0].items.some(function(i){return i.id === id && !i.disabled;});})
+expect C.results('workbook')[0].items.map(function(i){return i.id;}).join(',') === 'export-xlsx,export-breakdown-xlsx,export-broll-xlsx'
+
+# --- Export again as Excel -----------------------------------------------------
+eval (async function(){await window.__export('csv','xlsx');return localStorage.getItem('splitpage-last-export');})()
+expect localStorage.getItem('splitpage-last-export') === 'export-xlsx'
+jsclick #btn-file
+sleep 200
+expect !document.getElementById('menu-export-again').hidden
+expect document.querySelector('#menu-export-again .mi-label').textContent == Export again as Excel
+eval (function(){window.__n=window.__files.length;return true;})()
+jsclick #menu-export-again
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script.xlsx
+expect window.__lastFile().blob.type == application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+# the dialog opens on the card and the choice exported last
+key ctrl KeyE
+sleep 400
+expect document.querySelector('input[name="export-format"]:checked').value == csv
+expect document.querySelector('input[name="export-choice"]:checked').value == xlsx
+key Escape
+sleep 300
+
+# --- the desktop native menu's three new items reach the same buttons --------
+eval (function(){window.__n=window.__files.length;D.runMenuCommand('export-broll-xlsx');return true;})()
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script - b-roll shot list.xlsx
+eval (function(){window.__n=window.__files.length;D.runMenuCommand('export-breakdown-xlsx');return true;})()
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script - breakdown.xlsx
+eval (function(){window.__n=window.__files.length;D.runMenuCommand('export-xlsx');return true;})()
+wait window.__files.length === window.__n + 1
+expect window.__lastFile().name == untitled-script.xlsx
+
+quit
