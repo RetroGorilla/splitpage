@@ -542,7 +542,7 @@
   <div id="rows"></div>
 
   <div class="add-row-bar">
-    <button class="add-row-btn" type="button" data-action="add-row">+ Add row</button>
+    <button class="add-row-btn" type="button" data-action="add-row">+ Add scene</button>
   </div>
 </div>
 
@@ -1422,6 +1422,24 @@
      Two dialogs: the code a shared session may ask for, and the list of
      servers this browser knows about. Nothing here is ever part of a
      document — see the note on browser state at the top of 13-hosted.js. -->
+
+<div class="modal-backdrop" id="about-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="about-title">
+    <div class="modal-header">
+      <h2 id="about-title">About Splitpage</h2>
+      <button type="button" class="modal-close" data-about-close aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+    </div>
+    <p id="about-version"></p>
+    <div id="about-body"></div>
+    <p class="modal-hint"><a id="about-link" href="#" target="_blank" rel="noopener" hidden>Open the releases page</a></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" data-about-close>Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal-backdrop" id="pin-modal" hidden>
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">

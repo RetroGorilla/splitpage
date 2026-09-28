@@ -613,7 +613,7 @@ The whole app works on a phone, with the script first and scenes stacked
 - **Accept a tag completion**: tap it (there's no <kbd>Tab</kbd>).
 - **Find & replace** and **Search commands** are in the File menu.
 - **Select several breakdown items**: long-press one, then tap others.
-- **Move or add scenes** from a scene's **⋯** menu, or **+ Add row** at the
+- **Move or add scenes** from a scene's **⋯** menu, or **+ Add scene** at the
   bottom.
 
 ## Desktop app
