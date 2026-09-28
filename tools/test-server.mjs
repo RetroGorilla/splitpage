@@ -2139,7 +2139,7 @@ function rawRequest(port, text) {
   return new Promise((resolve) => {
     const sock = netConnect(port, "127.0.0.1");
     let got = "";
-    let timer = setTimeout(() => sock.destroy(), 5000);
+    const timer = setTimeout(() => sock.destroy(), 5000);
     sock.on("connect", () => sock.write(text));
     sock.on("data", (c) => { got += c; });
     sock.on("error", () => { /* a reset is an answer of a kind; got says which */ });
