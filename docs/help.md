@@ -266,6 +266,8 @@ status.
   window; click it or scroll to see it at 100 %, and drag to look around.
   <kbd>←</kbd> <kbd>→</kbd> go through the scene's pictures, and
   <kbd>Esc</kbd>, **×** or a click outside goes back to the gallery.
+- **Draw on a picture**: pick it in the gallery and press **Annotate**.
+  See [Annotating a picture](#annotating-a-picture).
 - **Watch a video**: press **▶** in the gallery. YouTube and Vimeo links
   play there, and so does a video file dropped since you opened the script.
   Anything else opens with **Open link** / **Open file**.
@@ -276,6 +278,33 @@ status.
 
 A saved file carries all its pictures. One that can't be found shows as
 **Image unavailable**; the rest of the script is fine.
+
+### Annotating a picture
+
+Circle the thing that matters, highlight a corner, or write a note right on
+a picture. Open the scene's gallery, pick the picture and press
+**Annotate**. It opens over the whole window with the tools along the top:
+
+- **Pen** and **Highlighter** draw where you drag, with a mouse, a pen or
+  a finger. The highlighter is wide and see-through.
+- **Text**: click the picture and type. Click away or press
+  <kbd>Esc</kbd> to put it down. With Text picked, click a text to change
+  it or drag it to move it.
+- **Eraser**: drag over a mark to take the whole mark away.
+- Six **colours** and three **sizes** (S, M, L). Changing them while you
+  type changes the text you're typing.
+- **Undo** and **Redo** (<kbd>Ctrl</kbd>+<kbd>Z</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>) step through your marks,
+  and **Clear all** takes them all away.
+- **Done** saves. **Cancel** or <kbd>Esc</kbd> leaves without saving; if
+  you've drawn something it asks first, so press it again to throw the
+  marks away.
+
+The scene shows the picture with your marks everywhere: the script, the
+exports and the teleprompter. The original is kept, so **Edit annotations**
+opens your marks again to change them, and **Remove annotations** puts the
+picture back as it was. Saving is one step of the script's undo, so
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> afterwards takes it back too.
 
 ### Presenting
 
