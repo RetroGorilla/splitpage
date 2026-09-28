@@ -3959,11 +3959,19 @@
   /* what you do | → | the tag it makes | its category */
   .tagging-help-row {
     display: grid;
-    grid-template-columns: 108px 14px auto minmax(0, 1fr);
+    /* 124px: room for "Location: Loc:" (2026-09-28); the same in every
+       list, so the arrows line up down the card */
+    grid-template-columns: 124px 14px auto minmax(0, 1fr);
     align-items: baseline;
     column-gap: 6px;
   }
   .tagging-help-keys .tagging-help-row { grid-template-columns: 100px minmax(0, 1fr); column-gap: 8px; }
+  /* a name and its short form side by side: "Location: Loc:" */
+  .tagging-help-words .tagging-help-row > span:first-child { display: inline-flex; gap: 4px; }
+  /* Select + Tag's row names no one category: its words take the rest */
+  .tagging-help-row > .tagging-help-cat:nth-child(3) { grid-column: 3 / -1; }
+  .tagging-help-example { margin: 0 0 6px; }
+  .tagging-help-label kbd { font-weight: 500; }
   .tagging-help-arrow { color: var(--text-faint); text-align: center; }
   .tagging-help-cat { font-size: 12.5px; color: var(--text-dim); }
   .tagging-help-how { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
