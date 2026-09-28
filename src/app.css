@@ -3029,6 +3029,10 @@
     border-radius: 4px;
     cursor: pointer;
   }
+  /* Three choices (the b-roll list's PDF, Excel and CSV, 2026-09-28) do
+     not fit a third each without breaking a label over two lines, so each
+     takes the room its words need, on one line. */
+  .export-seg:has(label:nth-child(3)) label { flex: 1 1 auto; padding: 5px 5px; white-space: nowrap; }
   .export-seg label:hover { color: var(--text); }
   .export-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
   .export-seg label:has(input:checked) { background: var(--hover); color: var(--text); }
