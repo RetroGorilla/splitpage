@@ -597,19 +597,31 @@
     <button type="button" class="modal-close" id="tagging-help-dismiss" aria-label="Close the tagging reference" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <div class="tagging-help-body">
-    <h3 class="tagging-help-label">Type it</h3>
+    <!-- Every way to type a tag, a category at a time (Adam, 2026-09-28:
+         the word forms, #210, were only named in a sentence, and Cast and
+         Music/SFX looked as if they could only be picked from Tag) -->
+    <h3 class="tagging-help-label">Type brackets round the words</h3>
     <ul class="tagging-help-list">
       <li class="tagging-help-row"><code>[gaffer tape]</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
       <li class="tagging-help-row"><code>{kitchen}</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
       <li class="tagging-help-row"><code>~lens flare~</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">lens flare</span><span class="tagging-help-cat">VFX</span></li>
       <li class="tagging-help-row"><code>&lt;tripod&gt;</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
-      <li class="tagging-help-row"><span><code>VFX: glow</code> <kbd>Tab</kbd></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
     </ul>
-    <p class="tagging-help-note">Brackets tag the moment you type the closing one. In the Visual column, a name and a colon (Prop, Location or Loc, Cast, VFX, Gear, SFX, Music) starts a tag, and <kbd>Tab</kbd> closes it; <kbd>Esc</kbd> cancels. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text.</p>
-    <h3 class="tagging-help-label">Select the words, then press Tag</h3>
+    <p class="tagging-help-note">The tag is made the moment you type the closing bracket.</p>
+    <h3 class="tagging-help-label">Or type its name and a colon, then <kbd>Tab</kbd></h3>
+    <p class="tagging-help-note tagging-help-example">In the Visual column: <code>VFX: glow</code> <kbd>Tab</kbd> tags <em>glow</em> as VFX.</p>
+    <ul class="tagging-help-list tagging-help-words">
+      <li class="tagging-help-row"><code>Prop:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
+      <li class="tagging-help-row"><span><code>Location:</code> <code>Loc:</code></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
+      <li class="tagging-help-row"><code>Cast:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
+      <li class="tagging-help-row"><code>VFX:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
+      <li class="tagging-help-row"><code>Gear:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
+      <li class="tagging-help-row"><span><code>SFX:</code> <code>Music:</code></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+    </ul>
+    <p class="tagging-help-note">Any capitals work. <kbd>Esc</kbd> cancels, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> undoes just the tag and leaves the plain text.</p>
+    <h3 class="tagging-help-label">Or select the words and press Tag</h3>
     <ul class="tagging-help-list">
-      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
-      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tagging-help-cat">any category, in either column</span></li>
     </ul>
     <h3 class="tagging-help-label">Keys</h3>
     <ul class="tagging-help-list tagging-help-keys">
