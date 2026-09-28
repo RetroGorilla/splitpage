@@ -1,7 +1,15 @@
 import { S } from "./_state.js";
 import { PREF_EVENT, VIDEO_THUMBS_KEY } from "./00p-prefs.js";
 import { escapeHtml } from "./02-state.js";
-import { moveGallerySlot, removeGallerySlot, rowSlots, setVideoThumbnail, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
+import {
+  annotateGallerySlot,
+  moveGallerySlot,
+  removeGallerySlot,
+  rowSlots,
+  setVideoThumbnail,
+  videoLinkKey,
+  videoLinkLabel
+} from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import {
@@ -13,6 +21,7 @@ import {
   videoHostLabel
 } from "./05-render.js";
 import { embeddableVideo, embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
+import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
 import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
 import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
@@ -24,7 +33,9 @@ import { reviewMode } from "./13-hosted.js";
    "+N" tile, or "+N more videos", which shows only the videos): "Scene N
    · Visual", how many pictures and videos, a large preview of the picked
    item with ‹ › and "3 / 10", its caption (its file name, or its video
-   links) and Open / Make cover / Remove; then every item as a numbered
+   links) and Open / Annotate / Make cover / Remove (a picture drawn on
+   says "Edit annotations" and offers "Remove annotations" — the editor is
+   05w-annotate.js); then every item as a numbered
    grid, a dashed "behind +N" line after item 3 when the cell shows only
    three, and a "+" tile to add a picture.
 
@@ -122,6 +133,8 @@ export function closeGalleryOverlay() {
    render() or renderRow() ran for. Closes it when its scene or its last
    picture is gone. */
 export function refreshGalleryOverlay() {
+  /* the picture being drawn on, if any, gone with whatever changed */
+  refreshAnnotator();
   if (!view) return;
   var got = rowOf(view.rowId);
   if (!got || !rowSlots(got.row).length) { closeGalleryOverlay(); return; }
@@ -231,8 +244,14 @@ function paint() {
     ? '<button type="button" class="btn-outline" data-gact="retry-thumb" data-key="' + escapeHtml(videoLinkKey(poster)) + '"' +
       (view.fetching === videoLinkKey(poster) ? ' disabled aria-busy="true"' : '') + '>Retry thumbnail</button>'
     : '';
+  /* A picture — never a video's still — can be drawn on (05w-annotate.js);
+     one already drawn on says so, and offers its original back. */
+  var annotate = review || poster || !slot.ref ? '' :
+    '<button type="button" class="btn-outline" data-gact="annotate">' + PEN_ICON +
+      (slot.annotation ? 'Edit annotations' : 'Annotate') + '</button>' +
+    (slot.annotation ? '<button type="button" class="btn-outline" data-gact="unannotate" title="Go back to the picture as it was">Remove annotations</button>' : '');
   var buttons =
-    (openLink ? openButtonHtml(openLink) : '') + retry +
+    (openLink ? openButtonHtml(openLink) : '') + retry + annotate +
     (review ? '' :
       '<button type="button" class="btn-outline" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>' + COVER_ICON + 'Make cover</button>' +
       '<button type="button" class="scene-gallery-remove" data-gact="remove">Remove</button>');
@@ -295,6 +314,7 @@ function paint() {
 var OPEN_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13M17.5 14v4.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5V8.5A1.5 1.5 0 0 1 6 7h4.5"/></svg>';
 var COVER_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3.5" y="5" width="10" height="14" rx="1.5"/>' +
   '<rect x="16" y="5" width="4.5" height="6" rx="1"/><rect x="16" y="13" width="4.5" height="6" rx="1"/></svg>';
+var PEN_ICON = '<svg aria-hidden="true"><use href="#i-pen"/></svg>';
 
 /* The button that opens a video, saying how: a file plays in the
    computer's own player (the desktop app hands it over — openVideoFile,
@@ -483,6 +503,22 @@ function removeSelected() {
   }
 }
 
+/* "Remove annotations": the picked picture back as it was before anything
+   was drawn on it — one undo step, like Make cover. */
+function removeAnnotations() {
+  if (reviewMode()) return;
+  var at = view.sel;
+  var slot = rowSlots(rowOf(view.rowId).row)[at];
+  if (!slot || !slot.annotation) return;
+  var original = slot.annotation.imageRef;
+  if (!galleryEdit(view.rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
+    showToast("Couldn’t go back to the original — the gallery already shows that picture.", "warn");
+    return;
+  }
+  var btn = modal().querySelector('[data-gact="annotate"]');
+  if (btn) btn.focus({ preventScroll: true });
+}
+
 function onClick(e) {
   if (e.target === modal()) { closeGalleryOverlay(); return; }
   var el = e.target.closest("[data-gact]");
@@ -493,6 +529,8 @@ function onClick(e) {
   else if (act === "pick") pick(Number(el.getAttribute("data-slot")));
   else if (act === "cover") makeCover();
   else if (act === "remove") removeSelected();
+  else if (act === "annotate") openAnnotator(view.rowId, view.sel);
+  else if (act === "unannotate") removeAnnotations();
   else if (act === "all") { view.videos = false; paint(); }
   else if (act === "play") startPlaying();
   else if (act === "zoom") openZoom();
