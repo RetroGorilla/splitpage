@@ -10,6 +10,7 @@ import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { arrivingOnLink } from "./13-hosted.js";
 import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
 import { desktopAppUrl } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
@@ -479,6 +480,8 @@ async function clearRecents() {
 async function newTabEligibleForAutoShow() {
   if (newTabSuppressed()) return false;
   if (!seedCheckPasses()) return false;
+  /* arrived on a link to one script (13-hosted.js): that script is coming */
+  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   if (S.DESKTOP && typeof draftRestorePending !== "undefined" && draftRestorePending) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   if (S.DESKTOP) {

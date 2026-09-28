@@ -83,6 +83,11 @@ expect document.getElementById('pin-input').value === ''
 # --- actually laid out, not just an unhidden dialog nested in a hidden overlay
 expect document.getElementById('pin-modal').getBoundingClientRect().width > 0
 expect document.querySelector('#pin-modal .modal-panel').offsetParent !== null
+# a six-digit PIN or a server's long owner key (Collaborate): plain text,
+# no number keypad, and it says both
+expect document.getElementById('pin-input').type == text
+expect document.getElementById('pin-input').getAttribute('inputmode') === null
+expect document.getElementById('pin-input').placeholder == Join PIN or key
 jsclick #pin-modal [data-connect-action="pin-submit"]
 sleep 200
 expect document.getElementById('pin-error').hidden === false

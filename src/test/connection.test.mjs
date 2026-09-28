@@ -34,7 +34,7 @@ import {
 } from "../js/_home.js";
 
 test("a tab starts on its own origin's server, with nothing proved there", () => {
-  assert.deepEqual(conn, { serverUrl: "", token: "", role: "", tunnel: null });
+  assert.deepEqual(conn, { serverUrl: "", token: "", role: "", scope: "", tunnel: null });
   assert.equal(homeConn(), null);
 });
 
@@ -49,11 +49,11 @@ test("server addresses are normalized one way", () => {
 test("setConnection replaces the record whole and validates every field", () => {
   const a = setConnection({ serverUrl: "http://a:1/", token: "t1", role: "edit" });
   assert.equal(conn, a);
-  assert.deepEqual(a, { serverUrl: "http://a:1/", token: "t1", role: "edit", tunnel: null });
+  assert.deepEqual(a, { serverUrl: "http://a:1/", token: "t1", role: "edit", scope: "", tunnel: null });
   /* nothing of the previous server survives a new one */
   const b = setConnection({ serverUrl: "http://b:2/" });
   assert.notEqual(b, a);
-  assert.deepEqual(b, { serverUrl: "http://b:2/", token: "", role: "", tunnel: null });
+  assert.deepEqual(b, { serverUrl: "http://b:2/", token: "", role: "", scope: "", tunnel: null });
 
   assert.throws(() => setConnection({ serverUrl: "b:2" }), /not a normalized base/);
   assert.throws(() => setConnection({ serverBase: "http://b:2/" }), /no field "serverBase"/);
@@ -108,6 +108,30 @@ test("a document is only ever saved through the connection it was opened through
   assert.throws(() => setHome("server", { id: "doc-b", conn: a }), /this tab's connection/);
   assert.equal(setHome("server", { id: "doc-b", conn: b }).conn, b);
   setHome("none");
+  setConnection({});
+});
+
+/* Collaborate: a link's token opens ONE document, and the server says
+   which (/api/me's `scope`). It is a fact about the token like the role —
+   validated, moved in place, and gone with the server. */
+test("a link's scope is a document id the server could have named, kept like the role", () => {
+  const c = setConnection({ serverUrl: "https://s.example/", token: "t" });
+  assert.equal(c.scope, "");
+  setHome("server", { id: "doc-7" });
+  updateConnection({ role: "edit", scope: "doc-7" });
+  assert.equal(home.conn.scope, "doc-7", "the home sees it without a second copy");
+  assert.equal(conn, c);
+  /* only what server.js's own id whitelist allows, or "" */
+  assert.throws(() => updateConnection({ scope: "../etc" }), /a scope is/);
+  assert.throws(() => updateConnection({ scope: "Doc 7" }), /a scope is/);
+  assert.throws(() => updateConnection({ scope: 7 }), /a scope is/);
+  assert.equal(conn.scope, "doc-7", "a refused scope leaves the one there was");
+  updateConnection({ scope: "" });
+  assert.equal(conn.scope, "");
+  setHome("none");
+  /* a new server starts with nothing the old one said */
+  setConnection({ serverUrl: "https://s.example/", token: "t", role: "review", scope: "doc-7" });
+  assert.equal(setConnection({ serverUrl: "https://other.example/" }).scope, "");
   setConnection({});
 });
 

@@ -140,7 +140,7 @@ function commands() {
     fromMenu("paste", "File", "import revised draft text", "Import: paste a script…"),
     fromMenu("gdoc-import", "File", "import google docs link url", "Import: Google Doc link…"),
     fromMenu("drive-open", "File", "import google drive cloud files", "Import: Google Drive…"),
-    fromMenu("share-link", "Share", "share publish link url collaborate live together send"),
+    fromMenu("collaborate", "Share", "collaborate share invite link url people live together send edit comment publish"),
     fromMenu("server-publish", "Share", "publish upload server hosted"),
     fromMenu("servers", "Share", "server connect bookmark address pin join"),
     fromMenu("export", "Export", "download save as format dialog"),

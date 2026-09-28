@@ -23,7 +23,9 @@ wait T.isOpen()
 expect document.getElementById('file-menu').hidden
 expect document.querySelector('#settings-modal [role="dialog"]').getAttribute('aria-modal') === 'true'
 expect document.getElementById('settings-title').textContent === 'Settings'
-expect Array.prototype.map.call(document.querySelectorAll('#settings-modal .settings-section-title'), function(h){return h.textContent;}).join('|') == Appearance|Editor|Present|You|Help & tips|Data
+# Collaboration (13b-collaborate.js: the server address, the sign-in) sits
+# after You since Collaborate; 262 drives it
+expect Array.prototype.map.call(document.querySelectorAll('#settings-modal .settings-section-title'), function(h){return h.textContent;}).join('|') == Appearance|Editor|Present|You|Collaboration|Help & tips|Data
 expect document.getElementById('settings-modal').contains(document.activeElement)
 expect (function(){var r=document.querySelector('#settings-modal .modal-panel').getBoundingClientRect();return r.top>=0&&r.left>=0&&r.bottom<=innerHeight&&r.right<=innerWidth;})()
 shot 134-settings-light

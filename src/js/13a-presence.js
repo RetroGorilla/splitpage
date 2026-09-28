@@ -15,6 +15,7 @@ import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiFetch,
   apiUrl,
+  linkTurnedOff,
   notePresenceRev,
   onServerDoc,
   serverSessionExpired
@@ -179,7 +180,9 @@ function presenceInitials(name) {
    answering, a tab somebody is actually looking at, and somebody who has
    touched the keyboard in the last few minutes. */
 function presenceWanted() {
-  if (!onServerDoc() || !S.serverMode.available || serverSessionExpired) return false;
+  /* A link whose owner turned it off beats for nothing: the server would
+     refuse the beat, and the others should see this person leave. */
+  if (!onServerDoc() || !S.serverMode.available || serverSessionExpired || linkTurnedOff) return false;
   if (document.hidden) return false;
   return (Date.now() - presenceLastActive) <= PRESENCE_IDLE_MS;
 }

@@ -4,7 +4,7 @@ import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { launcherFetch } from "./13-hosted.js";
+import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile } from "./18-local-files.js";
 import { toggleFileMenu } from "./18b-file-menu.js";
 import { openHelp, startTour } from "./20c-help.js";
@@ -386,6 +386,11 @@ async function submitOnboardJoin() {
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
+  /* Somebody who clicked a link to one script (a Collaborate invite, a
+     review link, a plain ?doc=) came for that script: the page is the
+     pristine seed only until it arrives, and a setup wizard over it would
+     be the first thing a first-time guest sees (13-hosted.js). */
+  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   /* A tab restoring a crash draft looks exactly like a first run from here:
      the page IS the untouched seed until the draft is applied, which happens
      after the boot load (21-events.js). Putting the welcome wizard over

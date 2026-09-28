@@ -1,13 +1,19 @@
-# "Publish & copy a link" (issue #19): the File menu's one entry that hands
-# someone a LIVE document rather than a dead copy.
+# "Publish & copy a link" (issue #19): handing someone a LIVE document
+# rather than a dead copy.
+#
+# Since Collaborate, File ▸ Collaborate… (13b-collaborate.js, suites
+# 260-264) is the File menu's way to do that, and this entry is gone from
+# the menu. What is still here is what outlived it: the `?doc=` parameter
+# at the other end of every link (Collaborate's too), the plain address
+# and the "what they'll be asked for" note that Collaborate still shows for
+# a server too old to make links, and publishAndCopyShareLink() itself —
+# reached now only through window.__shareTest, for SKILL.md's by-hand
+# "share link end to end" run — with its no-server and read-only refusals.
 #
 # What is NOT here: a real publish. This harness serves static files and
 # cannot start server.js, the same limitation 18-connect.txt records — the
 # round trip against a real server is the by-hand recipe in SKILL.md, and
-# the API half it rides on is covered by `node tools/test-server.mjs`. What
-# IS here is everything that does not need one: the entry and its state, the
-# refusal-and-redirect when no server is connected, the address it builds,
-# what it says about getting in, and the ?doc= parameter at the other end.
+# the API half it rides on is covered by `node tools/test-server.mjs`.
 
 # --- the other end of the link: ?doc= ------------------------------------
 # First, before any DOM churn — it needs its own page load, and a goto after
@@ -28,19 +34,16 @@ goto /index.html
 eval (function(){ window.S = window.__shareTest; window.F0 = window.__splitpageFormats; return !!(S && S.url && S.note && F0); })()
 expect true
 
-# --- the entry sits with the Server tools, always shown --------------------
-# Always shown on purpose: it is how someone with no server yet finds out
-# that sharing a live document is possible at all.
+# --- the File menu's Share group: Collaborate… where this entry was --------
+# (changed deliberately with Collaborate: the entry is gone, and the item
+# that replaced it is always offered too — with no server set up it needs
+# none, one is built in. Its own flow is 260's.)
 jsclick #btn-file
 expect !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-share-link') !== null
-expect document.getElementById('menu-share-link').hidden == false
-expect document.getElementById('menu-share-link').disabled == false
-# it lives in the File menu's Share group (issue #145), next to
-# Servers…, the other tool that is never hidden either
-expect document.getElementById('menu-share-link').closest('.menu-group').getAttribute('data-menu-group') == share
-expect document.getElementById('menu-share-link').querySelector('.mi-why').textContent == No server connected — set one up first
-expect document.getElementById('menu-share-link').title.indexOf('same document') !== -1
+expect document.getElementById('menu-share-link') === null
+expect document.querySelectorAll('#file-menu [data-file-action="share-link"]').length === 0
+expect document.querySelector('#file-menu [data-menu-group="share"] .mi').id == menu-collaborate
+expect document.getElementById('menu-collaborate').disabled == false
 jsclick #file-menu-close
 
 # --- the address it builds -------------------------------------------------
@@ -68,8 +71,7 @@ eval (function(){ S.setIdentity(null); return true; })()
 # --- with no server it says so and opens Servers…, and publishes nothing --
 expect document.getElementById('connect-modal').hidden == true
 eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; S.mode().available = false; return true; })()
-jsclick #btn-file
-jsclick #file-menu [data-file-action="share-link"]
+eval (function(){ S.publishAndCopy(); return true; })()
 wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
 eval (function(){ var t = document.querySelectorAll('.toast.warn'); window.__noServerText = t[t.length - 1].textContent; return window.__noServerText; })()
 expect window.__noServerText.indexOf('needs a Splitpage server') !== -1
@@ -77,14 +79,15 @@ wait document.getElementById('connect-modal').hidden == false
 jsclick #connect-modal [data-connect-action="close"]
 wait document.getElementById('connect-modal').hidden == true
 
-# --- a read-only server disables it, with the reason in the tooltip -------
+# --- a read-only server: nothing is published, and Collaborate… says why --
+# (this page served by that server, as the web app on it is)
 eval (function(){ S.mode().available = true; S.mode().readOnly = true; S.updateMenu(); return true; })()
-expect document.getElementById('menu-share-link').disabled == true
-expect document.getElementById('menu-share-link').title.indexOf('read-only') !== -1
+expect document.getElementById('menu-collaborate').disabled == true
+expect document.querySelector('#menu-collaborate .mi-why').textContent == This server is read-only
 eval (async function(){ window.__roToastsBefore = document.querySelectorAll('.toast.warn').length; window.__roResult = await S.publishAndCopy(); return window.__roResult; })()
 expect window.__roResult == false
 eval (function(){ S.mode().readOnly = false; S.mode().available = false; S.updateMenu(); return true; })()
-expect document.getElementById('menu-share-link').disabled == false
+expect document.getElementById('menu-collaborate').disabled == false
 
 # --- the standalone HTML export is untouched: still a dead copy -----------
 # The decision this issue settled was that the export stays inert. It still

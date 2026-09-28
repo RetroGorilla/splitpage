@@ -1638,7 +1638,9 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     or passphrase. Since #11 the same holds for `desktop-state.json` and a
     draft header: a server tab's persisted source is `{kind, serverDocId,
     serverUrl, tunnel}` and nothing else, and a token only ever sits in
-    main's memory between a route-open and the new tab's boot.
+    main's memory between a route-open and the new tab's boot. Collaborate's
+    owner token and link keys follow the same rule — where each may live is
+    #62.
 30. **The first-run setup wizard may only appear over a genuinely pristine
     copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
     `build.mjs`, checked by `seedCheckPasses()`) plus
@@ -1877,17 +1879,40 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     /Type /Pagination /Subtype /Footer >> BDC … EMC`, `pdfFooterOps`):
     text extraction skips it, and a test that reads the content streams
     must too — its hairline is the same operator as a scene's rule.
+62. **Collaborate's credentials live in this browser's storage, per server,
+    and nowhere else** (13-hosted.js, 13b-collaborate.js). The OWNER KEY
+    (the server's JOIN_PIN) is never stored at all: it is typed, posted to
+    `/api/join` and dropped; what is kept is the token it buys, in this tab
+    (`splitpage-server-token`, sessionStorage) and — "Remember on this
+    device", ticked by default in the Collaborate dialog — in the
+    per-server map `splitpage-server-tokens` (localStorage), the same place
+    the PIN dialog's "Remember" has used since #11. A LINK'S KEY (`#invite=`
+    / `#review=`) is in the link, then in the tab (`splitpage-review-key`,
+    sessionStorage) and, only for a server whose `/api/health` says
+    `linksPersist: true`, on the device (`splitpage-invites`, `{serverUrl:
+    {key, doc}}`) — so a LAN session's review key never reaches localStorage
+    (suite 43). A link's TOKEN is the tab's only (`setLinkToken`): it never
+    goes into, and a guest's join never clears, the owner's remembered map,
+    and a link clicked on the owner's own device never replaces the owner's
+    remembered sign-in (`holdsOwnerSignIn`). None of the three ever enters
+    `state`, a file, an export, the app-data bundle (#48 — and no key name
+    here may match its regex, nor suite 18's
+    `/pass|secret|key|cred|ssh|pin/`), `desktop-state.json`, a draft header
+    or a URL other than the link itself; the key leaves the address bar the
+    moment it is read. `link-off` forgets the key in the tab and on the
+    device; Settings ▸ Collaboration ▸ Sign out forgets the owner's token
+    for that server only.
 ---
 
 ## 6. Map of the source
 
-`src/js/` (46 modules; filenames say where things live, and still set
+`src/js/` (47 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
 | --- | --- |
 | `_state.js` | the 54 cross-module mutable vars, as one exported object `S` |
-| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11) |
+| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `scope`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11); `scope` (Collaborate) is the one document id a link's token opens, `""` for the owner's, as the server said and never stored |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`; the save status's words `savedStatusText` and tooltip time `savedWhenText`, #208), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
@@ -1924,8 +1949,9 @@ evaluation order via `_entry.js`):
 | `09-find-replace.js` | find & replace |
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import; the Markdown exports reopened (`parseStackedMarkdownExport`, `markdownExportScript`), old shapes and new (invariant 58) |
-| `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
+| `12-dirty-toast.js` | dirty flag, toasts (`showActionToast`'s `sticky` for a state that lasts — a link turned off), draft-change hook, save-state indicator (`updateSaveStatus`) |
+| `13-hosted.js` | server detection (`applyHealth`: `links`, `linksPersist`), picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19; out of the menu since Collaborate, its `serverDocShareUrl`/`shareAccessNote` still Collaborate's for an older server), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82). Collaborate's guest half: the link's key read out of `#invite=`/`#review=` (`readLinkKey`) and kept per tab, or per device for a server whose links persist (`splitpage-invites`); `joinWithLinkKey` at boot, over a stale token and after a restart; `conn.scope` and the File menu's "Your link opens this one script"; `openSharedDocFromLink` opening the link's script (its scope wins over `?doc=`); `flagLinkOff` — the latched `linkTurnedOff`: one sticky toast with Save a copy…, no saves, no presence, the key forgotten; `apiFetch`'s `link-off`/`owner-only`/`wrong-document` codes and `opts.base`/`opts.token` (ask a server the tab is not pointed at); the owner's remembered sign-in per server (`rememberTokenForServer`) never touched by a link's token (`setLinkToken`); `arrivingOnLink()` for the wizard, the start screen and the desktop pitch |
+| `13b-collaborate.js` | File ▸ Collaborate… (and Ctrl K, the Export dialog's note, the desktop native menu): which server (`collabTarget` — the script's own server, else the one that served the page, else Settings' `splitpage-collab-server`, else the built-in `DEFAULT_COLLAB_SERVER`), the dialog's steps (checking → sign-in → confirm → publishing → links; unreachable / error / legacy / open-server) asked with apiFetch's `base` override so Cancel leaves the tab where it was, publishing through `pointTabAt` + `publishToServer({quiet, onError})`, the links API (list, make one of each the first time, New link = `replace:true`, Turn off = DELETE, both armed), the links' base (the desktop app hosting a session hands out its LAN address); the menu item's state (`collaborateBlockedReason`); Settings' view of it (`collabServerView`, `signOutCollab`); a guest's first-time name box (`maybeAskGuestName`, the header's and Settings ▸ You's own name and colour); pure `normalizeCollabServer`, `parseLinkFragment`, `inviteLink` (src/test/collaborate.test.mjs); `window.__collabTest` |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
 | `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` and `rundownEdge()` (a dot whose block the sliding lens has carried off the track is hidden) being exported; `paintRundownPresence()` is called from `paintPresence()` |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171). The Markdown exports: `exportMetaLine()` (also the standalone page's description), timed scene headings with a status/read line, open threads' `<sup>N</sup>` markers (`markdownWithMarkers`), hard breaks (`mdHardBreaks`), and `appendExportTail` — the breakdown by category, the b-roll shot list as task lists, numbered comments — all behind `opts.export` (invariant 59); `opts.scenes` for the dialog's sketch |
@@ -1944,13 +1970,13 @@ evaluation order via `_entry.js`):
 | `20b-onboarding.js` | first-run wizard, pristine-seed gate (invariant #30) |
 | `20c-help.js` | in-app Help modal, coach-mark tour |
 | `20d-formats.js` | the two document formats, hand-edit reconcile |
-| `20e-connect.js` | join-PIN dialog, server bookmarks, SSH helper |
+| `20e-connect.js` | join-PIN dialog (a six-digit PIN or a server's long owner key, since Collaborate), server bookmarks, SSH helper; `joinServer` carrying a link's `docId`/`scope` and its `link-off`; on a server with Collaborate's links the Servers dialog points a script's owner at Collaborate instead of its old review link |
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
 | `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
-| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
+| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
 | `21-events.js` | all event wiring, `init()` |
 
@@ -2143,6 +2169,26 @@ no server it refuses and opens **Servers…** instead. The other end is
 bar, and opens that document after the server has answered — but only if
 `resumeServerDoc()` did not already claim the page, since a crash draft or a
 lapsed sign-in is unsaved work that must not be replaced.
+
+**Collaborate replaced it in the menu** (`src/js/13b-collaborate.js`, File
+▸ Share's first item). Adam: "The end user shouldn't have to know that this
+URL exists — they just go Collaborate and then it gets stored on my
+server." The server is built in (`DEFAULT_COLLAB_SERVER`,
+`https://script.bigmanonline.uk/`, changeable in Settings ▸ Collaboration);
+the owner signs in once per device with the owner key, inside the dialog;
+a script not on the server yet is stored there after one confirmation, with
+this tab pointed at it; the dialog ends on two links, Can edit and Can
+comment (`<server>?doc=<id>#invite=<key>`), each with Copy, New link and
+Turn off, from the server's links API (`/api/docs/:id/links`, owner-only).
+A guest's page reads the key (13-hosted.js, `readLinkKey`), joins with it,
+learns the one script it opens (`conn.scope`), opens it, asks their name
+once, and remembers the key for that server (invariant #62); every
+library-wide File-menu item says why it will not work for them. A link the
+owner turns off is `flagLinkOff`: latched like a lapsed sign-in, but no
+reload and no PIN dialog, since neither fixes it. `publishAndCopyShareLink`
+stays for `window.__shareTest` and SKILL.md's by-hand run; its address and
+access note are Collaborate's for a server too old to make links. Suites
+260–264; the server half is `tools/test-server.mjs`.
 
 ---
 

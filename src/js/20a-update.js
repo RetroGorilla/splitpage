@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { arrivingOnLink } from "./13-hosted.js";
 
 /* ================= updates =================
 
@@ -299,6 +300,9 @@ var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
 export function renderDesktopAppNotice() {
   /* Already in the desktop app — nothing to point it at. */
   if (S.DESKTOP) return;
+  /* Somebody who came in on a link to one script (Collaborate) came to
+     work on it, not to be sold an app: nothing to install is the point. */
+  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return;
   try {
     if (localStorage.getItem(DESKTOP_NOTICE_KEY) === "1") return;
   } catch (e) { /* no storage — fall through and show it */ }

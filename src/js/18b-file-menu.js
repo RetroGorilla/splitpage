@@ -7,7 +7,7 @@ import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { applyReviewMode, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
+import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
 import { writerOpen } from "./19-writer.js";
 import {
@@ -109,9 +109,10 @@ function renderKeyChips(root) {
 
    An item that cannot do its job right now says so on the item, rather
    than failing (or toasting) on click. Whether it is also disabled is the
-   caller's decision: Publish & copy a link with no server stays enabled,
-   because pressing it opens Servers… to set one up; on a read-only server
-   there is nothing to press for, so it is disabled as well. */
+   caller's decision: Collaborate… on a script with no server yet stays
+   enabled, because pressing it is how the script gets onto one; for a
+   guest on somebody else's link there is nothing to press for, so it is
+   disabled as well ("Only the script's owner can invite people"). */
 export function setMenuItemReason(item, reason) {
   var why = item && item.querySelector(".mi-why");
   if (!why) return;
@@ -177,6 +178,7 @@ export function fileCardView() {
   if (!S.state) return { name: "Loading…", bits: [] };
   if (home.kind === "server") {
     var srv = serverSessionExpired ? { text: "Signed out — reload to sign in", unsaved: true }
+      : linkTurnedOff ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
     return { name: S.state.title || "Untitled script", bits: [srv, { text: "On the server · v" + home.rev }] };
   }
