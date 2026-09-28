@@ -2316,8 +2316,10 @@ function init() {
     if (fmt) { onWriterFormat(fmt); return; }
     if (e.target.closest("#wr-gutter-mode")) { cycleWriterGutter(); return; }
     if (e.target.closest("#wr-export")) { exportNarration("narration-docx"); return; }
-    if (e.target.closest("#wr-close")) closeWriter();
   });
+  /* Close sits beside Save in the title row now (2026-09-28), not on the
+     tools' bar */
+  document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
 
   /* The writer covers the whole screen, but Tab does not know that: from
      the last control on its bar, focus walks on into the header and the
