@@ -907,7 +907,7 @@ function afterUndoApplied(steps) {
 }
 
 function onUndoRefused(reason, dir) {
-  showToast("Couldn't " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
+  showToast("Could not " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
 }
 
 function onRootInput(e) {

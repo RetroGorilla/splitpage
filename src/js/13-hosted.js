@@ -2481,10 +2481,10 @@ async function driveSignInDesktop() {
     : code === "TIMEOUT" ? "Sign-in timed out — nothing came back from your browser within 5 minutes. Try again."
     : code === "STATE_MISMATCH" ? "The reply from Google didn't match this sign-in, so it was refused. Try again."
     : code === "NO_REFRESH_TOKEN" ? "Google didn't grant lasting access. Try again, and allow access when Google asks."
-    : code === "NO_BROWSER" ? "Couldn't open your browser for Google sign-in."
+    : code === "NO_BROWSER" ? "Could not open your browser for Google sign-in."
     : code === "CANCELLED" ? "Sign-in was cancelled."
     : code === "NOT_CONFIGURED" ? "No Google client is set up on this computer yet."
-    : "Couldn't finish signing in to Google Drive" + (code ? " (" + code + ")" : "") + ".";
+    : "Could not finish signing in to Google Drive" + (code ? " (" + code + ")" : "") + ".";
   showToast(msg, code === "DENIED" || code === "CANCELLED" ? "warn" : "error");
   await refreshDriveDesktop();
 }

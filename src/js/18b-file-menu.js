@@ -178,7 +178,7 @@ export function fileCardView() {
   if (home.kind === "server") {
     var srv = serverSessionExpired ? { text: "Signed out — reload to sign in", unsaved: true }
       : savedWord(null);
-    return { name: S.state.title || "Untitled script", bits: [srv, { text: "On the server · v" + home.rev }] };
+    return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + home.rev }] };
   }
   if (home.kind === "file") {
     return {

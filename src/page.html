@@ -306,7 +306,7 @@
                    (localStorage "splitpage-rundown-min"), the same switch as
                    the chevron on the strip itself; 05f-rundown.js keeps
                    aria-checked. Mirrored in the desktop View menu. -->
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimize the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
+              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimise the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <!-- Desktop app only (issue #86): the in-page twin of View ▸
                    Present in Browser, which a Windows user cannot reach —
                    the window's title bar is the tab strip, so there is no
@@ -633,12 +633,12 @@
       <h2 id="import-title">Import a script</h2>
       <button type="button" class="modal-close" id="import-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
+    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labelled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
     <!-- Opened from the New Tab page (issue #144), where there is no
          document of the user's to keep: the import becomes a new one.
          11-import.js puts .is-new-document on #import-modal, which swaps
          this hint in for the one above and hides "Replace existing rows". -->
-    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns.</p>
+    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labelled lines) is detected automatically and split into both columns.</p>
     <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
       <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
