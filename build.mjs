@@ -279,9 +279,9 @@ function mdToHtml(markdown) {
       const slug = "help-" + slugify(text.replace(/[.*`_]/g, ""));
       out.push("<h" + level + ' id="' + slug + '">' + mdInline(text) + "</h" + level + ">");
       if (level === 2) {
-        toc.push({ li: '<li><a href="#' + slug + '">' + text + "</a>", subs: [] });
+        toc.push({ li: '<li><a href="#' + slug + '">' + mdInline(text) + "</a>", subs: [] });
       } else if (level === 3 && toc.length) {
-        toc[toc.length - 1].subs.push('<li><a href="#' + slug + '">' + text + "</a></li>");
+        toc[toc.length - 1].subs.push('<li><a href="#' + slug + '">' + mdInline(text) + "</a></li>");
       }
       i++;
       continue;
