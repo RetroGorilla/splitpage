@@ -1930,7 +1930,8 @@
   .annotate-swatch::before {
     content: ""; position: absolute; inset: 6px; border-radius: 50%;
     background: var(--swatch);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent);
+    /* strong enough that black reads on the dark toolbar, white on the light */
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text) 55%, transparent);
   }
   .annotate-swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--visual); }
   .annotate-swatch:hover:not(:disabled) { background: var(--layer-hover, var(--hover)); }
