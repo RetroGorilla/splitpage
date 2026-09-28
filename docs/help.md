@@ -676,6 +676,17 @@ If you turn their link off, they see **The owner turned off this link**.
 Nothing more is saved to the server, their changes stay on their screen,
 and **Save a copy…** still works.
 
+**If the connection drops, or the tab closes.** Changes that haven't reached
+the server yet are kept in the browser as they type, for any script on a
+server (yours or one you were invited to). The next time that browser opens
+the script (a reload, the link again, a new tab), the kept changes are merged
+into whatever the server has now, both sides' edits kept, with **Undo merge**
+if it's not what they wanted. Nothing is saved until they press Save. If the
+link has been turned off by then, the changes open as an unsaved copy
+instead, to keep with **Save a copy…**. Saving removes the kept copy; one
+left unsaved is forgotten after 30 days. A private window may not keep
+anything.
+
 ## Hosting a shared session
 
 Let people on your network open and edit the same scripts. In the desktop

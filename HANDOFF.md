@@ -763,6 +763,39 @@ tabs**.
   `splitpage:draft-restore-done` or an explicit user decision — never
   crash/kill/session-end/quit. `buildDraftHeader` (`main.js:807`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
+- **The browser keeps drafts too, for server documents only** (PR #233 —
+  a Collaborate guest has no desktop app). `20g-drafts.js` is one writer
+  and one restore over a pluggable backend: `S.DESKTOP` → the bridge
+  above; otherwise `03d-drafts-idb.js` (IndexedDB `splitpage-drafts` v1:
+  `meta` + `bodies`, keyPath `key`), live only while the page's document
+  is on a server and not in review mode (`browserDraftTarget`). Same
+  triggers, throttle, dedup, NEED_BASE handshake, blobs-first and backoff
+  as the desktop. ONE DRAFT PER DOCUMENT, not per tab: key
+  `browserDraftKey(draftBaseOf(serverUrl), serverDocId)` — the base is
+  origin + folder only (no query, fragment or user), so no token or link
+  key can ride in; the record is the document, its ancestor and scalars
+  (`rev`, `title`, `writerId`, …), never a credential (#29, #62). Each page
+  has a random `writerId` and holds the Web Lock
+  `splitpage-draft-writer-<id>` while showing (let go on `pagehide` — a page
+  in the back-forward cache would otherwise look alive); a page removes only
+  its own draft, and a draft whose writer is live is never "recovered". No
+  launch hands a draft back, so it is looked for when a server document is
+  about to open: `finishServerDetect()` for `conn.scope || ?doc= || the
+  join's doc`, before `resumeServerDoc()` (so it beats an older
+  sessionStorage stash, as the desktop's does), and `openServerDoc(id)` for
+  the picker. Found → `armServerDraftResume()` + `applyTakenDraft()`, i.e.
+  the desktop's `restoreServerDraft` path: merged with the draft's own base,
+  "Undo merge" armed, `noAutoSave` (the chip says "not saved yet"). A link
+  found off on a later load (`flagLinkOff`, nothing of the reader's on
+  screen) opens the kept draft as an unsaved copy
+  (`offerBrowserDraftAfterLinkOff`), which keeps writing that same draft
+  (`browserCopyOf`, `keepBase`) until it is saved somewhere. Bounds: 30
+  days, 20 drafts, 64 MiB, oldest first, inside each put. No IndexedDB →
+  `UNAVAILABLE`, the writer stops with nothing on screen; a full quota says
+  "this browser's storage is full". An unreachable server at load does NOT
+  open the draft as a copy (unlike the desktop): the harness and a flaky
+  start look alike, so it waits for the next load that reaches the server.
+  Untitled scripts and local files are still desktop-only.
 - **Desktop version history** (#83, `main.js` §8b): one
   `shared/history-store.js` (the store the browser runs too; policy from
   `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
@@ -1375,9 +1408,13 @@ history. A database a newer build wrote is served read-only: every write
 answers `read-only`, and captures stay pending in the page with ONE toast
 and one panel line.
 
-**Crash-safe drafts** (desktop only, §3.13): a `stateJson` full `state`
+**Crash-safe drafts** (§3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
-schema. **`desktop-state.json` v2**: no document content and no docId, just
+schema. On the desktop per tab, for every kind of document; in the browser
+(PR #233) per server document only, in IndexedDB `splitpage-drafts`:
+`meta` `{key, base, docId, rev, title, writtenAt, writerId, editSeq, schema,
+docIdWrittenOut, bytes}` and `bodies` `{key, stateJson, baseJson}`, `key` =
+`JSON.stringify([base, serverDocId])`. **`desktop-state.json` v2**: no document content and no docId, just
 windows/bounds/tabs/each tab's *source*/`lastKnownTitle` — a launch recipe,
 not a backup (§3.13).
 
@@ -1689,7 +1726,13 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 40. **A crash draft is deleted only when its tab becomes clean, or on an
     explicit user decision** — never on crash, kill, renderer loss,
     session-end, quit, or restore. A discard writes a tombstone before
-    anything is unlinked.
+    anything is unlinked. The browser's (PR #233) keeps the same rule per
+    page: removed only by the page that wrote it (or took it over after a
+    restore) when that page is clean or has moved to another server
+    document, never by another tab's save, never by a restore that failed —
+    plus the store's own bounds (30 days, 20 drafts, 64 MiB). A link turned
+    off, a lapsed sign-in or a page too old never stops the writer; they
+    stop saves, and a restore never saves.
 41. **Restoring a draft never writes the user's file by itself.**
     "Unchanged on disk" is decided by content, never mtime. The draft
     header is built only by main from allowlisted scalar fields; draft
@@ -1897,8 +1940,11 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     remembered sign-in (`holdsOwnerSignIn`). None of the three ever enters
     `state`, a file, an export, the app-data bundle (#48 — and no key name
     here may match its regex, nor suite 18's
-    `/pass|secret|key|cred|ssh|pin/`), `desktop-state.json`, a draft header
-    or a URL other than the link itself; the key leaves the address bar the
+    `/pass|secret|key|cred|ssh|pin/`), `desktop-state.json`, a draft header,
+    the browser's draft store (PR #233: keyed by origin + folder and the
+    server's document id, holding the document and scalars only — suite
+    265 looks for the token and the key in it) or a URL other than the link
+    itself; the key leaves the address bar the
     moment it is read. `link-off` forgets the key in the tab and on the
     device; Settings ▸ Collaboration ▸ Sign out forgets the owner's token
     for that server only.
@@ -1923,6 +1969,7 @@ evaluation order via `_entry.js`):
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
 | `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v3: `index` + `bodies`, one strict transaction per job; the v3 upgrade drops 2.1's v1 stores only when they hold no snapshot), `hashText` |
+| `03d-drafts-idb.js` | the browser's store for crash-safe drafts of server documents (PR #233): `createIdbDraftStore` (`splitpage-drafts` v1: `meta` + `bodies`; `put` with the NEED_BASE rule and `keepBase`, `get`, `list`, `remove(key, writerId)`, `claim`; every call resolves, `UNAVAILABLE` with no IndexedDB), pure `browserDraftKey`, `draftBaseOf` (origin + folder), `planDraftEviction` (30 days, 20, 64 MiB); `src/test/browser-drafts.test.mjs` |
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
@@ -1950,7 +1997,7 @@ evaluation order via `_entry.js`):
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import; the Markdown exports reopened (`parseStackedMarkdownExport`, `markdownExportScript`), old shapes and new (invariant 58) |
 | `12-dirty-toast.js` | dirty flag, toasts (`showActionToast`'s `sticky` for a state that lasts — a link turned off), draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection (`applyHealth`: `links`, `linksPersist`), picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19; out of the menu since Collaborate, its `serverDocShareUrl`/`shareAccessNote` still Collaborate's for an older server), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82). Collaborate's guest half: the link's key read out of `#invite=`/`#review=` (`readLinkKey`) and kept per tab, or per device for a server whose links persist (`splitpage-invites`); `joinWithLinkKey` at boot, over a stale token and after a restart; `conn.scope` and the File menu's "Your link opens this one script"; `openSharedDocFromLink` opening the link's script (its scope wins over `?doc=`); `flagLinkOff` — the latched `linkTurnedOff`: one sticky toast with Save a copy…, no saves, no presence, the key forgotten; `apiFetch`'s `link-off`/`owner-only`/`wrong-document` codes and `opts.base`/`opts.token` (ask a server the tab is not pointed at); the owner's remembered sign-in per server (`rememberTokenForServer`) never touched by a link's token (`setLinkToken`); `arrivingOnLink()` for the wizard, the start screen and the desktop pitch |
+| `13-hosted.js` | server detection (`applyHealth`: `links`, `linksPersist`), picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19; out of the menu since Collaborate, its `serverDocShareUrl`/`shareAccessNote` still Collaborate's for an older server), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82). Collaborate's guest half: the link's key read out of `#invite=`/`#review=` (`readLinkKey`) and kept per tab, or per device for a server whose links persist (`splitpage-invites`); `joinWithLinkKey` at boot, over a stale token and after a restart; `conn.scope` and the File menu's "Your link opens this one script"; `openSharedDocFromLink` opening the link's script (its scope wins over `?doc=`); `flagLinkOff` — the latched `linkTurnedOff`: one sticky toast with Save a copy…, no saves, no presence, the key forgotten, and (nothing of the reader's on screen) this browser's kept draft opened as an unsaved copy (PR #233); a browser draft armed in `finishServerDetect` before `resumeServerDoc`, and in `openServerDoc`; `apiFetch`'s `link-off`/`owner-only`/`wrong-document` codes and `opts.base`/`opts.token` (ask a server the tab is not pointed at); the owner's remembered sign-in per server (`rememberTokenForServer`) never touched by a link's token (`setLinkToken`); `arrivingOnLink()` for the wizard, the start screen and the desktop pitch |
 | `13b-collaborate.js` | File ▸ Collaborate… (and Ctrl K, the Export dialog's note, the desktop native menu): which server (`collabTarget` — the script's own server, else the one that served the page, else Settings' `splitpage-collab-server`, else the built-in `DEFAULT_COLLAB_SERVER`), the dialog's steps (checking → sign-in → confirm → publishing → links; unreachable / error / legacy / open-server) asked with apiFetch's `base` override so Cancel leaves the tab where it was, publishing through `pointTabAt` + `publishToServer({quiet, onError})`, the links API (list, make one of each the first time, New link = `replace:true`, Turn off = DELETE, both armed), the links' base (the desktop app hosting a session hands out its LAN address); the menu item's state (`collaborateBlockedReason`); Settings' view of it (`collabServerView`, `signOutCollab`); a guest's first-time name box (`maybeAskGuestName`, the header's and Settings ▸ You's own name and colour); pure `normalizeCollabServer`, `parseLinkFragment`, `inviteLink` (src/test/collaborate.test.mjs); `window.__collabTest` |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
 | `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` and `rundownEdge()` (a dot whose block the sliding lens has carried off the track is hidden) being exported; `paintRundownPresence()` is called from `paintPresence()` |
@@ -1973,7 +2020,7 @@ evaluation order via `_entry.js`):
 | `20e-connect.js` | join-PIN dialog (a six-digit PIN or a server's long owner key, since Collaborate), server bookmarks, SSH helper; `joinServer` carrying a link's `docId`/`scope` and its `link-off`; on a server with Collaborate's links the Servers dialog points a script's owner at Collaborate instead of its old review link |
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
-| `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
+| `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop over a pluggable backend (the desktop bridge, or the browser's `03d-drafts-idb.js` for a server document, PR #233), `applyTakenDraft`, `sameDocContent`; the browser's restore — `armBrowserServerDraft` (finishServerDetect, openServerDoc), `offerBrowserDraftAfterLinkOff` (flagLinkOff), the writer's Web Lock; `__desktopTest.drafts.browser` |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
 | `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |

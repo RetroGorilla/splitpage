@@ -53,6 +53,7 @@ import {
 import { openCollaborate } from "./13b-collaborate.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
+  autoSaveHalt,
   exportMetaLine,
   markdownExportImages,
   saveDoc,
@@ -164,6 +165,9 @@ function updateHeaderFileChip() {
     srvState.textContent = serverSessionExpired
       ? "· signed out — reload"
       : linkTurnedOff ? "· link turned off — not saving"
+      /* A recovered draft merged in (20g-drafts.js) halts autosave until
+         Save: "saving…" there was a promise nothing was keeping (PR #233). */
+      : S.dirty && autoSaveHalt ? "· not saved yet"
       : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
     srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || !!S.dirty);
     saveBack.disabled = true;
