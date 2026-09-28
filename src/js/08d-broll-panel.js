@@ -1642,16 +1642,27 @@ export function shotRecordForFile(e) {
    be what adds a shot to the list. "Scene start" (#169) — the timecode
    the shot's scene starts at, as the list's scene heads show it — goes
    last, so a sheet built on the columns before it still lines up. */
-export function buildBrollCsv() {
-  var head = ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
-              "Scene start"];
-  var lines = [head.join(",")];
+/* The same shots as a table, for the Excel workbook too (16b-xlsx.js):
+   the heading and a row per shot ({cells, shot, flagged}). */
+export function brollTable() {
+  var out = {
+    head: ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
+           "Scene start"],
+    rows: []
+  };
   var starts = sceneStarts();
   brollSortedForList(brollEntries(true)).forEach(function (e) {
     var r = shotRecordForFile(e);
-    lines.push([r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location, r.props.join("; "),
-                r.cuts, r.owner, r.note, r.desc, startOf(e, starts)].map(csvEscape).join(","));
+    out.rows.push({ shot: r.shot, flagged: r.flagged, cells: [r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location,
+      r.props.join("; "), r.cuts, r.owner, r.note, r.desc, startOf(e, starts)] });
   });
+  return out;
+}
+
+export function buildBrollCsv() {
+  var t = brollTable();
+  var lines = [t.head.join(",")];
+  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
   if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
   return "﻿" + lines.join("\r\n");
 }
