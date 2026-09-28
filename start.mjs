@@ -406,8 +406,8 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
     /* Loopback unless the user asked to host. There is no authentication in
        that process by design, so reaching the network is never the default
        and never silent — see the warning printed below. Putting it on the
-       INTERNET is a different job again: the Docker image behind Cloudflare
-       Access, in DEPLOY.md. */
+       INTERNET is a different job again: the Docker image behind a Cloudflare
+       tunnel, with a long owner key and PERSIST_LINKS=1, in DEPLOY.md. */
     HOST: HOSTING ? "0.0.0.0" : "127.0.0.1",
     STATIC_DIR: ROOT,
     DATA_DIR,
@@ -495,7 +495,7 @@ ${line}
   code is checked by this computer but travels in the clear over plain
   HTTP, so anyone able to watch the network can read it as it goes past —
   fine on your own network, not on a public one or over the internet. For
-  the internet, put Splitpage behind Cloudflare Access (see DEPLOY.md).
+  the internet, run the server image behind a Cloudflare tunnel (DEPLOY.md).
   Close this window to stop sharing.`);
     if (reviewPin) {
       /* The review address is the ordinary one with the link key in its
