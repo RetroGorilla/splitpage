@@ -73,7 +73,7 @@ jsclick .export-card[data-format="broll"]
 sleep 200
 expect document.querySelector('input[name="export-format"]:checked').value == broll
 expect Array.prototype.map.call(document.querySelectorAll('#export-options label'), function(l){return l.textContent;}).join('|') === 'PDF, landscape|Excel (.xlsx)|CSV (.csv)'
-expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with B-roll:
+expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with "B-roll:"
 expect document.getElementById('export-go').disabled === true
 expect document.getElementById('export-preview').classList.contains('is-landscape')
 jsclick .export-card[data-format="packing"]

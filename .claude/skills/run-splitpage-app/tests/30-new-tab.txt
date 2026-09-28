@@ -134,6 +134,11 @@ expect document.querySelectorAll('.newtab-preview.is-blank svg').length == 1
 # the browser build: no Recent column, and the desktop-app line with the
 # desktop-app notice's own link target (20a-update.js)
 expect document.getElementById('newtab-recents').hidden == true
+# the line is for a Windows browser only (a phone, a Mac or Linux gets nothing
+# to click), so this suite's Linux Chromium sees it hidden until it is
+# made to look like Windows
+expect document.getElementById('newtab-desktop').hidden == true
+eval (function(){ Object.defineProperty(navigator, 'userAgent', { configurable: true, get: function(){ return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120'; } }); window.__newTab.refreshRecents(); return true; })()
 expect document.getElementById('newtab-desktop').hidden == false
 expect document.getElementById('newtab-desktop-link').href.indexOf('https://github.com/RetroGorilla/splitpage-releases') === 0
 # the drop zone, and a footer offering the tour and the example script

@@ -628,7 +628,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     endBusy(readBusy);
   }
 
-  if (!newRows || !newRows.length) { showToast("No script rows found in that file.", "warn"); return; }
+  if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
   /* opening a document replaces the whole script — keep a way back */
   if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);

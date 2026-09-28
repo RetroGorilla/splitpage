@@ -42,6 +42,7 @@ import {
   render,
   renderRow,
   syncFieldFromDom,
+  syncPageTitle,
   toggleCellFormat,
   typeAtDirectionEdge,
   typePendingMarks,
@@ -907,7 +908,7 @@ function afterUndoApplied(steps) {
 }
 
 function onUndoRefused(reason, dir) {
-  showToast("Couldn't " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
+  showToast("Could not " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
 }
 
 function onRootInput(e) {
@@ -2069,6 +2070,7 @@ function init() {
   document.getElementById("doc-title").addEventListener("input", function (e) {
     if (!S.state) return;
     S.state.title = e.target.value;
+    syncPageTitle();
     markDirty();
   });
 

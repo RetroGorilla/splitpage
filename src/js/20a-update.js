@@ -296,9 +296,18 @@ export function dismissUpdateNotice() {
 
 var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
 
-export function renderDesktopAppNotice() {
+/* The desktop app is a Windows installer. Offering it to a phone, a Mac or a
+   Linux box is a dead end, so the notice and the start screen's footer line
+   both ask this first. */
+export function desktopAppOffered() {
   /* Already in the desktop app — nothing to point it at. */
-  if (S.DESKTOP) return;
+  if (S.DESKTOP) return false;
+  var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+  return /Windows/.test(ua) && !/Mobi|Android/.test(ua);
+}
+
+export function renderDesktopAppNotice() {
+  if (!desktopAppOffered()) return;
   try {
     if (localStorage.getItem(DESKTOP_NOTICE_KEY) === "1") return;
   } catch (e) { /* no storage — fall through and show it */ }
@@ -334,10 +343,9 @@ export function dismissDesktopAppNotice() {
 export function showAbout() {
   var lines = [];
   var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
-  lines.push("Splitpage " + (version || "(version unknown)"));
+  var link = null;
 
   if (S.DESKTOP) {
-    lines.push("");
     var dl = (updateStatus && updateStatus.download) || { state: "idle" };
     if (!updateStatus) {
       lines.push("Could not check for updates.");
@@ -350,41 +358,72 @@ export function showAbout() {
       lines.push("Downloading version " + (updateStatus.latest || "") + "\u2026");
     } else if (updateStatus.updateAvailable && updateStatus.latest) {
       lines.push("Version " + updateStatus.latest + " is available.");
-      lines.push(updateStatus.canInstall
-        ? "Use the Download button in the update notice — it installs from inside the app."
-        : "There is no installer for this platform in that release. Get it from " +
-          (updateStatus.releaseUrl || "the release page") + ".");
+      if (updateStatus.canInstall) {
+        lines.push("Use the Download button in the update notice — it installs from inside the app.");
+      } else {
+        lines.push("There is no installer for this platform in that release.");
+        link = updateStatus.releaseUrl || RELEASES_URL;
+      }
     } else if (updateStatus.error) {
       lines.push("Last update check failed: " + updateStatus.error);
     } else {
       lines.push("Up to date.");
     }
-    window.alert(lines.join("\n"));
-    return;
-  }
-
-  if (!updateStatus) {
-    lines.push("");
-    lines.push("Opened without the launcher, so updates cannot be checked from here.");
-    lines.push("Start it with start.bat (Windows) or ./start.sh, or run:");
-    lines.push("    node update.mjs check");
+  } else if (!updateStatus) {
+    lines.push("This copy was opened without the launcher, so it cannot check for updates.");
+    lines.push("New versions are on the releases page.");
+    link = releasesUrl();
   } else if (updateStatus.checking) {
-    lines.push("");
     lines.push("Checking for updates\u2026");
   } else if (updateStatus.updateAvailable) {
-    lines.push("");
     lines.push("Version " + updateStatus.latest + " is available.");
-    lines.push("This copy does not update itself: download the new zip and");
-    lines.push("unzip it over this folder, then start Splitpage again.");
-    lines.push("    " + releasesUrl());
+    lines.push("This copy does not update itself: download the new zip and " +
+      "unzip it over this folder, then start Splitpage again.");
+    link = releasesUrl();
   } else if (updateStatus.error) {
-    lines.push("");
     lines.push("Last update check failed: " + updateStatus.error);
   } else if (updateStatus.latest) {
-    lines.push("");
     lines.push("Up to date.");
   }
-  window.alert(lines.join("\n"));
+
+  openAboutDialog(version, lines, link);
+}
+
+var aboutWired = false;
+
+function closeAboutDialog() {
+  var modal = document.getElementById("about-modal");
+  if (modal) modal.hidden = true;
+}
+
+function openAboutDialog(version, lines, link) {
+  var modal = document.getElementById("about-modal");
+  if (!modal) return;
+  if (!aboutWired) {
+    aboutWired = true;
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal || e.target.closest("[data-about-close]")) closeAboutDialog();
+    });
+    modal.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.stopPropagation(); closeAboutDialog(); }
+    });
+  }
+  document.getElementById("about-version").textContent =
+    "Version " + (version || "unknown");
+  var body = document.getElementById("about-body");
+  body.textContent = "";
+  lines.forEach(function (line) {
+    var p = document.createElement("p");
+    p.className = "modal-hint";
+    p.textContent = line;
+    body.appendChild(p);
+  });
+  var a = document.getElementById("about-link");
+  a.hidden = !link;
+  if (link) a.href = link;
+  modal.hidden = false;
+  var close = modal.querySelector("[data-about-close]");
+  if (close) close.focus();
 }
 
 /* The version the page itself was built as, for the file:// case where
