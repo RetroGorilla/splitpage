@@ -636,12 +636,15 @@ export function haltAutoSave(reason) {
   clearAutoSaveTimers();
   autoSaveHalt = reason || "Autosave is paused — press Save to try again.";
   updateSaveStatus();
+  /* a server document's chip says "saving…" only while something is (PR #233) */
+  updateFileChip();
 }
 
 export function resumeAutoSave() {
   if (!autoSaveHalt) return;
   autoSaveHalt = "";
   updateSaveStatus();
+  updateFileChip();
 }
 
 /* serialize auto-saves so two quick ones (e.g. posting a comment right

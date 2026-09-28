@@ -64,6 +64,7 @@ import {
 } from "./20e-connect.js";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 
 /* Declared here, assigned in __init() below: these initialisers read the
@@ -761,6 +762,7 @@ function flagLinkOff(kind) {
     updateFileChip();
     updateSaveStatus();
     updateServerMenu();
+    offerDraftAfterLinkOff();
     return;
   }
   stashForReload();
@@ -776,6 +778,20 @@ function flagLinkOff(kind) {
   updateFileChip();
   updateSaveStatus();
   updateServerMenu();
+  offerDraftAfterLinkOff();
+}
+
+/* The browser keeps a guest's unsaved changes to a server script
+   (20g-drafts.js, PR #233) — through a link turned off mid-session too,
+   since the script stays on screen and dirty. Found off on a LATER load
+   (a reload, the link again next week), nothing of theirs is on screen:
+   the kept draft opens as an unsaved copy, so the last thing the link did
+   for them is give their work back. Both kinds of latch come here — an
+   "arrived" tab has no draft of this session, but may have one of the
+   last. Never on the desktop, whose drafts come back at launch. */
+function offerDraftAfterLinkOff() {
+  if (S.DESKTOP || onServerDoc()) return;
+  offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
 }
 
 /* Coming back after signing in again: reopen the document that was open and
@@ -1282,10 +1298,21 @@ export async function finishServerDetect() {
   applyReviewMode();
   /* The link's document is opened only if nothing else claimed this page:
      resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
-     both are unsaved work that must not be replaced (issue #19). */
-  resumeServerDoc().then(function (resumed) {
-    if (!resumed) openSharedDocFromLink();
-  }, function () { openSharedDocFromLink(); });
+     both are unsaved work that must not be replaced (issue #19).
+
+     In the browser the crash draft is this browser's own (20g-drafts.js,
+     PR #233), looked for under the script this load is about to open — a
+     guest's link or reload (their token's scope, the link's ?doc=, what
+     the join named) — and armed before resumeServerDoc() looks, so it is
+     merged ahead of an older lapsed-sign-in stash of the same script, as
+     the desktop's is. The owner's plain reload opens no script by itself;
+     theirs is found when they open it (openServerDoc). */
+  var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
+  (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
+    return resumeServerDoc().then(function (resumed) {
+      if (!resumed) openSharedDocFromLink();
+    }, function () { openSharedDocFromLink(); });
+  });
 }
 
 export function updateServerMenu() {
@@ -1430,6 +1457,18 @@ function renderServerPicker() {
    waiting to open it (a restored desktop tab, 20f-desktop.js) can tell a
    PIN still to be typed from a document that opened. */
 export async function openServerDoc(id) {
+  /* This browser kept unsaved changes to this script from a page that is
+     gone (20g-drafts.js, PR #233): open it through the resume, which
+     merges them into what the server holds now, rather than over them. */
+  if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
+    if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
+    var resumed = await resumeServerDoc();
+    if (resumed) {
+      if (typeof closeNewTabPage === "function") closeNewTabPage();
+      closeServerPicker();
+    }
+    return resumed;
+  }
   var body;
   /* The document is on the server this tab was pointed at when it asked.
      If the tab was pointed somewhere else before the answer came back, it

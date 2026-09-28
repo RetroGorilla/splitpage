@@ -62,8 +62,10 @@ export function setSaveButtons(text, disabled) {
   /* Last of the three, and in this order deliberately: the crash draft is
      written with the document's identity and its dirty state in the header,
      so both have to be settled before it is told anything changed
-     (20g-drafts.js). It only sets a timer. */
-  if (S.DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
+     (20g-drafts.js). It only sets a timer. Not desktop-only since PR #233:
+     the browser keeps a draft of a server document, and noteDraftChange()
+     decides for itself whether this page has one to keep. */
+  if (typeof noteDraftChange === "function") noteDraftChange();
   /* Last of all, and derived from everything above rather than set
      alongside it: the save-state indicator (below) is the one place that
      says, in words, whether what is on screen is on disk yet. */
@@ -89,7 +91,7 @@ export function markDirty() {
      saveDoc()'s finally ran — the one window where a crash is most likely
      to cost work, since the document is large enough to still be writing.
      noteDraftChange() is O(1) and only moves a timer (20g-drafts.js). */
-  if (S.DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
+  if (typeof noteDraftChange === "function") noteDraftChange();
   if (!S.saveButtonBusy) setSaveButtons("Save •");
   /* Only moves two timers (14-export.js), so it is safe on the keystroke
      path; the save itself waits for a pause in the typing. */
