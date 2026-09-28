@@ -52,6 +52,7 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { clearDirty, showToast } from "./12-dirty-toast.js";
+import { scheduleAutoSave } from "./14-export.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -1177,6 +1178,11 @@ export async function publishToServer() {
     return false;
   }
   var published = cloneState(S.state);
+  /* What was on screen when the snapshot was taken (#248). Typing goes on
+     during the upload — the progress bar does not stop it — so what the
+     server ends up with can be older than what the editor shows, and only
+     this can tell the two apart. The same seqAtSave saveToServer keeps. */
+  var seqAtPublish = S.editSeq;
   /* Publishing makes a second home for this script. If its id already
      lives somewhere else (a file on disk, another server document), the
      server copy gets a new one — otherwise two documents that will now be
@@ -1229,7 +1235,15 @@ export async function publishToServer() {
     copyDocHistorySafe(oldId, forkDocId);
   }
   S.docIdWrittenOut = true;
-  clearDirty();
+  /* Clean only if nothing was typed since the snapshot. Otherwise the
+     server has the earlier text and the page is still ahead of it: the
+     edits stay dirty (so the unload warning and the crash draft still
+     cover them) and, because clearDirty() is also what would have stopped
+     the pending autosave, one is scheduled now — to the server home this
+     publish just made, which is where the next save goes. The base is
+     `published`, so that save is judged against what the server has. */
+  if (S.editSeq === seqAtPublish) clearDirty();
+  else scheduleAutoSave();
   updateFileChip();
   showToast("Published to the server as “" + (S.state.title || body.id) + "” — collaborators can open it now", "ok");
   return true;

@@ -28,10 +28,10 @@ import assert from "node:assert/strict";
 const { S } = await import("../js/_state.js");
 const homeMod = await import("../js/_home.js");
 const { setHome } = homeMod;
-const { publishToServer, publishAndCopyShareLink } = await import("../js/13-hosted.js");
+const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
 const { setBaseState, cloneState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
-const { setAutoSaveEnabled } = await import("../js/14-export.js");
+const { setAutoSaveEnabled, autoSaveTiming } = await import("../js/14-export.js");
 
 /* The few elements the calls under test reach for by id: showToast()'s host
    (nothing reads it back) and the header's file chip, which
@@ -206,4 +206,29 @@ test("#247: a share link is not made for the document that replaced the one publ
   postGate();
   assert.equal(await p, false);
   assert.deepEqual(copied, [], "no link copied, least of all one to B");
+});
+
+test("#248: text typed during the upload stays dirty, and the next save carries it", async () => {
+  startOn(doc("doc-a", "A", "before"), { dirty: true });
+  const p = publishToServer();
+  await flush();
+
+  S.state.rows[0].audioText = "typed DURING upload";
+  markDirty();
+
+  timers.length = 0;
+  postGate();
+  assert.equal(await p, true);
+
+  assert.equal(homeMod.home.kind, "server", "the publish itself still succeeded");
+  assert.equal(S.dirty, true, "the editor does not claim the newer text is saved");
+  assert.equal(S.baseState.rows[0].audioText, "before", "the base is what the server was given");
+  assert.ok(timers.includes(autoSaveTiming.hostedIdle), "an autosave to the new server home is scheduled");
+
+  assert.equal(await saveToServer(), true);
+  const put = calls.filter((c) => c.method === "PUT")[0];
+  assert.ok(put, "a PUT went to the server document");
+  assert.equal(put.body.state.rows[0].audioText, "typed DURING upload");
+  assert.equal(put.body.baseRev, 1, "judged against the rev the publish came back with");
+  assert.equal(S.dirty, false);
 });
