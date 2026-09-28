@@ -218,6 +218,17 @@ export function updateCollaborateMenu() {
   btn.title = why ? why + "."
     : "Stores this script on " + serverLabel(t.url) +
       " and gives you two links to send: one to edit it, one to comment on it.";
+  /* The header's Collab button (PR #233, Adam's ask) answers to the same
+     reason. aria-disabled, not disabled: a disabled button cannot be
+     tabbed to and shows most browsers no tooltip, and the reason is the
+     point. A click on it while blocked lands in openCollaborate(), which
+     says the same thing as a toast. */
+  var head = document.getElementById("btn-collab");
+  if (head) {
+    if (why) head.setAttribute("aria-disabled", "true");
+    else head.removeAttribute("aria-disabled");
+    head.title = why ? why + "." : "Collaborate — invite people to this script";
+  }
 }
 
 /* ---- the dialog ---- */
@@ -1044,6 +1055,15 @@ function wireGuest(m) {
    in filename order. */
 export function __init() {
   updateCollaborateMenu();
+  /* The header's Collab button: the dialog, or the reason it cannot open.
+     Asked again as it is pointed at or tabbed to, so the tooltip is never
+     a state behind (the File menu refreshes its item as it opens). */
+  var headBtn = document.getElementById("btn-collab");
+  if (headBtn) {
+    headBtn.addEventListener("click", function () { openCollaborate(); });
+    headBtn.addEventListener("pointerenter", updateCollaborateMenu);
+    headBtn.addEventListener("focus", updateCollaborateMenu);
+  }
 
   /* ---- test hook ----
      What a headless suite needs that it cannot click into existence: the

@@ -130,6 +130,12 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   to that scene, or drop a
   dragged scene on it to move the scene. **File ▸ Minimize the rundown**
   shrinks it to a line; click the line to bring it back.
+- **The header's buttons**: **Production**, **Gear**, **B-roll** and
+  **Comments** open their panels; **Collab** invites people to the script
+  (see [Collaborating](#collaborating)); **Write** and **Present** are the
+  two other ways to see it. In a narrower window the panel buttons shrink to
+  their icons and counts, and Collab and Write to their icons. Point at one,
+  or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
 - **Scene status**: click the lamp in the scene's gutter to cycle **To do →
   Ready → Shot**.
 - **Hide shot scenes**: File ▸ Hide shot scenes
@@ -623,8 +629,9 @@ included (they're your files), and neither are sign-ins, PINs or API keys.
 
 ## Collaborating
 
-**File ▸ Collaborate…** (or <kbd>Ctrl</kbd>+<kbd>K</kbd>, *collaborate*)
-shares the script you have open. You get two links to send:
+**Collab** in the header, beside Write and Present (or **File ▸
+Collaborate…**, or <kbd>Ctrl</kbd>+<kbd>K</kbd>, *collaborate*) shares the
+script you have open. You get two links to send:
 
 - **Can edit**: whoever opens it can change the script, comment and resolve
   comments.
@@ -670,7 +677,8 @@ first time, a small box asks their name and colour (the same ones as
 they show up in the header and on the rundown. Their browser remembers the
 link, so a reload, a new tab or coming back next week gets them back in.
 Things that aren't theirs to do say so in the File menu: *Your link opens
-this one script* and *Only the script's owner can invite people*.
+this one script* and *Only the script's owner can invite people* (which
+is also what the dimmed **Collab** button says when they point at it).
 
 If you turn their link off, they see **The owner turned off this link**.
 Nothing more is saved to the server, their changes stay on their screen,

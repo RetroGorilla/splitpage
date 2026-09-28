@@ -1,0 +1,342 @@
+# The header's Collab button and the toolbar's labels (PR #233, Adam:
+# "Add a button to the header, but we'll need to make the gear/production/
+# b-roll/comments buttons condense when the window is narrow. But they
+# should expand to show their names when you hover your mouse over them.")
+#
+# Collab is File ▸ Collaborate… beside Write and Present: the same dialog,
+# the same "can it work" (updateCollaborateMenu, 13b-collaborate.js), and
+# for someone on a link it is aria-disabled with the reason as its tooltip.
+#
+# The condensing is the one #174 made — the panel toggles' labels close
+# below 1300 (1250 until Collab took 100px of the row), Write's below 1000
+# (and now Collab's with it) — but closing
+# and opening are a width animation on the motion tokens instead of a snap
+# (the label used to leave the layout in one frame, the right half jumping
+# by its width), and a closed label opens again on hover or keyboard focus,
+# over its neighbours without moving any of them (app.css, "the toolbar's
+# labels"; 20i-topbar.js measures the widths).
+#
+# Laid out the way 85 and 252 do it: the app a second time in an iframe on
+# this page, the IFRAME resized (a suite can set the device metrics only
+# once), its own media queries answering to its width. For the sweeps the
+# iframe's motion tokens are set to 0.01ms (as 150 does), so each width is
+# read settled; the animation checks put them back.
+#
+# Every `eval` is one physical line.
+
+open
+viewport 1920 900
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+
+# =============================================================================
+# Collab: beside Write, drawn as Write is, named for what it does
+# =============================================================================
+expect document.getElementById('btn-collab').parentElement.classList.contains('toolbar')
+expect document.getElementById('btn-collab').nextElementSibling.id == btn-write
+expect document.getElementById('btn-collab').previousElementSibling.classList.contains('btn-group')
+expect document.querySelector('#btn-collab .btn-label').textContent == Collab
+expect document.querySelector('#btn-collab use').getAttribute('href') == #i-people
+expect document.getElementById('btn-collab').getAttribute('aria-label') == Collaborate — invite people to this script
+expect document.getElementById('btn-collab').title == Collaborate — invite people to this script
+expect document.getElementById('btn-collab').getAttribute('aria-disabled') === null
+# a secondary button, as Write is; Present is still the one filled, red one
+expect document.getElementById('btn-collab').classList.contains('btn-mode')
+expect getComputedStyle(document.getElementById('btn-collab')).backgroundColor === getComputedStyle(document.getElementById('btn-write')).backgroundColor
+expect getComputedStyle(document.getElementById('btn-collab')).borderTopColor === getComputedStyle(document.getElementById('btn-write')).borderTopColor
+expect document.querySelectorAll('.toolbar .btn-accent').length === 1 && document.querySelector('.toolbar .btn-accent').id === 'btn-present'
+expect document.querySelector('#btn-collab .btn-label').getBoundingClientRect().width > 30
+
+# reached by the keyboard: Tab from Comments lands on it, then Write
+eval document.getElementById('btn-comments').focus()
+key Tab
+expect document.activeElement.id == btn-collab
+key Tab
+expect document.activeElement.id == btn-write
+
+# a real click opens the Collaborate dialog
+click #btn-collab
+wait window.__collabTest.isOpen()
+expect document.getElementById('collab-title').textContent == Collaborate
+eval window.__collabTest.close()
+expect !window.__collabTest.isOpen()
+# and so does Enter on it, and closing gives the focus back to it
+eval document.getElementById('btn-collab').focus()
+key Enter
+wait window.__collabTest.isOpen()
+eval window.__collabTest.close()
+expect !window.__collabTest.isOpen()
+expect document.activeElement.id == btn-collab
+
+# =============================================================================
+# someone on a link: Collab is theirs to see, not to use — and says why
+# =============================================================================
+eval window.__hostedTest.setSession({role:'edit', scope:'shared-doc', docId:'shared-doc'})
+expect document.getElementById('btn-collab').getAttribute('aria-disabled') == true
+expect document.getElementById('btn-collab').disabled === false
+expect document.getElementById('btn-collab').title == Only the script's owner can invite people.
+expect getComputedStyle(document.getElementById('btn-collab')).opacity === '0.5'
+# still reached by Tab, so the reason can be heard
+eval document.getElementById('btn-comments').focus()
+key Tab
+expect document.activeElement.id == btn-collab
+click #btn-collab
+sleep 300
+expect !window.__collabTest.isOpen()
+wait document.getElementById('toast-host').textContent.indexOf("Only the script's owner can invite people.") !== -1
+# a review session likewise
+eval window.__hostedTest.setSession({role:'review', docId:'shared-doc'})
+expect document.getElementById('btn-collab').getAttribute('aria-disabled') == true
+expect document.getElementById('btn-collab').title == Only the script's owner can invite people.
+
+# =============================================================================
+# the app again in an iframe, with a document whose toggles carry counts
+# =============================================================================
+eval (function(){ var f=document.createElement('iframe'); f.id='hf'; f.style.cssText='position:fixed;left:0;top:0;width:1440px;height:800px;border:0;z-index:99999;background:#fff'; f.src='/index.html'; document.body.appendChild(f); return true; })()
+wait document.getElementById('hf').contentDocument && document.getElementById('hf').contentDocument.querySelectorAll('#rows .row').length > 0
+sleep 800
+
+eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__frames=function(n){ return new Promise(function(res){ var w=W.__w(); var k=function(){ if(--n<=0) res(true); else w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); }); }; W.__at=async function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); await W.__frames(3); return true; }; W.__still=function(on){ var s=W.__d().documentElement.style; ['--dur-press','--dur-fast','--dur-enter','--dur-exit','--dur-move'].forEach(function(t){ if(on) s.setProperty(t,'0.01ms'); else s.removeProperty(t); }); return true; }; W.__sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',presence:'#presence-bar',search:'#btn-command',production:'#btn-production',gear:'#btn-gear',broll:'#btn-broll',comments:'#btn-comments',collab:'#btn-collab',write:'#btn-write',present:'#btn-present'}; W.__boxes=function(){ var d=W.__d(); var out=[]; Object.keys(W.__sel).forEach(function(k){ var e=d.querySelector(W.__sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__lab=function(id){ return W.__d().querySelector('#'+id+' .btn-label').getBoundingClientRect().width; }; W.__check=function(w){ var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['file','title','save','search','production','gear','broll','comments','collab','write','present'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(!bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); var left=d.querySelector('.topbar-left'); if(left.scrollWidth>left.clientWidth+1) bad.push('left half overflows by '+(left.scrollWidth-left.clientWidth)); var tb=d.querySelector('.toolbar').getBoundingClientRect(); if(tb.right>vw+0.5) bad.push('toolbar past the edge'); var pl=W.__lab('btn-production'), cl=W.__lab('btn-collab'), wl=W.__lab('btn-write'); if(w<1300 && pl>0.5) bad.push('Production label open '+pl.toFixed(1)); if(w>=1300 && pl<40) bad.push('Production label closed '+pl.toFixed(1)); if(w<1000 && (cl>0.5||wl>0.5)) bad.push('Collab/Write label open'); if(w>=1000 && (cl<20||wl<20)) bad.push('Collab/Write label closed'); var cb=d.getElementById('comments-badge').getBoundingClientRect(); var cr=d.getElementById('btn-comments').getBoundingClientRect(); if(cb.width<5||cb.left<cr.left-0.5||cb.right>cr.right+0.5) bad.push('comments count not shown'); return bad.length? w+': '+bad.join(', ') : ''; }; W.__sweep=async function(ws){ var bad=[]; for(var i=0;i<ws.length;i++){ await W.__at(ws[i]); var c=W.__check(ws[i]); if(c) bad.push(c); } W.__bad=bad.join('; '); return W.__bad || 'ok'; }; W.__title=function(t){ var i=W.__d().getElementById('doc-title'); i.value=t; i.dispatchEvent(new Event('input',{bubbles:true})); i.blur(); return true; }; return true; })()
+expect true
+
+# twelve open comments (a two-figure count), b-roll lines and tags, so every
+# toggle carries a count as wide as it gets in practice
+eval (function(){ var w=window.__w(); var rows=[]; for(var i=0;i<24;i++) rows.push({id:'r'+i, visualText:(i%3===0?'B-roll: shot '+i+'<br>':'')+'Visual '+i+' [tripod] {gaffer}', audioText:'Scene '+i+' says a few words here.', status:'todo'}); var cm=[]; for(var c=0;c<12;c++) cm.push({id:'c'+c, rowId:'r'+c, field:'audioText', anchorId:'c'+c, quotedText:'Scene', author:'Ann', body:'Note '+c, createdAt:'2026-09-01T10:00:00Z', kind:'anchor', replies:[]}); w.__splitpageFormats.openFile(new w.File([JSON.stringify({schema:2,title:'Pilot',rows:rows,comments:cm})],'labels.splitpage')); var d=window.__d().getElementById('desktop-app-bar-dismiss'); if(d) d.click(); return true; })()
+wait window.__d().getElementById('comments-badge').textContent === '12' && !window.__d().getElementById('comments-badge').hidden
+wait !window.__d().getElementById('broll-badge').hidden && window.__d().getElementById('broll-badge').textContent === '8'
+eval window.__still(true)
+
+# =============================================================================
+# every width from 761 to 1920: nothing overlaps, nothing spills, each
+# label open or closed where it should be, the comment count always shown
+# =============================================================================
+eval (function(){ var ws=[]; for(var w=761; w<=1920; w+=10) ws.push(w); for(var a=990;a<=1010;a++) ws.push(a); for(var b=1290;b<=1310;b++) ws.push(b); window.__ws=ws; return ws.length; })()
+eval window.__title('Pilot')
+eval window.__sweep(window.__ws)
+expect window.__bad === ''
+eval window.__title('The Long Road Home: Episode Four of the Documentary Series!!')
+eval window.__sweep(window.__ws)
+expect window.__bad === ''
+# and with a panel open
+eval window.__d().getElementById('btn-comments').click()
+eval window.__sweep([1920, 1440, 1310, 1290, 1100, 1000, 990, 900, 800, 761])
+expect window.__bad === ''
+eval window.__d().getElementById('btn-comments').click()
+eval window.__title('Pilot')
+
+# every closed label is still its button's name
+eval window.__at(900)
+expect window.__d().getElementById('btn-production').textContent.indexOf('Production') === 0
+expect window.__d().getElementById('btn-comments').textContent.indexOf('Comments') === 0
+expect window.__d().getElementById('btn-collab').getAttribute('aria-label') == Collaborate — invite people to this script
+expect window.__d().getElementById('btn-write').textContent == Write
+
+# =============================================================================
+# crossing 1300: the labels close and open over frames, not in one (a
+# 20px step, as a drag makes; a jump of more than 24px at once is not
+# animated — .is-width-jump — which the sweeps above cross all the time).
+# __rec reads each frame as it was drawn: from a setTimeout queued in its
+# animation frame, so after the ResizeObserver that notices a jump.
+# =============================================================================
+eval window.__still(false)
+eval window.__at(1310)
+sleep 400
+eval (function(){ var W=window; W.__rec=function(n, ids){ var w=W.__w(); var out=[]; return new Promise(function(res){ var k=function(){ var bs=W.__boxes(); var ov=0; bs.forEach(function(a,i){ for(var j=i+1;j<bs.length;j++){ var b=bs[j]; if(Math.min(a.r,b.r)-Math.max(a.l,b.l)>0.5 && Math.min(a.b,b.b)-Math.max(a.t,b.t)>0.5) ov++; } }); out.push({lab:W.__lab('btn-production'), ov:ov}); if(--n>0) w.requestAnimationFrame(t); else res(out); }; var t=function(){ w.setTimeout(k, 0); }; w.requestAnimationFrame(t); }); }; return true; })()
+eval (async function(){ var p=window.__rec(24); document.getElementById('hf').style.width='1290px'; var s=await p; window.__seq=s.map(function(f){ return f.lab.toFixed(1); }); window.__mid=s.filter(function(f){ return f.lab>1 && f.lab<70; }).length; return window.__seq.join(' '); })()
+expect window.__mid >= 3
+expect window.__seq[window.__seq.length-1] === '0.0'
+eval (async function(){ var p=window.__rec(24); document.getElementById('hf').style.width='1310px'; var s=await p; window.__seq=s.map(function(f){ return f.lab.toFixed(1); }); window.__mid=s.filter(function(f){ return f.lab>1 && f.lab<70; }).length; window.__overlap=s.reduce(function(a,f){ return a+f.ov; },0); return window.__seq.join(' '); })()
+expect window.__mid >= 3
+expect parseFloat(window.__seq[window.__seq.length-1]) > 60
+# nothing collided on any frame of the way
+expect window.__overlap === 0
+# a jump (a window snapped to half the screen): not animated, so there is
+# no frame in which the labels still hold room the row no longer has
+eval (async function(){ var p=window.__rec(6); document.getElementById('hf').style.width='900px'; var s=await p; window.__jump=s.map(function(f){ return f.lab.toFixed(1)+'/'+f.ov; }); return window.__jump.join(' '); })()
+expect window.__jump.every(function(x){ return x === '0.0/0'; })
+expect window.__lab('btn-collab') === 0
+
+# =============================================================================
+# hover: a closed toggle opens its name over its neighbours, moving none
+# (__watch reads every header control's layout slot — its margin box, the
+# box its neighbours are laid out against — on every frame of the opening,
+# and lists any that moved by more than half a pixel)
+# =============================================================================
+eval window.__at(1100)
+sleep 400
+expect window.__lab('btn-production') === 0
+eval (function(){ var W=window; W.__pt=function(id){ var r=W.__d().getElementById(id).getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; }; W.__others=function(){ var d=W.__d(); var cs=function(e,p){ return parseFloat(W.__w().getComputedStyle(e)[p])||0; }; var out={}; Object.keys(W.__sel).forEach(function(k){ var e=d.querySelector(W.__sel[k]); if(!e) return; var r=e.getBoundingClientRect(); out[k]=[r.left-cs(e,'marginLeft'), r.right+cs(e,'marginRight'), r.top]; }); return out; }; W.__watch=function(skip, n){ var w=W.__w(); var before=W.__others(); W.__moved=[]; W.__labs=[]; var k=function(){ var now=W.__others(); Object.keys(before).forEach(function(key){ for(var i=0;i<3;i++) if(Math.abs(now[key][i]-before[key][i])>0.5) W.__moved.push(key+' '+before[key].map(Math.round)+' -> '+now[key].map(Math.round)); }); W.__labs.push(W.__lab('btn-'+skip)); if(--n>0) w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); return JSON.stringify(before); }; W.__group=function(){ return W.__d().querySelector('.btn-group').getBoundingClientRect(); }; return true; })()
+eval window.__watch('production', 40)
+mouse hover window.__pt('btn-production')
+sleep 800
+expect window.__lab('btn-production') > 60
+expect window.__d().getElementById('btn-production').classList.contains('is-label-open')
+# no neighbour moved on any frame, and it opened over frames
+expect window.__moved.length === 0
+expect (function(){ var l=window.__labs; var m=Math.max.apply(null,l); return l.filter(function(v){ return v>1 && v<m-1; }).length >= 3; })()
+# it stays inside the panels' slot, and ends on a neighbour's edge
+expect (function(){ var g=window.__group(); var r=window.__d().getElementById('btn-production').getBoundingClientRect(); return r.left>=g.left-0.5 && r.right<=g.right+0.5; })()
+expect (function(){ var r=window.__d().getElementById('btn-production').getBoundingClientRect(); var ends=['btn-gear','btn-broll','btn-comments'].map(function(id){ return window.__d().getElementById(id).getBoundingClientRect().right; }); return ends.some(function(e){ return Math.abs(e-r.right)<0.6; }); })()
+# the pill is opaque, so the icons under it do not show through
+expect (function(){ var c=getComputedStyle(window.__d().getElementById('btn-production')).backgroundColor; return /^rgb\(/.test(c) && c === window.__w().getComputedStyle(window.__d().documentElement).getPropertyValue('--hover').trim().replace(/^#(..)(..)(..)$/,function(m,a,b,c2){ return 'rgb('+parseInt(a,16)+', '+parseInt(b,16)+', '+parseInt(c2,16)+')'; }); })()
+# and it does not take its neighbours' pointer: Gear's centre is still Gear
+expect (function(){ var d=window.__d(); var g=d.getElementById('btn-gear').getBoundingClientRect(); var h=d.elementFromPoint(g.left+g.width/2, g.top+g.height/2); return !!h && h.closest('button') && h.closest('button').id === 'btn-gear'; })()
+shot 266-hover-production-1100
+
+# moving on to Comments: it opens leftwards, its count in view; Production closes
+eval window.__watch('comments', 40)
+mouse hover window.__pt('btn-comments')
+sleep 800
+expect window.__lab('btn-comments') > 60
+expect window.__lab('btn-production') === 0
+expect window.__moved.length === 0
+expect (function(){ var g=window.__group(); var r=window.__d().getElementById('btn-comments').getBoundingClientRect(); var b=window.__d().getElementById('comments-badge').getBoundingClientRect(); var l=window.__d().querySelector('#btn-comments .btn-label').getBoundingClientRect(); return r.left>=g.left-0.5 && r.right<=g.right+0.5 && b.width>5 && b.left>=l.right-0.5 && b.right<=r.right+0.5; })()
+# a click on it still opens its panel
+eval window.__d().getElementById('btn-comments').click()
+expect !window.__d().getElementById('comments-panel').hidden
+eval window.__d().getElementById('btn-comments').click()
+
+# pointing away closes it
+mouse hover ({x: 600, y: 500})
+sleep 600
+expect window.__lab('btn-comments') === 0
+expect !window.__d().querySelector('.panel-toggle.is-label-open')
+
+# a touch opens nothing (no hover to take away again)
+eval (function(){ var b=window.__d().getElementById('btn-gear'); b.dispatchEvent(new (window.__w().PointerEvent)('pointerenter', {pointerType:'touch'})); return b.classList.contains('is-label-open'); })()
+sleep 500
+expect !window.__d().getElementById('btn-gear').classList.contains('is-label-open')
+expect window.__lab('btn-gear') === 0
+
+# =============================================================================
+# keyboard focus opens it the same way
+# =============================================================================
+eval window.__d().getElementById('btn-production').focus()
+eval window.__watch('gear', 40)
+key Tab
+sleep 800
+expect window.__d().activeElement.id == btn-gear
+expect window.__d().getElementById('btn-gear').matches(':focus-visible')
+expect window.__lab('btn-gear') > 25
+expect window.__moved.length === 0
+expect (function(){ var g=window.__group(); var r=window.__d().getElementById('btn-gear').getBoundingClientRect(); return r.left>=g.left-0.5 && r.right<=g.right+0.5; })()
+key Tab
+sleep 600
+expect window.__d().activeElement.id == btn-broll
+expect window.__lab('btn-gear') === 0
+expect window.__lab('btn-broll') > 30
+eval window.__d().activeElement.blur()
+sleep 500
+
+# =============================================================================
+# Collab below 1000: an icon, and it opens leftwards over the panels
+# =============================================================================
+eval window.__at(990)
+sleep 400
+expect window.__lab('btn-collab') === 0
+expect Math.round(window.__d().getElementById('btn-collab').getBoundingClientRect().width) == 32
+expect Math.round(window.__d().getElementById('btn-write').getBoundingClientRect().width) == 32
+eval window.__watch('collab', 40)
+mouse hover window.__pt('btn-collab')
+sleep 800
+expect window.__lab('btn-collab') > 30
+expect window.__moved.length === 0
+expect (function(){ var d=window.__d(); var r=d.getElementById('btn-collab').getBoundingClientRect(); var s=d.getElementById('btn-command').getBoundingClientRect(); var w=d.getElementById('btn-write').getBoundingClientRect(); var g=window.__group(); return r.left>=g.left-0.5 && r.left>=s.right && r.right<=w.left; })()
+shot 266-hover-collab-990
+# Write stays its icon under the pointer: it would open over Present
+mouse hover window.__pt('btn-write')
+sleep 600
+expect window.__lab('btn-write') === 0
+expect window.__lab('btn-collab') === 0
+mouse hover ({x: 600, y: 500})
+sleep 400
+
+# =============================================================================
+# reduced motion: the same tokens, collapsed — it simply appears
+# =============================================================================
+eval window.__still(true)
+eval window.__at(1100)
+mouse hover window.__pt('btn-broll')
+eval window.__frames(3)
+expect window.__lab('btn-broll') > 30
+expect window.__w().getComputedStyle(window.__d().querySelector('#btn-broll .btn-label')).transitionDuration.split(',').every(function(s){ return parseFloat(s) < 0.001; })
+mouse hover ({x: 600, y: 500})
+eval window.__frames(3)
+expect window.__lab('btn-broll') === 0
+eval window.__still(false)
+
+# =============================================================================
+# dark theme: the pill is dark's --hover, the words dark's --text
+# =============================================================================
+eval window.__d().documentElement.setAttribute('data-theme','dark')
+sleep 400
+mouse hover window.__pt('btn-gear')
+sleep 800
+expect (function(){ var w=window.__w(); var d=window.__d(); var cs=w.getComputedStyle(d.getElementById('btn-gear')); var root=w.getComputedStyle(d.documentElement); var hex=function(h){ h=h.trim(); return 'rgb('+parseInt(h.slice(1,3),16)+', '+parseInt(h.slice(3,5),16)+', '+parseInt(h.slice(5,7),16)+')'; }; return cs.backgroundColor === hex(root.getPropertyValue('--hover')) && cs.color === hex(root.getPropertyValue('--text')); })()
+mouse hover ({x: 600, y: 500})
+sleep 400
+eval window.__d().documentElement.removeAttribute('data-theme')
+
+# =============================================================================
+# screenshots: 1920, 1280, 1000, 800, light and dark, a button pointed at
+# =============================================================================
+eval (function(){ document.getElementById('hf').style.height='56px'; return true; })()
+eval window.__at(1920)
+sleep 400
+mouse hover window.__pt('btn-collab')
+sleep 700
+shot 266-header-1920-light
+eval window.__at(1280)
+sleep 400
+mouse hover window.__pt('btn-collab')
+sleep 700
+shot 266-header-1280-light
+eval window.__at(1000)
+sleep 400
+mouse hover window.__pt('btn-production')
+sleep 700
+shot 266-header-1000-light
+eval window.__at(800)
+sleep 400
+mouse hover window.__pt('btn-collab')
+sleep 700
+shot 266-header-800-light
+eval window.__d().documentElement.setAttribute('data-theme','dark')
+mouse hover ({x: 600, y: 500})
+eval window.__at(1920)
+sleep 400
+mouse hover window.__pt('btn-collab')
+sleep 700
+shot 266-header-1920-dark
+eval window.__at(1280)
+sleep 400
+mouse hover window.__pt('btn-comments')
+sleep 700
+shot 266-header-1280-dark
+eval window.__at(1000)
+sleep 400
+mouse hover window.__pt('btn-comments')
+sleep 700
+shot 266-header-1000-dark
+eval window.__at(800)
+sleep 400
+mouse hover window.__pt('btn-collab')
+sleep 700
+shot 266-header-800-dark
+mouse hover ({x: 600, y: 500})
+eval window.__d().documentElement.removeAttribute('data-theme')
+eval (function(){ document.getElementById('hf').style.height='800px'; return true; })()
+
+# =============================================================================
+# phone widths: the bottom bar as it was; no Collab, panels or Write above
+# =============================================================================
+eval window.__at(390)
+sleep 300
+expect ['.btn-group','#btn-collab','#btn-write'].every(function(q){ return window.__d().querySelector(q).getBoundingClientRect().width === 0; })
+expect Array.prototype.map.call(window.__d().querySelectorAll('#phone-bar .phone-tab-label'), function(l){ return l.textContent; }).join(',') == Script,Write,Production,Gear,B-roll,Comments
+expect window.__w().getComputedStyle(window.__d().getElementById('phone-bar')).display !== 'none'
+expect Array.prototype.every.call(window.__d().querySelectorAll('#phone-bar .phone-tab'), function(t){ return t.getBoundingClientRect().width > 40; })
+expect window.__d().documentElement.scrollWidth <= window.__d().documentElement.clientWidth
+expect Math.round(window.__d().getElementById('btn-present').getBoundingClientRect().width) == 44
+
+quit
