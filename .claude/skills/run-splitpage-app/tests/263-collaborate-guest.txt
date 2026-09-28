@@ -170,6 +170,10 @@ expect document.getElementById('menu-server-new').disabled === true
 expect document.querySelector('#menu-server-new .mi-why').textContent == Your link opens this one script
 expect document.getElementById('menu-collaborate').disabled === true
 expect document.querySelector('#menu-collaborate .mi-why').textContent == Only the script's owner can invite people
+# the header's Collab button says the same (PR #233), still reachable by Tab
+expect document.getElementById('btn-collab').getAttribute('aria-disabled') == true
+expect document.getElementById('btn-collab').disabled === false
+expect document.getElementById('btn-collab').title == Only the script's owner can invite people.
 # the rest of the File menu is theirs as usual
 expect document.querySelector('#file-menu [data-file-action="save-as"]').disabled === false
 expect document.querySelector('#file-menu [data-file-action="paste"]').disabled === false

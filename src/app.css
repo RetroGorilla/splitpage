@@ -701,7 +701,10 @@
   .btn.panel-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    /* the 5px between icon, label and count is the label's own padding and
+       the count's margin, so it can close with the label ("the toolbar's
+       labels" below) */
+    gap: 0;
     height: 32px;
     padding: 0 6px;
     border: 0;
@@ -718,7 +721,7 @@
   .btn.panel-toggle .comments-badge {
     min-width: 0;
     height: auto;
-    margin: 0;
+    margin: 0 0 0 5px;
     padding: 0;
     border-radius: 0;
     background: none;
@@ -763,7 +766,7 @@
   .btn.btn-mode {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 0;           /* the label's own 6px padding, so it can close */
     height: 32px;
     padding: 0 11px 0 10px;
     border: 1px solid var(--border-strong);
@@ -775,6 +778,82 @@
   }
   .btn.btn-mode .btn-icon { color: var(--text-dim); }
   .btn.btn-mode:hover { background: var(--hover); border-color: var(--border-strong); }
+  /* Collab (PR #233): File ▸ Collaborate… beside Write, and drawn as Write
+     is, so Present stays the one filled thing on the row. Blocked (someone
+     on a link, a read-only server) it is aria-disabled, not disabled:
+     dimmed, still reachable by Tab and by the pointer, its tooltip the
+     reason (updateCollaborateMenu, 13b-collaborate.js). */
+  .btn.btn-collab[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+  .btn.btn-collab[aria-disabled="true"]:active { transform: none; }
+
+  /* ---- the toolbar's labels (PR #233) ----
+     The panel toggles below 1300, and Collab and Write below 1000 ("the
+     header's widths" below), close their labels up to an icon (and a
+     count). Until PR #233 that was a snap: the label was taken out of the
+     layout (position: absolute, clip-path) in the frame the window crossed
+     the width, so the whole right half jumped by its width and the title
+     re-flowed at once, and a closed label could only be read as a tooltip.
+
+     Now the label stays in the layout and closes: max-width from its own
+     width (--label-w, the text, measured by 20i-topbar.js, plus its
+     padding) to 0, its padding and its opacity with it, on the motion
+     tokens — --dur-enter opening, --dur-exit closing, and with reduced
+     motion the tokens collapse and it is the instant change it was. It
+     never wraps (white-space: nowrap, .btn) and it is clipped, not
+     squeezed, so the words do not re-flow while it moves. Closed, it is
+     still the button's name (a screen reader, textContent) and the title
+     is still the tooltip.
+
+     And a closed label opens again, on hover or keyboard focus (Adam:
+     "they should expand to show their names when you hover your mouse over
+     them") — OVER the neighbours, moving none of them: the button grows by
+     the label and a negative margin of exactly that amount on the side it
+     grows towards hands it back, both on the same duration, curve and
+     delay, so the row's layout is the same in every frame. Production and
+     Gear open to the right and B-roll and Comments to the left, so each
+     stays inside the panels' own slot; Collab opens to the left, over the
+     gap and the panels — none of them ever over Search, Write, Present or
+     the left half. The pill is --hover, which is opaque, so the icons it
+     covers do not show through; the count stays in view.
+
+     Nor does an open button take its neighbours' pointer. It is
+     pointer-events: none except its ::before, which covers only its closed
+     box (the edge moving with the margin, on the same timing), so the
+     pointer moving on across the pill reaches the button underneath. It
+     opens after --dur-fast, so a pointer passing along the row is not a
+     ripple of pills. A device without hover (a touch screen) keeps the
+     icons; the phone has its own bottom bar. Suite 266 measures it. */
+  .panel-toggle .btn-label,
+  .btn-mode .btn-label {
+    display: block;
+    box-sizing: border-box;
+    /* exactly the text and its padding, open, so the margin that hands an
+       open label's width back (below) is the same number to the fraction
+       of a pixel; until it is measured, both are invalid and so auto and
+       none — the label at its natural width */
+    width: calc(var(--label-w) + 5px);
+    max-width: calc(var(--label-w) + 5px);
+    padding-left: 5px;
+    overflow: hidden;
+    opacity: 1;
+    transition: max-width var(--dur-enter) var(--ease-enter),
+                padding var(--dur-enter) var(--ease-enter),
+                opacity var(--dur-enter) var(--ease-enter);
+  }
+  .btn-mode .btn-label { width: calc(var(--label-w) + 6px); max-width: calc(var(--label-w) + 6px); padding-left: 6px; }
+  /* the window's width jumping (snapped, restored, turned): the labels
+     change at once, since the row has no room to spare for them to take
+     their time (20i-topbar.js). Cancelling a running transition too. */
+  .toolbar.is-width-jump .btn,
+  .toolbar.is-width-jump .btn::before,
+  .toolbar.is-width-jump .btn-label { transition: none !important; }
+  .btn.panel-toggle, .btn.btn-mode {
+    transition: background var(--dur-fast) var(--ease-standard),
+                border-color var(--dur-fast) var(--ease-standard),
+                color var(--dur-fast) var(--ease-standard),
+                padding var(--dur-enter) var(--ease-enter),
+                transform var(--dur-press) var(--ease-standard);
+  }
 
   /* ---- the header's widths (#174, #175, #166) ----
      What the row lets go of as the window narrows, widest first, so that
@@ -783,9 +862,13 @@
      and its title is the tooltip.
        below 1860  search is "Search" and its keycaps
        below 1600  search is its magnifier
-       below 1250  the panel toggles are an icon and their count
+       below 1300  the panel toggles are an icon and their count (1250
+                   until Collab joined the row, PR #233; suite 252's eight
+                   people and a long title needed the 50px back)
        below 1180  the File button is its mark and chevron
-       below 1000  Write is its icon, and the gaps close up
+       below 1000  Write and Collab are their icons, and the gaps close up
+     The labels close and open as an animation, and a closed one opens on
+     hover or focus ("the toolbar's labels" above, PR #233).
        below  880  "All changes saved" and the rest shorten to a dot in the
                    state's colour (the words stay its name and tooltip)
      The phone (760 and under) is its own layout, further down. Measured by
@@ -809,11 +892,17 @@
       position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
     }
   }
-  @media (max-width: 1249px) {
+  /* the panel toggles' labels close (see "the toolbar's labels" above) */
+  @media (max-width: 1299px) {
     .panel-toggle .btn-label {
-      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+      max-width: 0;
+      padding-left: 0;
+      opacity: 0;
+      transition: max-width var(--dur-exit) var(--ease-exit),
+                  padding var(--dur-exit) var(--ease-exit),
+                  opacity var(--dur-exit) var(--ease-exit);
     }
-    .btn.panel-toggle { gap: 4px; }
+    .btn.panel-toggle .comments-badge { margin-left: 4px; }
   }
   @media (max-width: 1179px) {
     .btn-brand .brand-name {
@@ -825,10 +914,125 @@
     .topbar-row { column-gap: 12px; }
     .topbar-left { gap: 8px; }
     .toolbar { gap: 6px; }
-    #btn-write .btn-label {
-      position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    /* Write and Collab: the icon in a 32px square (1 + 7 + 16 + 7 + 1),
+       their labels closing as the panels' do */
+    .btn.btn-mode {
+      padding: 0 7px;
+      transition: background var(--dur-fast) var(--ease-standard),
+                  border-color var(--dur-fast) var(--ease-standard),
+                  color var(--dur-fast) var(--ease-standard),
+                  padding var(--dur-exit) var(--ease-exit),
+                  margin var(--dur-exit) var(--ease-exit),
+                  transform var(--dur-press) var(--ease-standard);
     }
-    .btn.btn-mode { width: 32px; padding: 0; justify-content: center; }
+    .btn-mode .btn-label {
+      max-width: 0;
+      padding-left: 0;
+      opacity: 0;
+      transition: max-width var(--dur-exit) var(--ease-exit),
+                  padding var(--dur-exit) var(--ease-exit),
+                  opacity var(--dur-exit) var(--ease-exit);
+    }
+  }
+
+  /* A closed label opening over its neighbours, on hover (where there is
+     hover) or keyboard focus — "the toolbar's labels" above. The same
+     rules twice, once per width, since a media query cannot be a selector:
+     the panel toggles from 761 to 1299, Collab from 761 to 999. Write is
+     not among them: it is one word under a tooltip already, and opening it
+     would cover Present. */
+  /* How far an open button reaches: its label (--label-w and the 5px or
+     6px before it) and --label-x, the few px more that 20i-topbar.js adds
+     so the pill ends on the edge of a neighbour rather than across the
+     middle of its icon or its count. The extra is padding on the side it
+     grows towards, so the words sit next to the icon. */
+  @media (min-width: 761px) and (max-width: 1299px) {
+    .btn.panel-toggle {
+      position: relative;
+      --label-grow: calc(var(--label-w, 0px) + 5px + var(--label-x, 0px));
+    }
+    .btn.panel-toggle::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: auto;
+      transition: left var(--dur-exit) var(--ease-exit), right var(--dur-exit) var(--ease-exit);
+    }
+    .btn.panel-toggle:focus-visible { z-index: 1; }
+    .btn.panel-toggle.is-label-open { z-index: 2; }
+    .btn.panel-toggle {
+      transition: background var(--dur-fast) var(--ease-standard),
+                  color var(--dur-fast) var(--ease-standard),
+                  margin var(--dur-exit) var(--ease-exit),
+                  padding var(--dur-exit) var(--ease-exit);
+    }
+    .btn.panel-toggle:is(:focus-visible, .is-label-open) {
+      pointer-events: none;
+      background: var(--hover);
+      color: var(--text);
+      transition: background var(--dur-fast) var(--ease-standard),
+                  color var(--dur-fast) var(--ease-standard),
+                  margin var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  padding var(--dur-enter) var(--ease-enter) var(--dur-fast);
+    }
+    .btn.panel-toggle:is(:focus-visible, .is-label-open) .btn-label {
+      max-width: calc(var(--label-w, 0px) + 5px);
+      padding-left: 5px;
+      opacity: 1;
+      transition: max-width var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  padding var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  opacity var(--dur-enter) var(--ease-enter) var(--dur-fast);
+    }
+    .btn.panel-toggle:is(:focus-visible, .is-label-open)::before {
+      transition: left var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  right var(--dur-enter) var(--ease-enter) var(--dur-fast);
+    }
+    :is(#btn-production, #btn-gear):is(:focus-visible, .is-label-open) {
+      margin-right: calc(-1 * var(--label-grow));
+      padding-right: calc(6px + var(--label-x, 0px));
+    }
+    :is(#btn-production, #btn-gear):is(:focus-visible, .is-label-open)::before { right: var(--label-grow); }
+    :is(#btn-broll, #btn-comments):is(:focus-visible, .is-label-open) {
+      margin-left: calc(-1 * var(--label-grow));
+      padding-left: calc(6px + var(--label-x, 0px));
+    }
+    :is(#btn-broll, #btn-comments):is(:focus-visible, .is-label-open)::before { left: var(--label-grow); }
+  }
+  @media (min-width: 761px) and (max-width: 999px) {
+    .btn.btn-collab {
+      position: relative;
+      --label-grow: calc(var(--label-w, 0px) + 6px + var(--label-x, 0px));
+    }
+    .btn.btn-collab::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      pointer-events: auto;
+      transition: left var(--dur-exit) var(--ease-exit);
+    }
+    .btn.btn-collab:is(:focus-visible, .is-label-open) { z-index: 2; }
+    .btn.btn-collab:is(:focus-visible, .is-label-open) {
+      pointer-events: none;
+      margin-left: calc(-1 * var(--label-grow));
+      padding-left: calc(7px + var(--label-x, 0px));
+      background: var(--hover);
+      transition: background var(--dur-fast) var(--ease-standard),
+                  border-color var(--dur-fast) var(--ease-standard),
+                  margin var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  padding var(--dur-enter) var(--ease-enter) var(--dur-fast);
+    }
+    .btn.btn-collab:is(:focus-visible, .is-label-open) .btn-label {
+      max-width: calc(var(--label-w, 0px) + 6px);
+      padding-left: 6px;
+      opacity: 1;
+      transition: max-width var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  padding var(--dur-enter) var(--ease-enter) var(--dur-fast),
+                  opacity var(--dur-enter) var(--ease-enter) var(--dur-fast);
+    }
+    .btn.btn-collab:is(:focus-visible, .is-label-open)::before {
+      left: calc(var(--label-grow) - 1px);
+      transition: left var(--dur-enter) var(--ease-enter) var(--dur-fast);
+    }
   }
   @media (min-width: 761px) and (max-width: 879px) {
     .doc-title { min-width: 6ch; }
@@ -6491,7 +6695,9 @@
     .length-status .rd-length-slot .rd-length-of { display: none; }
     .rundown .rd-length { display: none; }
     .toolbar { flex: none; gap: 0; }
-    .btn-group, #btn-write { display: none; }
+    /* the bottom bar has the panels and Write; the File menu has
+       Collaborate… (PR #233) */
+    .btn-group, #btn-write, #btn-collab { display: none; }
     /* Search (#175): the magnifier, in a 44px target */
     .btn.cmdk-trigger { width: 44px; height: 44px; }
     .btn.cmdk-trigger .btn-icon { width: 20px; height: 20px; }
