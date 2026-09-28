@@ -19,6 +19,9 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   gives you the original back. See [Annotating a picture](#annotating-a-picture).
 - **Search commands** (Ctrl+K) puts the tagging reference first, and
   searching *tags* finds it.
+- **The tagging reference lists every word form**: `Prop:`, `Location:` or
+  `Loc:`, `Cast:`, `VFX:`, `Gear:`, and `SFX:` or `Music:`, each with its
+  tag colour, beside the bracket shortcuts.
 
 ## What's new in 3.0
 
@@ -348,10 +351,12 @@ every scene they're in. While you type a tag you've used before,
 
 **The tagging reference**: **File ▸ Tagging reference** (or search commands
 for it) opens a card at the bottom right of the script (a sheet at the
-bottom on a phone). It shows every category's shortcut in its tag colour,
-and stays while you scroll and type, fading while the caret is under it.
-<kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no shortcut:
-select the words and press **Tag**.
+bottom on a phone). It shows every way to type a tag, each in its tag
+colour: the brackets, and a category's name and a colon for all six
+categories. It stays while you scroll and type, fading while the caret is
+under it. <kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no
+brackets: type `Cast:`, `SFX:` or `Music:`, or select the words and press
+**Tag**.
 
 **Icons on tags**: turn on **Settings ▸ Show icons on tags** to put a small
 icon before each tag as well as its colour: a box for a prop, a pin for a
