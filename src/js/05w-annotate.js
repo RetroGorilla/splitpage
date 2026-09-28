@@ -88,12 +88,10 @@ var ARM_MS = 2800;            /* "Discard changes?" waits this long for its seco
 
 /* The tool, colour and size last used, kept while the page is open: the
    next picture opens with the same pen. Each tool has its own colour and
-   size — the highlighter starts yellow, the pen and text red. */
-var memory = {
-  tool: "pen",
-  color: { pen: ANNOTATION_COLORS[0], highlight: ANNOTATION_COLORS[1], text: ANNOTATION_COLORS[0] },
-  size: { pen: 1, highlight: 1, text: 1 }
-};
+   size — the highlighter starts yellow, the pen and text red. Filled in
+   by __init: at evaluation time another module's value may not be there
+   yet (_entry.js). */
+var memory = { tool: "pen", color: {}, size: { pen: 1, highlight: 1, text: 1 } };
 
 var ed = null;          /* the open editor (openAnnotator), or null */
 var drawQueued = false;
@@ -798,6 +796,12 @@ function disarmCancel() {
 function done() {
   commitText();
   if (!ed.ready || ed.saving) return;
+  if (reviewMode()) {
+    /* the session became a review one while this was open */
+    closeAnnotator();
+    showToast("This script can only be commented on now, so the annotations weren’t saved.", "warn");
+    return;
+  }
   var marks = normalizeMarks(ed.marks);
   if (JSON.stringify(marks) === ed.start) { closeAnnotator(); return; }
   if (locate() === -1) { lost(); return; }
@@ -944,6 +948,7 @@ function buildSwatches() {
 /* Eval-time work for this module. _entry.js calls every module's __init()
    in filename order. */
 export function __init() {
+  memory.color = { pen: ANNOTATION_COLORS[0], highlight: ANNOTATION_COLORS[1], text: ANNOTATION_COLORS[0] };
   var m = modal();
   if (!m) return;
   buildSwatches();
@@ -955,7 +960,13 @@ export function __init() {
   f.addEventListener("pointercancel", onPointerCancel);
   f.addEventListener("lostpointercapture", onPointerUp);
   window.addEventListener("keydown", onWindowKeydown, true);
-  window.addEventListener("resize", function () { if (ed) layout(); });
+  /* the stage changes size with the window, and when the bar above it
+     wraps differently (a phone turned, the text face arriving) */
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(function () { if (ed) layout(); }).observe(document.getElementById("annotate-stage"));
+  } else {
+    window.addEventListener("resize", function () { if (ed) layout(); });
+  }
   /* For the browser suites: what the editor holds. Nothing in the app
      reads it. */
   window.__annotateTest = {

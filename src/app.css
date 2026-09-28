@@ -1877,6 +1877,11 @@
      app's theme. The bar's controls are 36px (40px on a phone), each its
      own tab stop; a picked tool, colour or size is filled. */
   .modal-backdrop.annotate-overlay { z-index: 160; padding: 0; background: rgba(8, 8, 7, 0.62); }
+  /* it fills the window, so it only fades in: the dialogs' 8px rise would
+     open a gap along the top */
+  @starting-style {
+    .modal-backdrop.annotate-overlay:not([hidden]) .modal-panel.annotate-panel { transform: none; }
+  }
   .modal-panel.annotate-panel {
     display: flex; flex-direction: column;
     width: 100%; height: 100%; max-width: none; max-height: none;
