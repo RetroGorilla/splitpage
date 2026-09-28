@@ -154,6 +154,36 @@ wait A().marks.length === 3
 key ctrl KeyY
 wait A().marks.length === 2
 expect JSON.stringify(F.state()) === before
+
+# ---- P / H / T / E pick the tools (Adam, 2026-09-27), not while typing -------------------------
+expect tb('[data-tool="pen"]').getAttribute('aria-keyshortcuts') === 'P' && tb('[data-tool="eraser"]').title.indexOf('Eraser (E)') === 0
+key KeyH
+wait A().tool === 'highlight' && tb('[data-tool="highlight"]').getAttribute('aria-pressed') === 'true'
+key KeyT
+wait A().tool === 'text'
+key KeyE
+wait A().tool === 'eraser'
+key KeyP
+wait A().tool === 'pen'
+# with a modifier they are not the tools
+key shift KeyE
+expect A().tool === 'pen'
+# in a text box they are letters
+key KeyT
+wait A().tool === 'text'
+mouse down pt(0.6, 0.85)
+mouse up pt(0.6, 0.85)
+wait !!document.querySelector('.annotate-textbox')
+press phet
+expect document.querySelector('.annotate-textbox').value === 'phet' && A().tool === 'text'
+key Escape
+wait !document.querySelector('.annotate-textbox') && A().marks.length === 3
+key ctrl KeyZ
+wait A().marks.length === 2
+# back to the eraser, the tool the rest of this suite expects remembered
+key KeyE
+wait A().tool === 'eraser'
+expect JSON.stringify(F.state()) === before
 sleep 300
 shot 257-editor-light
 

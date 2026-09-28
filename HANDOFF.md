@@ -4,7 +4,13 @@ Written 2026-08-28, condensed 2026-09-15. For whoever (or whatever) picks this u
 
 `docs/help.md` is the **user-facing** doc — what the features are and how to
 use them, and the file `build.mjs` renders into the in-app Help page. Read it
-first; this file deliberately does not repeat it. `README.md` is the
+first; this file deliberately does not repeat it.
+
+**What's new (Adam, 2026-09-27).** Every user-facing change adds a line to
+the top list in `docs/help.md`, "What's new since <last release>", above the
+last release's own list. When a release is cut, that heading becomes
+"What's new in <version>" (a release's notes are built from it) and a fresh
+"since" list starts with the next change. `README.md` is the
 repo-facing half of what used to be one file (#80): building, releasing, and
 the map of the tree.
 

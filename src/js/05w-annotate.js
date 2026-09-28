@@ -894,7 +894,25 @@ function onWindowKeydown(e) {
     e.preventDefault();
     e.stopPropagation();
     if (isRedoKey(e)) redoMark(); else undoMark();
+    return;
   }
+  var tool = toolForKey(e);
+  if (tool && !ed.gesture) {
+    e.preventDefault();
+    e.stopPropagation();
+    setTool(tool);
+  }
+}
+
+/* P, H, T and E pick the tools (Adam, 2026-09-27: offered, and taken —
+   single letters, no modifier). Only while the editor is open and not
+   typing in a text box (onWindowKeydown returns before this there), and
+   never mid-stroke. The buttons' tooltips name them. */
+var TOOL_KEYS = { p: "pen", h: "highlight", t: "text", e: "eraser" };
+
+function toolForKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing) return "";
+  return TOOL_KEYS[String(e.key || "").toLowerCase()] || "";
 }
 
 /* Tab and Shift+Tab go round the editor's own controls and no further. */
