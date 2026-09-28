@@ -522,8 +522,20 @@ function buildSw() {
   return current.replace(SW_CACHE_LINE, () => 'var CACHE = "splitpage-' + version() + '";');
 }
 
+/* src/page.html is full of HTML comments: notes to whoever edits it, with
+   design reasons and issue numbers. Nobody using the app reads them, and the
+   page ships to them (and inside every saved copy) verbatim, so they come out
+   here, before the script and styles go in. Only the shell is touched: the
+   bundle and the stylesheet have their own comment syntax, and a "<!--" inside
+   the bundle's strings (the exports write HTML) must stay exactly as it is. */
+function stripHtmlComments(shell) {
+  return shell
+    .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*\r?\n/gm, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+}
+
 function build() {
-  let html = src("page.html");
+  let html = stripHtmlComments(src("page.html"));
   for (const [marker, load] of PARTS) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
     /* split/join rather than replace(): the content is data and may well
