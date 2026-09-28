@@ -102,8 +102,9 @@ expect window.__hits(document.getElementById('runtime-chip'))
 expect window.__hits(document.querySelector('#rundown .rundown-toggle'))
 # its body scrolls rather than the card reaching up
 expect (function(){ var b = document.querySelector('#tagging-help .tagging-help-body'); return b.scrollHeight > b.clientHeight; })()
-# the VFX: glow row: its category on the same line as its example
-expect (function(){ var li = document.querySelector('#tagging-help .tagging-help-row kbd').closest('li'); var s = li.querySelector('.tag-sample').getBoundingClientRect(); var c = li.querySelector('.tagging-help-cat').getBoundingClientRect(); return Math.abs(c.top - s.top) < 6 && c.left > s.right; })()
+# the name-and-colon rows (2026-09-28: one per category, "Location: Loc:"
+# the widest): each one's category on the same line as its example
+expect Array.prototype.every.call(document.querySelectorAll('#tagging-help .tagging-help-words .tagging-help-row'), function(li){ var s = li.querySelector('.tag-sample').getBoundingClientRect(); var c = li.querySelector('.tagging-help-cat').getBoundingClientRect(); return Math.abs(c.top - s.top) < 6 && c.left > s.right; })
 shot 251-tagging-card
 # scrolled (the header condensed) and then minimized: still clear of it
 eval window.scrollTo(0, 2000)

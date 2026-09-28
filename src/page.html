@@ -278,12 +278,15 @@
                 <button type="button" data-file-action="export-docx">Word (.docx)</button>
                 <button type="button" data-file-action="export-md">Markdown (.md)</button>
                 <button type="button" data-file-action="export-md-table">Markdown, two columns (.md)</button>
+                <button type="button" data-file-action="export-xlsx">Spreadsheet (.xlsx)</button>
                 <button type="button" data-file-action="export-csv">Spreadsheet (.csv)</button>
                 <button type="button" data-file-action="export-html">SplitShare (.html)</button>
                 <button type="button" data-file-action="export-broll-pdf">B-roll shot list (.pdf)</button>
+                <button type="button" data-file-action="export-broll-xlsx">B-roll shot list (.xlsx)</button>
                 <button type="button" data-file-action="export-broll-csv">B-roll shot list (.csv)</button>
                 <button type="button" data-file-action="export-narration-docx">Narration only (.docx)</button>
                 <button type="button" data-file-action="export-narration-txt">Narration only (.txt)</button>
+                <button type="button" data-file-action="export-breakdown-xlsx">Breakdown (.xlsx)</button>
                 <button type="button" data-file-action="export-breakdown">Breakdown (.csv)</button>
                 <button type="button" data-file-action="export-packing-gear">Gear packing list (.pdf)</button>
                 <button type="button" data-file-action="export-packing-prop">Props packing list (.pdf)</button>
@@ -594,19 +597,31 @@
     <button type="button" class="modal-close" id="tagging-help-dismiss" aria-label="Close the tagging reference" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <div class="tagging-help-body">
-    <h3 class="tagging-help-label">Type it</h3>
+    <!-- Every way to type a tag, a category at a time (Adam, 2026-09-28:
+         the word forms, #210, were only named in a sentence, and Cast and
+         Music/SFX looked as if they could only be picked from Tag) -->
+    <h3 class="tagging-help-label">Type brackets round the words</h3>
     <ul class="tagging-help-list">
       <li class="tagging-help-row"><code>[gaffer tape]</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
       <li class="tagging-help-row"><code>{kitchen}</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
       <li class="tagging-help-row"><code>~lens flare~</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">lens flare</span><span class="tagging-help-cat">VFX</span></li>
       <li class="tagging-help-row"><code>&lt;tripod&gt;</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
-      <li class="tagging-help-row"><span><code>VFX: glow</code> <kbd>Tab</kbd></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
     </ul>
-    <p class="tagging-help-note">Brackets tag the moment you type the closing one. In the Visual column, a name and a colon (Prop, Location or Loc, Cast, VFX, Gear, SFX, Music) starts a tag, and <kbd>Tab</kbd> closes it; <kbd>Esc</kbd> cancels. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text.</p>
-    <h3 class="tagging-help-label">Select the words, then press Tag</h3>
+    <p class="tagging-help-note">The tag is made the moment you type the closing bracket.</p>
+    <h3 class="tagging-help-label">Or type its name and a colon, then <kbd>Tab</kbd></h3>
+    <p class="tagging-help-note tagging-help-example">In the Visual column: <code>VFX: glow</code> <kbd>Tab</kbd> tags <em>glow</em> as VFX.</p>
+    <ul class="tagging-help-list tagging-help-words">
+      <li class="tagging-help-row"><code>Prop:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
+      <li class="tagging-help-row"><span><code>Location:</code> <code>Loc:</code></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
+      <li class="tagging-help-row"><code>Cast:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
+      <li class="tagging-help-row"><code>VFX:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
+      <li class="tagging-help-row"><code>Gear:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
+      <li class="tagging-help-row"><span><code>SFX:</code> <code>Music:</code></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+    </ul>
+    <p class="tagging-help-note">Any capitals work. <kbd>Esc</kbd> cancels, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> undoes just the tag and leaves the plain text.</p>
+    <h3 class="tagging-help-label">Or select the words and press Tag</h3>
     <ul class="tagging-help-list">
-      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
-      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tagging-help-cat">any category, in either column</span></li>
     </ul>
     <h3 class="tagging-help-label">Keys</h3>
     <ul class="tagging-help-list tagging-help-keys">
@@ -865,9 +880,9 @@
     </span>
     <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
-  </div>
-  <div class="writer-scroll" id="writer-scroll">
-    <div class="writer-doc" id="writer-doc"></div>
+    <!-- Close beside Save, and the tools under this row (Adam, 2026-09-28:
+         where the script keeps them — its toolbar sits above the text) -->
+    <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">
     <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
@@ -884,8 +899,9 @@
     <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
     <button type="button" id="wr-export">Export narration</button>
     <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
-    <div class="spacer"></div>
-    <button type="button" id="wr-close">Close (Esc)</button>
+  </div>
+  <div class="writer-scroll" id="writer-scroll">
+    <div class="writer-doc" id="writer-doc"></div>
   </div>
 </div>
 

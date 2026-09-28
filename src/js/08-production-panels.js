@@ -1319,32 +1319,45 @@ export function breakdownRows() {
 /* One flat sheet with a Category column rather than a file per list: it
    filters or pivots into a props list, a graphics list or one person's
    pull list in a couple of clicks, and stays a single thing to send. */
-export function buildBreakdownCsv() {
-  /* B-roll shots last, so a sheet built on the old columns' positions
-     still lines up — and #169's two after them for the same reason: when
-     the item is first needed ("First scene at", the start timecode of the
-     first scene it is in, as the gutter shows it — a call sheet sorts on
-     it) and the category's own heading as the Production panel groups by
-     it ("Group", "Props & set dressing"). */
+/* The breakdown as a table, for the .csv and the Excel workbook
+   (16b-xlsx.js): the heading and a row per item ({cells, catId, status}
+   — the category and status ids, which the workbook colours). B-roll
+   shots last, so a sheet built on the old columns' positions still lines
+   up — and #169's two after them for the same reason: when the item is
+   first needed ("First scene at", the start timecode of the first scene
+   it is in, as the gutter shows it — a call sheet sorts on it) and the
+   category's own heading as the Production panel groups by it ("Group",
+   "Props & set dressing"). */
+export function breakdownTable() {
   var starts = sceneFacts().map(function (f) { return f.start; });
-  var lines = [["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
-                "First scene at", "Group"].join(",")];
+  var out = {
+    head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
+           "First scene at", "Group"],
+    rows: []
+  };
   breakdownRows().forEach(function (r) {
     var first = r.inScript === "no" ? "" : (starts[Number(r.scenes[0]) - 1] || "");
-    lines.push([
-      csvEscape(r.categoryLabel),
-      csvEscape(r.name),
-      csvEscape(r.statusLabel),
-      csvEscape(r.owner),
-      csvEscape(r.mentions),
-      csvEscape(r.scenes.join(" ")),
-      csvEscape(r.inScript),
-      csvEscape(r.notes),
-      csvEscape(r.broll.join("; ")),
-      csvEscape(first),
-      csvEscape(r.category)
-    ].join(","));
+    out.rows.push({ catId: r.catId, status: r.status, cells: [
+      r.categoryLabel,
+      r.name,
+      r.statusLabel,
+      r.owner,
+      r.mentions,
+      r.scenes.join(" "),
+      r.inScript,
+      r.notes,
+      r.broll.join("; "),
+      first,
+      r.category
+    ] });
   });
+  return out;
+}
+
+export function buildBreakdownCsv() {
+  var t = breakdownTable();
+  var lines = [t.head.join(",")];
+  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
   if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
   return "﻿" + lines.join("\r\n");
 }
