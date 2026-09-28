@@ -135,6 +135,16 @@ export async function saveDoc(opts) {
      next launch (rememberLastFileHandle, below). */
   var pickedFor = null;
   var wrote = false;
+  /* A Save As from a hosted document is a copy taken home, not a save of
+     the document: nothing went to the server, so nothing about the server
+     document is settled. Its baseline is what the server last confirmed
+     (a later merge measures against it), its dirty flag says whether the
+     server is missing edits, and its pending autosave is the write that
+     would fix that — all three are left exactly as they were, or a save
+     that never happened reads as one and the next close loses the edit.
+     Decided here, once, from the home this save started with (the same
+     one `saveAs` falling through to the file path below relies on). */
+  var copyOfHosted = home.kind === "server";
   function retargetTo(handle, k) {
     if (S.state.docId !== docIdAtSave) return;
     /* A Save As from a hosted document takes a copy home while the page
@@ -318,7 +328,7 @@ export async function saveDoc(opts) {
          user asked for it — but it stays just a file on disk. */
       var stillOurs = S.state.docId === docIdAtSave;
       var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
-      if (stillOurs) setBaseState(published, "saveDoc: the bytes just written to the file");
+      if (stillOurs && !copyOfHosted) setBaseState(published, "saveDoc: the bytes just written to the file");
       if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
       adoptSavedCopyDocId(forkDocId, docIdAtSave);
       var docIdAfterSave = S.state.docId;
@@ -331,7 +341,7 @@ export async function saveDoc(opts) {
         var afterFile = await targetHandle.getFile();
         if (homeAtWrite && home === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
       } catch (e) { /* not fatal — the write already succeeded */ }
-      if (stillOurs && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
+      if (stillOurs && !copyOfHosted && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
       /* An automatic save says so through the indicator, not a toast (see
          `auto` at the top): one "Saved to script.md" per pause in the
          typing is noise sitting on top of the work. */
@@ -346,9 +356,9 @@ export async function saveDoc(opts) {
       if (ok) {
         wrote = true;
         var downloadedOurs = S.state.docId === docIdAtSave;
-        if (downloadedOurs) setBaseState(published, "saveDoc: the copy just downloaded");
+        if (downloadedOurs && !copyOfHosted) setBaseState(published, "saveDoc: the copy just downloaded");
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
-        if (downloadedOurs && S.editSeq === seqAtSave) clearDirty();
+        if (downloadedOurs && !copyOfHosted && S.editSeq === seqAtSave) clearDirty();
         warnImagesLeftOut(imagesLeftOut, filename);
       } else {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
