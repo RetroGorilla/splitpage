@@ -52,6 +52,7 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { clearDirty, showToast } from "./12-dirty-toast.js";
+import { scheduleAutoSave } from "./14-export.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -1177,6 +1178,11 @@ export async function publishToServer() {
     return false;
   }
   var published = cloneState(S.state);
+  /* What was on screen when the snapshot was taken (#248). Typing goes on
+     during the upload — the progress bar does not stop it — so what the
+     server ends up with can be older than what the editor shows, and only
+     this can tell the two apart. The same seqAtSave saveToServer keeps. */
+  var seqAtPublish = S.editSeq;
   /* Publishing makes a second home for this script. If its id already
      lives somewhere else (a file on disk, another server document), the
      server copy gets a new one — otherwise two documents that will now be
@@ -1186,6 +1192,15 @@ export async function publishToServer() {
   if (forkDocId) published.docId = forkDocId;
   var body;
   var via = conn;
+  /* Which document, in which home, this publish is for (#247). The page is
+     not locked while the POST is in the air — the progress bar does not stop
+     File ▸ Open, the server picker or New script — so the answer can come
+     back to a different document on screen. Same idea as saveToServer's
+     `docId`, with the home's own record as well because a local document
+     has no server id to compare: setHome() builds a new record every time,
+     so `home` still being this one says nothing about where the document
+     lives has changed either. */
+  var homeAtStart = home;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
       return sendWithBlobs(published, function (sending, acceptMissing) {
@@ -1198,16 +1213,37 @@ export async function publishToServer() {
   /* Published to the server the tab WAS on; this tab has since been pointed
      elsewhere, so the copy there is not its home. */
   if (via !== conn) return false;
+  /* Published, but not this document any more: another one was opened in
+     this tab while the POST was in flight. The copy stays on the server —
+     it is what the user asked for, and it is a real document — but nothing
+     about the page is changed on its behalf: not the home, not the base,
+     not the dirty flag, not the id. Changing them would leave the document
+     on screen saving into somebody else's server document with its own
+     unsaved work marked saved. False, like every other "not adopted": the
+     share-link caller reads it as "no link", and its own onServerDoc()
+     test could not tell this new document from the one it published. */
+  if (S.state.docId !== oldId || home !== homeAtStart) {
+    showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
+      "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
+    return false;
+  }
   setHome("server", { id: body.id, rev: body.rev || 1 });
   setBaseState(published, "publishToServer: what the server just accepted");
-  /* Adopted only after the server has it, like Save As. The id check keeps
-     a document opened while the POST was in flight from being re-id'd. */
-  if (forkDocId && S.state.docId === oldId) {
+  /* Adopted only after the server has it, like Save As. */
+  if (forkDocId) {
     S.state.docId = forkDocId;
     copyDocHistorySafe(oldId, forkDocId);
   }
   S.docIdWrittenOut = true;
-  clearDirty();
+  /* Clean only if nothing was typed since the snapshot. Otherwise the
+     server has the earlier text and the page is still ahead of it: the
+     edits stay dirty (so the unload warning and the crash draft still
+     cover them) and, because clearDirty() is also what would have stopped
+     the pending autosave, one is scheduled now — to the server home this
+     publish just made, which is where the next save goes. The base is
+     `published`, so that save is judged against what the server has. */
+  if (S.editSeq === seqAtPublish) clearDirty();
+  else scheduleAutoSave();
   updateFileChip();
   showToast("Published to the server as “" + (S.state.title || body.id) + "” — collaborators can open it now", "ok");
   return true;

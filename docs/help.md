@@ -13,6 +13,10 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since 3.0
 
+- **Publishing is safer while it uploads.** Text you type during a publish
+  now stays unsaved and is saved to the server right after, instead of being
+  marked saved. If you open another script before the upload finishes, that
+  script is left alone; the published copy waits on the server.
 - **Draw on your pictures.** In a scene's gallery, press **Annotate** to
   mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
   and E pick them). Your marks stay editable, and **Remove annotations**
