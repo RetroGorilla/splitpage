@@ -117,6 +117,12 @@
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5a1 1 0 0 0 1 .9h7a1 1 0 0 0 1-.9l1-12.5"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8 8"/></symbol>
     <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M13.5 5l5.5 5.5-7.5 7.5H6v-5.5z"/><path d="M4 21h16"/></symbol>
+    <!-- the annotation editor's (05w-annotate.js): the eraser, a text box,
+         and undo / redo as a hooked arrow either way -->
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M9 19.5L4.5 15a1.5 1.5 0 0 1 0-2.1L13 4.4a1.5 1.5 0 0 1 2.1 0l4.5 4.5a1.5 1.5 0 0 1 0 2.1L11.1 19.5z"/><path d="M8.5 9l6.5 6.5M9 19.5h11"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5.5 7.5V5h13v2.5M12 5v14M9 19h6"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 13.5L4.5 9 9 4.5"/><path d="M4.5 9h10a5 5 0 0 1 0 10H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 13.5L19.5 9 15 4.5"/><path d="M19.5 9h-10a5 5 0 0 0 0 10H13"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.75"/></symbol>
     <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
     <!-- The side panels', the start page's, the prompter's and the phone's
@@ -999,6 +1005,52 @@
     <div class="scene-gallery-zoom-stage" id="gallery-zoom-stage"></div>
     <p class="scene-gallery-zoom-info" id="gallery-zoom-info"></p>
     <button type="button" class="scene-gallery-zoom-close" id="gallery-zoom-close" aria-label="Close full size"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+  </div>
+</div>
+
+<!-- Drawing on a picture in a scene's gallery (05w-annotate.js), opened by
+     the gallery's Annotate button and laid over the whole window, the
+     gallery still open under it: the tools across the top, the picture's
+     original fitted to the stage with the marks on a canvas over it. The
+     colour swatches are the module's (ANNOTATION_COLORS, 02d-gallery.js),
+     so the six colours a mark may have are written down once. Every
+     button is its own tab stop; the tool, colour and size buttons say
+     which is picked with aria-pressed. -->
+<div class="modal-backdrop annotate-overlay" id="annotate-modal" hidden>
+  <div class="modal-panel annotate-panel" role="dialog" aria-modal="true" aria-labelledby="annotate-title">
+    <div class="annotate-bar">
+      <h2 class="annotate-title" id="annotate-title">Annotate picture</h2>
+      <div class="annotate-tools">
+        <div class="annotate-group" role="group" aria-label="Tool">
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="pen" aria-pressed="true" aria-label="Pen" title="Pen"><svg aria-hidden="true"><use href="#i-pen"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="highlight" aria-pressed="false" aria-label="Highlighter" title="Highlighter"><svg aria-hidden="true"><use href="#i-highlight"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="text" aria-pressed="false" aria-label="Text" title="Text: click the picture to type, drag a text to move it"><svg aria-hidden="true"><use href="#i-text"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="eraser" aria-pressed="false" aria-label="Eraser" title="Eraser: drag over a mark to take it away"><svg aria-hidden="true"><use href="#i-eraser"/></svg></button>
+        </div>
+        <div class="annotate-group annotate-swatches" id="annotate-colors" role="group" aria-label="Colour"></div>
+        <div class="annotate-group" id="annotate-sizes" role="group" aria-label="Size">
+          <button type="button" class="annotate-btn annotate-size" data-aact="size" data-size="0" aria-pressed="false" aria-label="Small" title="Small">S</button>
+          <button type="button" class="annotate-btn annotate-size" data-aact="size" data-size="1" aria-pressed="true" aria-label="Medium" title="Medium">M</button>
+          <button type="button" class="annotate-btn annotate-size" data-aact="size" data-size="2" aria-pressed="false" aria-label="Large" title="Large">L</button>
+        </div>
+        <div class="annotate-group" role="group" aria-label="History">
+          <button type="button" class="annotate-btn" data-aact="undo" id="annotate-undo" aria-label="Undo" title="Undo (Ctrl+Z)"><svg aria-hidden="true"><use href="#i-undo"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="redo" id="annotate-redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><svg aria-hidden="true"><use href="#i-redo"/></svg></button>
+          <button type="button" class="annotate-btn annotate-clear" data-aact="clear" id="annotate-clear" title="Take every mark away">Clear all</button>
+        </div>
+      </div>
+      <div class="annotate-end">
+        <button type="button" class="btn" data-aact="cancel" id="annotate-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" data-aact="done" id="annotate-done">Done</button>
+      </div>
+    </div>
+    <div class="annotate-stage" id="annotate-stage">
+      <div class="annotate-frame" id="annotate-frame" data-tool="pen">
+        <img class="annotate-img" id="annotate-img" alt="" draggable="false">
+        <canvas class="annotate-canvas" id="annotate-canvas"></canvas>
+      </div>
+      <p class="annotate-status" id="annotate-status" role="status"></p>
+    </div>
   </div>
 </div>
 

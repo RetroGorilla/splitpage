@@ -1,0 +1,64 @@
+# Drawing on a gallery picture on a phone (05w-annotate.js, app.css
+# .annotate-* under max-width 600px), at 375×812 with touch:
+#   * the gallery dialog offers Annotate, and nothing in it runs off the
+#     screen;
+#   * the editor's first line is the title with Cancel and Done, the tools a
+#     line of their own that scrolls sideways instead of widening the page;
+#     every control 40px; nothing past the right edge;
+#   * the stage fills the rest of the screen and the picture fits inside it;
+#   * a stroke drawn on it is a mark, and Done saves it.
+# Every `eval` is one physical line.
+
+open
+viewport 375 812 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+
+eval (function(){ window.F = window.__splitpageFormats; window.A = function(){ return window.__annotateTest.state(); }; window.AM = function(){ return document.getElementById('annotate-modal'); }; window.M = function(){ return document.getElementById('gallery-modal'); }; window.row = function(){ return F.state().rows.filter(function(r){ return r.id === 'p1'; })[0]; }; window.pic = function(w, h, color){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL('image/png'); }; window.pt = function(fx, fy){ var r = document.getElementById('annotate-frame').getBoundingClientRect(); return { x: Math.round(r.left + r.width * fx), y: Math.round(r.top + r.height * fy) }; }; window.R = function(el){ return el.getBoundingClientRect(); }; window.noOverflow = function(){ return document.documentElement.scrollWidth <= innerWidth && document.body.scrollWidth <= innerWidth; }; return true; })()
+eval (function(){ var doc = { schema: 2, title: 'Phone', comments: [], rows: [ { id: 'p1', visualText: 'one', audioText: 'A', status: 'todo', visualImage: pic(1200, 800, '#6b8fb3'), imageName: 'wide.png' } ] }; F.openFile(new File([JSON.stringify(doc)], 'phone.splitpage')); return true; })()
+wait F.state().title === 'Phone' && !!document.querySelector('#rows .row[data-id="p1"] .scene-gallery-tile')
+eval (function(){ window.orig = row().imageRef.sha256; return true; })()
+
+# ---- the gallery dialog offers it ----------------------------------------------
+eval document.querySelector('#rows .row[data-id="p1"] .scene-gallery-tile').click()
+wait !M().hidden && !!M().querySelector('[data-gact="annotate"]')
+expect (function(){ var b = R(M().querySelector('[data-gact="annotate"]')); return b.left >= 0 && b.right <= innerWidth; })()
+expect noOverflow()
+
+# ---- the editor's layout ---------------------------------------------------------
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready
+expect noOverflow()
+expect (function(){ var bar = R(document.querySelector('.annotate-bar')); return bar.left === 0 && bar.right <= innerWidth + 0.5; })()
+# the title, Cancel and Done on the first line, inside the screen
+expect (function(){ var t = R(document.getElementById('annotate-title')), c = R(document.getElementById('annotate-cancel')), d = R(document.getElementById('annotate-done')); return Math.abs(t.top - c.top) < 12 && Math.abs(c.top - d.top) < 1 && d.right <= innerWidth && c.left > t.left; })()
+# the tools below them, one line that scrolls sideways
+expect (function(){ var tools = document.querySelector('.annotate-tools'); var tr = R(tools), d = R(document.getElementById('annotate-done')); return tr.top >= d.bottom - 1 && tr.right <= innerWidth + 0.5 && tools.scrollWidth > tools.clientWidth && getComputedStyle(tools).overflowX === 'auto'; })()
+expect (function(){ var tops = Array.prototype.map.call(document.querySelectorAll('.annotate-tools .annotate-btn'), function(b){ return Math.round(R(b).top); }); return tops.every(function(t){ return t === tops[0]; }); })()
+expect Array.prototype.every.call(document.querySelectorAll('.annotate-tools .annotate-btn, .annotate-swatch'), function(b){ return R(b).height >= 36 && R(b).width >= 36; })
+expect Array.prototype.every.call(document.querySelectorAll('.annotate-tools .annotate-btn'), function(b){ return R(b).height >= 40; })
+# the stage takes the rest of the screen, the picture inside it
+expect (function(){ var s = R(document.getElementById('annotate-stage')), bar = R(document.querySelector('.annotate-bar')); return Math.abs(s.top - bar.bottom) < 1.5 && Math.abs(s.bottom - innerHeight) < 1 && s.left === 0 && Math.abs(s.right - innerWidth) < 1; })()
+expect (function(){ var s = R(document.getElementById('annotate-stage')), f = R(document.getElementById('annotate-frame')); return f.left >= s.left + 7 && f.right <= s.right - 7 && f.top >= s.top && f.bottom <= s.bottom && Math.abs(f.width - (s.width - 16)) < 2; })()
+# the last tool scrolled to is reachable
+eval (function(){ var tools = document.querySelector('.annotate-tools'); tools.scrollLeft = tools.scrollWidth; return tools.scrollLeft > 0; })()
+expect (function(){ var c = R(document.getElementById('annotate-clear')); return c.right <= innerWidth && c.left >= 0; })()
+expect noOverflow()
+eval (function(){ document.querySelector('.annotate-tools').scrollLeft = 0; return true; })()
+sleep 300
+shot 258-editor-phone
+
+# ---- drawing, and Done -----------------------------------------------------------
+mouse down pt(0.2, 0.4)
+mouse move pt(0.4, 0.5)
+mouse move pt(0.6, 0.45)
+mouse up pt(0.8, 0.5)
+wait A().marks.length === 1 && A().marks[0].kind === 'pen'
+click #annotate-done
+wait AM().hidden
+wait row().imageRef.sha256 !== orig && !!row().imageAnnotation && row().imageAnnotation.imageRef.sha256 === orig
+wait M().querySelector('[data-gact="annotate"]').textContent === 'Edit annotations'
+expect noOverflow()
+expect (function(){ return Array.prototype.every.call(M().querySelectorAll('.scene-gallery-buttons button'), function(b){ var r = R(b); return r.left >= 0 && r.right <= innerWidth; }); })()
+sleep 300
+shot 258-gallery-phone
