@@ -885,6 +885,19 @@ export async function saveBackToFile(opts) {
     showToast("Could not build the file.", "error");
     return;
   }
+  /* What these bytes are a copy of. Taken here, in the same task the
+     builder ran in (buildFileData reads the document synchronously once
+     its awaits are done, so nothing can have been typed between the two),
+     and BEFORE the conflict check and the write below, which are both
+     awaits a person can type through. The same three facts saveDoc keeps
+     (14-export.js): the document, the record it is filed under, and how
+     many edits it had had. The write finishing says the bytes are on
+     disk, not that the page still matches them. */
+  var docIdAtBuild = S.state.docId;
+  var seqAtBuild = S.editSeq;
+  function bytesStillCurrent() {
+    return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
+  }
 
   /* true in-place write, when the browser allows it */
   if (imported.handle && imported.handle.createWritable) {
@@ -900,7 +913,11 @@ export async function saveBackToFile(opts) {
       var writable = await imported.handle.createWritable();
       await writable.write(built.data);
       await writable.close();
-      imported.dirty = false;
+      /* Only when nothing was typed while the file was being written: an
+         edit made during it is not in those bytes, and markDirty() has
+         already told the chip so. The timestamp below is the file's, and
+         moves either way — it is what the next conflict check compares. */
+      if (bytesStillCurrent()) imported.dirty = false;
       try {
         var after = await imported.handle.getFile();
         imported.lastModified = after.lastModified;
@@ -920,7 +937,9 @@ export async function saveBackToFile(opts) {
   var ok = await deliverFile(imported.name, built.data, {
     savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
-  if (ok) { imported.dirty = false; updateFileChip(); }
+  /* The download is a copy of the bytes built above, so the same rule: a
+     script typed into while it was being handed over is not "up to date". */
+  if (ok) { if (bytesStillCurrent()) imported.dirty = false; updateFileChip(); }
 }
 
 /* The file on disk moved under us. Never overwrite silently — the whole
