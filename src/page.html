@@ -868,9 +868,9 @@
     </span>
     <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
-  </div>
-  <div class="writer-scroll" id="writer-scroll">
-    <div class="writer-doc" id="writer-doc"></div>
+    <!-- Close beside Save, and the tools under this row (Adam, 2026-09-28:
+         where the script keeps them — its toolbar sits above the text) -->
+    <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">
     <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
@@ -887,8 +887,9 @@
     <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
     <button type="button" id="wr-export">Export narration</button>
     <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
-    <div class="spacer"></div>
-    <button type="button" id="wr-close">Close (Esc)</button>
+  </div>
+  <div class="writer-scroll" id="writer-scroll">
+    <div class="writer-doc" id="writer-doc"></div>
   </div>
 </div>
 
