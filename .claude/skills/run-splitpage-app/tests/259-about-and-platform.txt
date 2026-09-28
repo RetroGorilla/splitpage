@@ -1,7 +1,8 @@
 # About Splitpage is a dialog in the app's own look, not a native alert()
 # (20a-update.js showAbout), and the "get the desktop app" notice is offered
 # to a Windows browser only (desktopAppOffered). The Help contents list shows
-# a heading's formatting, not its raw markdown (build.mjs mdToHtml).
+# a heading's formatting, not its raw markdown (build.mjs mdToHtml), and the
+# built page has none of the shell's HTML comments (build.mjs stripHtmlComments).
 
 open
 
@@ -31,3 +32,7 @@ jsclick #btn-file
 jsclick #file-menu [data-file-action="help"]
 sleep 300
 expect document.getElementById('help-toc').textContent.indexOf('`') === -1
+
+# --- the shipped page carries none of src/page.html's editing notes -----------
+# (build.mjs stripHtmlComments; the page is served, and saved, verbatim)
+expect (function(){ var w = document.createTreeWalker(document, NodeFilter.SHOW_COMMENT); return w.nextNode() === null; })()
