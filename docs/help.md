@@ -21,9 +21,11 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   searching *tags* finds it.
 - **Export to Excel.** File ▸ Export… ▸ **Spreadsheet** now makes an Excel
   workbook: sized columns, wrapped text, a frozen header with filters, a
-  Notes column to write in, and a sheet for each part. **CSV** is the second choice on the same card, and
-  the Breakdown and the B-roll shot list offer both. See
-  [Exporting](#exporting).
+  Notes column to write in, and a sheet for each part. **CSV** is the
+  second choice on the same card, and the Breakdown and the B-roll shot
+  list offer both. See [Exporting](#exporting).
+- **The writer's tools are at the top**, under the title, where the
+  script's formatting bar is, and **Close** is beside **Save**.
 
 ## What's new in 3.0
 
@@ -207,7 +209,9 @@ count.
 ### The writer
 
 **Write** in the header opens the Audio column as one flowing document, for
-when the job is writing narration. One paragraph is one scene.
+when the job is writing narration. One paragraph is one scene. Its tools
+sit along the top, under the title, and **Close** (or <kbd>Esc</kbd>) is
+beside **Save**.
 
 - <kbd>Enter</kbd> starts a new scene, <kbd>Shift</kbd>+<kbd>Enter</kbd> is
   a line break, and <kbd>Backspace</kbd> at the start of a paragraph joins it
