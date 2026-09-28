@@ -2250,7 +2250,22 @@ async function handleStatic(req, res, url) {
 /* ---------- server ---------- */
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, "http://localhost");
+  let url;
+  try {
+    url = new URL(req.url, "http://localhost");
+  } catch (e) {
+    /* Node's HTTP parser accepts request targets the URL constructor
+       rejects (an absolute-form target with a broken host, like
+       "GET http://[ HTTP/1.1"). This runs right here in the listener, not
+       inside the promise chain below, so an exception has nothing to catch
+       it: it is an uncaught exception, and it ends the process — every open
+       document and every other session with it — before the PIN is even
+       looked at (#250). It is an ordinary bad request; answer it as one and
+       close the connection, since nothing about it can be trusted. */
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Connection": "close" });
+    res.end("Bad request");
+    return;
+  }
   /* The launcher route is the one piece of API a static-only (NO_API) copy
      still answers: it is what lets the app the launcher just opened ask
      where it was started from. It is gated by the per-launch token and the
