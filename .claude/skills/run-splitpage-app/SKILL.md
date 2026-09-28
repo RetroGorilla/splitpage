@@ -302,14 +302,37 @@ the thing you changed is a pure function of a document.
 
 The harness serves static files from its own `HttpListener` and cannot start
 `server/server.js` with an environment, so everything that depends on
-`JOIN_PIN`, `ALLOW_ORIGINS` or `LAUNCH_TOKEN` is tested by a plain Node script
-instead. No dependencies, a few seconds, real servers on free ports:
+`JOIN_PIN`, `PERSIST_LINKS`, `TRUST_PROXY`, `ALLOW_ORIGINS` or `LAUNCH_TOKEN` is
+tested by a plain Node script instead. No dependencies, about a minute, real
+servers on free ports (some started twice on one `DATA_DIR`, which is what a
+redeploy is — `startServer(env, { dataDir })` and `await server.halt()`):
 
 ```bash
 node tools/test-server.mjs
 ```
 
-Ends with `ALL PASS` and exit 0. It covers the join PIN
+Ends with `ALL PASS - N/N server checks` and exit 0. A check the platform
+cannot make is never silent: it prints `SKIP <name> — <why>` where it runs and
+is listed again above the summary (on Windows: the POSIX modes of
+`DATA_DIR/links/`, 0700, and its files, 0600). Invite links (the link store)
+are covered end to end: the owner-only links API (create, get-or-create,
+`replace`, revoke, `no-pin` 409, `read-only` for an edit link), joining by key
+for both roles with `scope` in the answer, a dead key's 410 `link-off` that is
+never counted as a guess while a live key's join no longer wipes the count,
+every scoped refusal (the list filtered, `wrong-document` on other ids and on
+presence, `owner-only` on create/delete/share/links), an edit link's own PUT
+through the ordinary 409 path, revocation and document deletion turning a
+token `link-off` on its next request, blob visibility and
+`LINK_EDIT_BLOB_BUDGET_BYTES` for edit links, `/api/me`'s `scope`, health's
+`links`/`linksPersist`; under `PERSIST_LINKS=1` the owner token
+(`HMAC(secret, "owner\0" + JOIN_PIN)`, recomputed from the secret file) and
+the links surviving a restart, a new `JOIN_PIN` signing the owner out, the
+short-key warning, an unreadable `links.json` refusing to start; without it a
+restart cancelling everything. Also `TRUST_PROXY=cloudflare` (counting
+`Cf-Connecting-Ip`, a forged X-Forwarded-For buying nothing), and what an
+internet-facing server must not do: serve `DATA_DIR` or a dotfile from the
+static handler, crash on `GET //` (sent with `rawRequest`, which fetch() will
+not), or 500 on a non-ASCII token header. It covers the join PIN
 (open health, gated routes, wrong PIN, the rate limit, the right PIN), the CORS
 allowlist (including the literal `null` origin and static files never getting
 the headers), the 409 compare-and-set, the launcher routes answering 404

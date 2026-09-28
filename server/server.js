@@ -5,15 +5,21 @@
  * scope. No dependencies — plain Node (18+), so the image is just `node:alpine`
  * plus this file and there is nothing to audit but what you can read here.
  *
- * There is no *real* authentication in this process. It is designed to sit
- * behind Cloudflare Access (or a VPN), which rejects unauthenticated requests
- * before they arrive. If you expose this port directly to the internet,
- * anyone who finds it can read and rewrite every document. See DEPLOY.md.
+ * With no JOIN_PIN there is no authentication in this process at all. That
+ * shape is designed to sit behind Cloudflare Access (or a VPN), which rejects
+ * unauthenticated requests before they arrive. If you expose it directly to
+ * the internet, anyone who finds it can read and rewrite every document. See
+ * DEPLOY.md.
  *
- * JOIN_PIN is the one exception, and it is a small one: a shared code that
- * stops a curious neighbour on the same wifi from opening your scripts. It
- * travels in the clear over plain HTTP, so it is a door lock for a LAN, not
- * a substitute for Access on the internet.
+ * JOIN_PIN locks it. On a LAN (the launcher's --host, the desktop app's) it
+ * is a short shared code that travels in the clear over plain HTTP: a door
+ * lock that stops a curious neighbour on the same wifi, no more. Set to a long
+ * random key, with PERSIST_LINKS=1 and TLS in front (a Cloudflare tunnel),
+ * it is the owner's key to a server that faces the internet on its own, and
+ * guests come in through per-document invite links instead of a code — see
+ * "the link store" below. Everything a token can reach is decided in one
+ * place, the gate in handleApi(), from what this process holds and never from
+ * anything the client says about itself.
  *
  * Storage is one JSON file per document in DATA_DIR. That is the whole
  * database: no index to corrupt, and `cp -r` is a valid backup.
@@ -45,6 +51,11 @@ const MAX_BLOB_BYTES = Number(process.env.MAX_BLOB_BYTES || 8 * 1024 * 1024);
    fill the array". The library-wide review credential is one token shared by
    everyone who holds it, so it is one budget shared by all of them. */
 const REVIEW_BLOB_BUDGET = Number(process.env.REVIEW_BLOB_BUDGET_BYTES || 20 * 1024 * 1024);
+/* The same kind of allowance for an EDIT link — a guest who can change one
+   script. Larger, because an editor pastes stills into scenes and not only
+   screenshots into comments; still metered, because "can edit this script"
+   must not become "can fill the array" either. The owner is not metered. */
+const LINK_EDIT_BLOB_BUDGET = Number(process.env.LINK_EDIT_BLOB_BUDGET_BYTES || 100 * 1024 * 1024);
 const REVIEW_BLOB_WINDOW_MS = 60 * 60 * 1000;
 /* Set READ_ONLY=1 to publish a library nobody can write to. */
 const READ_ONLY = process.env.READ_ONLY === "1";
@@ -60,16 +71,27 @@ const NO_API = process.env.NO_API === "1";
  *
  * Empty (the default) means open, exactly as this server has always been.
  * Set it and every /api/* route except /api/health and /api/join needs a
- * token, which a client gets by posting the right PIN once.
+ * token, which a client gets by posting the right PIN once. Whoever holds
+ * THAT token is the owner: every document, every route, unscoped.
  *
- * The token lives in this process's memory and nowhere else: it is minted at
- * startup, never written to disk, never logged, and never put in
+ * The token is never written to disk, never logged, and never put in
  * update-status.json or any file the static handler serves (invariant #29).
- * Restarting the server invalidates every session, which is the right
- * trade for a tool you start when you want to share and close when you stop.
+ * Without PERSIST_LINKS it is minted at startup and lives in this process's
+ * memory only, so restarting the server invalidates every session — the
+ * right trade for a tool you start when you want to share and close when you
+ * stop. With PERSIST_LINKS=1 it is DERIVED instead, HMAC(secret, "owner\0" +
+ * JOIN_PIN) with the secret kept in DATA_DIR/links (see the link store
+ * below): a redeploy keeps the owner signed in, and changing JOIN_PIN is how
+ * the owner signs every one of their devices out at once.
  */
 const JOIN_PIN = String(process.env.JOIN_PIN || "");
-const SESSION_TOKEN = crypto.randomBytes(32).toString("hex");
+/* Replaced at startup under PERSIST_LINKS (loadLinkStore), before the port
+   is opened, so no request ever sees the random one there. */
+let ownerToken = crypto.randomBytes(32).toString("hex");
+/* A key guessable in the time a server stays up, on a server that stays up
+   on the internet. The rate limit below slows a guesser down; it does not
+   make six digits safe to expose, and a warning at startup says so. */
+const OWNER_KEY_MIN = 20;
 
 /* ---------- the review credential ----------
  *
@@ -83,7 +105,8 @@ const SESSION_TOKEN = crypto.randomBytes(32).toString("hex");
  * Both mint the SAME review token, and the role lives with that token in this
  * process's memory — not in anything the client holds, so there is no local
  * state to flip and a reconnect gets the role back rather than losing it.
- * Restarting invalidates them exactly like the join PIN.
+ * Restarting invalidates it, with or without PERSIST_LINKS: it belongs to
+ * the launcher's LAN session, which is the one place that sets it.
  *
  * A review credential without a join PIN would be a lock on a door standing
  * open (with no JOIN_PIN, /api/join hands an EDITOR token to anyone who
@@ -95,62 +118,280 @@ const REVIEW_KEY = String(process.env.REVIEW_KEY || "");
 const REVIEW_ACTIVE = !!(JOIN_PIN && (REVIEW_PIN || REVIEW_KEY) && REVIEW_PIN !== JOIN_PIN);
 const REVIEW_TOKEN = crypto.randomBytes(32).toString("hex");
 
-/* ---------- per-document review links (#63) ----------
+/* ---------- the link store: per-document invite links ----------
  *
  * REVIEW_PIN and REVIEW_KEY above are the operator's own, chosen at launch
- * before any document exists: they are a credential for this LIBRARY, and
- * the launcher prints them saying so.
+ * before any document exists: a credential for this LIBRARY, and the
+ * launcher prints them saying so.
  *
- * The link the app offers is a different thing. It is asked for from inside
- * an open document and it reads as "share THIS script", so it gets a key of
- * its own, minted per document and remembered here — the token it mints
- * carries the document id with it, and the list, read and save routes hold
- * it to that one document. Before this, every review credential read every
- * document on the server and listed the picker; a link meant for one script
- * was a key to the whole library.
+ * A link is a different thing. It is asked for from inside an open document
+ * and reads as "share THIS script", so it carries a key of its own, and the
+ * token that key mints is held to that one document by every route in
+ * handleApi() (#63): the list shows only it, any other id is 403
+ * `wrong-document`, and the routes that are about the library rather than
+ * one script — create, delete, the links themselves, /api/share — are 403
+ * `owner-only`. Before #63 every review credential read every document and
+ * listed the picker; a link meant for one script was a key to the whole
+ * library. Two roles: "review" (read and comment, #30/#71) and "edit"
+ * (change that one script as the owner could, and nothing else). At most one
+ * ACTIVE link per document and role, handed out again on request, so sharing
+ * a link twice does not quietly kill the copy already sent; `replace` is the
+ * explicit way to do that.
  *
- * In memory, per process, exactly like the session token: restarting the
- * server invalidates every link, which is the same trade the join PIN makes.
- * Minted once per document and reused, so handing the link out twice does
- * not quietly invalidate the copy already sent.
+ * Revoking one leaves a tombstone — the sha256 of its key and of its token,
+ * never either itself — so whoever still holds it is told "this link was
+ * switched off" (`link-off`) rather than "wrong PIN", which would send a
+ * guest looking for a code nobody gave them. A tombstone hit is not a guess
+ * and is not rate-limited as one. 2000 kept, oldest dropped: past that a
+ * dead link degrades to the ordinary pin-required, still a refusal.
+ *
+ * WHERE IT LIVES. Without PERSIST_LINKS, in this process's memory and
+ * nowhere else, like the owner token: a restart cancels every link and every
+ * token, the right trade for a LAN session that is started to share and
+ * closed afterwards (the desktop app's --host, start.mjs). With
+ * PERSIST_LINKS=1 — a server that stays up on the internet and gets
+ * redeployed — in DATA_DIR/links/ (0700):
+ *   secret      32 random bytes as hex, made once (0600). The owner token is
+ *               derived from it (see the join PIN above).
+ *   links.json  the active links and the tombstones (0600), rewritten whole
+ *               through writeFileDurable() on every change — and on the disk
+ *               BEFORE a new key is handed out or a revoke is confirmed, so a
+ *               crash can neither lose a link somebody was sent nor bring
+ *               back one that was switched off.
+ * `links` does not end in .json, so the document list skips it, and the
+ * static handler refuses everything under DATA_DIR (insideDataDir below).
+ *
+ * The file holds keys and tokens in the clear. It has to hold the keys (the
+ * owner can copy a link again), and a key mints its token on request, so
+ * hashing the tokens there would protect nothing a stolen file does not
+ * already give away. Its protection is its mode and the volume it is on.
+ *
+ * Lookups are Maps rebuilt from the file at startup, so the gate is O(1)
+ * however many links there are. A plain Map lookup rather than a timing-safe
+ * compare of every record in turn: the key space is 256 bits of randomness,
+ * and walking every record per request would be both slower and, with
+ * hundreds of them, no more constant-time than this.
  */
-const reviewGrantsByDoc = new Map();   /* docId -> { key, token } */
-const reviewGrantsByKey = new Map();   /* key   -> { docId, token } */
-const reviewScopeByToken = new Map();  /* token -> docId */
-const REVIEW_GRANT_MAX = 500;
+const PERSIST_LINKS = process.env.PERSIST_LINKS === "1";
+const LINKS_DIR = path.join(DATA_DIR, "links");
+const LINKS_FILE = path.join(LINKS_DIR, "links.json");
+const LINKS_SECRET_FILE = path.join(LINKS_DIR, "secret");
+const LINK_ROLES = ["edit", "review"];
+const LINK_ID_RE = /^[0-9a-f]{12}$/;
+const LINK_TOMBSTONE_MAX = 2000;
 
-function reviewGrantFor(docId) {
-  let grant = reviewGrantsByDoc.get(docId);
-  if (grant) return grant;
-  /* A library nobody prunes would otherwise grow one grant per document
-     ever shared, for as long as the process runs. Oldest first: Map keeps
-     insertion order, and the oldest link is the one least likely to still
-     be in somebody's inbox. */
-  if (reviewGrantsByDoc.size >= REVIEW_GRANT_MAX) {
-    const oldest = reviewGrantsByDoc.keys().next().value;
-    const gone = reviewGrantsByDoc.get(oldest);
-    reviewGrantsByDoc.delete(oldest);
-    if (gone) { reviewGrantsByKey.delete(gone.key); reviewScopeByToken.delete(gone.token); }
+const linksById = new Map();       /* id    -> record */
+const linkByKey = new Map();       /* key   -> record */
+const linkByToken = new Map();     /* token -> record */
+const linkByDocRole = new Map();   /* docId + "/" + role -> record */
+const linkTombstones = [];         /* oldest first */
+const tombKeyHashes = new Set();
+const tombTokenHashes = new Set();
+
+function docRoleKey(docId, role) {
+  return docId + "/" + role;
+}
+
+function indexLink(rec) {
+  linksById.set(rec.id, rec);
+  linkByKey.set(rec.key, rec);
+  linkByToken.set(rec.token, rec);
+  linkByDocRole.set(docRoleKey(rec.docId, rec.role), rec);
+}
+
+function unindexLink(rec) {
+  linksById.delete(rec.id);
+  linkByKey.delete(rec.key);
+  linkByToken.delete(rec.token);
+  const slot = docRoleKey(rec.docId, rec.role);
+  if (linkByDocRole.get(slot) === rec) linkByDocRole.delete(slot);
+}
+
+function addTombstone(tomb) {
+  linkTombstones.push(tomb);
+  tombKeyHashes.add(tomb.keyHash);
+  tombTokenHashes.add(tomb.tokenHash);
+  while (linkTombstones.length > LINK_TOMBSTONE_MAX) {
+    const oldest = linkTombstones.shift();
+    tombKeyHashes.delete(oldest.keyHash);
+    tombTokenHashes.delete(oldest.tokenHash);
   }
-  grant = {
+}
+
+function activeLink(docId, role) {
+  return linkByDocRole.get(docRoleKey(docId, role)) || null;
+}
+
+function mintLink(docId, role, createdBy) {
+  let id;
+  do { id = crypto.randomBytes(6).toString("hex"); } while (linksById.has(id));
+  const rec = {
+    id,
     key: crypto.randomBytes(24).toString("hex"),
-    token: crypto.randomBytes(32).toString("hex")
+    token: crypto.randomBytes(32).toString("hex"),
+    docId,
+    role,
+    createdAt: new Date().toISOString(),
+    createdBy: createdBy || null
   };
-  reviewGrantsByDoc.set(docId, grant);
-  reviewGrantsByKey.set(grant.key, { docId, token: grant.token });
-  reviewScopeByToken.set(grant.token, docId);
-  return grant;
+  indexLink(rec);
+  return rec;
 }
 
-/* Which document a review token is confined to, or "" for the launch-wide
-   credential, which the operator set deliberately and which is not confined
-   to anything. */
-function reviewScopeOfToken(token) {
-  return reviewScopeByToken.get(String(token || "")) || "";
+/* Off at once: the gate reads this store on every request, so the token's
+   very next request is refused. */
+function revokeLink(rec) {
+  unindexLink(rec);
+  addTombstone({
+    id: rec.id,
+    keyHash: sha256Of(rec.key),
+    tokenHash: sha256Of(rec.token),
+    docId: rec.docId,
+    role: rec.role,
+    revokedAt: new Date().toISOString()
+  });
 }
 
-function reviewScopeOf(req) {
-  return reviewScopeOfToken(req.headers["x-splitpage-token"] || "");
+/* What the owner is shown of a link. Never the token: that is the guest's,
+   and the key is what a link is. */
+function linkAnswer(rec) {
+  return { id: rec.id, role: rec.role, key: rec.key, createdAt: rec.createdAt };
+}
+
+/* The whole store, to disk, one write at a time. Each write takes the store
+   as it stands when the write RUNS, not when it was asked for, so the last
+   one in the chain always carries the latest state and a failed write is
+   repaired by the next. Nothing to do without PERSIST_LINKS. */
+let linksWriting = Promise.resolve();
+
+function saveLinks() {
+  if (!PERSIST_LINKS) return Promise.resolve();
+  const write = () => writeFileDurable(LINKS_FILE, JSON.stringify({
+    version: 1,
+    links: Array.from(linksById.values()),
+    revoked: linkTombstones
+  }, null, 2) + "\n", 0o600);
+  const next = linksWriting.then(write, write);
+  linksWriting = next.catch(() => {});
+  return next;
+}
+
+/* The active link for this document and role, or a new one. Called inside
+   the document's lock, so it cannot race a DELETE of the same document into
+   minting a link for a script that is already gone.
+
+   A new key goes to disk before it is handed out: a key the next restart
+   would not know is a link that dies silently in somebody's inbox. If that
+   write fails, the new link is dropped again (it was never seen), and the one
+   it was replacing stays revoked — the safe direction to be wrong in. */
+async function linkFor(docId, role, opts) {
+  const existing = activeLink(docId, role);
+  if (existing && !(opts && opts.replace)) return { link: existing, created: false };
+  if (existing) revokeLink(existing);
+  const rec = mintLink(docId, role, opts && opts.by);
+  try {
+    await saveLinks();
+  } catch (err) {
+    unindexLink(rec);
+    throw err;
+  }
+  return { link: rec, created: true };
+}
+
+/* Deleting a document revokes every link to it. */
+function revokeLinksOf(docId) {
+  let n = 0;
+  for (const role of LINK_ROLES) {
+    const rec = activeLink(docId, role);
+    if (rec) { revokeLink(rec); n++; }
+  }
+  return n;
+}
+
+function cleanLinkRecord(r) {
+  if (!r || typeof r !== "object") return null;
+  if (!LINK_ID_RE.test(String(r.id)) || !isValidId(r.docId) || LINK_ROLES.indexOf(r.role) === -1) return null;
+  if (typeof r.key !== "string" || !/^[0-9a-f]{48,128}$/.test(r.key)) return null;
+  if (typeof r.token !== "string" || !/^[0-9a-f]{64}$/.test(r.token)) return null;
+  return {
+    id: r.id, key: r.key, token: r.token, docId: r.docId, role: r.role,
+    createdAt: typeof r.createdAt === "string" ? r.createdAt : null,
+    createdBy: typeof r.createdBy === "string" ? r.createdBy : null
+  };
+}
+
+function cleanTombstone(t) {
+  if (!t || typeof t !== "object") return null;
+  if (!SHA_RE.test(String(t.keyHash)) || !SHA_RE.test(String(t.tokenHash))) return null;
+  return {
+    id: String(t.id || ""), keyHash: t.keyHash, tokenHash: t.tokenHash,
+    docId: String(t.docId || ""), role: String(t.role || ""),
+    revokedAt: typeof t.revokedAt === "string" ? t.revokedAt : null
+  };
+}
+
+/* Only under PERSIST_LINKS, once, before the port opens. A secret or a
+   links.json that is there but unreadable stops the server rather than
+   being quietly replaced: replacing the secret signs the owner out, and
+   replacing the file would drop every link and every tombstone — neither is
+   a thing to do to someone's server without telling them. Missing is
+   simply a first start. */
+async function loadLinkStore() {
+  await fsp.mkdir(LINKS_DIR, { recursive: true, mode: 0o700 });
+  /* mkdir's mode is only for a directory it creates, and only after the
+     umask; a folder restored from a backup keeps whatever it had. */
+  await fsp.chmod(LINKS_DIR, 0o700).catch(() => {});
+
+  let secret;
+  try {
+    secret = (await fsp.readFile(LINKS_SECRET_FILE, "utf8")).trim();
+  } catch (err) {
+    if (!err || err.code !== "ENOENT") throw err;
+    secret = crypto.randomBytes(32).toString("hex");
+    await writeFileDurable(LINKS_SECRET_FILE, secret + "\n", 0o600);
+  }
+  if (!/^[0-9a-f]{64}$/.test(secret)) {
+    throw new Error(LINKS_SECRET_FILE + " is not 64 hex characters. Restore it from a backup, " +
+                    "or delete it to start a new one (which signs every owner device out).");
+  }
+  await fsp.chmod(LINKS_SECRET_FILE, 0o600).catch(() => {});
+  ownerToken = crypto.createHmac("sha256", Buffer.from(secret, "hex"))
+    .update("owner\0" + JOIN_PIN).digest("hex");
+
+  let raw = null;
+  try {
+    raw = await fsp.readFile(LINKS_FILE, "utf8");
+  } catch (err) {
+    if (!err || err.code !== "ENOENT") throw err;
+  }
+  if (raw === null) return;
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(LINKS_FILE + " is not valid JSON. Restore it from a backup, or move it " +
+                    "aside to start with no links (every link handed out stops working).", { cause: err });
+  }
+  await fsp.chmod(LINKS_FILE, 0o600).catch(() => {});
+  let skipped = 0;
+  for (const t of (data && Array.isArray(data.revoked)) ? data.revoked : []) {
+    const tomb = cleanTombstone(t);
+    if (tomb) addTombstone(tomb); else skipped++;
+  }
+  for (const r of (data && Array.isArray(data.links)) ? data.links : []) {
+    const rec = cleanLinkRecord(r);
+    /* A record this code could not have written — a second active link for
+       the same document and role, one whose key is also a tombstone — is
+       left out rather than guessed about. */
+    if (!rec || linksById.has(rec.id) || linkByKey.has(rec.key) || linkByToken.has(rec.token) ||
+        activeLink(rec.docId, rec.role) || tombKeyHashes.has(sha256Of(rec.key))) {
+      skipped++;
+      continue;
+    }
+    indexLink(rec);
+  }
+  if (skipped) console.warn("[splitpage] " + skipped + " unreadable entr" + (skipped === 1 ? "y" : "ies") +
+                            " in " + LINKS_FILE + " were ignored");
 }
 
 /* Origins allowed to call this API from another page — a comma list, empty
@@ -195,6 +436,11 @@ const MIME = {
  * permission check, because by the time a request is here Access has already
  * made that decision. Behind a VPN instead, these headers are simply absent
  * and the app falls back to asking for a name, exactly like the local build.
+ *
+ * Without Access in front (a tunnel on its own, a LAN) the header is whatever
+ * the caller wrote, which is exactly as trustworthy as the `by` name every
+ * write already carries in its body — so it is still only ever a label, and
+ * nothing that decides what a token may do ever reads it.
  */
 function identityOf(req) {
   const email = String(req.headers["cf-access-authenticated-user-email"] || "").trim();
@@ -211,11 +457,13 @@ function identityOf(req) {
 
 /* ---------- the join PIN, CORS, and the launch token ----------
  *
- * Everything in this block is about *who may call the API*, and it is the
- * only place in the process that decides that. Three separate keys, on
- * purpose: the PIN is shared with people, the session token is what the
- * browser then carries, and the launch token belongs to the launcher that
- * started this process and to nothing else.
+ * Everything in this block is about *who is calling the API*: which token
+ * this is (sessionOfToken), and nothing else in the process answers that.
+ * What each answer may then reach is decided in one place too, the gate at
+ * the top of handleApi(). Separate keys, on purpose: the PIN is shared with
+ * people, the owner token is what their browser then carries, a link's key
+ * and token are one guest's way into one document, and the launch token
+ * belongs to the launcher that started this process and to nothing else.
  */
 
 /* Constant-time by construction: both sides are hashed to a fixed 32 bytes
@@ -230,7 +478,13 @@ function sameSecret(given, expected) {
 /* A wrong PIN is cheap to guess six digits at a time, so make guessing
    expensive: ten failures from one address in a minute and that address is
    told to come back later. In memory, per process — a launcher that runs for
-   an afternoon does not need a store for this, and neither does a container. */
+   an afternoon does not need a store for this, and neither does a container.
+
+   Only the JOIN PIN itself clears an address's count. A link key or the
+   review code used to as well, and every guest holds one of those: nine
+   wrong guesses, one good join with the link they were sent, nine more, for
+   as long as they liked — a reviewer walking six digits up to the editor's
+   PIN at nine tenths of full speed. */
 const PIN_WINDOW_MS = 60 * 1000;
 const PIN_MAX_FAILURES = 10;
 const pinFailures = new Map();
@@ -254,8 +508,22 @@ const pinFailures = new Map();
  * that is not plausibly an address is ignored rather than used as a key — a
  * header of junk should fall back to the socket, not mint a bucket named after
  * the junk.
+ *
+ * BEHIND CLOUDFLARE THAT FIRST ENTRY IS THE CALLER'S TO CHOOSE. Cloudflare
+ * appends to an X-Forwarded-For the client already sent rather than replacing
+ * it, so "1.2.3.4, <real client>" arrives here with the invented address in
+ * front, and TRUST_PROXY=1 hands a guesser a fresh bucket per guess — the
+ * very thing the default exists to stop. TRUST_PROXY=cloudflare reads
+ * Cf-Connecting-Ip instead, which Cloudflare sets itself and overwrites
+ * whatever a client sent: one address, the one that connected to Cloudflare.
+ * It is only as good as "nothing but Cloudflare can reach this port" (a
+ * tunnel, or a firewall that says so), which is what setting it asserts.
+ * TRUST_PROXY=1 keeps its old meaning for a proxy that does replace the
+ * header (nginx with `proxy_set_header X-Forwarded-For $remote_addr`).
  */
-const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const TRUST_PROXY_MODE = String(process.env.TRUST_PROXY || "").trim().toLowerCase();
+const TRUST_PROXY = TRUST_PROXY_MODE === "1";
+const TRUST_CLOUDFLARE = TRUST_PROXY_MODE === "cloudflare";
 const IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
 
 function forwardedIp(req) {
@@ -267,8 +535,19 @@ function forwardedIp(req) {
   return IP_RE.test(first) ? first : "";
 }
 
+/* One address or nothing. Node joins a header it does not know that arrives
+   twice with ", ", which IP_RE refuses — so a second copy smuggled in beside
+   Cloudflare's falls back to the socket rather than picking either. */
+function cloudflareIp(req) {
+  const raw = String(req.headers["cf-connecting-ip"] || "").trim().replace(/^\[|\]$/g, "");
+  return IP_RE.test(raw) ? raw : "";
+}
+
 function clientIp(req) {
-  if (TRUST_PROXY) {
+  if (TRUST_CLOUDFLARE) {
+    const connecting = cloudflareIp(req);
+    if (connecting) return connecting;
+  } else if (TRUST_PROXY) {
     const forwarded = forwardedIp(req);
     if (forwarded) return forwarded;
   }
@@ -297,30 +576,36 @@ function noteFailure(ip) {
 }
 
 function sameToken(given, token) {
-  /* length check first: timingSafeEqual throws on a length mismatch, and the
-     token's length is not a secret (it is always 64 hex characters) */
-  if (given.length !== token.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token));
+  /* Length check first: timingSafeEqual throws on a length mismatch, and the
+     token's length is not a secret (it is always 64 hex characters). In
+     BYTES, not characters — a header is read as latin1, so one "é" among 64
+     characters is 65 bytes, and comparing string lengths let that through to
+     a throw: a 500 and a stack trace in the log for anyone who sent one. */
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(String(token));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-/* "edit", "review", or null for a caller carrying neither token. The role is
-   read from the token on every request, so it cannot be stale and cannot be
-   asserted by the client. */
-function roleOfToken(given) {
+/* Who a token is, read from what this process holds on every request, so it
+   cannot be stale and cannot be asserted by the client:
+     { role: "edit" | "review", scope, token }  scope "" for the owner and the
+                                                library-wide review credential,
+                                                a document id for a link;
+     { revoked: true }                          a link that was switched off;
+     null                                       nobody. */
+function sessionOfToken(given) {
   const token = String(given == null ? "" : given);
-  if (sameToken(token, SESSION_TOKEN)) return "edit";
-  if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return "review";
-  /* A per-document review link's own token (#63). A plain Map lookup rather
-     than a timing-safe compare of every grant in turn: the key space is 256
-     bits of randomness, and walking the whole map per request would be both
-     slower and, with hundreds of grants, no more constant-time than this. */
-  if (REVIEW_ACTIVE && reviewScopeByToken.has(token)) return "review";
+  if (!token) return null;
+  if (sameToken(token, ownerToken)) return { role: "edit", scope: "", token };
+  if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return { role: "review", scope: "", token };
+  const link = linkByToken.get(token);
+  if (link) return { role: link.role, scope: link.docId, token };
+  if (tombTokenHashes.size && tombTokenHashes.has(sha256Of(token))) return { revoked: true };
   return null;
 }
 
-function roleOf(req) {
-  return roleOfToken(req.headers["x-splitpage-token"] || "");
-}
+/* An open server (no JOIN_PIN) asks nobody anything: everyone is the owner. */
+const OPEN_SESSION = Object.freeze({ role: "edit", scope: "", token: "" });
 
 /* Echoed only for an origin that was explicitly allowed, never `*`, and never
    with Allow-Credentials: a cross-origin caller proves itself with the token
@@ -543,13 +828,19 @@ async function syncDir(dir) {
    reach the disk before the bytes it points at do, and a power cut between
    the two leaves the document there and EMPTY — the one outcome this whole
    dance exists to prevent (#74). So: write, fsync the temp file, rename,
-   then fsync the directory that now holds the new name. */
-async function writeFileDurable(target, data) {
+   then fsync the directory that now holds the new name.
+
+   `mode` is for a file that must never be readable by anyone else (the link
+   store's secret and links.json, 0600). It is set when the temp file is
+   CREATED, so there is no moment at which the secret sits on the disk with
+   wider permissions waiting for a chmod. Omitted, it is Node's own default,
+   which is what documents and blobs have always been written with. */
+async function writeFileDurable(target, data, mode) {
   const tmp = target + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
   try {
     let handle;
     try {
-      handle = await fsp.open(tmp, "w");
+      handle = await fsp.open(tmp, "w", mode === undefined ? 0o666 : mode);
       await handle.writeFile(data, typeof data === "string" ? "utf8" : undefined);
       await handle.sync();
     } finally {
@@ -740,9 +1031,10 @@ async function summaryOf(id) {
 
 function launcherAllowed(req) {
   if (!LAUNCH_TOKEN || HOST !== "127.0.0.1") return false;
-  const given = String(req.headers["x-splitpage-launch"] || "");
-  if (given.length !== LAUNCH_TOKEN.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(LAUNCH_TOKEN));
+  /* sameToken compares bytes: a header of non-ASCII characters used to reach
+     timingSafeEqual with mismatched lengths and throw, which is a 500 here
+     instead of the 404 these routes promise. */
+  return sameToken(String(req.headers["x-splitpage-launch"] || ""), LAUNCH_TOKEN);
 }
 
 function handleLauncher(req, res, parts) {
@@ -1340,13 +1632,6 @@ async function hasBlob(sha) {
   }
 }
 
-/* The shas in `shas` this server does not hold. */
-async function blobsMissing(shas) {
-  const missing = [];
-  for (const sha of shas) if (!(await hasBlob(sha))) missing.push(sha);
-  return missing;
-}
-
 /* Best effort, never awaited by anything that answers: a blob in use is a
    blob whose mtime is recent, and that is all a later collector would ask. */
 function touchBlobs(shas) {
@@ -1374,10 +1659,20 @@ async function writeBlob(sha, buf) {
    is gone (`acceptMissing`). Empty means the write may go ahead.
    `docId` names the stored document, or is "" for a new one; its refs are
    only looked up when something is actually missing, which on a server
-   holding every image is never. */
-async function refusedRefs(incoming, docId, acceptMissing) {
+   holding every image is never.
+
+   `visible` is blobVisibility()'s answer for a link: an image it can neither
+   see in its document nor has uploaded itself counts as missing whether or
+   not it is here, exactly as on /missing and on a comment — an edit link's
+   save is not a way to ask what the rest of the library holds either. The
+   client's answer to a 422 is to upload the bytes, which it has, and which
+   then count as its own. */
+async function refusedRefs(incoming, docId, acceptMissing, visible) {
   if (!incoming.size) return [];
-  const missing = await blobsMissing(incoming);
+  const missing = [];
+  for (const sha of incoming) {
+    if ((visible && !visible(sha)) || !(await hasBlob(sha))) missing.push(sha);
+  }
   if (!missing.length) return [];
   const accept = new Set(Array.isArray(acceptMissing) ? acceptMissing.filter(isSha) : []);
   const stored = docId ? await storedRefsOf(docId) : null;
@@ -1386,15 +1681,15 @@ async function refusedRefs(incoming, docId, acceptMissing) {
 
 /* The images a new comment or reply body names that it may not name: ones
    this server does not hold (the same 422 a save gets, and the same excuse
-   for one its document already names), and — for a per-document review link
-   — ones it can neither see in its document nor has uploaded itself, which
-   are answered as missing whether or not they are here, so posting a comment
-   is not a way to ask what the rest of the library holds. */
-async function commentRefsRefused(req, role, docId, html) {
+   for one its document already names), and — for a per-document link, of
+   either role — ones it can neither see in its document nor has uploaded
+   itself, which are answered as missing whether or not they are here, so
+   posting a comment is not a way to ask what the rest of the library holds. */
+async function commentRefsRefused(session, docId, html) {
   const refs = new Set();
   if (typeof html === "string" && html.indexOf("data-blob") !== -1) blobAttrsIn(html, refs);
   if (!refs.size) return { refs, missing: [] };
-  const visible = await blobVisibility(req, role);
+  const visible = await blobVisibility(session);
   let stored;
   const missing = [];
   for (const sha of refs) {
@@ -1412,28 +1707,37 @@ function clientKnowsBlobs(req) {
   return isFinite(v) && v >= CLIENT_BLOBS;
 }
 
-/* ---------- a reviewer's image budget ----------
+/* ---------- a guest's image budget ----------
  *
  * A reviewer may upload the screenshots they paste into comments (D6), up to
- * REVIEW_BLOB_BUDGET bytes per token per rolling hour. The bytes are RESERVED
- * before the body is read — the declared length, or the whole per-blob cap
- * for a chunked upload — so ten uploads started at once cannot each find the
- * budget empty; the reservation is settled to what was actually stored when
- * the upload ends, and to nothing when it fails.
+ * REVIEW_BLOB_BUDGET bytes per token per rolling hour; an edit link, the
+ * stills it pastes into its one script, up to LINK_EDIT_BLOB_BUDGET. The
+ * owner is not metered. The bytes are RESERVED before the body is read — the
+ * declared length, or the whole per-blob cap for a chunked upload — so ten
+ * uploads started at once cannot each find the budget empty; the reservation
+ * is settled to what was actually stored when the upload ends, and to nothing
+ * when it fails.
  *
  * The ledger also remembers which shas a token has uploaded. A per-document
- * review link sees only the images its document names — and the images it
- * has itself handed over, because it holds those bytes already. That is what
- * lets a comment carrying a fresh screenshot pass the 422 check below without
- * the check telling a link-holder whether some OTHER document on this server
- * holds an image with that hash.
+ * link sees only the images its document names — and the images it has
+ * itself handed over, because it holds those bytes already. That is what lets
+ * a comment carrying a fresh screenshot, or an edit link's save carrying a
+ * fresh still, pass the 422 check without the check telling a link-holder
+ * whether some OTHER document on this server holds an image with that hash.
  */
-const reviewLedgers = new Map();   /* token -> [{ at, bytes, sha }] */
+const blobLedgers = new Map();   /* token -> [{ at, bytes, sha }] */
 
-function reviewLedger(token, now) {
-  const list = (reviewLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
-  if (list.length) reviewLedgers.set(token, list); else reviewLedgers.delete(token);
+function blobLedger(token, now) {
+  const list = (blobLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
+  if (list.length) blobLedgers.set(token, list); else blobLedgers.delete(token);
   return list;
+}
+
+/* Bytes per rolling hour for this caller, or 0 for unmetered (the owner). */
+function blobBudgetOf(session) {
+  if (session.role === "review") return REVIEW_BLOB_BUDGET;
+  if (session.scope) return LINK_EDIT_BLOB_BUDGET;
+  return 0;
 }
 
 /* A file costs at least a block on the disk, and a floor on the charge is
@@ -1444,32 +1748,30 @@ function blobCharge(bytes) {
   return Math.max(BLOB_MIN_CHARGE, bytes);
 }
 
-function reviewBytesUsed(token, now) {
+function blobBytesUsed(token, now) {
   let used = 0;
-  for (const e of reviewLedger(token, now)) used += e.bytes;
+  for (const e of blobLedger(token, now)) used += e.bytes;
   return used;
 }
 
-function reviewUploaded(token, sha) {
-  return reviewLedger(token, Date.now()).some((e) => e.sha === sha);
+function blobUploaded(token, sha) {
+  return blobLedger(token, Date.now()).some((e) => e.sha === sha);
 }
 
-/* Which shas this caller may learn anything about. Everything, for an editor
-   and for the library-wide review credential (either can read every document
-   there is). For a per-document review link: what its document names, plus
-   what it uploaded itself. */
-async function blobVisibility(req, role) {
-  if (role !== "review") return null;
-  const scope = reviewScopeOf(req);
-  if (!scope) return null;
-  const token = String(req.headers["x-splitpage-token"] || "");
-  const refs = (await storedRefsOf(scope)) || new Set();
-  return (sha) => refs.has(sha) || reviewUploaded(token, sha);
+/* Which shas this caller may learn anything about, as a predicate — or null
+   for "everything": the owner and the library-wide review credential, either
+   of which can read every document there is. For a per-document link of
+   either role: what its document's stored state names, plus what it uploaded
+   itself. */
+async function blobVisibility(session) {
+  if (!session || !session.scope) return null;
+  const refs = (await storedRefsOf(session.scope)) || new Set();
+  return (sha) => refs.has(sha) || blobUploaded(session.token, sha);
 }
 
 /* GET, PUT and POST /missing under /api/blobs. Called after the gate, with
-   the caller's role. */
-async function handleBlobs(req, res, parts, role) {
+   who the caller is. */
+async function handleBlobs(req, res, parts, session) {
   if (parts[2] === "missing" && parts.length === 3) {
     if (req.method !== "POST") return sendJson(res, 405, { error: "method-not-allowed" });
     const body = await readBody(req, MISSING_BODY);
@@ -1478,7 +1780,7 @@ async function handleBlobs(req, res, parts, role) {
       return sendJson(res, 400, { error: "bad-shas" });
     }
     const unique = Array.from(new Set(shas));
-    const visible = await blobVisibility(req, role);
+    const visible = await blobVisibility(session);
     /* A per-document link is told the truth about what it may see, and that
        everything else is missing. "Missing" costs it one upload of bytes it
        already holds; the truth would tell it what the rest of the library
@@ -1496,7 +1798,7 @@ async function handleBlobs(req, res, parts, role) {
 
   if (req.method === "GET") {
     if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
-    const visible = await blobVisibility(req, role);
+    const visible = await blobVisibility(session);
     /* Not "forbidden": a link that may not see a blob is told it is not
        there, exactly as if it were not, so asking reveals nothing. */
     if (visible && !visible(sha)) return sendJson(res, 404, { error: "not-found" });
@@ -1537,7 +1839,7 @@ async function handleBlobs(req, res, parts, role) {
   if (req.method === "PUT") {
     /* Everything that can refuse this without the bytes does so before a
        byte is read (#74): the library, the hash's shape, the declared size,
-       and a reviewer's budget. */
+       and a guest's budget. */
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
     const declared = req.headers["content-length"] !== undefined
@@ -1546,23 +1848,27 @@ async function handleBlobs(req, res, parts, role) {
       return sendJson(res, 413, { error: "too-large" });
     }
     let entry = null;
-    const token = String(req.headers["x-splitpage-token"] || "");
-    if (role === "review") {
+    const token = session.token;
+    const budget = blobBudgetOf(session);
+    if (budget) {
       const now = Date.now();
       const reserve = blobCharge(isFinite(declared) && declared >= 0 ? declared : MAX_BLOB_BYTES);
-      if (reviewBytesUsed(token, now) + reserve > REVIEW_BLOB_BUDGET) {
+      /* `review-budget` for an edit link too: it is the answer the client
+         already knows and words as "this link's image allowance is used up
+         for now", which is exactly as true of an edit link. */
+      if (blobBytesUsed(token, now) + reserve > budget) {
         return sendJson(res, 429, { error: "review-budget" });
       }
       entry = { at: now, bytes: reserve, sha: "" };
-      const list = reviewLedger(token, now);
+      const list = blobLedger(token, now);
       list.push(entry);
-      reviewLedgers.set(token, list);
+      blobLedgers.set(token, list);
     }
     try {
       const buf = await readRawBody(req, MAX_BLOB_BYTES);
       if (sha256Of(buf) !== sha) return sendJson(res, 400, { error: "hash-mismatch" });
       if (!sniffImageMime(buf)) return sendJson(res, 415, { error: "unsupported-type" });
-      const visible = await blobVisibility(req, role);
+      const visible = await blobVisibility(session);
       const truthful = !visible || visible(sha);
       let present = false;
       if (await hasBlob(sha)) {
@@ -1592,7 +1898,7 @@ async function handleBlobs(req, res, parts, role) {
       /* Refused, failed, or free: nothing charged, and no entry left behind
          for a caller to grow the ledger with. */
       if (entry) {
-        const list = reviewLedgers.get(token);
+        const list = blobLedgers.get(token);
         const at = list ? list.indexOf(entry) : -1;
         if (at !== -1) list.splice(at, 1);
       }
@@ -1600,6 +1906,75 @@ async function handleBlobs(req, res, parts, role) {
   }
 
   return sendJson(res, 405, { error: "method-not-allowed" });
+}
+
+/* ---------- the links API ----------
+ *
+ *   GET    /api/docs/:id/links           the active links, {links:[{id, role, key, createdAt}]}
+ *   POST   /api/docs/:id/links           {role, replace?} -> the active one (200) or a new one (201)
+ *   DELETE /api/docs/:id/links/:linkId   revoke it, now
+ *
+ * The owner's, and nobody else's: a guest on a link of either role, and the
+ * library-wide review credential, get 403 `owner-only`. A link on ANOTHER
+ * document never gets this far — the scope check in handleApi() answers
+ * `wrong-document` first, like every other route under a document id.
+ * Nothing to mint without a JOIN_PIN (409 `no-pin`): on an open server every
+ * caller is already the owner, and a link would be a lesser key to a door
+ * standing open. Under READ_ONLY an edit link is refused — it would be a key
+ * to nothing — while a review link, and revoking anything, still work.
+ *
+ * GET answers even for a document that is no longer there, so that links
+ * left over from a script removed by hand can still be seen and revoked;
+ * POST needs the document (404 `not-found`), and runs under its lock so it
+ * cannot race a DELETE into minting a link to a script that just went.
+ * The token is never in an answer here: it is the guest's, and the key is
+ * what a link is.
+ */
+async function handleLinks(req, res, parts, id, session, who) {
+  if (parts.length > 5) return sendJson(res, 404, { error: "not-found" });
+  const linkId = parts[4];
+  const allowed = linkId === undefined
+    ? (req.method === "GET" || req.method === "POST")
+    : req.method === "DELETE";
+  if (!allowed) return sendJson(res, 405, { error: "method-not-allowed" });
+  /* On the role alone, before the body or the store is looked at. */
+  if (session.scope || session.role !== "edit") return sendJson(res, 403, { error: "owner-only" });
+  if (!JOIN_PIN) return sendJson(res, 409, { error: "no-pin" });
+
+  if (req.method === "GET") {
+    const links = [];
+    for (const role of LINK_ROLES) {
+      const rec = activeLink(id, role);
+      if (rec) links.push(linkAnswer(rec));
+    }
+    return sendJson(res, 200, { links });
+  }
+
+  if (req.method === "POST") {
+    /* A role and a flag: the PIN-sized cap, not a document's. */
+    const body = await readBody(req, SMALL_BODY);
+    const role = body && body.role;
+    if (LINK_ROLES.indexOf(role) === -1) return sendJson(res, 400, { error: "bad-role" });
+    if (READ_ONLY && role === "edit") return sendJson(res, 403, { error: "read-only" });
+    return withDocLock(id, async () => {
+      if (!(await readDocMeta(id))) return sendJson(res, 404, { error: "not-found" });
+      const { link, created } = await linkFor(id, role, { replace: body.replace === true, by: who.name });
+      return sendJson(res, created ? 201 : 200, linkAnswer(link));
+    });
+  }
+
+  /* DELETE. `no-such-link` rather than `not-found`: the client reads a bare
+     not-found under a document id as "the script is gone", and a link that
+     was already revoked is not that. */
+  const rec = LINK_ID_RE.test(linkId) ? linksById.get(linkId) : null;
+  if (!rec || rec.docId !== id) return sendJson(res, 404, { error: "no-such-link" });
+  revokeLink(rec);
+  /* Off in memory already, so the token is refused from its next request
+     whatever happens here; the write is what keeps it off after a restart.
+     If it fails the answer is a 500 and the next write of the store carries
+     the revoke with it. */
+  await saveLinks();
+  return sendJson(res, 200, { ok: true });
 }
 
 /* ---------- API ---------- */
@@ -1618,9 +1993,18 @@ async function handleApi(req, res, url) {
       mode: "server",
       readOnly: READ_ONLY,
       authRequired: !!JOIN_PIN,
-      /* whether a second, comment-only credential exists at all — not what
-         it is. A client needs this to know a review link is worth offering */
-      reviewAvailable: REVIEW_ACTIVE,
+      /* Whether a comment-only link can be had here at all — never what it
+         is. A client needs this to know a review link is worth offering.
+         It used to mean "the launcher set a review credential", because the
+         per-document links rode on it; they have their own store now and
+         exist wherever a JOIN_PIN does (with no PIN there is nothing for a
+         link to be a lesser key to). */
+      reviewAvailable: !!JOIN_PIN,
+      /* This server has the per-document invite links API
+         (/api/docs/:id/links, both roles), and whether they — and the
+         owner's sign-in — survive a restart (PERSIST_LINKS). */
+      links: 1,
+      linksPersist: PERSIST_LINKS,
       /* This server stores images as blobs under /api/blobs (#82). A client
          keeps its images as references only against a server that says so. */
       blobs: 1,
@@ -1632,7 +2016,7 @@ async function handleApi(req, res, url) {
      route wants. Rate-limited per address so the six digits cannot simply be
      enumerated. */
   if (parts[1] === "join" && req.method === "POST") {
-    if (!JOIN_PIN) return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit", open: true });
+    if (!JOIN_PIN) return sendJson(res, 200, { token: ownerToken, role: "edit", open: true });
     const ip = clientIp(req);
     if (recentFailures(ip).length >= PIN_MAX_FAILURES) {
       return sendJson(res, 429, { error: "too-many-attempts" });
@@ -1642,21 +2026,28 @@ async function handleApi(req, res, url) {
        rather than a document-sized one (#74). */
     const body = await readBody(req, SMALL_BODY);
     /* The join PIN is checked first, so a review PIN set to the same digits
-       by mistake can never take the host's own session down to read-only. */
+       by mistake can never take the host's own session down to read-only.
+       The only success that clears this address's count (see pinFailures). */
     if (sameSecret(body && body.pin, JOIN_PIN)) {
       pinFailures.delete(ip);
-      return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit" });
+      return sendJson(res, 200, { token: ownerToken, role: "edit" });
     }
-    /* A per-document review link (#63): its key names one document, and the
-       token it hands back is held to that document by every route below.
-       Checked before the launch-wide credential so a link always wins over
-       the library-wide one, never the other way round. */
-    if (REVIEW_ACTIVE && body && typeof body.key === "string") {
-      const grant = reviewGrantsByKey.get(body.key);
-      if (grant) {
-        pinFailures.delete(ip);
-        return sendJson(res, 200, { token: grant.token, role: "review", docId: grant.docId });
-      }
+    const key = body && typeof body.key === "string" ? body.key : "";
+    /* A per-document link (#63): its key names one document and one role,
+       and the token it hands back is held to that document by every route
+       below. Checked before the launch-wide credential so a link always
+       wins over the library-wide one, never the other way round. */
+    const link = key ? linkByKey.get(key) : null;
+    if (link) {
+      return sendJson(res, 200, { token: link.token, role: link.role, docId: link.docId, scope: link.docId });
+    }
+    /* A link that was switched off. Said so, with its own status, so the
+       page can tell a guest "this link no longer works" instead of asking
+       for a PIN nobody gave them — and not counted as a guess: it is not
+       one, and a guest re-opening a dead link five times should not lock
+       out the house they share an address with. */
+    if (key && tombKeyHashes.has(sha256Of(key))) {
+      return sendJson(res, 410, { error: "link-off" });
     }
     /* Either half of the LIBRARY-wide review credential: the code someone
        was read out, or the key the launcher printed. Deliberately not
@@ -1664,7 +2055,6 @@ async function handleApi(req, res, url) {
        existed and the launcher says as much when it prints it. */
     if (REVIEW_ACTIVE && ((REVIEW_PIN && sameSecret(body && body.pin, REVIEW_PIN)) ||
                           (REVIEW_KEY && sameSecret(body && body.key, REVIEW_KEY)))) {
-      pinFailures.delete(ip);
       return sendJson(res, 200, { token: REVIEW_TOKEN, role: "review" });
     }
     noteFailure(ip);
@@ -1688,6 +2078,11 @@ async function handleApi(req, res, url) {
      Both roles are here: a review viewer (#30) is someone else in the
      document and shows up like anybody else.
 
+     A link is held to its own document here as everywhere else. It used not
+     to be — presence checked the token and never its scope, so a review
+     link could beat about any document id it liked and be told who was in
+     that one, where they were, and what rev it was at.
+
      It reads one thing off the disk, added by #69: the document's rev, from
      its head line, which is what makes this the pull channel as well as the
      listing (presenceRev above). It still WRITES nothing but the in-memory
@@ -1700,15 +2095,18 @@ async function handleApi(req, res, url) {
        header — so the body is read with the small cap, which a heartbeat has
        never come close to. */
     const given = String(req.headers["x-splitpage-token"] || "");
-    const headerRole = JOIN_PIN ? roleOfToken(given) : "edit";
-    if (JOIN_PIN && given && !headerRole) return sendJson(res, 401, { error: "pin-required" });
+    const fromHeader = JOIN_PIN ? sessionOfToken(given) : OPEN_SESSION;
+    if (fromHeader && fromHeader.revoked) return sendJson(res, 401, { error: "link-off" });
+    if (JOIN_PIN && given && !fromHeader) return sendJson(res, 401, { error: "pin-required" });
     const body = await readBody(req, SMALL_BODY);
-    const role = headerRole || (JOIN_PIN ? roleOfToken(body && body.token) : "edit");
-    if (!role) return sendJson(res, 401, { error: "pin-required" });
+    const session = fromHeader || sessionOfToken(body && body.token);
+    if (session && session.revoked) return sendJson(res, 401, { error: "link-off" });
+    if (!session) return sendJson(res, 401, { error: "pin-required" });
 
     const docId = body && body.docId;
     const me = presenceHandle(body && body.id);
     if (!isValidId(docId) || !me) return sendJson(res, 400, { error: "bad-presence" });
+    if (session.scope && session.scope !== docId) return sendJson(res, 403, { error: "wrong-document" });
 
     if (body && body.gone) {
       /* A tab that is going away. Answering with the listing would be
@@ -1784,28 +2182,45 @@ async function handleApi(req, res, url) {
 
      JSON, deliberately: the client treats a non-JSON answer as a lapsed
      Cloudflare Access session and reloads the page to sign in again, which
-     would be exactly the wrong move here. */
-  const role = JOIN_PIN ? roleOf(req) : "edit";
-  if (!role) {
+     would be exactly the wrong move here.
+
+     Who the caller is — role AND scope — comes from sessionOfToken(), which
+     reads this process's own store on every request. A link revoked a moment
+     ago is refused here on its very next request, as `link-off` rather than
+     pin-required, so the page can say "this link was switched off" instead
+     of asking a guest for a PIN they were never given. */
+  const session = JOIN_PIN ? sessionOfToken(req.headers["x-splitpage-token"] || "") : OPEN_SESSION;
+  if (session && session.revoked) return sendJson(res, 401, { error: "link-off" });
+  if (!session) {
     return sendJson(res, 401, { error: "pin-required" });
   }
+  const role = session.role;
+  /* A document id for a link's token, "" for the owner and for the
+     library-wide review credential. Everything below that is about more than
+     one script — the list, create, delete, the links, /api/share — asks this
+     before anything else. */
+  const scope = session.scope;
 
   /* Where the client learns what it is allowed to do — from the token it
      already holds, on every load and every reconnect, rather than from
      anything it stored for itself. */
   if (parts[1] === "me" && req.method === "GET") {
-    return sendJson(res, 200, Object.assign({ role }, who));
+    return sendJson(res, 200, Object.assign({ role, scope }, who));
   }
 
   /* What the host needs to hand a review link out: the KEY that link
-     carries, never the review PIN itself, and only to someone who is
-     already an editor here — a reviewer asking has nothing to share and
-     gets a refusal. It is answered over the API and never written into
+     carries, never the review PIN itself, and only to the owner — a
+     reviewer, or a guest on any link, has nothing to share and gets a
+     refusal. It is answered over the API and never written into
      update-status.json, the document, or any file the static handler
-     serves (invariant #29). */
+     serves (invariant #29).
+
+     Kept for clients that predate /api/docs/:id/links, which is what this
+     now is underneath: get-or-create THAT document's review link. */
   if (parts[1] === "share" && req.method === "GET") {
+    if (scope) return sendJson(res, 403, { error: "owner-only" });
     if (role !== "edit") return sendJson(res, 403, { error: "review-only" });
-    if (!REVIEW_ACTIVE) return sendJson(res, 200, { reviewAvailable: false, reviewKey: "", docId: "" });
+    if (!JOIN_PIN) return sendJson(res, 200, { reviewAvailable: false, reviewKey: "", docId: "" });
     /* `?doc=<id>` asks for a link to THAT script, which is what the app
        offers and what a reader is being handed. Without one there is nothing
        to scope a link to, and the launch-wide credential is the operator's
@@ -1813,17 +2228,19 @@ async function handleApi(req, res, url) {
        answered with a key to the whole library (#63). */
     const wanted = url.searchParams.get("doc") || "";
     if (!isValidId(wanted)) return sendJson(res, 400, { error: "bad-id" });
-    if (!(await readDoc(wanted))) return sendJson(res, 404, { error: "not-found" });
-    const grant = reviewGrantFor(wanted);
-    return sendJson(res, 200, {
-      reviewAvailable: true,
-      reviewKey: grant.key,
-      docId: wanted
+    return withDocLock(wanted, async () => {
+      if (!(await readDocMeta(wanted))) return sendJson(res, 404, { error: "not-found" });
+      const { link } = await linkFor(wanted, "review", { by: who.name });
+      return sendJson(res, 200, {
+        reviewAvailable: true,
+        reviewKey: link.key,
+        docId: wanted
+      });
     });
   }
 
   /* Images (#82): after the gate, like everything that reads or writes. */
-  if (parts[1] === "blobs") return handleBlobs(req, res, parts, role);
+  if (parts[1] === "blobs") return handleBlobs(req, res, parts, session);
 
   if (parts[1] !== "docs") return sendJson(res, 404, { error: "not-found" });
 
@@ -1831,9 +2248,8 @@ async function handleApi(req, res, url) {
 
   /* list */
   if (!id && req.method === "GET") {
-    /* A review link names one document, so the picker it can list is that
-       one document — not the library (#63). */
-    const scope = role === "review" ? reviewScopeOf(req) : "";
+    /* A link names one document, so the picker it can list is that one
+       document — not the library (#63). */
     if (scope) {
       const only = await summaryOf(scope);
       return sendJson(res, 200, { docs: only ? [only] : [] });
@@ -1864,6 +2280,9 @@ async function handleApi(req, res, url) {
   if (!id && req.method === "POST") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
+    /* An edit link can change its one script and add nothing to the
+       library: a new document would be one it could not even open. */
+    if (scope) return sendJson(res, 403, { error: "owner-only" });
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
@@ -1907,14 +2326,31 @@ async function handleApi(req, res, url) {
 
   if (!isValidId(id)) return sendJson(res, 400, { error: "bad-id" });
 
-  /* A per-document review link reaches that document and no other, on every
-     method — reading one, commenting on one and deleting one were all gated
-     on holding a token, not on which document the token was minted for
-     (#63). The launch-wide review credential has no scope and is unchanged. */
-  if (role === "review") {
-    const scope = reviewScopeOf(req);
-    if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
+  /* The sub-routes that exist. Anything else under a document is not a
+     route, and used to be answered as the document itself with the extra
+     segments ignored — a DELETE of `/api/docs/:id/link/…`, one letter off
+     the links route, deleted the script. */
+  if (parts.length > 3 && parts[3] !== "comments" && parts[3] !== "links") {
+    return sendJson(res, 404, { error: "not-found" });
   }
+
+  /* Deleting a script is the owner's, whichever script: a link is a way into
+     one document, never a way to remove one — its own included. */
+  if (scope && req.method === "DELETE" && parts.length === 3) {
+    return sendJson(res, 403, { error: "owner-only" });
+  }
+
+  /* A link reaches its document and no other, on every method and every
+     sub-route — reading one, commenting on one and deleting one were all
+     gated on holding a token, not on which document the token was minted for
+     (#63). Before anything else about the request is looked at, so the
+     refusal comes before a byte of the body is read. The owner and the
+     launch-wide review credential have no scope. */
+  if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
+
+  /* The document's invite links. Above the comment, read and save routes for
+     the reason the comments route gives just below. */
+  if (parts[3] === "links") return handleLinks(req, res, parts, id, session, who);
 
   /* ---------- comments, on their own (#71) ----------
    *
@@ -2002,7 +2438,7 @@ async function handleApi(req, res, url) {
       const parentId = commentIdOf(body.replyTo);
       const reply = cleanReply(body.reply, now, by);
       if (!parentId || !reply) return sendJson(res, 400, { error: "bad-comment" });
-      const replyRefs = await commentRefsRefused(req, role, id, reply.body);
+      const replyRefs = await commentRefsRefused(session, id, reply.body);
       if (replyRefs.missing.length) {
         return sendJson(res, 422, { error: "missing-blobs", missing: replyRefs.missing });
       }
@@ -2041,7 +2477,7 @@ async function handleApi(req, res, url) {
     /* The anchor's HTML needs no such check: placeAnchor() accepts it only
        when it matches the stored field tag for tag, images included, so it
        cannot bring a new ref in. */
-    const commentRefs = await commentRefsRefused(req, role, id, comment.body);
+    const commentRefs = await commentRefsRefused(session, id, comment.body);
     if (commentRefs.missing.length) {
       return sendJson(res, 422, { error: "missing-blobs", missing: commentRefs.missing });
     }
@@ -2139,8 +2575,11 @@ async function handleApi(req, res, url) {
       /* After the rev check — a stale client has to merge before anything
          else it is told matters — and before a byte is written: an image
          this save names that is new to this document and not on this
-         server is refused, and the client uploads it and asks again (#82). */
-      const missing = await refusedRefs(putRefs, id, body.acceptMissing);
+         server is refused, and the client uploads it and asks again (#82).
+         For an edit link, "on this server" means "that it can see": its own
+         document's images and its own uploads (refusedRefs). */
+      const visible = putRefs.size ? await blobVisibility(session) : null;
+      const missing = await refusedRefs(putRefs, id, body.acceptMissing, visible);
       if (missing.length) return sendJson(res, 422, { error: "missing-blobs", missing });
 
       const doc = {
@@ -2160,6 +2599,10 @@ async function handleApi(req, res, url) {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
     return withDocLock(id, async () => {
+      /* Every link to it goes first, and is on the disk before the script is
+         removed: a crash in between leaves a script with its links off,
+         never links that outlive it into whatever this id means next. */
+      if (revokeLinksOf(id)) await saveLinks();
       try {
         await fsp.unlink(docPath(id));
       } catch (err) {
@@ -2174,6 +2617,35 @@ async function handleApi(req, res, url) {
 }
 
 /* ---------- static files ---------- */
+
+/* DATA_DIR as the filesystem spells it (symlinks followed, and on Windows the
+   long name in its real case), filled in by start(). */
+let dataDirReal = path.resolve(DATA_DIR);
+/* Windows and macOS match file names regardless of case, so "/DATA/x.json"
+   opens data/x.json there and a case-sensitive comparison would let it by. */
+const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
+
+function foldPath(p) {
+  return FOLD_CASE ? p.toLowerCase() : p;
+}
+
+/* Is this file inside DATA_DIR? The launcher serves its whole folder
+   (STATIC_DIR is the app's root) and keeps the library in `data/` beneath
+   it, so without this `GET /data/<id>.json` handed any document — and under
+   PERSIST_LINKS `data/links/links.json` — to anyone who could reach the port,
+   PIN or no PIN. Compared by real path, so a short 8.3 name, a different
+   case or a symlink is the same folder it points at. */
+async function insideDataDir(full) {
+  let real;
+  try {
+    real = await fsp.realpath(full);
+  } catch (err) {
+    real = full;
+  }
+  const f = foldPath(real);
+  const d = foldPath(dataDirReal);
+  return f === d || f.startsWith(d.endsWith(path.sep) ? d : d + path.sep);
+}
 
 async function handleStatic(req, res, url) {
   if (req.method !== "GET" && req.method !== "HEAD") {
@@ -2201,6 +2673,14 @@ async function handleStatic(req, res, url) {
     res.writeHead(403).end();
     return;
   }
+  /* Nothing whose name starts with a dot, at any depth: the launcher serves
+     a folder that may be a git checkout, and `.git/config` (remote URLs,
+     sometimes with a token in them) or a stray `.env` is nobody's business.
+     The app itself has no such file. Answered as not there. */
+  if (path.relative(root, full).split(path.sep).some((seg) => seg.charAt(0) === ".")) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+    return;
+  }
 
   let stat;
   try {
@@ -2209,7 +2689,7 @@ async function handleStatic(req, res, url) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
     return;
   }
-  if (!stat.isFile()) {
+  if (!stat.isFile() || await insideDataDir(full)) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
     return;
   }
@@ -2250,7 +2730,18 @@ async function handleStatic(req, res, url) {
 /* ---------- server ---------- */
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, "http://localhost");
+  /* A request line such as `GET // HTTP/1.1` is one Node's parser accepts
+     and the URL constructor does not: "//" reads as an authority with no
+     host. It threw here, synchronously, outside every handler below — an
+     uncaught exception, so one request from anyone took the whole server
+     down with every document open in it. Now it is a 400. */
+  let url;
+  try {
+    url = new URL(req.url, "http://localhost");
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Connection": "close" }).end("Bad request");
+    return;
+  }
   /* The launcher route is the one piece of API a static-only (NO_API) copy
      still answers: it is what lets the app the launcher just opened ask
      where it was started from. It is gated by the per-launch token and the
@@ -2305,6 +2796,10 @@ async function start() {
      launcher's default) this process is a static file server and has no
      business creating a data directory next to someone's app. */
   if (!NO_API) await fsp.mkdir(DATA_DIR, { recursive: true });
+  /* Before the port opens, so no request is ever answered with the random
+     owner token or an empty link store in place of the real ones. */
+  if (PERSIST_LINKS && !NO_API) await loadLinkStore();
+  dataDirReal = await fsp.realpath(DATA_DIR).catch(() => path.resolve(DATA_DIR));
   server.listen(PORT, HOST, () => {
     console.log("[splitpage] listening on " + HOST + ":" + PORT);
     console.log("[splitpage] documents in " + DATA_DIR);
@@ -2314,12 +2809,33 @@ async function start() {
     if (ALLOW_ORIGINS.length) console.log("[splitpage] cross-origin calls allowed from: " + ALLOW_ORIGINS.join(", "));
     if (TRUST_PROXY) {
       console.log("[splitpage] TRUST_PROXY=1 — the PIN rate limit counts X-Forwarded-For, so nothing " +
-                  "but your proxy may be able to reach this port");
+                  "but your proxy may be able to reach this port. Behind Cloudflare use TRUST_PROXY=cloudflare: " +
+                  "Cloudflare appends to a client's X-Forwarded-For, so its first entry is the caller's to choose");
+    } else if (TRUST_CLOUDFLARE) {
+      console.log("[splitpage] TRUST_PROXY=cloudflare — the PIN rate limit counts Cf-Connecting-Ip, so nothing " +
+                  "but Cloudflare may be able to reach this port");
+    } else if (TRUST_PROXY_MODE && TRUST_PROXY_MODE !== "0") {
+      console.warn("[splitpage] TRUST_PROXY=" + TRUST_PROXY_MODE + " is not a setting this server knows " +
+                   "(1 or cloudflare) — ignored; the PIN rate limit counts the socket");
+    }
+    if (PERSIST_LINKS && !NO_API) {
+      console.log("[splitpage] PERSIST_LINKS=1 — invite links and the owner's sign-in survive a restart (" + LINKS_DIR + ")");
     }
     if (JOIN_PIN) {
       /* Never the PIN itself: this stream is inherited by the launcher and
-         may end up in a log file. That it is set is all anyone needs here. */
-      console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
+         may end up in a log file. That it is set — and whether it is long
+         enough for where it is — is all anyone needs here. */
+      if (PERSIST_LINKS) {
+        console.log("[splitpage] an owner key is required; guests come in on per-document links");
+        if (JOIN_PIN.length < OWNER_KEY_MIN) {
+          console.warn("[splitpage] WARNING: JOIN_PIN is shorter than " + OWNER_KEY_MIN + " characters on a server " +
+                       "that keeps its sessions (PERSIST_LINKS=1), which means one meant to stay up on the " +
+                       "internet. The rate limit slows a guesser down; it does not make a short code safe to " +
+                       "expose. Set it to 32 or more random characters.");
+        }
+      } else {
+        console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
+      }
       if (REVIEW_ACTIVE) console.log("[splitpage] a review credential is set — it opens EVERY document here to read and comment on, nothing else. The link Splitpage itself offers is per-document.");
       else if (REVIEW_PIN || REVIEW_KEY) {
         console.log("[splitpage] the review credential was IGNORED — it is the same as the join PIN");

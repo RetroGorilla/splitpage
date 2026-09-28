@@ -12,10 +12,10 @@
  */
 
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer, connect as netConnect } from "node:net";
 import { request as httpRequest } from "node:http";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,11 +29,19 @@ const LAUNCH = "abc";
 
 let passed = 0;
 const failures = [];
+const skipped = [];
 
 function check(name, ok, detail) {
   if (ok) { passed++; console.log("  ok   " + name); return; }
   failures.push(name + (detail ? " — " + detail : ""));
   console.log("  FAIL " + name + (detail ? " — " + detail : ""));
+}
+
+/* Never silent: a check this platform cannot make is printed, counted and
+   named again in the summary. */
+function skip(name, why) {
+  skipped.push(name + " (" + why + ")");
+  console.log("  SKIP " + name + " — " + why);
 }
 
 function eq(name, actual, expected) {
@@ -51,9 +59,12 @@ function freePort() {
   });
 }
 
-async function startServer(env) {
+/* `opts.dataDir` starts the server on a folder that already exists — the
+   PERSIST_LINKS tests stop one server and start the next on the same
+   DATA_DIR, which is what a redeploy is. */
+async function startServer(env, opts) {
   const port = await freePort();
-  const dataDir = mkdtempSync(join(tmpdir(), "splitpage-test-"));
+  const dataDir = (opts && opts.dataDir) || mkdtempSync(join(tmpdir(), "splitpage-test-"));
   const child = spawn(process.execPath, [SERVER], {
     cwd: ROOT,
     stdio: ["ignore", "pipe", "pipe"],
@@ -67,11 +78,13 @@ async function startServer(env) {
     }
   });
   let log = "";
+  let exitCode = null;
   child.stdout.on("data", (c) => { log += c; });
   child.stderr.on("data", (c) => { log += c; });
+  const exited = new Promise((resolve) => child.once("exit", (code) => { exitCode = code; resolve(code); }));
 
   const base = "http://127.0.0.1:" + port + "/";
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 80 && exitCode === null; i++) {
     try {
       const res = await fetch(base + "api/health");
       if (res.ok) break;
@@ -88,6 +101,14 @@ async function startServer(env) {
       child.kill();
       rmSync(dataDir, { recursive: true, force: true });
     },
+    /* Stop it and wait until it has gone, leaving DATA_DIR where it is for
+       the next server to start on. */
+    async halt() {
+      if (exitCode === null) child.kill();
+      await exited;
+    },
+    /* null while it runs; the code it exited with once it has */
+    get exitCode() { return exitCode; },
     get log() { return log; }
   };
 }
@@ -839,9 +860,14 @@ try {
    nothing — both are ignored rather than half-applied. */
 const s5 = await startServer({ JOIN_PIN: PIN, REVIEW_PIN: PIN, HOST: "127.0.0.1" });
 try {
+  check("a review PIN equal to the join PIN is not a review credential",
+    s5.log.includes("review credential was IGNORED — it is the same as the join PIN"), s5.log);
+  /* reviewAvailable no longer means "the launcher set a review code": it is
+     whether a per-document review link can be had, and those need only a
+     join PIN (the link store). */
   const res = await fetch(s5.base + "api/health");
-  eq("a review PIN equal to the join PIN is not a review credential",
-    (await json(res)).reviewAvailable, false);
+  eq("...though per-document review links are on offer, which need only the join PIN",
+    (await json(res)).reviewAvailable, true);
   const joined = await json(await fetch(s5.base + "api/join", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pin: PIN })
@@ -2130,11 +2156,687 @@ try {
   sBlobRO.stop();
 }
 
+/* ---------- invite links: the link store ----------
+ *
+ * Per-document links of two roles, "edit" and "review", minted by the owner
+ * through /api/docs/:id/links and joined by key. A link's token is held to
+ * its one document by every route; the routes that are about the library
+ * (create, delete, the links, /api/share) are the owner's alone; revoking a
+ * link — or replacing it, or deleting its document — turns its token off on
+ * its very next request. This store replaced #63's in-memory review grants,
+ * so the #63 review-link tests above run through it too.
+ */
+
+/* A request written byte for byte onto a socket, for the ones fetch() will
+   not send: a path of "//", a header byte outside ASCII. Answers the status
+   code, or 0 when the connection dropped without one. */
+function rawRequest(base, head) {
+  return new Promise((resolve) => {
+    const url = new URL(base);
+    let text = "";
+    let done = false;
+    let timer = null;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      sock.destroy();
+      resolve(value);
+    };
+    const sock = netConnect(Number(url.port), url.hostname, () => sock.write(Buffer.from(head, "latin1")));
+    sock.on("data", (c) => {
+      text += c.toString("latin1");
+      const m = /^HTTP\/1\.1 (\d{3})/.exec(text);
+      if (m) finish(Number(m[1]));
+    });
+    sock.on("error", () => finish(0));
+    sock.on("close", () => finish(0));
+    timer = setTimeout(() => finish(0), 5000);
+  });
+}
+
+const LINK_EDIT_BUDGET = 13000;   /* three uploads charged 4096 each, and no fourth */
+const sLinks = await startServer({
+  JOIN_PIN: PIN,
+  REVIEW_PIN,
+  HOST: "127.0.0.1",
+  MAX_BLOB_BYTES: "65536",
+  LINK_EDIT_BLOB_BUDGET_BYTES: String(LINK_EDIT_BUDGET)
+});
+const linksDataDir = sLinks.dataDir;
+/* Carried out of the block below to the restart that follows it. */
+let linksOwnerToken, linksEditToken, linksEditKey, linksDocId;
+
+try {
+  const base = sLinks.base;
+  const joinAs = async (payload) => {
+    const res = await fetch(base + "api/join", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    return { status: res.status, body: await json(res) };
+  };
+  const hdr = (token) => ({ "Content-Type": "application/json", "x-splitpage-token": token, "x-splitpage-client": "2" });
+  const call = async (method, path, token, payload) => {
+    const res = await fetch(base + path, {
+      method, headers: hdr(token), body: payload === undefined ? undefined : JSON.stringify(payload)
+    });
+    return { status: res.status, body: await json(res) };
+  };
+  const said = (out) => out.status + "/" + (out.body && out.body.error);
+  const linksUrl = (id) => "api/docs/" + id + "/links";
+
+  {
+    const body = await json(await fetch(base + "api/health"));
+    eq("health says the links API is here", body && body.links, 1);
+    eq("...that links do not outlive this process without PERSIST_LINKS", body && body.linksPersist, false);
+    eq("...and that review links can be had, a join PIN being set", body && body.reviewAvailable, true);
+  }
+  const owner = (await joinAs({ pin: PIN })).body.token;
+  linksOwnerToken = owner;
+  const libraryReview = (await joinAs({ pin: REVIEW_PIN })).body.token;
+  {
+    const me = (await call("GET", "api/me", owner)).body;
+    eq("/api/me gives the owner the edit role", me && me.role, "edit");
+    eq("...and no scope: every document is theirs", me && me.scope, "");
+  }
+  const docA = (await call("POST", "api/docs", owner, { state: fixtureState() })).body;
+  const docB = (await call("POST", "api/docs", owner, { state: Object.assign(fixtureState(), { title: "Not shared" }) })).body;
+  linksDocId = docA.id;
+
+  /* ---- the owner mints, lists and re-reads links ---- */
+  let editLink = null, reviewLink = null;
+  {
+    const none = await call("GET", linksUrl(docA.id), owner);
+    eq("a document starts with no links", none.status, 200);
+    eq("...an empty list", JSON.stringify(none.body), JSON.stringify({ links: [] }));
+
+    const made = await call("POST", linksUrl(docA.id), owner, { role: "edit" });
+    eq("the owner mints an edit link", made.status, 201);
+    editLink = made.body || {};
+    check("...with a 12-hex id", /^[0-9a-f]{12}$/.test(editLink.id), JSON.stringify(editLink));
+    check("...a key of at least 24 random bytes", /^[0-9a-f]{48,}$/.test(editLink.key));
+    eq("...its role", editLink.role, "edit");
+    check("...and when it was made", !isNaN(Date.parse(editLink.createdAt)));
+    eq("...and nothing else: never the token it mints", Object.keys(editLink).sort().join(","), "createdAt,id,key,role");
+
+    const again = await call("POST", linksUrl(docA.id), owner, { role: "edit" });
+    eq("asking again is 200, not a new link", again.status, 200);
+    eq("...the same key, so a copy already sent keeps working", again.body && again.body.key, editLink.key);
+
+    const rv = await call("POST", linksUrl(docA.id), owner, { role: "review" });
+    eq("a review link is a link of its own", rv.status, 201);
+    reviewLink = rv.body || {};
+    check("...with its own key", !!reviewLink.key && reviewLink.key !== editLink.key);
+
+    const list = (await call("GET", linksUrl(docA.id), owner)).body;
+    const links = (list && list.links) || [];
+    eq("the list names both", links.length, 2);
+    check("...by id, role and key", [editLink, reviewLink].every((want) =>
+      links.some((l) => l.id === want.id && l.role === want.role && l.key === want.key)), JSON.stringify(links));
+    check("...and never a token", links.every((l) => !("token" in l)));
+
+    const share = (await call("GET", "api/share?doc=" + docA.id, owner)).body;
+    eq("/api/share, kept for older clients, hands out that same review link", share && share.reviewKey, reviewLink.key);
+    eq("...saying review links are available", share && share.reviewAvailable, true);
+  }
+  {
+    eq("a role that is not one is 400", (await call("POST", linksUrl(docA.id), owner, { role: "admin" })).status, 400);
+    eq("...saying bad-role", (await call("POST", linksUrl(docA.id), owner, {})).body.error, "bad-role");
+    eq("a link to a document that is not there is 404 not-found",
+      said(await call("POST", linksUrl("nothing-here-0000"), owner, { role: "edit" })), "404/not-found");
+    eq("...and to an id that is not one, 400", (await call("POST", linksUrl("Not-An-Id"), owner, { role: "edit" })).status, 400);
+    eq("a method the links route does not have is 405", (await call("PUT", linksUrl(docA.id), owner, {})).status, 405);
+  }
+
+  /* ---- joining by key ---- */
+  let editToken = null, reviewToken = null;
+  {
+    const e = await joinAs({ key: editLink.key });
+    eq("an edit link's key joins", e.status, 200);
+    eq("...as an editor", e.body && e.body.role, "edit");
+    eq("...of that document", e.body && e.body.docId, docA.id);
+    eq("...and names it as its scope", e.body && e.body.scope, docA.id);
+    check("...with a token of its own", /^[0-9a-f]{64}$/.test(e.body && e.body.token) && e.body.token !== owner);
+    editToken = e.body && e.body.token;
+    const r = await joinAs({ key: reviewLink.key });
+    eq("a review link's key joins as a reviewer", r.body && r.body.role, "review");
+    eq("...scoped to the same document", r.body && r.body.scope, docA.id);
+    reviewToken = r.body && r.body.token;
+    eq("joining twice with one key hands back the same token", (await joinAs({ key: editLink.key })).body.token, editToken);
+
+    const meE = (await call("GET", "api/me", editToken)).body || {};
+    eq("/api/me tells an edit link what it is", meE.role + "/" + meE.scope, "edit/" + docA.id);
+    const meR = (await call("GET", "api/me", reviewToken)).body || {};
+    eq("...and a review link", meR.role + "/" + meR.scope, "review/" + docA.id);
+    const meL = (await call("GET", "api/me", libraryReview)).body || {};
+    eq("...while the library-wide review credential has no scope", meL.role + "/" + meL.scope, "review/");
+  }
+
+  /* ---- what an edit link may do: its one document, as the owner could ---- */
+  {
+    const list = (await call("GET", "api/docs", editToken)).body;
+    eq("an edit link lists its one document", ((list && list.docs) || []).map((d) => d.id).join(","), docA.id);
+    const mine = await call("GET", "api/docs/" + docA.id, editToken);
+    eq("...reads it", mine.status, 200);
+    const next = Object.assign(JSON.parse(JSON.stringify(mine.body.state)), { title: "Edited by a guest" });
+    const saved = await call("PUT", "api/docs/" + docA.id, editToken, { baseRev: mine.body.rev, state: next, by: "Guest" });
+    eq("...and saves it, through the ordinary compare-and-set", saved.status, 200);
+    eq("...which moves the rev", saved.body && saved.body.rev, mine.body.rev + 1);
+    const stale = await call("PUT", "api/docs/" + docA.id, editToken, { baseRev: mine.body.rev, state: mine.body.state });
+    eq("...a stale save is the ordinary 409", stale.status, 409);
+    check("...handing back the state to merge", !!(stale.body && stale.body.state && stale.body.state.title === "Edited by a guest"));
+    const posted = await call("POST", "api/docs/" + docA.id + "/comments", editToken, {
+      comment: { id: "lk-c1", rowId: "r1", field: "audioText", body: "a guest's note", author: "Guest" }
+    });
+    eq("...comments on it", posted.status, 200);
+    const resolved = await call("PATCH", "api/docs/" + docA.id + "/comments/lk-c1", editToken, { resolved: true });
+    eq("...and resolves a comment on it, as an editor may", resolved.status, 200);
+    eq("...and is present in it", (await call("POST", "api/presence", editToken, { docId: docA.id, id: "guest1", name: "Guest" })).status, 200);
+  }
+
+  /* ---- and nothing else ---- */
+  {
+    eq("an edit link cannot read another document", said(await call("GET", "api/docs/" + docB.id, editToken)), "403/wrong-document");
+    const other = (await call("GET", "api/docs/" + docB.id, owner)).body;
+    eq("...nor save one", said(await call("PUT", "api/docs/" + docB.id, editToken, { baseRev: other.rev, state: other.state })),
+      "403/wrong-document");
+    eq("...nor comment on one", said(await call("POST", "api/docs/" + docB.id + "/comments", editToken, {
+      comment: { id: "lk-c2", rowId: "r1", field: "audioText", body: "x" }
+    })), "403/wrong-document");
+    eq("...nor resolve on one", said(await call("PATCH", "api/docs/" + docB.id + "/comments/c1", editToken, { resolved: true })),
+      "403/wrong-document");
+    eq("...nor see another document's links", said(await call("GET", linksUrl(docB.id), editToken)), "403/wrong-document");
+    eq("...nor beat about another document, to learn who is in it",
+      said(await call("POST", "api/presence", editToken, { docId: docB.id, id: "guest1" })), "403/wrong-document");
+    const beacon = await fetch(base + "api/presence", {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ docId: docB.id, id: "guest1", gone: true, token: editToken })
+    });
+    eq("...not even as a leaving beacon", beacon.status, 403);
+    const early = await refuseBeforeBody(base, "api/docs/" + docB.id, "PUT", { "x-splitpage-token": editToken });
+    eq("...and a save to another document is refused before a byte of its body is read", early.status, 403, early.error);
+  }
+  {
+    eq("an edit link cannot add a document to the library",
+      said(await call("POST", "api/docs", editToken, { state: fixtureState() })), "403/owner-only");
+    eq("...nor delete its own", said(await call("DELETE", "api/docs/" + docA.id, editToken)), "403/owner-only");
+    eq("...nor any other", said(await call("DELETE", "api/docs/" + docB.id, editToken)), "403/owner-only");
+    eq("...nor hand out links through /api/share", said(await call("GET", "api/share?doc=" + docA.id, editToken)), "403/owner-only");
+    eq("...nor list its own document's links", said(await call("GET", linksUrl(docA.id), editToken)), "403/owner-only");
+    eq("...nor mint one", said(await call("POST", linksUrl(docA.id), editToken, { role: "edit" })), "403/owner-only");
+    eq("...nor revoke one", said(await call("DELETE", linksUrl(docA.id) + "/" + reviewLink.id, editToken)), "403/owner-only");
+    eq("...and its document is still there", (await call("GET", "api/docs/" + docA.id, owner)).status, 200);
+  }
+
+  /* ---- a review link: #63's rules, now from the store ---- */
+  {
+    eq("a review link reads its document", (await call("GET", "api/docs/" + docA.id, reviewToken)).status, 200);
+    eq("...and no other", said(await call("GET", "api/docs/" + docB.id, reviewToken)), "403/wrong-document");
+    const cur = (await call("GET", "api/docs/" + docA.id, owner)).body;
+    eq("...never PUTs, even to its own", said(await call("PUT", "api/docs/" + docA.id, reviewToken, { baseRev: cur.rev, state: cur.state })),
+      "403/review-only");
+    eq("...cannot create (review-only, as before)", said(await call("POST", "api/docs", reviewToken, { state: fixtureState() })),
+      "403/review-only");
+    eq("...cannot delete", said(await call("DELETE", "api/docs/" + docA.id, reviewToken)), "403/owner-only");
+    eq("...cannot see the links", said(await call("GET", linksUrl(docA.id), reviewToken)), "403/owner-only");
+    eq("...nor use /api/share", said(await call("GET", "api/share?doc=" + docA.id, reviewToken)), "403/owner-only");
+    eq("...nor beat about another document", said(await call("POST", "api/presence", reviewToken, { docId: docB.id, id: "rev1" })),
+      "403/wrong-document");
+    eq("...but is present in its own", (await call("POST", "api/presence", reviewToken, { docId: docA.id, id: "rev1" })).status, 200);
+    eq("...and never resolves", said(await call("PATCH", "api/docs/" + docA.id + "/comments/lk-c1", reviewToken, { resolved: false })),
+      "403/reviewers-cannot-resolve");
+  }
+  {
+    eq("the library-wide review credential is not the owner either",
+      said(await call("GET", linksUrl(docA.id), libraryReview)), "403/owner-only");
+    eq("...and /api/share still answers it review-only, as before",
+      said(await call("GET", "api/share?doc=" + docA.id, libraryReview)), "403/review-only");
+  }
+
+  /* ---- the sub-routes that exist, and no others ---- */
+  {
+    const typo = await call("DELETE", "api/docs/" + docA.id + "/link/" + editLink.id, owner);
+    eq("a DELETE one letter off the links route is 404", typo.status, 404);
+    eq("...and did not delete the document it was under", (await call("GET", "api/docs/" + docA.id, owner)).status, 200);
+    eq("...nor is a GET of some other sub-path answered as the document",
+      (await call("GET", "api/docs/" + docA.id + "/anything", owner)).status, 404);
+  }
+
+  /* ---- images: an edit link sees what a review link sees, and is metered ---- */
+  {
+    const putBlob = (token, buf) => fetch(base + "api/blobs/" + shaOf(buf), {
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream", "x-splitpage-token": token, "x-splitpage-client": "2" },
+      body: buf
+    });
+    const getBlob = (token, sha) => fetch(base + "api/blobs/" + sha, { headers: { "x-splitpage-token": token } });
+    const one = pngOf(600), oneSha = shaOf(one);
+    const hidden = pngOf(400), hiddenSha = shaOf(hidden);
+    const other = pngOf(500), otherSha = shaOf(other);
+    eq("(the owner uploads an image)", (await putBlob(owner, one)).status, 201);
+    eq("(and two more that no document names)",
+      (await putBlob(owner, hidden)).status + "/" + (await putBlob(owner, other)).status, "201/201");
+    const cur = (await call("GET", "api/docs/" + docA.id, owner)).body;
+    const withOne = JSON.parse(JSON.stringify(cur.state));
+    withOne.rows[0].imageRef = { sha256: oneSha, width: 4, height: 3, mime: "image/png" };
+    eq("(and puts the first in the shared script)",
+      (await call("PUT", "api/docs/" + docA.id, owner, { baseRev: cur.rev, state: withOne })).status, 200);
+
+    eq("an edit link may GET an image its document names", (await getBlob(editToken, oneSha)).status, 200);
+    eq("...but not one it does not, though it exists", (await getBlob(editToken, hiddenSha)).status, 404);
+    const miss = (await call("POST", "api/blobs/missing", editToken, { shas: [oneSha, hiddenSha] })).body;
+    eq("...and /missing calls that one missing", JSON.stringify(miss && miss.missing), JSON.stringify([hiddenSha]));
+
+    const now = (await call("GET", "api/docs/" + docA.id, editToken)).body;
+    const withHidden = JSON.parse(JSON.stringify(now.state));
+    withHidden.rows[0].imageRef = { sha256: hiddenSha, width: 4, height: 3, mime: "image/png" };
+    const probe = await call("PUT", "api/docs/" + docA.id, editToken, { baseRev: now.rev, state: withHidden });
+    eq("an edit link's save naming an image it cannot see is 422, though the image is here", probe.status, 422);
+    eq("...naming it as missing", JSON.stringify(probe.body && probe.body.missing), JSON.stringify([hiddenSha]));
+    const up = await putBlob(editToken, hidden);
+    eq("...uploading those bytes is 201 stored:true, as for a new image", up.status + "/" + ((await json(up)) || {}).stored, "201/true");
+    eq("...after which the same save goes through",
+      (await call("PUT", "api/docs/" + docA.id, editToken, { baseRev: now.rev, state: withHidden })).status, 200);
+    eq("...and the image is its to read", (await getBlob(editToken, hiddenSha)).status, 200);
+
+    const img = 'see <img class="comment-img" data-blob="' + otherSha + '" data-w="1" data-h="1">';
+    const cmt = await call("POST", "api/docs/" + docA.id + "/comments", editToken, {
+      comment: { id: "lk-img", rowId: "r1", field: "audioText", author: "Guest", body: img }
+    });
+    eq("an edit link's comment naming an image it cannot see is 422 too", cmt.status, 422);
+
+    /* The upload above was charged 4096 against LINK_EDIT_BLOB_BUDGET_BYTES
+       (13000), so two more small ones fit and a third does not. */
+    eq("an edit link's upload within its allowance is 201", (await putBlob(editToken, pngOf(3000))).status, 201);
+    eq("...and a second", (await putBlob(editToken, pngOf(3000))).status, 201);
+    const over = await putBlob(editToken, pngOf(3000));
+    eq("...a third, over LINK_EDIT_BLOB_BUDGET_BYTES, is 429", over.status, 429);
+    eq("...review-budget, which the client already words as this link's allowance", ((await json(over)) || {}).error, "review-budget");
+    const early = await refuseBeforeBody(base, "api/blobs/" + "7".repeat(64), "PUT",
+      { "x-splitpage-token": editToken, "Content-Length": "3000" });
+    eq("...refused before its body is read", early.status, 429);
+    eq("...while the owner is not metered", (await putBlob(owner, pngOf(3000))).status, 201);
+  }
+
+  /* ---- replace, and revoke ---- */
+  const deadEditKey = editLink.key;
+  {
+    const fresh = await call("POST", linksUrl(docA.id), owner, { role: "edit", replace: true });
+    eq("replace: true always mints", fresh.status, 201);
+    check("...a new link", !!fresh.body && fresh.body.id !== editLink.id && fresh.body.key !== editLink.key);
+    eq("...and the old one's token is refused on its very next request, as link-off",
+      said(await call("GET", "api/docs/" + docA.id, editToken)), "401/link-off");
+    eq("...and its key is 410 link-off", said(await joinAs({ key: deadEditKey })), "410/link-off");
+    const joined = await joinAs({ key: fresh.body.key });
+    eq("the new key joins", joined.body && joined.body.role, "edit");
+    editLink = fresh.body;
+    editToken = joined.body.token;
+    linksEditToken = editToken;
+    linksEditKey = editLink.key;
+    const list = (await call("GET", linksUrl(docA.id), owner)).body;
+    eq("...and the list holds one edit link, the new one",
+      list.links.filter((l) => l.role === "edit").map((l) => l.id).join(","), editLink.id);
+  }
+  {
+    const off = await call("DELETE", linksUrl(docA.id) + "/" + reviewLink.id, owner);
+    eq("the owner revokes a link", off.status, 200);
+    eq("...{ok:true}", off.body && off.body.ok, true);
+    eq("its token is refused on its very next request", said(await call("GET", "api/docs/" + docA.id, reviewToken)), "401/link-off");
+    eq("...by presence too, from the header",
+      said(await call("POST", "api/presence", reviewToken, { docId: docA.id, id: "rev1" })), "401/link-off");
+    const beacon = await fetch(base + "api/presence", {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ docId: docA.id, id: "rev1", gone: true, token: reviewToken })
+    });
+    eq("...and from a beacon's body", beacon.status + "/" + ((await json(beacon)) || {}).error, "401/link-off");
+    eq("...and by the images route", said(await call("POST", "api/blobs/missing", reviewToken, { shas: [] })), "401/link-off");
+    eq("revoking it again is 404 no-such-link", said(await call("DELETE", linksUrl(docA.id) + "/" + reviewLink.id, owner)),
+      "404/no-such-link");
+    eq("a live link revoked through another document's path is 404",
+      (await call("DELETE", linksUrl(docB.id) + "/" + editLink.id, owner)).status, 404);
+    eq("...and is not revoked", (await call("GET", "api/docs/" + docA.id, editToken)).status, 200);
+    eq("a link id that is not one is 404", (await call("DELETE", linksUrl(docA.id) + "/zz", owner)).status, 404);
+    const again = await call("POST", linksUrl(docA.id), owner, { role: "review" });
+    eq("after a revoke, asking for a review link mints a new one", again.status, 201);
+    check("...not the dead one", !!again.body && again.body.key !== reviewLink.key);
+  }
+
+  /* ---- deleting a document revokes its links ---- */
+  {
+    const docC = (await call("POST", "api/docs", owner, { state: Object.assign(fixtureState(), { title: "To be deleted" }) })).body;
+    const e = (await call("POST", linksUrl(docC.id), owner, { role: "edit" })).body;
+    const r = (await call("POST", linksUrl(docC.id), owner, { role: "review" })).body;
+    const et = (await joinAs({ key: e.key })).body.token;
+    const rt = (await joinAs({ key: r.key })).body.token;
+    eq("(a document with two live links)", (await call("GET", "api/docs/" + docC.id, et)).status, 200);
+    eq("the owner deletes it", (await call("DELETE", "api/docs/" + docC.id, owner)).status, 200);
+    eq("...and its edit link is off", said(await call("GET", "api/docs", et)), "401/link-off");
+    eq("...and its review link", said(await call("GET", "api/docs", rt)), "401/link-off");
+    eq("...and both keys answer 410", (await joinAs({ key: e.key })).status + "/" + (await joinAs({ key: r.key })).status, "410/410");
+    eq("...and it has no links left", (await call("GET", linksUrl(docC.id), owner)).body.links.length, 0);
+  }
+
+  /* ---- the limiter: a dead link is not a guess, a live one is not an amnesty ----
+     Last in this block: it locks this address out of /api/join for a minute. */
+  {
+    const dead = [];
+    for (let i = 0; i < 12; i++) dead.push((await joinAs({ key: deadEditKey })).status);
+    check("a dead link's key, twelve times over, is 410 every time and never 429 — it is not a guess",
+      dead.every((s) => s === 410), dead.join(","));
+    const wrong = [];
+    for (let i = 0; i < 9; i++) wrong.push((await joinAs({ key: "0".repeat(48) })).status);
+    check("(nine wrong keys, each 401)", wrong.every((s) => s === 401), wrong.join(","));
+    eq("a live link still joins after nine wrong guesses", (await joinAs({ key: editLink.key })).status, 200);
+    eq("...the tenth wrong guess is still just wrong", (await joinAs({ key: "1".repeat(48) })).status, 401);
+    eq("...and then the address is locked out, even for a live link: joining with one did not wipe the count",
+      (await joinAs({ key: editLink.key })).status, 429);
+    eq("...the owner's PIN included", (await joinAs({ pin: PIN })).status, 429);
+  }
+} finally {
+  await sLinks.halt();
+}
+
+/* Without PERSIST_LINKS a restart cancels every token and every link, exactly
+   as it always has: the store was in memory and nowhere else. */
+check("without PERSIST_LINKS nothing about links is written to DATA_DIR", !existsSync(join(linksDataDir, "links")));
+const sLinks2 = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" }, { dataDir: linksDataDir });
+try {
+  const as = (token) => ({ headers: { "x-splitpage-token": token } });
+  const docs = await fetch(sLinks2.base + "api/docs", as(linksOwnerToken));
+  eq("after a restart without PERSIST_LINKS the owner's old token is refused", docs.status, 401);
+  eq("...pin-required", ((await json(docs)) || {}).error, "pin-required");
+  const guest = await fetch(sLinks2.base + "api/docs/" + linksDocId, as(linksEditToken));
+  eq("...and so is a link's, as pin-required: the store is gone, tombstones and all",
+    guest.status + "/" + ((await json(guest)) || {}).error, "401/pin-required");
+  const key = await fetch(sLinks2.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: linksEditKey })
+  });
+  eq("...and its key is just a wrong key", key.status, 401);
+  const owner = (await json(await fetch(sLinks2.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: PIN })
+  }))).token;
+  check("the PIN mints a new owner token", !!owner && owner !== linksOwnerToken);
+  const links = await json(await fetch(sLinks2.base + "api/docs/" + linksDocId + "/links", as(owner)));
+  eq("...and the document it opens has no links", links && links.links.length, 0);
+  eq("...while the documents themselves are all still there",
+    (await fetch(sLinks2.base + "api/docs/" + linksDocId, as(owner))).status, 200);
+} finally {
+  sLinks2.stop();
+}
+
+/* A published library mints no edit links (an edit link would be a key to
+   nothing), and still mints review links. */
+const sLinksRO = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1", READ_ONLY: "1" });
+try {
+  writeFileSync(join(sLinksRO.dataDir, "frozen-links.json"), JSON.stringify({
+    id: "frozen-links", rev: 1, state: { title: "Frozen", rows: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z", updatedBy: "Host"
+  }));
+  const owner = (await json(await fetch(sLinksRO.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: PIN })
+  }))).token;
+  const mint = (role) => fetch(sLinksRO.base + "api/docs/frozen-links/links", {
+    method: "POST", headers: { "Content-Type": "application/json", "x-splitpage-token": owner }, body: JSON.stringify({ role })
+  });
+  const edit = await mint("edit");
+  eq("a read-only library refuses an edit link", edit.status + "/" + ((await json(edit)) || {}).error, "403/read-only");
+  const review = await mint("review");
+  eq("...and mints a review link", review.status, 201);
+  const joined = await json(await fetch(sLinksRO.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: ((await json(review)) || {}).key })
+  }));
+  eq("...which reads the document", (await fetch(sLinksRO.base + "api/docs/frozen-links", {
+    headers: { "x-splitpage-token": joined && joined.token }
+  })).status, 200);
+} finally {
+  sLinksRO.stop();
+}
+
+/* An open server (no PIN) has nothing for a link to be a lesser key to. */
+const sLinksOpen = await startServer({ HOST: "127.0.0.1" });
+try {
+  const health = await json(await fetch(sLinksOpen.base + "api/health"));
+  eq("with no join PIN, health says no review links", health && health.reviewAvailable, false);
+  eq("...while still naming the links API", health && health.links, 1);
+  const made = await json(await fetch(sLinksOpen.base + "api/docs", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state: fixtureState() })
+  }));
+  const list = await fetch(sLinksOpen.base + "api/docs/" + made.id + "/links");
+  eq("...and the links API answers 409 no-pin", list.status + "/" + ((await json(list)) || {}).error, "409/no-pin");
+  const mint = await fetch(sLinksOpen.base + "api/docs/" + made.id + "/links", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "edit" })
+  });
+  eq("...for a mint too", mint.status, 409);
+  const share = await json(await fetch(sLinksOpen.base + "api/share?doc=" + made.id));
+  eq("...while /api/share answers older clients as it always did", share && share.reviewAvailable, false);
+  const me = await json(await fetch(sLinksOpen.base + "api/me"));
+  eq("...and /api/me says editor, unscoped", me && me.role + "/" + me.scope, "edit/");
+} finally {
+  sLinksOpen.stop();
+}
+
+/* ---------- PERSIST_LINKS=1: a server meant to stay up on the internet ----------
+ *
+ * The owner token is HMAC(secret, "owner\0" + JOIN_PIN), the secret made once
+ * in DATA_DIR/links; links and tombstones are in DATA_DIR/links/links.json.
+ * Both survive a restart on the same DATA_DIR — what a redeploy is — and
+ * changing JOIN_PIN signs the owner out while leaving the links alone.
+ */
+const OWNER_KEY = "owner-" + randomBytes(24).toString("hex");
+const OWNER_KEY_2 = "owner-" + randomBytes(24).toString("hex");
+const persistEnv = { JOIN_PIN: OWNER_KEY, PERSIST_LINKS: "1", HOST: "127.0.0.1" };
+const sP1 = await startServer(persistEnv);
+const persistDir = sP1.dataDir;
+const linksDir = join(persistDir, "links");
+const p = {};
+
+const joinOn = async (server, payload) => {
+  const res = await fetch(server.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+  });
+  return { status: res.status, body: await json(res) };
+};
+const callOn = async (server, method, path, token, payload) => {
+  const res = await fetch(server.base + path, {
+    method,
+    headers: { "Content-Type": "application/json", "x-splitpage-token": token },
+    body: payload === undefined ? undefined : JSON.stringify(payload)
+  });
+  return { status: res.status, body: await json(res) };
+};
+
+try {
+  const health = await json(await fetch(sP1.base + "api/health"));
+  eq("PERSIST_LINKS: health says links persist", health && health.linksPersist, true);
+  check("...and a long owner key draws no warning", !sP1.log.includes("shorter than"), sP1.log);
+
+  p.owner = (await joinOn(sP1, { pin: OWNER_KEY })).body.token;
+  const secret = readFileSync(join(linksDir, "secret"), "utf8").trim();
+  check("the secret is 32 random bytes as hex", /^[0-9a-f]{64}$/.test(secret));
+  eq("the owner token is HMAC(secret, \"owner\\0\" + JOIN_PIN)", p.owner,
+    createHmac("sha256", Buffer.from(secret, "hex")).update("owner\0" + OWNER_KEY).digest("hex"));
+
+  p.doc = (await callOn(sP1, "POST", "api/docs", p.owner, { state: fixtureState() })).body.id;
+  const first = (await callOn(sP1, "POST", "api/docs/" + p.doc + "/links", p.owner, { role: "edit" })).body;
+  p.deadKey = first.key;
+  p.deadToken = (await joinOn(sP1, { key: first.key })).body.token;
+  const edit = (await callOn(sP1, "POST", "api/docs/" + p.doc + "/links", p.owner, { role: "edit", replace: true })).body;
+  const review = (await callOn(sP1, "POST", "api/docs/" + p.doc + "/links", p.owner, { role: "review" })).body;
+  p.edit = { id: edit.id, key: edit.key, token: (await joinOn(sP1, { key: edit.key })).body.token };
+  p.review = { id: review.id, key: review.key, token: (await joinOn(sP1, { key: review.key })).body.token };
+
+  const raw = readFileSync(join(linksDir, "links.json"), "utf8");
+  const stored = JSON.parse(raw);
+  eq("links.json holds the active links", stored.links.length, 2);
+  check("...each a whole record", stored.links.every((l) =>
+    ["id", "key", "token", "docId", "role", "createdAt", "createdBy"].every((k) => k in l)), raw);
+  eq("...and the replaced one as a tombstone", stored.revoked.length, 1);
+  eq("...by the hash of its key", stored.revoked[0].keyHash, shaOf(Buffer.from(p.deadKey)));
+  eq("...and of its token", stored.revoked[0].tokenHash, shaOf(Buffer.from(p.deadToken)));
+  check("...never the dead key or token themselves", !raw.includes(p.deadKey) && !raw.includes(p.deadToken));
+  check("...and never the owner token", !raw.includes(p.owner));
+  check("no temp file is left beside it", !readdirSync(linksDir).some((n) => n.endsWith(".tmp")), readdirSync(linksDir).join(", "));
+  const listed = (await callOn(sP1, "GET", "api/docs", p.owner)).body;
+  eq("the document list does not mistake links/ for a document", listed.docs.map((d) => d.id).join(","), p.doc);
+
+  if (process.platform === "win32") {
+    skip("links/ is 0700, and secret and links.json are 0600", "Windows has no POSIX file modes");
+  } else {
+    eq("links/ is 0700", statSync(linksDir).mode & 0o777, 0o700);
+    eq("...the secret 0600", statSync(join(linksDir, "secret")).mode & 0o777, 0o600);
+    eq("...and links.json 0600", statSync(join(linksDir, "links.json")).mode & 0o777, 0o600);
+  }
+} finally {
+  await sP1.halt();
+}
+
+/* The same DATA_DIR, the same JOIN_PIN: a redeploy. */
+const sP2 = await startServer(persistEnv, { dataDir: persistDir });
+try {
+  eq("after a restart the owner's token still works, with no sign-in", (await callOn(sP2, "GET", "api/docs", p.owner)).status, 200);
+  eq("...and signing in again hands back the same one", (await joinOn(sP2, { pin: OWNER_KEY })).body.token, p.owner);
+  const me = (await callOn(sP2, "GET", "api/me", p.edit.token)).body || {};
+  eq("an edit link's token still works, still scoped", me.role + "/" + me.scope, "edit/" + p.doc);
+  eq("...and still reads its document", (await callOn(sP2, "GET", "api/docs/" + p.doc, p.edit.token)).status, 200);
+  eq("a review link's token too", (await callOn(sP2, "GET", "api/docs/" + p.doc, p.review.token)).status, 200);
+  eq("...and joining with a key hands back the token it always had", (await joinOn(sP2, { key: p.edit.key })).body.token, p.edit.token);
+  eq("a link revoked before the restart is still off", said2(await callOn(sP2, "GET", "api/docs", p.deadToken)), "401/link-off");
+  eq("...and its key still 410", (await joinOn(sP2, { key: p.deadKey })).status, 410);
+  const links = (await callOn(sP2, "GET", "api/docs/" + p.doc + "/links", p.owner)).body.links;
+  check("the owner sees the same two links", links.length === 2 &&
+    links.some((l) => l.id === p.edit.id && l.key === p.edit.key) &&
+    links.some((l) => l.id === p.review.id && l.key === p.review.key), JSON.stringify(links));
+  eq("a revoke after the restart is written too", (await callOn(sP2, "DELETE", "api/docs/" + p.doc + "/links/" + p.review.id, p.owner)).status, 200);
+} finally {
+  await sP2.halt();
+}
+
+/* The same DATA_DIR, a NEW JOIN_PIN: how the owner signs every device out. */
+const sP3 = await startServer(Object.assign({}, persistEnv, { JOIN_PIN: OWNER_KEY_2 }), { dataDir: persistDir });
+try {
+  eq("a changed JOIN_PIN signs the old owner token out", said2(await callOn(sP3, "GET", "api/docs", p.owner)), "401/pin-required");
+  eq("...the old key is just a wrong PIN now", (await joinOn(sP3, { pin: OWNER_KEY })).status, 401);
+  const fresh = (await joinOn(sP3, { pin: OWNER_KEY_2 })).body.token;
+  check("...and the new one mints a different owner token", !!fresh && fresh !== p.owner);
+  eq("guests' links are untouched by it", (await callOn(sP3, "GET", "api/docs/" + p.doc, p.edit.token)).status, 200);
+  eq("...and the one revoked on the last run is still off", said2(await callOn(sP3, "GET", "api/docs", p.review.token)), "401/link-off");
+} finally {
+  sP3.stop();
+}
+
+function said2(out) {
+  return out.status + "/" + (out.body && out.body.error);
+}
+
+/* A short key on a server that keeps its sessions is one meant for the
+   internet, and it says so. The LAN's six digits say nothing of the kind. */
+const sShort = await startServer({ JOIN_PIN: PIN, PERSIST_LINKS: "1", HOST: "127.0.0.1" });
+try {
+  check("PERSIST_LINKS with a JOIN_PIN under 20 characters warns at startup",
+    sShort.log.includes("WARNING: JOIN_PIN is shorter than 20"), sShort.log);
+  check("...and a LAN session's short PIN does not", !s2.log.includes("shorter than"));
+} finally {
+  sShort.stop();
+}
+
+/* A links.json that is there but unreadable stops the server rather than
+   being quietly replaced by an empty one. */
+{
+  const badDir = mkdtempSync(join(tmpdir(), "splitpage-test-"));
+  mkdirSync(join(badDir, "links"));
+  writeFileSync(join(badDir, "links", "links.json"), "{nope");
+  const sBad = await startServer(persistEnv, { dataDir: badDir });
+  await sBad.halt();
+  eq("an unreadable links.json stops the server at startup", sBad.exitCode, 1);
+  check("...saying which file and why", sBad.log.includes("links.json is not valid JSON"), sBad.log);
+  eq("...and leaves the file as it found it", readFileSync(join(badDir, "links", "links.json"), "utf8"), "{nope");
+  rmSync(badDir, { recursive: true, force: true });
+}
+
+/* ---------- TRUST_PROXY=cloudflare ----------
+ *
+ * Cloudflare APPENDS to an X-Forwarded-For the client sent, so the first
+ * entry — what TRUST_PROXY=1 reads — is the caller's to choose behind it.
+ * Cf-Connecting-Ip is set by Cloudflare and overwrites a client's own.
+ */
+const sCf = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1", TRUST_PROXY: "cloudflare" });
+try {
+  check("the server says it counts Cf-Connecting-Ip", sCf.log.includes("TRUST_PROXY=cloudflare"), sCf.log);
+  {
+    let last = null;
+    for (let i = 0; i < 10; i++) last = await guess(sCf, { "X-Forwarded-For": "4.4.4." + i });
+    eq("ten guesses each forging a different X-Forwarded-For are ten guesses from one place", last.status, 401);
+    eq("...so a forged X-Forwarded-For does not buy an eleventh", (await guess(sCf, { "X-Forwarded-For": "5.5.5.5" })).status, 429);
+    eq("an unparseable Cf-Connecting-Ip falls back to the socket", (await guess(sCf, { "Cf-Connecting-Ip": "not an address" })).status, 429);
+    eq("...as does a list of two", (await guess(sCf, { "Cf-Connecting-Ip": "1.1.1.1, 2.2.2.2" })).status, 429);
+  }
+  {
+    let last = null;
+    for (let i = 0; i < 10; i++) last = await guess(sCf, { "Cf-Connecting-Ip": "1.1.1.1" });
+    eq("a Cf-Connecting-Ip is a bucket of its own: its tenth wrong guess is still just wrong", last.status, 401);
+    eq("...its eleventh is 429", (await guess(sCf, { "Cf-Connecting-Ip": "1.1.1.1" })).status, 429);
+    eq("...and an X-Forwarded-For beside it changes nothing",
+      (await guess(sCf, { "Cf-Connecting-Ip": "1.1.1.1", "X-Forwarded-For": "3.3.3.3" })).status, 429);
+    eq("...while the next client along gets their own ten", (await guess(sCf, { "Cf-Connecting-Ip": "2.2.2.2" })).status, 401);
+    eq("...an IPv6 one included", (await guess(sCf, { "Cf-Connecting-Ip": "2001:db8::1" })).status, 401);
+  }
+} finally {
+  sCf.stop();
+}
+
+/* ---------- what an internet-facing server must not do ----------
+ *
+ * The launcher serves its whole folder and keeps the library in data/
+ * beneath it; a request line of `//` used to crash the process; a token
+ * header with a non-ASCII byte in it used to be a 500 and a stack trace.
+ */
+const staticRoot = mkdtempSync(join(tmpdir(), "splitpage-static-"));
+writeFileSync(join(staticRoot, "index.html"), "<!doctype html><title>t</title>");
+mkdirSync(join(staticRoot, ".git"));
+writeFileSync(join(staticRoot, ".git", "config"), "[remote \"origin\"]\n");
+writeFileSync(join(staticRoot, ".env"), "SECRET=1\n");
+mkdirSync(join(staticRoot, "data"));
+const sStatic = await startServer({
+  STATIC_DIR: staticRoot, JOIN_PIN: OWNER_KEY, PERSIST_LINKS: "1", HOST: "127.0.0.1", LAUNCH_TOKEN: LAUNCH
+}, { dataDir: join(staticRoot, "data") });
+try {
+  const base = sStatic.base;
+  const owner = (await joinOn(sStatic, { pin: OWNER_KEY })).body.token;
+  const made = (await callOn(sStatic, "POST", "api/docs", owner, { state: fixtureState() })).body;
+  eq("(a link, so links.json exists)", (await callOn(sStatic, "POST", "api/docs/" + made.id + "/links", owner, { role: "edit" })).status, 201);
+  eq("the app itself is served", (await fetch(base + "index.html")).status, 200);
+  eq("a document inside DATA_DIR is not, when DATA_DIR sits under STATIC_DIR", (await fetch(base + "data/" + made.id + ".json")).status, 404);
+  eq("...not with a token either", (await fetch(base + "data/" + made.id + ".json", { headers: { "x-splitpage-token": owner } })).status, 404);
+  eq("...nor spelled in capitals", (await fetch(base + "DATA/" + made.id + ".json")).status, 404);
+  eq("...nor percent-encoded", (await fetch(base + "%64ata/" + made.id + ".json")).status, 404);
+  eq("...nor the link store's secret", (await fetch(base + "data/links/secret")).status, 404);
+  eq("...nor links.json", (await fetch(base + "data/links/links.json")).status, 404);
+  eq("nothing whose name starts with a dot: .git/config", (await fetch(base + ".git/config")).status, 404);
+  eq("...nor .env", (await fetch(base + ".env")).status, 404);
+  eq("...while the API still reads that document", (await callOn(sStatic, "GET", "api/docs/" + made.id, owner)).status, 200);
+
+  eq("a request line of // is 400", await rawRequest(base, "GET // HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"), 400);
+  eq("...and the server is still up afterwards", (await fetch(base + "api/health")).status, 200);
+  eq("a token header with a non-ASCII byte in it is 401, not 500",
+    await rawRequest(base, "GET /api/docs HTTP/1.1\r\nHost: x\r\nx-splitpage-token: " + "a".repeat(63) + "é\r\nConnection: close\r\n\r\n"), 401);
+  eq("...and a launch header likewise is the launcher's 404, not 500",
+    await rawRequest(base, "GET /api/launcher/info HTTP/1.1\r\nHost: x\r\nx-splitpage-launch: ébc\r\nConnection: close\r\n\r\n"), 404);
+  check("...with no server error logged for any of it", !sStatic.log.includes("server-error") && !/RangeError|TypeError/.test(sStatic.log), sStatic.log);
+} finally {
+  sStatic.stop();
+  rmSync(staticRoot, { recursive: true, force: true });
+}
+
 console.log("");
+if (skipped.length) {
+  console.log("SKIPPED " + skipped.length + " check" + (skipped.length === 1 ? "" : "s") + " on this platform:");
+  for (const s of skipped) console.log("  - " + s);
+}
 if (failures.length) {
   console.log("FAILED " + failures.length + " of " + (passed + failures.length) + " checks:");
   for (const f of failures) console.log("  - " + f);
   process.exit(1);
 }
-console.log("ALL PASS - " + passed + "/" + passed + " server checks");
+console.log("ALL PASS - " + passed + "/" + passed + " server checks" +
+  (skipped.length ? " (" + skipped.length + " skipped, listed above)" : ""));
 process.exit(0);
