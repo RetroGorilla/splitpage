@@ -20,8 +20,8 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **Search commands** (Ctrl+K) puts the tagging reference first, and
   searching *tags* finds it.
 - **Export to Excel.** File ▸ Export… ▸ **Spreadsheet** now makes an Excel
-  workbook: sized columns, wrapped text, a frozen header with filters, and a
-  sheet for each part. **CSV** is the second choice on the same card, and
+  workbook: sized columns, wrapped text, a frozen header with filters, a
+  Notes column to write in, and a sheet for each part. **CSV** is the second choice on the same card, and
   the Breakdown and the B-roll shot list offer both. See
   [Exporting](#exporting).
 
@@ -543,9 +543,10 @@ Every spreadsheet — the script, the Breakdown and the B-roll shot list —
 comes two ways. Pick one under **Format**:
 
 - **Excel (.xlsx)** opens laid out and ready to read or print: columns sized
-  to fit, long lines wrapped, the header row frozen with filters on it, and a
-  sheet each for the script, the comments, the breakdown and the b-roll (only
-  the ones your script has). It opens in Excel, Google Sheets and Numbers.
+  to fit, long lines wrapped, the header row frozen with filters on it, a
+  blank **Notes** column beside the scenes to write in, and a sheet each for
+  the script, the comments, the breakdown and the b-roll (only the ones your
+  script has). It opens in Excel, Google Sheets and Numbers.
 - **CSV (.csv)** is the plain values and nothing else, for another tool to
   read. Splitpage can open a CSV of the script again.
 

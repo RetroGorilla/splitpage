@@ -6,7 +6,9 @@ import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { exportMetaLine, tagPrintColor, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
-import { brollSummaryText, commentNumbers, exportBrollScenes, exportFacts, exportRuns, sceneFacts } from "./14b-export-kit.js";
+import {
+  brollSummaryText, commentNumbers, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
+} from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
@@ -392,11 +394,13 @@ function pvShotList(title) {
 
 /* The sheets the whole-script workbook will have (buildScriptXlsx,
    16b-xlsx.js): the script always, and a sheet for each part only when
-   the script has anything for it — the same rule tailSummary() reads for
-   the documents' closing sections. */
+   the script has anything for it — asked of the same lists the builder
+   reads (exportComments, breakdownRows, and the shots brollTable lists,
+   which exportBrollScenes groups), so the tabs cannot promise a sheet the
+   file leaves out. */
 function xlsxSheetNames() {
   var names = ["Script"];
-  if ((S.state.comments || []).length) names.push("Comments");
+  if (exportComments().length) names.push("Comments");
   if (breakdownRows().length) names.push("Breakdown");
   if (exportBrollScenes().length) names.push("B-roll");
   return names;
@@ -434,8 +438,9 @@ function previewHtml(action) {
   if (action === "export-md-table") return pvTextLines(toMarkdownTableDoc(null, { export: true, scenes: 7 }), 20);
   if (action === "export-csv" || action === "export-xlsx") {
     var scenes = sceneFacts();
+    var sheetHead = ["Scene", "Start", "Status", "Read", "Visual", "Audio"];
     /* a few scenes, so the totals under them stay in sight */
-    var sceneGrid = pvGrid(["Scene", "Start", "Status", "Read", "Visual", "Audio"], rows.slice(0, 5).map(function (r, i) {
+    var sheetRows = rows.slice(0, 5).map(function (r, i) {
       var f = scenes[i];
       return { cells: [f.number, f.start, escapeHtml(f.status.label), f.read,
                        cellText(r.visualText, 34), cellText(r.audioText, 44)] };
@@ -443,8 +448,13 @@ function previewHtml(action) {
       { cls: "pv-gap", cells: ["…", "", "", "", "", ""] },
       { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts().status.shot + " of " + S.state.rows.length + " shot"),
                                  escapeHtml(exportFacts().runtime), "", ""] }
-    ] : []), [12, 12, 14, 10, 25, 27]);
-    return action === "export-xlsx" ? pvWorkbook(sceneGrid, xlsxSheetNames()) : sceneGrid;
+    ] : []);
+    if (action === "export-csv") return pvGrid(sheetHead, sheetRows, [12, 12, 14, 10, 25, 27]);
+    /* the workbook's script sheet ends in a blank, ruled Notes column to
+       write in (scriptSheet, 16b-xlsx.js) — the room Adam asked for */
+    return pvWorkbook(pvGrid(sheetHead.concat(["Notes"]), sheetRows.map(function (r) {
+      return { cls: r.cls, cells: r.cells.concat([""]) };
+    }), [12, 12, 14, 10, 18, 20, 14]), xlsxSheetNames());
   }
   if (action === "export-html") {
     /* the page is the app, named for the script in the browser's tab */
@@ -567,6 +577,7 @@ export function exportSummary(action) {
          gives each part a sheet of its own */
       var more = xlsxSheetNames().slice(1).map(function (s) { return s.toLowerCase(); });
       if (more.length) bits.push((more.length === 1 ? "a sheet for " : "sheets for ") + listed(more));
+      bits.push("a Notes column to write in");
       bits.push("columns sized, header frozen, filters on");
     } else if (action === "export-html") {
       bits.push(plural(rows.length, "scene"));
