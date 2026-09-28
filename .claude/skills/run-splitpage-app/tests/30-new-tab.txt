@@ -135,8 +135,9 @@ expect document.querySelectorAll('.newtab-preview.is-blank svg').length == 1
 # desktop-app notice's own link target (20a-update.js)
 expect document.getElementById('newtab-recents').hidden == true
 # the line is for a Windows browser only (a phone, a Mac or Linux gets nothing
-# to click), so this suite's Linux Chromium sees it hidden until it is
-# made to look like Windows
+# to click). Made to look like Linux first, whatever this harness runs on —
+# on Windows headless Edge is a Windows browser (2026-09-28) — then Windows
+eval (function(){ Object.defineProperty(navigator, 'userAgent', { configurable: true, get: function(){ return 'Mozilla/5.0 (X11; Linux x86_64) Chrome/120'; } }); window.__newTab.refreshRecents(); return true; })()
 expect document.getElementById('newtab-desktop').hidden == true
 eval (function(){ Object.defineProperty(navigator, 'userAgent', { configurable: true, get: function(){ return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120'; } }); window.__newTab.refreshRecents(); return true; })()
 expect document.getElementById('newtab-desktop').hidden == false
