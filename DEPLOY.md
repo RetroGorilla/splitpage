@@ -1,349 +1,575 @@
-# Hosting Splitpage on Unraid
+# Running Splitpage's server
 
-This puts Splitpage on your own domain so collaborators can open a link, sign
-in with Google, and work on the same scripts you do — with edits merged rather
-than overwriting each other.
+Splitpage's document server runs on the unRAID box **OldMan**, at
+**https://script.bigmanonline.uk**. It keeps your scripts in one place, and
+lets you hand someone a link to one script — to edit it or just comment on
+it — without them installing anything.
 
-**The container has no login of its own, on purpose.** Cloudflare Access does
-that job in front of it, and does it better than anything hand-rolled here.
-Follow §3 before you share the link with anyone.
+Written to be followed without knowing Docker. If you only read one thing:
+
+```bash
+cd /mnt/user/appdata/splitpage
+./deploy.sh
+```
+
+That is the whole deploy. It pulls the code, builds, snapshots your scripts,
+swaps the container and shows the log. Everything below explains what it's
+doing, how to set it up the first time, and how to fix things when they go
+wrong.
+
+- §1–5 are this server: where things live, first-time setup, deploying,
+  looking after it, traps.
+- §6–7 are how the desktop installers and releases are built.
+- §8 is other ways to run the server (someone else's machine, Cloudflare
+  Access in front, `docker compose`).
+- §9 is what to do when something is broken.
+
+**How it's locked.** There is no Cloudflare Access in front of this server,
+on purpose (§2.5 says why). The server locks itself: a long **owner key**
+that you type into Splitpage once per device, and an **invite link** per
+script for everybody else, which opens that one script and nothing more.
 
 ---
 
-## 1. What you get
+## 1. Where everything lives
 
-- The app at `https://splitpage.yourdomain.com`, installable as a PWA.
-- Documents stored **on the server**, not in each person's browser. Open one,
-  edit it, and Save publishes straight back.
-- **Concurrent editing that doesn't lose work.** Every save carries the version
-  it started from. If someone saved while you were typing, the server hands
-  their version back and Splitpage three-way merges the two. Edits to different
-  scenes merge silently; edits to the *same* field keep theirs live and save
-  yours as a review comment, so nothing is ever dropped.
-- Your existing local workflow is untouched. Opening `index.html` from disk
-  still works exactly as before, and **Save As** still gives you a local copy
-  of a hosted script any time.
+| Thing | Where |
+| --- | --- |
+| The app, live | https://script.bigmanonline.uk |
+| Server | unRAID box (`OldMan`), reached over SSH as `root` |
+| Project folder | `/mnt/user/appdata/splitpage/` — a clone of `RetroGorilla/splitpage` |
+| Settings + the owner key | `/mnt/user/appdata/splitpage/.env` |
+| **Your scripts** | `/mnt/user/appdata/splitpage/data/` — one `.json` file per script |
+| Pictures in scripts | `/mnt/user/appdata/splitpage/data/blobs/` |
+| **Invite links + sign-ins** | `/mnt/user/appdata/splitpage/data/links/` — `links.json` (the links you've made) and `secret` (what keeps your devices signed in) |
+| Deploy-time snapshots | `/mnt/user/appdata/splitpage/backups/splitpage-*` (last 10) |
+| Container name | `splitpage` |
+| Port | `8791` — what the Cloudflare tunnel points at |
+| Branch deployed | `main` (override for one run with `BRANCH=other ./deploy.sh`) |
 
----
+**`data/` is the whole database.** No index, nothing to rebuild: copying the
+folder *is* a backup. Three parts, and a backup needs all of them:
 
-## 2. Build and run it
+- the `.json` files — one per script, the script and its comments inside;
+- `blobs/` — every picture, stored once, named by its fingerprint. A script
+  whose picture file is gone shows a placeholder in its place;
+- `links/` — **what keeps the links you've sent working, and you signed
+  in.** Two files: lose `links.json` and every link you ever sent is dead
+  (you'd have to make and send new ones); lose `secret` and every device
+  has to type the owner key again. Both are readable by the server only,
+  which is right — leave their permissions alone.
 
-> **Stock Unraid has `docker` but not `docker compose`.** Compose only exists
-> if you installed the *Compose Manager* plugin from Community Applications.
-> The steps below use plain `docker`, which always works. If you do have
-> Compose Manager, `docker compose up -d --build` in the source folder does the
-> same thing and you can skip to §3 — but note that `docker-compose.yml` lives
-> in the repository, and a repository checkout has no `index.html` to build
-> from until you run `node build.mjs` in it. Deploying from the CI artifact
-> (§2.1) avoids the question entirely.
+**Never edit anything inside `data/` or `backups/` by hand.** §4 explains
+why the snapshots depend on it.
 
-### 2.1 Get the files onto the server
+### Two different places
 
-**Take them from CI.** `index.html` is generated and is *not* in the
-repository — every green CI run builds it and uploads the deployable set as
-an artifact called **`splitpage-app`**. On the repository's **Actions** tab,
-open the run for the commit you want to deploy, and download `splitpage-app`
-from the *Artifacts* box at the bottom of the page. GitHub hands you a zip;
-its contents are exactly what goes on the server, `Dockerfile` included, so
-the unzipped folder is already a working `docker build` context.
+1. **The server** — where you SSH in. The project folder, `.env` and `data/`
+   live here.
+2. **Inside the container** — a sealed box running the server. It sees your
+   scripts at `/data`; that is the *same folder* as
+   `/mnt/user/appdata/splitpage/data` on the server, just viewed from inside.
 
-> **Building it yourself instead.** From a checkout: `npm install` once, then
-> `node build.mjs`, and copy `index.html`, `sw.js`, `manifest.webmanifest`,
-> `icon.svg`, `icon-maskable.svg`, `Dockerfile` and `server/` yourself. A checkout that has never
-> been built has no `index.html` at all — that is normal, not a broken clone.
-> `node build.mjs --check` says whether the copy you have is current.
->
-> The folder you make on the server below is also called `src`, which is an
-> unrelated coincidence: it holds the *built* app, not the repo's source.
-
-In Windows Explorer, open `\\TOWER\appdata` (replace `TOWER` with your
-server's name — the same one you use for other shares). Create a folder
-`splitpage`, and inside it a folder `src`, then copy the whole contents of
-the unzipped artifact into `src`.
-
-You should end up with:
-
-```
-/mnt/user/appdata/splitpage/src/
-    index.html
-    manifest.webmanifest
-    icon.svg
-    icon-maskable.svg
-    sw.js
-    Dockerfile
-    server/server.js
-    server/package.json
-```
-
-That is the whole build context. There is no `src/` of the repo's own on the
-server and no Node build step in the image: the app arrives already built.
-
-*If `\\TOWER\appdata` won't open*, the share isn't exported over SMB. In the
-Unraid web UI: **Shares → appdata → SMB Security Settings → Export = Yes**.
-(Set it back to No afterwards if you prefer it hidden — the container reads
-from disk, not from the share.)
-
-### 2.2 Build and start it
-
-Unraid web UI → **Terminal** (the `>_` icon, top right). Then:
-
-```bash
-mkdir -p /mnt/user/appdata/splitpage/data
-```
-
-```bash
-docker build -t splitpage /mnt/user/appdata/splitpage/src
-```
-
-That pulls `node:22-alpine` and takes a minute or two the first time. Then:
-
-```bash
-docker run -d --name splitpage --restart unless-stopped -p 8791:8791 -v /mnt/user/appdata/splitpage/data:/data --user 99:100 splitpage
-```
-
-`--restart unless-stopped` means it comes back by itself after a reboot. The
-container now shows up on Unraid's **Docker** tab like any other.
-
-### 2.3 Check it works
-
-```bash
-docker logs splitpage --tail 20
-```
-
-You want `listening on 0.0.0.0:8791`. Then, from your PC's browser, visit
-`http://TOWER-IP:8791` — find the IP on Unraid's **Dashboard**, or run
-`hostname -I` in the terminal. Splitpage should load, and **File** should show
-*Open from the server…*.
-
-### If it won't start
-
-Almost always permissions on the data volume — the container runs as a
-non-root user. `docker logs splitpage` showing `EACCES` means the uid is wrong.
-Check what actually owns the folder:
-
-```bash
-ls -ln /mnt/user/appdata/splitpage
-```
-
-`99 100` is Unraid's usual `nobody:users` and matches the `--user 99:100`
-above. If yours differs, remove and recreate the container with the right
-values:
-
-```bash
-docker rm -f splitpage
-```
-
-### Updating later
-
-Download the `splitpage-app` artifact from the newer CI run, copy its
-contents into `src` again (overwriting), then:
-
-```bash
-docker rm -f splitpage && docker build -t splitpage /mnt/user/appdata/splitpage/src && docker run -d --name splitpage --restart unless-stopped -p 8791:8791 -v /mnt/user/appdata/splitpage/data:/data --user 99:100 splitpage
-```
-
-Your documents live in the `data` volume, which this does not touch.
-
-Anyone with the app open while you update should reload it. A page older than
-the server can no longer save a document that has images in it: the server
-answers with "This page is out of date for this server", because an older page
-would drop the images it cannot see.
-
-### Where your documents live
-
-One JSON file per script in `/mnt/user/appdata/splitpage/data`. That is the
-whole database — no index, nothing to rebuild. **Back it up by copying the
-folder.** Include it in your normal Unraid appdata backup and you are covered.
-
-Each file is written with a summary on its first line and the script on its
-second:
-
-```json
-{"id":"kitchen-ab12","rev":7,"updatedAt":"…","updatedBy":"…","title":"Kitchen","rows":9,
-"state":{ …the whole script… }}
-```
-
-It is still one JSON object — the newline is whitespace, so anything that
-reads JSON reads it unchanged. The point of the split is that the picker can
-list twenty scripts, and a save can check the revision it is replacing,
-without parsing twenty scripts in full. Documents written by an older version
-have no such line; they are read the old way and quietly rewritten with one
-the next time they are listed or saved. Each save is fsynced and renamed into
-place, so a power cut leaves the previous version, never a half-written one.
+The container is disposable. Deleting and rebuilding it is routine and loses
+nothing, **as long as the data stays in the folder above, not inside it.**
 
 ---
 
-## 3. Put it behind Cloudflare Access — do this before sharing the link
+## 2. First-time setup
 
-You already run a tunnel for Seer, so this is a second hostname on it plus a
-policy. Nothing here touches the container.
+Once, about twenty minutes. Everything happens in a terminal on OldMan:
+`ssh root@oldman` from your PC, or the unRAID web UI's **Terminal** (the
+`>_` icon, top right).
 
-### 3.1 Route the hostname
+### 2.1 A deploy key for this repository
 
-Cloudflare dashboard → **Zero Trust** → **Networks → Tunnels** → your tunnel →
-**Configure** → **Public Hostnames** → **Add a public hostname**:
+The repository is private, so the server pulls it over SSH with a read-only
+**deploy key**, exactly as it does for BigManager. BigManager's key,
+`bmo_deploy`, can't be reused: GitHub refuses a deploy key that is already on
+another repository. So Splitpage gets its own, in the same place.
+
+That place is `/boot/config/ssh/root/`, on the USB stick. unRAID keeps
+root's SSH settings there, which is why `bmo_deploy` survives reboots, and
+the `config` file beside it is what tells SSH which key to use for which
+host. Have a look first:
+
+```bash
+ls -la /boot/config/ssh/root/
+cat /boot/config/ssh/root/config
+```
+
+You should see `bmo_deploy` and a `config` with a `Host github.com` block
+naming it. Leave that block alone.
+
+**a. Make the key.**
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "oldman splitpage deploy" -f /boot/config/ssh/root/splitpage_deploy
+```
+
+That makes two files: `splitpage_deploy`, the private half, which never
+leaves the server, and `splitpage_deploy.pub`, the public half, which goes to
+GitHub. `-N ""` means no passphrase — a deploy runs unattended, with no one
+to type one.
+
+**b. Tell SSH when to use it.** Both keys are for github.com, so this one
+gets a made-up host name, `github-splitpage`, which only Splitpage's clone
+uses; BigManager carries on using plain `github.com`. Run this **once**:
+
+```bash
+cat >> /boot/config/ssh/root/config <<'EOF'
+
+Host github-splitpage
+    HostName github.com
+    User git
+    IdentityFile /boot/config/ssh/root/splitpage_deploy
+    IdentitiesOnly yes
+EOF
+```
+
+`>>` adds to the end of the file. (A single `>` would replace the whole
+file, BigManager's entry included — mind the two.) `IdentitiesOnly yes`
+stops SSH offering BigManager's key instead, which GitHub would accept as
+*a* key and then refuse for this repository.
+
+**c. Give GitHub the public half.**
+
+```bash
+cat /boot/config/ssh/root/splitpage_deploy.pub
+```
+
+Copy the whole line it prints (it starts `ssh-ed25519`). On GitHub, open
+`RetroGorilla/splitpage` → **Settings** → **Deploy keys** → **Add deploy
+key**. Title: `OldMan (read-only)`. Paste the line into **Key**. Leave
+**Allow write access** unticked. **Add key**.
+
+**d. Check it.**
+
+```bash
+ssh -T git@github-splitpage
+```
+
+You want: `Hi RetroGorilla/splitpage! You've successfully authenticated, but
+GitHub does not provide shell access.` If it asks *Are you sure you want to
+continue connecting*, type `yes`. A warning about `known_hosts` ("Operation
+not permitted") is harmless, the same as with BigManager: the USB stick
+can't hold the link SSH tries to make. `Permission denied (publickey)` means
+step c didn't happen, or step b has a typo.
+
+### 2.2 Get the code
+
+```bash
+git clone git@github-splitpage:RetroGorilla/splitpage.git /mnt/user/appdata/splitpage
+```
+
+The address uses `github-splitpage`, not `github.com` — that is what picks
+the key from 2.1. Every later `git pull` (which `deploy.sh` does for you)
+uses it too.
+
+If git says the folder *already exists and is not an empty directory*,
+something is there from an earlier attempt. **Don't delete it** — it may
+hold scripts. Move it aside, then clone again:
+
+```bash
+mv /mnt/user/appdata/splitpage /mnt/user/appdata/splitpage-old
+```
+
+(If `splitpage-old/data` has scripts in it you want, copy them in after
+step 2.4, the way §4 *Restoring* does.)
+
+### 2.3 Settings, and the owner key
+
+```bash
+cd /mnt/user/appdata/splitpage
+cp .env.example .env
+chmod 600 .env
+KEY="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+sed -i "s/^JOIN_PIN=.*/JOIN_PIN=$KEY/" .env
+grep '^JOIN_PIN=' .env
+```
+
+Line by line: copy the template to `.env`; make it readable by root only;
+make a random 32-character key of letters and digits; write it into the
+`JOIN_PIN=` line; show you that line.
+
+**Copy the part after `JOIN_PIN=` into your password manager now**, as
+"Splitpage owner key". That is the owner key. (It is called `JOIN_PIN` in
+the file — a name left over from the laptop launcher.) Whoever has it can
+open, change and delete every script and make or cancel links, so it is
+only ever typed into Splitpage, never sent to anyone.
+
+The other settings in `.env` are already what this server needs:
+`PERSIST_LINKS=1`, `TRUST_PROXY=cloudflare` and
+`ALLOW_ORIGINS=splitpage://app`. `nano .env` shows what each one does.
+
+### 2.4 First deploy
+
+```bash
+cd /mnt/user/appdata/splitpage
+./deploy.sh
+```
+
+The first build downloads Node and takes a few minutes; later ones are
+quicker. It ends with **Done — deployed `<commit>`**, a line starting
+`/api/health says:`, and then the server's log. Press Ctrl-C to leave the
+log — the server keeps running.
+
+Check it from a PC at home: `http://<unraid-ip>:8791` (the IP is on unRAID's
+**Dashboard**) should load Splitpage.
+
+### 2.5 Point the Cloudflare tunnel at it
+
+The same thing you did for BigManager's `life.bigmanonline.uk`. Cloudflare
+dashboard → **Zero Trust** → **Networks → Tunnels** → your tunnel →
+**Configure** → **Public Hostname** → **Add a public hostname**:
 
 | Field | Value |
 | --- | --- |
-| Subdomain | `splitpage` |
-| Domain | `yourdomain.com` |
+| Subdomain | `script` |
+| Domain | `bigmanonline.uk` |
 | Service type | `HTTP` |
-| URL | `192.168.1.50:8791` — your Unraid IP and the port |
+| URL | `<unraid-ip>:8791` — the same IP BigManager's entry uses |
 
-Use `HTTP`, not `HTTPS` — the hop from the tunnel to the container is inside
-your LAN, and the container speaks plain HTTP. Visitors still get HTTPS,
-because Cloudflare terminates it at the edge.
+`HTTP`, not `HTTPS`: the hop from the tunnel to the container stays inside
+your home network, and visitors still get HTTPS because Cloudflare adds it.
+The tunnel dials out to Cloudflare, so you never forward a port on your
+router — and must not forward this one.
 
-The tunnel dials **out** to Cloudflare, so you never forward a port and 8791
-stays off the internet.
+**Do not add an Access application for `script.bigmanonline.uk`.** The
+Splitpage desktop app and the people you send links to talk to the server
+directly and can't carry a Cloudflare Access sign-in, so Access would lock
+them out; the server's owner key and invite links are the lock instead.
+(If you have an Access application for `*.bigmanonline.uk`, it covers this
+hostname too — check **Access → Applications**.)
 
-### 3.2 Add Google as a sign-in method
+### 2.6 Check it from outside
 
-Zero Trust → **Settings → Authentication** → **Login methods** → **Add new** →
-**Google**. Cloudflare walks you through creating the Google OAuth client and
-tells you exactly which redirect URL to paste in.
+On your phone, **with Wi-Fi off**, open:
 
-If that turns fiddly, **One-time PIN** needs no setup at all — collaborators
-get a six-digit code by email instead. You can add Google later without
-changing anything else.
+```
+https://script.bigmanonline.uk/api/health
+```
 
-### 3.3 Lock the hostname down
+You should get one line of text containing `"authRequired":true`,
+`"links":1` and `"linksPersist":true`. Then `https://script.bigmanonline.uk`
+should load Splitpage — without a Cloudflare sign-in page. A sign-in page
+means an Access application covers the hostname (2.5). *Bad gateway* means
+the tunnel's URL is wrong or the container isn't running (§9).
 
-Zero Trust → **Access → Applications** → **Add an application** →
-**Self-hosted**:
+### 2.7 Sign in from the app
 
-- **Application domain:** `splitpage.yourdomain.com`
-- **Session duration:** 24 hours is a good default (see §5).
-- Add a policy: **Action = Allow**, and either
-  - **Include → Emails →** each collaborator's address, or
-  - **Include → Emails ending in →** `@yourdomain.com` for everyone in your org.
+In Splitpage — the desktop app or the web page — press **Collaborate** and
+paste the owner key. That device stays signed in, through restarts and
+deploys; do it once on each device you use.
 
-Include your own address, or you will lock yourself out.
-
-### 3.4 Check it
-
-Open `https://splitpage.yourdomain.com` in a private window. You should get a
-Cloudflare sign-in page, **not** Splitpage. Sign in and the app loads.
-
-> If Splitpage loads without asking you to sign in, the policy is not applied.
-> Stop and fix that before sending the link to anyone — until it is, the URL is
-> open to whoever finds it.
-
-Free tier covers 50 users, which is far more than a video crew needs.
+From then on, **Collaborate** on a script makes a **Can edit** or **Can
+comment** link to send. The person opens it in their browser: no account,
+nothing to install, and they see that one script only.
 
 ---
 
-## 4. Using it
+## 3. Deploying a change
 
-**Publish your first script.** Open the app, then **File ▸ Put this script on
-the server**. The chip by the title changes to *On the server*, and from then
-on Save publishes there.
+```bash
+cd /mnt/user/appdata/splitpage
+./deploy.sh
+```
 
-**Collaborators.** Send them the link. **File ▸ Open from the server…** lists
-everything published; they pick one and start working. Their name is filled in
-automatically from the Google account they signed in with, so review comments
-are attributed without anyone typing anything.
+In order, it:
 
-**Two people at once.** Both just work. Splitpage merges on save. If you both
-change the *same* line, theirs stays in the script and yours is kept as a
-comment flagged "Unmerged edit" — click **Review conflicts** in the banner to
-see them.
+1. pulls the latest `main` from GitHub (and starts over if that changed
+   `deploy.sh` itself);
+2. keeps the version running now as the image `splitpage:previous` — only
+   if it is healthy, so a re-run after a failed deploy can't replace the
+   last good version with the broken one;
+3. builds the new image. The app is compiled inside the build, so the
+   server needs no Node of its own. **The server stays up during the build**,
+   so a failed build costs you no downtime;
+4. stops the server;
+5. snapshots `data/` into `backups/` (§4);
+6. starts the new container, as `99:100` (unRAID's `nobody:users`), after
+   making sure `data/` belongs to that user;
+7. waits up to 60 seconds for `/api/health` to answer, prints what it says,
+   and shows the log.
 
-**Taking a copy.** **Save As** always writes a local `.html`, even when a
-hosted document is open. That is how you fork a script, or keep an archive.
+**It refuses to run** — a red **STOPPED** line saying what to fix — if
+`.env` is missing, if `JOIN_PIN` is missing, shorter than 20 characters or
+has a quote or space in it, if `PERSIST_LINKS` isn't `1`, if `TRUST_PROXY`
+isn't `cloudflare`, if any setting appears twice, or if `.env` sets `PORT`,
+`HOST`, `DATA_DIR` or `STATIC_DIR` (the image sets those). It also won't
+build if `.dockerignore` has stopped keeping `data/`, `backups/` and `.env`
+out of what Docker is handed. It **warns** and
+carries on if `ALLOW_ORIGINS` doesn't include `splitpage://app` (the desktop
+app couldn't connect), or if the new server doesn't report
+`"linksPersist":true`.
+
+If it asks for a GitHub username or password, the clone's address is wrong —
+see *git asks for a username* in §5.
+
+The last lines either say **Done — deployed `<commit>`**, or that the new
+version did not come up healthy, followed by:
+
+```bash
+cd /mnt/user/appdata/splitpage
+./deploy.sh rollback
+```
+
+That starts the previous version again. It **does not touch your data**:
+scripts, pictures, links and `.env` stay exactly as they are. The code
+folder keeps the newer commit, so the next `./deploy.sh` would build it
+again — get the problem fixed on GitHub first.
+
+Run from a terminal, a deploy ends by following the log until you press
+Ctrl-C. Run without one — `ssh oldman 'cd /mnt/user/appdata/splitpage &&
+./deploy.sh'` from another machine, as Claude does — it prints the last 40
+lines once and exits, so the command finishes by itself.
+
+**Anyone with Splitpage open should reload it** after a deploy. A page
+older than the server can't save a script that has pictures in it: the
+server answers "This page is out of date for this server", because an older
+page would drop the pictures it can't see.
 
 ---
 
-## 5. Things worth knowing
+## 4. Looking after it
 
-**Sessions expire.** At the duration set in §3.3. When one does mid-edit,
-Splitpage notices — a background save would otherwise get a sign-in page back
-where it expected data — stashes your unsaved work, and tells you to reload.
-After you sign in again it reopens the document and merges your stashed edits
-back in, including anything that changed while you were out. Longer sessions
-mean fewer interruptions; shorter ones are stricter. 24 hours is a reasonable
-middle.
+### Everyday commands
 
-**No per-user permissions.** Anyone Access lets in can edit and delete any
-document. There are no roles. If you need a read-only audience, set
-`READ_ONLY=1` in `docker-compose.yml` and run a second container pointed at the
-same data folder on a different hostname with its own, broader Access policy.
+```bash
+cd /mnt/user/appdata/splitpage
 
-**Deleting is immediate.** The picker's × asks once, then the document is gone
-from the server. Your backup of the data folder is the undo.
+docker ps                          # is it running?
+docker logs --tail 100 splitpage   # what did it say?
+docker restart splitpage           # turn it off and on again
+nano .env                          # change a setting...
+docker restart splitpage           # ...then restart to apply it
+```
 
-**Large scripts.** The cap is 25 MB per document (`MAX_BODY_BYTES`). Raise it
-if you hit it.
+**Changing `.env` does nothing until the container restarts.** That trips
+everyone up once. (`./deploy.sh` also applies it, and checks the file first;
+it just takes longer.)
 
-That cap is for saving a whole script. Posting a comment has its own, much
-smaller one — half a megabyte, fixed — because a comment is a comment, and a
-review session that can only comment should never be able to make the server
-buffer a script-sized upload. Raising `MAX_BODY_BYTES` does not raise it, and
-nothing a reviewer legitimately sends comes close to it.
+### Backups
 
-**Images.** Current versions of the app keep images out of the document:
-each image is uploaded once, on its own, and stored under
-`data/blobs/<2 characters>/<its SHA-256>`, so the documents themselves stay
-small. Back `blobs/` up with the rest of the folder — a document that names an
-image whose file is gone shows a placeholder in its place. Nothing deletes an
-image file today, even when no document uses it any more.
+Every `./deploy.sh` stops the server and snapshots `data/` — scripts,
+pictures and links together — into `backups/splitpage-<date>-<time>/`,
+keeping the newest 10.
 
-One image is capped at 8 MiB (`MAX_BLOB_BYTES`), and only PNG, JPEG, GIF and
-WebP are accepted. Review sessions may upload the screenshots they paste into
-comments, up to 20 MiB per review token per hour
-(`REVIEW_BLOB_BUDGET_BYTES`); editors have no such limit. Everyone who uses the
-library-wide review PIN or key shares one token, and so one allowance.
+Each snapshot is a **hard-link snapshot**: made in a moment and costing
+almost no space, because a file that hasn't changed is *shared* with `data/`
+rather than copied. That is still a real backup, because the server never
+changes a file once it has written it. Every save writes a new file and
+swaps it in under the old name; pictures are never rewritten at all. So the
+file a snapshot shares is never touched again, and a script you delete from
+the app disappears from `data/` only. The one thing that *would* break this
+is editing a file inside `data/` or `backups/` by hand — editors like `nano`
+rewrite a file in place, and every snapshot sharing it would change too.
+Don't. (If the disk can't hard-link, `deploy.sh` makes an ordinary full
+copy instead, and says so.)
 
-An older copy of the app cannot save over a document that holds images stored
-this way (it would drop them) — the server refuses with "client too old", and
-reloading the page fixes it.
+The snapshots sit on the same disk as the app. For a copy somewhere else,
+copy the newest one — it was taken with the server stopped, so it is
+consistent:
 
-**`JOIN_PIN` is not a substitute for Access.** Setting `JOIN_PIN` in the
-container's environment makes every `/api/*` route except `/api/health` and
-`/api/join` require a token, which a client gets by posting the right PIN. It
-exists for the *launcher's* case — someone hosting a session on a laptop for
-the people in the room — where there is no Access and no TLS. On the internet
-it buys nothing Access does not already do, and it is weaker in every way: one
-shared string, the same for everyone, valid until the process restarts, tied
-to no person, with nothing to revoke and nothing to audit. Use Access. Setting
-both is allowed and changes nothing about who reaches the container; the PIN is
-then just one more thing to type.
+```bash
+cd /mnt/user/appdata/splitpage
+mkdir -p /mnt/user/backups/splitpage
+cp -a "$(ls -1d backups/splitpage-* | tail -n 1)" /mnt/user/backups/splitpage/
+```
 
-If you do set it: the token is minted per process and held only in memory, so a
-redeploy signs everyone out; wrong PINs are limited to ten a minute per address;
-and neither the PIN nor the token is ever written to disk, logged, or served by
-the static handler.
+(Make a `backups` share in the unRAID web UI first, **Shares → Add Share**,
+ideally on a different disk.) Including `/mnt/user/appdata/splitpage/data`
+in whatever backs up the rest of your appdata works too.
 
-**`TRUST_PROXY=1`** tells that rate limit to count `X-Forwarded-For` instead of
-the socket. Set it when the container only ever hears from a proxy — a
-Cloudflare tunnel, nginx, or Docker's own NAT — because there every request
-arrives from the same address and the limit is one bucket for the whole house:
-one stranger's ten wrong guesses lock everybody out for a minute. Only the
-first entry of the header is read, and anything that is not an address is
-ignored.
+**What no backup contains:** `.env`, which holds the owner key. The key is
+in your password manager (2.3). If `.env` is ever lost, make a new one the
+same way, with a new key: your scripts and every link you've sent carry on
+working, and each device just signs in again with the new key.
 
-**Do not set it if anything can reach the port directly.** `X-Forwarded-For` is
-just a request header: whoever can talk to the port writes what they like in
-it, so trusting it there hands a guesser a fresh allowance per guess and turns
-the limit off. Off is the default for that reason.
+### Restoring
 
-**`ALLOW_ORIGINS`** is a comma-separated allowlist of origins permitted to call
-the API cross-origin. Empty (the default) means same-origin only, which is what
-a deployment behind Access should stay. Entries match exactly and are echoed
-back one at a time; `*` is never sent, and neither is
-`Access-Control-Allow-Credentials` — so a cross-origin caller has to carry a
-join token and cannot ride on somebody's Access cookie. Static files never
-carry CORS headers either way.
+Run on the server. This puts the current data aside rather than deleting
+it, so a restore can itself be undone.
 
-The literal entry `null` used to be honoured, so that a copy opened from
-`file://` could talk to a server. It is now ignored, with a line in the log
-saying so: `null` is not one site. Every page opened from `file://`, and every
-sandboxed iframe on every site on the internet, sends that same origin — so
-allowing it allowed all of them. Serve the portable copy over `http://` and
-name the origin it is served from.
+1. See which snapshots exist (newest last):
 
-**Updating.** Pull the new files and `docker compose up -d --build`. Documents
-live in the mounted volume, so they are unaffected.
+   ```bash
+   cd /mnt/user/appdata/splitpage
+   ls -1d backups/*
+   ```
+
+2. Stop the server and move the current data aside:
+
+   ```bash
+   cd /mnt/user/appdata/splitpage
+   docker stop splitpage
+   mv data "backups/before-restore-$(date +%Y%m%d-%H%M%S)"
+   ```
+
+3. Copy the snapshot in. Put the folder you picked from step 1 after `B=`:
+
+   ```bash
+   cd /mnt/user/appdata/splitpage
+   B=backups/splitpage-20260927-120000
+   cp -a "$B" data
+   docker start splitpage
+   ```
+
+   `cp -a` makes a real copy, with the same owners, so the snapshot itself
+   stays as it was.
+
+4. Open the app and check your latest scripts are what you expect, and that
+   a link you've sent still opens. If something is wrong, repeat steps 2–3
+   with the `backups/before-restore-…` folder as `B` to put things back.
+
+Never touch `.env` while restoring.
+
+### If the server won't start: a damaged links file
+
+Rather than quietly start with every link forgotten, the server refuses to
+start when `data/links/links.json` or `data/links/secret` can't be read.
+The container then keeps restarting, and `docker logs --tail 20 splitpage`
+names the file. Put back the copy from the newest snapshot — moving the
+damaged one aside first rather than copying over it, because copying over a
+file changes it in place, and the snapshots may share it:
+
+```bash
+cd /mnt/user/appdata/splitpage
+docker stop splitpage
+ls -1d backups/splitpage-*        # the newest is last
+F=links.json                      # or secret: whichever the log named
+mv "data/links/$F" "backups/$F.damaged-$(date +%Y%m%d-%H%M%S)"
+cp -a "backups/splitpage-20260927-120000/links/$F" data/links/
+docker start splitpage
+```
+
+(Use the snapshot folder from the `ls` line in place of
+`splitpage-20260927-120000`.) If no snapshot has a good copy, leave the file
+moved aside and just `docker start splitpage`. Nothing else is lost:
+without `links.json` every link you'd sent is dead, so make new ones from
+**Collaborate**; without `secret` every device signs in again with the
+owner key.
+
+### Changing the owner key
+
+If the key might have got out, or you just want a new one:
+
+```bash
+cd /mnt/user/appdata/splitpage
+KEY="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+sed -i "s/^JOIN_PIN=.*/JOIN_PIN=$KEY/" .env
+grep '^JOIN_PIN=' .env
+docker restart splitpage
+```
+
+Put the new key in your password manager in place of the old one. **Every
+device signed in with the old key is signed out** and needs the new one
+typed once (Collaborate). **Invite links you've already sent keep
+working** — they don't contain the key.
+
+### Turning off a link
+
+From the app: open **Collaborate** on that script and turn the link off.
+Nothing to do on the server. Changing the owner key does *not* turn links
+off (see above).
+
+---
+
+## 5. Traps, and things worth knowing
+
+- **This server does NOT have `docker compose`.** unRAID ships without it;
+  `docker compose up` fails with `unknown shorthand flag: 'd'`. The
+  `docker-compose.yml` in the repository is for other machines (§8). Here
+  it's plain `docker build` + `docker run`, which is exactly what
+  `deploy.sh` does.
+- **Port must match the tunnel.** Cloudflare forwards to one port on this
+  box; `deploy.sh` publishes `8791`. If the site gives *Bad gateway* after a
+  deploy, that mismatch is the first thing to check. `PORT=1234 ./deploy.sh`
+  overrides it (then change the tunnel to match). Not `PORT=` in `.env` —
+  that is the port *inside* the container, and `deploy.sh` refuses it.
+- **`EACCES` in the log means `data/` belongs to the wrong user.** The server
+  runs as `99:100` (`nobody:users`), so everything in `data/` must belong to
+  it. `deploy.sh` fixes this on every deploy; after copying files in by hand
+  as root, fix it yourself:
+
+  ```bash
+  chown -R 99:100 /mnt/user/appdata/splitpage/data
+  docker restart splitpage
+  ```
+
+- **Changing `.env` needs a restart.** See §4.
+- **Never run it without the owner key.** Without `JOIN_PIN` the server is
+  open: anyone who finds the address can read, change and delete every
+  script. `deploy.sh` refuses to start it that way; a `docker run` typed by
+  hand would not.
+- **No quotes in `.env`.** Docker keeps them as part of the value, so
+  `JOIN_PIN="abc…"` makes the key include the quote marks and the one you
+  type never matches. `deploy.sh` refuses it. The same goes for a comment
+  after a value on the same line.
+- **`TRUST_PROXY` must be `cloudflare`, not `1`.** Behind the tunnel every
+  request reaches the server from the same address, so it needs to be told
+  where each visitor really is in order to limit wrong owner-key guesses
+  (ten a minute, per visitor). `TRUST_PROXY=1` reads `X-Forwarded-For`,
+  which a visitor can fill in themselves — Cloudflare passes their version
+  along and adds the real address after it — so a guesser could claim a new
+  address with every guess. `cloudflare` reads `Cf-Connecting-Ip`, which
+  Cloudflare sets itself and nobody can forge through the tunnel.
+- **Never forward port 8791 on your router.** The wrong-key limit trusts
+  `Cf-Connecting-Ip` because only Cloudflare can set it — but anything that
+  reaches 8791 *directly*, skipping the tunnel, can write whatever it likes
+  in that header and get a fresh allowance of guesses every time. From your
+  own home network that is acceptable (that is how the tunnel reaches it,
+  and the owner key is long); from the internet it is not.
+- **Don't put Cloudflare Access in front.** See 2.5. Symptoms if it
+  happens: the desktop app shows the server as offline or "Your sign-in
+  expired", and links you've sent show a Cloudflare sign-in page.
+- **git asks for a username**, or a deploy stops at step 1 with
+  *Permission denied (publickey)*. The clone must use the deploy key's
+  address:
+
+  ```bash
+  cd /mnt/user/appdata/splitpage
+  git remote -v    # should show git@github-splitpage:RetroGorilla/splitpage.git
+  ```
+
+  If it shows `https://github.com/...` or `git@github.com:...`, switch it
+  (safe; it only changes where git fetches from):
+
+  ```bash
+  cd /mnt/user/appdata/splitpage
+  git remote set-url origin git@github-splitpage:RetroGorilla/splitpage.git
+  ```
+
+- **`git pull` refuses** (a deploy stops at step 1 saying the code folder
+  has changes of its own). Someone edited files in
+  `/mnt/user/appdata/splitpage` on the server; nothing was deployed and the
+  running server is untouched. That folder should only ever change through
+  `./deploy.sh`. `git status` lists the edited files. To set the edits aside
+  (kept, not deleted) and deploy:
+
+  ```bash
+  cd /mnt/user/appdata/splitpage
+  git stash push -m server-edits
+  ./deploy.sh
+  ```
+
+  If it still refuses, stop and ask — don't reach for `git reset`.
+- **`Permission denied` running `./deploy.sh`.** The file lost its
+  "executable" mark. `bash deploy.sh` does the same thing.
+- **`$'\r': command not found`.** `deploy.sh` was saved with Windows line
+  endings. `git checkout -- deploy.sh` puts GitHub's copy back.
+- **Wrong folder.** `git` and `./deploy.sh` only work from
+  `/mnt/user/appdata/splitpage`. `docker` commands work from anywhere.
+- **Deleting a script is immediate.** The × in the script list asks once,
+  then it's gone from the server. The snapshots are the undo (§4).
+- **Limits.** One save can be up to 25 MB, one picture up to 8 MiB (PNG,
+  JPEG, GIF and WebP only). Someone on a **Can comment** link may upload
+  20 MiB of pictures an hour (screenshots in comments), someone on a
+  **Can edit** link 100 MiB an hour; you, signed in with the owner key, are
+  not limited. All of these are settings in `.env` (`.env.example` explains
+  each). A comment has its own fixed half-megabyte cap.
+- **Pictures are never deleted,** even when no script uses them any more.
+  They are small, and `blobs/` only grows slowly.
 
 ---
 
@@ -502,14 +728,86 @@ default in those two files and cut a release from it.
 
 ---
 
-## 8. Troubleshooting
+## 8. Other ways to run it
 
-| Symptom | Cause |
+§1–5 are one particular server. The same image runs anywhere Docker does;
+these are the other setups, in brief. Whatever the setup, set `JOIN_PIN`:
+without it the server lets in anyone who can reach it.
+
+**With `docker compose`**, on a machine that has it. From a checkout:
+
+```bash
+cp .env.example .env            # then set JOIN_PIN (2.3's commands work)
+mkdir -p data && sudo chown 99:100 data
+docker compose up -d --build
+```
+
+`docker-compose.yml` runs the same container as `deploy.sh`, but has no
+snapshots, no settings check and no rollback.
+
+**From CI's built copy**, without a checkout. Every green CI run uploads the
+built app as the artifact **`splitpage-app`** (Actions → the run → *Artifacts*
+at the bottom). Unzipped, it holds `index.html`, `sw.js`, the manifest and
+icons, `VERSION`, `server/` and `Dockerfile.prebuilt`, which copies those in
+and builds nothing:
+
+```bash
+docker build -f Dockerfile.prebuilt -t splitpage .
+docker run -d --name splitpage --restart unless-stopped --user 99:100 \
+  -p 8791:8791 --env-file /path/to/.env -v /path/to/data:/data splitpage
+```
+
+The root `Dockerfile` needs the repository's source (it builds `index.html`
+itself), so it won't work on the artifact.
+
+**Behind Cloudflare Access instead of the owner key.** For a team that only
+ever uses a browser and whose email addresses you know. Add the hostname to
+the tunnel as in 2.5, then **Zero Trust → Access → Applications → Add an
+application → Self-hosted**, covering the **whole** hostname (the API under
+`/api/` included), with a policy allowing each person's email and a login
+method (**Settings → Authentication**: Google, or One-time PIN, which needs
+no setup). What changes:
+
+- The desktop app can't connect, and invite links only work for people
+  Access already lets in.
+- The server reads the `Cf-Access-Authenticated-User-Email` header Access
+  adds, and fills in each person's name in comments from it.
+- Access sessions expire (24 hours is a reasonable setting). When one lapses
+  mid-edit, Splitpage keeps the unsaved work, asks you to reload and sign in,
+  and merges the work back in afterwards.
+- Keep `JOIN_PIN` set anyway; it costs one extra step and protects the
+  server if the Access application is ever removed by mistake.
+- *"Your sign-in expired" straight after signing in*: the Access application
+  covers a *path* rather than the whole hostname, so Access answers the
+  app's API calls with its sign-in page.
+- *Everyone shows as the same person in comments*: Access isn't passing an
+  identity — check the application is on and the tunnel isn't bypassing it.
+
+**For people in the same room**, on a laptop, there is no server to set up:
+the launcher does it. See the user guide, *Hosting a shared session*
+(`docs/help.md`).
+
+---
+
+## 9. When something is broken
+
+```bash
+docker ps -a | grep splitpage       # running, or exited?
+docker logs --tail 100 splitpage    # the actual error
+```
+
+| Symptom | Cause, and the fix |
 | --- | --- |
-| App loads, but no server items in the File menu | The app can't reach `/api/health` — it's being served as static files, not by this container. Check the tunnel points at the container's port. |
-| "Your sign-in expired" straight after signing in | Access is returning its login page to API calls. Usually the Access application covers a *path* rather than the whole hostname — it must cover `splitpage.yourdomain.com` entirely, `/api/` included. |
-| `EACCES` in the logs | Data volume permissions — see §2. |
-| Saves fail with 413 | Document over `MAX_BODY_BYTES`, or one image over `MAX_BLOB_BYTES`. Raise it and restart. |
-| "This page is out of date for this server" | The page was loaded before the server was updated, and the document holds images. Reload the page. |
-| Pictures show as "Image unavailable" | The image files under `data/blobs/` are missing — restored from a backup that did not include `blobs/`, or copied without it. Restore `blobs/` too. |
-| Everyone shows as the same person in comments | Access isn't passing an identity, so Splitpage falls back to asking for a name. Confirm the Access app is on and the tunnel isn't bypassing it. |
+| `./deploy.sh` stops with **STOPPED:** | It says which setting in `.env` is wrong and how to fix it. Nothing was changed. |
+| Deploy ends *did not come up healthy* | Read the log it printed; `./deploy.sh rollback` puts the previous version back (§3). |
+| *Bad gateway* / 502 at the address | The container isn't running (`docker ps -a`), or the tunnel's URL isn't `<unraid-ip>:8791` with type `HTTP` (2.5). |
+| A Cloudflare sign-in page instead of Splitpage | An Access application covers the hostname. Remove it (2.5). |
+| Container exited straight away | Read the log. `EACCES` is the data folder's owner (§5); anything else is usually a bad value in `.env`. |
+| Container keeps restarting; the log names `data/links/links.json` or `data/links/secret` | That file is damaged, and the server won't start without a readable one. §4, *If the server won't start*. |
+| The owner key is refused though it's right | `.env` was changed without a restart (`docker restart splitpage`), or the key in the password manager isn't the one in `.env` (`grep '^JOIN_PIN=' .env`). |
+| "Too many attempts" when typing the key | Ten wrong tries in a minute from your address; wait a minute. If it happens to everyone at once, `TRUST_PROXY` isn't `cloudflare`. |
+| The desktop app can't connect; a browser can | `ALLOW_ORIGINS` in `.env` doesn't include `splitpage://app`. Add it, `docker restart splitpage`. |
+| Links you'd sent stopped working after a restart or deploy; every device signed out | The server isn't keeping links: `/api/health` doesn't say `"linksPersist":true`. Check `PERSIST_LINKS=1` in `.env`, and that `data/links/` exists (a restore without it loses every link). |
+| Saves fail with 413 | A script over `MAX_BODY_BYTES`, or one picture over `MAX_BLOB_BYTES`. Raise it in `.env` and restart. |
+| "This page is out of date for this server" | The page was loaded before the server was updated, and the script has pictures. Reload the page. |
+| Pictures show as "Image unavailable" | Their files under `data/blobs/` are missing — restored without `blobs/`. Restore `blobs/` too. |
