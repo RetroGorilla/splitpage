@@ -16,6 +16,11 @@ sleep 700
 expect !document.getElementById('writer').hidden
 expect document.querySelectorAll('#writer-doc .wr-para').length == 2
 expect document.querySelectorAll('#writer-doc .wr-block').length == 2
+# the tools at the top, under the title row, and Close beside Save in it
+# (Adam, 2026-09-28: where the script keeps its tools)
+expect (function(){ var t = document.querySelector('.writer-top').getBoundingClientRect(), b = document.querySelector('.writer-bar').getBoundingClientRect(), s = document.getElementById('writer-scroll').getBoundingClientRect(); return Math.abs(b.top - t.bottom) < 2 && s.top >= b.bottom - 1 && b.bottom < 140; })()
+expect document.getElementById('wr-close').parentNode === document.querySelector('.writer-top') && document.getElementById('wr-close').previousElementSibling === document.getElementById('wr-save')
+expect Math.abs(document.getElementById('wr-close').getBoundingClientRect().top - document.getElementById('wr-save').getBoundingClientRect().top) < 2
 
 # the narration is what is editable; the visual rides in the gutter as context
 expect document.querySelector('#writer-doc .wr-para').textContent.indexOf('welcome back') !== -1
