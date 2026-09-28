@@ -814,7 +814,7 @@ function done() {
     if (ed !== mine) return;
     ed.saving = false;
     paintTools();
-    if (!rec) { showToast("Couldn’t save the annotated picture — it may be too large for this browser.", "warn"); return; }
+    if (!rec) { showToast("Could not save the annotated picture — it may be too large for this browser.", "warn"); return; }
     save(rec, marks);
   });
 }
@@ -830,7 +830,7 @@ function save(rec, marks) {
   if (!ed) return;
   ed.committing = false;
   if (!ok) {
-    showToast("Couldn’t save the annotations to this picture.", "warn");
+    showToast("Could not save the annotations to this picture.", "warn");
     return;
   }
   closeAnnotator();

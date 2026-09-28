@@ -33,6 +33,8 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
 4. Fill in the pull request template. Screenshots for UI changes, light and
    dark.
 
+Words a person reads follow [docs/STYLE.md](docs/STYLE.md).
+
 Commit messages say what changed for a person using the app, in the
 imperative ("Help contents: render a heading's formatting"). Reference an
 issue number when there is one.

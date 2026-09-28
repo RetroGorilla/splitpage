@@ -20,6 +20,11 @@ appear in the app under **Help**. The format follows
 - The "get the desktop app" notice and start-screen line show only in a
   Windows browser, not on phones, Macs or Linux.
 - The bottom button and several messages say "scene" where they said "row".
+- Failure messages say what to check ("the connection failed — check that
+  you are online") instead of the browser's own wording, and Google Drive
+  errors say what to do.
+- Messages read "Could not …" throughout, and menu text uses one spelling
+  ("Minimise the rundown").
 
 ### Fixed
 - The Help contents list no longer shows raw backticks around code in a

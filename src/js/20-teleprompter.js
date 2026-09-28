@@ -1357,7 +1357,7 @@ async function launchPrompterFromScript(token) {
   var file = new File([body.text], body.name, { type: "text/plain" });
   var parsed = await parseProjectFileState(file);
   if (!parsed || parsed.error) {
-    showToast("Couldn't read the script the desktop app sent.", "error", true);
+    showToast("Could not read the script the desktop app sent.", "error", true);
     return false;
   }
   adoptProjectState(parsed.state, file, null, parsed.kind, { skipSnapshot: true, silent: true });

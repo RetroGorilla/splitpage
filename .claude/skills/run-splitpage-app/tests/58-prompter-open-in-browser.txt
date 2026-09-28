@@ -139,7 +139,7 @@ expect window.fakeP._prompterDocState.fileId === window.__pid
 eval (function(){ window.fakeP._prompterAnswer = { ok: false, code: 'READ_FAILED' }; return true; })()
 jsclick #pp-voice
 wait window.fakeP._prompterCalls === 3
-wait document.getElementById('pp-voice-status').textContent.indexOf("Couldn't read the saved file") !== -1
+wait document.getElementById('pp-voice-status').textContent.indexOf("Could not read the saved file") !== -1
 
 # --- File ▸ This document ▸ Present in browser: the in-page route ----------
 # Offered on desktop, in the File menu's This document group (never
