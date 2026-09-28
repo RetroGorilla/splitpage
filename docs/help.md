@@ -11,6 +11,15 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 [host a shared session](#hosting-a-shared-session) or
 [connect to a server](#connecting-to-a-server).
 
+## What's new since 3.0
+
+- **Draw on your pictures.** In a scene's gallery, press **Annotate** to
+  mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
+  and E pick them). Your marks stay editable, and **Remove annotations**
+  gives you the original back. See [Annotating a picture](#annotating-a-picture).
+- **Search commands** (Ctrl+K) puts the tagging reference first, and
+  searching *tags* finds it.
+
 ## What's new in 3.0
 
 - **A new look.** Calmer dark and light themes, a running order of the whole
@@ -291,6 +300,8 @@ a picture. Open the scene's gallery, pick the picture and press
   <kbd>Esc</kbd> to put it down. With Text picked, click a text to change
   it or drag it to move it.
 - **Eraser**: drag over a mark to take the whole mark away.
+- <kbd>P</kbd>, <kbd>H</kbd>, <kbd>T</kbd> and <kbd>E</kbd> pick the pen,
+  highlighter, text and eraser (not while you're typing a text).
 - Six **colours** and three **sizes** (S, M, L). Changing them while you
   type changes the text you're typing.
 - **Undo** and **Redo** (<kbd>Ctrl</kbd>+<kbd>Z</kbd>,
@@ -563,6 +574,7 @@ are along the bottom. An item that can't work right now says why.
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
 | <kbd>F1</kbd> | Help (desktop app) |
 | <kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> | New tab / close tab (desktop app) |
+| <kbd>P</kbd> / <kbd>H</kbd> / <kbd>T</kbd> / <kbd>E</kbd> | Pen / highlighter / text / eraser (while annotating a picture) |
 
 ### Search commands
 
