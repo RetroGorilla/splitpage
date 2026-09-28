@@ -45,6 +45,7 @@ import {
 } from "./12-dirty-toast.js";
 import {
   SERVER_RESUME_KEY,
+  linkTurnedOff,
   onServerDoc,
   saveToServer,
   serverSessionExpired
@@ -549,7 +550,9 @@ function readAutoSavePref() {
    word. A hosted document always has somewhere to go, so autosave is live
    there from the first edit. */
 export function autoSaveTarget() {
-  if (serverSessionExpired) return null;
+  /* a lapsed sign-in, or a link its owner turned off (Collaborate): the
+     server will take nothing more from this page, so nothing is tried */
+  if (serverSessionExpired || (linkTurnedOff && onServerDoc())) return null;
   if (onServerDoc()) return "server";
   /* No file established yet — wait for an explicit Save. The dirty
      indicator and the unload guard cover the user in the meantime; once a

@@ -28,6 +28,15 @@ import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } fro
 import { render } from "./05-render.js";
 import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments, showTaggingHelp } from "./10-comments.js";
 import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import {
+  COLLAB_SERVER_KEY,
+  DEFAULT_COLLAB_SERVER,
+  collabServerView,
+  normalizeCollabServer,
+  readCollabServer,
+  signOutCollab,
+  updateCollaborateMenu
+} from "./13b-collaborate.js";
 import { AUTOSAVE_KEY, setAutoSaveEnabled } from "./14-export.js";
 import { toggleFileMenu } from "./18b-file-menu.js";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, applyWriterSize, readWriterSize } from "./19-writer.js";
@@ -132,6 +141,40 @@ function importAvailable() {
   return !!(btn && !btn.hidden);
 }
 
+/* Collaboration (13b-collaborate.js): where File ▸ Collaborate… stores the
+   scripts you share, and whether this device is signed in there. The
+   address is a per-device preference like the rest; the sign-in is not a
+   preference at all (it is the token 13-hosted.js keeps per server), so
+   this only says whether there is one and offers to forget it. A page that
+   was itself served by a Splitpage server collaborates there, whatever the
+   address says, and says so instead of offering the field. */
+function collaborationHtml() {
+  var v = collabServerView();
+  var where = v.servedHere
+    ? '<p class="settings-hint settings-hint-flat">This page comes from <strong>' + escapeHtml(v.label) +
+        '</strong>, so Collaborate stores scripts there.</p>'
+    : '<div class="settings-field settings-inline">' +
+        '<label class="settings-label" for="settings-collab-server">Server address</label>' +
+        '<span class="settings-inline-control"><input type="text" id="settings-collab-server" class="settings-wide" autocomplete="off" ' +
+          'spellcheck="false" autocapitalize="off" placeholder="' + escapeHtml(DEFAULT_COLLAB_SERVER) + '" value="' +
+          escapeHtml(readCollabServer()) + '">' +
+          (v.isDefault ? '' : '<button type="button" class="btn-outline is-small" data-settings-action="collab-default">Use the default</button>') +
+        '</span>' +
+      '</div>' +
+      '<p class="settings-hint">Where Collaborate stores the scripts you share. Everyone you invite works on the copy there.</p>';
+  return where +
+    '<div class="settings-field settings-inline">' +
+      '<span class="settings-label" id="settings-collab-signin">' + (v.signedIn
+        ? 'Signed in on this device'
+        : 'Not signed in on this device') + '</span>' +
+      '<span class="settings-inline-control"><button type="button" class="btn-outline is-small" data-settings-action="collab-signout"' +
+        (v.signedIn ? '' : ' disabled') + '>Sign out</button></span>' +
+    '</div>' +
+    '<p class="settings-hint">' + (v.signedIn
+      ? 'Collaborate uses your owner key without asking. Sign out to make this device ask for it again.'
+      : 'Collaborate asks for your server’s owner key the first time, and remembers it here.') + '</p>';
+}
+
 function bodyHtml() {
   var clock = readClockPref();
   var scale = readScriptScale();
@@ -180,6 +223,7 @@ function bodyHtml() {
       '</div>' +
       '<p class="settings-hint">Signs your edits and comments.</p>' +
       personSwatchesHtml(name, "settings-person-color", "settings-label")) +
+    section("Collaboration", collaborationHtml()) +
     section("Help & tips",
       '<div class="settings-actions">' +
         '<button type="button" class="btn-outline" data-settings-action="tagging-help">Show the tagging reference</button>' +
@@ -221,16 +265,24 @@ function ensureModal() {
    changes while it is open, keeping the focused control focused. */
 /* Typed but not yet committed (no Enter, no blur) survives a redraw that
    was about some other setting. */
-var TYPED_FIELDS = { "settings-name": COMMENT_NAME_KEY, "settings-default-wpm": DEFAULT_WPM_KEY };
+/* A function, not a literal: the keys are other modules' exports, which
+   are not guaranteed to be assigned yet while this module is evaluated
+   (_entry.js — nothing may read another module's value at evaluation
+   time; the Collaboration key read that way came out undefined). */
+function typedFields() {
+  return { "settings-name": COMMENT_NAME_KEY, "settings-default-wpm": DEFAULT_WPM_KEY,
+           "settings-collab-server": COLLAB_SERVER_KEY };
+}
 
 function renderSettings(changedKey) {
   var m = modal();
   if (!m) return;
   var bodyEl = m.querySelector("#settings-body");
   var typed = {};
-  Object.keys(TYPED_FIELDS).forEach(function (fid) {
+  var fields = typedFields();
+  Object.keys(fields).forEach(function (fid) {
     var el = document.getElementById(fid);
-    if (el && TYPED_FIELDS[fid] !== changedKey) typed[fid] = el.value;
+    if (el && fields[fid] !== changedKey) typed[fid] = el.value;
   });
   var focusedId = document.activeElement && m.contains(document.activeElement) ? document.activeElement.id : "";
   var focusedRadio = document.activeElement && document.activeElement.type === "radio" && m.contains(document.activeElement)
@@ -252,15 +304,23 @@ function renderSettings(changedKey) {
   if (again) { try { again.focus({ preventScroll: true }); } catch (e) { again.focus(); } }
 }
 
-export function openSettings() {
+/* opts.focus: the id of the control to start on, scrolled into view — the
+   Collaborate dialog's "Change the address…" (13b-collaborate.js). */
+export function openSettings(opts) {
+  opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
   var m = ensureModal();
   if (!m.hidden) return;
   var active = document.activeElement;
   settingsReturnFocus = active && active !== document.body ? active : document.getElementById("btn-file");
   renderSettings();
   m.hidden = false;
-  var first = m.querySelector('input[name="settings-theme"]:checked') || m.querySelector("input, button");
+  var wanted = opts.focus ? document.getElementById(opts.focus) : null;
+  var first = wanted || m.querySelector('input[name="settings-theme"]:checked') || m.querySelector("input, button");
   if (first) first.focus();
+  if (wanted) {
+    try { wanted.scrollIntoView({ block: "center" }); } catch (e) { wanted.scrollIntoView(); }
+    if (typeof wanted.select === "function") wanted.select();
+  }
 }
 
 export function closeSettings() {
@@ -321,6 +381,18 @@ function applyChange(target) {
     updateIdentityChip();
     if (S.state) render();
   }
+  if (id === "settings-collab-server") {
+    var raw = (target.value || "").trim();
+    /* empty is "the default again", not "nowhere" */
+    var url = raw ? normalizeCollabServer(raw) : DEFAULT_COLLAB_SERVER;
+    if (!url) {
+      showToast("That isn't a web address — something like https://script.example.com/", "warn");
+      target.value = readCollabServer();
+      return;
+    }
+    if (url === readCollabServer()) { target.value = url; return; }
+    writePref(COLLAB_SERVER_KEY, url === DEFAULT_COLLAB_SERVER ? null : url);
+  }
 }
 
 /* A range moves its readout while it is dragged; the value is stored on
@@ -361,6 +433,12 @@ function runAction(action) {
     showToast(S.DESKTOP ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
     return;
   }
+  if (action === "collab-default") { writePref(COLLAB_SERVER_KEY, null); return; }
+  if (action === "collab-signout") {
+    signOutCollab();
+    renderSettings();
+    return;
+  }
   if (action === "servers") { closeSettings(); openServersDialog(); return; }
   if (action === "drive") { closeSettings(); clickFileMenuItem("drive-open"); return; }
   if (action === "export-app-data") { closeSettings(); clickFileMenuItem("export-app-data"); return; }
@@ -371,7 +449,8 @@ function wireModal(m) {
   m.addEventListener("change", function (e) { if (e.target && e.target.closest(".settings-body")) applyChange(e.target); });
   m.addEventListener("input", function (e) { if (e.target) applyInput(e.target); });
   m.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && e.target && (e.target.id === "settings-name" || e.target.id === "settings-default-wpm")) {
+    if (e.key === "Enter" && e.target && (e.target.id === "settings-name" || e.target.id === "settings-default-wpm" ||
+        e.target.id === "settings-collab-server")) {
       e.preventDefault();
       applyChange(e.target);
       return;
@@ -407,6 +486,7 @@ function onPrefChanged(key) {
     if (hist && !hist.hidden) renderHistory();
   }
   if (key === COMMENT_NAME_KEY || key === PERSON_COLOR_KEY) updateIdentityChip();
+  if (key === COLLAB_SERVER_KEY) updateCollaborateMenu();
   if (settingsOpen()) renderSettings(key);
 }
 

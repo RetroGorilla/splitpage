@@ -245,12 +245,16 @@
 
             <!-- The live counterpart of every export (issue #19): an export
                  hands someone a DEAD COPY whose edits never come back, and
-                 Publish & copy a link doesn't. It is always offered — with no
-                 server it says so on its second line and opens Servers… to
-                 set one up rather than failing. 13-hosted.js. -->
+                 Collaborate doesn't. Collaborate… (13b-collaborate.js) is
+                 always offered and needs no server set up first: one is built
+                 in (Settings ▸ Collaboration). It stores the script there and
+                 hands back two links — Can edit, Can comment — that open this
+                 one script with nothing to install and no PIN. Disabled, with
+                 the reason, only for someone who is themselves on a link. It
+                 took the place of "Publish & copy a link". -->
             <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
               <div class="menu-group-head" id="fm-g-share">Share</div>
-              <button type="button" role="menuitem" class="mi" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document."><svg class="mi-icon" aria-hidden="true"><use href="#i-share"/></svg><span class="mi-text"><span class="mi-label">Publish &amp; copy a link</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="collaborate" id="menu-collaborate" title="Stores this script on your collaboration server and gives you two links to send: one to edit it, one to comment on it."><svg class="mi-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="mi-text"><span class="mi-label">Collaborate…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="server-publish" id="menu-server-new" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud-up"/></svg><span class="mi-text"><span class="mi-label">Put this script on the server</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
@@ -712,8 +716,8 @@
       </div>
     </div>
     <div class="export-foot">
-      <p class="export-note">Exports are copies. To share one live document, use
-        <button type="button" class="export-note-link" id="export-share-link">Publish &amp; copy a link</button>.</p>
+      <p class="export-note">Exports are copies. To work on one live script together, use
+        <button type="button" class="export-note-link" id="export-share-link">Collaborate…</button></p>
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="export-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="export-go">Export</button>
@@ -1374,12 +1378,15 @@
 <div class="modal-backdrop" id="pin-modal" hidden>
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
     <div class="modal-header">
-      <h2 id="pin-title">Join PIN</h2>
+      <h2 id="pin-title">Join PIN or key</h2>
       <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint" id="pin-reason">This server asks for a join PIN.</p>
-    <input type="text" id="pin-input" inputmode="numeric" autocomplete="off"
-           spellcheck="false" placeholder="e.g. 481923" aria-labelledby="pin-title">
+    <p class="modal-hint" id="pin-reason">This server asks for its join PIN or key.</p>
+    <!-- Text, not numeric (Collaborate): a LAN session's six digits and a
+         server's long owner key both go in here, so no number keypad on a
+         phone and no length implied by the placeholder. -->
+    <input type="text" id="pin-input" autocomplete="off" autocapitalize="off"
+           spellcheck="false" placeholder="Join PIN or key" aria-labelledby="pin-title">
     <div class="connect-error" id="pin-error" hidden></div>
     <label class="connect-check"><input type="checkbox" id="pin-remember">
       Remember this code on this device</label>

@@ -1,0 +1,211 @@
+# The other end of a Collaborate link (13-hosted.js, 13b-collaborate.js):
+# somebody who has never used Splitpage clicks
+# `<server>?doc=<id>#invite=<key>`. The key is read once and taken out of
+# the address bar; the page joins with it (no PIN, no account), opens that
+# one script, and asks their name the first time. The key is remembered
+# for that server — this tab always, this device too when the server says
+# its links outlive a restart — so a reload, a new tab or coming back later
+# still gets in. A guest edits normally, and every File menu item that is
+# the owner's says why it will not work. When the owner turns the link off:
+# one sticky message, saving stops, the edits stay on screen, and Save a
+# copy… still works — and a link that was already off says so on arrival
+# instead of asking for a PIN nobody gave them. The owner opening their own
+# link on a device they are signed in on stays the owner.
+#
+# The harness serves this page itself and cannot start server.js, so the
+# page's own boot probe finds no server; the emulator 260 describes is then
+# installed and the real detection run again (H.detect()) — the key read at
+# load is still in hand, exactly as when a real server is slow to answer.
+# Each `goto` is a real reload, so the emulator is installed again after it.
+# Every `eval` is one physical line.
+
+# --- the owner trying their own link, signed in on this device -----------
+# The script opens as theirs: no join with the key, no guest scope, and
+# the key dropped from the tab so a later restart cannot turn the owner
+# into a guest with it.
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.setItem('splitpage-server-tokens', JSON.stringify({ '': 'tok-owner-1' })); return true; })()
+goto /index.html?doc=doc-own#invite=ownLinkKey1
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.H = window.__hostedTest; return H.link().fresh; })()
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+eval (function(){ __mkDoc('doc-own', 'My own script'); __mkLink('doc-own', 'edit', 'ownLinkKey1'); return true; })()
+eval (async function(){ await H.detect(); return true; })()
+wait H.home().id === 'doc-own'
+expect __srv.calls.filter(function(c){ return c.path === 'api/join'; }).length == 0
+expect H.conn().scope === ''
+expect H.conn().role == edit
+expect H.link().hasKey === false
+expect sessionStorage.getItem('splitpage-review-key') === null
+expect localStorage.getItem('splitpage-invites') === null
+expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))[''] == tok-owner-1
+sleep 300
+expect document.getElementById('guest-modal') === null
+eval (function(){ localStorage.removeItem('splitpage-server-tokens'); sessionStorage.clear(); return true; })()
+
+# --- a link that is already off: said once, no PIN dialog ----------------
+goto /index.html?doc=doc-g#invite=gOffKey789
+wait document.querySelectorAll('#rows .row').length > 0
+expect location.hash === ''
+expect location.href.indexOf('invite') === -1
+expect window.__hostedTest.link().hasKey === true
+eval (function(){ window.H = window.__hostedTest; return true; })()
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+eval (function(){ __mkDoc('doc-g', 'Pilot episode'); var l = __mkLink('doc-g', 'edit', 'gOffKey789'); l.off = true; return true; })()
+eval (async function(){ await H.detect(); return true; })()
+wait document.getElementById('toast-host').textContent.indexOf('The owner turned off this link.') !== -1
+expect document.getElementById('pin-modal').hidden
+expect H.link().hasKey === false
+expect H.link().turnedOff === true
+expect sessionStorage.getItem('splitpage-review-key') === null
+expect H.home().kind == none
+expect document.querySelector('#toast-host .toast.is-sticky .toast-action').textContent == Save a copy…
+
+# --- a good link ------------------------------------------------------------
+goto /index.html?doc=doc-g#invite=gEdItKeY123
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.K = window.__collabTest; return true; })()
+# read and taken out at once, before any server has answered
+expect location.hash === ''
+expect location.href.indexOf('invite') === -1
+expect location.search.indexOf('doc=') === -1
+expect sessionStorage.getItem('splitpage-review-key') == gEdItKeY123
+expect localStorage.getItem('splitpage-invites') === null
+expect H.link().hasKey === true
+expect H.link().fresh === true
+# somebody arriving at one script: the desktop-app pitch stays away (and so
+# do the first-run wizard and the start screen, which the harness itself
+# suppresses — the flag they read is this one)
+expect H.link().arriving === true
+expect document.getElementById('desktop-app-bar').hidden
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+eval (function(){ __mkDoc('doc-g', 'Pilot episode'); __mkLink('doc-g', 'edit', 'gEdItKeY123'); __mkLink('doc-g', 'review', 'gReViEwKeY456'); __mkDoc('doc-other', 'Not yours'); return true; })()
+eval (async function(){ await H.detect(); return true; })()
+wait H.home().id === 'doc-g'
+expect __srv.calls.map(function(c){ return c.m + ' ' + c.path + ' ' + c.status; }).slice(0, 4).join(' | ') == GET api/health 200 | POST api/join 200 | GET api/me 200 | GET api/docs/doc-g 200
+expect JSON.stringify(__srv.calls[1].body) == {"key":"gEdItKeY123"}
+expect H.conn().role == edit
+expect H.conn().scope == doc-g
+expect H.conn().hasToken === true
+expect document.getElementById('doc-title').value == Pilot episode
+expect document.getElementById('pin-modal').hidden
+# the link's token is this tab's, never "remember on this device"
+expect JSON.parse(sessionStorage.getItem('splitpage-server-token')).token == tok-gEdItKeY123
+expect localStorage.getItem('splitpage-server-tokens') === null
+# its key is kept on this device for this server: the server said its links persist
+expect JSON.parse(localStorage.getItem('splitpage-invites'))[''].key == gEdItKeY123
+expect JSON.parse(localStorage.getItem('splitpage-invites'))[''].doc == doc-g
+expect H.link().fresh === false
+# who are you? asked once the script is there
+wait !document.getElementById('guest-modal').hidden
+jsclick #guest-modal [data-guest-action="skip"]
+wait document.getElementById('guest-modal').hidden
+expect localStorage.getItem('splitpage-comment-author') === null
+
+# --- a reload: the tab's own token, and the one script it opens -----------
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.K = window.__collabTest; return true; })()
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+eval (function(){ __mkDoc('doc-g', 'Pilot episode'); __mkLink('doc-g', 'edit', 'gEdItKeY123'); return true; })()
+eval (async function(){ await H.detect(); return true; })()
+wait H.home().id === 'doc-g'
+# no ?doc= this time, and no join: the tab still had its token
+expect __srv.calls.filter(function(c){ return c.path === 'api/join'; }).length == 0
+expect __srv.calls.filter(function(c){ return c.path === 'api/me'; })[0].token == tok-gEdItKeY123
+expect document.getElementById('doc-title').value == Pilot episode
+# asked once per tab: Skip meant Skip
+sleep 300
+expect document.getElementById('guest-modal') === null || document.getElementById('guest-modal').hidden
+
+# --- a new tab (or next week): nothing in the tab, the device's key -------
+# ...opened on an address naming another script: the link's token opens
+# one, so that one is what opens, and the other is never asked for
+eval (function(){ sessionStorage.clear(); return true; })()
+goto /index.html?doc=doc-other
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.K = window.__collabTest; window.__toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('.toast'), function(t){ return t.textContent; }); }; return true; })()
+expect H.link().hasKey === true
+expect H.link().fresh === false
+expect H.conn().hasToken === false
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+eval (function(){ __mkDoc('doc-g', 'Pilot episode'); __mkLink('doc-g', 'edit', 'gEdItKeY123'); __mkDoc('doc-other', 'Not yours'); if (F.autosave.enabled()) F.autosave.toggle(); return true; })()
+eval (async function(){ await H.detect(); return true; })()
+wait H.home().id === 'doc-g'
+expect JSON.stringify(__srv.calls.filter(function(c){ return c.path === 'api/join'; })[0].body) == {"key":"gEdItKeY123"}
+expect H.conn().scope == doc-g
+expect __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-other'; }).length == 0
+
+# --- the first-time name, in the identity the header and Settings keep ----
+wait !document.getElementById('guest-modal').hidden
+expect document.getElementById('guest-title').textContent == What’s your name?
+expect document.querySelector('#guest-modal .modal-hint').textContent.indexOf('Pilot episode') !== -1
+expect document.querySelector('#guest-modal .modal-hint').textContent.indexOf('you can edit it') !== -1
+expect document.activeElement.id == guest-name
+expect document.querySelectorAll('#guest-modal input[name="guest-person-color"]').length == 8
+shot 263-guest-name
+# Continue with no name keeps the box open
+jsclick #guest-modal [data-guest-action="save"]
+sleep 150
+expect !document.getElementById('guest-modal').hidden
+eval (function(){ document.getElementById('guest-name').value = 'Sam Okafor'; var r = document.querySelectorAll('#guest-modal input[name="guest-person-color"]')[2]; r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); return r.value; })()
+eval (function(){ window.__pickedColor = document.querySelectorAll('#guest-modal input[name="guest-person-color"]')[2].value; return window.__pickedColor; })()
+jsclick #guest-modal [data-guest-action="save"]
+wait document.getElementById('guest-modal').hidden
+expect localStorage.getItem('splitpage-comment-author') == Sam Okafor
+expect localStorage.getItem('splitpage-person-color') === window.__pickedColor
+expect document.getElementById('identity-name').textContent == Sam Okafor
+
+# --- what a link cannot do, said on each item -----------------------------
+jsclick #btn-file
+expect document.getElementById('menu-server-open').hidden === false
+expect document.getElementById('menu-server-open').disabled === true
+expect document.querySelector('#menu-server-open .mi-why').textContent == Your link opens this one script
+expect document.getElementById('menu-server-new').disabled === true
+expect document.querySelector('#menu-server-new .mi-why').textContent == Your link opens this one script
+expect document.getElementById('menu-collaborate').disabled === true
+expect document.querySelector('#menu-collaborate .mi-why').textContent == Only the script's owner can invite people
+# the rest of the File menu is theirs as usual
+expect document.querySelector('#file-menu [data-file-action="save-as"]').disabled === false
+expect document.querySelector('#file-menu [data-file-action="paste"]').disabled === false
+jsclick #file-menu-close
+expect window.__commandTest.results('open from the server')[0].items.filter(function(i){ return i.id === 'server-open'; })[0].why == Your link opens this one script
+
+# --- a guest edits normally: the save goes out on the link's token --------
+eval (async function(){ __srv.calls = []; var t = document.getElementById('doc-title'); t.value = 'Pilot episode, v2'; t.dispatchEvent(new Event('input', { bubbles: true })); await F.save(); return __srv.calls.map(function(c){ return c.m + ' ' + c.path + ' ' + c.status; }).join(' | '); })()
+expect __srv.calls.some(function(c){ return c.m === 'PUT' && c.path === 'api/docs/doc-g' && c.status === 200 && c.token === 'tok-gEdItKeY123'; })
+expect __srv.docs['doc-g'].state.title == Pilot episode, v2
+# presence beats for this script and no other
+expect window.__presenceTest.payload().docId == doc-g
+
+# --- the owner turns the link off -----------------------------------------
+eval (function(){ __srv.links.forEach(function(l){ if (l.key === 'gEdItKeY123') l.off = true; }); window.__picked = []; window.showSaveFilePicker = function(){ window.__picked.push('save-as'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; return true; })()
+eval (async function(){ __srv.calls = []; var t = document.getElementById('doc-title'); t.value = 'Pilot episode, v3'; t.dispatchEvent(new Event('input', { bubbles: true })); await F.save(); return __srv.calls.map(function(c){ return c.m + ' ' + c.path + ' ' + c.status; }).join(' | '); })()
+wait H.link().turnedOff === true
+expect __srv.calls.filter(function(c){ return c.m === 'PUT'; }).map(function(c){ return c.status; }).join(',') == 401
+wait __toasts().some(function(t){ return t.indexOf('The owner turned off this link.') === 0; })
+expect document.querySelectorAll('#toast-host .toast.is-sticky').length >= 1
+expect document.querySelector('#toast-host .toast.is-sticky .toast-action').textContent == Save a copy…
+# no PIN dialog, no reload prompt: nothing to type, nothing a reload fixes
+expect document.getElementById('pin-modal').hidden
+expect __toasts().every(function(t){ return t.indexOf('sign-in expired') === -1; })
+# saving stops — the status, the chip and the card say so — and the edit stays
+expect document.getElementById('btn-save').getAttribute('data-status') == Not saving
+expect document.getElementById('file-chip-state').textContent == · link turned off — not saving
+expect window.__fileMenuTest.cardView().bits[0].text == Link turned off — not saving
+expect document.getElementById('doc-title').value == Pilot episode, v3
+expect F.autosave.target() === null
+eval (async function(){ __srv.calls = []; await F.save(); await F.save(); return __srv.calls.length; })()
+expect __srv.calls.filter(function(c){ return c.m === 'PUT'; }).length == 0
+# presence stops with it; the key is forgotten here and on this device
+expect window.__presenceTest.wanted() === false
+expect H.link().hasKey === false
+expect sessionStorage.getItem('splitpage-review-key') === null
+expect localStorage.getItem('splitpage-invites') === null
+# one message, however many saves were tried
+expect __toasts().filter(function(t){ return t.indexOf('The owner turned off this link.') === 0; }).length == 1
+shot 263-link-off
+# Save a copy… still works
+jsclick #toast-host .toast.is-sticky .toast-action
+wait window.__picked.length === 1

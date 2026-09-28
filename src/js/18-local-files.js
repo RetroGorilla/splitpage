@@ -43,13 +43,14 @@ import {
 } from "./11-import.js";
 import { clearDirty, markDirty, showToast } from "./12-dirty-toast.js";
 import {
+  linkTurnedOff,
   onServerDoc,
   openDriveModal,
   openServerPicker,
-  publishAndCopyShareLink,
   publishToServer,
   serverSessionExpired
 } from "./13-hosted.js";
+import { openCollaborate } from "./13b-collaborate.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
   exportMetaLine,
@@ -162,8 +163,9 @@ function updateHeaderFileChip() {
     var srvState = document.getElementById("file-chip-state");
     srvState.textContent = serverSessionExpired
       ? "· signed out — reload"
+      : linkTurnedOff ? "· link turned off — not saving"
       : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
-    srvState.classList.toggle("unsaved", serverSessionExpired || !!S.dirty);
+    srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || !!S.dirty);
     saveBack.disabled = true;
     setMenuItemLabel(saveBack, "Save to file");
     return;
@@ -1084,7 +1086,7 @@ export function handleFileMenuAction(action) {
   else if (action === "drive-open") openDriveModal();
   else if (action === "server-open") openServerPicker();
   else if (action === "server-publish") publishToServer();
-  else if (action === "share-link") publishAndCopyShareLink();
+  else if (action === "collaborate") openCollaborate();
   else if (action === "find") openFindBar();
   else if (action === "prompter-open-in-browser") openPrompterInBrowser();
   else if (action === "prompter-open-in-chromium") openPrompterInChromium();

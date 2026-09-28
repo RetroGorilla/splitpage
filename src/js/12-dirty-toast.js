@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
-import { onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
+import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
 import { recordMyColor } from "./13a-presence.js";
 import {
   autoSaveEnabled,
@@ -170,6 +170,10 @@ function saveStatusView() {
     return { text: "Not saving", cls: "warn",
              title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
   }
+  if (typeof onServerDoc === "function" && onServerDoc() && linkTurnedOff) {
+    return { text: "Not saving", cls: "warn",
+             title: "The owner turned off the link you opened this with — File ▸ Save a copy… keeps what's on screen." };
+  }
   if (S.saveButtonBusy) {
     return { text: "Saving…", cls: "busy",
              title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
@@ -295,11 +299,16 @@ export function showToast(msg, kind, sticky) {
 
 /* A toast with one action button beside its words ("Undo"), up a little
    longer than a plain one so there is time to reach it. The button runs
-   onAction once and takes the toast away. */
-export function showActionToast(msg, kind, label, onAction) {
+   onAction once and takes the toast away. `sticky` keeps it up until it is
+   clicked away or its button is used — for a state that lasts, such as a
+   link its owner turned off (13-hosted.js's flagLinkOff), where the action
+   ("Save a copy…") is still the thing to do an hour later. */
+export function showActionToast(msg, kind, label, onAction, sticky) {
   var el = showToast(msg, kind, true);
-  el.classList.remove("is-sticky");
-  el.removeAttribute("title");
+  if (!sticky) {
+    el.classList.remove("is-sticky");
+    el.removeAttribute("title");
+  }
   el.classList.add("has-action");
   var btn = document.createElement("button");
   btn.type = "button";
@@ -311,7 +320,7 @@ export function showActionToast(msg, kind, label, onAction) {
     onAction();
   });
   el.appendChild(btn);
-  setTimeout(el.dismiss, 6000);
+  if (!sticky) setTimeout(el.dismiss, 6000);
   return el;
 }
 
