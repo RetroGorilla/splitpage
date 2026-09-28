@@ -600,7 +600,7 @@ export async function handleImportFile(file) {
       showToast(importFileErrorMessage(err), "error");
       return;
     }
-    if (!rows || !rows.length) { showToast("No script rows found in that file.", "warn"); return; }
+    if (!rows || !rows.length) { showToast("No scenes found in that file.", "warn"); return; }
     pendingFileRows = rows;
     pendingFileName = file.name;
     document.getElementById("import-textarea").value = "";
