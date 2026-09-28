@@ -1,0 +1,66 @@
+# Changelog
+
+What changed for a person using Splitpage, newest first. The same entries
+appear in the app under **Help**. The format follows
+[Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
+
+## Unreleased
+
+### Added
+- **Draw on your pictures.** In a scene's gallery, **Annotate** marks up a
+  picture with a pen, a highlighter, text and an eraser (P, H, T and E pick
+  them). The marks stay editable, and **Remove annotations** gives you the
+  original back.
+
+### Changed
+- Search commands (Ctrl+K) puts the tagging reference first, and searching
+  *tags* finds it.
+- **About Splitpage** is a dialog in the app's own look, and no longer shows
+  command-line instructions in a browser alert.
+- The "get the desktop app" notice and start-screen line show only in a
+  Windows browser, not on phones, Macs or Linux.
+- The bottom button and several messages say "scene" where they said "row".
+
+### Fixed
+- The Help contents list no longer shows raw backticks around code in a
+  heading.
+
+## 3.0.0 — 2026-09-26
+
+### Added
+- **A new look.** Calmer dark and light themes, a running order of the whole
+  script under the header, each scene's status as a lamp, and side panels
+  that open beside the script instead of over it.
+- **A start screen for every new tab:** a blank script, three starter
+  scripts, a long demo that shows off every feature, recent documents and a
+  drop zone for a file.
+- **One undo for everything:** typing, tags, scene moves, statuses, pictures,
+  comments and Production changes.
+- **Stage directions** (`((beat))`) and **sound cues** (`SFX:` / `Music:`) in
+  the Audio column.
+- **Timing:** a target length for the piece, or a scene's length by hand.
+- **Several pictures and videos per scene,** with YouTube, Vimeo and dropped
+  video files playing in the gallery; click a picture to see it full size.
+- **Settings in one place,** script zoom (Ctrl + wheel), Search commands
+  (Ctrl+K) and one Export dialog (Ctrl+E).
+- **A B-roll panel built for the shoot,** with prop statuses and a full-page
+  shot list.
+- **Exports that match the app:** the PDF and Word script carry each scene's
+  status, timecode and read time, tags in their colours, numbered comments,
+  the breakdown and a b-roll shot list; Markdown and spreadsheets gain the
+  same, and the packing list has sign-off lines.
+- **Merging a word at a time:** two people's edits to one scene combine
+  unless they changed the same words.
+- **Plain-language tags:** type `VFX:` or `Prop:` in the Visual column and
+  press Tab.
+- **Tag every mention at once:** find a word (Ctrl+F), then **Tag all as…**.
+- **Whole scenes:** drag out of a text box to select scenes, then copy, cut,
+  paste or delete them, comments and pictures included.
+- **The rundown** magnifies the scenes under the pointer, shows the script's
+  length, and shows where other people are working.
+- **In the desktop app:** Follow My Voice through Windows' own speech
+  recognition, Google Drive, and a server connection per tab.
+
+## Before 3.0.0
+
+3.0.0-beta.1 to beta.8 were pre-releases of the 3.0 work above.
