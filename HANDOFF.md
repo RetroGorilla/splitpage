@@ -128,11 +128,22 @@ full regression run — that is still `run-tests.ps1` on Windows, or
 `driver.mjs` one suite at a time here, plus the packaged targets.
 
 Since #80 CI also **produces** the app. It builds `index.html` and uploads
-it, with `sw.js`, `manifest.webmanifest`, `icon.svg`, the server and the
-`Dockerfile`, as the `splitpage-app` artifact — the set of files DEPLOY.md §2
-copies onto the server, arranged so the download is itself a working `docker
-build` context. The upload is the last step, so an artifact only exists for a
+it, with `sw.js`, `manifest.webmanifest`, the icons, `VERSION`, `server/`
+and `Dockerfile.prebuilt`, as the `splitpage-app` artifact, arranged so the
+download is itself a working `docker build -f Dockerfile.prebuilt` context
+(DEPLOY.md §8). The upload is the last step, so an artifact only exists for a
 run whose checks all passed.
+
+The owner's server does not use the artifact. `deploy.sh` pulls `main` and
+builds the root `Dockerfile`, which is two-stage: `npm ci` + `node build.mjs`
+in a `node:22-alpine` build stage, then only the built `index.html`/`sw.js`,
+the static files, `VERSION` and `server/` in the runtime stage. Docker is not
+on the Windows machine, so `.github/workflows/docker.yml` is where that image
+is really built: `bash -n` and shellcheck over `deploy.sh`, a legacy-builder
+`docker build`, then the container started as `99:100` with the settings
+`deploy.sh` insists on, checked through `/api/health` (VERSION, `links`,
+`linksPersist`), its own HEALTHCHECK and an owner sign-in that must survive a
+restart. It runs only when a deploy-relevant file changes (its `paths:`).
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not

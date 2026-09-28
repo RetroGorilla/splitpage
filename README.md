@@ -66,8 +66,12 @@ and at least the core browser suite — see
 [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md).
 
 CI (`.github/workflows/ci.yml`) does the same on every pull request, builds
-the app, and uploads the built files as a `splitpage-app` artifact. That
-artifact is what a server deploy copies — see [DEPLOY.md](DEPLOY.md) §2.
+the app, and uploads the built files as a `splitpage-app` artifact — a
+ready-built copy for running the server without a checkout
+(`Dockerfile.prebuilt`; [DEPLOY.md](DEPLOY.md) §8). The server itself is
+deployed from a checkout by `deploy.sh`, whose Dockerfile builds the app;
+`.github/workflows/docker.yml` builds and starts that image whenever a file
+it depends on changes.
 
 ## Building a release
 
@@ -187,6 +191,9 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 - `server/server.js`, `Dockerfile`, `docker-compose.yml` — the hosted mode: a
   dependency-free Node server that serves the app and stores documents as one
   JSON file each. See [DEPLOY.md](DEPLOY.md).
+- `deploy.sh`, `.env.example` — the one-command deploy on the owner's
+  server and the settings template it checks; `Dockerfile.prebuilt` builds
+  the same image from CI's already-built `splitpage-app` artifact.
 
 **Notes**
 

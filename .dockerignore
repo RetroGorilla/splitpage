@@ -1,0 +1,34 @@
+# What `docker build` never sees. Both Dockerfiles COPY named paths only, so
+# this is not what keeps the image small — it is what keeps things out of the
+# build CONTEXT, which the builder is handed whole before any COPY runs.
+#
+# The first block is the one that matters. On the server the image is built
+# from the same folder that holds the live documents and the owner key
+# (DEPLOY.md: deploy.sh keeps data/, backups/ and .env inside the clone), so
+# without these lines every deploy would pack every script, every image and
+# the key into the context — and one careless COPY away from an image layer.
+
+# ---- live data and secrets: never in a context, never in an image ----
+# deploy.sh refuses to build unless these three lines are here exactly as
+# written, so reword the comments freely but not them.
+data/
+backups/
+.env
+.env.*
+# A copy of the app with somebody's script saved into it, and scratch copies
+# of the same (.gitignore says why each exists).
+*.splitpage.html
+_*.html
+
+# ---- big, and nothing the build reads ----
+.git/
+**/node_modules
+desktop/
+dist/
+.cache/
+.claude/
+.github/
+
+# ---- written by the local launcher at runtime ----
+.update/
+update-status.json
