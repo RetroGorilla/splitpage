@@ -14,10 +14,36 @@
 # a job gate on it at all.
 name: CI
 
+# The repository is private, so every minute here is billed. Three things
+# keep it down without weakening what a merge is gated on:
+#
+#   - A change that touches only prose does not run at all. Markdown is not
+#     built or read by any check — except docs/help.md, which build.mjs
+#     renders into the app's Help, so it is put back after the exclusion.
+#     .claude/ is session notes and skills, except the run-splitpage-app
+#     driver and suites the browser steps below execute. Order matters: a
+#     later pattern overrides an earlier one.
+#   - A draft pull request does not run until it is marked ready
+#     (`ready_for_review` is in the types for that), since drafts are pushed
+#     to repeatedly and the last push is the only answer anyone reads.
+#   - desktop-smoke, the long job, does not repeat on the push to main; see
+#     its own note.
+#
+# No branch protection requires these checks, so a pull request that the
+# path filter skips is not left waiting on one.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: &ci-paths
+      - '**'
+      - '!**/*.md'
+      - 'docs/help.md'
+      - '!.claude/**'
+      - '.claude/skills/run-splitpage-app/**'
+      - '!.github/ISSUE_TEMPLATE/**'
   push:
     branches: [main]
+    paths: *ci-paths
 
 # A second push to the same branch makes the first run's answer worthless.
 concurrency:
@@ -34,6 +60,7 @@ env:
 
 jobs:
   checks:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -184,7 +211,13 @@ jobs:
   # cannot quietly pass by testing nothing — the failure mode #89 was about.
   # Its summary ends with a SKIPPED list naming every check this platform
   # could not run (today: the one MainWindowHandle probe).
+  #
+  # Pull requests only. A pull_request run already tests the merge result
+  # (refs/pull/N/merge), so the push that merging makes would run the same
+  # tree a second time. `checks` still runs on that push because its artifact
+  # is what a deploy downloads (DEPLOY.md §2.1); this job produces nothing.
   desktop-smoke:
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
