@@ -17,7 +17,9 @@ apart from this one: a change to the README no longer rebuilds the app.
 
 Hosting Splitpage for other people on a server is [DEPLOY.md](DEPLOY.md).
 Developer notes — architecture, invariants, how to test — are
-[HANDOFF.md](HANDOFF.md).
+[HANDOFF.md](HANDOFF.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md); to
+report a security problem, [SECURITY.md](SECURITY.md); what changed in each
+release is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Working on the code
 
@@ -54,12 +56,9 @@ isn't.
 Before pushing, run what CI runs:
 
 ```
-npx eslint .
-npm test                                   # src/test/*.test.mjs
-node tools/test-server.mjs
-node tools/test-update.mjs
-node desktop/test/drafts.test.mjs
-node desktop/test/ipc-table.test.mjs
+npm run lint
+npm run test:all      # src/test, the desktop modules, the server, the updater
+node desktop/test/tabstrip-width.mjs       # needs a Chromium; see the skill below
 ```
 
 and at least the core browser suite — see
