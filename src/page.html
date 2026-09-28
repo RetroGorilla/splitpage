@@ -475,7 +475,7 @@
          (Download / Install and restart / Try again / Open release page), so
          the text here is only what it reads before that runs. -->
     <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
-    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
+    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
   <!-- Browser build only: an always-available, dismissable pointer at the
@@ -485,7 +485,7 @@
     <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
     <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
     <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
-    <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
+    <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
   <div class="notice" id="resume-banner" hidden>
@@ -633,13 +633,13 @@
       <h2 id="import-title">Import a script</h2>
       <button type="button" class="modal-close" id="import-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labelled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
+    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. One column becomes Audio text; a table with two columns (or VISUAL:/AUDIO: lines) is split into Visual and Audio. This keeps the document you are in — its breakdown, cast, b-roll and comments stay — so use it to bring in a revised draft. File ▸ Open starts a new document instead.</p>
     <!-- Opened from the New Tab page (issue #144), where there is no
          document of the user's to keep: the import becomes a new one.
          11-import.js puts .is-new-document on #import-modal, which swaps
          this hint in for the one above and hides "Replace existing rows". -->
-    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labelled lines) is detected automatically and split into both columns.</p>
-    <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
+    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. One column becomes Audio text; a table with two columns (or VISUAL:/AUDIO: lines) is split into Visual and Audio.</p>
+    <textarea id="import-textarea" aria-label="Script to import" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
       <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
       <div class="import-split-group" role="radiogroup" aria-label="Split by">
@@ -738,7 +738,7 @@
       opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
       it lands, bring it in the same way as any other Word file: File ▸ Open…. If the doc isn't
       shared "Anyone with the link", make sure you're signed in to the right Google account in that tab first.</p>
-    <input type="text" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
+    <input type="text" id="gdoc-url-input" aria-label="Google Doc link" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
     <div class="modal-footer">
       <span></span>
       <div class="modal-footer-actions">
@@ -921,12 +921,12 @@
       </div>
       <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…" aria-labelledby="comment-body-label"></div>
       <div class="link-popover" hidden>
-        <input type="url" placeholder="https://example.com" data-role="link-input">
+        <input type="url" aria-label="Link address" placeholder="https://example.com" data-role="link-input">
         <button type="button" data-action="link-confirm">Add</button>
         <button type="button" data-action="link-cancel">Cancel</button>
       </div>
       <div class="video-popover" hidden>
-        <input type="url" placeholder="https://youtube.com/watch?v=…" data-role="video-input">
+        <input type="url" aria-label="Video link" placeholder="https://youtube.com/watch?v=…" data-role="video-input">
         <button type="button" data-action="video-confirm">Add</button>
         <button type="button" data-action="video-cancel">Cancel</button>
       </div>
@@ -1267,7 +1267,7 @@
     <div id="drive-main" hidden>
       <div class="modal-row drive-account" id="drive-account"></div>
       <div class="drive-connect-row">
-        <input type="text" id="drive-folder-input" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
+        <input type="text" id="drive-folder-input" aria-label="Google Drive folder link or ID" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
         <button type="button" class="btn btn-accent" id="drive-connect-btn" data-action="drive-connect">Open folder</button>
       </div>
       <button type="button" class="drive-edit-creds" data-action="drive-edit-creds">Change API key / Client ID…</button>
@@ -1312,7 +1312,7 @@
     <div class="tag-cats" id="tag-cats" role="radiogroup" aria-label="Category"></div>
 
     <div class="comment-field-label">Name</div>
-    <input type="text" id="tag-name" list="tag-name-list" autocomplete="off" placeholder="e.g. Halo Mount">
+    <input type="text" id="tag-name" aria-label="Tag name" list="tag-name-list" autocomplete="off" placeholder="e.g. Halo Mount">
     <datalist id="tag-name-list"></datalist>
     <div class="tag-hint" id="tag-hint"></div>
 
@@ -1708,10 +1708,10 @@
       <section class="onboard-step" data-onboard-step="1">
         <p class="modal-hint">Splitpage is a two-column visual/audio script editor with a
           built-in teleprompter. Scripts save as readable <strong>Markdown (.md)</strong>
-          files by default — a table you can read and edit anywhere, with everything
-          Splitpage needs kept alongside it — or as Splitpage's own native
-          <strong>.splitpage</strong> format, which is exactly what it looks like
-          internally, if you would rather have zero translation.</p>
+          files by default — a table you can read and edit in any editor, with what
+          Splitpage needs kept alongside it. You can also save as
+          <strong>.splitpage</strong>, Splitpage's own format, if you would rather keep
+          everything in one file.</p>
       </section>
 
       <section class="onboard-step" data-onboard-step="2">

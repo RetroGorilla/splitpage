@@ -143,7 +143,7 @@ export function exportActionReason(action) {
     return has ? "" : "Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack";
   }
   if (action === "export-broll-pdf" || action === "export-broll-csv") {
-    return exportBrollScenes().length ? "" : "No b-roll yet — start a Visual line with B-roll:";
+    return exportBrollScenes().length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
   }
   return "";
 }

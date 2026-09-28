@@ -36,3 +36,18 @@ expect document.getElementById('help-toc').textContent.indexOf('`') === -1
 # --- the shipped page carries none of src/page.html's editing notes -----------
 # (build.mjs stripHtmlComments; the page is served, and saved, verbatim)
 expect (function(){ var w = document.createTreeWalker(document, NodeFilter.SHOW_COMMENT); return w.nextNode() === null; })()
+
+# --- the browser tab is named for the script ----------------------------------
+# (05-render.js syncPageTitle; a script still on its default name stays plain)
+key Escape
+sleep 200
+expect document.title == Splitpage
+eval (function(){ var t = document.getElementById('doc-title'); t.value = 'Keepwarm Mug'; t.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
+expect document.title == Keepwarm Mug — Splitpage
+eval (function(){ var t = document.getElementById('doc-title'); t.value = 'Untitled Script'; t.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
+expect document.title == Splitpage
+
+# --- fields that had only a placeholder are labelled; the notices close with an icon
+expect ['import-textarea', 'gdoc-url-input', 'drive-folder-input', 'tag-name'].every(function(id){ return !!document.getElementById(id).getAttribute('aria-label'); })
+expect [].every.call(document.querySelectorAll('[data-role="link-input"], [data-role="video-input"]'), function(el){ return !!el.getAttribute('aria-label'); })
+expect document.querySelectorAll('.update-bar-dismiss svg').length == 2

@@ -29,6 +29,14 @@ appear in the app under **Help**. The format follows
 ### Fixed
 - The Help contents list no longer shows raw backticks around code in a
   heading.
+- The browser tab shows the script's name ("Keepwarm Mug — Splitpage"), so
+  several open at once can be told apart.
+- The link, video, import, Google Doc, Drive folder and tag name boxes are
+  labelled for screen readers.
+- The "×" on the update and desktop-app notices is an icon in the notice's
+  colours, readable in both themes.
+- Shorter, clearer wording in the setup wizard, the Import dialog and the
+  Export dialog's b-roll message.
 
 ## 3.0.0 — 2026-09-26
 
