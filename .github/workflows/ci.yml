@@ -53,6 +53,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # One place to bump the Chromium the suites run against. Unpinned, a new
+  # Playwright release could change the browser under a green branch.
+  PLAYWRIGHT_VERSION: '1.63.0'
+
 jobs:
   checks:
     if: ${{ !github.event.pull_request.draft }}
@@ -74,7 +79,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # build.mjs bundles src/js with esbuild since #66, so there is a
       # devDependency to install before anything can build or check.
@@ -116,33 +121,13 @@ jobs:
       - name: Unit tests over src/js
         run: npm test
 
-      - name: Desktop drafts unit tests
-        run: node desktop/test/drafts.test.mjs
-
-      - name: Desktop IPC channel table
-        run: node desktop/test/ipc-table.test.mjs
-
-      - name: Desktop blob store unit tests
-        run: node desktop/test/blob-store.test.mjs
-
-      # Version history on disk (#83): the fs backend under the shared store.
-      - name: Desktop history backend unit tests
-        run: node desktop/test/history-fs-backend.test.mjs
-
-      - name: Desktop teleprompter share listener
-        run: node desktop/test/prompter-share.test.mjs
-
-      - name: Desktop Follow My Voice listener (fake helper)
-        run: node desktop/test/voice-helper.test.mjs
-
-      - name: Desktop Google Drive client (loopback OAuth, fake Google)
-        run: node desktop/test/google-drive.test.mjs
-
-      - name: Server tests
-        run: node tools/test-server.mjs
-
-      - name: Updater tests
-        run: node tools/test-update.mjs
+      # Everything that runs without a browser or Electron, from one place
+      # (package.json's test:all): src/test (already run above), the desktop
+      # modules' unit tests, the document server and the updater. A test file
+      # added to one of those lists is in CI the same day; before this each
+      # was a step here, and four of them had been left out.
+      - name: Desktop, server and updater tests
+        run: npm run test:desktop && npm run test:tools
 
       # The browser suites need a Chromium. driver.mjs can find Playwright's
       # on its own, but "found the wrong one" fails as a wall of CDP errors
@@ -153,7 +138,7 @@ jobs:
       # the test runner: nothing in this repo imports Playwright.
       - name: Install Chromium
         run: |
-          npx --yes playwright install --with-deps chromium
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
           if [ -z "$exe" ]; then
             echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH — Playwright's layout may have changed again"
@@ -162,6 +147,9 @@ jobs:
           fi
           echo "using $exe"
           echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
+
+      - name: Desktop tab strip width (headless Chromium)
+        run: node desktop/test/tabstrip-width.mjs
 
       # Suite 01 is the boot-and-type path everything else rests on: if this
       # fails the app does not start. The rest of the suites are a full
@@ -237,7 +225,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # main.js serves index.html out of APP_ROOT, and it is not committed
       # (#80) — so the app has nothing to load until the root build has run.
@@ -280,7 +268,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb
-          npx --yes playwright install-deps chromium
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install-deps chromium
 
       # Xvfb started by hand rather than `xvfb-run`, which is what a person
       # runs locally. xvfb-run returns its own exit status when its temp-dir

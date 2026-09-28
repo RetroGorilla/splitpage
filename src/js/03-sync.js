@@ -230,7 +230,7 @@ var RESTORE_LABEL = "Restore this version";
 /* An Older row's button is the small one at the row's end (#169); the
    row it sits on says what it restores. */
 var RESTORE_OLDER_LABEL = "Restore";
-var RESTORE_ARMED_LABEL = "Couldn't keep a backup — restore anyway?";
+var RESTORE_ARMED_LABEL = "Could not keep a backup — restore anyway?";
 var restoreArmedKey = null;
 var restoreArmTimer = null;
 
@@ -2034,7 +2034,7 @@ export function undoMerge(btn) {
     }).then(function (r) {
       if (r === "no-backup") {
         undoMergeForceFor = undo;
-        showToast("Couldn't keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
+        showToast("Could not keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
       } else if (r === "missing") {
         showToast("The snapshot from before the merge is no longer in the history.", "warn");
       } else if (r === "corrupt") {

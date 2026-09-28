@@ -146,7 +146,7 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
 - **The rundown**: the strip under the header shows every scene as a block.
   Hover it to magnify the scenes round the pointer, click a block to jump
   to that scene, or drop a
-  dragged scene on it to move the scene. **File ▸ Minimize the rundown**
+  dragged scene on it to move the scene. **File ▸ Minimise the rundown**
   shrinks it to a line; click the line to bring it back.
 - **Scene status**: click the lamp in the scene's gutter to cycle **To do →
   Ready → Shot**.
@@ -575,7 +575,7 @@ copy…**. Below:
 - **Share**: Publish & copy a link, and Servers….
 - **Export**: Export…, and Export again.
 - **This document**: Version history, Find & replace, Hide shot scenes,
-  Minimize the rundown, and in the desktop app Present in browser and Use
+  Minimise the rundown, and in the desktop app Present in browser and Use
   Chromium Speech Recognition.
 
 Settings, Help, Tour, Set up, About, Tagging reference and Export app data
@@ -638,7 +638,7 @@ The whole app works on a phone, with the script first and scenes stacked
 - **Accept a tag completion**: tap it (there's no <kbd>Tab</kbd>).
 - **Find & replace** and **Search commands** are in the File menu.
 - **Select several breakdown items**: long-press one, then tap others.
-- **Move or add scenes** from a scene's **⋯** menu, or **+ Add row** at the
+- **Move or add scenes** from a scene's **⋯** menu, or **+ Add scene** at the
   bottom.
 
 ## Desktop app

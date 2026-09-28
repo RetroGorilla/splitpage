@@ -4566,7 +4566,7 @@ function buildMenu() {
          shape as the item above — the page owns the setting (per-device
          localStorage) and its switch in File ▸ This document, which
          sendMenuCommand clicks. No accelerator: Adam picks keys. */
-      { label: "Minimize the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
+      { label: "Minimise the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" },

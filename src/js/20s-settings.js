@@ -141,7 +141,7 @@ function bodyHtml() {
       segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], readThemePref()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
       '<p class="settings-hint settings-clock-example" id="settings-clock-example">' + escapeHtml(clockExample(clock)) + '</p>' +
-      switchHtml("settings-rundown-min", "Minimize the rundown strip", "Keep the strip of scenes under the header small.", flagOn(RUNDOWN_MIN_KEY)) +
+      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of scenes under the header small.", flagOn(RUNDOWN_MIN_KEY)) +
       switchHtml("settings-tag-icons", "Show icons on tags",
         "Put a small icon for its category before each tag, as well as its colour.", tagIconsOn())) +
     section("Editor",

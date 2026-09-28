@@ -87,7 +87,7 @@ eval (async function(){window.__f=await window.__export('breakdown','xlsx');wind
 expect window.__b.name == untitled-script - breakdown.xlsx
 expect window.__b.pk === true && window.__b.sheets === 'Breakdown'
 expect X.reason('export-breakdown-xlsx') === ''
-expect X.reason('export-broll-xlsx') == No b-roll yet — start a Visual line with B-roll:
+expect X.reason('export-broll-xlsx') == No b-roll yet — start a Visual line with "B-roll:"
 key ctrl KeyE
 sleep 400
 jsclick .export-card[data-format="broll"] input
@@ -97,7 +97,7 @@ expect document.querySelector('input[name="export-choice"]:checked').value == pd
 jsclick .export-seg input[value="xlsx"]
 sleep 150
 expect document.getElementById('export-go').disabled === true
-expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with B-roll:
+expect document.getElementById('export-why').textContent == No b-roll yet — start a Visual line with "B-roll:"
 expect !document.getElementById('export-preview').classList.contains('is-landscape')
 key Escape
 sleep 300

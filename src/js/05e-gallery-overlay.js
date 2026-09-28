@@ -411,7 +411,7 @@ function retryThumbnail() {
   fetchThumbnailRecord(poster.href).then(function (rec) {
     if (view && view.fetching === key) view.fetching = null;
     var done = rec && rowOf(rowId) && galleryEdit(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
-    if (!done) showToast("Couldn’t get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
+    if (!done) showToast("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && view.rowId === rowId) refreshGalleryOverlay();
   });
 }
@@ -512,7 +512,7 @@ function removeAnnotations() {
   if (!slot || !slot.annotation) return;
   var original = slot.annotation.imageRef;
   if (!galleryEdit(view.rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
-    showToast("Couldn’t go back to the original — the gallery already shows that picture.", "warn");
+    showToast("Could not go back to the original — the gallery already shows that picture.", "warn");
     return;
   }
   var btn = modal().querySelector('[data-gact="annotate"]');
