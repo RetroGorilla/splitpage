@@ -1,6 +1,7 @@
 {
   "name": "splitpage",
   "private": true,
+  "license": "MIT",
   "version": "0.0.0",
   "description": "Build, lint and test tooling for Splitpage. The app itself has no runtime dependencies; esbuild builds the bundle, eslint checks every source tree in it (see eslint.config.mjs) and jsdom lends the unit tests a DOM (see build.mjs and src/test/_dom.mjs).",
   "type": "module",

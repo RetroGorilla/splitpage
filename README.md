@@ -195,3 +195,7 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 - `.github/workflows/ci.yml` — lint, unit tests, server and updater tests and
   two browser suites on every pull request, plus the build whose output is
   uploaded as the `splitpage-app` artifact.
+
+## License
+
+[MIT](LICENSE).
