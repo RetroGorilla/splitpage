@@ -61,7 +61,14 @@ function sceneBrollLists() {
   return byScene;
 }
 
-export function buildCsv() {
+/* The script as a table, for the .csv and the Excel workbook (16b-xlsx.js)
+   alike, so the two can never say different things: the heading, a row
+   per scene ({cells, status} — the scene's status id, which the workbook
+   colours), the Total and Target rows, and the comments ({cells, reply})
+   under their own heading. Cells are what the sheet shows, unescaped. */
+export var COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
+
+export function scriptTable() {
   var facts = exportFacts();
   var scenes = sceneFacts();
   var tags = sceneTagLists();
@@ -78,13 +85,13 @@ export function buildCsv() {
     cells[0] = label;
     cells[2] = status;
     cells[3] = read;
-    return cells.map(csvEscape).join(",");
+    return cells;
   }
 
-  var lines = [CSV_HEAD.join(",")];
+  var out = { head: CSV_HEAD.slice(), scenes: [], summary: [], commentHead: COMMENT_HEAD.slice(), comments: [] };
   S.state.rows.forEach(function (row, i) {
     var f = scenes[i];
-    lines.push([
+    out.scenes.push({ status: f.status.id, cells: [
       f.number,
       f.start,
       f.status.label,
@@ -95,37 +102,42 @@ export function buildCsv() {
       (tags[i] || []).join("; "),
       (broll[i] || []).join("; "),
       (open[i] || []).sort(function (a, b) { return a - b; }).join(", ")
-    ].map(csvEscape).join(","));
+    ] });
   });
-  lines.push(summary("Total", facts.scenes ? facts.status.shot + " of " + facts.scenes + " shot" : "", facts.runtime));
+  out.summary.push(summary("Total", facts.scenes ? facts.status.shot + " of " + facts.scenes + " shot" : "", facts.runtime));
   if (facts.target) {
-    lines.push(summary("Target", facts.target.delta === "0:00" ? "on target"
+    out.summary.push(summary("Target", facts.target.delta === "0:00" ? "on target"
       : facts.target.delta + (facts.target.over ? " over" : " under"), facts.target.text));
   }
+  comments.forEach(function (c) {
+    out.comments.push({ reply: false, resolved: !!c.resolved, cells: [
+      c.number || "",
+      c.where,
+      c.resolved ? "Resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") : "Open",
+      c.assignee,
+      c.author,
+      c.when,
+      c.quoted,
+      commentBodyText(c)
+    ] });
+    c.replies.forEach(function (rp) {
+      out.comments.push({ reply: true, resolved: !!c.resolved, cells: ["", "", "", "", "↳ " + rp.author, rp.when, "", commentBodyText(rp)] });
+    });
+  });
+  return out;
+}
 
-  if (comments.length) {
+export function buildCsv() {
+  var t = scriptTable();
+  var line = function (cells) { return cells.map(csvEscape).join(","); };
+  var lines = [t.head.join(",")];
+  t.scenes.forEach(function (s) { lines.push(line(s.cells)); });
+  t.summary.forEach(function (cells) { lines.push(line(cells)); });
+  if (t.comments.length) {
     lines.push("");
     lines.push(csvEscape("Comments"));
-    lines.push(["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"].join(","));
-    comments.forEach(function (c) {
-      lines.push([
-        csvEscape(c.number || ""),
-        csvEscape(c.where),
-        csvEscape(c.resolved ? "Resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") : "Open"),
-        csvEscape(c.assignee),
-        csvEscape(c.author),
-        csvEscape(c.when),
-        csvEscape(c.quoted),
-        csvEscape(commentBodyText(c))
-      ].join(","));
-      c.replies.forEach(function (rp) {
-        lines.push([
-          csvEscape(""), csvEscape(""), csvEscape(""), csvEscape(""),
-          csvEscape("↳ " + rp.author), csvEscape(rp.when),
-          csvEscape(""), csvEscape(commentBodyText(rp))
-        ].join(","));
-      });
-    });
+    lines.push(t.commentHead.join(","));
+    t.comments.forEach(function (c) { lines.push(line(c.cells)); });
   }
   /* BOM so Excel reads the UTF-8 correctly */
   return "﻿" + lines.join("\r\n");
