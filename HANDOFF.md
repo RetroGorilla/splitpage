@@ -350,13 +350,40 @@ stash when `splitpage-server-resume` is present.
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, one file (~2,300 lines). One JSON file
+`server/server.js` — plain Node, no dependencies, one file (~2,850 lines). One JSON file
 per document in `DATA_DIR`.
 
-- No identity of its own — Cloudflare Access decides who anybody is; the
-  server only reads `Cf-Access-Authenticated-User-Email` for display.
-- `JOIN_PIN` is a door lock: sha256 + `timingSafeEqual`, 10 wrong
-  guesses/minute cap, refusal is `401 {error:"pin-required"}` JSON.
+- No identity of its own — `Cf-Access-Authenticated-User-Email` is read for
+  display and attribution only. Without Access in front it is whatever the
+  caller wrote (as trustworthy as the `by` in every write body), so nothing
+  that decides what a token may do ever reads it.
+- **Two shapes, one file.** No `JOIN_PIN`: open, everyone the owner, meant
+  for behind Cloudflare Access or a VPN. `JOIN_PIN` set: a short code on a
+  LAN (the desktop app's `--host`, `start.mjs`), or — with a long random key,
+  `PERSIST_LINKS=1` and TLS in front (Adam's Unraid box behind a Cloudflare
+  tunnel, NO Access) — the owner's key to a server that faces the internet on
+  its own, with guests on per-document invite links. The gate at the top of
+  `handleApi()` is the one place that decides what a token reaches.
+- `JOIN_PIN` → the **owner token**: sha256 + `timingSafeEqual`, refusal is
+  `401 {error:"pin-required"}` JSON. 10 wrong guesses/minute per address;
+  only the join PIN itself clears an address's count — a link key or the
+  review code used to as well, and every guest holds one, so a reviewer could
+  walk six digits to the editor's PIN at 90% speed (9 wrong, 1 good join,
+  repeat). Without `PERSIST_LINKS` the owner token is random per process (a
+  restart signs everyone out, as always). With it, it is
+  `HMAC-SHA256(secret, "owner\0" + JOIN_PIN)`, the secret in
+  `DATA_DIR/links/secret`: a redeploy keeps the owner signed in, changing
+  `JOIN_PIN` signs every owner device out. `PERSIST_LINKS=1` with a
+  `JOIN_PIN` under 20 characters prints a loud startup WARNING (an
+  internet-facing server with a guessable key); a LAN PIN does not.
+- **Who the limiter counts** (#74): the socket; `TRUST_PROXY=1` → the first
+  `X-Forwarded-For` entry (for a proxy that REPLACES the header);
+  `TRUST_PROXY=cloudflare` → `Cf-Connecting-Ip`, which Cloudflare overwrites.
+  Behind Cloudflare `=1` is spoofable: Cloudflare APPENDS to a client-sent
+  X-Forwarded-For, so its first entry is the guesser's to choose — a fresh
+  bucket per guess. Junk (or a comma list) in either header falls back to
+  the socket. Any other `TRUST_PROXY` value is ignored with a warning (`0`
+  silently).
 - CORS opt-in per origin, never carries credentials; `OPTIONS /api/*`
   answered 204 before any route runs.
 - `/api/launcher/info` is loopback-only and launch-token-gated — launch
@@ -371,10 +398,12 @@ per document in `DATA_DIR`.
   no longer starts another process at all. The gating rules above stay as
   written: they are why a route here could exist, and anything that ever
   joins `info` inherits them.
-- `REVIEW_PIN`/`REVIEW_KEY` are a second credential minting a second token
-  with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
-  role is read from the token on every request (`roleOf`), so it survives a
-  reconnect and cannot be asserted by a client. **A review session never
+- `REVIEW_PIN`/`REVIEW_KEY` are a second, LIBRARY-wide credential minting a
+  second token with the role `review` (#30), unscoped, random per process
+  even under `PERSIST_LINKS` (it belongs to the launcher's LAN session, the
+  only thing that sets it). Both are ignored without a `JOIN_PIN`. Role and
+  scope are read from the token on every request (`sessionOfToken`), so they
+  survive a reconnect and cannot be asserted by a client. **A review session never
   PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply
   from either role. **Reviewers never resolve or unresolve** (owner's
   decision): `PATCH /api/docs/:id/comments/:cid` is editor-only, and a
@@ -399,16 +428,90 @@ per document in `DATA_DIR`.
   The client adopts `home.rev` from a comments response only when it is the
   exact successor, so a collaborator's save in between is still pulled by
   the next heartbeat. Edit-role users keep PUT for everything, comments
-  included. `GET /api/share` hands an editor the review LINK's key, never
-  the PIN.
+  included. `GET /api/share?doc=<id>` (owner only) is kept for older clients:
+  it is get-or-create that document's REVIEW link from the store below,
+  answered `{reviewAvailable:true, reviewKey, docId}` — never the PIN.
+- **Invite links: the link store** (replaced #63's in-memory
+  `reviewGrantFor`/`reviewGrantsBy*`/`reviewScopeByToken`). A link is
+  `{id (12 hex), key (24 random bytes hex — what the URL carries), token (32
+  bytes hex — what join hands back), docId, role "edit"|"review", createdAt,
+  createdBy}`, at most ONE active per (docId, role), looked up through Maps
+  (`linkByKey`, `linkByToken`, `linkByDocRole`) so the gate is O(1). Revoking
+  leaves a tombstone of `sha256(key)` and `sha256(token)` — never either
+  itself — capped at 2000, oldest dropped. Links need only a `JOIN_PIN`
+  (not a review code), which is why `/api/health`'s `reviewAvailable` is now
+  `!!JOIN_PIN`; health also says `links: 1` and `linksPersist`.
+  - **Where it lives.** Without `PERSIST_LINKS`: memory only, a restart
+    cancels every link and token (the LAN sessions, unchanged in lifetime).
+    With `PERSIST_LINKS=1`: `DATA_DIR/links/` (0700) holding `secret` and
+    `links.json` (both 0600, the mode set when the temp file is CREATED via
+    `writeFileDurable(…, mode)`), rewritten whole on every change through a
+    one-at-a-time chain that writes the store as it is when the write RUNS.
+    On disk BEFORE a new key is handed out (a failed write drops the new
+    link) or a revoke is confirmed. An unreadable `secret` or `links.json`
+    stops the server at startup rather than being silently replaced (that
+    would sign the owner out / drop every link). `links/` does not end in
+    `.json`, so the list skips it; the static handler refuses all of
+    `DATA_DIR`. The file holds keys and tokens in the clear: it must hold
+    keys (the owner copies a link again) and a key mints its token on
+    request, so hashing tokens there would protect nothing.
+  - **Join** (`POST /api/join`): `{pin}` = JOIN_PIN → `{token, role:"edit"}`;
+    `{key}` of an active link → `{token, role, docId, scope: docId}`; a
+    tombstoned key → **410 `link-off`**, NOT counted as a guess (a dead
+    link re-opened is not an attack, and must not lock out the house);
+    library review code/key unchanged; else 401 `bad-pin`, counted.
+  - **The gate.** `sessionOfToken` → `{role, scope, token}` (scope "" for
+    the owner and the library review token), `{revoked:true}` for a
+    tombstoned token → **401 `link-off`** (header or beacon body; the page
+    tells a guest "this link was switched off" instead of asking for a PIN
+    they never had), or null → 401 `pin-required`. A SCOPED token (either
+    role): `GET /api/docs` lists only its document; any `/api/docs/:id…` on
+    another id → 403 `wrong-document`, before the body; `POST /api/docs`
+    → 403 `owner-only` for a scoped edit (review keeps `review-only`);
+    `DELETE /api/docs/:id` (any id, its own included), the links API and
+    `/api/share` → 403 `owner-only`; `POST /api/presence` on another docId
+    → 403 `wrong-document` (it used to check no scope at all — a link could
+    read who was in any document and its rev). A scoped EDIT token PUTs
+    its own document through the ordinary compare-and-set/409/426/422 path
+    and may PATCH-resolve its comments. `GET /api/me` →
+    `{role, scope, email, name}`.
+  - **Links API** (`handleLinks`, owner only = unscoped edit; else 403
+    `owner-only`; no JOIN_PIN → 409 `no-pin`): `GET /api/docs/:id/links` →
+    `{links:[{id, role, key, createdAt}]}` (active only; answers even for a
+    document removed by hand, so its links can still be revoked);
+    `POST {role, replace?}` (8 KB cap) → the active link (200) or a new one
+    (201), `replace:true` revokes first and always mints; 400 `bad-role`,
+    404 `not-found` (no such document), 403 `read-only` for an EDIT link
+    under READ_ONLY (review links and revokes still work); runs under the
+    document's lock so it cannot race a DELETE. `DELETE …/links/:linkId` →
+    `{ok:true}`, off from the token's next request; 404 **`no-such-link`**
+    (not `not-found`, which the client reads as "the script is gone").
+    Deleting a document revokes its links first, persisted before the
+    unlink. The token is never in any answer here. Placed above the
+    comment/read/save routes, and any OTHER sub-path under a document is now
+    404 — it used to be answered as the document itself, so a `DELETE` one
+    letter off `/links/…` deleted the script.
 - `POST /api/presence` (#28) is a heartbeat and a listing in one round trip,
   in memory only, capped and swept per request, TTL 15s. It is behind the
   same gate but carries its own copy of it, because a closing tab's
-  `sendBeacon` cannot set the token header. Presence is never part of a
-  document and never touches one.
+  `sendBeacon` cannot set the token header — including `link-off` and a
+  link's scope (403 `wrong-document` for another docId). Presence is never
+  part of a document and never touches one.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
   `Cache-Control: no-store` on every response except a blob's.
+- **What an internet-facing server must not do** (found reviewing for the
+  Unraid deployment). A request line of `GET //` threw in `new URL()`
+  outside every handler — an uncaught exception, one request from anyone
+  took the process down; now 400. A token or launch header with a non-ASCII
+  byte reached `timingSafeEqual` with mismatched BYTE lengths (the string
+  lengths matched) and threw — a 500 plus a stack trace per request;
+  `sameToken` compares bytes now. The static handler refuses anything under
+  `DATA_DIR` by real path, case-folded on Windows/macOS (`insideDataDir`):
+  `start.mjs` serves its whole folder with the library in `data/` beneath
+  it, so `GET /data/<id>.json` handed any document to anyone on the LAN,
+  PIN or no PIN. And nothing whose path has a segment starting with `.`
+  (`.git/config`, `.env` in a checkout).
 - **Images are content-addressed blobs** (#82). Bytes live at
   `DATA_DIR/blobs/<first 2 hex>/<sha256>`, written like a document (temp in
   the same dir, fsync, rename, fsync the dir — `writeFileDurable`), global
@@ -422,27 +525,35 @@ per document in `DATA_DIR`.
     `If-None-Match`), `nosniff`, `CSP: default-src 'none'; sandbox`. A file
     whose bytes do not hash to its name is 404 and logged, not served.
   - `PUT /api/blobs/<sha>`, raw body: READ_ONLY 403, bad sha 400, declared
-    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a reviewer over budget 429
-    `review-budget` — all four before the body is read (#74); then
+    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a metered guest over budget
+    429 `review-budget` — all four before the body is read (#74); then
     `hash-mismatch` 400, not png/jpeg/gif/webp (SVG included) 415
     `unsupported-type`, already stored 200 `{stored:false}`, else 201
     `{stored:true}`.
   - `POST /api/blobs/missing {shas:[≤2000]}` (256 KB body cap) →
     `{missing:[…]}`, both roles, READ_ONLY too.
-  - **Who sees what.** Editors and the library-wide review token: every
-    blob. A per-document review link: the shas its document's stored state
-    names (`refsIn`, cached by doc id + rev) plus the shas it uploaded
-    itself; anything else is 404 on GET and "missing" on `/missing` whether
-    or not it exists, a PUT of such bytes is answered 201 `{stored:true}`
-    (and charged) even when they were already here, and a comment naming
-    one is 422. None of the four answers tells a link what the rest of the
-    library holds.
-  - **Reviewer budget.** Review tokens may PUT (screenshots in comments,
-    D6) up to `REVIEW_BLOB_BUDGET_BYTES` (20 MiB) per token per rolling
-    hour, each upload charged at least 4 KiB. The declared length is
+  - **Who sees what** (`blobVisibility(session)`). The owner and the
+    library-wide review token: every blob. A per-document link of EITHER
+    role: the shas its document's stored state names (`refsIn`, cached by
+    doc id + rev) plus the shas it uploaded itself; anything else is 404 on
+    GET and "missing" on `/missing` whether or not it exists, a PUT of such
+    bytes is answered 201 `{stored:true}` (and charged) even when they were
+    already here, and a comment naming one is 422 — and so, for an edit
+    link, is a document PUT naming one (`refusedRefs(…, visible)`); the
+    client uploads it, after which it is the link's own. None of these
+    answers tells a link what the rest of the library holds. Residual: an
+    edit link that already KNOWS a sha can put it in `acceptMissing`, save,
+    and then learn from a GET whether the library holds those bytes — which
+    needs the image's hash, i.e. effectively the image.
+  - **Guest budgets** (`blobLedgers`, per token per rolling hour, each
+    upload charged at least 4 KiB): review tokens `REVIEW_BLOB_BUDGET_BYTES`
+    (20 MiB; screenshots in comments, D6), scoped edit tokens
+    `LINK_EDIT_BLOB_BUDGET_BYTES` (100 MiB; stills in its one script). Over
+    either is 429 `review-budget` — the code the client already words as
+    "this link's image allowance is used up". The declared length is
     reserved before the body and settled to what was stored; a re-send of
     bytes the token could already see is free. The library-wide review
-    token is one budget shared by everyone holding it. Editors are
+    token is one budget shared by everyone holding it. The owner is
     unmetered.
   - `refsIn(state)` counts `imageRef.sha256` / `imageValue.sha256` anywhere
     in the state and `data-blob="<sha>"` on any TAG in any string (comment
