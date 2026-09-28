@@ -449,6 +449,9 @@ $KeyMap = @{
   KeyC      = @{ key = 'c';         code = 'KeyC';      vk = 67 }
   KeyX      = @{ key = 'x';         code = 'KeyX';      vk = 88 }
   KeyV      = @{ key = 'v';         code = 'KeyV';      vk = 86 }
+  # the annotation editor's tool keys (P, H, T, E; 2026-09-27)
+  KeyP      = @{ key = 'p';         code = 'KeyP';      vk = 80 }
+  KeyT      = @{ key = 't';         code = 'KeyT';      vk = 84 }
 }
 
 # mouse down|move|up|right <js expression giving {x, y}> — one real CDP mouse

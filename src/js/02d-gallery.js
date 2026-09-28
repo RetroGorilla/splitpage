@@ -36,10 +36,108 @@ import { normalizeImageRef } from "../../shared/blob-policy.js";
    the gallery draws a placeholder. An item has a picture, a
    poster link, or both. migrateRows (02-state.js) calls migrateGallery for each row;
    the merge (03-sync.js) merges imageLinks and moreImages as sets
-   (mergeGalleryField), so two people adding pictures both keep theirs. */
+   (mergeGalleryField), so two people adding pictures both keep theirs.
+
+   ANNOTATIONS (2026-09-27). A picture drawn on in the annotation editor
+   (05w-annotate.js) keeps what it was: its record becomes the FLATTENED
+   picture — the original with the marks drawn in — so every reader of a
+   picture (the cell, the exports, the teleprompter, an older copy of the
+   app) shows the marks with no change of its own, and beside it
+
+     imageAnnotation  (the row, for the first picture)
+     annotation       (an item of moreImages)
+                      {imageRef: the untouched original, marks: [...]}
+
+   so opening the editor again edits the marks over the original, and
+   taking them all away gives the original back. Its key is `imageRef` so
+   the server's walker (server.js refsIn, which counts any imageRef) and
+   blob-policy's refsIn keep the original's bytes. A mark is resolution-
+   free, every position a fraction of the picture's width or height:
+
+     {kind: "pen"|"highlight", color, width, points: [x0, y0, x1, y1, …]}
+     {kind: "text", color, size, x, y, text}
+
+   width and size are fractions of the picture's WIDTH; x, y the text
+   box's top left. Nothing about a mark is trusted — normalizeMarks is
+   the one gate, as normalizeImageRef is for a record. */
 
 var MAX_LINKS = 20;
 var MAX_MORE = 60;
+var MAX_MARKS = 500;
+var MAX_POINTS = 2000;
+var MAX_TEXT = 500;
+
+/* The annotation editor's colours, and the only ones a mark may have: red,
+   yellow, green, blue, black, white. */
+export var ANNOTATION_COLORS = ["#e5383b", "#ffb703", "#2a9d8f", "#3a86ff", "#111111", "#ffffff"];
+
+function fraction(v, lo, hi) {
+  if (typeof v !== "number" || !isFinite(v)) return null;
+  return Math.round(Math.min(hi, Math.max(lo, v)) * 10000) / 10000;
+}
+
+/* One mark made safe, or null. */
+function normalizeMark(m) {
+  if (!m || typeof m !== "object" || Array.isArray(m)) return null;
+  var color = typeof m.color === "string" ? m.color.toLowerCase() : "";
+  if (ANNOTATION_COLORS.indexOf(color) === -1) return null;
+  if (m.kind === "pen" || m.kind === "highlight") {
+    var width = fraction(m.width, 0.001, 0.2);
+    if (width === null || !Array.isArray(m.points) || m.points.length < 2) return null;
+    var pts = [];
+    for (var i = 0; i + 1 < m.points.length && pts.length < MAX_POINTS * 2; i += 2) {
+      var x = fraction(m.points[i], 0, 1), y = fraction(m.points[i + 1], 0, 1);
+      if (x === null || y === null) return null;
+      pts.push(x, y);
+    }
+    return { kind: m.kind, color: color, width: width, points: pts };
+  }
+  if (m.kind === "text") {
+    var size = fraction(m.size, 0.01, 0.3);
+    var tx = fraction(m.x, 0, 1), ty = fraction(m.y, 0, 1);
+    if (size === null || tx === null || ty === null || typeof m.text !== "string") return null;
+    /* Drawn on a canvas, never parsed as markup, so "<" is only a
+       character (plainText would take "a <b> c" apart); its own line
+       breaks kept, every other control a space. Anything that shows it
+       as HTML escapes it as it would any text. */
+    /* eslint-disable-next-line no-control-regex -- controls are what goes */
+    var text = m.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000B-\u001F\u007F]+/g, " ").slice(0, MAX_TEXT);
+    if (!text.trim()) return null;
+    return { kind: "text", color: color, size: size, x: tx, y: ty, text: text };
+  }
+  return null;
+}
+
+/* A list of marks made safe: at most MAX_MARKS, in paint order. */
+export function normalizeMarks(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (m) {
+    if (out.length >= MAX_MARKS) return;
+    var n = normalizeMark(m);
+    if (n) out.push(n);
+  });
+  return out;
+}
+
+/* An annotation made safe, or null: an original to go back to and at
+   least one mark. In a file the original is inline, as `visualImage`
+   (inlineStateImages, 02c-blobs.js), interned here like a picture. The
+   original is never the flattened picture itself. */
+function normalizeAnnotation(a, flat) {
+  if (!a || typeof a !== "object" || Array.isArray(a) || !flat) return null;
+  var legacy = safeImageSrc(a.visualImage);
+  var rec = legacy ? internDataUrl(legacy) : null;
+  if (rec) queuePersist([rec.sha256]);
+  var ref = rec || normalizeImageRef(a.imageRef);
+  if (!ref || ref.sha256 === flat.sha256) return null;
+  var marks = normalizeMarks(a.marks);
+  return marks.length ? { imageRef: ref, marks: marks } : null;
+}
+
+/* The picture a slot started as: its original when it is annotated. */
+export function slotOriginal(slot) {
+  return slot && slot.annotation ? slot.annotation.imageRef : (slot ? slot.ref : null);
+}
 
 /* A caption link, made safe, or null. */
 export function normalizeVideoLink(x) {
@@ -111,6 +209,8 @@ function normalizeGalleryItem(it) {
   var name = ref ? normalizePictureName(it.name) : "";
   if (name) out.name = name;
   if (links.length) out.links = links;
+  var ann = normalizeAnnotation(it.annotation, ref);
+  if (ann) out.annotation = ann;
   return out;
 }
 
@@ -131,6 +231,8 @@ export function migrateGallery(r) {
   if (imageName) r.imageName = imageName; else delete r.imageName;
   var links = normalizeVideoLinks(r.imageLinks);
   if (links.length) r.imageLinks = links; else delete r.imageLinks;
+  var ann = normalizeAnnotation(r.imageAnnotation, normalizeImageRef(r.imageRef));
+  if (ann) r.imageAnnotation = ann; else delete r.imageAnnotation;
   var seen = {};
   var firstKey = itemKey({ imageRef: r.imageRef, links: r.imageLinks });
   if (firstKey) seen[firstKey] = true;
@@ -146,6 +248,7 @@ export function migrateGallery(r) {
     r.imageRef = first.imageRef || null;
     if (first.name) r.imageName = first.name;
     if (first.links) r.imageLinks = first.links;
+    if (first.annotation) r.imageAnnotation = first.annotation;
   }
   if (more.length) r.moreImages = more; else delete r.moreImages;
 }
@@ -155,7 +258,8 @@ export function migrateGallery(r) {
    A slot is {ref, dataUrl, links, name}: ref a record (or null), dataUrl
    a legacy inline picture (the first slot of a row that has not been
    through migrateRows), links its caption, name its picture's file name
-   ("" when unknown). Slot 0 is there when the row
+   ("" when unknown), annotation its {imageRef, marks} when it has been
+   drawn on (null otherwise). Slot 0 is there when the row
    has a first picture or first-slot links. */
 export function rowSlots(row) {
   var out = [];
@@ -164,16 +268,26 @@ export function rowSlots(row) {
   var links = Array.isArray(row.imageLinks) ? row.imageLinks : [];
   if (img || links.length) {
     out.push({ ref: img ? img.ref : null, dataUrl: img ? img.dataUrl : null, links: links,
-               name: img && typeof row.imageName === "string" ? row.imageName : "" });
+               name: img && typeof row.imageName === "string" ? row.imageName : "",
+               annotation: img && img.ref ? readAnnotation(row.imageAnnotation) : null });
   }
   (Array.isArray(row.moreImages) ? row.moreImages : []).forEach(function (it) {
     if (!it || typeof it !== "object") return;
     var ref = normalizeImageRef(it.imageRef);
     var itLinks = Array.isArray(it.links) ? it.links : [];
     if (!ref && !itLinks.some(function (l) { return l && l.poster; })) return;
-    out.push({ ref: ref, dataUrl: null, links: itLinks, name: ref && typeof it.name === "string" ? it.name : "" });
+    out.push({ ref: ref, dataUrl: null, links: itLinks, name: ref && typeof it.name === "string" ? it.name : "",
+               annotation: ref ? readAnnotation(it.annotation) : null });
   });
   return out;
+}
+
+/* An annotation as the document holds it (migrateGallery made it safe),
+   or null — no interning here, rowSlots is a reader. */
+function readAnnotation(a) {
+  if (!a || typeof a !== "object") return null;
+  var ref = normalizeImageRef(a.imageRef);
+  return ref && Array.isArray(a.marks) && a.marks.length ? { imageRef: ref, marks: a.marks } : null;
 }
 
 /* Whether a slot is a video's tile. */
@@ -215,15 +329,16 @@ export function rowVideoLinks(row) {
 
 function copy(v) { return JSON.parse(JSON.stringify(v)); }
 
-/* Writes `slots` ({ref, links, name}) back as the row's keys — empty ones
-   are left out. A slot after the first with neither a picture nor a video
-   is nothing, and is dropped. */
+/* Writes `slots` ({ref, links, name, annotation}) back as the row's keys
+   — empty ones are left out. A slot after the first with neither a
+   picture nor a video is nothing, and is dropped. */
 export function setRowSlots(row, slots) {
   delete row.visualImage;
   var first = slots[0] || null;
   row.imageRef = first && first.ref ? copy(first.ref) : null;
   if (first && first.ref && first.name) row.imageName = first.name; else delete row.imageName;
   if (first && first.links && first.links.length) row.imageLinks = copy(first.links); else delete row.imageLinks;
+  if (first && first.ref && first.annotation) row.imageAnnotation = copy(first.annotation); else delete row.imageAnnotation;
   var more = [];
   slots.slice(1).forEach(function (s) {
     if (!s || (!s.ref && !isVideoSlot(s))) return;
@@ -231,6 +346,7 @@ export function setRowSlots(row, slots) {
     if (s.ref) it.imageRef = copy(s.ref);
     if (s.ref && s.name) it.name = s.name;
     if (s.links && s.links.length) it.links = copy(s.links);
+    if (s.ref && s.annotation) it.annotation = copy(s.annotation);
     more.push(it);
   });
   if (more.length) row.moreImages = more; else delete row.moreImages;
@@ -238,7 +354,7 @@ export function setRowSlots(row, slots) {
 
 function slotsOf(row) {
   return rowSlots(row).map(function (s) {
-    return { ref: s.ref, links: s.links.slice(), name: s.name };
+    return { ref: s.ref, links: s.links.slice(), name: s.name, annotation: s.annotation };
   });
 }
 
@@ -314,7 +430,31 @@ export function replaceGalleryPicture(row, i, ref, name) {
   } else {
     slots[i].ref = ref;
     slots[i].name = normalizePictureName(name);
+    /* a new picture, not the old one drawn on */
+    slots[i].annotation = null;
   }
+  setRowSlots(row, slots);
+  return true;
+}
+
+/* Slot i's picture drawn on (05w-annotate.js): `flat` the original with
+   `marks` drawn in, `original` what it was before any marks. With marks
+   the slot shows `flat` and keeps the original and the marks beside it;
+   with none it goes back to the original. Its file name and caption stay.
+   false when slot i is not a picture, or when `flat` is a picture
+   another slot already shows (two slots with one picture would be one
+   slot to migrateGallery). */
+export function annotateGallerySlot(row, i, flat, original, marks) {
+  var slots = slotsOf(row);
+  var s = slots[i];
+  var orig = normalizeImageRef(original);
+  if (!s || !s.ref || isVideoSlot(s) || !orig) return false;
+  var clean = normalizeMarks(marks);
+  var ref = clean.length ? normalizeImageRef(flat) : orig;
+  if (!ref || (clean.length && ref.sha256 === orig.sha256)) return false;
+  if (slots.some(function (o, k) { return k !== i && o.ref && o.ref.sha256 === ref.sha256; })) return false;
+  s.ref = ref;
+  s.annotation = clean.length ? { imageRef: orig, marks: clean } : null;
   setRowSlots(row, slots);
   return true;
 }

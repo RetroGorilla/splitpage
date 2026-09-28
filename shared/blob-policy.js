@@ -111,9 +111,14 @@ function refsIn(state) {
   rows.forEach(function (r) {
     if (!r || typeof r !== "object") return;
     addRecord(r.imageRef);
-    /* the scene's further pictures (#135): [{imageRef, links}] */
+    /* an annotated picture's original (02d-gallery.js): what taking the
+       marks away gives back, so its bytes are kept like the picture's */
+    if (r.imageAnnotation && typeof r.imageAnnotation === "object") addRecord(r.imageAnnotation.imageRef);
+    /* the scene's further pictures (#135): [{imageRef, links, annotation}] */
     (Array.isArray(r.moreImages) ? r.moreImages : []).forEach(function (it) {
-      if (it && typeof it === "object") addRecord(it.imageRef);
+      if (!it || typeof it !== "object") return;
+      addRecord(it.imageRef);
+      if (it.annotation && typeof it.annotation === "object") addRecord(it.annotation.imageRef);
     });
     refsInHtml(r.visualText, add);
     refsInHtml(r.audioText, add);
