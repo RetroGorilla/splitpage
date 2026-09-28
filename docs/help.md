@@ -11,7 +11,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 [host a shared session](#hosting-a-shared-session) or
 [connect to a server](#connecting-to-a-server).
 
-## What's new since 3.0
+## What's new in 3.1
 
 - **Draw on your pictures.** In a scene's gallery, press **Annotate** to
   mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
@@ -19,6 +19,9 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   gives you the original back. See [Annotating a picture](#annotating-a-picture).
 - **Search commands** (Ctrl+K) puts the tagging reference first, and
   searching *tags* finds it.
+- **Version history from 2.x** is no longer converted. If you are updating
+  straight from 2.x, install 3.0 first to keep it. Nothing changes if you
+  already have 3.0.
 
 ## What's new in 3.0
 
@@ -505,7 +508,8 @@ you'll see **Continue where you left off?**
 **File ▸ Version history…** lists snapshots of the script as you worked.
 Pick one to restore it. Each script has its own history, kept on this
 computer (not in the file). History from older versions of Splitpage appears
-under **Older history** for 90 days.
+under **Older history** for 90 days. Only 3.0 carries history over from 2.x,
+so coming straight from 2.x, install 3.0 first to keep it.
 
 ## Exporting
 
