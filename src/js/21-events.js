@@ -42,6 +42,7 @@ import {
   render,
   renderRow,
   syncFieldFromDom,
+  syncPageTitle,
   toggleCellFormat,
   typeAtDirectionEdge,
   typePendingMarks,
@@ -2069,6 +2070,7 @@ function init() {
   document.getElementById("doc-title").addEventListener("input", function (e) {
     if (!S.state) return;
     S.state.title = e.target.value;
+    syncPageTitle();
     markDirty();
   });
 

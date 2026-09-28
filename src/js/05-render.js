@@ -98,7 +98,7 @@ export function pad2(n) { return n < 10 ? "0" + n : "" + n; }
 
 var LINK_POPOVER_HTML =
   '<div class="link-popover" hidden>' +
-    '<input type="url" placeholder="https://example.com" data-role="link-input">' +
+    '<input type="url" aria-label="Link address" placeholder="https://example.com" data-role="link-input">' +
     '<button type="button" data-action="link-confirm">Add</button>' +
     '<button type="button" data-action="link-cancel">Cancel</button>' +
   '</div>';
@@ -828,6 +828,16 @@ var renderCalls = 0;
 var rowsPainted = 0;
 var cellsPainted = 0;
 
+/* The browser tab (and the window list, and history) names the script, so
+   several open at once can be told apart. A script still called by its
+   default name adds nothing, so that tab stays plain "Splitpage". Only the live
+   document's title changes: the shell a save writes out was captured at boot
+   (00-prelude.js PAGE_SHELL) and keeps "Splitpage". */
+export function syncPageTitle() {
+  var name = ((S.state && S.state.title) || "").trim();
+  document.title = !name || name === "Untitled Script" ? "Splitpage" : name + " — Splitpage";
+}
+
 export function render() {
   /* A document the undo stack has not seen (just opened, restored or
      replaced) is copied before it can be edited (12a-undo.js). */
@@ -852,6 +862,7 @@ export function render() {
 
   var titleInput = document.getElementById("doc-title");
   if (document.activeElement !== titleInput) titleInput.value = S.state.title || "";
+  syncPageTitle();
   syncAnchorResolvedClasses();
   updateScriptStats();
   updateCommentsCount();

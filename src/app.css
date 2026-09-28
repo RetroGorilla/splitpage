@@ -7029,16 +7029,21 @@
 .update-bar-action:hover { background: var(--hover); }
 .update-bar-dismiss {
   margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
   border: 0;
   background: none;
   cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-  padding: 0 4px;
-  color: inherit;
-  opacity: .55;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
 }
-.update-bar-dismiss:hover { opacity: 1; }
+.update-bar-dismiss:hover { color: var(--text); background: var(--hover); }
+.update-bar-dismiss:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.update-bar-dismiss svg {
+  width: 16px; height: 16px;
+  fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+}
 
 /* ---- Help page (docs/help.md rendered at build time — see mdToHtml in
    build.mjs and 20c-help.js) ---- */
