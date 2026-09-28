@@ -13,10 +13,6 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new since 3.0
 
-- **Publishing is safer while it uploads.** Text you type during a publish
-  now stays unsaved and is saved to the server right after, instead of being
-  marked saved. If you open another script before the upload finishes, that
-  script is left alone; the published copy waits on the server.
 - **Draw on your pictures.** In a scene's gallery, press **Annotate** to
   mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
   and E pick them). Your marks stay editable, and **Remove annotations**
@@ -33,6 +29,12 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **The tagging reference lists every word form**: `Prop:`, `Location:` or
   `Loc:`, `Cast:`, `VFX:`, `Gear:`, and `SFX:` or `Music:`, each with its
   tag colour, beside the bracket shortcuts.
+- **Saving you can trust.** Text typed while a publish or a save is still
+  going stays marked unsaved until it is saved, instead of being called
+  saved. Opening another script during a publish leaves that script alone;
+  the published copy waits on the server. **Save As** on a shared script
+  now makes a copy without calling the shared one saved. And a malformed
+  request can no longer stop a shared-script server.
 
 ## What's new in 3.0
 
