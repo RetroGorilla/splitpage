@@ -745,10 +745,24 @@ function flagClientTooOld() {
    lapsed sign-in's, so a fresh link to the same script opened in this tab
    merges it back in (resumeServerDoc). Save a copy… still works, and the
    toast offers it. The key is forgotten here and on this device, so no
-   later load tries it again. */
+   later load tries it again.
+
+   "arrived" is the same latch for a link that was already off when this
+   tab opened it: the script never reached the screen, so there is nothing
+   of the reader's to keep or copy — what is showing is the start-up demo,
+   and "your changes can't be saved" or a Save a copy… button would be about
+   that. Only who to ask. */
 function flagLinkOff(kind) {
   if (linkTurnedOff) return;
   linkTurnedOff = true;
+  if (kind === "arrived") {
+    forgetLinkKey(conn.serverUrl);
+    showToast("This link has been turned off. Ask whoever sent it for a new one.", "warn", true);
+    updateFileChip();
+    updateSaveStatus();
+    updateServerMenu();
+    return;
+  }
   stashForReload();
   forgetLinkKey(conn.serverUrl);
   var saveCopy = function () {
@@ -1179,7 +1193,12 @@ async function joinWithLinkKey() {
     rememberLinkKey(conn.serverUrl, key, linkDocId, !!S.serverMode.linksPersist);
     return "ok";
   }
-  if (joined && joined.error === "link-off") { flagLinkOff("off"); return "off"; }
+  /* Off before this tab ever held the script: nothing of theirs on screen.
+     A tab that has it open (or has edits) gets the mid-session wording. */
+  if (joined && joined.error === "link-off") {
+    flagLinkOff(onServerDoc() || S.dirty ? "off" : "arrived");
+    return "off";
+  }
   if (joined && joined.error === "bad-pin") { forgetLinkKey(conn.serverUrl); return "gone"; }
   return "failed";
 }

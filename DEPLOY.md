@@ -469,8 +469,10 @@ working** — they don't contain the key.
 
 ### Turning off a link
 
-From the app: open **Collaborate** on that script and turn the link off.
-Nothing to do on the server. Changing the owner key does *not* turn links
+From the app: open that script, **File ▸ Collaborate…**, and press **Turn
+off** on the link (twice — it asks you to confirm). **New link** instead
+makes a fresh one and stops the old one working. Nothing to do on the
+server. Changing the owner key does *not* turn links
 off (see above).
 
 ---
