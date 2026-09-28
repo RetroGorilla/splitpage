@@ -548,8 +548,11 @@ export function mergeStates(base, mine, theirs) {
       if (b && mv === bv) { tookTheirs = true; return; }            /* only they changed it */
       if (b && tv === bv) {                                         /* only I changed it */
         out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
-        /* the picture's file name goes with it (#135) */
+        /* the picture's file name goes with it (#135), and what it was
+           before it was drawn on (02d-gallery.js, annotations) */
         if (m.imageName) out.imageName = m.imageName; else delete out.imageName;
+        if (m.imageAnnotation) out.imageAnnotation = JSON.parse(JSON.stringify(m.imageAnnotation));
+        else delete out.imageAnnotation;
         tookMine = true;
         return;
       }

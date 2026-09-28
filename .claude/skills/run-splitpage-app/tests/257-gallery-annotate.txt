@@ -1,0 +1,320 @@
+# Drawing on a picture in a scene's gallery (2026-09-27; 05w-annotate.js,
+# the gallery dialog's Annotate button in 05e-gallery-overlay.js, the data
+# layer in 02d-gallery.js), driven with real mouse input:
+#   * Annotate is offered for a picture, not a video's tile, not in review;
+#   * a pen stroke and a highlight (drawn once where it crosses itself) are
+#     marks; the eraser takes a whole mark; a text is placed, typed, put
+#     down, edited in place and dragged; the editor's own undo / redo
+#     (buttons and keys) never touch the document;
+#   * Cancel with changes asks first (the button, then a second press; Esc
+#     twice); with none it just closes;
+#   * Done: the slot's picture a new sha whose pixels differ, the original
+#     and the normalised marks beside it, "Picture annotated", focus back on
+#     the gallery's button, now "Edit annotations";
+#   * opening it again shows the marks over the original, not drawn twice;
+#   * the script's Ctrl+Z / Ctrl+Shift+Z take the save back and forth;
+#   * Remove annotations and Clear all + Done give the original back;
+#   * a JPEG stays a JPEG; a .splitpage reopens with the annotation;
+#   * light and dark screenshots.
+# Every `eval` is one physical line.
+
+open
+viewport 1280 800
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+
+eval (function(){ window.F = window.__splitpageFormats; window.A = function(){ return window.__annotateTest.state(); }; window.AM = function(){ return document.getElementById('annotate-modal'); }; window.M = function(){ return document.getElementById('gallery-modal'); }; window.row = function(){ return F.state().rows.filter(function(r){ return r.id === 'a1'; })[0]; }; window.pic = function(w, h, color, type){ var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h); return c.toDataURL(type || 'image/png'); }; window.pt = function(fx, fy){ var r = document.getElementById('annotate-frame').getBoundingClientRect(); return { x: Math.round(r.left + r.width * fx), y: Math.round(r.top + r.height * fy) }; }; window.cpx = function(fx, fy){ var c = document.getElementById('annotate-canvas'); return Array.prototype.slice.call(c.getContext('2d').getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data); }; window.imgPx = function(img, fx, fy){ var c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; var g = c.getContext('2d'); g.drawImage(img, 0, 0); return Array.prototype.slice.call(g.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data); }; window.btn = function(act){ return M().querySelector('[data-gact="' + act + '"]'); }; window.tb = function(sel){ return AM().querySelector(sel); }; window.toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast:not(.is-leaving)'), function(t){ return t.textContent; }); }; window.clearToasts = function(){ document.querySelectorAll('#toast-host .toast').forEach(function(t){ t.remove(); }); return true; }; window.picked = function(){ var t = M().querySelector('.scene-gallery-grid-tile.is-selected'); return t ? Number(t.getAttribute('data-slot')) : -1; }; return true; })()
+eval (function(){ var doc = { schema: 2, title: 'Annotate', comments: [], rows: [ { id: 'a1', visualText: 'one', audioText: 'A', status: 'todo', visualImage: pic(800, 450, '#6b8fb3'), imageName: 'wide.png', moreImages: [ { visualImage: pic(640, 480, '#8a7a5c', 'image/jpeg'), name: 'photo.jpg' }, { visualImage: pic(320, 180, '#3a3'), name: 'take.png', links: [{ href: 'https://vimeo.com/4', poster: true }] } ] }, { id: 'a2', visualText: 'two', audioText: 'B', status: 'todo' } ] }; F.openFile(new File([JSON.stringify(doc)], 'annotate.splitpage')); return true; })()
+wait F.state().title === 'Annotate' && !!document.querySelector('#rows .row[data-id="a1"] .scene-gallery-tile')
+eval (function(){ window.orig = row().imageRef.sha256; window.jpgOrig = row().moreImages[0].imageRef.sha256; window.before = JSON.stringify(F.state()); return true; })()
+
+# ---- Annotate: a picture has it, a video's tile does not -------------------------
+eval document.querySelector('#rows .row[data-id="a1"] .scene-gallery-tile').click()
+wait !M().hidden && picked() === 0
+expect !!btn('annotate') && btn('annotate').textContent === 'Annotate'
+expect !btn('unannotate')
+expect !!btn('annotate').querySelector('svg use[href="#i-pen"]')
+eval M().querySelector('.scene-gallery-grid-tile[data-slot="2"]').click()
+wait picked() === 2
+expect !btn('annotate')
+eval M().querySelector('.scene-gallery-grid-tile[data-slot="0"]').click()
+wait picked() === 0 && !!btn('annotate')
+
+# ---- the editor opens over the gallery, the pen picked --------------------------------
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready
+expect !M().hidden
+expect AM().querySelector('[role="dialog"]').getAttribute('aria-modal') === 'true'
+expect document.getElementById('annotate-title').textContent === 'Annotate picture'
+expect A().tool === 'pen' && A().marks.length === 0
+expect tb('[data-tool="pen"]').getAttribute('aria-pressed') === 'true' && tb('[data-tool="eraser"]').getAttribute('aria-pressed') === 'false'
+expect document.activeElement === tb('[data-tool="pen"]')
+expect tb('[data-aact="color"][aria-label="Red"]').getAttribute('aria-pressed') === 'true'
+expect AM().querySelectorAll('[data-aact="color"]').length === 6
+expect tb('[data-aact="size"][aria-label="Medium"]').getAttribute('aria-pressed') === 'true'
+expect tb('#annotate-undo').disabled && tb('#annotate-redo').disabled && tb('#annotate-clear').disabled
+# the original fitted to the stage, the canvas the same box
+expect (function(){ var f = document.getElementById('annotate-frame').getBoundingClientRect(), s = document.getElementById('annotate-stage').getBoundingClientRect(); return Math.abs(f.width / f.height - 800 / 450) < 0.01 && f.left >= s.left && f.right <= s.right && f.top >= s.top && f.bottom <= s.bottom && (Math.abs(f.width - (s.width - 48)) < 2 || Math.abs(f.height - (s.height - 48)) < 2); })()
+expect document.getElementById('annotate-img').naturalWidth === 800
+expect getComputedStyle(document.getElementById('annotate-frame')).touchAction === 'none'
+
+# ---- a pen stroke ------------------------------------------------------------------
+mouse down pt(0.2, 0.3)
+mouse move pt(0.25, 0.33)
+mouse move pt(0.3, 0.35)
+mouse move pt(0.35, 0.33)
+mouse up pt(0.4, 0.3)
+wait A().marks.length === 1
+expect A().marks[0].kind === 'pen' && A().marks[0].color === '#e5383b' && A().marks[0].width === 0.008
+expect A().marks[0].points.length >= 8 && Math.abs(A().marks[0].points[0] - 0.2) < 0.01 && Math.abs(A().marks[0].points[1] - 0.3) < 0.01
+expect A().marks[0].points.every(function(v){ return v >= 0 && v <= 1 && Math.abs(Math.round(v * 10000) - v * 10000) < 1e-6; })
+expect (function(){ var p = cpx(0.3, 0.35); return p[3] > 200 && p[0] > 180 && p[1] < 100; })()
+expect !tb('#annotate-undo').disabled && tb('#annotate-redo').disabled
+
+# ---- a highlight, crossing itself, drawn once ------------------------------------------
+click [data-tool="highlight"]
+expect A().tool === 'highlight' && tb('[data-tool="highlight"]').getAttribute('aria-pressed') === 'true' && tb('[data-tool="pen"]').getAttribute('aria-pressed') === 'false'
+expect tb('[data-aact="color"][aria-label="Yellow"]').getAttribute('aria-pressed') === 'true'
+mouse down pt(0.45, 0.5)
+mouse move pt(0.75, 0.5)
+mouse move pt(0.75, 0.6)
+mouse move pt(0.6, 0.6)
+mouse up pt(0.6, 0.4)
+wait A().marks.length === 2
+expect A().marks[1].kind === 'highlight' && A().marks[1].color === '#ffb703' && A().marks[1].width === 0.035
+expect (function(){ var one = cpx(0.5, 0.5), cross = cpx(0.6, 0.502); return one[3] > 80 && one[3] < 100 && Math.abs(cross[3] - one[3]) <= 3; })()
+
+# ---- text: placed, typed, put down --------------------------------------------------
+click [data-tool="text"]
+expect A().tool === 'text' && document.getElementById('annotate-status').textContent.indexOf('Click the picture to type') === 0
+mouse down pt(0.1, 0.8)
+mouse up pt(0.1, 0.8)
+wait !!document.querySelector('.annotate-textbox') && A().text !== null
+expect document.activeElement === document.querySelector('.annotate-textbox')
+type Hello
+key Enter
+type world
+eval (function(){ window.boxW = document.querySelector('.annotate-textbox').getBoundingClientRect().width; return document.querySelector('.annotate-textbox').value; })()
+expect document.querySelector('.annotate-textbox').value === 'Hello\nworld'
+# the text is not on the canvas while its box is open
+expect A().marks.length === 2
+key Escape
+wait !document.querySelector('.annotate-textbox') && A().marks.length === 3
+expect !AM().hidden
+expect A().marks[2].kind === 'text' && A().marks[2].text === 'Hello\nworld' && A().marks[2].color === '#e5383b' && A().marks[2].size === 0.045
+expect Math.abs(A().marks[2].x - 0.1) < 0.01
+expect document.activeElement === tb('[data-tool="text"]')
+# a click on it edits it; Esc with nothing changed adds no step
+eval (function(){ window.undo0 = A().undo; var m = A().marks[2]; window.tp = pt(m.x + 0.02, m.y + 0.03); return tp; })()
+mouse down tp
+mouse up tp
+wait !!document.querySelector('.annotate-textbox')
+expect document.querySelector('.annotate-textbox').value === 'Hello\nworld'
+key Escape
+wait !document.querySelector('.annotate-textbox')
+expect A().marks.length === 3 && A().undo === undo0
+# dragged by its body, it moves
+eval (function(){ window.tx = A().marks[2].x; return true; })()
+mouse down tp
+mouse move ({x: tp.x + 20, y: tp.y})
+mouse move ({x: tp.x + 60, y: tp.y - 10})
+mouse up ({x: tp.x + 60, y: tp.y - 10})
+wait A().marks[2].x > tx + 0.03
+expect !document.querySelector('.annotate-textbox') && A().undo === undo0 + 1
+# an empty text box puts nothing down
+mouse down pt(0.8, 0.15)
+mouse up pt(0.8, 0.15)
+wait !!document.querySelector('.annotate-textbox')
+key Escape
+wait !document.querySelector('.annotate-textbox')
+expect A().marks.length === 3 && A().undo === undo0 + 1
+
+# ---- the eraser takes a whole mark ---------------------------------------------------
+click [data-tool="eraser"]
+expect tb('[data-aact="color"]').disabled && tb('[data-aact="size"]').disabled
+mouse down pt(0.3, 0.2)
+mouse move pt(0.3, 0.28)
+mouse move pt(0.3, 0.42)
+mouse up pt(0.3, 0.45)
+wait A().marks.length === 2
+expect A().marks[0].kind === 'highlight' && A().marks[1].kind === 'text'
+expect cpx(0.3, 0.35)[3] === 0
+
+# ---- the editor's undo / redo: buttons and keys, never the document's ------------------------
+click #annotate-undo
+wait A().marks.length === 3 && A().marks[0].kind === 'pen'
+click #annotate-redo
+wait A().marks.length === 2
+key ctrl KeyZ
+wait A().marks.length === 3
+key ctrl+shift KeyZ
+wait A().marks.length === 2
+key ctrl KeyZ
+wait A().marks.length === 3
+key ctrl KeyY
+wait A().marks.length === 2
+expect JSON.stringify(F.state()) === before
+
+# ---- P / H / T / E pick the tools (Adam, 2026-09-27), not while typing -------------------------
+expect tb('[data-tool="pen"]').getAttribute('aria-keyshortcuts') === 'P' && tb('[data-tool="eraser"]').title.indexOf('Eraser (E)') === 0
+key KeyH
+wait A().tool === 'highlight' && tb('[data-tool="highlight"]').getAttribute('aria-pressed') === 'true'
+key KeyT
+wait A().tool === 'text'
+key KeyE
+wait A().tool === 'eraser'
+key KeyP
+wait A().tool === 'pen'
+# with a modifier they are not the tools
+key shift KeyE
+expect A().tool === 'pen'
+# in a text box they are letters
+key KeyT
+wait A().tool === 'text'
+mouse down pt(0.6, 0.85)
+mouse up pt(0.6, 0.85)
+wait !!document.querySelector('.annotate-textbox')
+press phet
+expect document.querySelector('.annotate-textbox').value === 'phet' && A().tool === 'text'
+key Escape
+wait !document.querySelector('.annotate-textbox') && A().marks.length === 3
+key ctrl KeyZ
+wait A().marks.length === 2
+# back to the eraser, the tool the rest of this suite expects remembered
+key KeyE
+wait A().tool === 'eraser'
+expect JSON.stringify(F.state()) === before
+sleep 300
+shot 257-editor-light
+
+# ---- Cancel with changes asks first ----------------------------------------------------------
+click #annotate-cancel
+expect !AM().hidden && document.getElementById('annotate-cancel').textContent === 'Discard changes?' && document.getElementById('annotate-cancel').classList.contains('armed')
+wait document.getElementById('annotate-cancel').textContent === 'Cancel'
+expect !AM().hidden && A().marks.length === 2
+
+# ---- Done: flattened, the original and the marks beside it ------------------------------------
+eval (function(){ window.saved = A().marks; return clearToasts(); })()
+click #annotate-done
+wait AM().hidden
+wait row().imageRef.sha256 !== orig && !!row().imageAnnotation
+expect row().imageAnnotation.imageRef.sha256 === orig
+expect JSON.stringify(row().imageAnnotation.marks) === JSON.stringify(saved)
+expect row().imageName === 'wide.png' && row().imageRef.mime === 'image/png' && row().imageRef.width === 800 && row().imageRef.height === 450
+wait toasts().indexOf('Picture annotatedUndo') !== -1
+wait !!btn('annotate') && btn('annotate').textContent === 'Edit annotations' && !!btn('unannotate')
+expect document.activeElement === btn('annotate')
+expect !M().hidden && picked() === 0
+# the dialog's picture is the flattened one, and its pixels differ where the highlight is
+wait (function(){ var i = M().querySelector('.scene-gallery-preview-pic img'); return i && i.getAttribute('data-blob') === row().imageRef.sha256 && i.complete && i.naturalWidth === 800; })()
+expect (function(){ var p = imgPx(M().querySelector('.scene-gallery-preview-pic img'), 0.5, 0.5); return p[0] > 150 && p[2] < 140; })()
+expect (function(){ var p = imgPx(M().querySelector('.scene-gallery-preview-pic img'), 0.9, 0.9); return Math.abs(p[0] - 0x6b) < 3 && Math.abs(p[2] - 0xb3) < 3; })()
+
+# ---- opened again: the marks over the original, not drawn twice ------------------------------
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready
+expect document.getElementById('annotate-title').textContent === 'Edit annotations'
+expect JSON.stringify(A().marks) === JSON.stringify(saved) && A().undo === 0
+expect (function(){ var p = imgPx(document.getElementById('annotate-img'), 0.5, 0.5); return Math.abs(p[0] - 0x6b) < 3 && Math.abs(p[1] - 0x8f) < 3 && Math.abs(p[2] - 0xb3) < 3; })()
+expect (function(){ var p = cpx(0.5, 0.5); return p[3] > 80 && p[3] < 100; })()
+# no changes: Cancel closes at once
+click #annotate-cancel
+wait AM().hidden
+expect row().imageAnnotation.imageRef.sha256 === orig
+# Esc with changes: the first arms Cancel, the second throws them away
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready
+# the tool last used (the eraser) is still picked: the pen again, for a dot
+expect A().tool === 'eraser'
+click [data-tool="pen"]
+mouse down pt(0.9, 0.1)
+mouse up pt(0.9, 0.1)
+wait A().marks.length === 3
+key Escape
+expect !AM().hidden && document.getElementById('annotate-cancel').textContent === 'Discard changes?'
+expect document.activeElement === document.getElementById('annotate-cancel')
+key Escape
+wait AM().hidden
+expect JSON.stringify(row().imageAnnotation.marks) === JSON.stringify(saved)
+
+# ---- the script's undo takes the save back, and redo brings it again ---------------------------------
+eval (function(){ window.flat = row().imageRef.sha256; return true; })()
+key ctrl KeyZ
+wait row().imageRef.sha256 === orig && !row().imageAnnotation
+wait !!btn('annotate') && btn('annotate').textContent === 'Annotate' && !btn('unannotate')
+key ctrl+shift KeyZ
+wait row().imageRef.sha256 === flat && !!row().imageAnnotation
+
+# ---- Remove annotations: the original back, one step ------------------------------------------------
+eval clearToasts()
+click [data-gact="unannotate"]
+wait row().imageRef.sha256 === orig && !row().imageAnnotation
+wait toasts().indexOf('Annotations removedUndo') !== -1
+expect btn('annotate').textContent === 'Annotate' && !btn('unannotate')
+key ctrl KeyZ
+wait row().imageRef.sha256 === flat && row().imageAnnotation.imageRef.sha256 === orig
+
+# ---- Clear all + Done does the same -------------------------------------------------------------------
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready && A().marks.length === 2
+click #annotate-clear
+wait A().marks.length === 0 && cpx(0.5, 0.5)[3] === 0
+click #annotate-done
+wait AM().hidden
+wait row().imageRef.sha256 === orig && !row().imageAnnotation
+
+# ---- a JPEG stays a JPEG --------------------------------------------------------------------------
+eval M().querySelector('.scene-gallery-grid-tile[data-slot="1"]').click()
+wait picked() === 1 && !!btn('annotate')
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready && A().tool === 'pen'
+mouse down pt(0.3, 0.3)
+mouse move pt(0.5, 0.5)
+mouse up pt(0.7, 0.4)
+wait A().marks.length === 1
+click #annotate-done
+wait AM().hidden
+wait row().moreImages[0].imageRef.sha256 !== jpgOrig && !!row().moreImages[0].annotation
+expect row().moreImages[0].imageRef.mime === 'image/jpeg' && row().moreImages[0].annotation.imageRef.sha256 === jpgOrig && row().moreImages[0].name === 'photo.jpg'
+expect row().moreImages[0].annotation.marks.length === 1 && row().moreImages[0].annotation.marks[0].kind === 'pen'
+
+# ---- a .splitpage reopens with its annotation --------------------------------------------------------
+eval (function(){ window.keep = JSON.stringify(row().moreImages[0]); return F.openFile(new File([F.buildSplitpage()], 'again.splitpage')).then(function(){ return true; }); })()
+wait !!row() && !!row().moreImages && JSON.stringify(row().moreImages[0]) === keep
+eval M().hidden ? true : document.getElementById('gallery-close').click()
+
+# ---- dark theme ---------------------------------------------------------------------------------------
+eval document.querySelector('#rows .row[data-id="a1"] .scene-gallery-tile').click()
+wait !M().hidden
+eval M().querySelector('.scene-gallery-grid-tile[data-slot="1"]').click()
+wait picked() === 1 && btn('annotate').textContent === 'Edit annotations'
+# the toasts stacked up by now reach the dialog's buttons
+eval clearToasts()
+eval document.documentElement.setAttribute('data-theme', 'dark')
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready && A().marks.length === 1
+expect getComputedStyle(document.querySelector('.annotate-bar')).backgroundColor === 'rgb(33, 32, 30)'
+expect getComputedStyle(document.getElementById('annotate-title')).color === 'rgb(236, 235, 231)'
+click [data-tool="text"]
+mouse down pt(0.1, 0.1)
+mouse up pt(0.1, 0.1)
+wait !!document.querySelector('.annotate-textbox')
+type Keep this
+sleep 300
+shot 257-editor-dark
+key Escape
+click #annotate-cancel
+click #annotate-cancel
+wait AM().hidden
+eval document.documentElement.removeAttribute('data-theme')
+
+# ---- a review session: no Annotate -------------------------------------------------------------------
+key Escape
+wait M().hidden
+eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
+sleep 300
+eval document.querySelector('#rows .row[data-id="a1"] .scene-gallery-tile').click()
+wait !M().hidden
+expect !btn('annotate') && !btn('unannotate')
+key Escape
+wait M().hidden
