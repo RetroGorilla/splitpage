@@ -1,0 +1,155 @@
+name: Docker
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - Dockerfile.prebuilt
+      - .dockerignore
+      - deploy.sh
+      - .env.example
+      - server/**
+      - build.mjs
+      - package.json
+      - package-lock.json
+      - .github/workflows/docker.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - Dockerfile.prebuilt
+      - .dockerignore
+      - deploy.sh
+      - .env.example
+      - server/**
+      - build.mjs
+      - package.json
+      - package-lock.json
+      - .github/workflows/docker.yml
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: deploy.sh parses
+        run: bash -n deploy.sh
+
+      - name: shellcheck deploy.sh
+        run: shellcheck deploy.sh
+
+      - name: deploy.sh is executable in git and has LF line endings
+        run: |
+          mode="$(git ls-files -s deploy.sh | cut -d' ' -f1)"
+          if [ "$mode" != 100755 ]; then
+            echo "::error file=deploy.sh::deploy.sh is mode $mode in git, not 100755 — run: git update-index --chmod=+x deploy.sh"
+            exit 1
+          fi
+          if [ "$(tr -cd '\r' < deploy.sh | wc -c)" -ne 0 ]; then
+            echo "::error file=deploy.sh::deploy.sh has CRLF line endings"
+            exit 1
+          fi
+
+      - name: Build the image from the checkout (legacy builder, as on unRAID)
+        env:
+          DOCKER_BUILDKIT: '0'
+        run: docker build --label "splitpage.commit=${GITHUB_SHA::7}" -t splitpage-ci .
+
+      - name: The image holds the built app and the server, and no source
+        run: |
+          docker run --rm --entrypoint find splitpage-ci /app -mindepth 1 | sort > "$RUNNER_TEMP/image-files.txt"
+          cat "$RUNNER_TEMP/image-files.txt"
+          for f in /app/VERSION /app/public/index.html /app/public/sw.js \
+                   /app/public/manifest.webmanifest /app/public/icon.svg \
+                   /app/public/icon-maskable.svg /app/server/server.js /app/server/package.json; do
+            grep -qx "$f" "$RUNNER_TEMP/image-files.txt" || { echo "::error::$f is missing from the image"; exit 1; }
+          done
+          if grep -E 'node_modules|^/app/(src|shared|docs|tools|desktop)(/|$)|build\.mjs|package-lock|\.env|\.git' "$RUNNER_TEMP/image-files.txt"; then
+            echo "::error::the image carries source, dependencies or secrets it should not (listed above)"
+            exit 1
+          fi
+          if docker run --rm --entrypoint sh splitpage-ci -c 'test -e /build'; then
+            echo "::error::the build stage's /build is in the final image"
+            exit 1
+          fi
+
+      - name: Start it the way deploy.sh does, and check it
+        run: |
+          fail() { echo "::error::$1"; docker logs --tail 60 splitpage-ci || true; exit 1; }
+          wait_up() {
+            for _ in $(seq 1 30); do
+              curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8791/api/health && return 0
+              sleep 1
+            done
+            fail "no answer from /api/health within 30s"
+          }
+          version="$(tr -d '[:space:]' < VERSION)"
+
+          data="$RUNNER_TEMP/splitpage-data"
+          mkdir -p "$data"
+          sudo chown 99:100 "$data"
+          pin="ci$(openssl rand -hex 16)"
+          echo "::add-mask::$pin"
+          printf 'JOIN_PIN=%s\nPERSIST_LINKS=1\nTRUST_PROXY=cloudflare\nALLOW_ORIGINS=splitpage://app\n' "$pin" > "$RUNNER_TEMP/ci.env"
+
+          docker run -d --name splitpage-ci \
+            --user 99:100 \
+            -p 127.0.0.1:8791:8791 \
+            --env-file "$RUNNER_TEMP/ci.env" \
+            -v "$data:/data" \
+            --health-interval 2s \
+            splitpage-ci
+          wait_up
+
+          health="$(curl -fsS http://127.0.0.1:8791/api/health)"
+          echo "/api/health: $health"
+          jq -e --arg v "$version" '.version == $v' <<<"$health" >/dev/null \
+            || fail "/api/health does not report the built VERSION ($version)"
+          jq -e '.authRequired == true' <<<"$health" >/dev/null \
+            || fail "/api/health says no owner key is required, with JOIN_PIN set"
+          jq -e '.links == 1 and .linksPersist == true' <<<"$health" >/dev/null \
+            || fail "/api/health does not report links: 1 and linksPersist: true with PERSIST_LINKS=1"
+
+          curl -fsS http://127.0.0.1:8791/ | grep -q "<meta name=\"splitpage-version\" content=\"$version\">" \
+            || fail "/ does not serve the app built from this VERSION"
+          curl -fsS http://127.0.0.1:8791/sw.js | grep -qF "var CACHE = \"splitpage-$version\";" \
+            || fail "/sw.js is not the copy the build stamped with VERSION"
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8791/VERSION)"
+          [ "$code" = 404 ] || fail "/VERSION is served as a file (HTTP $code); it should only be read"
+
+          for _ in $(seq 1 30); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' splitpage-ci)"
+            [ "$status" = healthy ] && break
+            sleep 1
+          done
+          [ "$status" = healthy ] \
+            || fail "the image's HEALTHCHECK says '$status': $(docker inspect -f '{{json .State.Health}}' splitpage-ci)"
+
+          token="$(curl -fsS -X POST -H 'content-type: application/json' \
+                     --data "{\"pin\":\"$pin\"}" http://127.0.0.1:8791/api/join | jq -r '.token // empty')"
+          [ -n "$token" ] || fail "POST /api/join with the owner key returned no token"
+          echo "::add-mask::$token"
+          me() { curl -fsS -H "x-splitpage-token: $token" http://127.0.0.1:8791/api/me; }
+          me | jq -e '.role == "edit"' >/dev/null || fail "the owner's token is not an editor's"
+          docker restart splitpage-ci >/dev/null
+          wait_up
+          me | jq -e '.role == "edit"' >/dev/null \
+            || fail "after a restart the owner's sign-in was refused — PERSIST_LINKS is not keeping it"
+
+          sudo ls -lnR "$data" | head -40
+          sudo test -d "$data/links" || fail "PERSIST_LINKS=1, but the server made no data/links/ folder"
+          wrong="$(sudo find "$data" \( ! -uid 99 -o ! -gid 100 \) -print)"
+          [ -z "$wrong" ] || fail "files in the data folder that 99:100 does not own: $wrong"
+
+      - name: Container log
+        if: always()
+        run: docker logs --tail 80 splitpage-ci 2>&1 || true

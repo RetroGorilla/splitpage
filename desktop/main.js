@@ -2856,6 +2856,7 @@ function buildMenu() {
       { label: "Import from Google Doc link…", click: () => sendMenuCommand("gdoc-import") },
       { label: "Google Drive files…", click: () => sendMenuCommand("drive-open") },
       { type: "separator" },
+      { label: "Collaborate…", click: () => sendMenuCommand("collaborate") },
       { label: "Open from the server…", click: () => sendMenuCommand("server-open") },
       { label: "Put this script on the server", click: () => sendMenuCommand("server-publish") },
       { label: "Servers…", click: () => sendMenuCommand("servers") },

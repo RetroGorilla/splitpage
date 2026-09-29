@@ -45,6 +45,7 @@ import {
 } from "./12-dirty-toast.js";
 import {
   SERVER_RESUME_KEY,
+  linkTurnedOff,
   onServerDoc,
   saveToServer,
   serverSessionExpired
@@ -88,6 +89,7 @@ export async function saveDoc(opts) {
   var retarget = null;
   var pickedFor = null;
   var wrote = false;
+  var copyOfHosted = home.kind === "server";
   function retargetTo(handle, k) {
     if (S.state.docId !== docIdAtSave) return;
     if (home.kind === "server") { pickedFor = home; return; }
@@ -205,7 +207,7 @@ export async function saveDoc(opts) {
       wrote = true;
       var stillOurs = S.state.docId === docIdAtSave;
       var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
-      if (stillOurs) setBaseState(published, "saveDoc: the bytes just written to the file");
+      if (stillOurs && !copyOfHosted) setBaseState(published, "saveDoc: the bytes just written to the file");
       if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
       adoptSavedCopyDocId(forkDocId, docIdAtSave);
       var docIdAfterSave = S.state.docId;
@@ -214,7 +216,7 @@ export async function saveDoc(opts) {
         var afterFile = await targetHandle.getFile();
         if (homeAtWrite && home === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
       } catch (e) { }
-      if (stillOurs && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
+      if (stillOurs && !copyOfHosted && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       else noteSaveStatus();
       warnImagesLeftOut(imagesLeftOut, targetHandle.name);
@@ -223,9 +225,9 @@ export async function saveDoc(opts) {
       if (ok) {
         wrote = true;
         var downloadedOurs = S.state.docId === docIdAtSave;
-        if (downloadedOurs) setBaseState(published, "saveDoc: the copy just downloaded");
+        if (downloadedOurs && !copyOfHosted) setBaseState(published, "saveDoc: the copy just downloaded");
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
-        if (downloadedOurs && S.editSeq === seqAtSave) clearDirty();
+        if (downloadedOurs && !copyOfHosted && S.editSeq === seqAtSave) clearDirty();
         warnImagesLeftOut(imagesLeftOut, filename);
       } else {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
@@ -312,7 +314,7 @@ function readAutoSavePref() {
 }
 
 export function autoSaveTarget() {
-  if (serverSessionExpired) return null;
+  if (serverSessionExpired || (linkTurnedOff && onServerDoc())) return null;
   if (onServerDoc()) return "server";
   var file = fileHome();
   if (!file || !file.handle) return null;
@@ -373,12 +375,14 @@ export function haltAutoSave(reason) {
   clearAutoSaveTimers();
   autoSaveHalt = reason || "Autosave is paused — press Save to try again.";
   updateSaveStatus();
+  updateFileChip();
 }
 
 export function resumeAutoSave() {
   if (!autoSaveHalt) return;
   autoSaveHalt = "";
   updateSaveStatus();
+  updateFileChip();
 }
 
 var saveInFlight = false;

@@ -144,7 +144,7 @@
 
             <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
               <div class="menu-group-head" id="fm-g-share">Share</div>
-              <button type="button" role="menuitem" class="mi" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document."><svg class="mi-icon" aria-hidden="true"><use href="#i-share"/></svg><span class="mi-text"><span class="mi-label">Publish &amp; copy a link</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="collaborate" id="menu-collaborate" title="Stores this script on your collaboration server and gives you two links to send: one to edit it, one to comment on it."><svg class="mi-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="mi-text"><span class="mi-label">Collaborate…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="server-publish" id="menu-server-new" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud-up"/></svg><span class="mi-text"><span class="mi-label">Put this script on the server</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
@@ -231,6 +231,7 @@
           <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="btn-label">B-roll</span><span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
+        <button class="btn btn-mode btn-collab" id="btn-collab" type="button" aria-label="Collaborate — invite people to this script" title="Collaborate — invite people to this script"><svg class="btn-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="btn-label">Collab</span></button>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
         <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
       </div>
@@ -465,8 +466,8 @@
       </div>
     </div>
     <div class="export-foot">
-      <p class="export-note">Exports are copies. To share one live document, use
-        <button type="button" class="export-note-link" id="export-share-link">Publish &amp; copy a link</button>.</p>
+      <p class="export-note">Exports are copies. To work on one live script together, use
+        <button type="button" class="export-note-link" id="export-share-link">Collaborate…</button></p>
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="export-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="export-go">Export</button>
@@ -1094,12 +1095,12 @@
 <div class="modal-backdrop" id="pin-modal" hidden>
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
     <div class="modal-header">
-      <h2 id="pin-title">Join PIN</h2>
+      <h2 id="pin-title">Join PIN or key</h2>
       <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint" id="pin-reason">This server asks for a join PIN.</p>
-    <input type="text" id="pin-input" inputmode="numeric" autocomplete="off"
-           spellcheck="false" placeholder="e.g. 481923" aria-labelledby="pin-title">
+    <p class="modal-hint" id="pin-reason">This server asks for its join PIN or key.</p>
+    <input type="text" id="pin-input" autocomplete="off" autocapitalize="off"
+           spellcheck="false" placeholder="Join PIN or key" aria-labelledby="pin-title">
     <div class="connect-error" id="pin-error" hidden></div>
     <label class="connect-check"><input type="checkbox" id="pin-remember">
       Remember this code on this device</label>

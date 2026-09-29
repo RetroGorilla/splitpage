@@ -12,6 +12,7 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
+import { openCollaborate } from "./13b-collaborate.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import { setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
@@ -73,7 +74,7 @@ export function openPinDialog(opts) {
     onDone: opts.onDone || null
   };
   document.getElementById("pin-reason").textContent =
-    opts.reason || "This server asks for a join PIN.";
+    opts.reason || "This server asks for its join PIN or key.";
   var input = document.getElementById("pin-input");
   input.value = "";
   setPinError("");
@@ -110,7 +111,12 @@ export async function joinServer(base, pin, key) {
   }
   var body = null;
   try { body = await res.json(); } catch (e) { }
-  if (res.ok && body && body.token) return { ok: true, token: body.token, role: body.role || "edit" };
+  if (res.ok && body && body.token) {
+    var joined = { ok: true, token: body.token, role: body.role || "edit" };
+    if (typeof body.docId === "string") joined.docId = body.docId;
+    if (typeof body.scope === "string") joined.scope = body.scope;
+    return joined;
+  }
   if (res.status === 429) return { ok: false, error: "too-many-attempts" };
   if (res.status === 404 || !body) return { ok: false, error: "not-splitpage" };
   return { ok: false, error: (body && body.error) || ("HTTP " + res.status) };
@@ -118,6 +124,7 @@ export async function joinServer(base, pin, key) {
 
 export function joinErrorText(code) {
   if (code === "bad-pin") return "That code was not right. Ask whoever is hosting for it again.";
+  if (code === "link-off") return "The owner turned off this link. Ask them for a new one.";
   if (code === "too-many-attempts") return "Too many wrong codes. Wait a minute, then try again.";
   if (code === "offline") return "No answer from that address. Check it, and that the session is still running.";
   if (code === "not-splitpage") return "Something answered, but it was not a Splitpage server.";
@@ -192,6 +199,17 @@ var reviewLinkUrl = "";
 async function renderReviewLink() {
   var box = document.getElementById("connect-review");
   if (!box) return;
+  if (S.serverMode.available && S.serverMode.links && home.kind === "server" &&
+      conn.role !== "review" && !conn.scope) {
+    reviewLinkUrl = "";
+    box.innerHTML = '<div class="connect-add-title">Invite people to this script</div>' +
+      '<div class="modal-row">' +
+        '<span class="modal-hint">Collaborate gives you a link to edit it and one to comment — no PIN needed.</span>' +
+        '<button type="button" class="btn" data-connect-action="collaborate">Collaborate…</button>' +
+      '</div>';
+    box.hidden = false;
+    return;
+  }
   reviewLinkUrl = await fetchReviewLink();
   if (!reviewLinkUrl) { box.hidden = true; box.innerHTML = ""; return; }
   box.innerHTML = '<div class="connect-add-title">Share this script to read and comment</div>' +
@@ -362,7 +380,7 @@ function askPinFor(id) {
   if (!b) return;
   openPinDialog({
     base: b.url,
-    reason: "Enter the join PIN for " + (b.name || shortHost(b.url)) + ".",
+    reason: "Enter the join PIN or key for " + (b.name || shortHost(b.url)) + ".",
     onDone: function (joined) { useServer(b, joined); }
   });
 }
@@ -522,6 +540,7 @@ export function __init() {
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
         else if (action === "review-copy") copyReviewLink();
+        else if (action === "collaborate") { closeServersDialog(); openCollaborate(); }
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");

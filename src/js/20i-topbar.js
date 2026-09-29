@@ -1,6 +1,84 @@
 import { rowMotionMs } from "./04a-row-motion.js";
 
 export function __init() {
+  (function setupToolbarLabels() {
+    const buttons = document.querySelectorAll(".toolbar .panel-toggle, .toolbar .btn-mode");
+    if (!buttons.length) return;
+    function measure() {
+      buttons.forEach(function (btn) {
+        const label = btn.querySelector(".btn-label");
+        if (!label) return;
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        const w = range.getBoundingClientRect().width;
+        if (w > 0) btn.style.setProperty("--label-w", w + "px");
+      });
+    }
+    function closedBox(el) {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { left: r.left - (parseFloat(cs.marginLeft) || 0),
+               right: r.right + (parseFloat(cs.marginRight) || 0) };
+    }
+    function settleReach(btn) {
+      const label = btn.querySelector(".btn-label");
+      if (!label) return;
+      const growsRight = btn.id === "btn-production" || btn.id === "btn-gear";
+      const own = closedBox(btn);
+      const text = parseFloat(btn.style.getPropertyValue("--label-w")) || 0;
+      const reach = text + (btn.classList.contains("btn-mode") ? 6 : 5);
+      let extra = 0;
+      let best = Infinity;
+      document.querySelectorAll(".toolbar .panel-toggle").forEach(function (other) {
+        if (other === btn) return;
+        const b = closedBox(other);
+        const gap = growsRight ? b.right - (own.right + reach) : (own.left - reach) - b.left;
+        const into = growsRight ? (own.right + reach) - b.left > 5 : b.right - (own.left - reach) > 5;
+        if ((growsRight ? b.left >= own.right - 0.5 : b.right <= own.left + 0.5) && into && gap >= -0.5 && gap < best) best = gap;
+      });
+      if (best !== Infinity) extra = Math.max(0, best);
+      btn.style.setProperty("--label-x", extra + "px");
+    }
+    measure();
+    try { document.fonts.ready.then(measure); } catch (e) {}
+    const toolbar = document.querySelector(".toolbar");
+    const row = document.querySelector(".topbar-row");
+    let lastWidth = -1;
+    let jumpFrame = 0;
+    function widthNow(w) {
+      const jump = lastWidth >= 0 && Math.abs(w - lastWidth) > 24;
+      lastWidth = w;
+      if (!jump || !toolbar) return;
+      toolbar.classList.add("is-width-jump");
+      if (jumpFrame) cancelAnimationFrame(jumpFrame);
+      jumpFrame = requestAnimationFrame(function () {
+        jumpFrame = requestAnimationFrame(function () {
+          jumpFrame = 0;
+          toolbar.classList.remove("is-width-jump");
+        });
+      });
+    }
+    if (row && typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(function (entries) {
+        widthNow(entries[entries.length - 1].contentRect.width);
+      }).observe(row);
+    } else {
+      window.addEventListener("resize", function () { widthNow(window.innerWidth); });
+    }
+    buttons.forEach(function (btn) {
+      if (btn.id === "btn-write") return;
+      btn.addEventListener("pointerenter", function (e) {
+        if (e.pointerType === "touch") return;
+        settleReach(btn);
+        btn.classList.add("is-label-open");
+      });
+      btn.addEventListener("focus", function () { settleReach(btn); });
+      btn.addEventListener("pointerleave", function () {
+        btn.classList.remove("is-label-open");
+      });
+    });
+  })();
+
   const titleInput = document.getElementById("doc-title");
   if (titleInput) {
     titleInput.addEventListener("mouseenter", function () {

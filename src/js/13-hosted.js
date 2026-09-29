@@ -51,7 +51,9 @@ import {
   renderComments,
   saveAuthorName
 } from "./10-comments.js";
-import { clearDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
+import { scheduleAutoSave } from "./14-export.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -63,6 +65,7 @@ import {
 } from "./20e-connect.js";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 
 var sharedDocId;
@@ -73,9 +76,12 @@ var SERVER_TOKEN_KEY = "splitpage-server-token";
 var REMEMBERED_TOKENS_KEY = "splitpage-server-tokens";
 var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
 var REVIEW_KEY_KEY = "splitpage-review-key";
+var LINK_KEYS_KEY = "splitpage-invites";
 
 var launchToken = "";
-var reviewKey = "";
+var linkKey = "";
+var linkKeyFresh = false;
+export var linkTurnedOff = false;
 
 S.serverMode = { available: false, readOnly: false, checked: false,
                    authRequired: false, reviewAvailable: false, version: null };
@@ -216,7 +222,7 @@ export function setServerToken(token, remember) {
 }
 
 export function clearServerToken() {
-  updateConnection({ token: "", role: "" });
+  updateConnection({ token: "", role: "", scope: "" });
   saveTabServer();
   var map = rememberedTokens();
   if (Object.prototype.hasOwnProperty.call(map, conn.serverUrl)) {
@@ -225,18 +231,82 @@ export function clearServerToken() {
   }
 }
 
-function readReviewKey() {
-  try { reviewKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { reviewKey = ""; }
-  var hash = location.hash || "";
-  var m = /(?:^#|&)review=([A-Za-z0-9]+)/.exec(hash);
-  if (!m) return;
-  reviewKey = m[1];
-  try { sessionStorage.setItem(REVIEW_KEY_KEY, reviewKey); } catch (e) {}
-  var rest = hash.replace(/(^#|&)review=[A-Za-z0-9]+/, "$1").replace(/^#&/, "#");
-  if (rest === "#") rest = "";
+function setLinkToken(token) {
+  updateConnection({ token: String(token || "") });
+  saveTabServer();
+}
+
+export function rememberedTokenForServer(serverUrl) {
+  return rememberedTokenFor(normalizeServerUrl(serverUrl));
+}
+
+export function rememberTokenForServer(serverUrl, token) {
+  var url = normalizeServerUrl(serverUrl);
+  var map = rememberedTokens();
+  if (token) map[url] = String(token);
+  else delete map[url];
+  writeRememberedTokens(map);
+}
+
+function readLinkKey() {
+  linkKeyFresh = false;
+  var found = parseLinkFragment(location.hash || "");
+  if (found) {
+    linkKey = found.key;
+    linkKeyFresh = true;
+    try { sessionStorage.setItem(REVIEW_KEY_KEY, linkKey); } catch (e) {}
+    try {
+      history.replaceState(null, "", location.pathname + location.search + found.rest);
+    } catch (e) { }
+    return;
+  }
+  try { linkKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { linkKey = ""; }
+  if (linkKey) return;
+  var saved = deviceLinkKeys()[conn.serverUrl];
+  if (saved && typeof saved.key === "string") linkKey = saved.key;
+}
+
+function deviceLinkKeys() {
+  var map = readJsonFrom(localStorage, LINK_KEYS_KEY);
+  return map && typeof map === "object" && !Array.isArray(map) ? map : {};
+}
+
+function writeDeviceLinkKeys(map) {
   try {
-    history.replaceState(null, "", location.pathname + location.search + rest);
-  } catch (e) { }
+    if (Object.keys(map).length) localStorage.setItem(LINK_KEYS_KEY, JSON.stringify(map));
+    else localStorage.removeItem(LINK_KEYS_KEY);
+  } catch (e) {}
+}
+
+function rememberLinkKey(serverUrl, key, docId, persist) {
+  try { sessionStorage.setItem(REVIEW_KEY_KEY, key); } catch (e) {}
+  var map = deviceLinkKeys();
+  if (persist) map[serverUrl] = { key: key, doc: docId || "" };
+  else delete map[serverUrl];
+  writeDeviceLinkKeys(map);
+}
+
+function forgetLinkKey(serverUrl) {
+  linkKey = "";
+  linkKeyFresh = false;
+  try { sessionStorage.removeItem(REVIEW_KEY_KEY); } catch (e) {}
+  var map = deviceLinkKeys();
+  if (Object.prototype.hasOwnProperty.call(map, serverUrl)) {
+    delete map[serverUrl];
+    writeDeviceLinkKeys(map);
+  }
+}
+
+export function arrivingOnLink() {
+  return !!linkKey || !!sharedDocId;
+}
+
+export function isLinkGuest() {
+  return !!conn.scope;
+}
+
+function holdsOwnerSignIn() {
+  return !!conn.token && conn.token === rememberedTokenFor(conn.serverUrl);
 }
 
 var CLIENT_HEADER = "x-splitpage-client";
@@ -260,8 +330,10 @@ function serverTakesBlobs() {
 }
 
 function clientHeaders(headers, opts) {
-  if (conn.token) headers["x-splitpage-token"] = conn.token;
-  if (!(opts && opts.noClientHeader) && !capsOf(conn).noClientHeader) headers[CLIENT_HEADER] = CLIENT_GENERATION;
+  var other = !!(opts && opts.base !== undefined);
+  var token = opts && opts.token !== undefined ? opts.token : conn.token;
+  if (token) headers["x-splitpage-token"] = token;
+  if (!(opts && opts.noClientHeader) && (other || !capsOf(conn).noClientHeader)) headers[CLIENT_HEADER] = CLIENT_GENERATION;
   return headers;
 }
 
@@ -273,13 +345,15 @@ export async function apiFetch(path, opts) {
       ? { "Content-Type": "application/json", "Accept": "application/json" }
       : { "Accept": "application/json" };
   clientHeaders(headers, opts);
+  var base = opts.base !== undefined ? normalizeServerUrl(opts.base) : conn.serverUrl;
+  var rel = String(path || "").replace(/^\/+/, "");
   var res;
   try {
-    res = await fetch(apiUrl(path), {
+    res = await fetch(base ? base + rel : rel, {
       method: opts.method || "GET",
       headers: headers,
       body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
-      credentials: conn.serverUrl ? "omit" : "same-origin",
+      credentials: base ? "omit" : "same-origin",
       cache: "no-store"
     });
   } catch (e) {
@@ -302,7 +376,19 @@ export async function apiFetch(path, opts) {
     if (body403 && (body403.error === "pin-required" || body403.error === "bad-pin")) {
       throw ApiError("pin", "this server asks for a join PIN");
     }
+    if (body403 && body403.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
+    if (body403 && body403.error === "owner-only") throw ApiError("owner-only", "only the script's owner can do that");
+    if (body403 && body403.error === "wrong-document") {
+      throw ApiError("wrong-document", "this link opens a different script");
+    }
     throw ApiError("auth", "signed out");
+  }
+  if (res.status === 410) {
+    var body410 = await res.json().catch(function () { return null; });
+    if (body410 && body410.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
+    var gone = ApiError("410", (body410 && body410.error) || "HTTP 410");
+    gone.payload = body410;
+    throw gone;
   }
   if (res.status === 429) {
     var body429 = await res.json().catch(function () { return null; });
@@ -370,6 +456,39 @@ function flagClientTooOld() {
     : "This page is out of date for this server. Copy anything unsaved, then reload the page to keep saving.",
     "warn", true);
   updateFileChip();
+}
+
+function flagLinkOff(kind) {
+  if (linkTurnedOff) return;
+  linkTurnedOff = true;
+  if (kind === "arrived") {
+    forgetLinkKey(conn.serverUrl);
+    showToast("This link has been turned off. Ask whoever sent it for a new one.", "warn", true);
+    updateFileChip();
+    updateSaveStatus();
+    updateServerMenu();
+    offerDraftAfterLinkOff();
+    return;
+  }
+  stashForReload();
+  forgetLinkKey(conn.serverUrl);
+  var saveCopy = function () {
+    var item = document.querySelector('#file-menu [data-file-action="save-as"]');
+    if (item && !item.disabled) item.click();
+  };
+  showActionToast(kind === "gone"
+    ? "This link no longer works — ask whoever sent it for a new one. Your changes can't be saved to it any more."
+    : "The owner turned off this link. Your changes can't be saved to it any more.",
+  "warn", "Save a copy…", saveCopy, true);
+  updateFileChip();
+  updateSaveStatus();
+  updateServerMenu();
+  offerDraftAfterLinkOff();
+}
+
+function offerDraftAfterLinkOff() {
+  if (S.DESKTOP || onServerDoc()) return;
+  offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
 }
 
 async function resumeServerDoc() {
@@ -494,9 +613,31 @@ async function resumeServerDoc() {
 
 function handleApiError(err, whatFailed) {
   if (err && err.code === "auth") { flagServerSessionExpired(); return; }
+  if (err && err.code === "link-off") { flagLinkOff("off"); return; }
+  if (err && err.code === "pin" && (isLinkGuest() || linkKey)) {
+    joinWithLinkKey().then(function (r) {
+      if (r === "ok") {
+        showToast(whatFailed + " — the connection to the server was renewed. " +
+          (S.dirty ? "Save again to send your latest changes." : "Try again."), "warn");
+      } else if (r === "none" || r === "gone") {
+        flagLinkOff("gone");
+      } else if (r === "failed") {
+        showToast(whatFailed + " — no answer from the server. Try again in a moment.", "warn");
+      }
+    });
+    return;
+  }
   if (err && err.code === "pin") {
     clearServerToken();
-    openPinDialog({ reason: "This server asks for a join PIN." });
+    openPinDialog({ reason: "This server asks for its join PIN or key." });
+    return;
+  }
+  if (err && err.code === "owner-only") {
+    showToast(whatFailed + " — only the script's owner can do that. Your link opens this one script.", "warn");
+    return;
+  }
+  if (err && err.code === "wrong-document") {
+    showToast(whatFailed + " — your link opens a different script.", "warn");
     return;
   }
   if (err && err.code === "pin-blocked") {
@@ -514,8 +655,8 @@ function handleApiError(err, whatFailed) {
   }
   if (err && err.code === "client-too-old") { flagClientTooOld(); return; }
   if (err && err.code === "review-budget") {
-    showToast(whatFailed + " — this review link has used up its allowance for images for now. " +
-      "Try again in an hour, or post it without the picture.", "warn", true);
+    showToast(whatFailed + " — this link has used up its allowance for images for now. " +
+      "Try again in an hour, or leave the picture out.", "warn", true);
     return;
   }
   if (err && err.code === "blob-too-large") {
@@ -555,11 +696,7 @@ export async function detectServer() {
   try {
     var health = await probeHealth(probing);
     if (probing !== conn) return;
-    S.serverMode.available = !!(health && health.ok);
-    S.serverMode.readOnly = !!(health && health.readOnly);
-    S.serverMode.authRequired = !!(health && health.authRequired);
-    S.serverMode.reviewAvailable = !!(health && health.reviewAvailable);
-    S.serverMode.version = (health && health.version) || null;
+    applyHealth(health);
   } catch (e) {
     if (probing !== conn) return;
     S.serverMode.available = false;
@@ -578,24 +715,71 @@ export async function detectServer() {
     return;
   }
 
-  if (S.serverMode.authRequired && !conn.token) {
-    if (reviewKey) {
-      var joined = await joinServer(conn.serverUrl, null, reviewKey);
+  var useKey = !!linkKey && (!conn.token || (linkKeyFresh && !holdsOwnerSignIn()));
+  if (linkKeyFresh && holdsOwnerSignIn()) {
+    linkKey = "";
+    linkKeyFresh = false;
+    try { sessionStorage.removeItem(REVIEW_KEY_KEY); } catch (e) {}
+  }
+  if (S.serverMode.authRequired && (!conn.token || useKey)) {
+    var reason = null;
+    if (useKey) {
+      var r = await joinWithLinkKey();
       if (probing !== conn) return;
-      if (joined && joined.ok) {
-        setServerToken(joined.token, false);
-        finishServerDetect();
-        return;
-      }
+      if (r === "ok") { finishServerDetect(); return; }
+      if (r === "off") { updateServerMenu(); return; }
+      if (r === "gone") reason = "This link no longer works — ask whoever sent it for a new one. " +
+        "If you have this server's join PIN or key, enter it here.";
+      if (conn.token) { finishServerDetect(); return; }
     }
     updateServerMenu();
-    openPinDialog({ reason: (conn.serverUrl ? shortHost(conn.serverUrl) : "This server") +
-      " asks for a join PIN before it will show you anything." });
+    openPinDialog({ reason: reason || ((conn.serverUrl ? shortHost(conn.serverUrl) : "This server") +
+      " asks for a join PIN or key before it will show you anything.") });
     return;
   }
 
   finishServerDetect();
 }
+
+export function applyHealth(health) {
+  S.serverMode.available = !!(health && health.ok);
+  S.serverMode.readOnly = !!(health && health.readOnly);
+  S.serverMode.authRequired = !!(health && health.authRequired);
+  S.serverMode.reviewAvailable = !!(health && health.reviewAvailable);
+  S.serverMode.version = (health && health.version) || null;
+  S.serverMode.links = !!(health && Number(health.links) >= 1);
+  S.serverMode.linksPersist = !!(health && health.linksPersist === true);
+  S.serverMode.checked = true;
+  if (!capsOf(conn).known && health) noteCaps(conn, health, false);
+}
+
+async function joinWithLinkKey() {
+  if (!linkKey || linkTurnedOff) return "none";
+  var key = linkKey;
+  var via = conn;
+  var joined = await joinServer(conn.serverUrl, null, key);
+  if (via !== conn) return "moved";
+  if (joined && joined.ok) {
+    linkKeyFresh = false;
+    setLinkToken(joined.token);
+    var scope = typeof joined.scope === "string" ? joined.scope
+      : typeof joined.docId === "string" && joined.role === "review" ? joined.docId : "";
+    try {
+      updateConnection({ role: joined.role === "review" ? "review" : "edit", scope: scope });
+    } catch (e) {}
+    linkDocId = joined.docId || scope || "";
+    rememberLinkKey(conn.serverUrl, key, linkDocId, !!S.serverMode.linksPersist);
+    return "ok";
+  }
+  if (joined && joined.error === "link-off") {
+    flagLinkOff(onServerDoc() || S.dirty ? "off" : "arrived");
+    return "off";
+  }
+  if (joined && joined.error === "bad-pin") { forgetLinkKey(conn.serverUrl); return "gone"; }
+  return "failed";
+}
+
+var linkDocId = "";
 
 async function probeHealth(probing) {
   var health;
@@ -617,18 +801,38 @@ export async function finishServerDetect() {
     var me = await apiFetch("api/me");
     if (asking !== conn) return;
     serverIdentity = me;
-    updateConnection({ role: (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit" });
+    var role = (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit";
+    var scope = serverIdentity && typeof serverIdentity.scope === "string" ? serverIdentity.scope
+      : (role === "review" ? conn.scope : "");
+    try { updateConnection({ role: role, scope: scope }); }
+    catch (e2) { updateConnection({ role: role, scope: "" }); }
     if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
       saveAuthorName(serverIdentity.name);
       updateIdentityChip();
     }
-  } catch (e) { }
+  } catch (e) {
+    if (asking !== conn) return;
+    if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
+    if (e && e.code === "pin" && linkKey && !linkTurnedOff) {
+      updateConnection({ token: "", role: "", scope: "" });
+      saveTabServer();
+      var again = await joinWithLinkKey();
+      if (asking !== conn) return;
+      if (again === "ok") { finishServerDetect(); return; }
+      if (again === "gone" || again === "none") flagLinkOff("gone");
+      updateServerMenu();
+      return;
+    }
+  }
 
   updateServerMenu();
   applyReviewMode();
-  resumeServerDoc().then(function (resumed) {
-    if (!resumed) openSharedDocFromLink();
-  }, function () { openSharedDocFromLink(); });
+  var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
+  (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
+    return resumeServerDoc().then(function (resumed) {
+      if (!resumed) openSharedDocFromLink();
+    }, function () { openSharedDocFromLink(); });
+  });
 }
 
 export function updateServerMenu() {
@@ -636,27 +840,21 @@ export function updateServerMenu() {
     var el = document.getElementById(id);
     if (el) el.hidden = !S.serverMode.available;
   });
+  var guest = isLinkGuest();
+  var openBtn = document.getElementById("menu-server-open");
+  if (openBtn) {
+    openBtn.disabled = guest;
+    setMenuItemReason(openBtn, guest ? "Your link opens this one script" : "");
+  }
   var newBtn = document.getElementById("menu-server-new");
   if (newBtn) {
-    newBtn.disabled = S.serverMode.readOnly || conn.role === "review";
+    newBtn.disabled = S.serverMode.readOnly || conn.role === "review" || guest;
     setMenuItemReason(newBtn, !newBtn.disabled ? ""
+      : guest ? "Your link opens this one script"
       : conn.role === "review" ? "Viewing only — publishing needs the editing code"
       : "This server is read-only");
   }
-  var shareBtn = document.getElementById("menu-share-link");
-  if (shareBtn) {
-    shareBtn.disabled = S.serverMode.available && (S.serverMode.readOnly || conn.role === "review");
-    shareBtn.title = shareBtn.disabled
-      ? (conn.role === "review"
-          ? "You are viewing this session — publishing a script needs the editing code."
-          : "This server is published read-only — nothing new can be put on it.")
-      : "Puts this script on the connected server and copies a link to it. " +
-        "Unlike the standalone HTML export, everyone who opens the link edits the same document.";
-    setMenuItemReason(shareBtn, !S.serverMode.available ? "No server connected — set one up first"
-      : !shareBtn.disabled ? ""
-      : conn.role === "review" ? "Viewing only — publishing needs the editing code"
-      : "This server is read-only — nothing new can go on it");
-  }
+  updateCollaborateMenu();
 }
 
 export function applyReviewMode() {
@@ -676,6 +874,7 @@ export function reviewBlocked() {
 
 export async function fetchReviewLink() {
   if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
+  if (S.serverMode.links || isLinkGuest()) return "";
   if (!onServerDoc()) return "";
   var body;
   try { body = await apiFetch("api/share?doc=" + encodeURIComponent(home.id)); } catch (e) { return ""; }
@@ -737,6 +936,15 @@ function renderServerPicker() {
 }
 
 export async function openServerDoc(id) {
+  if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
+    if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
+    var resumed = await resumeServerDoc();
+    if (resumed) {
+      if (typeof closeNewTabPage === "function") closeNewTabPage();
+      closeServerPicker();
+    }
+    return resumed;
+  }
   var body;
   var via = conn;
   try {
@@ -769,18 +977,25 @@ export async function openServerDoc(id) {
   return true;
 }
 
-export async function publishToServer() {
+export async function publishToServer(opts) {
+  opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
   if (S.serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
   if (conn.role === "review") {
     showToast("You are viewing this session — publishing a script needs the editing code.", "warn");
     return false;
   }
+  if (isLinkGuest()) {
+    showToast("Your link opens this one script — only its owner can put a script on the server.", "warn");
+    return false;
+  }
   var published = cloneState(S.state);
+  var seqAtPublish = S.editSeq;
   var oldId = S.state.docId;
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
   var via = conn;
+  var homeAtStart = home;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
       return sendWithBlobs(published, function (sending, acceptMissing) {
@@ -789,22 +1004,34 @@ export async function publishToServer() {
         return apiFetch("api/docs", { method: "POST", body: post });
       }, true);
     });
-  } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
+  } catch (err) {
+    if (opts.onError) opts.onError(err);
+    else handleApiError(err, "Could not put that on the server");
+    return false;
+  }
   if (via !== conn) return false;
+  if (S.state.docId !== oldId || home !== homeAtStart) {
+    showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
+      "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
+    return false;
+  }
   setHome("server", { id: body.id, rev: body.rev || 1 });
   setBaseState(published, "publishToServer: what the server just accepted");
-  if (forkDocId && S.state.docId === oldId) {
+  if (forkDocId) {
     S.state.docId = forkDocId;
     copyDocHistorySafe(oldId, forkDocId);
   }
   S.docIdWrittenOut = true;
-  clearDirty();
+  if (S.editSeq === seqAtPublish) clearDirty();
+  else scheduleAutoSave();
   updateFileChip();
-  showToast("Published to the server as “" + (S.state.title || body.id) + "” — collaborators can open it now", "ok");
+  if (!opts.quiet) {
+    showToast("Published to the server as “" + (S.state.title || body.id) + "” — collaborators can open it now", "ok");
+  }
   return true;
 }
 
-function serverDocShareUrl(id) {
+export function serverDocShareUrl(id) {
   try {
     return new URL("?doc=" + encodeURIComponent(id), conn.serverUrl || location.href).href;
   } catch (e) {
@@ -812,13 +1039,13 @@ function serverDocShareUrl(id) {
   }
 }
 
-function shareAccessNote() {
+export function shareAccessNote() {
   if (S.serverMode.authRequired) return "They'll need the join PIN to open it.";
   if (serverIdentity && serverIdentity.email) return "They'll need to sign in the same way you did.";
   return "Anyone who can reach that address can open it.";
 }
 
-function copyShareText(text) {
+export function copyShareText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return copyShareTextFallback(text); });
   }
@@ -878,11 +1105,12 @@ function readSharedDocParam() {
 }
 
 async function openSharedDocFromLink() {
-  if (!sharedDocId) return false;
-  var id = sharedDocId;
+  var id = conn.scope || sharedDocId || linkDocId;
   sharedDocId = "";
+  if (!id) return false;
   if (onServerDoc()) return false;
-  await openServerDoc(id);
+  var opened = await openServerDoc(id);
+  if (opened && (isLinkGuest() || linkKey)) maybeAskGuestName();
   return true;
 }
 
@@ -995,7 +1223,7 @@ export async function fetchBlob(sha) {
 }
 
 export async function saveToServer() {
-  if (serverSessionExpired || clientTooOld) return false;
+  if (serverSessionExpired || clientTooOld || linkTurnedOff) return false;
   if (reviewMode()) return sendReviewWrites();
   var docId = serverHomeId();
   var attempts = 0;
@@ -1356,7 +1584,7 @@ function sameDocumentContent(a, b) {
 }
 
 export function notePresenceRev(body) {
-  if (!body || pullInFlight || serverSessionExpired || reviewWriting) return;
+  if (!body || pullInFlight || serverSessionExpired || linkTurnedOff || reviewWriting) return;
   var docId = serverHomeId();
   if (!docId || body.docId !== docId) return;
   if (typeof body.rev !== "number") return;
@@ -2178,7 +2406,10 @@ export function __init() {
 
   setRemoteSource(function (sha) { return onServerDoc() ? fetchBlob(sha) : null; });
 
-  readReviewKey();
+  readLinkKey();
+  window.addEventListener("hashchange", function () {
+    if (parseLinkFragment(location.hash || "")) location.reload();
+  });
 
   sharedDocId = readSharedDocParam();
 
@@ -2201,7 +2432,7 @@ export function __init() {
       S.serverMode.checked = true;
       S.serverMode.authRequired = true;
       S.serverMode.reviewAvailable = opts.reviewAvailable !== false;
-      updateConnection({ role: opts.role || "edit" });
+      updateConnection({ role: opts.role || "edit", scope: opts.scope || "" });
       if (opts.docId === null) { if (home.kind === "server") setHome("none"); }
       else setHome("server", { id: opts.docId || "doc-test", rev: opts.rev || 1 });
       if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
@@ -2212,10 +2443,16 @@ export function __init() {
     },
     role: function () { return conn.role; },
     conn: function () {
-      return { serverUrl: conn.serverUrl, hasToken: !!conn.token, role: conn.role,
+      return { serverUrl: conn.serverUrl, hasToken: !!conn.token, role: conn.role, scope: conn.scope,
                tunnel: conn.tunnel ? Object.assign({}, conn.tunnel) : null,
                homeHoldsIt: home.kind === "server" && home.conn === conn };
     },
+    link: function () {
+      return { hasKey: !!linkKey, fresh: linkKeyFresh, turnedOff: linkTurnedOff,
+               deviceServers: Object.keys(deviceLinkKeys()), docId: linkDocId,
+               arriving: arrivingOnLink(), guest: isLinkGuest() };
+    },
+    serverMode: function () { return Object.assign({}, S.serverMode); },
     pointTabAt: function (url, opts) { if (home.kind === "server") setHome("none"); return pointTabAt(url, opts).serverUrl; },
     setToken: setServerToken,
     clearToken: clearServerToken,
