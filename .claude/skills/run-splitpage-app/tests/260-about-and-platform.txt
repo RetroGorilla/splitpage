@@ -23,9 +23,11 @@ sleep 200
 expect document.getElementById('about-modal').hidden == true
 
 # --- the desktop-app notice is for Windows only --------------------------------
-# this suite's Chromium is not Windows, so the notice stays hidden (suite 30
-# covers the Windows side, through the start screen's footer line)
-expect document.getElementById('desktop-app-bar').hidden == true
+# shown exactly when this browser is a Windows desktop one: the harness runs
+# on Linux in the cloud and on Windows on Adam's PC, where headless Edge IS
+# a Windows browser (2026-09-28). Suite 30 makes each side happen on purpose,
+# through the start screen's footer line.
+expect document.getElementById('desktop-app-bar').hidden === !(/Windows/.test(navigator.userAgent) && !/Mobi|Android/.test(navigator.userAgent))
 
 # --- Help contents: a `code` heading renders as code, no visible backticks ------
 jsclick #btn-file
