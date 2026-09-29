@@ -1,6 +1,6 @@
 # Splitpage — app + document server in one small image.
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /build
 
@@ -13,7 +13,7 @@ COPY shared/ ./shared/
 COPY docs/help.md ./docs/help.md
 RUN node build.mjs
 
-FROM node:22-alpine
+FROM node:26-alpine
 
 # Run as the image's built-in non-root user. If the container cannot write to
 # your Unraid share, that is almost always this: fix it by passing --user with
