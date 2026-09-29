@@ -1,16 +1,3 @@
-/* The tag palette and the faint-text token (#143), read straight out of
- * src/app.css: every category's colour and tint defined in the light
- * block and in both dark blocks, TAG_CATEGORIES naming them, each one's
- * script rule present (HANDOFF invariant 14 — before this it was guarded by
- * one browser assertion on Gear alone), the hues kept off the Visual blue
- * and the Audio amber (#169; teal and orange before it), and the contrast
- * figures #143 set actually met.
- *
- * WCAG 2 relative luminance and contrast ratio, computed here rather than
- * pulled in: it is ten lines, and the numbers are the point of the test.
- *
- * Needs a DOM only because 07-production-tags.js pulls in modules that do.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -21,8 +8,6 @@ import { PRINT_COLORS, PRINT_TOKENS } from "../js/14b-export-kit.js";
 
 const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
 
-/* The custom properties declared directly in the rule whose selector is
-   `selector` — the first such rule, which for these three is the only one. */
 function tokens(selector) {
   const at = css.indexOf(selector + " {");
   assert.notEqual(at, -1, "no rule for " + selector + " in app.css");
@@ -68,8 +53,7 @@ test("every category names its own colour token, defined in every theme, and has
     }
     const rule = new RegExp('\\.tag-anchor\\[data-tag-cat="' + cat.id + '"\\]\\s*\\{[^}]*--tag-color:\\s*var\\(--tag-' + cat.id + '\\)');
     assert.match(css, rule, cat.id + ": no .tag-anchor rule drawing it in the script (HANDOFF invariant 14)");
-    /* The tagging reference's examples (#205) are drawn by that same rule,
-       so a colour change can never leave them out of date. */
+    // Tagging reference examples share the rule, so colours cannot drift
     const shared = new RegExp('\\.tag-sample\\[data-tag-cat="' + cat.id + '"\\],\\s*\\.tag-anchor\\[data-tag-cat="' + cat.id + '"\\]\\s*\\{');
     assert.match(css, shared, cat.id + ": the tagging reference's .tag-sample should share the script's .tag-anchor rule");
   }
@@ -108,10 +92,6 @@ test("tagged words stay readable on their tint, and the rule stands out from it"
   }
 });
 
-/* The exports' copy of the light palette (#171, TAG_PRINT_COLORS in
-   14-export.js): a PDF or a Word file cannot read a CSS token, so the hexes
-   are written out a second time — and this is what keeps the two copies
-   one palette. */
 test("the exports' category colours are the light theme's --tag-* values, and readable on white", () => {
   const ids = TAG_CATEGORIES.map((c) => c.id).sort();
   assert.deepEqual(Object.keys(TAG_PRINT_COLORS).sort(), ids, "TAG_PRINT_COLORS and TAG_CATEGORIES name different categories");
@@ -127,9 +107,6 @@ test("the exports' category colours are the light theme's --tag-* values, and re
   assert.equal(tagPrintColor("__proto__"), null);
 });
 
-/* The rest of the light palette the exports print with (PRINT_COLORS,
-   14b-export-kit.js): the text greys, the rules, the Visual blue, the Audio
-   amber, the b-roll teal — the same second copy, held to the same tokens. */
 test("the exports' print palette is the light theme's :root values", () => {
   for (const [key, token] of Object.entries(PRINT_TOKENS)) {
     assert.match(PRINT_COLORS[key], /^[0-9A-F]{6}$/, key + ": six upper-case hex digits");
@@ -147,8 +124,6 @@ test("--text-faint is 4.5:1 on the page in both themes", () => {
   assert.ok(contrast(DARK["--text-faint"], DARK["--bg"]) >= 4.5, "dark: " + contrast(DARK["--text-faint"], DARK["--bg"]).toFixed(2));
 });
 
-/* --broll (#142): the header badge and the script's "B-roll:" marker read it,
-   and for a while nothing defined it — the badge drew with no fill. */
 test("--broll is defined in every theme, off every other hue, and readable as text and as a fill", () => {
   const badge = css.match(/\.broll-badge\s*\{([^}]*)\}/);
   assert.ok(badge, "no .broll-badge rule");
@@ -169,11 +144,6 @@ test("--broll is defined in every theme, off every other hue, and readable as te
   }
 });
 
-/* A category's icon (#217): every category has one, defined next to
-   TAG_CATEGORIES, and tagIconCss() gives it to [data-tag-cat="<id>"] as
-   --tag-icon. app.css draws it only under <html data-tag-icons>, as a
-   ::before on a tag (never a node the script could read back) and in
-   place of the panels' dots, and never in the teleprompter. */
 import { tagIconCss, tagIconSvg } from "../js/07-production-tags.js";
 import { SETTINGS_APPDATA_PREFS, TAG_ICONS_KEY, tagIconsOn } from "../js/00p-prefs.js";
 
@@ -195,7 +165,6 @@ test("icons are drawn only under data-tag-icons, as ::before, and not in the tel
   assert.match(css, /:root\[data-tag-icons\] \.tag-sample::before,/);
   assert.match(css, /:root\[data-tag-icons\] \.prompter \.tag-anchor::before \{ content: none; \}/);
   assert.match(css, /:root\[data-tag-icons\] \.tag-cat-dot\[data-tag-cat\]/);
-  /* no ::before on a tag outside the setting */
   assert.doesNotMatch(css.replace(/:root\[data-tag-icons\][^{]*\{[^}]*\}/g, ""), /\.tag-anchor::before/);
 });
 

@@ -1,13 +1,3 @@
-/* Stage directions for the performer (#167): the `dir` mark of the
- * document model (04c-doc-model.js) and everything that reads it.
- *
- * A direction is words of the Audio column carrying dir. It is stored as
- * <span class="stage-dir">, shown dim and bracketed, left out of the
- * words the teleprompter listens for and of the read time, written as
- * "(beat)" by every export that writes text, and typed as "((beat))".
- * The live half — the Direction button, the shortcut and its Ctrl+Z, the
- * prompter's word list on a page — is browser suite 155-stage-directions.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -52,8 +42,6 @@ function withState(s, fn) {
   try { return fn(s); } finally { S.state = was; }
 }
 
-/* ---- the model ---- */
-
 test("stored as a span of its own, read back as the dir mark, a fixed point of the sanitiser", () => {
   const html = "Hello " + DIR("beat") + " and on.";
   const cell = fromHtml(html);
@@ -61,7 +49,6 @@ test("stored as a span of its own, read back as the dir mark, a fixed point of t
   assert.equal(toHtml(cell), html);
   assert.equal(sanitizeHtml(html), html);
   assert.deepEqual(fromHtml(toHtml(cell)), normalizeCell(cell));
-  /* nothing but the class survives the sanitiser */
   assert.equal(sanitizeHtml('<span class="stage-dir x" style="color:red" onclick="x()">b</span>'), DIR("b"));
 });
 
@@ -72,7 +59,6 @@ test("one nesting: comments outside a direction, a link and a tag inside it", ()
   assert.equal(html, "say " + cmt("c1", DIR("look at the " + tagSpan("prop", "Mug", "mug"))) +
     DIR('<a href="https://e.x/" target="_blank" rel="noopener"> now</a>'));
   assert.deepEqual(fromHtml(html), normalizeCell(cell));
-  /* formatting inside a direction does not cut it: one span */
   assert.equal(toHtml([D("a "), D("b", { b: true }), D(" c")]), DIR("a <strong>b</strong> c"));
 });
 
@@ -94,7 +80,6 @@ test("typing carries a direction on only between two of its characters", () => {
   assert.equal(insideDirection(cell, 5), true);
   const atEnd = [T("Hi "), D("beat")];
   assert.equal(typingMarks(atEnd, 7).dir, undefined, "at the end of the cell");
-  /* a line break typed inside one stays in it; at its edge it does not */
   assert.deepEqual(breakLine(cell, 5, 5).cell, [T("Hi "), D("be\nat"), T(" on")]);
   assert.deepEqual(breakLine(cell, 7, 7).cell, [T("Hi "), D("beat"), T("\n on")]);
 });
@@ -113,19 +98,14 @@ test("the Direction button: on over the words without their end spaces, off wher
   const on = toggleDirection(cell, 5, 13);
   assert.deepEqual(on, [T("Hello  "), D("beat"), T("  world")]);
   assert.deepEqual(toggleDirection(on, 7, 11), [T("Hello  beat  world")]);
-  /* part of one: off over just that part */
   assert.deepEqual(toggleDirection(on, 7, 9), [T("Hello  be"), D("at"), T("  world")]);
-  /* over one and more: on over all of it */
   assert.deepEqual(toggleDirection(on, 7, 18), [T("Hello  "), D("beat  world")]);
-  /* only spaces selected: nothing */
   assert.deepEqual(toggleDirection(cell, 5, 7), cell);
   assert.deepEqual(directionRangeAt(on, 9), { from: 7, to: 11 });
   assert.deepEqual(directionRangeAt(on, 11), { from: 7, to: 11 }, "at its end");
   assert.deepEqual(directionRangeAt(on, 7), { from: 7, to: 11 }, "at its start");
   assert.equal(directionRangeAt(on, 3), null);
 });
-
-/* ---- the typed shortcut, "((beat))" ---- */
 
 test("typing the second ')' of ((words)) makes them a direction and the brackets go", () => {
   const typed = fromHtml("Hello ((beat))");
@@ -134,9 +114,7 @@ test("typing the second ')' of ((words)) makes them a direction and the brackets
   assert.equal(got.end, 10);
   const mid = directionShortcut(fromHtml("Hi ((look left)) and on"), 16);
   assert.deepEqual(mid.cell, [T("Hi "), D("look left"), T(" and on")]);
-  /* spaces just inside the brackets stay narration */
   assert.deepEqual(directionShortcut(fromHtml("a (( beat )) b"), 12).cell, [T("a  "), D("beat"), T("  b")]);
-  /* formatting and a tag inside it come along */
   const rich = fromHtml("((hold the " + tagSpan("prop", "Mug", "mug") + " <strong>up</strong>))");
   const r = directionShortcut(rich, cellLength(rich));
   assert.deepEqual(r.cell, [D("hold the "), D("mug", { tag: "t:prop:Mug" }), D(" "), D("up", { b: true })]);
@@ -157,19 +135,14 @@ test("single brackets are prose, and so is anything the pairs do not cleanly hol
   no("((" + BROLL + " x))");
   no("((beat)) and on", 5);
   no("((" + DIR("already") + "))");
-  /* a bracket that is a tag's own text is never taken out of it */
   no(tagSpan("prop", "((x", "((x") + " y))");
-  /* "(((x))" makes the last pair the direction and leaves the first bracket */
   assert.deepEqual(directionShortcut(fromHtml("(((x))"), 6).cell, [T("("), D("x")]);
 });
-
-/* ---- readers ---- */
 
 test("plain text brackets a direction; the words said leave it out", () => {
   const cell = fromHtml("Hello " + DIR("beat") + " world, " + DIR("smile") + "<br>" + DIR("pause") + "<br>end" + DIR("x") + ".");
   assert.equal(toPlainText(cell), "Hello (beat) world, (smile)\n(pause)\nend(x).");
   assert.equal(spokenText(cell), "Hello world, \n\nend.");
-  /* a direction across a format edge is one pair of brackets */
   assert.equal(toPlainText([D("a "), D("b", { b: true })]), "(a b)");
   assert.equal(spokenText([D("only")]), "");
   assert.equal(spokenText([T("a"), D("x"), T("b")]), "a b");
@@ -187,7 +160,6 @@ test("Word runs carry dir and a bracket each side", () => {
   assert.deepEqual(runs.map((r) => [r.text, !!r.dir, !!r.b]), [
     ["Hi ", false, false], ["(", true, false], ["be", true, false], ["at", true, true], [")", true, false], [" on", false, false]
   ]);
-  /* a cell with none: no dir key anywhere (the runs htmlToRuns gives) */
   assert.ok(toDocxRuns(fromHtml("plain <em>x</em>")).every((r) => !("dir" in r)));
 });
 
@@ -211,8 +183,6 @@ test("read time: a direction takes none", () => {
   });
 });
 
-/* ---- merge ---- */
-
 test("merge: a direction made on one side and words changed on the other both land", () => {
   const base = "Hello beat and then more words";
   const mine = toHtml(toggleDirection(fromHtml(base), 6, 10));
@@ -221,10 +191,8 @@ test("merge: a direction made on one side and words changed on the other both la
   assert.equal(got.conflict, false);
   assert.equal(got.markConflicts, 0);
   assert.equal(toHtml(got.cell), "Hello " + DIR("beat") + " and then even more words");
-  /* both sides making it one is one */
   const both = mergeCells(fromHtml(base), fromHtml(mine), fromHtml(mine));
   assert.equal(toHtml(both.cell), mine);
-  /* one side taking it off again wins */
   const off = mergeCells(fromHtml(mine), fromHtml(base), fromHtml(mine));
   assert.equal(toHtml(off.cell), base);
 });
@@ -238,8 +206,6 @@ test("mergeStates carries a direction through the document merge", () => {
   assert.equal(out.rows[0].audioText, "Hello " + DIR("beat") + " and then even more words");
   assert.equal(out.comments.length, 0, "no conflict card");
 });
-
-/* ---- find, clipboard, import ---- */
 
 test("find & replace inside a direction keeps the new words in it", () => {
   const html = "Say it " + DIR("slow beat") + " now";
@@ -263,8 +229,6 @@ test("coming in: ((words)) becomes one; the brackets an export printed round one
   assert.deepEqual(importDirections(fromHtml("A " + DIR("(beat)") + " b")), [T("A "), D("beat"), T(" b")]);
   assert.equal(audioDirectionsHtml("plain (words)"), "plain (words)", "left exactly as read");
 });
-
-/* ---- the project formats ---- */
 
 function directionDoc() {
   return migrateRows({
@@ -299,8 +263,6 @@ test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand
     S.state = null;
   }
 });
-
-/* ---- exports ---- */
 
 test("narration export: directions in by default, as (beat); left out when switched off", () => {
   withState(directionDoc(), () => {
@@ -344,7 +306,6 @@ test("a Splitpage .docx reopens with its directions as directions; ((…)) in a 
   const foreign = zipWrite([{ name: "word/document.xml", data: strBytes(W(p("Hello ((beat)) world.") + p("(A wide shot of the lake.)") + p("Then (quietly) on."))) }]);
   const rows = (await docxToRows(new File([foreign], "mine.docx"))).rows;
   assert.equal(rows[0].audioText, "Hello " + DIR("beat") + " world.");
-  /* the whole-paragraph bracket rule still sends that to the Visual column */
   assert.equal(rows[1].visualText, "(A wide shot of the lake.)");
   assert.equal(rows[1].audioText, "Then (quietly) on.", "single brackets are prose");
 });

@@ -67,82 +67,14 @@ import { closeNewTabPage } from "./20j-newtab.js";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 
-/* Declared here, assigned in __init() below: these initialisers read the
-   DOM, read storage, or depend on another module's value, so they have to
-   run in fragment order rather than in whatever order the bundle lands in. */
 var sharedDocId;
 
-/* ================= hosted documents =================
-
-   Everything here is additive and inert unless the page was actually served
-   by a Splitpage document server (server/server.js). Opened from a file://
-   path, or from any plain static host, /api/health simply fails and the app
-   behaves exactly as it always has — local files, local saves, no server.
-
-   The compare-and-set save below is what the three-way merge at the top of
-   this file was written for and has been waiting for: every PUT carries the
-   rev this view loaded, the server rejects the write if anyone saved in the
-   meantime and hands back their version, and mergeStates() reconciles the
-   two instead of either side losing work.
-
-   WHO YOU ARE is still not this app's business. Real authentication belongs
-   to Cloudflare Access (or a VPN) sitting in front of the server, and this
-   code only ever *reads* who Access says you are, to fill in a name.
-
-   What this file does now carry is a join PIN — a shared code a LAN host
-   can set so a stranger on the same wifi cannot simply open the address and
-   read everything. Post the PIN once, get a token, send that token with
-   every request. It is a door lock, not an identity: it says you were told
-   the code, nothing more, and it travels in the clear over plain HTTP. A
-   server on the internet still needs Access in front of it.
-
-   A page can also be pointed at a server that did not serve it — its
-   connection's `serverUrl` — so a copy on disk, or one served by a
-   different machine, can open documents from someone's shared session.
-   That needs the server to allow this origin (ALLOW_ORIGINS) and, if it
-   has one, the PIN.
-
-   THE CONNECTION IS THIS TAB'S (#11). `conn` (_home.js) is the one record
-   of which server this page talks to, the token it carries there, the role
-   the server gave it and the SSH tunnel it rides on. Every tab is its own
-   page, so two tabs can be on two servers — or one on a server and one on
-   a file — at once, and pointing one somewhere else leaves the other
-   exactly where it was. Before this the base and a remembered token lived
-   in localStorage, which every tab of the origin shares: switching server
-   in one tab re-pointed the next tab to load, and a remembered token was
-   sent to whichever server happened to be current.
-
-   ALL OF THIS IS BROWSER STATE — localStorage and sessionStorage, per
-   browser, per person. None of it is ever written into the document, so
-   invariant #4 (nothing may be added to the state object without going
-   through migrateRows) is deliberately not in play here, and no key below
-   may ever be moved into `state`. Nor into update-status.json or anything
-   else the static handler serves (invariant #29). */
-
-/* The server a FRESH page starts on: "" is same-origin, the server that
-   served this page. Written when the reader picks a server in the Servers
-   dialog; read only by a page that has no server of its own yet (below). */
 var SERVER_BASE_KEY = "splitpage-server-base";
-/* THIS tab's server, {serverUrl, tunnel}: sessionStorage, which is per tab
-   — it survives this tab's reload, and another tab switching server never
-   touches it. */
+// sessionStorage: per tab, survives reload, isolated from other tabs
 var TAB_SERVER_KEY = "splitpage-tab-server";
-/* This tab's token, {serverUrl, token}, sessionStorage: closing the tab
-   forgets the code, which is the right default for a code someone read out
-   to you once. It names the server it was given for, so it can never be
-   sent anywhere else. (Before #11 this key held the bare token.) */
 var SERVER_TOKEN_KEY = "splitpage-server-token";
-/* "Remember on this device": {serverUrl: token} in localStorage — one per
-   server, never sent to any other. The legacy single remembered token
-   (localStorage "splitpage-server-token") is moved in here once, under the
-   base it was remembered for. */
 var REMEMBERED_TOKENS_KEY = "splitpage-server-tokens";
-/* Minted per launch by start.mjs, arrives in the URL fragment, lives only
-   as long as this tab. */
 var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
-/* The key a review link carries, also in the fragment and also per launch.
-   Kept for this tab so a reload does not send the reviewer back to a code
-   they were never told — the token it buys is sessionStorage too. */
 var REVIEW_KEY_KEY = "splitpage-review-key";
 var LINK_KEYS_KEY = "splitpage-invites";
 
@@ -151,48 +83,25 @@ var linkKey = "";
 var linkKeyFresh = false;
 export var linkTurnedOff = false;
 
-/* What this browser is allowed to do here, as the SERVER sees it — `conn.role`:
-   "edit", "review", or "" before we have asked. It is read back from /api/me
-   every time the tab connects, never stored, and never inferred from
-   anything local — a review session that reconnects is still a review
-   session, and nothing on this side can promote itself by editing its own
-   storage. */
-
 S.serverMode = { available: false, readOnly: false, checked: false,
                    authRequired: false, reviewAvailable: false, version: null };
-/* The hosted document we are editing is `home` when its kind is "server"
-   (_home.js): {kind, id, rev}. */
-var serverIdentity = null;              /* { email, name } from Cloudflare Access */
+var serverIdentity = null;
 export var serverSessionExpired = false;
-var serverDocs = [];                    /* last listing, for the picker */
+var serverDocs = [];
 
 export function onServerDoc() { return home.kind === "server"; }
 
-/* Viewing a hosted document through the review credential: the editor is
-   read-only and only the comment machinery stays live. Gated on there
-   being a server document open, because the same tab can still have a
-   local file of its own — this browser is restricted THERE, not here. */
 export function reviewMode() {
   var c = homeConn();
   return !!c && c.role === "review";
 }
 
-/* A Cloudflare Access session that has expired does not fail — it answers
-   200 with an HTML sign-in page. Left undetected that lands as "unexpected
-   token <" in the middle of an autosave, or worse, looks like success. Any
-   answer that is redirected or is not JSON is treated as a lapsed session. */
 function ApiError(code, message) {
   var e = new Error(message || code);
   e.code = code;
   return e;
 }
 
-/* ---- where the API is, and what we send with it ---- */
-
-/* Always ends in a single slash so apiUrl() can just concatenate, and
-   always carries a scheme so a typed "192.168.1.20:8791" is not resolved
-   as a relative path. The one copy is _home.js's, where the connection
-   record checks against it; this name stays for the callers that had it. */
 export var normalizeServerBase = normalizeServerUrl;
 
 function readJsonFrom(storage, key) {
@@ -211,19 +120,14 @@ function writeRememberedTokens(map) {
   try {
     if (Object.keys(map).length) localStorage.setItem(REMEMBERED_TOKENS_KEY, JSON.stringify(map));
     else localStorage.removeItem(REMEMBERED_TOKENS_KEY);
-  } catch (e) { /* it just won't be remembered */ }
+  } catch (e) { }
 }
 
-/* The token "Remember on this device" kept for THIS server, or "". */
 function rememberedTokenFor(serverUrl) {
   var t = rememberedTokens()[serverUrl];
   return typeof t === "string" ? t : "";
 }
 
-/* The one legacy remembered token, from before tokens were kept per server.
-   It can only have belonged to the base that was current when it was
-   remembered — switching server always cleared it — so that is where it
-   goes. */
 function migrateLegacyRememberedToken() {
   var legacy, base;
   try {
@@ -237,9 +141,6 @@ function migrateLegacyRememberedToken() {
   try { localStorage.removeItem(SERVER_TOKEN_KEY); } catch (e) {}
 }
 
-/* This tab's own token, if it was given for this server. A bare string is
-   the pre-#11 shape: one token for whatever server this tab was on, which
-   is the server this tab is loading onto now. */
 function sessionTokenFor(serverUrl) {
   var raw;
   try { raw = sessionStorage.getItem(SERVER_TOKEN_KEY); } catch (e) { return ""; }
@@ -260,22 +161,9 @@ function saveTabServer() {
     } else {
       sessionStorage.removeItem(SERVER_TOKEN_KEY);
     }
-  } catch (e) { /* it just won't survive a reload */ }
+  } catch (e) { }
 }
 
-/* Where this page starts, most specific first:
-     1. desktop — the tab's own source record, handed over by main at boot
-        (TAB-BOOT-SYNC's `connection`). A restored or newly opened server
-        tab is on the server its document lives on, whatever any other tab
-        last picked. Main may also hand over the token of the tab that
-        opened this one, so opening a document in a new tab does not ask
-        for the PIN again.
-     2. this tab's own sessionStorage — a reload stays where it was.
-     3. the default a fresh page starts on (localStorage), which is
-        whatever server was last deliberately picked.
-   The token then comes from the boot record, this tab's session, or
-   "Remember on this device" for THAT server — in that order, and never
-   from anything kept for another server. */
 function loadTabConnection() {
   migrateLegacyRememberedToken();
   var from = null;
@@ -296,18 +184,11 @@ function loadTabConnection() {
   try {
     setConnection({ serverUrl: serverUrl, token: token, tunnel: from.tunnel || null });
   } catch (e) {
-    /* A tunnel or an address that no longer validates is not a reason to
-       fail the boot: same-origin, as a fresh copy would be. */
     setConnection({});
   }
   saveTabServer();
 }
 
-/* Point THIS tab at `serverUrl`. The caller has already left any server
-   home (setConnection refuses otherwise). opts: {token, tunnel,
-   makeDefault}. With no token given, the one remembered for that server —
-   and only that server — is used. makeDefault also makes it where the next
-   fresh page starts; nothing else about another tab changes. */
 export function pointTabAt(serverUrl, opts) {
   opts = opts || {};
   var url = normalizeServerUrl(serverUrl);
@@ -321,7 +202,7 @@ export function pointTabAt(serverUrl, opts) {
     try {
       if (url) localStorage.setItem(SERVER_BASE_KEY, url);
       else localStorage.removeItem(SERVER_BASE_KEY);
-    } catch (e) { /* it just won't be the default */ }
+    } catch (e) { }
   }
   return conn;
 }
@@ -331,9 +212,6 @@ export function apiUrl(path) {
   return conn.serverUrl ? conn.serverUrl + rel : rel;
 }
 
-/* A token for THIS tab's server. `remember` keeps it for this server on
-   this device; not remembering forgets any copy kept for this server
-   before (and no other server's). */
 export function setServerToken(token, remember) {
   updateConnection({ token: String(token || "") });
   saveTabServer();
@@ -343,8 +221,6 @@ export function setServerToken(token, remember) {
   writeRememberedTokens(map);
 }
 
-/* This server stopped taking our token (or we are leaving it): forget it
-   here, in this tab's session and on this device — for this server only. */
 export function clearServerToken() {
   updateConnection({ token: "", role: "", scope: "" });
   saveTabServer();
@@ -372,12 +248,6 @@ export function rememberTokenForServer(serverUrl, token) {
   writeRememberedTokens(map);
 }
 
-/* ---- the review link ----
-
-   `#review=<key>` in the address, the same delivery as the launcher's own
-   key: the fragment is the one part of a URL browsers never send to a
-   server and no proxy logs. Read once, kept for this tab, and taken out of
-   the address bar so it is not in a screenshot or a bookmark. */
 function readLinkKey() {
   linkKeyFresh = false;
   var found = parseLinkFragment(location.hash || "");
@@ -387,7 +257,7 @@ function readLinkKey() {
     try { sessionStorage.setItem(REVIEW_KEY_KEY, linkKey); } catch (e) {}
     try {
       history.replaceState(null, "", location.pathname + location.search + found.rest);
-    } catch (e) { /* file:// in some browsers — the key is already stored */ }
+    } catch (e) { }
     return;
   }
   try { linkKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { linkKey = ""; }
@@ -439,29 +309,6 @@ function holdsOwnerSignIn() {
   return !!conn.token && conn.token === rememberedTokenFor(conn.serverUrl);
 }
 
-/* ---- what this client is, and what the server can do (#82) ----
-
-   Every API call says which generation of client made it:
-   `x-splitpage-client: 2` is a client that knows what an image reference
-   (`imageRef`, `<img data-blob>`) is. The server refuses a document PUT
-   WITHOUT it — 426 client-too-old — once the stored document names a blob,
-   because an older client would save the script back with its pictures
-   gone (D7). This page is never that client, but a later server may ask for
-   a later number, and the answer then is the same: this page is out of
-   date, reload it (flagClientTooOld).
-
-   What the SERVER can do is read off its /api/health, once per connection
-   (#11: a connection is this tab's, and pointing the tab elsewhere is a new
-   record, so a WeakMap keyed by it forgets the old server's answer by
-   itself). `blobs: 1` is a server with the blob routes; anything else —
-   including a server that has not answered yet — is sent images inline
-   (serverStateFor).
-
-   A server from before #82 that is on ANOTHER origin does not list the new
-   header in its CORS preflight, so the browser would refuse every call
-   carrying it. detectServer() tries again without it when the probe cannot
-   get through at all, and remembers for this connection that the header
-   stays off; such a server has no blob routes and no 426 either. */
 var CLIENT_HEADER = "x-splitpage-client";
 var CLIENT_GENERATION = "2";
 var serverCaps = new WeakMap();
@@ -478,7 +325,6 @@ function noteCaps(c, health, noClientHeader) {
   });
 }
 
-/* The one place that decides whether blob refs may go to this tab's server. */
 function serverTakesBlobs() {
   return capsOf(conn).blobs;
 }
@@ -507,12 +353,6 @@ export async function apiFetch(path, opts) {
       method: opts.method || "GET",
       headers: headers,
       body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
-      /* Same-origin keeps the Cloudflare Access cookie flowing, which is
-         the whole point of serving app and API together. Cross-origin it
-         is switched off deliberately: the token in the header is what
-         proves us there, and the server never answers with
-         Allow-Credentials, so asking for cookies would only turn a working
-         request into a CORS failure. */
       credentials: base ? "omit" : "same-origin",
       cache: "no-store"
     });
@@ -521,29 +361,21 @@ export async function apiFetch(path, opts) {
   }
 
   var ctype = res.headers.get("content-type") || "";
-  /* An upload refused for its size by something in front of the server (a
-     proxy's own HTML 413) is still "too large", not a lapsed sign-in. */
+  // Proxy HTML 413 is too-large, not lapsed sign-in
   if (opts.raw && res.status === 413) throw ApiError("blob-too-large", "too-large");
+  // Expired Access session answers 200 HTML, not an error
   if (res.redirected || (!ctype.includes("application/json") && res.status !== 204)) {
     throw ApiError("auth", "signed out");
   }
   if (res.status === 401 || res.status === 403) {
-    /* a real 403 from our own server (READ_ONLY) still answers JSON, so
-       separate the two rather than calling everything an auth failure */
     var body403 = await res.json().catch(function () { return null; });
     if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
-    /* The review credential's own refusal: the token is fine, the change
-       is not. Nothing to re-ask for, so it must never reach the PIN
-       dialog or the lapsed-sign-in path. */
+    // Token is fine; never route to PIN dialog
     if (body403 && body403.error === "review-only") {
       var e403 = ApiError("review-only", "this link can comment, but not change the script");
       e403.detail = body403.detail || "";
       throw e403;
     }
-    /* A missing or stale join PIN is nothing like a lapsed Access session:
-       it is answered right here by asking for the code, with no reload and
-       no stash. Kept as its own code so handleApiError() cannot confuse
-       the two. */
     if (body403 && (body403.error === "pin-required" || body403.error === "bad-pin")) {
       throw ApiError("pin", "this server asks for a join PIN");
     }
@@ -566,28 +398,15 @@ export async function apiFetch(path, opts) {
     if (body429 && body429.error === "too-many-attempts") {
       throw ApiError("pin-blocked", "too many wrong codes — wait a minute and try again");
     }
-    /* A review link's hourly allowance for images (#82): the token is
-       fine, this upload is not, and it will be again in a while. */
     if (body429 && body429.error === "review-budget") {
       throw ApiError("review-budget", "this link's image allowance is used up for now");
     }
   }
-  /* The server says this page is older than the document needs (#82 D7).
-     Neither a conflict nor a sign-out: nothing to merge, nothing to type —
-     only a reload fetches a client it will take. */
   if (res.status === 426) throw ApiError("client-too-old", "this page is out of date");
 
   var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
   if (res.status === 409) { var c = ApiError("conflict"); c.payload = body; throw c; }
-  /* The server's own "there is no such document" (a GET, PUT or DELETE of
-     api/docs/:id whose file is gone) gets a name of its own, the way a 409
-     does: callers ask `err.code === "not-found"`. Every other non-ok status
-     is named by its number with the server's reason as the message — a 404
-     that is about something else (a comment, "no-such-comment") stays
-     "404", and the comment routes read it that way (#99). */
   if (res.status === 404 && body && body.error === "not-found") throw ApiError("not-found");
-  /* A write naming images the server does not hold (#82): `payload.missing`
-     is the list, which sendWithBlobs() uploads and retries. */
   if (res.status === 422 && body && body.error === "missing-blobs") {
     var mb = ApiError("missing-blobs", "an image in it is not on the server");
     mb.payload = body;
@@ -602,29 +421,10 @@ export async function apiFetch(path, opts) {
   return body;
 }
 
-/* Once the session has lapsed, every queued autosave would fire the same
-   failure again. Latch it, say so once, and let a reload clear it — the
-   conflict stash already carries unsaved work across that reload. */
 export var SERVER_RESUME_KEY = "splitpage-server-resume";
 
-/* The same "reopen it and merge my edits back in" job, asked for by a crash
-   draft instead of by a lapsed sign-in (20g-drafts.js arms it before
-   detectServer() runs at boot). It is a var rather than a second
-   sessionStorage key on purpose: the draft was read from disk, it may be far
-   bigger than sessionStorage would take, and stashLocalWork() simply fails
-   on a document too big for it — which a recovered draft must not.
-
-   {id, rev, base, mine, at, onDone(outcome)}. onDone is how the restore
-   learns which way this went ('server-resumed' or 'not-found'); polling
-   the home's id cannot tell a resume that merged the draft from one that
-   simply reopened the document. */
 S.draftServerResume = null;
 
-/* Stash before promising anything. stashLocalWork() was written for the
-   artifact shell's forced reload and had sat unused ever since; this is
-   the same situation it was built for — the only way back is a reload,
-   and everything typed since the last save would go with it. Only claim
-   the work is safe if it actually got persisted. → true when it was. */
 function stashForReload() {
   var stashed = false;
   if (onServerDoc()) {
@@ -639,6 +439,7 @@ function stashForReload() {
 
 function flagServerSessionExpired() {
   if (serverSessionExpired) return;
+  // Latched so queued autosaves don't repeat failure
   serverSessionExpired = true;
   var stashed = stashForReload();
   showToast(stashed
@@ -648,13 +449,6 @@ function flagServerSessionExpired() {
   updateFileChip();
 }
 
-/* 426 client-too-old (#82 D7): the server will not take a save from this
-   copy of the page, because the document holds something (an image
-   reference, today) a client this old would drop. Latched like a lapsed
-   sign-in, so autosave does not ask again and again for the same answer,
-   and resolved the same way — a reload, which also fetches the newer page
-   when this one was served by that server — with the same stash, so the
-   edits since the last save are merged back in after it. */
 var clientTooOld = false;
 
 function flagClientTooOld() {
@@ -701,16 +495,7 @@ function offerDraftAfterLinkOff() {
   offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
 }
 
-/* Coming back after signing in again: reopen the document that was open and
-   merge the stashed edits into whatever it looks like now — which may have
-   moved on, since the sign-in could have taken a while. Same three-way
-   merge as a save conflict, for the same reason. */
 async function resumeServerDoc() {
-  /* A crash draft of a server document asks for the same thing and is
-     answered first: it was read from disk moments ago, so it is the more
-     recent of the two, and a page that has both (a sign-in lapsed, then the
-     app died) would otherwise merge the older sessionStorage stash and drop
-     the draft on the floor. */
   var override = S.draftServerResume;
   var pending;
   if (override) {
@@ -723,13 +508,7 @@ async function resumeServerDoc() {
   }
   if (!pending || !pending.id) return false;
 
-  /* init() fires detectServer() (which leads here) and loadInitialState()
-     concurrently with no coordination between them — loadInitialState()
-     resolves almost immediately and renders a blank, fully editable
-     document, while this is still doing network round trips. Remember
-     what was on screen and the edit counter before awaiting anything, so
-     keystrokes typed into that transitional document during the wait can
-     be recovered rather than silently overwritten below. */
+  // init races loadInitialState; keep typed edits recoverable
   var seqAtStart = S.editSeq;
   var stateAtStart = S.state ? cloneState(S.state) : null;
 
@@ -740,22 +519,7 @@ async function resumeServerDoc() {
     if (via !== conn) return false;
     forgetRemoteMisses();
   } catch (err) {
-    /* still signed out, or the document is gone — leave SERVER_RESUME_KEY
-       (and the stash it points at) alone so a later reload can still
-       recover it. Removing it here, before success is known, is what
-       applyStashedWork() (14-export.js) uses to decide a stash belongs to
-       a fresh/local document rather than this hosted one — clear it too
-       early and a later reload would splice this doc's stashed edits into
-       an unrelated blank document instead. */
-    /* A recovered draft is different: the document it belongs to is GONE
-       from the server (deleted while the app was down), so waiting for a
-       later launch would hide the work forever. Disarm and hand the restore
-       back its answer — it opens the edits as an unsaved local copy. Any
-       other failure (signed out, no answer yet, a PIN still to type) leaves
-       the override armed: finishServerDetect() calls this again once the
-       PIN dialog succeeds. apiFetch() names the server's "no such
-       document" 404 "not-found" (#99), the same code saveToServer's own
-       branch looks for. */
+    // Draft's document deleted server-side: disarm, open as local
     if (override && err && err.code === "not-found") {
       S.draftServerResume = null;
       try { override.onDone("not-found"); } catch (e2) {}
@@ -764,10 +528,6 @@ async function resumeServerDoc() {
   }
   if (override) {
     S.draftServerResume = null;
-    /* Only when the lapsed-sign-in stash is about this SAME document does
-       it belong to the merge below — the draft already carries everything
-       that stash held, and a stash left over from a different document must
-       survive for its own resume. */
     var samePending;
     try {
       var rawPending = sessionStorage.getItem(SERVER_RESUME_KEY);
@@ -782,20 +542,11 @@ async function resumeServerDoc() {
   }
 
   var stash = override || readStash();
-  /* A server document saved by a client older than document ids has none.
-     The stash was taken from this same document before the sign-in lapsed,
-     so the id this view was already using is the right one to keep;
-     failing that, one derived from the server's own document id, the same
-     for everyone who opens it. */
-  /* `stash` is the override when there is one, so this is also the draft's
-     own id — the document the draft was taken from keeps its identity and
-     its history rather than deriving a second one from the server id. */
   var theirs = migrateDocument(cloneState(body.state), {
     kind: "server",
     serverId: body.id,
     fallbackId: normalizeDocId(stash && stash.mine && stash.mine.docId) || null
   });
-  /* the pictures the stash carries, and an older build's stripped images */
   if (stash) acceptStash(stash, theirs);
   setHome("server", { id: body.id, rev: body.rev || 0 });
   S.docIdWrittenOut = true;
@@ -806,12 +557,6 @@ async function resumeServerDoc() {
 
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) {
     if (typedDuringResume) {
-      /* No undo point: nothing has been filed for a document that was on
-         screen for the length of a fetch, and there is no stash behind
-         this — only the keystrokes typed into the interim document, which
-         the merge keeps. Same rule as the main merge below for autosave:
-         a restore driven by a crash draft (override) never publishes on
-         its own. */
       applyMerge({
         base: stateAtStart,
         mine: S.state,
@@ -819,6 +564,7 @@ async function resumeServerDoc() {
         source: "server-resume",
         newBase: cloneState(theirs),
         chips: true,
+        // Crash-draft restore must never publish unseen merge
         noAutoSave: !!override,
         toast: {
           text: function () {
@@ -839,9 +585,6 @@ async function resumeServerDoc() {
     updateIdentityChip();
     updateFileChip();
     showToast("Signed back in — reopened " + (S.state.title || body.id), "ok");
-    /* Only reachable with an override if the draft held nothing usable; the
-       document did reopen, so the restore is finished either way and must
-       not be left waiting for an answer that is never coming. */
     if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
     return true;
   }
@@ -849,37 +592,8 @@ async function resumeServerDoc() {
   if (!override) clearStash();
   var mine = migrateRows(cloneState(stash.mine));
   if (typedDuringResume) {
-    /* fold the keystrokes typed on top of the blank interim document into
-       what the stash already remembers as "mine", so both survive the
-       three-way merge below rather than one silently replacing the other. */
     mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine).merged;
   }
-  /* TWO snapshots, and they hold different things — filing only one of
-     them was the bug. `undoPoint` captures `theirs`, the version that was
-     live a moment before the merge: it is the UNDO POINT, not the
-     recovered work, and applyMerge arms "Undo merge" at it, which nothing
-     on this path used to do — reportMerge unhides #merge-banner, whose
-     button reads lastMergeUndo, so it answered "No merge snapshot to
-     undo." with the snapshot it needed already filed. `keepLabel` is the
-     recovered version itself, so the draft is a version in the history
-     rather than something that existed only inside this function — the
-     same pair restoreFileDraft files (20g-drafts.js). Without it the
-     pre-merge recovered document is nowhere: the draft on disk goes with
-     the first clean save after this.
-
-     The lapsed-sign-in path files neither: the reload it came from is
-     seconds old and the stash is still in sessionStorage. A draft can be
-     days old.
-
-     That path also keeps queueing the save — the user is sitting in front
-     of a seconds-old reload and the merged version is theirs. A CRASH-DRAFT
-     restore is the opposite: it runs at launch with nobody having touched
-     anything, so it must not publish a merge the user has not seen yet.
-     The PUT would bump the rev for every other viewer, commit conflict
-     comments nobody has read, and then clear dirty, which discards the
-     crash draft that held the pre-merge version. Splitpage never writes
-     the user's document on its own (invariant #41 / overrides §1); the
-     file path has said so since step K. The user's next Save publishes it. */
   applyMerge({
     base: stash.base || null,
     mine: mine,
@@ -887,7 +601,6 @@ async function resumeServerDoc() {
     source: "server-resume",
     undoPoint: override ? theirs : null,
     keepLabel: override ? "Your unsaved changes, recovered" : null,
-    /* if theirs won the id, the history written under mine follows it */
     historyFrom: mine.docId,
     newBase: cloneState(theirs),
     chips: true,
@@ -921,9 +634,7 @@ function handleApiError(err, whatFailed) {
     });
     return;
   }
-  /* Never latches serverSessionExpired: the code is one dialog away, the
-     page does not have to reload to ask for it, and nothing needs stashing
-     because nothing was signed out. */
+  // Never latch expiry; nothing signed out, no stash needed
   if (err && err.code === "pin") {
     clearServerToken();
     openPinDialog({ reason: "This server asks for its join PIN or key." });
@@ -951,8 +662,6 @@ function handleApiError(err, whatFailed) {
     return;
   }
   if (err && err.code === "client-too-old") { flagClientTooOld(); return; }
-  /* The image answers (#82): each says what to do about the picture, not
-     about the connection, which is fine. */
   if (err && err.code === "review-budget") {
     showToast(whatFailed + " — this link has used up its allowance for images for now. " +
       "Try again in an hour, or leave the picture out.", "warn", true);
@@ -976,12 +685,6 @@ function handleApiError(err, whatFailed) {
   showToast(whatFailed + " — " + plainReason(err) + ".", "error");
 }
 
-/* A failure's reason as a person would say it. The browser's own words for a
-   dropped connection ("Failed to fetch", "Load failed", a bare TypeError)
-   mean nothing to someone editing a script, so they become a sentence that
-   says what to check. Anything else is already written for a person (the
-   server's reasons, this file's own ApiError text) and passes through.
-   No trailing full stop: callers add their own. */
 export function plainReason(err) {
   var message = err && err.message ? String(err.message) : "";
   if (err && err.code === "offline") {
@@ -996,14 +699,7 @@ export function plainReason(err) {
 }
 
 export async function detectServer() {
-  /* A saved base is tried first and is the reason a file:// page can have
-     a server at all: the old skip was "no http, no server", and that is
-     only still true when nobody has pointed this copy anywhere. */
   if (!conn.serverUrl && location.protocol === "file:") { S.serverMode.checked = true; return; }
-  /* Which connection this probe is for. The tab can be pointed somewhere
-     else while it is in flight (the Servers dialog, or main handing this
-     tab a document on another server), and an answer from the old server
-     must not be written over the new one's. */
   var probing = conn;
   try {
     var health = await probeHealth(probing);
@@ -1016,15 +712,10 @@ export async function detectServer() {
   if (probing !== conn) return;
   S.serverMode.checked = true;
   updateConnectMenu();
-  /* Also on the no-server path: the share entry's enabled state and its
-     tooltip are derived here rather than trusted from the markup, so the
-     two can never drift apart (issue #19). */
   updateServerMenu();
   if (!S.serverMode.available) {
     if (conn.serverUrl) {
-      /* A server reached through an SSH forward is only there while the
-         reader's own ssh command is running — nothing here starts it
-         (20e-connect.js's SSH helper), so say which one to start. */
+      // SSH-forwarded servers need the reader's ssh running
       showToast("Could not reach " + conn.serverUrl +
         (conn.tunnel ? " — is the SSH tunnel to " + conn.tunnel.userHost + " running? (" +
           tunnelCommand(conn.tunnel) + ") Or" : " —") +
@@ -1033,10 +724,6 @@ export async function detectServer() {
     return;
   }
 
-  /* The server wants a code and this browser has not been given one (or
-     the one it has is stale): ask before listing anything. Every route
-     past here would answer 401 anyway, and a picker full of "could not
-     reach the server" is a worse way to say "type the PIN". */
   var useKey = !!linkKey && (!conn.token || (linkKeyFresh && !holdsOwnerSignIn()));
   if (linkKeyFresh && holdsOwnerSignIn()) {
     linkKey = "";
@@ -1044,11 +731,7 @@ export async function detectServer() {
     try { sessionStorage.removeItem(REVIEW_KEY_KEY); } catch (e) {}
   }
   if (S.serverMode.authRequired && (!conn.token || useKey)) {
-    /* Arrived on a review link: the key in the fragment IS the code, so
-       ask the server with it rather than asking the reader for something
-       they were never given. A key that is no longer good (the session was
-       restarted since the link was sent) simply falls through to the
-       dialog, which is the only place a code is ever typed. */
+    // Fragment key is the code; stale key falls to dialog
     var reason = null;
     if (useKey) {
       var r = await joinWithLinkKey();
@@ -1108,11 +791,6 @@ async function joinWithLinkKey() {
 
 var linkDocId = "";
 
-/* /api/health for THIS connection, recording what the server can do
-   (capsOf, above). A cross-origin server that cannot be reached at all is
-   asked once more without the client header: a server older than #82 does
-   not allow it in its preflight, and a refused preflight looks exactly
-   like "no answer" from here. */
 async function probeHealth(probing) {
   var health;
   try {
@@ -1120,8 +798,7 @@ async function probeHealth(probing) {
   } catch (e) {
     if (!(e && e.code === "offline" && probing.serverUrl) || probing !== conn) throw e;
     health = await apiFetch("api/health", { noClientHeader: true });
-    /* A server that answers `blobs` does allow the header: the first try
-       failed for some other reason, and the header stays on. */
+    // Server reporting blobs allows header; keep it on
     if (probing === conn) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
     return health;
   }
@@ -1129,24 +806,12 @@ async function probeHealth(probing) {
   return health;
 }
 
-/* Everything that only makes sense once we are actually allowed in. Split
-   out of detectServer() so the PIN dialog can call it on success without
-   re-probing health. */
 export async function finishServerDetect() {
-  /* Access hands us a verified email; use it for attribution so reviewers
-     don't have to introduce themselves, but never overwrite a name someone
-     has deliberately set for themselves. */
   var asking = conn;
   try {
     var me = await apiFetch("api/me");
-    /* A tab pointed elsewhere while /api/me was in flight: that answer is
-       about a server this tab has left, and its role must not land on the
-       connection that replaced it. */
     if (asking !== conn) return;
     serverIdentity = me;
-    /* The role rides along with identity: same answer, same round trip,
-       and it comes from the token rather than from anything this page
-       could have decided for itself. */
     var role = (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit";
     var scope = serverIdentity && typeof serverIdentity.scope === "string" ? serverIdentity.scope
       : (role === "review" ? conn.scope : "");
@@ -1158,7 +823,6 @@ export async function finishServerDetect() {
     }
   } catch (e) {
     if (asking !== conn) return;
-    /* identity is a nicety, not a requirement */
     if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
     if (e && e.code === "pin" && linkKey && !linkTurnedOff) {
       updateConnection({ token: "", role: "", scope: "" });
@@ -1174,9 +838,6 @@ export async function finishServerDetect() {
 
   updateServerMenu();
   applyReviewMode();
-  /* The link's document is opened only if nothing else claimed this page:
-     resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
-     both are unsaved work that must not be replaced (issue #19). */
   var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
@@ -1197,10 +858,6 @@ export function updateServerMenu() {
     setMenuItemReason(openBtn, guest ? "Your link opens this one script" : "");
   }
   var newBtn = document.getElementById("menu-server-new");
-  /* Publishing is a write, and a review session has none. The server says
-     so too (403 review-only on POST /api/docs) — this only keeps the app
-     from offering something it knows will be refused, and says why on the
-     item (#145) rather than leaving a greyed line to be guessed at. */
   if (newBtn) {
     newBtn.disabled = S.serverMode.readOnly || conn.role === "review" || guest;
     setMenuItemReason(newBtn, !newBtn.disabled ? ""
@@ -1211,13 +868,6 @@ export function updateServerMenu() {
   updateCollaborateMenu();
 }
 
-/* ---- viewing, comments only ----
-
-   The badge and the body class every read-only rule in app.css hangs off.
-   Called wherever the answer can change — the role arriving, a document
-   opening or closing — rather than polled, and it only ever reflects what
-   the SERVER said: flipping the class by hand changes what this page
-   offers and nothing about what it is allowed to save. */
 export function applyReviewMode() {
   var on = reviewMode();
   document.body.classList.toggle("is-review", on);
@@ -1227,25 +877,12 @@ export function applyReviewMode() {
   if (title) title.readOnly = on;
 }
 
-/* Somewhere to say it once, rather than in every blocked handler. */
 export function reviewBlocked() {
   if (!reviewMode()) return false;
   showToast("Viewing only — you can comment on this script, but not change it.", "warn");
   return true;
 }
 
-/* The address to hand to someone who should only read and comment on THIS
-   script: this server's own, with a key minted for this document in the
-   fragment. Asked for at the moment it is wanted rather than held — it is
-   a credential, and a page whose owner never opens the Servers dialog
-   never learns it at all.
-
-   It needs a document open on the server, because the key is per-document
-   now (#63): before, one launch-wide key opened every script on the
-   server and listed the picker, while the dialog offered it as a way to
-   share the one you were looking at. "" whenever there is nothing to hand
-   out — no review credential, no hosted document, or this browser is
-   itself a reviewer. */
 export async function fetchReviewLink() {
   if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
   if (S.serverMode.links || isLinkGuest()) return "";
@@ -1254,13 +891,9 @@ export async function fetchReviewLink() {
   try { body = await apiFetch("api/share?doc=" + encodeURIComponent(home.id)); } catch (e) { return ""; }
   if (!body || !body.reviewKey) return "";
   var base = conn.serverUrl || (location.origin + "/");
-  /* The link carries the document as well as the key: the key only opens
-     that one document, so landing anywhere else would be a dead end. */
   return base + "?doc=" + encodeURIComponent(body.docId || home.id) +
          "#review=" + body.reviewKey;
 }
-
-/* ---- the picker ---- */
 
 export async function openServerPicker() {
   var modal = document.getElementById("server-modal");
@@ -1313,9 +946,6 @@ function renderServerPicker() {
   }).join("");
 }
 
-/* → true once the document is on screen, false otherwise — so a caller
-   waiting to open it (a restored desktop tab, 20f-desktop.js) can tell a
-   PIN still to be typed from a document that opened. */
 export async function openServerDoc(id) {
   if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
@@ -1327,9 +957,6 @@ export async function openServerDoc(id) {
     return resumed;
   }
   var body;
-  /* The document is on the server this tab was pointed at when it asked.
-     If the tab was pointed somewhere else before the answer came back, it
-     is not this tab's document any more (#11). */
   var via = conn;
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(id));
@@ -1339,26 +966,18 @@ export async function openServerDoc(id) {
   }
   if (via !== conn) return false;
   if (!body || !body.state) { showToast("That document is empty.", "warn"); return false; }
-  /* New server state: a picture nobody had a moment ago may be there now. */
   forgetRemoteMisses();
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
-  /* no fallback id: nothing this page holds is known to be this document,
-     so an id-less server document derives one from its server id */
   S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
   setBaseState(cloneState(S.state), "openServerDoc: the document as the server sent it");
-  if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
-  /* a hosted document and a local file are different homes for the same
-     Save button — setHome() replaces whichever one this page had, so it
-     can never be ambiguous which one Save writes */
+  if (typeof closeNewTabPage === "function") closeNewTabPage();
   setHome("server", { id: body.id, rev: body.rev || 0 });
   S.docIdWrittenOut = true;
   resetProductionPanelState();
 
   clearDirty();
-  /* Before render(), not after: the rows are built editable or not from
-     this same answer, so the class has to be on the body first. */
   applyReviewMode();
   render();
   updateIdentityChip();
@@ -1369,9 +988,6 @@ export async function openServerDoc(id) {
   return true;
 }
 
-/* → true once the document is on the server. The boolean is what
-   publishAndCopyShareLink() (issue #19) needs: a link must never be
-   copied for a publish that did not happen. */
 export async function publishToServer(opts) {
   opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
   if (S.serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
@@ -1384,10 +1000,7 @@ export async function publishToServer(opts) {
     return false;
   }
   var published = cloneState(S.state);
-  /* Publishing makes a second home for this script. If its id already
-     lives somewhere else (a file on disk, another server document), the
-     server copy gets a new one — otherwise two documents that will now be
-     edited apart share one version history. Same rule as Save As. */
+  // Fork id if held elsewhere; else shared version history
   var oldId = S.state.docId;
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
@@ -1406,13 +1019,10 @@ export async function publishToServer(opts) {
     else handleApiError(err, "Could not put that on the server");
     return false;
   }
-  /* Published to the server the tab WAS on; this tab has since been pointed
-     elsewhere, so the copy there is not its home. */
   if (via !== conn) return false;
   setHome("server", { id: body.id, rev: body.rev || 1 });
   setBaseState(published, "publishToServer: what the server just accepted");
-  /* Adopted only after the server has it, like Save As. The id check keeps
-     a document opened while the POST was in flight from being re-id'd. */
+  // Adopt only after server has it; guards concurrent open
   if (forkDocId && S.state.docId === oldId) {
     S.state.docId = forkDocId;
     copyDocHistorySafe(oldId, forkDocId);
@@ -1426,32 +1036,6 @@ export async function publishToServer(opts) {
   return true;
 }
 
-/* ---- "Publish and copy a link" (issue #19) ----
-
-   The standalone HTML export stays what it has always been: a DEAD COPY.
-   It carries no document id, it never connects anywhere, and the
-   recipient's edits stay in their file. Shapes that would have made it a
-   live client of a server — an exported page phoning home to a URL baked
-   into it, or a centrally hosted Splitpage — were considered and are not
-   being built (issue #19, and the note on standaloneHtmlFor in
-   02b-doc-id.js, which still holds).
-
-   What IS being built is the delivery half, because hosted mode already
-   is the collaboration: one shared document, rev-based conflict
-   detection, a three-way merge and attribution. What was missing was a
-   way to hand someone the address of it. So this publishes to the server
-   this copy is connected to and puts the open-URL on the clipboard —
-   a link, not a file.
-
-   It never connects anywhere on its own and never publishes silently:
-   with no server it says so and opens the Servers dialog instead, and the
-   toast names what the recipient will be asked for (a join PIN, an Access
-   sign-in, or nothing at all) before they get there. */
-
-/* conn.serverUrl is "" when this page was served BY the document server, in
-   which case the address to share is this page's own. Built through the
-   URL parser so a "?doc=" already in the bar, a fragment, or a path that
-   is not the root all resolve the way a browser would. */
 export function serverDocShareUrl(id) {
   try {
     return new URL("?doc=" + encodeURIComponent(id), conn.serverUrl || location.href).href;
@@ -1460,9 +1044,6 @@ export function serverDocShareUrl(id) {
   }
 }
 
-/* What the person opening the link will be asked for. Said out loud next
-   to the link, because "just open this" and "open this, and you will need
-   the six-digit code I am about to send you" are different messages. */
 export function shareAccessNote() {
   if (S.serverMode.authRequired) return "They'll need the join PIN to open it.";
   if (serverIdentity && serverIdentity.email) return "They'll need to sign in the same way you did.";
@@ -1476,8 +1057,6 @@ export function copyShareText(text) {
   return Promise.resolve(copyShareTextFallback(text));
 }
 
-/* An insecure origin, or a browser that refuses the async API without a
-   permission: the old selection trick still works there. */
 function copyShareTextFallback(text) {
   try {
     var ta = document.createElement("textarea");
@@ -1497,18 +1076,13 @@ export async function publishAndCopyShareLink() {
   if (!S.serverMode.available) {
     showToast("A share link needs a Splitpage server to publish to. " +
       "Pick or add one under Servers…, then try again.", "warn");
-    if (typeof openServersDialog === "function") openServersDialog(); /* 20e-connect.js */
+    if (typeof openServersDialog === "function") openServersDialog();
     return false;
   }
   if (S.serverMode.readOnly) {
     showToast("This server is published read-only — nothing new can be put on it.", "warn");
     return false;
   }
-  /* Already hosted: the document has an address, and the only thing that
-     could be wrong with the link is that it points at a version older
-     than what is on screen. Save first, then share. A save that fails has
-     already said why (saveToServer / handleApiError), and a link to a
-     stale version is worse than none. */
   if (onServerDoc()) {
     if (S.dirty && !(await saveToServer())) return false;
   } else if (!(await publishToServer()) || !onServerDoc()) {
@@ -1523,17 +1097,6 @@ export async function publishAndCopyShareLink() {
   return true;
 }
 
-/* ---- opening a shared link: ?doc=<id> ----
-
-   The other end of the link above. Runs after the server has answered and
-   after any PIN dialog, so a link opened cold asks for the code first and
-   then lands on the document — rather than failing with a 401 and leaving
-   the person looking at a blank script.
-
-   A crash draft or a lapsed-sign-in resume wins: both are unsaved work
-   belonging to a document that was already open here, and a link in the
-   address bar must not throw them away. The parameter is stripped either
-   way, so a reload is an ordinary reload of whatever is on screen. */
 function readSharedDocParam() {
   var id;
   try { id = new URLSearchParams(location.search).get("doc") || ""; } catch (e) { id = ""; }
@@ -1542,7 +1105,7 @@ function readSharedDocParam() {
     var url = new URL(location.href);
     url.searchParams.delete("doc");
     history.replaceState(null, "", url.pathname + url.search + url.hash);
-  } catch (e) { /* the id is already in hand; the bar keeping it is cosmetic */ }
+  } catch (e) { }
   return id;
 }
 
@@ -1550,7 +1113,7 @@ async function openSharedDocFromLink() {
   var id = conn.scope || sharedDocId || linkDocId;
   sharedDocId = "";
   if (!id) return false;
-  if (onServerDoc()) return false;   /* a resume already took this page somewhere */
+  if (onServerDoc()) return false;
   var opened = await openServerDoc(id);
   if (opened && (isLinkGuest() || linkKey)) maybeAskGuestName();
   return true;
@@ -1568,9 +1131,6 @@ export async function armServerDelete(btn, id) {
     showToast("Deleted from the server", "ok");
     return;
   }
-  /* The button is named by aria-label since it became an icon (#169), and
-     a label outranks the text, so the armed "Delete?" is said by the label
-     too — or a screen reader would never hear that it is waiting. */
   var label = btn.getAttribute("aria-label");
   btn.setAttribute("data-armed", "1");
   btn.textContent = "Delete?";
@@ -1585,38 +1145,7 @@ export async function armServerDelete(btn, id) {
   }, 2800);
 }
 
-/* ---- images on the wire (#82) ----
-
-   A state names its images by sha (`row.imageRef`, `<img data-blob>`;
-   refsIn in shared/blob-policy.js finds them all) and the bytes travel on
-   their own. The server refuses a write naming a blob it does not hold —
-   422 missing-blobs — so every write that can name one goes through
-   sendWithBlobs():
-
-     1. POST api/blobs/missing with the state's refs;
-     2. PUT api/blobs/<sha>, raw bytes, for each one missing (the bytes from
-        this page's registry, or its local store — never asked of the server
-        that has just said it lacks them);
-     3. the write itself.
-
-   A 422 anyway (the server lost one in between, or the page could not tell
-   it was missing) uploads what the answer lists and tries ONCE more. That
-   retry is not one of saveToServer's three 409 rounds: it is the same
-   write, not a merge. A sha this page has no bytes for at all — a history
-   snapshot restored after its image was lost — can only be said to be gone:
-   a document write retries with `acceptMissing` naming it, which the server
-   takes as "I know" and stores the reference as it is (the image shows as
-   unavailable, and the record is kept for when the bytes turn up). A
-   comment has no such excuse, and fails with a toast.
-
-   A server without the blob routes (health without `blobs`, or one this tab
-   has not heard from) is sent the images INLINE instead — rows carrying
-   `visualImage: data:…` and HTML images a `src="data:…"`, the form a
-   .splitpage file keeps — because it would store a ref as a key it knows
-   nothing about and could never serve the bytes behind it. What the page
-   holds is not changed: only the copy that is sent. */
-
-var MISSING_BATCH = 2000; /* the server's cap on one /missing request */
+var MISSING_BATCH = 2000;
 
 function uniqueShas(list) {
   var out = [];
@@ -1626,7 +1155,6 @@ function uniqueShas(list) {
   return out;
 }
 
-/* Which of `shas` (unique, valid) this tab's server does not hold. */
 async function blobsMissingOnServer(shas) {
   var out = [];
   for (var i = 0; i < shas.length; i += MISSING_BATCH) {
@@ -1639,11 +1167,6 @@ async function blobsMissingOnServer(shas) {
   return out;
 }
 
-/* Puts every listed blob the server lacks onto it, one at a time. `known`
-   says the list already IS what the server lacks (a 422's), so it is not
-   asked again. → the shas this page has no bytes for, which were not
-   sent. Throws what an upload throws (blob-too-large, blob-unsupported,
-   review-budget, offline, ...). */
 async function uploadBlobs(shas, known) {
   var list = uniqueShas(shas);
   if (!list.length) return [];
@@ -1661,26 +1184,14 @@ async function uploadBlobs(shas, known) {
   return absent;
 }
 
-/* The copy of `state` a server without blob routes is sent: every image
-   this page can find the bytes for put back inline. An image whose bytes
-   are nowhere keeps its reference — dropping it would lose the record of
-   what was there, and an older server stores the key untouched. */
 async function inlineBlobsForServer(state, refs) {
   if (!refs.length) return state;
   await ensureBytes(refs);
   var out = cloneState(state);
-  /* rows' imageRef, image-conflict cards' imageValue and every
-     <img data-blob> in the HTML, the way a .splitpage file carries them
-     (02c-blobs.js) */
   inlineStateImages(out);
   return out;
 }
 
-/* One write whose state may name blobs. `send(state, acceptMissing)` makes
-   the request (it is called at most twice) and returns its promise.
-   `canAccept`: a document write, which may say a blob is gone; a comment
-   may not. Throws what the write or an upload throws; `missing-blobs`
-   when an image is gone and the write may not say so. */
 async function sendWithBlobs(state, send, canAccept) {
   var refs = refsIn(state);
   if (!serverTakesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
@@ -1695,14 +1206,6 @@ async function sendWithBlobs(state, send, canAccept) {
   }
 }
 
-/* A blob's bytes from this tab's server, into the page's registry — the
-   registry's remote source (setRemoteSource in __init). Not apiFetch():
-   a 200 here is raw bytes, which apiFetch would read as a lapsed sign-in.
-   The answer is re-hashed by the registry's intern() before it is
-   believed; bytes that are not an image, or not THIS image, are refused
-   (null) and the image stays missing. Anything else that goes wrong —
-   offline, 404, a sign-in page — is null too: the caller shows the image
-   as unavailable, and nothing here is worth a toast. */
 export async function fetchBlob(sha) {
   if (!isSha256Hex(sha) || !serverTakesBlobs()) return null;
   var res;
@@ -1710,7 +1213,6 @@ export async function fetchBlob(sha) {
     res = await fetch(apiUrl("api/blobs/" + sha), {
       method: "GET",
       headers: clientHeaders({ "Accept": "image/*" }),
-      /* as apiFetch, and for the same reasons */
       credentials: conn.serverUrl ? "omit" : "same-origin"
     });
   } catch (e) { return null; }
@@ -1725,23 +1227,10 @@ export async function fetchBlob(sha) {
   return bytesForSync(sha);
 }
 
-/* ---- the compare-and-set save ----
-
-   Returns true when the document is safely on the server. A 409 means
-   somebody saved between our load and our write: we take their version,
-   three-way merge it against the base this view still holds, and try again
-   against their rev. Bounded, because a busy document could otherwise spin
-   here forever — three rounds is far more contention than a script gets. */
 export async function saveToServer() {
   if (serverSessionExpired || clientTooOld || linkTurnedOff) return false;
-  /* A review session has no PUT: the server refuses one outright (#71).
-     What it has to send is its own comments, one at a time, below. */
   if (reviewMode()) return sendReviewWrites();
-  /* The server picker is never disabled while a save is in flight, so
-     openServerDoc() can reassign home/state/baseState to a different
-     hosted document mid-save. Remember which document THIS call is for,
-     and refuse to write a result — success or conflict — into whatever
-     home/state/baseState point at now if it has moved on. */
+  // Picker unlocked during save; drop result if doc changed
   var docId = serverHomeId();
   var attempts = 0;
   var mergeResult = null;
@@ -1749,13 +1238,6 @@ export async function saveToServer() {
   while (attempts < 3) {
     attempts++;
     if (serverHomeId() !== docId) return false;
-    /* `state.rev` is NOT touched here. The rev this save is judged by is
-       the DOCUMENT's, which the server keeps and hands back (home.rev
-       below, sent as baseRev); `state.rev` is only the merge counter
-       inside the document (max-plus-one, 02-state.js). Bumping it on the
-       way out and putting it back on every failure was a second, private
-       counter that drifted from the server's on every 409 and told nobody
-       anything (#72). */
     S.state.lastEditedBy = getEditorName();
     S.state.lastEditedAt = nowIso();
     var published = cloneState(S.state);
@@ -1770,78 +1252,40 @@ export async function saveToServer() {
           return apiFetch("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
         }, true);
       });
-      if (serverHomeId() !== docId) return true; /* saved, but the open document has since changed */
+      if (serverHomeId() !== docId) return true;
       home.rev = body.rev;
       setBaseState(published, "saveToServer: what the server just accepted");
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
-      /* reported only once the merged result is actually stored, so the
-         banner can never describe a merge that failed to save. `undo:
-         "saved"` because it is stored: Undo merge can only put the user's
-         version back HERE, and the banner says the next save is what
-         replaces the merged copy (reportMerge, #97). */
+      // Report only after merged result is stored
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
       if (serverHomeId() !== docId) return false;
 
       if (err && err.code === "conflict" && err.payload && err.payload.state) {
-        /* The id this view has been writing history under, before the merge
-           below can hand the document theirs. */
         var prevDocId = S.state.docId;
-        /* Their copy came from the same server document, so if a client
-           older than document ids saved it without one, it is still this
-           document: keep our id rather than deriving a new one and splitting
-           the history on every conflict. */
         forgetRemoteMisses();
         var theirs = migrateDocument(cloneState(err.payload.state), {
           kind: "server",
           serverId: docId,
           fallbackId: S.state.docId
         });
-        /* The undo point here is MINE — mid-save, what is on screen is
-           what this call was trying to publish, so that is the version
-           the merge replaces — and "Undo merge" is armed at it like every
-           other merge's (#97; it used to be filed and never armed, so the
-           banner's button answered "No merge snapshot to undo.").
-
-           Only on the FIRST conflict of this save. A second 409 finds the
-           first round's merge on screen, which is not a version the user
-           ever had: filing that would point Undo at a half-merged
-           document and bury the one they were actually saving.
-
-           What Undo then does is local: see undoMerge (03-sync.js). The
-           merge is on the server by the time the banner offers it, and
-           the next save, at the rev that merged save came back with,
-           writes the restored version over it.
-
-           report:false because the merged version is not on the server
-           yet: the loop retries, and the 200 branch above reports it with
-           {alreadySaved:true} — so the banner can never describe a merge
-           that failed to save. */
         mergeResult = applyMerge({
           base: S.baseState,
           mine: S.state,
           theirs: theirs,
           source: "server-conflict",
           undoPoint: mergeResult ? null : cloneState(S.state),
-          /* if theirs won the id, the history written under ours follows it */
           historyFrom: prevDocId,
           report: false
         }).result;
-        /* Their rev, from their answer — the baseRev the retry is judged
-           against. Nothing on the client invents one. */
         home.rev = err.payload.rev || home.rev;
-        continue; /* try again against their rev */
+        continue;
       }
 
       if (err && err.code === "not-found") {
-        /* Somebody deleted it on the server. There is nothing left to
-           compare-and-set against, so this page stops calling it home: the
-           server home is cleared through setHome() (#73), which also stops
-           autosave and the presence beat for it. What is on screen stays,
-           and stays dirty — it is now the only copy. (Dead until #99:
-           apiFetch() used to call this "404".) */
+        // Home cleared; screen stays dirty as the only copy
         showToast("That document is no longer on the server. Use “Put this script on the server” to publish it again.", "warn");
         setHome("none");
         updateFileChip();
@@ -1855,85 +1299,8 @@ export async function saveToServer() {
   return false;
 }
 
-/* ---- a reviewer's writes (#71) ----
-
-   A review token writes through one route and nothing else:
-   POST api/docs/:id/comments (a new comment, or a reply). It never
-   resolves or unresolves — the owner's decision, since authorship cannot be
-   established (an author is a typed name, and reviewers share one token),
-   so a reviewer's resolve would always be a resolve of somebody else's
-   comment. The server answers a reviewer's PATCH
-   api/docs/:id/comments/:cid with 403 reviewers-cannot-resolve, and
-   nothing here sends one. The server
-   refuses a review PUT outright — it used to diff the whole uploaded script
-   against the stored one to prove only a comment had moved, and that proof
-   is gone. So saveToServer() never PUTs from a review session; it comes
-   here instead, and everything that makes a reviewer's comment reach the
-   server — posting it, the autosave that follows, pressing Save after a
-   failure, a stash merged back in after a lapsed sign-in — is the same
-   path it always was, ending somewhere else.
-
-   WHAT TO SEND is what this view holds that the server has not confirmed:
-   a comment in S.state that S.baseState does not have, and a reply its
-   thread in the base does not have. A resolved flag that differs from the
-   base is not sent — it is put back to the base's (dropLocalResolves), so
-   a review session never shows a resolve the server does not have.
-   S.baseState is what the server last confirmed (HANDOFF §3.6), so the
-   difference IS the outbox — which is why a comment typed while offline, or
-   carried across a reload in the stash, goes out on the next save without
-   a queue of its own to keep. Conflict cards are never sent: they are this
-   view's own record of a merge, not something a reviewer wrote. Nothing
-   else a reviewer's state could differ in is sendable, and nothing else is
-   looked at.
-
-   WHAT COMES BACK is adopted, not kept alongside: the server builds the
-   stored comment itself (its clock, its bounded author), so the stored copy
-   replaces ours in S.state and goes into S.baseState, keeping only what
-   this view has not sent yet (a reply still to go).
-   Only the one comment the answer is about is folded in (with, for a placed
-   anchor, the one field its span sits in and that scene's stamp) — nothing
-   else of the document changes on either side, so a later merge still sees
-   every other difference exactly as it was.
-
-   THE REV. Every answer carries the DOCUMENT's rev, the one the heartbeat
-   reports and the pull compares with home.rev (#69). When it is exactly
-   the rev this view held plus the one write it just made, nobody else wrote
-   in between: the server now holds precisely our base plus this change, so
-   home.rev takes it and the next beat is quiet — a reviewer's own comment
-   does not come back round as a pull-merge of itself. When it has moved
-   further, somebody else saved meanwhile and this view has not seen it:
-   home.rev stays where it was, so the next beat pulls their change and
-   merges it against a base that already holds ours. Adopting the higher
-   number there would mark their save as seen and it would never arrive.
-
-   THE ANCHOR. The `.cmt-anchor` span a new comment wrapped around its words
-   is in S.state's row, so the request carries that one field's HTML with
-   every OTHER span this view has not had confirmed taken back out (a second
-   comment still waiting, the one a composer that is open right now just
-   wrapped) — the server places the anchor only if the words are unchanged
-   apart from this comment's own span. `anchored:false` is not a failure:
-   the comment landed, somebody rewrote that scene meanwhile, and the span
-   comes back out of the scene on screen so this view never shows a
-   highlight the server does not have. The card falls back to its scene,
-   field and quoted words, as for any comment whose text has gone.
-
-   EDITORS STAY ON PUT. The routes take an edit token too, but an editor's
-   comment changes travel in the same save as their script edits, share its
-   409 and its three-way merge, and include what these routes cannot say at
-   all — a delete, an assignee, "use my version" on a conflict card. Moving
-   only some of them to a second channel would mean ordering two kinds of
-   write against each other for nothing; the issue keeps editors on PUT, and
-   this does. */
-
-/* A pull must not land in the middle of these, for the same reason it must
-   not land in the middle of a PUT: it replaces S.baseState, which the
-   answers below are folded into. saveDoc()'s saveButtonBusy already covers
-   every path that gets here; this covers the flush itself. */
 var reviewWriting = false;
 
-/* Refused for good by the server (too large, too many, a thread that has
-   been deleted): kept on screen so nothing typed is thrown away, and not
-   sent again this session. Keyed by what was being sent. */
 var reviewRefused = {};
 
 function commentIndexIn(list, id) {
@@ -1949,8 +1316,6 @@ function rowIn(state, id) {
 
 function jsonCopy(v) { return JSON.parse(JSON.stringify(v)); }
 
-/* The next thing this view holds that the server has not confirmed, in
-   document order: a comment before its replies. */
 function nextReviewWrite() {
   var base = (S.baseState && S.baseState.comments) || [];
   var list = (S.state && S.state.comments) || [];
@@ -1960,7 +1325,7 @@ function nextReviewWrite() {
     var bi = commentIndexIn(base, c.id);
     if (bi === -1) {
       if (!reviewRefused["c:" + c.id]) return { kind: "comment", id: c.id, key: "c:" + c.id };
-      continue; /* its replies cannot go before it does */
+      continue;
     }
     var was = base[bi];
     var had = {};
@@ -1975,10 +1340,6 @@ function nextReviewWrite() {
   return null;
 }
 
-/* A reviewer cannot resolve (see above), so a resolved flag this view holds
-   that the server does not — only ever from a stash or a copy made before
-   that rule — goes back to what the server confirmed rather than sitting on
-   screen as if it had been saved. → true when anything changed. */
 function dropLocalResolves() {
   var base = (S.baseState && S.baseState.comments) || [];
   var changed = false;
@@ -1996,9 +1357,6 @@ function dropLocalResolves() {
   return changed;
 }
 
-/* One field's HTML as the server should see it: this comment's span in
-   place, every span the server has not confirmed yet taken back out. Null
-   when there is no span of this comment's to place. */
 function reviewAnchorFor(c) {
   if (c.field !== "visualText" && c.field !== "audioText") return null;
   var row = rowIn(S.state, c.rowId);
@@ -2022,9 +1380,6 @@ function unwrapElement(el) {
   el.parentNode.removeChild(el);
 }
 
-/* This comment's span out of the scene on screen — the anchor did not
-   land. When that leaves the field as the server has it, the scene's stamp
-   goes back too: the reviewer did not change it after all. */
 function dropLocalAnchor(c) {
   var row = rowIn(S.state, c.rowId);
   if (!row || (c.field !== "visualText" && c.field !== "audioText")) return false;
@@ -2067,12 +1422,6 @@ function reviewRequest(op, c) {
   return { path: path, method: "POST", body: payload, busy: "Posting your comment…" };
 }
 
-/* A comment or reply body may hold images (#82 D6): uploaded first, or
-   inlined for a server without blob routes, like a document's. Only the
-   body is looked at — the anchor's HTML has to match the stored field tag
-   for tag, so any image in it is one the server already has. `req.body`
-   itself is left as it was: adoptReviewAnswer reads the anchor back off
-   it. */
 function sendReviewRequest(req) {
   var isReply = !!req.body.reply;
   var probe = { comments: [{ body: isReply ? req.body.reply.body : req.body.comment.body }] };
@@ -2087,9 +1436,6 @@ function sendReviewRequest(req) {
   }, false);
 }
 
-/* The server's copy of the one comment an answer is about, into the base
-   and onto the screen. Returns true when something visible in the script
-   changed (an anchor came back out), so the caller knows to re-render. */
 function adoptReviewAnswer(op, sent, body) {
   var stored = body.comment;
   var baseList = S.baseState.comments || (S.baseState.comments = []);
@@ -2105,17 +1451,13 @@ function adoptReviewAnswer(op, sent, body) {
     if (!Array.isArray(next.replies)) next.replies = [];
     var have = {};
     next.replies.forEach(function (r) { if (r) have[r.id] = true; });
-    /* replies still to go stay, after the ones the server has */
     (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
-    /* the resolved flag is the server's: a reviewer never has one to send */
     list[si] = next;
   }
 
   var redraw = false;
   if (op.kind === "comment" && sent.anchor) {
     if (body.anchored === true) {
-      /* stamped exactly as placeAnchor() stamped it: the write's own time
-         and the comment's stored author */
       var baseRow = rowIn(S.baseState, sent.anchor.rowId);
       if (baseRow) {
         baseRow[sent.anchor.field] = sent.anchor.html;
@@ -2132,7 +1474,7 @@ function adoptReviewAnswer(op, sent, body) {
     }
   }
 
-  /* See above: only a rev that is exactly ours-plus-this-write is ours. */
+  // Own only if rev is exactly ours plus this write
   if (typeof body.rev === "number" && body.rev === (home.rev || 0) + (body.changed ? 1 : 0)) {
     home.rev = body.rev;
   }
@@ -2153,12 +1495,8 @@ var REVIEW_REFUSALS = {
   "blob-unsupported": "an image in it is not a PNG, JPEG, GIF or WebP"
 };
 
-/* A refusal that will be the same answer every time — keep the words on
-   screen, stop sending them, say why once. Anything else (offline, signed
-   out, a PIN to type) is worth trying again. */
 function permanentReviewRefusal(err) {
   if (!err) return "";
-  /* the same picture is refused the same way every time (#82) */
   if (err.code === "missing-blobs" || err.code === "blob-too-large" || err.code === "blob-unsupported") {
     return REVIEW_REFUSALS[err.code];
   }
@@ -2170,14 +1508,9 @@ function permanentReviewRefusal(err) {
   return "";
 }
 
-/* → true once nothing this view holds is waiting for the server (anything
-   it refused for good excepted), false when something is still to go. */
 async function sendReviewWrites() {
   var docId = serverHomeId();
-  /* openServerDoc() always sets one; without it there is no telling what
-     the server has already confirmed, so nothing is sent. */
   if (!S.baseState) return false;
-  /* nothing to send for it, and nothing to keep showing either */
   var redraw = dropLocalResolves();
   var sentAny = false;
   var sentKeys = {};
@@ -2187,8 +1520,6 @@ async function sendReviewWrites() {
       if (serverHomeId() !== docId) return false;
       var op = nextReviewWrite();
       if (!op) break;
-      /* An answer that did not settle it — a stored copy whose reply list
-         somehow still lacks ours — must not become a loop. */
       if (sentKeys[op.key]) { reviewRefused[op.key] = true; continue; }
       sentKeys[op.key] = true;
       var c = S.state.comments[commentIndexIn(S.state.comments, op.id)];
@@ -2216,7 +1547,7 @@ async function sendReviewWrites() {
                             "Could not post your comment");
         return false;
       }
-      if (serverHomeId() !== docId) return true; /* it landed; the page has moved on */
+      if (serverHomeId() !== docId) return true;
       if (!body || !body.comment) return false;
       if (adoptReviewAnswer(op, req.body, body)) redraw = true;
       sentAny = true;
@@ -2226,8 +1557,6 @@ async function sendReviewWrites() {
   }
   if (redraw) render();
   else if (sentAny) { captureReplyDrafts(); renderComments(); }
-  /* Clean unless something refused for good is still only on this screen:
-     the unload guard should still say so about that. */
   var refusedHere = false;
   (S.state.comments || []).forEach(function (c) {
     if (!c) return;
@@ -2239,72 +1568,8 @@ async function sendReviewWrites() {
   return true;
 }
 
-/* ---- the pull channel (issue #69) ----
-
-   Hosted mode had no way of learning that somebody else had saved. The only
-   thing that ever told you was your OWN save coming back 409 — which ships
-   the whole document, base64 stills and all, in both directions, files a
-   snapshot into a history that holds fifty, and gives up with a toast after
-   three rounds. So a second editor's scenes arrived when you typed, not
-   when they wrote them, and the README's "live collaboration" was a save
-   conflict wearing a merge for a hat.
-
-   The channel already existed. The presence heartbeat round-trips every two
-   seconds anyway (13a-presence.js), and it now comes back carrying
-   {docId, rev} beside `here` — read off the document's head line, so no
-   script is parsed to answer it (server.js's presenceRev). When that number
-   has moved past the one this view is holding, and only then, we GET the
-   document and merge it in.
-
-   THE REV BEING COMPARED IS THE DOCUMENT'S — `home.rev` (_home.js), the
-   compare-and-set token every PUT carries as `baseRev` and the server hands
-   back with every answer. NOT `state.rev`, which is the merge counter
-   inside the document (max-plus-one, 02-state.js), is private to the
-   client, and plays no part in conflict detection — #72 says so at length,
-   and comparing against it here would pull on a document that has not
-   changed and sit still on one that has.
-
-   NEVER DURING A SAVE. A pull that landed between saveToServer()'s
-   `cloneState(S.state)` and the PUT's answer would merge into `S.state` and
-   reassign `S.baseState`, and then the 200 branch would overwrite that base
-   with the version it published — their changes would vanish out of the
-   base and come back as a conflict on the next save. `S.saveButtonBusy`
-   (12-dirty-toast.js) is true for the whole of saveDoc(), hosted branch
-   included, which is exactly that window; it is checked before the GET and
-   again after it, because a save can start while the GET is in the air.
-
-   NO UNDO POINT, and this is the deliberate part. Every other merge path
-   files one, because each of them replaces a whole document the user might
-   want back: a save conflict, a recovered crash draft, a stash from a
-   lapsed sign-in. This one runs whenever ANYBODY saves — every few seconds
-   in a live session — and one snapshot per pull would fill the fifty-entry
-   history in under two minutes and evict the versions the user actually
-   wants (03a-history-store.js's cap). Not being able to undo the arrival of
-   somebody else's scene is a far smaller loss than losing the history, and
-   nothing is dropped either way: the three-way merge keeps this view's
-   unsaved edits, and a field both sides changed is still kept as a review
-   comment. Omitting `undoPoint` also leaves "Undo merge" pointing wherever
-   it already pointed rather than at a routine pull.
-
-   AND NO PUT. The pull publishes nothing, not even the merged result — if
-   it did, every idle viewer would write back a copy of what it had just
-   read, bumping the rev for everyone else, whose pulls would write in turn.
-   An autosave this view's own unsaved edits had already armed still runs,
-   and now goes out against the rev that just arrived instead of conflicting
-   with it, which is the whole point of the exercise.
-
-   A pull that finds nothing of theirs is silent: no render, no toast, no
-   dirty mark. It takes the rev and stops. */
-
-/* One at a time. The GET is slower than the beat that asked for it, and a
-   second pull into the middle of the first would merge against a base the
-   first is about to move. */
 var pullInFlight = false;
 
-/* Key order is not content. `theirs` has just been through
-   migrateDocument(), and `baseState` was cloned from a document that went
-   through it at some other moment, so two byte-identical documents can
-   serialise with their keys in different orders. */
 function canonicalJson(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v);
   if (Array.isArray(v)) return "[" + v.map(canonicalJson).join(",") + "]";
@@ -2315,10 +1580,6 @@ function canonicalJson(v) {
   }).join(",") + "}";
 }
 
-/* Has the version that just arrived anything in it this view's base does
-   not already have? `rev`, `lastEditedBy` and `lastEditedAt` move on every
-   save whether or not a word changed, so they are not part of the answer;
-   everything else is, down to a reply on a comment. */
 function sameDocumentContent(a, b) {
   if (!a || !b) return false;
   function bare(s) {
@@ -2331,15 +1592,10 @@ function sameDocumentContent(a, b) {
   return bare(a) === bare(b);
 }
 
-/* The heartbeat's answer, handed over exactly as the server sent it.
-   13a-presence.js paints badges and knows nothing about documents; every
-   decision about what a rev means is here. */
 export function notePresenceRev(body) {
   if (!body || pullInFlight || serverSessionExpired || linkTurnedOff || reviewWriting) return;
   var docId = serverHomeId();
   if (!docId || body.docId !== docId) return;
-  /* A document with no head line yet answers with no rev (server.js) — and
-     a rev that has not moved is the ordinary case, one comparison and out. */
   if (typeof body.rev !== "number") return;
   if (body.rev <= (home.rev || 0)) return;
   if (S.saveButtonBusy) return;
@@ -2352,28 +1608,15 @@ async function pullServerDoc(docId) {
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(docId));
   } catch (err) {
-    /* Deliberately never handleApiError(), for the same reason the beat
-       that asked for it never does: a background poll nobody asked for must
-       not put a toast on screen, reload the page or open the PIN dialog. A
-       server that stopped answering, a session that lapsed, a document
-       somebody deleted — the next save says so properly. */
     return;
   }
   if (!body || !body.state) return;
-  /* Everything that was true before the await is checked again after it.
-     The server picker is never disabled, so another document may have been
-     opened; and a save may have started, in which case this pull is dropped
-     and that save's own 409 does the merging instead. */
   if (serverHomeId() !== docId) return;
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
-  if (rev <= (home.rev || 0)) return;   /* a save of ours landed first */
+  if (rev <= (home.rev || 0)) return;
   forgetRemoteMisses();
 
-  /* Their copy came from this same server document, so an id-less one saved
-     by a client older than document ids is still THIS document: keep ours
-     rather than deriving a new one on every pull and splitting the history.
-     Same rule, and the same arguments, as saveToServer's 409. */
   var theirs = migrateDocument(cloneState(body.state), {
     kind: "server",
     serverId: docId,
@@ -2382,10 +1625,6 @@ async function pullServerDoc(docId) {
 
   home.rev = rev;
   if (sameDocumentContent(theirs, S.baseState)) {
-    /* Somebody saved a document that says what ours already said — their
-       own pull-merge, a save that only moved `lastEditedAt`, a second
-       window catching up. Take the rev, so the next beat is quiet and the
-       next save is judged against it, and touch nothing else. */
     setBaseState(cloneState(theirs), "pullServerDoc: their save says what ours already said");
     updateFileChip();
     return;
@@ -2396,41 +1635,14 @@ async function pullServerDoc(docId) {
     base: S.baseState,
     mine: S.state,
     theirs: theirs,
-    /* no undoPoint, and no source to label one with — see above */
     historyFrom: prevDocId,
-    /* what the server last confirmed, which is what the next save's baseRev
-       is measured against (HANDOFF §3.6) */
     newBase: cloneState(theirs),
     chips: true,
     report: false
   });
-  /* reportMerge here rather than applyMerge's own `report`, for the sake of
-     `alreadySaved`: the banner and the "Review conflicts" button it offers
-     are wanted, the markDirty() and queueAutoSave() that normally follow
-     them are not. This view's own unsaved edits were already dirty and
-     already have an autosave armed; what came from them is on the server by
-     definition. Marking a CLEAN document dirty here is the loop described
-     above, in one line.
-
-     `undo: false` takes "Undo merge" off the banner (#97). This path files
-     no snapshot, so the button would have nothing of this merge to undo —
-     and whatever it still pointed at would be from before somebody else's
-     saved work arrived, so undoing a pull means throwing that work away,
-     which is not what the button promises. The merge is still reported. */
   if (merged.result) reportMerge(merged.result, { alreadySaved: true, undo: false });
   showToast("Merged in changes from " + (body.updatedBy || "someone else"), "ok");
 }
-
-/* ---- the launcher's key ----
-
-   start.mjs mints one per launch and hands it over in the URL fragment,
-   which the browser never sends to a server and no proxy logs. Read it
-   once, keep it for this tab only, and take it out of the address bar so
-   it is not in a screenshot, a bookmark or a shared link.
-
-   It buys exactly one thing: the loopback-only /api/launcher/* routes,
-   which let the first-run wizard register this copy with Windows. Phase 4
-   calls launcherFetch(); this file's job is only to hold the key. */
 
 function readLaunchToken() {
   try { launchToken = sessionStorage.getItem(LAUNCH_TOKEN_KEY) || ""; } catch (e) { launchToken = ""; }
@@ -2439,24 +1651,19 @@ function readLaunchToken() {
   if (!m) return;
   launchToken = m[1];
   try { sessionStorage.setItem(LAUNCH_TOKEN_KEY, launchToken); } catch (e) {}
-  /* Strip it, keeping any other fragment the URL carried. replaceState
-     leaves no history entry holding the old URL either. */
   var rest = hash.replace(/(^#|&)launch=[A-Za-z0-9]+/, "$1").replace(/^#&/, "#");
   if (rest === "#") rest = "";
   try {
     history.replaceState(null, "", location.pathname + location.search + rest);
-  } catch (e) { /* file:// in some browsers — the token is already stored */ }
+  } catch (e) { }
 }
 
 
-/* Deliberately not apiFetch(): these routes are never on another origin
-   (the server refuses them off loopback), they carry a different header,
-   and a 404 from them means "not available here", not "signed out". */
 export async function launcherFetch(path, opts) {
   opts = opts || {};
   if (!launchToken) throw ApiError("no-launcher", "this copy was not started by the launcher");
   var headers = { "Accept": "application/json", "x-splitpage-launch": launchToken };
-  headers[CLIENT_HEADER] = CLIENT_GENERATION; /* same-origin only: no preflight to refuse it */
+  headers[CLIENT_HEADER] = CLIENT_GENERATION;
   if (opts.body) headers["Content-Type"] = "application/json";
   var res;
   try {
@@ -2476,33 +1683,6 @@ export async function launcherFetch(path, opts) {
   return body;
 }
 
-/* ================= Google Drive file manager =================
-
-   A standalone file browser for a publicly shared Google Drive folder —
-   separate from the script editor's own open/save flow above. Two
-   different things need two different credentials, because Google splits
-   them that way:
-
-   - Listing a public folder and downloading its files works anonymously,
-     identified only by an API key. Google still checks each file's own
-     sharing permission — this only works because the folder is public.
-   - Anything that changes Drive (upload, rename, delete, new folder)
-     always needs a real signed-in Google account, even on a folder
-     "anyone with the link" can edit — an API key alone carries no
-     identity Drive will accept for a write. That needs an OAuth Client ID
-     and a sign-in click (Google Identity Services' token client), and
-     whoever signs in must actually have edit access to the folder.
-
-   Splitpage has no backend of its own to hold either credential, so
-   whoever uses this pastes their own, once, in a small setup form. They
-   are kept in localStorage only — never sent anywhere but Google's APIs. */
-
-/* `google` is the namespace Google Identity Services installs on window when
-   loadGisScript() below has finished injecting accounts.google.com/gsi/client
-   — a real runtime global that no import can declare, which is why it is
-   named here rather than left to no-undef (#68). Every use is behind either
-   an awaited loadGisScript() or a `window.google &&` guard; there is no code
-   path that touches it before the script has run. */
 /* global google -- injected at runtime by Google Identity Services; see above */
 
 var DRIVE_KEY_STORE = "splitpage-drive-api-key";
@@ -2513,8 +1693,8 @@ var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 var driveCreds = { apiKey: "", clientId: "" };
 var driveState = {
   connected: false,
-  path: [],           /* [{id, name}], root folder first */
-  items: [],           /* last listing for the folder on top of path */
+  path: [],
+  items: [],
   tokenClient: null,
   accessToken: "",
   tokenExpiresAt: 0,
@@ -2527,7 +1707,7 @@ function loadDriveCreds() {
   try {
     driveCreds.apiKey = localStorage.getItem(DRIVE_KEY_STORE) || "";
     driveCreds.clientId = localStorage.getItem(DRIVE_CLIENT_STORE) || "";
-  } catch (e) { /* private browsing etc. — just start empty */ }
+  } catch (e) { }
 }
 
 function driveLastFolder() {
@@ -2542,28 +1722,9 @@ function saveDriveCreds(apiKey, clientId) {
   try {
     localStorage.setItem(DRIVE_KEY_STORE, driveCreds.apiKey);
     localStorage.setItem(DRIVE_CLIENT_STORE, driveCreds.clientId);
-  } catch (e) { /* not fatal — creds just won't survive a reload */ }
+  } catch (e) { }
 }
 
-/* ---- the desktop app's Drive (issue #10) ----
-
-   Google Identity Services only ever authorizes an http/https origin, and
-   the desktop page runs at splitpage://app, so none of the above can work
-   there. The desktop shell signs in instead — a loopback OAuth redirect
-   held by the MAIN process (desktop/google-drive.js, main.js § 9c) — and
-   performs every Drive request itself. What this page gets is the bridge's
-   six calls: driveStatus/driveSignIn/driveSignOut, which take no argument,
-   and driveList/driveDownload/driveUpload, which take a Drive id or an
-   upload request. It never holds a token, never names a URL, and there is
-   no API key and no Client ID form: the client is configured on the
-   machine (an environment variable or a JSON file in the settings folder),
-   and the modal says exactly where when nothing is.
-
-   The same modal, the same list and breadcrumb; what differs is the
-   account row, the setup panel, and that rename/delete/new folder are not
-   offered (the bridge does not carry them). An upload whose name matches
-   exactly one ordinary file in the folder replaces that file's content —
-   a new revision in Drive — instead of adding a second file of that name. */
 var driveDesktopStatus = null;
 
 function driveDesktopBridge() {
@@ -2574,8 +1735,6 @@ var DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
 var DRIVE_DOC_MIME = "application/vnd.google-apps.document";
 var DRIVE_ENV_VARS_FALLBACK = ["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"];
 
-/* Which of the modal's two sets of chrome is showing. Written both ways
-   because a browser suite swaps the desktop backend in and back out. */
 function applyDriveChrome(desktop) {
   document.getElementById("drive-web-hint").hidden = desktop;
   document.getElementById("drive-desktop-hint").hidden = !desktop;
@@ -2616,9 +1775,6 @@ async function driveDesktopCall(method, arg) {
   }
 }
 
-/* A Drive call answered SIGNED_OUT: the stored sign-in is gone (revoked in
-   the Google account, say). Show the signed-out modal rather than a list
-   nothing can refresh. */
 async function driveDesktopSignedOut(res) {
   if (!res || res.code !== "SIGNED_OUT") return false;
   driveResetBrowse();
@@ -2756,8 +1912,6 @@ async function driveListCurrentDesktop() {
 
 async function driveDownloadDesktop(it) {
   if (it.mimeType !== DRIVE_DOC_MIME && /^application\/vnd\.google-apps\./.test(it.mimeType)) {
-    /* Same as the web build: Sheets, Slides, forms and the like have no
-       clean text form — send the person to Drive itself. */
     S.DESKTOP.openExternal("https://drive.google.com/open?id=" + encodeURIComponent(it.id));
     return;
   }
@@ -2768,7 +1922,6 @@ async function driveDownloadDesktop(it) {
     return;
   }
   var filename = it.name;
-  /* A Google Doc comes back as plain text (main exports it that way). */
   if (it.mimeType === DRIVE_DOC_MIME && !/\.[a-z0-9]+$/i.test(filename)) filename += ".txt";
   await deliverFile(filename, res.bytes);
 }
@@ -2791,9 +1944,6 @@ async function driveUploadOneDesktop(file, parentId) {
 
 export function openDriveModal() {
   if (S.DESKTOP) {
-    /* A desktop shell without the Drive bridge (the entry is hidden then —
-       20f-desktop.js's initDesktop() — so this is the defensive half, for a
-       native menu command or a stale shortcut). */
     if (!driveDesktopBridge()) {
       showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open… instead.", "warn");
       return;
@@ -2842,9 +1992,6 @@ export function driveSaveCredsFromForm() {
   showToast("Saved — now paste a folder link below.", "ok");
 }
 
-/* Accepts a full folder URL (drive.google.com/drive/folders/<id>, with or
-   without ?usp=sharing and the rest), or a bare folder ID pasted straight
-   from one. */
 function parseDriveFolderId(input) {
   input = (input || "").trim();
   if (!input) return "";
@@ -2859,8 +2006,6 @@ function parseDriveFolderId(input) {
 function driveApiKeyParam() { return "key=" + encodeURIComponent(driveCreds.apiKey); }
 
 async function driveFetch(url, opts) {
-  /* The one place this page talks to Google directly — never on desktop,
-     where main makes every Drive request and the page holds no token. */
   if (S.DESKTOP) throw new Error("not available in the desktop app");
   opts = opts || {};
   var headers = opts.headers || {};
@@ -2955,10 +2100,6 @@ export function driveItemById(id) {
   return found[0] || null;
 }
 
-/* One of the page's sprite icons (the <symbol>s at the top of page.html),
-   drawn in currentColor at the size .row-icon-svg gives it. Where the
-   Drive and server lists used emoji and "×"/"✎"/"✓" glyphs, which render
-   in a different colour and weight on every platform (#169). */
 function spriteIcon(id) {
   return '<svg class="row-icon-svg" aria-hidden="true" focusable="false"><use href="#' + id + '"/></svg>';
 }
@@ -2985,8 +2126,6 @@ function renderDriveList() {
     list.innerHTML = '<div class="drive-empty">This folder is empty.</div>';
     return;
   }
-  /* Rename and delete are the web build's; the desktop bridge does not
-     carry them (see the desktop section above). */
   var canWrite = driveState.signedIn && !driveDesktopBridge();
   list.innerHTML = driveState.items.map(function (it) {
     var isFolder = it.mimeType === "application/vnd.google-apps.folder";
@@ -3048,8 +2187,6 @@ async function driveDownloadFile(it) {
       "/export?mimeType=" + encodeURIComponent(exportInfo.mime) + "&" + driveApiKeyParam();
     if (!/\.[a-z0-9]+$/i.test(filename)) filename += exportInfo.ext;
   } else if (/^application\/vnd\.google-apps\./.test(it.mimeType)) {
-    /* forms, sites, drawings, and the like have no clean export — send
-       the user to Drive itself rather than pretend to download something */
     window.open(it.webViewLink || ("https://drive.google.com/open?id=" + it.id), "_blank", "noopener");
     return;
   } else {
@@ -3107,8 +2244,6 @@ export async function armDriveDelete(btn, item) {
     await driveListCurrent();
     return;
   }
-  /* named by aria-label, so the armed state is said there too (see
-     armServerDelete) */
   var label = btn.getAttribute("aria-label");
   btn.setAttribute("data-armed", "1");
   btn.textContent = "Delete?";
@@ -3198,9 +2333,6 @@ export async function driveUploadFiles(fileList) {
   await driveListCurrent();
 }
 
-/* ---- sign-in, via Google Identity Services' token client (no backend,
-   no redirect — just a popup that hands back an access token) ---- */
-
 function loadGisScript() {
   if (driveGisPromise) return driveGisPromise;
   driveGisPromise = new Promise(function (resolve, reject) {
@@ -3227,9 +2359,6 @@ function renderDriveAccount() {
   updateDriveWriteButtons();
 }
 
-/* New folder / Upload live in the toolbar rather than per-row, so they
-   can't just be left out of the markup the way rename/delete are — disable
-   them instead, with a title explaining why. */
 function updateDriveWriteButtons() {
   var disabled = !driveState.signedIn;
   var reason = disabled ? "Sign in with Google first" : "";
@@ -3281,14 +2410,9 @@ export function driveSignOut() {
   renderDriveList();
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   loadTabConnection();
 
-  /* A hosted document's images come from its server when this page has
-     not got them (#82): the registry's remote source, asked only after
-     the page's own store. */
   setRemoteSource(function (sha) { return onServerDoc() ? fetchBlob(sha) : null; });
 
   readLinkKey();
@@ -3298,13 +2422,6 @@ export function __init() {
 
   sharedDocId = readSharedDocParam();
 
-  /* ---- test hook ----
-     Same trick as window.__newTab / window.__updateTest: the share action's
-     two pure pieces (the URL it builds and the sentence it says about
-     getting in) and the mode flags they read are what a headless suite has
-     to drive, and neither has a UI affordance that can be clicked into
-     existence without a real document server behind it. Nothing in the app
-     reads this. */
   window.__shareTest = {
     url: serverDocShareUrl,
     note: shareAccessNote,
@@ -3317,17 +2434,6 @@ export function __init() {
 
   readLaunchToken();
 
-  /* ---- test hook ----
-
-     The harness serves static files and cannot start server.js with an
-     environment, so the two halves of the review credential are tested in
-     two places: what the SERVER allows a review token to write lives in
-     tools/test-server.mjs, and what the EDITOR does about it lives in
-     tests/43-review-mode.txt, driven through this. `setSession` says what
-     /api/health, /api/join and /api/me would have said — nothing more: the
-     role still only ever comes from here or from the server, never from
-     anything the page stored. Nothing in the app reads this; the same trick
-     window.__updateTest (20a-update.js) plays. */
   window.__hostedTest = {
     setSession: function (opts) {
       opts = opts || {};
@@ -3336,27 +2442,15 @@ export function __init() {
       S.serverMode.authRequired = true;
       S.serverMode.reviewAvailable = opts.reviewAvailable !== false;
       updateConnection({ role: opts.role || "edit", scope: opts.scope || "" });
-      /* `docId: null` says "not on a server document" — which leaves a
-         local home exactly where it was, as zeroing serverDoc used to. */
       if (opts.docId === null) { if (home.kind === "server") setHome("none"); }
       else setHome("server", { id: opts.docId || "doc-test", rev: opts.rev || 1 });
-      /* A hosted document that is open always has a base — openServerDoc()
-         sets one from the answer it opened with, and every merge measures
-         against it (HANDOFF §3.6). Without this the hook produced a state
-         the app itself can never be in, and a suite that merged from it got
-         a two-way merge: every field either side had touched came out a
-         conflict rather than being reconciled against what the server last
-         confirmed. `false` is for a suite that wants exactly that. */
       if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
-      /* what /api/health's `blobs` would have said, when a suite says it */
       if (opts.blobs !== undefined) noteCaps(conn, { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
       updateServerMenu();
       render();
     },
     role: function () { return conn.role; },
-    /* This tab's connection (#11), with the token reduced to whether there
-       is one — a suite has no business reading the credential itself. */
     conn: function () {
       return { serverUrl: conn.serverUrl, hasToken: !!conn.token, role: conn.role, scope: conn.scope,
                tunnel: conn.tunnel ? Object.assign({}, conn.tunnel) : null,
@@ -3368,29 +2462,15 @@ export function __init() {
                arriving: arrivingOnLink(), guest: isLinkGuest() };
     },
     serverMode: function () { return Object.assign({}, S.serverMode); },
-    /* Point this tab somewhere, as the Servers dialog does, without a
-       server to answer — for the per-tab storage the suites can watch. */
     pointTabAt: function (url, opts) { if (home.kind === "server") setHome("none"); return pointTabAt(url, opts).serverUrl; },
     setToken: setServerToken,
     clearToken: clearServerToken,
     reviewMode: reviewMode,
     reviewLink: fetchReviewLink,
-    /* Where the document lives (_home.js), for the suites that watch the
-       pull channel take a rev off a heartbeat (#69) — `rev` is the
-       compare-and-set token. A copy, not the record. */
     home: function () { return Object.assign({}, home); },
-    /* Hand a heartbeat's answer straight to the pull channel, so a suite can
-       drive it without waiting out a real two-second beat. */
     noteRev: notePresenceRev,
-    /* What the server last confirmed, and whether this view thinks it holds
-       anything the server does not — for tests/57-review-comments.txt, which
-       watches a reviewer's comment go out through the comment routes (#71)
-       and be folded back in. Copies, not the live objects. */
     base: function () { return S.baseState ? cloneState(S.baseState) : null; },
     dirty: function () { return !!S.dirty; },
-    /* Images on the wire (#82), for tests/66-hosted-blobs.txt: the real
-       health probe, what it recorded for this connection, and the blob
-       fetch helper. */
     detect: detectServer,
     caps: function () { return Object.assign({}, capsOf(conn)); },
     fetchBlob: fetchBlob

@@ -1,16 +1,3 @@
-/* desktop/test/voice-helper.test.mjs: unit tests for desktop/voice-helper.js,
- * Follow My Voice's listener process on desktop (issue #8).
- *
- * Node built-ins only, no Electron: voice-helper.js is plain CommonJS, and
- * the process it runs is desktop/test/fake-voice-helper.mjs instead of
- * Windows' powershell.exe, so every case runs on any platform without a
- * microphone. What this cannot cover is the real listen.ps1 hearing a real
- * voice — that is docs/WINDOWS-CHECKS.md §3, by hand.
- *
- * Prints ALL PASS and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/voice-helper.test.mjs
- */
 import assert from "node:assert/strict";
 import path from "node:path";
 import { createRequire } from "node:module";

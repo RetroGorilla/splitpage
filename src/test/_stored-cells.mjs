@@ -1,17 +1,3 @@
-/* Cells as the app STORES them, for suites that check a reader or a writer
- * against the document model (#85) on real input rather than on the
- * model's own canonical HTML.
- *
- * Stored cells are not canonical: they keep whatever nesting the browser
- * and the sanitiser gave them (<em><strong> as often as <strong><em>, a
- * comment split around a bold word, two <strong>s side by side). STORED is
- * the demo document, hand-written non-canonical cells, and seeded random
- * cells built the way editing builds them — each run wrapped on its own,
- * its marks in a random order — then sanitised, as every cell is on blur
- * and on load.
- *
- * Import after ./_dom.mjs: building STORED runs the sanitiser.
- */
 import { readFileSync } from "node:fs";
 import { sanitizeHtml } from "../js/04-richtext.js";
 
@@ -27,9 +13,7 @@ const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, 
 export const tagSpan = (cat, name, inner) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${inner}</span>`;
 
-/* One cell the way editing leaves it: every run wrapped separately, so
-   neighbours that share a format sit in elements of their own, in
-   whichever order the marks happened to be applied. */
+// Stored cells are non-canonical; sanitize only, not model HTML
 export function storedCell(r) {
   const n = Math.floor(r() * 12);
   let out = "";

@@ -1,59 +1,3 @@
-/* Splitpage desktop — Google Drive through a loopback OAuth redirect (#10).
- *
- * WHY MAIN OWNS ALL OF IT. The web build signs in with Google Identity
- * Services, which needs an https origin Google has been told about; the
- * desktop app's pages live at splitpage://app, which Google will never accept
- * as a redirect. Google's answer for installed apps is the loopback redirect:
- * the app listens on http://127.0.0.1:<any port>, opens the consent page in
- * the person's own browser, and Google sends the browser back to the listener
- * with a one-time code. Whoever holds the listener holds the code, so the
- * listener lives here, in the main process, and so does everything after it:
- * the code-for-token exchange, the refresh token, the access token, and every
- * Drive request. The renderer never holds a token and never names a URL
- * (invariant #28, the same rule splitpage:update-download follows).
- *
- * THE FLOW (signIn):
- *   1. A one-shot http listener on 127.0.0.1, port 0 (the OS picks).
- *   2. PKCE: a 32-byte random verifier, its S256 challenge in the auth URL.
- *      A random `state` rides along and must come back unchanged.
- *   3. The auth URL goes to openExternal (shell.openExternal in main).
- *   4. The first request to the listener's "/" is THE callback. Wrong Host
- *      header -> refused and ignored (a DNS-rebinding page cannot spend it).
- *      Wrong or missing state -> the sign-in fails with STATE_MISMATCH.
- *      error=... -> DENIED. Either way the listener closes: one callback.
- *      Anything that is not "/" (a favicon probe) gets a 404 and is ignored.
- *   5. No callback within CALLBACK_TIMEOUT_MS -> TIMEOUT, listener closed.
- *   6. Main exchanges code + verifier at the token endpoint. The refresh
- *      token is stored (see TOKENS); the access token stays in memory.
- *
- * TOKENS. The refresh token is written ONLY as a safeStorage blob
- * (TOKEN_FILE in userData) — the OS keychain / DPAPI / libsecret encrypts it.
- * If safeStorage cannot encrypt (Linux with no keyring), the token is kept in
- * memory for this session only and status() says persisted:false, so the
- * modal can tell the person they will sign in again next launch. It is never
- * in desktop-state.json, a draft, or the app-data export: those are written
- * by other code that has no way to reach this module's state. The access
- * token never leaves memory. signOut() revokes (best effort, short timeout)
- * and deletes the blob.
- *
- * CONFIG. A Desktop-type OAuth client ID (and its "secret", which Google
- * issues for installed apps and documents as not confidential) comes from
- *   SPLITPAGE_GOOGLE_CLIENT_ID / SPLITPAGE_GOOGLE_CLIENT_SECRET, or
- *   <userData>/google-oauth-client.json — either {"client_id","client_secret"}
- *   or the file Google Cloud Console downloads ({"installed": {...}}).
- * Env wins. With neither, status() says configured:false and signIn()
- * answers NOT_CONFIGURED; the modal explains where to put it.
- *
- * ENDPOINTS. Fixed Google hosts. createGoogleDrive({testEndpointsBase}) points
- * them all at one local fake instead, and is refused unless testMode is also
- * true — main passes testMode only under SPLITPAGE_TEST=1. Every outgoing
- * request is checked against the endpoint origins before it is sent.
- *
- * Plain CommonJS, Node built-ins only (global fetch), no Electron: main.js
- * injects safeStorage and shell.openExternal, and
- * desktop/test/google-drive.test.mjs drives it under plain node.
- */
-
 "use strict";
 
 const http = require("node:http");
@@ -69,8 +13,6 @@ const GOOGLE = Object.freeze({
   upload: "https://www.googleapis.com/upload/drive/v3"
 });
 
-/* The web build asks for the same scope (DRIVE_SCOPE in 13-hosted.js): the
-   modal browses folders the person names, which drive.file cannot see. */
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 
 const TOKEN_FILE = "google-drive-token.bin";
@@ -80,7 +22,6 @@ const CLIENT_FILE = "google-oauth-client.json";
 const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 30 * 1000;
 const REVOKE_TIMEOUT_MS = 5 * 1000;
-/* Same ceiling as a teleprompter share / draft body: a script is text. */
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_NAME_CHARS = 255;
 const MAX_LIST_PAGES = 10;
@@ -91,7 +32,6 @@ const CLIENT_SECRET_RE = /^[A-Za-z0-9._~-]{1,256}$/;
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 function isDriveId(v) { return typeof v === "string" && DRIVE_ID_RE.test(v); }
-/* "root" is Drive's own alias for My Drive and matches the id pattern. */
 
 function isFileName(v) {
   return typeof v === "string" && v.length >= 1 && v.length <= MAX_NAME_CHARS &&
@@ -115,8 +55,6 @@ function toBytes(v) {
 
 function b64url(buf) { return Buffer.from(buf).toString("base64url"); }
 
-/* ------------------------------------------------------------------ config */
-
 function readClientConfig(opts) {
   const env = (opts && opts.env) || {};
   const dir = opts && opts.userDataDir;
@@ -132,14 +70,12 @@ function readClientConfig(opts) {
         secret = typeof o.client_secret === "string" ? o.client_secret.trim() : "";
         source = "file";
       }
-    } catch (_) { /* absent or unreadable: not configured */ }
+    } catch (_) { }
   }
   if (!id || !CLIENT_ID_RE.test(id)) return { configured: false, source: null };
   if (secret && !CLIENT_SECRET_RE.test(secret)) secret = "";
   return { configured: true, source, clientId: id, clientSecret: secret };
 }
-
-/* ------------------------------------------------------------------ pages */
 
 function callbackPage(ok, message) {
   const title = ok ? "Signed in to Google Drive" : "Google Drive sign-in did not finish";
@@ -150,8 +86,6 @@ function callbackPage(ok, message) {
     "@media (prefers-color-scheme:dark){body{color:#eee;background:#1b1b1b}}</style>" +
     "<h1>" + esc(title) + "</h1><p>" + esc(message) + "</p>";
 }
-
-/* ------------------------------------------------------------------ factory */
 
 function createGoogleDrive(opts) {
   const o = opts || {};
@@ -180,12 +114,12 @@ function createGoogleDrive(opts) {
   const callbackTimeoutMs = o.callbackTimeoutMs || CALLBACK_TIMEOUT_MS;
   const log = typeof o.log === "function" ? o.log : () => {};
 
-  let refreshToken = null;       // memory copy; the disk copy is the safeStorage blob
+  let refreshToken = null;
   let persisted = false;
-  let access = null;             // { token, expiresAt }
-  let account = null;            // { email, name } for the status line only
-  let pending = null;            // the in-flight sign-in promise
-  let pendingListener = null;    // its server, so shutdown() can close it
+  let access = null;
+  let account = null;
+  let pending = null;
+  let pendingListener = null;
   let loaded = false;
 
   function config() { return readClientConfig({ env, userDataDir }); }
@@ -227,12 +161,9 @@ function createGoogleDrive(opts) {
 
   function forgetLocal() {
     refreshToken = null; access = null; account = null; persisted = false;
-    if (tokenPath) { try { fs.rmSync(tokenPath, { force: true }); } catch (_) { /* gone is gone */ } }
+    if (tokenPath) { try { fs.rmSync(tokenPath, { force: true }); } catch (_) { } }
   }
 
-  /* Every outgoing request goes through here: fixed origins only, a timeout,
-     and no redirect following (a redirect off Google's hosts would be a
-     request to a URL nobody checked). */
   async function request(url, init, timeoutMs) {
     const u = new URL(url);
     if (!allowedOrigins.has(u.origin)) throw codeError("BAD_HOST", "refused request to " + u.origin);
@@ -254,7 +185,7 @@ function createGoogleDrive(opts) {
       body: body.toString()
     });
     let json = null;
-    try { json = await res.json(); } catch (_) { /* fall through */ }
+    try { json = await res.json(); } catch (_) { }
     if (!res.ok || !json || typeof json.access_token !== "string") {
       const err = json && typeof json.error === "string" ? json.error : "http_" + res.status;
       throw codeError(err === "invalid_grant" ? "INVALID_GRANT" : "TOKEN_FAILED", err);
@@ -276,7 +207,6 @@ function createGoogleDrive(opts) {
     try {
       takeTokens(await tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken }));
     } catch (e) {
-      /* Revoked in the Google account, or expired: the stored token is dead. */
       if (e.code === "INVALID_GRANT") { forgetLocal(); throw codeError("SIGNED_OUT", "Google no longer accepts this sign-in"); }
       throw e;
     }
@@ -299,12 +229,10 @@ function createGoogleDrive(opts) {
 
   async function driveError(res) {
     let reason = "";
-    try { const j = await res.json(); reason = j && j.error && (j.error.message || j.error.status) || ""; } catch (_) { /* no body */ }
+    try { const j = await res.json(); reason = j && j.error && (j.error.message || j.error.status) || ""; } catch (_) { }
     const code = res.status === 404 ? "NOT_FOUND" : res.status === 403 ? "FORBIDDEN" : "DRIVE_ERROR";
     return codeError(code, String(reason || ("HTTP " + res.status)).slice(0, 300));
   }
-
-  /* ---------------------------------------------------------------- sign-in */
 
   function signIn() {
     loadStored();
@@ -337,10 +265,12 @@ function createGoogleDrive(opts) {
         });
         res.end(callbackPage(ok, msg));
       };
+      // Host check blocks DNS-rebinding pages from spending the callback
       if (host !== "127.0.0.1:" + port && host !== "localhost:" + port) { res.writeHead(421, { connection: "close" }); res.end(); return; }
       let u;
       try { u = new URL(req.url, "http://127.0.0.1:" + port); } catch (_) { res.writeHead(400); res.end(); return; }
       if (req.method !== "GET" || u.pathname !== "/" || done) { res.writeHead(404, { connection: "close" }); res.end(); return; }
+      // First callback wins; later requests get 404
       done = true;
       const q = u.searchParams;
       if (q.get("state") !== state) {
@@ -396,8 +326,8 @@ function createGoogleDrive(opts) {
       const json = await tokenRequest({
         grant_type: "authorization_code", code: result.code, redirect_uri: redirectUri, code_verifier: verifier
       });
+      // Without a refresh token sign-in lapses within the hour
       if (typeof json.refresh_token !== "string" || !json.refresh_token) {
-        /* Without a refresh token the sign-in would lapse within the hour. */
         return { ok: false, code: "NO_REFRESH_TOKEN" };
       }
       takeTokens(json);
@@ -409,9 +339,8 @@ function createGoogleDrive(opts) {
       const about = await driveJson(endpoints.drive + "/about?fields=" + encodeURIComponent("user(emailAddress,displayName)"));
       const u = about && about.user || {};
       account = { email: String(u.emailAddress || "").slice(0, 320), name: String(u.displayName || "").slice(0, 200) };
-    } catch (_) { /* the status line just says "signed in" */ }
+    } catch (_) { }
     saveStored();
-    /* `pending` is still this promise until the caller's finally runs. */
     return Object.assign({ ok: true }, statusNow(), { signingIn: false });
   }
 
@@ -419,10 +348,6 @@ function createGoogleDrive(opts) {
     const cfg = config();
     return {
       configured: cfg.configured,
-      /* Where to put the client, for the modal's not-configured message.
-         Main telling the page a path is not invariant #34's concern (that
-         is the page naming one to main); it is this app's own config file,
-         never a document. */
       clientFilePath: userDataDir ? path.join(userDataDir, CLIENT_FILE) : CLIENT_FILE,
       envVars: ENV_VARS.slice(),
       signedIn: !!refreshToken,
@@ -448,12 +373,10 @@ function createGoogleDrive(opts) {
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ token: rt }).toString()
         }, REVOKE_TIMEOUT_MS);
-      } catch (_) { /* local sign-out stands either way */ }
+      } catch (_) { }
     }
     return { ok: true, status: statusNow() };
   }
-
-  /* ---------------------------------------------------------------- Drive */
 
   function cleanEntry(f) {
     return {
@@ -499,9 +422,8 @@ function createGoogleDrive(opts) {
       "?supportsAllDrives=true&fields=" + encodeURIComponent("id,name,mimeType,size,modifiedTime")));
     if (meta.mimeType === FOLDER_MIME) throw codeError("IS_A_FOLDER", "folder");
     let url;
+    // Native Docs have no bytes; export plain text
     if (meta.mimeType === "application/vnd.google-apps.document") {
-      /* A Google Doc has no bytes of its own; plain text is what a script
-         editor can open. Other Google-native types are not scripts. */
       url = endpoints.drive + "/files/" + fileId + "/export?mimeType=text%2Fplain";
     } else if (/^application\/vnd\.google-apps\./.test(meta.mimeType)) {
       throw codeError("UNSUPPORTED", "Google-native file");
@@ -545,8 +467,6 @@ function createGoogleDrive(opts) {
     return { file: cleanEntry(json) };
   }
 
-  /* Wrap each Drive call so the renderer gets {ok, ...} or {ok:false, code},
-     never an exception text that might carry a URL with a token in it. */
   function answer(fn) {
     return async (...args) => {
       try { return Object.assign({ ok: true }, await fn(...args)); } catch (e) {
@@ -556,9 +476,6 @@ function createGoogleDrive(opts) {
     };
   }
 
-  /* A sign-in still waiting for its browser: stop listening now, which
-     settles it as CANCELLED ('close' fires once no connection is left, so
-     a browser's keep-alive socket is dropped too). */
   function closePendingListener() {
     if (!pendingListener) return;
     pendingListener.close();
@@ -575,7 +492,6 @@ function createGoogleDrive(opts) {
     download: answer(download),
     upload: answer(upload),
     shutdown,
-    /* For tests: where the blob lives, and the endpoint set in use. */
     tokenPath,
     endpoints
   };

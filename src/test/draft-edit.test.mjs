@@ -1,9 +1,3 @@
-/* Editing a comment or reply draft through the model (#85 design §10 step 7):
- * src/js/05d-draft-edit.js. Its pictures and video cards are lifted out as
- * placeholder characters the model treats as letters and put back as
- * themselves, never formatted or linked; its undo history is a stack of
- * snapshots of its own. The live box (the keys, the toolbar, a paste, a
- * picture surviving every edit) is browser suite 81-draft-edit. */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -28,8 +22,6 @@ const img = (sha) => `<img class="comment-img" data-blob="${sha}" data-w="4" dat
 const CARD = '<a class="video-embed-card" href="https://youtube.com/watch?v=x" target="_blank" rel="noopener">' +
   '<span class="vec-play">\u25B6</span><span>Watch video</span><span class="vec-host">\u00B7 youtube.com</span></a>';
 
-/* The box's HTML through the placeholders and back, with fn applied to the
-   cell in between. */
 function roundTrip(html, fn) {
   const t = mediaTable([html]);
   const cell = t.cell(html);
@@ -41,7 +33,6 @@ test("a picture and a video card come back as themselves", () => {
   assert.equal(roundTrip(html), html);
   const t = mediaTable([html]);
   const cell = t.cell(html);
-  /* each is one position */
   assert.equal(cellLength(cell), "look ".length + 1 + 1 + 1 + 1 + "and ".length + 1);
   assert.equal(Object.keys(t.media).length, 3);
 });
@@ -53,7 +44,6 @@ test("a placeholder is never a character the box already holds", () => {
   const ch = Object.keys(t.media)[0];
   assert.ok(ch !== "\uE000" && ch !== "\uE001");
   assert.ok(lifted.indexOf(ch) !== -1);
-  /* the characters that were there stay text */
   assert.equal(roundTrip(html), html);
 });
 
@@ -70,7 +60,6 @@ test("formatting over a picture leaves the picture out of it", () => {
   const linked = roundTrip("a " + CARD + " b", (cell) => setMark(cell, 0, cellLength(cell), "href", "https://e.com/"));
   assert.ok(linked.indexOf(CARD) !== -1);
   assert.equal((linked.match(/<a /g) || []).length, 3, linked);
-  /* the card sits between two links, never inside one */
   assert.ok(!/<a href="https:\/\/e\.com\/"[^>]*>[^<]*<a /.test(linked), linked);
 });
 
@@ -86,10 +75,8 @@ test("bold throughout ignores pictures, as it ignores line breaks", () => {
   const n = cellLength(cell);
   assert.equal(markThroughoutText(cell, 0, n, "b", t.isMedia), true);
   assert.equal(t.markThroughout(cell, 0, n, "b"), true);
-  /* only a picture selected: nothing to be bold */
   const at = projection(cell).indexOf(Object.keys(t.media)[0]);
   assert.equal(markThroughoutText(cell, at, at + 1, "b", t.isMedia), false);
-  /* toggling a bold selection with a picture in it takes the bold off */
   const off = t.html(t.toggleMark(cell, 0, n, "b"));
   assert.equal(off.indexOf("<strong>"), -1);
   assert.equal((off.match(/<img /g) || []).length, 2);
@@ -117,20 +104,17 @@ test("the DOM walk counts a picture and a video card as one position each", () =
     const pt = posToDom(el, pos);
     assert.equal(domToPos(el, pt.node, pt.offset), pos, "pos " + pos);
   }
-  /* a caret inside the card's own words is before or after the card */
   const inCard = el.querySelector(".video-embed-card span:nth-child(2)").firstChild;
   assert.equal(domToPos(el, inCard, 0), 7);
   assert.equal(domToPos(el, inCard, 3), 7);
   el.remove();
 });
 
-/* ---- the history ---- */
-
 const snap = (html, from) => ({ html, sel: from === undefined ? null : { from, to: from } });
 
 test("typing is one entry, closed when undone", () => {
   const h = newHistory(snap("", 0));
-  h.pending = true;                     /* the browser typed */
+  h.pending = true;
   const back = historyUndo(h, snap("hello", 5));
   assert.equal(back.html, "");
   assert.equal(h.index, 0);

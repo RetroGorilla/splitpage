@@ -1,21 +1,8 @@
-/* Splitpage desktop — title-bar tab strip renderer.
- *
- * Plain browser JS (var/function, no modules) per HOUSE-RULES; this file is
- * not part of the src/js build.mjs concatenation and is loaded on its own,
- * only from splitpage://tabstrip. Its sole API surface is
- * window.splitpageTabStrip (TABSTRIP-BRIDGE, desktop/tabstrip-preload.js).
- * This page holds no document data beyond the ShellState it renders and
- * makes no fetches of its own.
- */
-
 "use strict";
 
 (function () {
   var bridge = window.splitpageTabStrip;
   if (!bridge) {
-    /* Loaded somewhere other than splitpage://tabstrip — e.g. opened
-       directly for a visual check outside Electron. Nothing to wire up;
-       the preload only defines the bridge on the trusted origin. */
     return;
   }
 
@@ -62,10 +49,6 @@
     el.className = "tab" + (tab.tabId === state.activeTabId ? " tab--active" : "");
     el.setAttribute("role", "tab");
     el.setAttribute("aria-selected", tab.tabId === state.activeTabId ? "true" : "false");
-    /* A tab whose renderer died and was not reloaded has no page behind it.
-       Main already treats it as never-unsaved (it closes with no prompt), so
-       the strip must not keep showing it as an ordinary tab with unsaved
-       work — it says what actually happened instead. */
     if (tab.crashed) el.className += " tab--crashed";
     el.title = tab.crashed
       ? (tab.fullPathForTooltip || tab.title) + " — this tab stopped responding and was not reloaded"
@@ -85,9 +68,6 @@
     titleEl.textContent = tab.title;
     el.appendChild(titleEl);
 
-    /* main never reports dirty AND crashed together (shellStateForWindow
-       suppresses the dirty flag for a crashed tab), so these are two
-       different marks, not one overriding the other. */
     if (tab.crashed) {
       var broken = document.createElement("span");
       broken.className = "tab__broken";
@@ -116,9 +96,6 @@
       bridge.activateTab(tab.tabId);
     });
 
-    /* Middle click closes, same path as Ctrl+W. mousedown's preventDefault
-       stops Chromium's autoscroll cursor from appearing on the press;
-       auxclick (fired on release) is what actually closes the tab. */
     el.addEventListener("mousedown", function (e) {
       if (e.button === 1) e.preventDefault();
     });
@@ -140,11 +117,8 @@
       draggedTabId = null;
       clearDropMarkers();
       if (!draggedId) return;
+      // dropEffect none means no strip accepted it: maybe tear off
       if (e.dataTransfer.dropEffect !== "none") return;
-      /* The strip IS the whole window (36px tall, full width), so "outside
-         the strip bounds" is the same as "outside this window's
-         viewport" — dropped over the document view below, another
-         window, or open desktop. */
       var outside =
         e.clientX < 0 ||
         e.clientY < 0 ||
@@ -187,9 +161,6 @@
     }
   }
 
-  /* The index, in the CURRENT (pre-drop) tab order, that the dragged tab
-     should land at — used for both an in-strip reorder and a drop arriving
-     from another window's strip. */
   function dropIndexForTarget(el, clientX) {
     var pills = Array.prototype.slice.call(tabsEl.children);
     var index = pills.indexOf(el);
@@ -200,6 +171,7 @@
 
   function handleDrop(e, dropIndex) {
     clearDropMarkers();
+    // Payload crosses windows, so it rides the drag data
     var raw = e.dataTransfer.getData("application/x-splitpage-tab");
     if (!raw) return;
     var payload;
@@ -216,12 +188,6 @@
     }
   }
 
-  /* A drop on the row itself rather than on a pill: past the last tab, or in
-     the small gap between two tabs (the row is no-drag now, so it receives
-     drops there). The index comes from the pointer's position, so a drop in a
-     gap lands in that gap: the first pill whose midpoint is right of the
-     pointer, or the end. Always sending it to the end moved a tab dropped
-     between the first two all the way to the right. */
   function dropIndexForPoint(clientX) {
     var pills = tabsEl.children;
     for (var i = 0; i < pills.length; i++) {
@@ -245,17 +211,6 @@
   bridge.onShellStateChanged(render);
   Promise.resolve(bridge.getShellState()).then(render);
 
-  /* --- Windows caption-button inset (TABSTRIP-BRIDGE "Layout") ----------
-   *
-   * navigator.windowControlsOverlay.getTitlebarAreaRect() reports the part
-   * of the title bar NOT covered by the OS's own min/max/close buttons.
-   * Its right edge tells us how much padding the strip needs so a tab is
-   * never drawn under those buttons. geometrychange fires when the window
-   * is resized, maximized/restored, or moved between monitors with
-   * different scale factors. Falls back to a fixed 150px on win32 when the
-   * overlay API itself is unavailable; see --titlebar-inset in
-   * tabstrip.css for the same default.
-   */
   function applyTitlebarInset() {
     var overlay = navigator.windowControlsOverlay;
     if (!overlay || !overlay.getTitlebarAreaRect) return;

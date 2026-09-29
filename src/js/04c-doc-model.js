@@ -1,46 +1,8 @@
 import { inertBody, safeHref, sanitizeHtml } from "./04-richtext.js";
 import { BROLL_MARKER_RE } from "./08c-broll.js";
 
-/* ================= the structured document model (issue #85) =================
-
-   docs/DOCUMENT-MODEL.md is the design; this file is its §4, step 1 of §10:
-   pure functions over one value per cell, with nothing in the app calling
-   them yet. Everything here is unit-tested under node (src/test/doc-model.
-   test.mjs) and does nothing at evaluation time.
-
-   A CELL is an array of RUNS. A run is text with marks, or the one atom, the
-   b-roll key:
-
-     { text: "the red mug", marks: { b: true, tag: "t_8f2a", cmt: ["c12"] } }
-     { atom: "broll", id: "bs_41", text: "B-roll:", marks: {} }
-
-   Marks, all optional: b, i, u, s, hl (true); dir (true: a stage direction
-   for the performer, #167 — shown, never read aloud); cue (true: a sound
-   cue line of the Audio column, #219 — a whole "SFX: …" or "Music: …"
-   line, never read aloud); href (a safeHref
-   URL); tag (a registry id, at most one per run); cmt (sorted comment
-   ids). "\n" in text
-   is a line break. A no-break space stays what it is (it is how two typed
-   spaces survive white-space: normal) and every reader treats it as a
-   space. normalizeCell() puts any cell in its one canonical form, so two
-   cells with the same content are the same JSON.
-
-   HTML stays the stored format (design D2). toHtml() writes the sanitiser's
-   own markup with its elements nested in one fixed order, so its output is
-   a fixed point of sanitizeHtml(); fromHtml() reads anything, through the
-   sanitiser first. The two agree character for character and mark for mark:
-   fromHtml(toHtml(c)) deep-equals normalizeCell(c).
-
-   Tags are named by registry id in the model and by (category, name) in
-   the stored HTML until step 2 gives the registry ids of its own. So
-   fromHtml takes opts.tagId(cat, name) and toHtml takes opts.tagOf(id) ->
-   {cat, name}; without them a tag's id is "t:" + cat + ":" + name, which
-   both sides read back. */
-
 var FORMAT_MARKS = ["hl", "b", "i", "u", "s"];
-var OBJ = "\uFFFC";              /* an atom's one character in a projection */
-
-/* ---- tags: registry id <-> (category, name) ---- */
+var OBJ = "\uFFFC";
 
 function defaultTagId(cat, name) { return "t:" + cat + ":" + name; }
 
@@ -49,11 +11,7 @@ function defaultTagOf(id) {
   return m ? { cat: m[1], name: m[2] } : null;
 }
 
-/* ---- canonical form ---- */
-
-/* Text a cell may hold: no C0 controls but tab and line feed, no CR, no
-   zero-width space (a caret spot in the live DOM, never content), and no
-   U+FFFC (the projection's atom character). */
+// Zero-width space is a caret spot, never content
 function cleanText(t) {
   /* eslint-disable-next-line no-control-regex -- C0 controls are exactly what cell text must not carry. */
   return String(t == null ? "" : t).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g, "");
@@ -63,7 +21,6 @@ function cleanMarks(marks, forAtom) {
   var out = {};
   if (!marks || typeof marks !== "object") return out;
   FORMAT_MARKS.forEach(function (k) { if (marks[k] === true) out[k] = true; });
-  /* a b-roll key is never part of a direction */
   if (!forAtom && marks.dir === true) out.dir = true;
   if (!forAtom && marks.cue === true) out.cue = true;
   if (typeof marks.href === "string") {
@@ -95,14 +52,11 @@ function sameMarks(a, b) {
 }
 
 function orderedMarks(m) {
-  /* One key order, so equal marks are equal JSON too. */
   var out = {};
   ["b", "i", "u", "s", "hl", "dir", "cue", "href", "tag", "cmt"].forEach(function (k) { if (m[k] !== undefined) out[k] = m[k]; });
   return out;
 }
 
-/* opts.hasTag(id) / opts.hasComment(id), when given, drop marks naming a
-   tag or comment that no longer exists. */
 export function normalizeCell(cell, opts) {
   opts = opts || {};
   var runs = [];
@@ -132,11 +86,7 @@ export function normalizeCell(cell, opts) {
     runs.push({ text: t, marks: m });
   });
 
-  /* A tag is one unit in the editor, so a comment, a link or a direction
-     covers all of it or none of it: across each stretch of one tag, cmt
-     becomes the union, href the first one found and dir set if any of it
-     was. That is also what lets toHtml() nest a tag inside its comments,
-     directions and links without ever splitting it. */
+  // Tag is atomic; comment, link, direction cover all or none
   for (var i = 0; i < runs.length;) {
     var tag = runs[i].atom ? null : runs[i].marks.tag;
     if (!tag) { i++; continue; }
@@ -174,12 +124,6 @@ export function normalizeCell(cell, opts) {
   return out;
 }
 
-/* ---- reading HTML ---- */
-
-/* Any HTML into a canonical cell, through the sanitiser first. Pictures and
-   video cards have no place in a script cell (design D7): each one found is
-   handed to opts.onMedia({kind:"image", ref} | {kind:"video", href}) and
-   left out. */
 export function fromHtml(html, opts) {
   opts = opts || {};
   var tagId = opts.tagId || defaultTagId;
@@ -188,8 +132,7 @@ export function fromHtml(html, opts) {
   (function walk(node, marks) {
     Array.prototype.forEach.call(node.childNodes, function (child) {
       if (child.nodeType === 3) {
-        /* white-space: normal — a line feed in a text node shows as a space;
-           only <br> breaks a line */
+        // Text-node line feed renders as space; only <br> breaks
         var t = String(child.nodeValue || "").replace(/[\r\n]+/g, " ");
         if (t) runs.push({ text: t, marks: marks });
         return;
@@ -239,16 +182,6 @@ export function fromHtml(html, opts) {
   return normalizeCell(runs, opts);
 }
 
-/* ---- a cached reader, for the readers (§10 step 3) ----
-
-   cellOf(html) is fromHtml(html) with the model's own tag names
-   ("t:<cat>:<name>"), cached by the HTML string itself, the contentMemo
-   reasoning (07-production-tags.js): a key that is the input cannot go
-   stale. Readers that only need words, formatting and category+name —
-   exports, word count, the teleprompter, find — read cells through it and
-   never parse HTML themselves. The returned cell is SHARED with every other
-   caller for the same HTML: read it, never mutate it. Budgeted by
-   characters, like contentMemo. */
 var CELL_CACHE_BUDGET = 2000000;
 var cellCache = new Map();
 var cellCacheChars = 0;
@@ -264,34 +197,14 @@ export function cellOf(html) {
   return cell;
 }
 
-/* A "t:<cat>:<name>" tag name (what cellOf gives) as {cat, name}, or null
-   for a registry id. */
 export function tagNameOf(id) {
   return defaultTagOf(id);
 }
 
-/* The other way: the tag mark a cell read without registry hooks (cellOf,
-   editCell) gives the tag (cat, name) — and that toHtml writes back as a
-   span with that category and name. */
 export function namedTagId(cat, name) {
   return defaultTagId(cat, name);
 }
 
-/* ---- the one nesting, shared by every writer ----
-
-   Elements open outermost first in this order: a sound cue line (#219),
-   each comment (by id), the stage direction, the link, the tag, then highlight, bold, italic,
-   underline, strike. Where two neighbouring runs share a prefix of that
-   list the elements stay open across both, so a comment over bold and
-   plain text is one span. The order never changes with the content, which
-   is what makes the output canonical — and normalizeCell() guarantees no
-   comment, direction or link starts or ends inside a tag, so a tag is never
-   split. A direction sits just inside the comments so that only a comment
-   edge can cut one in two: its brackets are drawn around each span of it
-   (app.css), and a link or a format edge inside a direction must not add a
-   pair. A cue is outermost because it is a whole line: one span from the
-   line's start to its end, whatever is inside it, so its icon (app.css) is
-   drawn once. */
 function elementKeys(marks, isAtom) {
   var keys = [];
   if (marks.cue && !isAtom) keys.push({ k: "cue", v: true });
@@ -303,7 +216,6 @@ function elementKeys(marks, isAtom) {
   return keys;
 }
 
-/* The cell as a tree of {el:{k,v}, kids} / {text} / {br} / {atom} nodes. */
 function buildTree(cell, opts) {
   var tagOf = (opts && opts.tagOf) || defaultTagOf;
   var root = { kids: [] };
@@ -351,17 +263,6 @@ function escAttr(t) {
 
 var FORMAT_TAG = { hl: "mark", b: "strong", i: "em", u: "u", s: "s" };
 
-/* The stored HTML for a cell: exactly the markup sanitizeHtml() writes,
-   nested in the fixed order above.
-
-   opts.textHtml(text, esc, where), when given, writes each stretch of text
-   instead of esc(text) — a stretch being what one text node of the output
-   would hold (never a line break), the b-roll key's word included; `where`
-   is {dir: true} for a stretch inside a stage direction, {dir: false}
-   otherwise. It is how a reader that wants the cell's own markup around
-   something of its own, the teleprompter's per-word spans, gets it without
-   parsing HTML. What it returns goes in as it is, so it must escape what
-   it writes. */
 var OUTSIDE_DIRECTION = { dir: false };
 var INSIDE_DIRECTION = { dir: true };
 
@@ -398,21 +299,8 @@ export function toHtml(cell, opts) {
   return render(t.root, OUTSIDE_DIRECTION);
 }
 
-/* ---- readers (what htmlToPlainText, htmlToMarkdown and htmlToRuns give
-   for this cell's HTML, without parsing any) ----
-
-   A stage direction (#167) is written the way a script prints one, in
-   brackets: "(beat)". Its brackets are not in the cell \u2014 they are how a
-   reader shows where one starts and ends \u2014 so every reader that writes
-   text adds them round each stretch of it. */
-
 function isDirRun(r) { return !!(r && !r.atom && r.marks.dir); }
 
-/* opts.directions: "brackets" (the default) writes each direction as
-   "(its words)"; "omit" leaves them out, for the words that are said (the
-   read-time estimate, a narration export without them) \u2014 one space kept
-   where one stood between two words, none before the punctuation that
-   followed it ("Pour it (slowly)." is "Pour it."). */
 export var OMIT_CLOSES = /^[.,;:!?)\]}"'\u2019\u201d]/;
 
 export function toPlainText(cell, opts) {
@@ -437,45 +325,12 @@ export function toPlainText(cell, opts) {
   return out.replace(/\u00a0/g, " ").trim();
 }
 
-/* The words someone says aloud: the cell's text without its directions
-   or its sound cues (#219) \u2014 what the read-time estimate counts
-   (01-scene-status.js wordCount). */
+// Feeds read-time estimate; excludes directions and sound cues
 export function spokenText(cell) {
   return toPlainText(cell, { directions: "omit", cues: "omit" });
 }
 
-/* ---- Markdown ----
-
-   The same notation htmlToMarkdown() (04-richtext.js) writes — **bold**,
-   *italic*, ~~strike~~, <u>underline</u>, <mark>highlight</mark>,
-   [text](href), a line break as "\n", tags and comments as their words —
-   but laid out for what a Markdown reader will make of it, not copied from
-   an element tree. HTML nests however it likes; Markdown's delimiters only
-   work where CommonMark's flanking rules let them open and close, and the
-   HTML walker wrote "**a **b" (a delimiter after a space closes nothing),
-   "**a****b**" (two bold elements side by side) and, over the model's one
-   fixed nesting, "*x ****y***" for italic "x " then bold-italic "y". So:
-
-   - Only the marks Markdown shows count: a tag or comment boundary never
-     splits emphasis.
-   - No mark starts or ends on white space (it moves outside, where it
-     looks the same; a delimiter next to a space does nothing, and an
-     element alone on a paragraph's first line starts an HTML block), and
-     no mark spans a blank line, which ends a Markdown paragraph.
-   - Where several marks open at once, the one that runs longest opens
-     first (outermost), so a mark is closed and reopened only where two
-     really cross; ties put the link, highlight and underline outside.
-   - A delimiter that still could not do its job where it stands (inside a
-     word next to punctuation, in one run of asterisks with a delimiter
-     closing there, or kept from its partner by the rule of 3) is written
-     as the HTML element instead — <strong>, <em>, <s> — which every
-     Markdown renderer that reads the <u> and <mark> this already writes
-     also reads (mdSettle).
-
-   Text is written as it is, as htmlToMarkdown() writes it: an asterisk
-   typed into a cell is not escaped. */
-
-var MD_MARKS = ["href", "hl", "u", "b", "i", "s"];      /* ties: outermost first */
+var MD_MARKS = ["href", "hl", "u", "b", "i", "s"];
 var MD_DELIM = { b: "**", i: "*", s: "~~" };
 var MD_HTML = { b: "strong", i: "em", s: "s", u: "u", hl: "mark" };
 var MD_WS = /[\s\u00a0]/;
@@ -487,19 +342,14 @@ function mdChars(cell) {
   runs.forEach(function (r, ri) {
     var m = {};
     MD_MARKS.forEach(function (k) { if (r.marks[k]) m[k] = r.marks[k]; });
-    /* a stage direction as the script prints it: "(beat)", in italics —
-       the brackets italic and nothing else, so a bold last word does not
-       take its closing bracket with it */
     var dir = isDirRun(r);
     if (dir) m.i = true;
-    /* a sound cue line (#219) set apart the same way, in italics */
     if (r.marks.cue) m.i = true;
     if (dir && !isDirRun(runs[ri - 1])) chars.push({ ch: "(", m: { i: true } });
     Array.from(r.text).forEach(function (ch) { chars.push({ ch: ch, m: Object.assign({}, m) }); });
     if (dir && !isDirRun(runs[ri + 1])) chars.push({ ch: ")", m: { i: true } });
   });
   var n = chars.length, i, j;
-  /* a blank line ends a paragraph, and everything open with it */
   for (i = 0; i < n; i++) {
     if (chars[i].ch !== "\n") continue;
     j = i + 1;
@@ -508,7 +358,6 @@ function mdChars(cell) {
       for (var k = i; k <= j; k++) chars[k].m = {};
     }
   }
-  /* no mark opens or closes on white space */
   MD_MARKS.forEach(function (key) {
     for (i = 0; i < n;) {
       if (!chars[i].m[key]) { i++; continue; }
@@ -528,9 +377,6 @@ function sameMdMarks(a, b) {
   return true;
 }
 
-/* The cell as tokens, {open: key, v, pair}, {close: key, v, pair} and
-   {text}, the marks properly nested: where a mark ends under one that goes
-   on, the one that goes on is closed and opened again. */
 function mdTokens(cell) {
   var pieces = [];
   mdChars(cell).forEach(function (c) {
@@ -538,7 +384,6 @@ function mdTokens(cell) {
     if (last && sameMdMarks(last.m, c.m)) last.text += c.ch;
     else pieces.push({ text: c.ch, m: c.m });
   });
-  /* how far each mark runs on from each piece, in characters */
   for (var p = pieces.length - 1; p >= 0; p--) {
     var next = pieces[p + 1];
     pieces[p].ext = {};
@@ -589,19 +434,12 @@ function mdRender(tokens, asHtml) {
   });
 }
 
-/* Whether a delimiter run can open and close where it stands, by
-   CommonMark's flanking rules; null is the edge of the cell, which counts
-   as white space. */
 function mdFlank(prev, next) {
   var wsPrev = prev === null || MD_WS.test(prev), wsNext = next === null || MD_WS.test(next);
   var pPrev = !wsPrev && MD_PUNCT.test(prev), pNext = !wsNext && MD_PUNCT.test(next);
   return { left: !wsNext && (!pNext || wsPrev || pPrev), right: !wsPrev && (!pPrev || wsNext || pNext) };
 }
 
-/* The delimiter runs of one rendering: consecutive delimiters of one
-   character with nothing between them. A line break is white space in the
-   plain export and "<br>" (punctuation) in a table cell, so a run has to
-   work both ways. */
 function mdRuns(tokens, strs, asHtml) {
   var runOf = [];
   for (var i = 0; i < tokens.length;) {
@@ -615,8 +453,6 @@ function mdRuns(tokens, strs, asHtml) {
       if (u.close) closes = true;
       j++;
     }
-    /* every token writes something, so the neighbours are the tokens
-       either side */
     var prev = i > 0 ? /[\s\S]$/u.exec(strs[i - 1])[0] : null;
     var next = j < strs.length ? /^[\s\S]/u.exec(strs[j])[0] : null;
     var asText = mdFlank(prev, next);
@@ -633,28 +469,19 @@ function mdRuns(tokens, strs, asHtml) {
   return runOf;
 }
 
-/* CommonMark's "rule of 3": a run that can both open and close does not
-   pair with one whose length makes the sum a multiple of 3, unless both
-   lengths are. */
+// CommonMark rule of 3
 function mdRuleOf3(a, b) {
   return (a.both || b.both) && (a.len + b.len) % 3 === 0 && !(a.len % 3 === 0 && b.len % 3 === 0);
 }
 
-/* A delimiter that cannot do its job where it stands goes over to HTML:
-   one that cannot open or close there, an opener in the same run as a
-   closer, an opener that could also close and would pair with a delimiter
-   of the same character still open outside it, and a pair the rule of 3
-   keeps apart. Switching one changes the runs after it, so they are
-   judged again: one switch per round, the first in the cell, until none
-   is needed. Every switch is for good, so it always settles. */
+// Unpairable delimiters fall back to HTML
 function mdSettle(tokens) {
   var asHtml = {};
   for (;;) {
     var strs = mdRender(tokens, asHtml);
     var runOf = mdRuns(tokens, strs, asHtml);
     var openRun = {}, outer = { "*": [], "~": [] };
-    /* where it stands first, how it pairs second: a run that is about to
-       change must not get a pair switched for its sake */
+    // Fix position problems before pairing ones; avoids pair switching
     var bad = null, badPairing = null;
     for (var i = 0; i < tokens.length && bad === null; i++) {
       var t = tokens[i], run = runOf[i];
@@ -681,20 +508,6 @@ export function toMarkdown(cell) {
   return mdSettle(mdTokens(cell)).replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/* [{text, b, i, u, s, mark, href}], a line break as its own {text:"\n"}.
-   A run of a sound cue line (#219) also carries cue: true.
-   A run inside a stage direction also carries dir: true (and only then \u2014
-   a cell with none gives exactly the runs htmlToRuns gives), and each
-   direction is bracketed: a "(" run before it and a ")" run after it,
-   unformatted but for dir, so a writer that knows nothing of directions
-   still prints "(beat)".
-
-   opts.annotate (the exports' kit, 14b-export-kit.js): each run also says
-   what the script draws round it \u2014 `tag` {cat, name} for a production tag,
-   `cmt` the ids of the comments over it (outermost first, the order their
-   elements open in), and `broll` the id of a b-roll key (the atom's own
-   run, "B-roll: "). Only when asked, so every other caller gets exactly
-   the runs it always did. */
 export function toDocxRuns(cell, opts) {
   var t = buildTree(cell, opts);
   var annotate = !!(opts && opts.annotate);
@@ -745,12 +558,6 @@ function bracketDirections(runs) {
   return out;
 }
 
-/* ---- positions ----
-
-   A position is an offset into the cell's projection: its text with each
-   atom as one U+FFFC. That is the coordinate edits, find, the undo stack
-   and caret restore share. */
-
 export function projection(cell) {
   var out = "";
   normalizeCell(cell).forEach(function (r) { out += r.atom ? OBJ : r.text; });
@@ -761,7 +568,6 @@ export function cellLength(cell) {
   return projection(cell).length;
 }
 
-/* One entry per position: {ch, marks} or {atom}. */
 function explode(cell) {
   var chars = [];
   normalizeCell(cell).forEach(function (r) {
@@ -788,8 +594,6 @@ function clamp(cell, pos) {
   return pos < 0 ? 0 : (pos > n ? n : pos);
 }
 
-/* The marks at a position: those of the character before it, or after it
-   at the very start. */
 export function marksAt(cell, pos) {
   var chars = explode(cell);
   pos = clamp(cell, pos);
@@ -797,12 +601,7 @@ export function marksAt(cell, pos) {
   return c ? Object.assign({}, c.atom ? c.atom.marks : c.marks) : {};
 }
 
-/* Typing carries formatting on (bold stays bold) but never a tag, a
-   comment or a link: those end where they end. A stage direction is typed
-   into only between two of its own characters: at either edge of one,
-   what is typed is narration again, so the words after "((beat))" are
-   never swallowed into it. Exported for the editor's toolbar state and its
-   pending marks (05-render.js): what a character typed at pos would carry. */
+// Tags, comments, links never carry onto typed text
 export function typingMarks(cell, pos) {
   var m = marksAt(cell, pos);
   delete m.tag;
@@ -814,7 +613,6 @@ export function typingMarks(cell, pos) {
 
 function isDirChar(c) { return !!(c && !c.atom && c.marks.dir); }
 
-/* Is pos strictly inside a direction — a character of one on each side? */
 export function insideDirection(cell, pos) {
   var chars = explode(cell);
   pos = clamp(cell, pos);
@@ -853,8 +651,6 @@ export function deleteRange(cell, from, to) {
   return implode(chars.slice(0, from).concat(chars.slice(to)));
 }
 
-/* The replaced range's first character lends its marks to the new text, so
-   a word replaced inside a comment or in bold stays inside it. */
 export function replaceText(cell, from, to, text) {
   from = clamp(cell, from);
   to = clamp(cell, to);
@@ -866,11 +662,6 @@ export function replaceText(cell, from, to, text) {
   return insertText(deleteRange(cell, from, to), from, text, marks);
 }
 
-/* The words from..to become `text` carrying tag `id` — what every typed
-   route to a tag does (a closing shortcut, Tab completion, an untagged
-   mention taken). The words keep the formatting they had (replaceText), so
-   a phrase typed in bold is a bold tag. Returns {cell, end}: end is the
-   position just past the tag, where the caret goes. */
 export function replaceWithTag(cell, from, to, text, id) {
   var a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
   var next = replaceText(cell, a, b, text);
@@ -878,21 +669,12 @@ export function replaceWithTag(cell, from, to, text, id) {
   return { cell: setMark(next, a, end, "tag", id), end: end };
 }
 
-/* The words from..to become a b-roll key (the atom) — what typing
-   "B-roll:" does (08c-broll.js maybeCaptureBroll). The key carries no
-   marks, even when the words were bold: a key inside <strong> or a comment
-   is not one the b-roll list can read (brollLineMarker knows a key only
-   where it starts its line at the top of the cell — the shape the
-   anchoring pass gives one too), so its line would fall back to matching
-   its record by name. Returns {cell, end}: end is the position just past
-   the key, where the caret goes. */
+// Key carries no marks; b-roll list can't read wrapped keys
 export function replaceWithBrollKey(cell, from, to, id, keyText) {
   var a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
   return { cell: insertBrollKey(deleteRange(cell, a, b), a, id, keyText, {}), end: a + 1 };
 }
 
-/* name is b, i, u, s, hl, dir (value true/false), href (a URL or null)
-   or tag (an id or null). Comments have addComment/removeComment. */
 export function setMark(cell, from, to, name, value) {
   var chars = explode(cell);
   from = clamp(cell, from);
@@ -915,14 +697,6 @@ export function setMark(cell, from, to, name, value) {
   return implode(chars);
 }
 
-/* ---- the editor's formatting edits (design §5: a format and a line
-   break are model edits, not execCommand) ---- */
-
-/* Does every character of [from, to) carry mark `name`? Only the
-   characters a reader sees as text count: a line break has no look of its
-   own to be bold or not, and a b-roll key is not the words being
-   formatted — so a selection over two separately bolded lines still reads
-   as bold. False for a range holding no such character. */
 export function markThroughout(cell, from, to, name) {
   var chars = explode(cell);
   from = clamp(cell, from);
@@ -937,24 +711,10 @@ export function markThroughout(cell, from, to, name) {
   return seen;
 }
 
-/* A toolbar button or Ctrl+B over a selection: already bold throughout
-   comes off, anything less goes on over all of it — so bolding across the
-   edge of an existing bold run makes one run, never a checkerboard. */
 export function toggleMark(cell, from, to, name) {
   return setMark(cell, from, to, name, !markThroughout(cell, from, to, name));
 }
 
-/* ---- stage directions (#167) ----
-
-   A direction for the performer — "(beat)", "(look to camera 2)" — is the
-   mark dir on ordinary words of the Audio column: the editor and the
-   Writer show it dim and bracketed, the teleprompter shows it in place but
-   leaves it out of the words voice follow listens for, and the read-time
-   estimate does not count it. The brackets are never in the cell; every
-   reader adds them (toPlainText, toMarkdown, toDocxRuns, app.css). */
-
-/* The whole direction at pos — the one holding the character after pos,
-   else the one before — as {from, to}, or null. */
 export function directionRangeAt(cell, pos) {
   var chars = explode(cell);
   pos = clamp(cell, pos);
@@ -966,17 +726,12 @@ export function directionRangeAt(cell, pos) {
   return { from: a, to: b };
 }
 
-/* The Direction button over a selection: already a direction throughout
-   comes off; anything less becomes one, without the spaces at its ends
-   (a double-click's trailing space would otherwise print "(beat )"). */
+// Strip end spaces or it prints "(beat )"
 export function toggleDirection(cell, from, to) {
   var r = directionToggleRange(cell, from, to);
   return setMark(cell, r.from, r.to, "dir", !r.off);
 }
 
-/* What toggleDirection acts on: {from, to, off} — the range itself when
-   it comes off, the range without its end spaces when it goes on (where
-   the editor puts the selection afterwards). */
 export function directionToggleRange(cell, from, to) {
   from = clamp(cell, from);
   to = clamp(cell, to);
@@ -988,18 +743,6 @@ export function directionToggleRange(cell, from, to) {
   return { from: from, to: to, off: false };
 }
 
-/* The typed shortcut: "((" words "))". The typing convention, signed off
-   by Adam for #167: a DOUBLE pair of round brackets, closed by typing the
-   second ")", turns the words between into a direction and the four
-   brackets go; one Ctrl+Z (a separate undo entry, like the tag shortcuts)
-   gives the literal "((words))" back. Single brackets are ordinary prose
-   and never convert. Only in the Audio column (the caller checks).
-   Called with pos just after the "))"; returns {cell, end} with end just
-   past the direction, or null when the text there is not one: nothing
-   between the pairs but spaces, a bracket, a line break or a b-roll key
-   inside, more than DIRECTION_MAX characters, a bracket that is part of a
-   tag, or words that already are a direction. "(((x))" makes "(" and a
-   direction "x"; "((x)))" — what typing ")" after an undo gives — stays. */
 var DIRECTION_MAX = 200;
 
 export function directionShortcut(cell, pos) {
@@ -1022,15 +765,9 @@ export function directionShortcut(cell, pos) {
   return { cell: setMark(next, open + lead, pos - 4 - trail, "dir", true), end: pos - 4 };
 }
 
-/* Directions in text that came from outside (an import, a Markdown table
-   edited by hand): each "((words))" in text that is not already one
-   becomes a direction, the way typing it would; and a direction that
-   arrives with its brackets round it — a .docx Splitpage wrote, which
-   prints them — loses them. For the Audio column only; the caller
-   decides. */
+// Import-only: ((words)) becomes direction; bracketed docx directions unwrap
 export function importDirections(cell) {
   var out = normalizeCell(cell);
-  /* brackets the writer printed round a direction */
   var chars = explode(out);
   var drop = [];
   for (var i = 0; i < chars.length;) {
@@ -1042,9 +779,6 @@ export function importDirections(cell) {
     i = j;
   }
   for (var d = drop.length - 1; d >= 0; d--) out = deleteRange(out, drop[d], drop[d] + 1);
-  /* "((words))" typed as text — the pattern holds no bracket inside, so
-     it finds the same pair the shortcut takes ("(((x))" matches at its
-     second bracket) */
   for (var guard = 0; guard < 1000; guard++) {
     var p = projection(out), done = true;
     var re = /\(\([^()\n￼]{1,200}\)\)/g, m;
@@ -1057,9 +791,6 @@ export function importDirections(cell) {
   return out;
 }
 
-/* A cell's directions as ordinary words again, each in the brackets it
-   was shown with — what a direction pasted into the Visual column, which
-   has none, becomes. A bracket is a run of its own, never part of a tag. */
 export function flattenDirections(cell) {
   var runs = normalizeCell(cell);
   if (!runs.some(isDirRun)) return runs;
@@ -1077,33 +808,6 @@ export function flattenDirections(cell) {
   return normalizeCell(out);
 }
 
-/* ---- sound cues (#219) ----
-
-   THE CONVENTION — Adam's decisions on #219 (2026-09-25); a typing
-   convention, so change none of it without asking him:
-   - "SFX:" or "Music:" starting a line of an Audio cell, in any case,
-     makes that whole line a sound cue. Mid-sentence the words are just
-     words. In the Visual column the same words start a plain-language
-     Music/SFX tag instead (#210, 07b-plain-tags.js).
-   - It turns into one the moment its colon is typed (cueShortcut, run by
-     05-render.js maybeCueShortcut), as an edit of its own, so one Ctrl+Z
-     gives the plain "SFX: …" words back, as for a b-roll marker.
-   - A cue is set apart from the words: its own small, dim line in the
-     editor with a note icon, in the Music/SFX colour (app.css .audio-cue);
-     never on the teleprompter, never in the read time, never listened for
-     by voice follow, left out of the narration export; its own styled line
-     in the script exports; an item in the Production panel's Music/SFX
-     list (07-production-tags.js tagsInField), with its owner and status.
-
-   It is the mark cue on every character of the line but its line break,
-   and the line's words, "SFX: door slam", stay in the cell as they were
-   typed — the keyword is how every reader, and a person reading a plain
-   export, knows what it is. The mark only ever covers whole lines whose
-   words still start with the keyword: settleCues, run by normalizeCell,
-   spreads it over the rest of a line that has any of it and takes it off
-   a line that no longer starts "SFX:" / "Music:" (its keyword deleted, a
-   line break typed through it). So typing on at the end of a cue is more
-   of the cue, and Enter at its end starts an ordinary line. */
 export var CUE_LINE_RE = /^[ \t\u00a0]*(sfx|music)[ \t\u00a0]*:/i;
 var CUE_TYPED_RE = /^[ \t\u00a0]*(sfx|music)[ \t\u00a0]*:$/i;
 
@@ -1142,8 +846,6 @@ function settleCues(runs) {
   return out;
 }
 
-/* The cell's lines as [{from, to, cue}] — to is before the line's own
-   break. */
 export function cueLines(cell) {
   var runs = normalizeCell(cell);
   var lines = [{ from: 0, to: 0, cue: false }];
@@ -1161,13 +863,6 @@ export function cueLines(cell) {
   return lines;
 }
 
-/* The cue's own name on a cue line: the stretches of words after its colon
-   that are not a tag, a stage direction or a b-roll key, as [{from, to}]
-   with the spaces round each left out. "SFX: door [slam] ((loud))" is the
-   sound "door": the tag is an item of its own and the direction is for
-   the performer, so neither is part of what the sound is called, and a
-   rename (editCues) rewrites only these stretches, leaving both where
-   they are. */
 function cueNameSpans(runs, from, to) {
   var other = [];
   runs.forEach(function (r) {
@@ -1196,10 +891,6 @@ function cueNameOf(p, spans) {
     .replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/* Each cue in the cell, in order, as {kind, name, text}: kind "sfx" or
-   "music" (the keyword, lower case), name the words after its colon that
-   are its own (cueNameSpans: what the Production panel lists it by), text
-   the whole line. */
 export function cuesInCell(cell) {
   var runs = normalizeCell(cell);
   if (!runs.some(isCueRun)) return [];
@@ -1219,9 +910,6 @@ export function cuesInCell(cell) {
   return out;
 }
 
-/* The cell without its cue lines, each taken out with one line break (the
-   one after it; the one before it for the last line) — what is said, for
-   the teleprompter, the read time and the narration export. */
 export function withoutCues(cell) {
   var runs = normalizeCell(cell);
   if (!runs.some(isCueRun)) return runs;
@@ -1239,12 +927,6 @@ export function withoutCues(cell) {
   return out;
 }
 
-/* The typed shortcut: pos is just after a ":" typed in an Audio cell.
-   When everything on the line before it is "SFX" or "Music" (spaces
-   allowed round it), the line becomes a cue — the words after the caret
-   too, if the colon went in the middle of a line that already had some.
-   Null otherwise, and on a line that already is one. The caller keeps
-   it to live typing in the Audio column. */
 export function cueShortcut(cell, pos) {
   pos = clamp(cell, pos);
   var p = projection(cell);
@@ -1258,9 +940,6 @@ export function cueShortcut(cell, pos) {
   return setMark(cell, from, to, "cue", true);
 }
 
-/* Cues in text that came from outside (an import, a Markdown table cell
-   edited by hand): each line starting "SFX:" or "Music:" becomes one, the
-   way typing it would. For the Audio column only; the caller decides. */
 export function importCues(cell) {
   var out = normalizeCell(cell);
   var p = projection(out);
@@ -1271,13 +950,6 @@ export function importCues(cell) {
   return out;
 }
 
-/* Rename or take off the cues whose name `match(name)` accepts — the
-   Production panel's rename and remove for a Music/SFX item that is a cue
-   (07-production-tags.js): a rename rewrites the cue's own name
-   (cueNameSpans), the keyword and its spacing kept and any tag or
-   direction on the line left as it is; a remove (newName null) makes the
-   line plain words again, as Ctrl+Z after typing one does, so the item
-   does not come straight back. */
 export function editCues(cell, match, newName) {
   var out = normalizeCell(cell);
   if (!out.some(isCueRun)) return out;
@@ -1296,10 +968,7 @@ export function editCues(cell, match, newName) {
       out = setMark(out, l.from, l.to, "cue", false);
       continue;
     }
-    /* a cue with no name of its own is no item, so nothing renames one */
     if (!spans.length) continue;
-    /* the later stretches go, each with the spaces before it, then the
-       first takes the new name */
     for (var k = spans.length - 1; k > 0; k--) {
       var from = spans[k].from;
       while (from > spans[k - 1].to && /[ \t\u00a0]/.test(p.charAt(from - 1))) from--;
@@ -1312,26 +981,13 @@ export function editCues(cell, match, newName) {
   return out;
 }
 
-/* A cell's cues as ordinary words again — what a cue pasted into the
-   Visual column, which has none, becomes. */
 export function flattenCues(cell) {
   var runs = normalizeCell(cell);
   if (!runs.some(isCueRun)) return runs;
   return setMark(runs, 0, cellLength(runs), "cue", false);
 }
 
-/* Enter / Shift+Enter over [from, to): the range replaced by a line break,
-   as {cell, pos} with pos just after the break.
-
-   At the very end of the cell there is nothing after the break to give the
-   new last line a box (a trailing <br> renders no line), so it goes in
-   twice with pos between the two — the sentinel the browser's own
-   insertLineBreak adds, which the next thing typed then sits in front of.
-
-   The break carries formatting on the way typing does (bold keeps going on
-   the next line). A comment or a link only where the text on both sides of
-   it is in the same one: a break typed inside a commented phrase stays
-   inside its one anchor, and one typed at its edge does not stretch it. */
+// At cell end a trailing <br> renders nothing; insert twice
 export function breakLine(cell, from, to) {
   from = clamp(cell, from);
   to = clamp(cell, to);
@@ -1369,12 +1025,10 @@ function editComment(cell, from, to, id, add) {
 
 export function addComment(cell, from, to, id) { return editComment(cell, from, to, id, true); }
 
-/* Without a range, everywhere in the cell. */
 export function removeComment(cell, id, from, to) {
   return editComment(cell, from === undefined ? 0 : from, to === undefined ? cellLength(cell) : to, id, false);
 }
 
-/* Where a comment's text is, as {from, to} over its first stretch, or null. */
 export function commentRange(cell, id) {
   var chars = explode(cell);
   var from = -1;
@@ -1403,8 +1057,6 @@ export function tagIds(cell) {
   return ids;
 }
 
-/* Every run tagged fromId now carries toId, or no tag at all when toId is
-   null: a tag removed, or two registry entries folded into one. */
 export function retag(cell, fromId, toId) {
   return normalizeCell(normalizeCell(cell).map(function (r) {
     if (r.atom || r.marks.tag !== fromId) return r;
@@ -1418,10 +1070,7 @@ export function splitCell(cell, pos) {
   return [sliceCell(cell, 0, pos), sliceCell(cell, pos)];
 }
 
-/* glue (a string, e.g. " ") goes between the two. It carries no formatting,
-   but it does carry a comment or a link the text on both sides of it is in
-   (breakLine's rule): a scene split through a commented phrase and joined
-   back is one anchor again, not two with a gap between them. */
+// Glue keeps shared comment/link; split-join stays one anchor
 export function joinCells(a, b, glue) {
   var runs = normalizeCell(a).slice();
   var rest = normalizeCell(b);
@@ -1443,26 +1092,6 @@ export function sameCell(a, b) {
   return JSON.stringify(normalizeCell(a)) === JSON.stringify(normalizeCell(b));
 }
 
-/* ---- where a comment is (design §3.2) ----
-
-   A comment's anchor is its cmt mark in the script's cells: the words
-   carry it wherever they go — split into a new scene, joined into the one
-   above, cut and pasted. comment.rowId / comment.field only SAY where that
-   is, for the panel's "Row 03 · Audio", its script-order sort, the jump
-   and the server; this is the one function that keeps them in step, run
-   wherever text moves between rows (a split, a join, a paste, a merge or
-   a load through migrateRows).
-
-   Each comment marked somewhere points at the first cell holding its mark,
-   in document order (row by row, the visual column before the audio, the
-   panel's own order). A comment whose mark is nowhere — its words deleted
-   — keeps what it had: it is detached, and still shows in the panel with
-   its quote. A conflict card and a title comment have no mark and are
-   never touched. Mutates the comments in place; returns how many moved.
-
-   Only cells whose HTML holds an anchor at all are read, and through
-   cellOf's cache, so a document of a thousand scenes and one comment costs
-   a thousand indexOf calls. */
 export function syncCommentAnchors(state) {
   var comments = state && state.comments;
   if (!Array.isArray(comments) || !comments.length) return 0;
@@ -1488,22 +1117,6 @@ export function syncCommentAnchors(state) {
   });
   return moved;
 }
-
-/* ---- steps (undo/redo) ----
-
-   One document change is a list of steps; one list is one undo entry.
-   A step records the value before and after, whatever the field holds —
-   a cell is stored as HTML (design D2), so a cell step carries HTML:
-
-     {op:"rowField", rowId, key, before, after}   a cell, status, picture…
-     {op:"docField", key, before, after}          title, registry, comments…
-     {op:"insertRow", index, row}
-     {op:"deleteRow", index, row}
-     {op:"moveRow", from, to}
-
-   applySteps() returns a new state and never mutates the one it is given.
-   A step whose `before` is not what the state holds is refused (throws):
-   an undo that no longer applies must fail whole, never half way. */
 
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
 function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
@@ -1565,9 +1178,6 @@ export function invertSteps(steps) {
   });
 }
 
-/* Which cells a step list touches, as "rowId\u0000field" keys — what the
-   undo stack compares with what a merge changed (design D4). A row
-   inserted or deleted touches both its cells. */
 export function touchedCells(steps) {
   var out = [];
   function add(k) { if (out.indexOf(k) === -1) out.push(k); }
@@ -1581,34 +1191,11 @@ export function touchedCells(steps) {
   return out;
 }
 
-/* ---- three-way merge of one cell (design §8) ----
-
-   Both sides changed the cell: merge the words, then the marks.
-   1. Each side's projection is cut into tokens — a word (a run of anything
-      but whitespace), one whitespace character, or one atom — and each side
-      is diffed against base.
-   2. Tokens neither side changed keep their characters, and each
-      character's marks are merged one mark at a time: whichever side
-      changed a mark wins; both changed it differently -> theirs, reported
-      in markConflicts. Only a link or a tag can be set differently (one
-      per character); formatting is on or off, so it never counts. The
-      document merge (mergeTextField, 03-sync.js) treats a count above
-      zero as a conflict: this cell stays live, my whole cell goes on a
-      card.
-   3. A stretch only one side changed takes that side. Both changed it the
-      same way: that. Differently: theirs, and conflict is true — the
-      caller keeps theirs live and puts my whole cell on a conflict card
-      (design D3).
-   Returns {cell, conflict, markConflicts}. */
-
 function tokenize(chars) {
   var toks = [];
   var i = 0;
   while (i < chars.length) {
     if (chars[i].atom) { toks.push({ key: OBJ + chars[i].atom.id, chars: [chars[i]] }); i++; continue; }
-    /* each whitespace character is a token of its own, so a change that
-       only widens or narrows a gap still leaves the words either side of
-       it in step */
     if (/\s/.test(chars[i].ch)) { toks.push({ key: chars[i].ch, chars: [chars[i]] }); i++; continue; }
     var j = i;
     var key = "";
@@ -1619,11 +1206,7 @@ function tokenize(chars) {
   return toks;
 }
 
-/* For each index of a, the index of b it is matched with in a longest
-   common subsequence of keys, or -1. Common ends are matched first, so the
-   table is only as big as the part that changed; past LCS_LIMIT cells of
-   table (a few thousand words rewritten on both sides) it gives up and
-   answers null, and the merge treats the cell as one conflicting change. */
+// Past this table size, gives up and answers null
 var LCS_LIMIT = 4000000;
 
 function lcsMap(a, b) {
@@ -1674,7 +1257,6 @@ function marksFromSet(set) {
   return m;
 }
 
-/* One character's marks, three ways. Returns {marks, conflict}. */
 function mergeMarks(o, a, b) {
   var so = markSet(o), sa = markSet(a), sb = markSet(b);
   var keys = {};
@@ -1684,8 +1266,6 @@ function mergeMarks(o, a, b) {
     var vo = !!so[k], va = !!sa[k], vb = !!sb[k];
     if (va === vo ? vb : va) out[k] = true;
   });
-  /* one link and one tag per character: where the set now holds two, the
-     sides set different ones — theirs */
   var conflict = false;
   ["href", "tag"].forEach(function (name) {
     var have = Object.keys(out).filter(function (k) { return k.indexOf(name + "=") === 0; });
@@ -1747,7 +1327,6 @@ export function mergeCells(base, mine, theirs) {
     if (!oS.length && !aS.length && !bS.length) return;
     var aSame = sameKeys(oS, aS), bSame = sameKeys(oS, bS);
     if (aSame && bSame) {
-      /* the words are the same on all three: only marks may differ */
       for (var i = 0; i < oS.length; i++) emitStable(oS[i], aS[i], bS[i]);
     } else if (aSame) {
       emit(bS);
@@ -1764,8 +1343,6 @@ export function mergeCells(base, mine, theirs) {
   var io = 0, ia = 0, ib = 0;
   for (var i = 0; i < o.length; i++) {
     if (ma[i] === -1 || mb[i] === -1) continue;
-    /* a token matched on both sides — but only a sync point if the
-       matches are in order with the last one */
     if (ma[i] < ia || mb[i] < ib) continue;
     chunk(o.slice(io, i), a.slice(ia, ma[i]), b.slice(ib, mb[i]));
     emitStable(o[i], a[ma[i]], b[mb[i]]);
@@ -1777,6 +1354,4 @@ export function mergeCells(base, mine, theirs) {
   return { cell: implode(out), conflict: conflict, markConflicts: markConflicts };
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}
