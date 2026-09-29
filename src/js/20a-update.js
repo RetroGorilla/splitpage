@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { arrivingOnLink } from "./13-hosted.js";
 
 var updateStatus = null;
 var updateNotice = null;
@@ -214,6 +215,7 @@ var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
 // Installer is Windows-only; phones, Mac, Linux get nothing
 export function desktopAppOffered() {
   if (S.DESKTOP) return false;
+  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
   return /Windows/.test(ua) && !/Mobi|Android/.test(ua);
 }

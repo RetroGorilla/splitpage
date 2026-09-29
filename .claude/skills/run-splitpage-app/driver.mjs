@@ -470,13 +470,14 @@ const KEY_MAP = {
 const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV, KeyP, KeyT";
 
 async function mouseEvent(rest) {
-  const m = /^\s*(down|move|up|right)\s+(.+)$/.exec(rest);
-  if (!m) throw new Error("mouse needs: down|move|up|right <js giving {x,y}>");
+  const m = /^\s*(down|move|up|right|hover)\s+(.+)$/.exec(rest);
+  if (!m) throw new Error("mouse needs: down|move|up|right|hover <js giving {x,y}>");
   const pt = await js(m[2]);
   if (!pt) throw new Error(`mouse ${m[1]}: no point from ${m[2]}`);
   const x = Math.trunc(pt.x), y = Math.trunc(pt.y);
   if (m[1] === "down") await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
   else if (m[1] === "move") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 });
+  else if (m[1] === "hover") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
   else if (m[1] === "up") await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
   else {
     await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "right", buttons: 2, clickCount: 1 });

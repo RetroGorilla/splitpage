@@ -1,0 +1,17 @@
+data/
+backups/
+.env
+.env.*
+*.splitpage.html
+_*.html
+
+.git/
+**/node_modules
+desktop/
+dist/
+.cache/
+.claude/
+.github/
+
+.update/
+update-status.json

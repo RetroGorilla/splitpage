@@ -344,7 +344,7 @@ ${line}
   code is checked by this computer but travels in the clear over plain
   HTTP, so anyone able to watch the network can read it as it goes past —
   fine on your own network, not on a public one or over the internet. For
-  the internet, put Splitpage behind Cloudflare Access (see DEPLOY.md).
+  the internet, run the server image behind a Cloudflare tunnel (DEPLOY.md).
   Close this window to stop sharing.`);
     if (reviewPin) {
       console.log(`
