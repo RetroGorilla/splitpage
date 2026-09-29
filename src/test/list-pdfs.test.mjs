@@ -48,7 +48,6 @@ const one = (texts, str) => {
 
 const SPW = 792, SM = 36;
 
-// Packing must leave nothing left of margin or past right
 function assertInsideMargins(pages, pw = PW, m = M) {
   pages.forEach((page, i) => {
     textsOf(page).forEach((t) => {
@@ -140,7 +139,6 @@ test("the packing list: a row per item, alphabetical, two boxes, the status as a
     const n = one(texts, name);
     return texts.filter((t) => t.y === n.y && t.str !== name);
   };
-  // No status word: it would go stale on paper
   const battery = row("button cell battery");
   assert.deepEqual(battery.map((t) => t.str), ["Sam", "13"]);
   assert.equal(battery[0].rgb, rgb(C.text));
@@ -227,7 +225,6 @@ test("the packing list: a long title wraps, notes and the b-roll shots under the
   const metas = texts.filter((t) => t.size === 10.5 && t.rgb === rgb(C.dim));
   assert.ok(metas.length >= 2, "wrapped");
   assert.equal(metas.map((t) => t.str).join(" "), LONG_TITLE + " · " + exportDateText());
-  // Line break in a note prints as space, never "?"
   assert.ok(!texts.some((t) => t.str.includes("?")));
   const kettle = one(texts, "Kettle"), brollLine = one(texts, "B-roll:");
   const noteLines = texts.filter((t) => t.x === kettle.x && t.font === "F1" && t.size === 9 && t.y < kettle.y && t.y > brollLine.y);

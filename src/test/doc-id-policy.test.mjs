@@ -109,7 +109,6 @@ test("chooseDuplicateLoser: one home, one document, and no id, no verdict", () =
 });
 
 test("chooseDuplicateLoser consults no birthtime — the branch is gone, not off", () => {
-  // atomicWrite rename moves NTFS birthtime; only seq is trusted (#76)
   const a = claim({ seq: 1, homeKey: "file:c:\\x\\a.md", birthtimeMs: 2_000_000 });
   const b = claim({ seq: 2, homeKey: "file:c:\\x\\b.md", birthtimeMs: 1_000_000 });
   assert.equal(loserBothWays(chooseDuplicateLoser, a, b), b);

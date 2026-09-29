@@ -25,7 +25,6 @@ export function __init() {
     if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     var field = reachTarget(e.target);
     if (!field) return;
-    // Stops browser focusing nothing before we focus field
     e.preventDefault();
     placeCaretAtEnd(field);
   });

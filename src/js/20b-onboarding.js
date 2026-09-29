@@ -282,7 +282,6 @@ async function submitOnboardJoin() {
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
-  // Restoring crash draft looks pristine; never welcome over it
   if (S.DESKTOP && draftRestorePending) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   if (S.DESKTOP) {
@@ -294,7 +293,6 @@ async function onboardEligibleForAutoShow() {
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
-  // Re-check: Skip/Finish may have run during the await
   if (readOnboardKey()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   return true;
@@ -341,7 +339,6 @@ export function __init() {
       }
     });
 
-    // Bubble phase, no stopPropagation: capture would swallow Escape
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); onboardSkip(); }
     });

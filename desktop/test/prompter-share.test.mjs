@@ -162,7 +162,6 @@ test("a share expires after its TTL", async () => {
   const share = makeShare({ now: () => clock, ttlMs: 60000 });
   try {
     const { port, token } = parseShareUrl(await share.publish("tab1", "a.md", "x"));
-    // tab2 published at same instant, so it also expires.
     const keep = parseShareUrl(await share.publish("tab2", "b.md", "y"));
     assert.equal((await request(port, "/prompter-script/" + token)).status, 200);
     clock += 60001;

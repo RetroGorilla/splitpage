@@ -3,7 +3,6 @@ import { S } from "./_state.js";
 var updateStatus = null;
 var updateNotice = null;
 var updateBusy = false;
-// Only user action resets; late statuses must not reshow bar
 var updateDismissed = false;
 
 var UPDATE_POLL_MS = 1500;
@@ -21,7 +20,6 @@ export function loadUpdateStatus() {
 }
 
 function fetchUpdateStatus() {
-  // no-store: must see what launcher wrote this run
   fetch("update-status.json", { cache: "no-store" })
     .then(function (res) { return res.ok ? res.json() : null; })
     .then(function (body) {
@@ -45,7 +43,6 @@ function pollUpdateStatus() {
 function applyUpdateStatus(status) {
   if (!status || typeof status !== "object") return;
   updateStatus = status;
-  // In-flight action's progress line overrides incoming status
   if (!updateBusy) updateNotice = null;
   renderUpdateNotice();
 }
@@ -178,7 +175,6 @@ function renderUpdateNotice() {
   if (!bar || !textEl) return;
 
   var plan = updateBarPlan();
-  // In-flight message keeps bar up, e.g. failures
   if (!plan && !updateNotice) {
     if (actionBtn) actionBtn.hidden = true;
     bar.hidden = true;
@@ -204,14 +200,12 @@ function renderUpdateNotice() {
 export function dismissUpdateNotice() {
   var bar = document.getElementById("update-bar");
   if (bar) bar.hidden = true;
-  // Stay dismissed: pushes and polling would otherwise reshow bar
   updateDismissed = true;
   if (updatePollTimer) { clearTimeout(updatePollTimer); updatePollTimer = null; }
 }
 
 var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
 
-// Installer is Windows-only; phones, Mac, Linux get nothing
 export function desktopAppOffered() {
   if (S.DESKTOP) return false;
   var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";

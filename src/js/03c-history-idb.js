@@ -10,7 +10,6 @@ var BODY_STORE = "bodies";
 var V1_STORES = ["docs", "snapMeta", "snapBody", "meta"];
 var V1_SNAPSHOT_STORES = ["snapMeta", "snapBody"];
 
-// Synchronous so the store can hash before a transaction opens
 export function hashText(text) {
   return sha256Bytes(new TextEncoder().encode(String(text)));
 }
@@ -123,7 +122,6 @@ export function createIdbHistoryBackend(o) {
     return new Promise(function (resolve, reject) {
       var req;
       try { req = factory.open(dbName); } catch (e) { reject(historyIdbError(e)); return; }
-      // Never create an empty version-1 db; it blocks every build
       req.onupgradeneeded = function () { try { req.transaction.abort(); } catch (e) {} };
       req.onsuccess = function () {
         var d = req.result;
@@ -239,7 +237,6 @@ export function createIdbHistoryBackend(o) {
           if (code) throw codedError(code, "Injected " + code + " fault");
           if (typeof sha !== "string" || !sha || typeof text !== "string") throw codedError("io", "history: bad body");
         } catch (e) { return Promise.reject(e); }
-        // Put-if-absent; bodies are content-addressed, rewrites waste quota
         return idbReq(bodies.count(sha)).then(function (n) {
           if (n > 0) return undefined;
           return idbReq(bodies.put({ sha: sha, stateJson: text })).then(noop);

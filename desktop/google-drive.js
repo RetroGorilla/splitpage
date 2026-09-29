@@ -265,12 +265,10 @@ function createGoogleDrive(opts) {
         });
         res.end(callbackPage(ok, msg));
       };
-      // Host check blocks DNS-rebinding pages from spending the callback
       if (host !== "127.0.0.1:" + port && host !== "localhost:" + port) { res.writeHead(421, { connection: "close" }); res.end(); return; }
       let u;
       try { u = new URL(req.url, "http://127.0.0.1:" + port); } catch (_) { res.writeHead(400); res.end(); return; }
       if (req.method !== "GET" || u.pathname !== "/" || done) { res.writeHead(404, { connection: "close" }); res.end(); return; }
-      // First callback wins; later requests get 404
       done = true;
       const q = u.searchParams;
       if (q.get("state") !== state) {
@@ -326,7 +324,6 @@ function createGoogleDrive(opts) {
       const json = await tokenRequest({
         grant_type: "authorization_code", code: result.code, redirect_uri: redirectUri, code_verifier: verifier
       });
-      // Without a refresh token sign-in lapses within the hour
       if (typeof json.refresh_token !== "string" || !json.refresh_token) {
         return { ok: false, code: "NO_REFRESH_TOKEN" };
       }
@@ -422,7 +419,6 @@ function createGoogleDrive(opts) {
       "?supportsAllDrives=true&fields=" + encodeURIComponent("id,name,mimeType,size,modifiedTime")));
     if (meta.mimeType === FOLDER_MIME) throw codeError("IS_A_FOLDER", "folder");
     let url;
-    // Native Docs have no bytes; export plain text
     if (meta.mimeType === "application/vnd.google-apps.document") {
       url = endpoints.drive + "/files/" + fileId + "/export?mimeType=text%2Fplain";
     } else if (/^application\/vnd\.google-apps\./.test(meta.mimeType)) {

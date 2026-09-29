@@ -93,7 +93,6 @@ if (has("--review-pin") || has("--share-readonly")) {
     process.exit(1);
   }
 }
-// Fragment key: link carries it without leaking review PIN.
 const reviewKey = reviewPin ? randomBytes(16).toString("hex") : "";
 
 function valuesOf(flag) {
@@ -187,7 +186,6 @@ function isFree(port) {
     const probe = createServer();
     probe.once("error", () => resolve(false));
     probe.once("listening", () => probe.close(() => resolve(true)));
-    // Probe the address the real server binds, not loopback.
     probe.listen(port, HOSTING ? "0.0.0.0" : "127.0.0.1");
   });
 }
@@ -220,9 +218,7 @@ function writeStatus(extra) {
   const version = readVersion();
   const latest = extra.latest !== undefined ? extra.latest : (previous.latest ?? null);
   const status = {
-    // Carry all prior fields; callers only supply some.
     ...previous,
-    // Staging path removed (#75); always null.
     pending: null,
     justUpdated: null,
     version,
@@ -241,7 +237,6 @@ function writeStatus(extra) {
 }
 
 const willCheck = !has("--no-update-check") && !!updater;
-// Lets page distinguish "no update" from "not checked yet".
 writeStatus({ checking: willCheck });
 
 if (willCheck) {
@@ -277,7 +272,6 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
     STATIC_DIR: ROOT,
     DATA_DIR,
     NO_API: LIBRARY ? "0" : "1",
-    // PIN only via env; never written to update-status.json.
     JOIN_PIN: joinPin,
     REVIEW_PIN: reviewPin,
     REVIEW_KEY: reviewKey,

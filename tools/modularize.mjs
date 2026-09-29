@@ -89,7 +89,6 @@ const stateNames = [...bindings.values()].filter((b) => b.onState).map((b) => b.
 const STATE = "S";
 if (bindings.has(STATE)) throw new Error("the name " + STATE + " is taken");
 
-// Static means no calls, member reads or binding refs.
 function isStatic(node) {
   if (!node) return false;
   switch (node.type) {
@@ -224,7 +223,6 @@ for (const stmt of topStatements) {
   frag.moves.push({ start: edge, end: stmt.range[1] });
 }
 
-// Never de-indent inside multi-line strings or templates.
 const protectedLines = new Set();
 (function findMultilineLiterals(node) {
   if (!node || typeof node !== "object") return;

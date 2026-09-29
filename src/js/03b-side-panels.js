@@ -6,7 +6,6 @@ import { closeCommentsPanel } from "./10-comments.js";
 export var SIDE_PANEL_IDS;
 
 var SIDE_PANEL_WIDTHS_KEY = "splitpage-panel-widths";
-// Honoured once as comments panel's initial width
 var LEGACY_COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
 var SIDE_PANEL_WIDTH_MIN = 280;
 var SIDE_PANEL_WIDTH_MAX = 720;
@@ -96,7 +95,6 @@ function initSidePanelResize(id) {
     startX = e.touches ? e.touches[0].clientX : e.clientX;
     startWidth = readSidePanelWidth(id);
     handle.classList.add("is-dragging");
-    // Disables #root padding transition; width rewrites every mousemove
     document.body.classList.add("is-panel-resizing");
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
@@ -169,7 +167,6 @@ function stepScriptPlace() {
 
 function letGoOfScriptPlace() { placeHold = null; }
 
-// Call before body.panel-open toggles; scroll bar removal shifts layout
 export function sidePanelOpening(open) {
   var html = document.documentElement;
   if (open) html.style.setProperty("--page-gutter", Math.max(0, window.innerWidth - html.clientWidth) + "px");
@@ -196,7 +193,6 @@ export function closeAllSidePanels() {
 }
 
 export function __init() {
-  // Derived from defaults map; panels cannot drift apart
   SIDE_PANEL_IDS = Object.keys(SIDE_PANEL_WIDTH_DEFAULTS);
   window.addEventListener("wheel", letGoOfScriptPlace, { passive: true });
   window.addEventListener("touchmove", letGoOfScriptPlace, { passive: true });

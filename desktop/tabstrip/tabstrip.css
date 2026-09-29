@@ -7,7 +7,6 @@
   --text: #171613;
   --visual: #2863AB;
   --danger: #C4302A;
-  /* Keep clear of native window controls overlay */
   --titlebar-inset: 150px;
 }
 
@@ -50,7 +49,6 @@ body {
   height: 36px;
   -webkit-app-region: drag;
   padding-left: 8px;
-  /* Inset must match titleBarOverlay controls width */
   padding-right: var(--titlebar-inset);
 }
 

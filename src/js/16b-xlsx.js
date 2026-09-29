@@ -84,7 +84,6 @@ function stringTable() {
       return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<sst xmlns="' + NS + '" count="' + count + '" uniqueCount="' + list.length + '">' +
         list.map(function (s) {
-          // Whitespace and newlines need xml:space preserve
           var keep = /^\s|\s$|\n/.test(s) ? ' xml:space="preserve"' : "";
           return "<si><t" + keep + ">" + xmlEscape(s) + "</t></si>";
         }).join("") + "</sst>";
@@ -183,7 +182,6 @@ export function buildWorkbook(sheets, title, styles) {
     '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
     '<Relationship Id="rId3" Type="' + NS_R + '/extended-properties" Target="docProps/app.xml"/>' +
     "</Relationships>";
-  // Day granularity: same-day exports give identical bytes
   var d = new Date();
   var day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
   var core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +

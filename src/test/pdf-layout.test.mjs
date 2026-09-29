@@ -106,7 +106,6 @@ test("picture-only rows, a picture with short text and one with long text never 
   ]));
   const images = checkLayout(pages);
   assert.equal(images.length, 6);
-  // Second picture once drew over the first
   assert.equal(images[1].w, VW);
   assert.equal(images[1].h.toFixed(2), (VW * 2 / 3).toFixed(2));
 });

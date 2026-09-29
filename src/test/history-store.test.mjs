@@ -88,7 +88,6 @@ test("put over maxBodyBytes answers 'too-large' and writes nothing", async () =>
 test("a put stamps strictly after the newest snapshot in its bucket; `at` keeps the wall clock", async () => {
   const { store } = fixture();
   await store.put(DOC_A, meta("s01", 5000, { at: "2026-01-01T00:00:05.000Z" }), body("a"));
-  // Clock going backwards must not reorder the newest snapshot
   await store.put(DOC_A, meta("s02", 1000, { at: "2026-01-01T00:00:01.000Z" }), body("b"));
   const listed = (await store.list(DOC_A)).entries;
   assert.deepEqual(listed.map((m) => [m.id, m.atMs]), [["s02", 5001], ["s01", 5000]]);
@@ -185,7 +184,6 @@ test("nothing evictable → no retry, the stuck flag is set, and nothing more is
   assert.deepEqual(r, { stored: false, code: "quota", evicted: 0, overCap: true });
   assert.equal(backend.counts.put - putsBefore, 1, "no second attempt when nothing was freed");
 
-  // Stuck: next refusal answers at once, no eviction job
   const exBefore = backend.counts.exclusive;
   backend.failNext("put", "quota", 1);
   assert.deepEqual(await store.put(DOC_B, meta("b02", 2), body("b2")), { stored: false, code: "quota", evicted: 0, overCap: true });
@@ -232,7 +230,6 @@ test("holds: a held snapshot survives the trim, the cap and the Older sweep; rel
   await store.importOlder([{ meta: meta("o01", 1), stateJson: body("o1") }, { meta: meta("o02", 2), stateJson: body("o2") }]);
   const release = store.hold({ older: true, id: "o01" });
   const again = store.hold({ older: true, id: "o01" });
-  // Cap evicts the Older bucket first, as a whole
   await store.evict(0);
   assert.deepEqual((await store.list(null)).older.map((m) => m.id), ["o01"]);
   release();
@@ -349,7 +346,6 @@ test("importOlder: put-if-absent, no stamp, 90 days from creation that a re-impo
     { ok: true, count: 3, added: 1 });
   listed = await store.list(null);
   assert.equal(listed.olderExpiresAt, 50_000 + HISTORY_OLDER_TTL_MS, "not extended");
-  // Sweep list() queued runs before the next job
   const raw = await store.rawIndex();
   assert.equal(raw[HISTORY_OLDER_KEY].migratedAt, 50_000);
   assert.equal(raw[HISTORY_OLDER_KEY].lastOpenedAt, 0);

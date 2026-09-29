@@ -89,7 +89,6 @@ export function legacyMdToHtml(text) {
   });
   out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
-    // url already entity-encoded; re-escaping double-encodes &
     var safe = safeHref(url);
     return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : m;
   });
@@ -141,7 +140,6 @@ function moveMediaOutOfCell(row, field) {
       resolvedBy: null,
       resolvedAt: null,
       assignee: "",
-      // Never "now"; copies read at different times would disagree
       createdAt: row.updatedAt || "",
       updatedAt: row.updatedAt || "",
       kind: "anchor",
@@ -153,10 +151,8 @@ function moveMediaOutOfCell(row, field) {
 
 export function migrateRows(s) {
   if (!s || typeof s !== "object") s = { title: "Untitled Script", rows: [], comments: [] };
-  // Newer schemas must not re-run lossy legacy conversion
   var legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;
 
-  // Must precede defaults pass, which makes empty and absent identical
   var hadTagRegistry = "productionTags" in s;
 
   STATE_FIELDS.forEach(function (f) {
@@ -179,7 +175,6 @@ export function migrateRows(s) {
     r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
     delete r.visualImage;
     migrateGallery(r);
-    // Empty string, not null; new Date(null) is epoch
     if (!r.updatedAt) r.updatedAt = "";
     r.updatedBy = r.updatedBy ? plainName(r.updatedBy) : null;
     ["visualText", "audioText"].forEach(function (field) {
@@ -205,7 +200,6 @@ export function migrateRows(s) {
       c.anchorId = null;
     } else {
       c.rowId = safeId(c.rowId, "r");
-      // Fall back to comment id; deleteComment finds anchor by it
       c.anchorId = safeId(c.anchorId || c.id, "c");
       c.field = (c.field === "visualText" || c.field === "visualImage") ? c.field : "audioText";
     }
@@ -249,7 +243,6 @@ export function migrateRows(s) {
     p.name = plainText(p.name).trim().slice(0, 60);
   });
   s.people = s.people.filter(function (p) { return p.name; });
-  // Null prototype; inherited names would resolve as people
   var knownPeople = Object.create(null);
   s.people.forEach(function (p) { knownPeople[p.id] = true; });
 
@@ -306,7 +299,6 @@ export function migrateRows(s) {
 
   s.title = plainText(s.title).slice(0, 300);
   if (typeof s.rev !== "number") s.rev = 0;
-  // Bad id must fail unique; shared ids share history
   s.docId = normalizeDocId(s.docId) || mintDocId();
   s.schema = SCHEMA_VERSION;
   return s;

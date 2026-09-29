@@ -11,7 +11,6 @@ function defaultTagOf(id) {
   return m ? { cat: m[1], name: m[2] } : null;
 }
 
-// Zero-width space is a caret spot, never content
 function cleanText(t) {
   /* eslint-disable-next-line no-control-regex -- C0 controls are exactly what cell text must not carry. */
   return String(t == null ? "" : t).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g, "");
@@ -86,7 +85,6 @@ export function normalizeCell(cell, opts) {
     runs.push({ text: t, marks: m });
   });
 
-  // Tag is atomic; comment, link, direction cover all or none
   for (var i = 0; i < runs.length;) {
     var tag = runs[i].atom ? null : runs[i].marks.tag;
     if (!tag) { i++; continue; }
@@ -132,7 +130,6 @@ export function fromHtml(html, opts) {
   (function walk(node, marks) {
     Array.prototype.forEach.call(node.childNodes, function (child) {
       if (child.nodeType === 3) {
-        // Text-node line feed renders as space; only <br> breaks
         var t = String(child.nodeValue || "").replace(/[\r\n]+/g, " ");
         if (t) runs.push({ text: t, marks: marks });
         return;
@@ -325,7 +322,6 @@ export function toPlainText(cell, opts) {
   return out.replace(/\u00a0/g, " ").trim();
 }
 
-// Feeds read-time estimate; excludes directions and sound cues
 export function spokenText(cell) {
   return toPlainText(cell, { directions: "omit", cues: "omit" });
 }
@@ -469,19 +465,16 @@ function mdRuns(tokens, strs, asHtml) {
   return runOf;
 }
 
-// CommonMark rule of 3
 function mdRuleOf3(a, b) {
   return (a.both || b.both) && (a.len + b.len) % 3 === 0 && !(a.len % 3 === 0 && b.len % 3 === 0);
 }
 
-// Unpairable delimiters fall back to HTML
 function mdSettle(tokens) {
   var asHtml = {};
   for (;;) {
     var strs = mdRender(tokens, asHtml);
     var runOf = mdRuns(tokens, strs, asHtml);
     var openRun = {}, outer = { "*": [], "~": [] };
-    // Fix position problems before pairing ones; avoids pair switching
     var bad = null, badPairing = null;
     for (var i = 0; i < tokens.length && bad === null; i++) {
       var t = tokens[i], run = runOf[i];
@@ -601,7 +594,6 @@ export function marksAt(cell, pos) {
   return c ? Object.assign({}, c.atom ? c.atom.marks : c.marks) : {};
 }
 
-// Tags, comments, links never carry onto typed text
 export function typingMarks(cell, pos) {
   var m = marksAt(cell, pos);
   delete m.tag;
@@ -669,7 +661,6 @@ export function replaceWithTag(cell, from, to, text, id) {
   return { cell: setMark(next, a, end, "tag", id), end: end };
 }
 
-// Key carries no marks; b-roll list can't read wrapped keys
 export function replaceWithBrollKey(cell, from, to, id, keyText) {
   var a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
   return { cell: insertBrollKey(deleteRange(cell, a, b), a, id, keyText, {}), end: a + 1 };
@@ -726,7 +717,6 @@ export function directionRangeAt(cell, pos) {
   return { from: a, to: b };
 }
 
-// Strip end spaces or it prints "(beat )"
 export function toggleDirection(cell, from, to) {
   var r = directionToggleRange(cell, from, to);
   return setMark(cell, r.from, r.to, "dir", !r.off);
@@ -765,7 +755,6 @@ export function directionShortcut(cell, pos) {
   return { cell: setMark(next, open + lead, pos - 4 - trail, "dir", true), end: pos - 4 };
 }
 
-// Import-only: ((words)) becomes direction; bracketed docx directions unwrap
 export function importDirections(cell) {
   var out = normalizeCell(cell);
   var chars = explode(out);
@@ -987,7 +976,6 @@ export function flattenCues(cell) {
   return setMark(runs, 0, cellLength(runs), "cue", false);
 }
 
-// At cell end a trailing <br> renders nothing; insert twice
 export function breakLine(cell, from, to) {
   from = clamp(cell, from);
   to = clamp(cell, to);
@@ -1070,7 +1058,6 @@ export function splitCell(cell, pos) {
   return [sliceCell(cell, 0, pos), sliceCell(cell, pos)];
 }
 
-// Glue keeps shared comment/link; split-join stays one anchor
 export function joinCells(a, b, glue) {
   var runs = normalizeCell(a).slice();
   var rest = normalizeCell(b);
@@ -1206,7 +1193,6 @@ function tokenize(chars) {
   return toks;
 }
 
-// Past this table size, gives up and answers null
 var LCS_LIMIT = 4000000;
 
 function lcsMap(a, b) {

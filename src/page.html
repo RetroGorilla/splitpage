@@ -2,13 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Must precede scripts; meta CSP only governs later content. -->
 <meta http-equiv="Content-Security-Policy" content="{{CSP}}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
 <meta name="splitpage-version" content="{{VERSION}}">
-<!-- Wizard shows only if #state-data still matches this checksum. -->
 <meta name="splitpage-seed-check" content="{{SEED_CHECK}}">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#F1F0ED" media="(prefers-color-scheme: light)">
@@ -17,7 +15,6 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Print media avoids render-blocking; 00-prelude promotes it (CSP forbids onload). -->
 <link id="font-css"
       href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap"
       rel="stylesheet" media="print">
@@ -99,7 +96,6 @@
     <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
     <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
     <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
-    <!-- Logo: fixed colours in both themes; sized by box only. -->
     <symbol id="i-mark" viewBox="0 0 512 512"><rect x="12" y="12" width="488" height="488" rx="100" fill="#0F0E0C" stroke="#43423F" stroke-width="24"/><rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/><rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/><circle cx="404" cy="116" r="50" fill="#0F0E0C"/><circle cx="404" cy="116" r="38" fill="#D7352D"/><circle cx="404" cy="116" r="26" fill="#F45246"/></symbol>
     <symbol id="i-rundown-min" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="6" height="6" rx="1"/><rect x="11" y="5.5" width="3.5" height="6" rx="1"/><rect x="16" y="5.5" width="4.5" height="6" rx="1"/><path d="M3.5 17.5h17"/></symbol>
   </defs>
@@ -358,7 +354,6 @@
 
 <button class="tag-suggest" id="tag-suggest" type="button" tabindex="-1"></button>
 
-<!-- Outside #root; tag-sample not tag-anchor so tag scanners ignore it. -->
 <section class="tagging-help" id="tagging-help" role="dialog" aria-labelledby="tagging-help-title" tabindex="-1" hidden>
   <div class="tagging-help-head">
     <h2 class="tagging-help-title" id="tagging-help-title">Tagging reference</h2>
@@ -518,7 +513,6 @@
     </div>
   </div>
   <div class="prompter-viewport">
-    <!-- Sibling of scroller: Mirror/Flip must not transform the guide. -->
     <div class="prompter-guide" aria-hidden="true">
       <div class="prompter-band"><svg class="pp-pointer" viewBox="0 0 22 26" aria-hidden="true"><path d="M0 0L22 13L0 26z"/></svg></div>
     </div>
@@ -1395,7 +1389,6 @@
   </div>
 </div>
 
-<!-- Saves splice document here; page must stay one self-contained file. -->
 <script id="state-data" type="application/json">
 {{SEED_STATE}}
 </script>

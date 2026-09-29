@@ -92,7 +92,6 @@ test("sanitizeHistoryMeta: atMs and at each fill in for the other", () => {
   const fromText = sanitizeHistoryMeta({ id: "s01", at: "2026-01-02T03:04:05.000Z" });
   assert.equal(fromText.atMs, Date.parse("2026-01-02T03:04:05.000Z"));
   assert.equal(fromText.at, "2026-01-02T03:04:05.000Z", "the wall-clock text the user saw is kept");
-  // Missing at derives from atMs; missing atMs parses text
   const fromMs = sanitizeHistoryMeta({ id: "s01", atMs: 1735786800000 });
   assert.equal(fromMs.at, new Date(1735786800000).toISOString());
   for (const m of [{ id: "s01" }, { id: "s01", atMs: NaN }, { id: "s01", atMs: "x" }]) {
@@ -126,7 +125,6 @@ test("historyStampAfter: no newest, or an unusable one, changes nothing", () => 
   assert.equal(historyStampAfter(m, 5), m);
 });
 
-// desktop/main.js requires this file as CommonJS
 test("a require() sees exactly what an import does — this file is CommonJS on purpose", () => {
   const require = createRequire(import.meta.url);
   const cjs = require("../../shared/history-policy.js");
@@ -150,7 +148,6 @@ test("historyUtf8Length: UTF-8 bytes without encoding a copy (moved here from 03
   assert.equal(historyUtf8Length("\udc00x"), 4);
 });
 
-// No _dom.mjs import: module must load without any DOM
 test("the module needs no DOM, no Electron and no init", () => {
   assert.equal(typeof globalThis.window, "undefined");
   assert.equal(typeof globalThis.document, "undefined");

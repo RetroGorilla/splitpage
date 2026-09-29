@@ -37,7 +37,6 @@ var draftTiming = {
   serverWait: 20000
 };
 
-// Store refuses non-increasing seq; blocks stale in-flight writes
 var draftSeq = 0;
 var draftIdleTimer = null;
 var draftMaxTimer = null;
@@ -61,7 +60,6 @@ function draftWriterLive() {
   return !!(S.DESKTOP && typeof S.DESKTOP.writeDraft === "function" && !draftStopped);
 }
 
-// O(1): runs on every keystroke; only moves timers
 export function noteDraftChange() {
   if (!draftWriterLive()) return;
   draftChangePending = true;
@@ -127,7 +125,6 @@ function draftOriginSignature(origin) {
 function captureAndSendDraft() {
   clearDraftTimers();
   if (!draftWriterLive() || !S.state) return Promise.resolve(null);
-  // Restore owns draft; writing now gets HELD and shows toast
   if (draftRestorePending) { draftChangePending = true; return Promise.resolve(null); }
   if (draftInFlight) { draftChangePending = true; return draftInFlight; }
 
@@ -167,7 +164,6 @@ function captureAndSendDraft() {
   var elapsed = Date.now() - startedAt;
   draftSlow = stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs;
 
-  // Ancestor changes only on save/open, not edits
   var editSeqAtCapture = S.editSeq;
   var baseAtCapture = S.baseState;
   var sendBase = S.baseState !== draftSentBase;
@@ -248,7 +244,6 @@ function sendDraftPayload(payload, baseTextFor, retriedWithBase) {
   return Promise.resolve().then(function () {
     return S.DESKTOP.writeDraft(payload);
   }).then(function (r) {
-    // NEED_BASE is a handshake: no count, no backoff
     if (r && r.ok === false && r.code === "NEED_BASE" && !retriedWithBase) {
       var again = {};
       for (var k in payload) { if (Object.prototype.hasOwnProperty.call(payload, k)) again[k] = payload[k]; }
@@ -334,7 +329,6 @@ function draftMigrate(json) {
   return migrateRows(raw);
 }
 
-// Sorted keys: parsed-from-disk vs live ordering must compare equal
 function draftStableJson(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v === undefined ? null : v);
   if (Array.isArray(v)) {
@@ -407,7 +401,6 @@ function showDraftPendingBanner(t, title) {
     btn.addEventListener("click", function () {
       var waiting = draftPendingFor;
       if (!waiting) { hideDraftPendingBanner(); return; }
-      // Disarm first: resume after PIN dialog would double-merge
       S.draftServerResume = null;
       hideDraftPendingBanner();
       recoverDraftAsUnsavedCopy(waiting,
@@ -433,7 +426,6 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   }
 
   S.state = mine;
-  // Never saved: no ancestor, merge starts from nothing
   setBaseState(null, "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor");
   setHome("none");
   resetProductionPanelState();
@@ -584,7 +576,6 @@ async function restoreFileDraft(t, mine, base, origin) {
   }
 
   var disk = parsed.state;
-  // docIdEmbedded rule: only a different embedded id means new script
   var refId = normalizeDocId((base && base.docId) || mine.docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(disk.docId) !== refId) {
     recoverDraftAsUnsavedCopy(t,
@@ -622,7 +613,6 @@ async function restoreFileDraft(t, mine, base, origin) {
     newBase: diskCopy,
     historyFrom: mine.docId,
     chips: true,
-    // Invariant #41: unreviewed merge never auto-saved
     noAutoSave: true,
     toast: {
       text: (file.name || "That file") + " had changed since the last session — your recovered " +
@@ -705,7 +695,6 @@ export async function applyTakenDraft(t) {
 }
 
 export function __init() {
-  // Pending: counts unsaved, not pristine; draft writes would be HELD
   draftRestorePending = !!(S.DESKTOP && S.DESKTOP.hasDraftToRestore);
 
   draftOnDisk = !!(S.DESKTOP && S.DESKTOP.hasDraftToRestore);

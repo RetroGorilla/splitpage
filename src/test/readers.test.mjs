@@ -132,7 +132,6 @@ test("teleprompter: where the model draws differently", () => {
   assert.equal(newPrompterScene("<strong>bo</strong><strong>ld</strong>"),
     '<strong><span class="w">bold</span></strong>');
   assert.equal(wordCount(newPrompterScene("<strong>bo</strong>ld")), 2);
-  // Leading line break trimmed even inside formatting
   assert.equal(newPrompterScene("<strong><br>x</strong>"), '<strong><span class="w">x</span></strong>');
   assert.equal(oldPrompterScene("<strong><br>x</strong>"), '<strong><br><span class="w">x</span></strong>');
   assert.equal(newPrompterScene("<strong></strong>"), null);

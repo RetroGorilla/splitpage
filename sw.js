@@ -1,4 +1,3 @@
-// Stamped by build.mjs from VERSION; never hand-edit.
 var CACHE = "splitpage-3.0.0";
 var SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-maskable.svg"];
 
@@ -24,13 +23,10 @@ self.addEventListener("fetch", function (event) {
   var url = new URL(event.request.url);
   if (url.origin !== location.origin) return;
 
-  // API responses are documents; caching serves stale revisions.
   if (/(^|\/)api\//.test(url.pathname)) return;
 
-  // Cache Storage ignores fetch's no-store; must bypass here.
   if (/(^|\/)update-status\.json$/.test(url.pathname)) return;
 
-  // Query URLs (?doc=) must never be written to cache.
   var cacheable = url.search === "";
 
   var isShellDoc = event.request.mode === "navigate" || url.href === INDEX_URL || url.href === ROOT_URL;
