@@ -136,7 +136,6 @@ var CHIP_PAD = String.fromCharCode(0x2009);
 var CHIP_PAD_ENDS = new RegExp("^" + CHIP_PAD + "+|" + CHIP_PAD + "+$", "g");
 var NBSP = String.fromCharCode(0xA0);
 
-// Child order must follow schema CT_RPr
 function rPrXml(p) {
   var out = "";
   if (p.style) out += '<w:rStyle w:val="' + p.style + '"/>';
@@ -409,7 +408,6 @@ export function buildDocx() {
     }
   };
 
-  // Comment pictures reuse the row picture's media part
   var pictureParts = {};
 
   var facts = exportFacts();
@@ -428,7 +426,6 @@ export function buildDocx() {
   var maxW = (COL_VISUAL - 200) * 635;
   S.state.rows.forEach(function (row, idx) {
     var visual = "";
-    // Bytes preloaded by buildFileData; missing ones are skipped
     var pic = rowImage(row) && rowImageBytes(row);
     if (pic) {
       try {
@@ -576,7 +573,6 @@ export function buildDocx() {
         pictureParts[sha] = img;
       }
       if (!img) return docxLineBreakParagraph("[image unavailable]", indentDxa, "<w:i/>");
-      // Twips to EMU is x635
       var scale = Math.min(9525, (10080 - indentDxa) * 635 * CIMG_MAXW / img.w, CIMG_MAXH / img.h);
       var cx = Math.max(1, Math.round(img.w * scale));
       var cy = Math.max(1, Math.round(img.h * scale));
@@ -886,7 +882,6 @@ function isDroppedRun(rEl) {
   return st === MARKER_STYLE.toLowerCase() || st === SCENE_NO_STYLE.toLowerCase();
 }
 
-// Only export-drawn underlines carry colour, never typed ones
 function colouredUnderline(props) {
   var el = props.getElementsByTagNameNS(W_NS, "u")[0];
   return !!el && !!(el.getAttributeNS(W_NS, "color") || el.getAttribute("w:color"));
@@ -905,7 +900,6 @@ function docxParaToHtml(pEl, linkMap, opts) {
       u = docxFlag(props, "u");
       s = docxFlag(props, "strike");
       mark = docxFlag(props, "highlight");
-      // Style marks a direction, not the writer's italic
       var rsv = runStyleName(rEl);
       if (rsv === DIRECTION_STYLE.toLowerCase()) { dir = true; i = false; }
       if (rsv === BROLL_STYLE.toLowerCase()) { b = false; chip = true; }
@@ -1022,7 +1016,6 @@ function exportTailStart(blocks) {
   return blocks.length;
 }
 
-// Foreign tables may add scene column or swap order
 function mapTableColumns(rowsText) {
   var head = (rowsText[0] || []).map(function (t) { return t.toLowerCase().trim(); });
   if (isBreakdownHeader(head)) return null;
@@ -1069,7 +1062,6 @@ export async function docxToRows(file) {
     return n.localName === "tbl" ? tableStyleName(n) === EXPORT_TABLE_STYLE : paraStyleName(n) === META_STYLE.toLowerCase();
   });
   var paraOpts = { ownExport: ownExport };
-  // Export tail sections and meta line are not rows
   blocks = blocks.slice(0, exportTailStart(blocks)).filter(function (n) {
     return !(n.localName === "p" && paraStyleName(n) === META_STYLE.toLowerCase());
   });
@@ -1109,7 +1101,6 @@ export async function docxToRows(file) {
         cellHtml.push(tcs.map(function (tc) {
           var parts = [];
           directChildren(tc, "p").forEach(function (pEl) {
-            // Video links belong to the gallery, not words
             var vl = docxVideoLinksOf(pEl, linkMap);
             if (vl) { vl.forEach(function (l) { rowLinks.push(l); }); return; }
             var h = docxParaToHtml(pEl, linkMap, paraOpts);

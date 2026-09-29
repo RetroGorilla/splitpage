@@ -27,7 +27,6 @@ import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
 
-// Assigned in __init() to keep fragment order
 var commentFilter;
 
 export var TAGGING_HELP_KEY = "splitpage-tagging-help-dismissed";
@@ -255,7 +254,6 @@ function commentAssigneeCandidates() {
 export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
-  // Review sessions cannot edit stored comments; restore select
   if (reviewBlocked()) { renderComments(); return; }
   S.state.comments[idx].assignee = plainText(name || "").trim().slice(0, 80);
   S.state.comments[idx].updatedAt = nowIso();
@@ -505,7 +503,6 @@ export function commentBodyText(entry) {
   return pieces.map(function (p) { return p.image ? COMMENT_IMAGE_TEXT : p.text; }).join("\n");
 }
 
-// Fallback for rows folded by hide-shot-scenes; not orphaned
 function anchorTextFromState(cmtId) {
   if (!S.state) return null;
   var cIdx = findCommentIndex(cmtId);
@@ -518,7 +515,6 @@ function anchorTextFromState(cmtId) {
   return span ? span.textContent : null;
 }
 
-// Anchor span is editable; live text may differ from quotedText
 function anchorLiveText(cmtId) {
   var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   if (el) return el.textContent;
@@ -744,7 +740,6 @@ export function jumpToAnchor(cmtId) {
     showToast("That text is no longer in the script.", "warn");
     return;
   }
-  // Deliberately leaves the comments panel open
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   el.classList.remove("flash");
   void el.offsetWidth;
@@ -858,7 +853,6 @@ function placeCommentMenu() {
   if (r.bottom > box.bottom - 8 && r.top - r.height - 40 > box.top + 8) menu.classList.add("opens-up");
 }
 
-// Closing also disarms any pending Delete confirmation
 function closeCommentMenu(refocus) {
   var id = commentMenuFor;
   if (!id) return;
@@ -1045,11 +1039,9 @@ export function restoreConflictValue(commentId) {
 
   pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
   if (c.field === "visualImage") {
-    // Picture is the card's record, not its body
     delete S.state.rows[ri].visualImage;
     S.state.rows[ri].imageRef = c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null);
   } else {
-    // Empty original must restore empty, not placeholder
     S.state.rows[ri][c.field] = c.emptyValue ? "" : sanitizeHtml(c.body);
   }
   stampRow(S.state.rows[ri]);

@@ -1,4 +1,3 @@
-// Strips keyed by covered ids so re-collapse is same strip
 export function rowMotionKey(el) {
   if (!el || !el.classList) return null;
   if (el.classList.contains("row")) return "row:" + el.getAttribute("data-id");
@@ -6,7 +5,6 @@ export function rowMotionKey(el) {
   return null;
 }
 
-// Beyond this render() behaves as before, no motion
 var ROW_MOTION_MAX_ROWS = 200;
 var ROW_MOTION_MAX_ENTER = 4;
 var ROW_MOTION_MAX_EXIT = 12;
@@ -20,7 +18,6 @@ function rowMotionEnabled() {
   return true;
 }
 
-// Document space, not viewport; refocus scroll would look like moves
 function measureRowMotion(rowsEl) {
   var out = { keys: [], rect: Object.create(null), node: Object.create(null) };
   var kids = rowsEl.children;
@@ -48,7 +45,6 @@ export function rowMotionMs(name, fallback) {
   } catch (e) { return fallback; }
 }
 
-// paint() runs exactly once; never skipped or deferred here
 export function withRowMotion(rowsEl, paint) {
   if (!rowsEl || !rowMotionEnabled() || rowsEl.children.length > ROW_MOTION_MAX_ROWS) {
     paint();
@@ -90,7 +86,6 @@ export function withRowMotion(rowsEl, paint) {
 
     if (!moved.length && !entered.length && !exited.length) return;
 
-    // Replaced document is not a change; no animation
     var bulk = !before.keys.length || !after.keys.length ||
       entered.length > ROW_MOTION_MAX_ENTER || exited.length > ROW_MOTION_MAX_EXIT;
 
@@ -101,7 +96,6 @@ export function withRowMotion(rowsEl, paint) {
       );
     }
 
-    // No fade-out; the gap closing already shows deletions
     if (!bulk) {
       for (i = 0; i < entered.length; i++) {
         entered[i].animate(

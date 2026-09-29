@@ -12,6 +12,7 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
+import { openCollaborate } from "./13b-collaborate.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import { setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
@@ -73,12 +74,11 @@ export function openPinDialog(opts) {
     onDone: opts.onDone || null
   };
   document.getElementById("pin-reason").textContent =
-    opts.reason || "This server asks for a join PIN.";
+    opts.reason || "This server asks for its join PIN or key.";
   var input = document.getElementById("pin-input");
   input.value = "";
   setPinError("");
   modal.hidden = false;
-  // Modal owns focus (invariant #19)
   input.focus();
 }
 
@@ -111,7 +111,12 @@ export async function joinServer(base, pin, key) {
   }
   var body = null;
   try { body = await res.json(); } catch (e) { }
-  if (res.ok && body && body.token) return { ok: true, token: body.token, role: body.role || "edit" };
+  if (res.ok && body && body.token) {
+    var joined = { ok: true, token: body.token, role: body.role || "edit" };
+    if (typeof body.docId === "string") joined.docId = body.docId;
+    if (typeof body.scope === "string") joined.scope = body.scope;
+    return joined;
+  }
   if (res.status === 429) return { ok: false, error: "too-many-attempts" };
   if (res.status === 404 || !body) return { ok: false, error: "not-splitpage" };
   return { ok: false, error: (body && body.error) || ("HTTP " + res.status) };
@@ -119,13 +124,13 @@ export async function joinServer(base, pin, key) {
 
 export function joinErrorText(code) {
   if (code === "bad-pin") return "That code was not right. Ask whoever is hosting for it again.";
+  if (code === "link-off") return "The owner turned off this link. Ask them for a new one.";
   if (code === "too-many-attempts") return "Too many wrong codes. Wait a minute, then try again.";
   if (code === "offline") return "No answer from that address. Check it, and that the session is still running.";
   if (code === "not-splitpage") return "Something answered, but it was not a Splitpage server.";
   return "Could not join: " + code + ".";
 }
 
-// Unreachable machine hangs; prevents clickable-looking busy buttons
 async function withBusy(button, label, work) {
   var was = button ? button.textContent : "";
   if (button) { button.disabled = true; button.textContent = label; }
@@ -154,14 +159,12 @@ async function submitPin() {
   var done = pinRequest.onDone;
   var base = pinRequest.base;
   closePinDialog();
-  // Token is only set on its own connection
   var forThisTab = normalizeServerBase(base) === conn.serverUrl;
   if (forThisTab) setServerToken(result.token, remember);
   showToast("Joined" + (base ? " " + shortHost(base) : "") +
     (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
   if (done) { done({ token: result.token, remember: remember }); return; }
   if (!forThisTab) return;
-  // No caller waiting: resume interrupted detection
   if (S.serverMode.available) finishServerDetect();
   else detectServer();
 }
@@ -196,6 +199,17 @@ var reviewLinkUrl = "";
 async function renderReviewLink() {
   var box = document.getElementById("connect-review");
   if (!box) return;
+  if (S.serverMode.available && S.serverMode.links && home.kind === "server" &&
+      conn.role !== "review" && !conn.scope) {
+    reviewLinkUrl = "";
+    box.innerHTML = '<div class="connect-add-title">Invite people to this script</div>' +
+      '<div class="modal-row">' +
+        '<span class="modal-hint">Collaborate gives you a link to edit it and one to comment — no PIN needed.</span>' +
+        '<button type="button" class="btn" data-connect-action="collaborate">Collaborate…</button>' +
+      '</div>';
+    box.hidden = false;
+    return;
+  }
   reviewLinkUrl = await fetchReviewLink();
   if (!reviewLinkUrl) { box.hidden = true; box.innerHTML = ""; return; }
   box.innerHTML = '<div class="connect-add-title">Share this script to read and comment</div>' +
@@ -330,10 +344,8 @@ function tunnelOf(bookmark) {
   return { userHost: String(s.userHost || ""), remotePort: Number(s.remotePort), localPort: Number(s.localPort) };
 }
 
-// Per-tab connection; tokens never follow tab to another server
 async function useServer(bookmark, opts) {
   opts = opts || {};
-  // Local home stays; server home is invalid on new server
   if (home.kind === "server") setHome("none");
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
@@ -346,7 +358,6 @@ async function useServer(bookmark, opts) {
   updateConnectMenu();
   renderConnect();
   await detectServer();
-  // Not a review of a hosted document anymore; rebuild editable
   applyReviewMode();
   if (S.state) render();
   updateFileChip();
@@ -369,7 +380,7 @@ function askPinFor(id) {
   if (!b) return;
   openPinDialog({
     base: b.url,
-    reason: "Enter the join PIN for " + (b.name || shortHost(b.url)) + ".",
+    reason: "Enter the join PIN or key for " + (b.name || shortHost(b.url)) + ".",
     onDone: function (joined) { useServer(b, joined); }
   });
 }
@@ -421,7 +432,6 @@ function showSshFor(id) {
   document.getElementById("connect-ssh-out").hidden = false;
 }
 
-// Clipboard API needs secure origin; LAN HTTP uses textarea path
 async function copyPlainText(text, okMsg, failMsg) {
   try {
     await navigator.clipboard.writeText(text);
@@ -458,7 +468,6 @@ async function copyReviewLink() {
     "Could not copy — select the address and copy it by hand.");
 }
 
-// .cmd not .bat; CRLF for Notepad and cmd
 function saveSshCmd() {
   if (!sshShownFor) return;
   var b = bookmarkById(sshShownFor);
@@ -531,6 +540,7 @@ export function __init() {
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
         else if (action === "review-copy") copyReviewLink();
+        else if (action === "collaborate") { closeServersDialog(); openCollaborate(); }
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");
@@ -541,7 +551,6 @@ export function __init() {
       }
     }
 
-    // Esc closes innermost first: PIN dialog opens over Servers
     window.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
       var pin = document.getElementById("pin-modal");

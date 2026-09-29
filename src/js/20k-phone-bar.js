@@ -1,4 +1,3 @@
-// Includes Version history, which has no tab of its own
 var PANEL_CLOSERS = [
   ["production-panel", "production-close"],
   ["gear-panel", "gear-close"],
@@ -66,7 +65,6 @@ export function __init() {
     if (btn) btn.click();
   });
 
-  // Batched per task; sync writes only to bar, unwatched
   if (typeof MutationObserver === "function") {
     var observer = new MutationObserver(syncPhoneBar);
     PANEL_CLOSERS.forEach(function (pair) {

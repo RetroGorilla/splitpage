@@ -55,7 +55,7 @@ expect document.getElementById('export-filename').textContent == untitled-script
 expect document.getElementById('export-options').hidden
 # the footer's note, and its link to the live alternative
 expect document.querySelector('#export-modal .export-note').textContent.indexOf('Exports are copies.') === 0
-expect document.getElementById('export-share-link').textContent == Publish & copy a link
+expect document.getElementById('export-share-link').textContent == Collaborate…
 shot 98-export-dialog
 
 # --- a format with nothing to export says so, and cannot be pressed --------
@@ -249,14 +249,17 @@ expect localStorage.getItem('splitpage-last-export') === 'export-csv'
 # --- the footer's link is Publish & copy a link ------------------------------
 # With no server, that opens Servers… to set one up — the dialog gets out of
 # the way first.
+eval (function(){ var real = window.fetch.bind(window); window.fetch = function(u, o){ return String(u).indexOf('api/') !== -1 ? Promise.reject(new TypeError('Failed to fetch')) : real(u, o); }; return true; })()
 key ctrl KeyE
 sleep 400
 jsclick #export-share-link
 sleep 400
 expect document.getElementById('export-modal').hidden
-expect !document.getElementById('connect-modal').hidden
+wait window.__collabTest.isOpen() && window.__collabTest.step() === 'unreachable'
+expect document.getElementById('connect-modal').hidden
 key Escape
 sleep 300
+expect !window.__collabTest.isOpen()
 
 # --- not over another dialog, the teleprompter or the writer ----------------
 jsclick #btn-present

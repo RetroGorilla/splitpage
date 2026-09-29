@@ -4,7 +4,6 @@ export var PAGE_SHELL;
 export var SpeechRecognitionCtor;
 
 S.state = null;
-// Resolves after boot load; desktop onOpenFile can race it
 S.initialStateReady = null;
 export var SCHEMA_VERSION = 2;
 S.editSeq = 0;
@@ -27,7 +26,6 @@ function openHandleDb() {
 
 export async function rememberLastFileHandle(handle) {
   if (!handle) return;
-  // Desktop main process persists open docs; skip page store
   if (S.DESKTOP) return;
   try {
     var db = await openHandleDb();
@@ -65,23 +63,18 @@ S.voiceFollowActive = false;
 S.voiceStarting = false;
 S.promptWords = [];
 S.wordCursor = -1;
-// Speakable words only; unspoken tokens break match runs
 S.speakable = [];
 S.speakNorms = [];
 S.speakCursor = -1;
 S.voiceRestarts = 0;
-// Stale queued restarts must not fire on next session
 S.voiceSession = 0;
-// Held open so Chrome's auto-restarts don't re-prompt mic
 S.voiceStream = null;
 S.finalTranscript = "";
 S.interimTranscript = "";
 
 export function __init() {
-  // Must run before any render; captures pristine served HTML
   PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
-  // CSP blocks inline onload; media=print keeps fonts non-blocking
   (function promoteFontCss() {
     var link = document.getElementById("font-css");
     if (!link) return;
@@ -89,7 +82,6 @@ export function __init() {
     link.addEventListener("load", function () { link.media = "all"; });
   })();
 
-  // Bridge only exists on privileged origin; presence is the check
   S.DESKTOP = window.splitpageDesktop || null;
 
   SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;

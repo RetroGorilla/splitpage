@@ -86,7 +86,6 @@ function createBlobStore(opts) {
     return new Promise((r) => setTimeout(r, ms));
   }
 
-  // Windows holds targets briefly (AV, indexers); retry rename
   async function renameRetry(from, to) {
     for (let attempt = 1; ; attempt++) {
       try {
@@ -189,7 +188,6 @@ function createBlobStore(opts) {
     return withLock(sha, async () => {
       ensureInit();
       const target = blobPath(sha);
-      // Same size implies same bytes: name is the checksum
       if ((await statSize(target)) === buf.length) return { ok: true, stored: false };
       if (readOnly) return { ok: false, code: "READ_ONLY" };
       const shard = shardDir(sha);

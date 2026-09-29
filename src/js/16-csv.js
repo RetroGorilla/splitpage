@@ -113,7 +113,6 @@ export function buildCsv() {
     lines.push(t.commentHead.join(","));
     t.comments.forEach(function (c) { lines.push(line(c.cells)); });
   }
-  // BOM makes Excel read UTF-8
   return "﻿" + lines.join("\r\n");
 }
 

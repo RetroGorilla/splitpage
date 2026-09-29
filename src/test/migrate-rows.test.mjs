@@ -27,7 +27,6 @@ test("garbage in is a document out, never a throw", () => {
 });
 
 test("a stray non-object in a list never takes the whole load down", () => {
-  // One null anywhere must not throw on later field access
   const s = migrateRows({
     schema: 2, title: "T",
     rows: [null, 7, { id: "r1", audioText: "one" }, "x"],
@@ -135,7 +134,6 @@ test("rows: an id that could escape a selector is replaced", () => {
 });
 
 test("rows: updatedAt is '' rather than null when nothing ever stamped it", () => {
-  // new Date(null) is valid epoch; must not render "Jan 1"
   assert.equal(doc({ rows: [{ id: "r1" }] }).rows[0].updatedAt, "");
   assert.equal(doc({ rows: [{ id: "r1", updatedAt: null }] }).rows[0].updatedAt, "");
 });
@@ -164,14 +162,12 @@ test("legacyMdToHtml reads the elements the model's toMarkdown falls back to", (
 });
 
 test("legacyMdToHtml does not double-encode a link's query string", () => {
-  // Escaping twice turned & into &amp;amp; and broke links
   const out = legacyMdToHtml("[go](https://x.test/?a=1&b=2)");
   assert.ok(out.includes('href="https://x.test/?a=1&amp;b=2"'), out);
   assert.ok(!legacyMdToHtml("[x](javascript:alert(1))").includes("<a "));
 });
 
 test("comments: a document-level conflict card is never given a fake row", () => {
-  // rowId stays null: safeId would fabricate a row comment
   const c = doc({ comments: [{ id: "c1", field: "title", kind: "conflict", body: "mine" }] }).comments[0];
   assert.equal(c.rowId, null);
   assert.equal(c.anchorId, null);
@@ -179,7 +175,6 @@ test("comments: a document-level conflict card is never given a fake row", () =>
 });
 
 test("comments: anchorId falls back to the comment's own id, never to null", () => {
-  // Null anchorId never matches; deleting left a dangling wrapper
   const c = doc({ comments: [{ id: "c1", rowId: "r1", field: "audioText" }] }).comments[0];
   assert.equal(c.anchorId, "c1");
 });

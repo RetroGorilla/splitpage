@@ -40,7 +40,6 @@ import {
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
-// Deliberately broad; mirrors 03a-history-store.js key-danger regex (#48)
 var APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
 
 function appDataReadRaw(key) {
@@ -62,7 +61,6 @@ function appDataVersionString() {
   return embedded || "";
 }
 
-// Each section isolated in try/catch; failed ones come back empty
 async function buildAppDataBundle() {
   var bundle = {
     format: APPDATA_FORMAT,
@@ -117,7 +115,6 @@ async function buildAppDataBundle() {
   return bundle;
 }
 
-// Checks own keys only, never values (#48); throws before writing
 function assertNoSecrets(value) {
   (function walk(v) {
     if (!v || typeof v !== "object") return;
@@ -151,7 +148,6 @@ var appDataLastExport = null;
 export async function exportAppData() {
   appDataLastExport = null;
   showToast("Gathering your Splitpage data…");
-  // Let toast paint before heavy history read
   await new Promise(function (resolve) { setTimeout(resolve, 0); });
 
   var bundle;
@@ -189,7 +185,6 @@ export async function exportAppData() {
   }
 }
 
-// V8 can't build much larger strings anyway
 var APPDATA_MAX_TEXT = 512 * 1024 * 1024;
 
 function appDataError(code, message) {
@@ -218,7 +213,6 @@ function appDataNormalizeHistory(h) {
   };
 }
 
-// Shape only; importHistoryBundle validates and counts refusals
 function appDataNormalizeBlobs(b) {
   if (!appDataIsPlainObject(b)) return null;
   var out = {};
@@ -288,7 +282,6 @@ function parseAppDataBundle(text) {
   };
 }
 
-// Existing wins; only known fields carried into localStorage
 function appDataMergeBookmarks(list) {
   var out = { added: 0, skipped: 0, failed: 0 };
   if (!list || !list.length) return out;
@@ -332,7 +325,6 @@ function appDataMergeBookmarks(list) {
   return out;
 }
 
-// Write only when no local value; never overwrite local choice
 function appDataPrefSpecs() {
   return [
     { name: "tourDone", key: TOUR_DONE_KEY,
@@ -366,7 +358,6 @@ function appDataMergePrefs(prefs) {
     } catch (e) { }
   });
 
-  // Local wins key by key; non-object local value left alone
   var inc = prefs.onboarding;
   if (appDataIsPlainObject(inc)) {
     var clean = {}, n = 0;
@@ -426,7 +417,6 @@ async function importAppData(text) {
 
   var summary = { ok: true, history: null, blobs: null, bookmarks: null, prefs: [], legacy: null, toast: "", warning: null };
 
-  // Legacy list goes to Older, never back into localStorage
   var legacy = [];
   if (bundle.snapshots) {
     try { legacy = normalizeLegacySnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
@@ -518,7 +508,6 @@ async function onImportAppDataChosen(e) {
     }
     await importAppData(text);
   } finally {
-    // Reset so picking the same file refires change
     input.value = "";
   }
 }

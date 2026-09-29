@@ -13,7 +13,6 @@ const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, 
 export const tagSpan = (cat, name, inner) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${inner}</span>`;
 
-// Stored cells are non-canonical; sanitize only, not model HTML
 export function storedCell(r) {
   const n = Math.floor(r() * 12);
   let out = "";

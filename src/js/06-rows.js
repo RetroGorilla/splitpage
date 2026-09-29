@@ -9,6 +9,7 @@ import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
+import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -29,7 +30,6 @@ export function addRow(afterId) {
   render();
 }
 
-// New cell exists only after render(); look it up afterwards
 export function addRowAndFocus(afterId, field) {
   addRow(afterId);
   var idx = findRowIndex(afterId);
@@ -48,7 +48,6 @@ export function addRowAndFocus(afterId, field) {
   cell.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-// Shared by writer Enter and split-view Alt+Enter
 export function splitRowFieldCore(cellEl) {
   var idx = findRowIndex(cellEl.getAttribute("data-id"));
   var field = cellEl.getAttribute("data-field");
@@ -73,7 +72,6 @@ export function splitRowFieldCore(cellEl) {
   return { idx: idx, created: created, field: field };
 }
 
-// Pre-D7 media cells bypass the model; split by DOM range
 function splitMediaCellInDom(cellEl) {
   var range = window.getSelection().getRangeAt(0);
   if (!range.collapsed) range.deleteContents();
@@ -125,7 +123,6 @@ export function setDropMarkerForRow(row, clientY) {
   row.classList.toggle("drop-after", after);
 }
 
-// Window scrolls (no inner container, 20i-topbar.js); zone from viewport edges
 var DRAG_SCROLL_ZONE = 120;
 var DRAG_SCROLL_MIN_SPEED = 6;
 var DRAG_SCROLL_MAX_SPEED = 28;
@@ -150,7 +147,6 @@ function dragScrollStep() {
   dragScroll.raf = requestAnimationFrame(dragScrollStep);
 }
 
-// Also called over the rundown strip (#185)
 export function stopDragScroll() {
   if (!dragScroll) return;
   cancelAnimationFrame(dragScroll.raf);
@@ -184,7 +180,6 @@ export function moveRowTo(id, targetId, after) {
   var to = findRowIndex(targetId);
   if (from === -1 || to === -1 || from === to) return;
   var row = S.state.rows.splice(from, 1)[0];
-  // Recompute after splice; removal shifts indexes
   var dest = findRowIndex(targetId);
   S.state.rows.splice(after ? dest + 1 : dest, 0, row);
   markDirty();
@@ -201,7 +196,6 @@ function deleteRow(id) {
   render();
 }
 
-// Single place for one-step moves: gutter buttons and Alt+Up/Down
 export function swapAdjacentRows(id, dir) {
   var idx = findRowIndex(id);
   var j = idx + dir;
@@ -220,6 +214,15 @@ export function moveRow(id, dir) {
 }
 
 export function armDelete(btn, id) {
+  var idx = findRowIndex(id);
+  var rowEl = document.querySelector('#rows .row[data-id="' + safeId(id) + '"]');
+  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(syncFieldFromDom);
+  if (idx !== -1 && isBlankScene(S.state, S.state.rows[idx])) {
+    clearTimeout(S.deleteArmTimer);
+    S.deleteArmId = null;
+    deleteRow(id);
+    return;
+  }
   if (S.deleteArmId === id) {
     clearTimeout(S.deleteArmTimer);
     S.deleteArmId = null;
@@ -257,7 +260,6 @@ export function toggleRowMenu(btn, focusFirst) {
   var row = btn.closest(".row");
   if (row) row.classList.toggle("has-menu-open", opening);
   if (!opening) return;
-  // Phone bottom bar would hide a downward menu
   menu.classList.remove("opens-up");
   var r = menu.getBoundingClientRect();
   var phoneBar = document.getElementById("phone-bar");
@@ -308,7 +310,6 @@ export function rowMenuKeydown(e) {
   return false;
 }
 
-// Canvas JPEG encode flattens alpha onto black; these stay PNG
 var ALPHA_CAPABLE_TYPE = /^image\/(png|gif|webp)$/;
 
 export function compressImageFile(file, maxDim, quality) {
@@ -339,7 +340,6 @@ export function compressImageFile(file, maxDim, quality) {
   });
 }
 
-// Bytes stored durably at once; nothing awaits it
 export function handleImageFile(rowId, file, slot) {
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
     var idx = findRowIndex(rowId);
@@ -366,7 +366,6 @@ export function removeImageLink(rowId, slot, key) {
   galleryEdit(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
 }
 
-// Video bytes never enter the document; tokens are session-only
 var videoFileTokens = {};
 var sessionVideoFiles = {};
 var sessionVideoUrls = {};
@@ -456,7 +455,6 @@ export function videoFirstFrame(file) {
     timer = setTimeout(function () { done(null); }, 4000);
     v.onerror = function () { done(null); };
     v.onloadeddata = function () {
-      // Very first frame is often black
       var t = isFinite(v.duration) && v.duration > 0 ? Math.min(0.5, v.duration / 3) : 0;
       if (t > 0 && Math.abs(v.currentTime - t) > 0.01) { v.onseeked = grab; v.currentTime = t; }
       else grab();

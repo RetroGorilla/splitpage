@@ -7,9 +7,7 @@ import { applyMerge, baseStateReason, cloneState, mergeStates, setBaseState } fr
 import { __init as historyInit, getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 
 before(async () => {
-  // Undo point filing needs history store chain from __init (#92)
   historyInit();
-  // Memory backend: jsdom lacks IndexedDB
   await window.__historyTest.forceBackend("memory");
 });
 
@@ -29,14 +27,12 @@ function freshId() {
   return "d" + String(seq).padStart(32, "0");
 }
 
-// Merges stamp rows with clock; strip before comparing
 function unstamped(s) {
   const c = cloneState(s);
   c.rows.forEach(function (r) { r.updatedAt = ""; });
   return c;
 }
 
-// Module globals are shared; restore before each case
 function reset() {
   S.state = { sentinel: "state" };
   S.baseState = { sentinel: "base" };

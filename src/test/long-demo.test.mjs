@@ -52,7 +52,6 @@ test("tags in every category, repeated across scenes", () => {
   const tags = collectTagsFromRows(doc.rows);
   const cats = new Set(tags.map((t) => t.cat.id));
   TAG_CATEGORIES.forEach((c) => assert.ok(cats.has(c.id), "a " + c.id + " tag"));
-  // Location grouping only means something with several locations
   const scenesAt = {};
   doc.rows.forEach((r) => {
     collectTagsFromRows([r]).filter((t) => t.cat.id === "location")

@@ -74,7 +74,6 @@ export function diffStates(before, after, opts) {
   return steps;
 }
 
-// Lazy: STATE_FIELDS lives in a module with import cycles
 var listMerges = null;
 function listMergeFor(key) {
   if (!listMerges) {
@@ -94,7 +93,6 @@ function resolveCell(live, step) {
 }
 
 export function applyStepsLive(state, steps) {
-  // Plan on scratch order; document untouched until validated
   var order = state.rows.map(function (r) { return r.id; });
   var byId = {};
   state.rows.forEach(function (r) { byId[r.id] = r; });
@@ -189,7 +187,6 @@ export function createUndoHistory() {
     var last = done[done.length - 1];
     if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
       var ins = insertedText(steps[0]);
-      // Browser may rewrite preceding space; test for any non-space
       var startsWord = /\S/.test(ins) && last.endsInSpace;
       if (!startsWord) {
         last.steps[0].after = steps[0].after;
@@ -313,7 +310,6 @@ export function trackDocument() {
 }
 
 export function flushEdits() {
-  // Unreported diffs are app-made: absorbed without undo entry
   var reported = flushQueued;
   flushQueued = false;
   if (applying) return;
@@ -322,9 +318,7 @@ export function flushEdits() {
   var skip = {};
   if (commentsAreSent()) skip.comments = true;
   var steps = diffStates(base, S.state);
-  // Server-doc comment changes, and their anchors, are unrecorded
   var sent = skip.comments && steps.some(function (s) { return s.op === "docField" && s.key === "comments"; });
-  // Re-serialised equal content is not a user action
   var content = steps.filter(function (s) { return !cosmetic(s); });
   if (reported && !sent && content.length) history.record(content, Date.now());
   try { base = applySteps(base, steps); } catch (e) { base = clone(S.state); }
@@ -426,7 +420,6 @@ export function caretAfterStep(step) {
   var s = 0;
   while (s < a.length && s < bk.length && a[a.length - 1 - s] === bk[bk.length - 1 - s]) s++;
   var offset = b.length - s;
-  // Never split a surrogate pair
   if (offset > 0 && offset < b.length) {
     var hi = b.charCodeAt(offset - 1), lo = b.charCodeAt(offset);
     if (hi >= 0xD800 && hi <= 0xDBFF && lo >= 0xDC00 && lo <= 0xDFFF) offset--;

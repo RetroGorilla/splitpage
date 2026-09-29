@@ -38,7 +38,6 @@ export {
 
 var historyChain;
 
-// Cap floor keeps a few snapshots alive under quota pressure
 var HISTORY_BROWSER_MIN_CAP = 5 * 1024 * 1024;
 var HISTORY_BROWSER_HEADROOM = 50 * 1024 * 1024;
 var HISTORY_ESTIMATE_TTL_MS = 5 * 60 * 1000;
@@ -57,7 +56,6 @@ function enqueueHistory(job, fallback) {
   return run;
 }
 
-// Re-checks after each wait; finishing jobs may queue more
 function historyIdle() {
   var c = historyChain;
   var m = historyMigrationPromise;
@@ -67,7 +65,6 @@ function historyIdle() {
   });
 }
 
-// Test-only clock; also the store's clock
 var historyNowOverride = null;
 function historyNow() {
   return historyNowOverride != null ? historyNowOverride : Date.now();
@@ -151,7 +148,6 @@ function historyCapFrom(c) {
   return Math.max(HISTORY_BROWSER_MIN_CAP, c.quota - other - HISTORY_BROWSER_HEADROOM);
 }
 
-// First call answers no cap; size unknown before index read
 function historyIdbCap(lastTotal) {
   if (historyCapOverride != null) return historyCapOverride;
   if (lastTotal == null) return Infinity;
@@ -235,13 +231,11 @@ function historyStoreAdapter(store) {
         return store.put(docId, meta, stateJson);
       });
     },
-    // Must reject when unreadable; strict import needs it (#49)
     list: function (docId) {
       return store.list(docId || null).then(function (r) {
         return store.usage().then(function (u) { r.usage = u; return r; }, function () { r.usage = null; return r; });
       });
     },
-    // Query carries holds on reads; main's eviction is process-wide
     get: function (bucket, id) { return store.get(bucket, id); },
     copy: function (from, to) { return store.copy(from, to); },
     touch: function (docId, title) { return store.touch(docId, title); },
@@ -289,7 +283,6 @@ function historyOpenIdb() {
   var entry = { backend: backend, store: store, adapter: historyStoreAdapter(store), ready: null };
   historyIdb = entry;
   entry.ready = backend.open().then(function () {
-    // Only Chromium; elsewhere persist() may show a permission prompt
     if (!historyPersistAsked && typeof navigator !== "undefined" && navigator.userAgentData && navigator.storage &&
         typeof navigator.storage.persist === "function") {
       historyPersistAsked = true;
@@ -373,7 +366,6 @@ var desktopHistoryBackend = {
     });
   },
 
-  // strict: null means could not read, never empty
   list: function (docId, opts) {
     var empty = { entries: [], older: [], olderExpiresAt: null };
     var failed = (opts && opts.strict) ? null : empty;
@@ -450,7 +442,6 @@ var desktopHistoryBackend = {
     return next();
   },
 
-  // Kept as a function; expiry sweep probes for one
   evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
 
   rawDocIds: function () {
@@ -515,7 +506,6 @@ function resolveHistoryBackend() {
   });
 }
 
-// Snapshotting the untouched seed would fill new users' history
 export function isPristineSeedDocument() {
   return !!S.state && S.editSeq === 0 && !S.dirty && home.kind === "none" && seedCheckPasses();
 }
@@ -565,7 +555,6 @@ function historyMarkPending(entry) {
   }
 }
 
-// Blobs must be durable before snapshot write (invariant 52)
 function historyPersistRefs(entry) {
   var refs = entry.refs || [];
   if (!refs.length) return Promise.resolve();
@@ -595,7 +584,6 @@ function historyStoreEntry(backend, entry) {
   });
 }
 
-// Synchronous up to ticket; write is queued (invariant 39)
 export function captureSnapshot(label, src, opts) {
   opts = opts || {};
   if (!src || typeof src !== "object" || !Array.isArray(src.rows)) return null;
@@ -612,7 +600,6 @@ export function captureSnapshot(label, src, opts) {
     return null;
   }
   if (typeof stateJson !== "string") return null;
-  // Strictly increasing so same-millisecond bursts keep call order
   var atMs = historyNow();
   if (atMs <= historyLastAtMs) atMs = historyLastAtMs + 1;
   historyLastAtMs = atMs;
@@ -682,7 +669,6 @@ function historyLocalMetas(docId, lists, seen) {
 
 export function listDocHistory(docId) {
   docId = normalizeDocId(docId);
-  // Read local entries before and after backend read; commits race
   var localBefore = docId ? historyLocalEntries(docId) : [];
   return resolveHistoryBackend().then(function (backend) {
     return backend.list(docId || null).then(null, function () {
@@ -715,7 +701,6 @@ export function listDocHistory(docId) {
   });
 }
 
-// Validate both ids here; Older only via older:true (invariant 38)
 export function getHistorySnapshot(q) {
   q = q || {};
   var id = typeof q.id === "string" ? q.id : "";
@@ -755,7 +740,6 @@ export function copyHistory(from, to) {
   if (from === to) return Promise.resolve({ ok: true, copied: 0 });
   return enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
-      // Failed stored copy must not skip pending entries
       return backend.copy(from, to).then(null, function (e) {
         if (window.console) console.error(e);
         return { ok: false, copied: 0, code: "io" };
@@ -901,7 +885,6 @@ function historyBlobCost(sha, entry) {
   return sha.length + entry.mime.length + entry.b64.length + 40;
 }
 
-// Runs after history job; blob reads must not hold queue
 async function historyExportAttachBlobs(out) {
   var cap = historyExportCap();
   var all = [];
@@ -1176,7 +1159,6 @@ function historyLegacyRaw() {
   try { return localStorage.getItem(SNAPSHOT_KEY); } catch (e) { return null; }
 }
 
-// Corrupt key is never deleted; may be another app version's
 export function normalizeLegacySnapshots(raw) {
   if (typeof raw !== "string") return null;
   var list;
@@ -1214,7 +1196,6 @@ export function normalizeLegacySnapshots(raw) {
 
 var historyMigrationPromise = null;
 
-// Remove key only after write is read back byte-identical
 export function startHistoryMigration() {
   if (historyMigrationPromise) return historyMigrationPromise;
   var p = runHistoryMigration().then(null, function (e) {
@@ -1334,7 +1315,6 @@ function historyResetForTest() {
 }
 
 export function __init() {
-  // Chain never rejects; jobs must not await another enqueueHistory
   historyChain = Promise.resolve();
 
   window.__historyTest = {
@@ -1370,7 +1350,6 @@ export function __init() {
       historyFault = known.indexOf(name) !== -1 ? name : null;
       if (historyIdb) historyArmFaults(historyIdb.backend);
       if (historyMem) historyArmFaults(historyMem.backend);
-      // Boot opened db already; drop backend so next call reopens
       if (historyFault === "idb-open-fail") {
         if (historyIdb) historyIdb.backend.close().then(historyNoop, historyNoop);
         historyIdb = null;

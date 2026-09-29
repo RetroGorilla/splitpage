@@ -26,7 +26,6 @@ function isShareableName(name) {
   return SHAREABLE_EXTENSIONS.includes(path.extname(String(name || "")).toLowerCase());
 }
 
-// Constant-time compare; tokens are bearer secrets
 function tokensEqual(a, b) {
   if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -110,7 +109,6 @@ function createPrompterShare(options) {
       "cache-control": "no-store"
     };
     const origin = req.headers.origin;
-    // CORS only for listed origins; stream carries live speech
     if (typeof origin === "string" && corsOrigins().includes(origin)) {
       headers["access-control-allow-origin"] = origin;
       headers.vary = "Origin";

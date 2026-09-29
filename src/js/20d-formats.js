@@ -32,7 +32,6 @@ import {
 } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
 
-// Inline images sync; await ensureBytes(refsIn(state)) first
 export function fileStateFor(s) {
   var copy = migrateRows(cloneState(s || S.state));
   inlineStateImages(copy);
@@ -59,7 +58,6 @@ var MD_DATA_INFO = "splitpage";
 var MD_DATA_NOTE = "<!-- splitpage: everything below is Splitpage's own record of this " +
   "script. Edit the text above freely; leave this block alone. -->";
 
-// Fence must be longer than any tilde run in content
 function splitpageDataFence(json) {
   var longest = 3, re = /~{3,}/g, m;
   while ((m = re.exec(json)) !== null) {
@@ -76,7 +74,6 @@ export function buildMarkdownProject(s) {
     fence + MD_DATA_INFO + "\n" + json + "\n" + fence + "\n";
 }
 
-// Last opening fence wins; earlier quoted ones must not shadow
 function findMarkdownDataBlock(text) {
   var lines = String(text || "").replace(/\r\n|\r/g, "\n").split("\n");
   var openAt = -1, fenceLen = 0, i;
@@ -96,22 +93,18 @@ function findMarkdownDataBlock(text) {
   };
 }
 
-// null means not ours; caller falls back to lossy import
 export function parseMarkdownProject(text) {
   var block = findMarkdownDataBlock(text);
   if (!block) return null;
   var parsed;
   try { parsed = parseSplitpageFile(block.json); } catch (e) { return null; }
 
-  // Other pipe tables sit under "## " headings; exclude them
   var sceneSection = block.before.split(/^##\s/m)[0];
   var heading = /^#\s+(.+)$/m.exec(block.before);
-  // Before migrateDocument: migrateRows always leaves an id
   var docIdEmbedded = docIdEmbeddedIn(parsed);
   return {
     state: migrateDocument(parsed, { kind: "file" }),
     docIdEmbedded: docIdEmbedded,
-    // keepEmpty: blank scene is a row; dropping shifts later rows
     table: parseMarkdownTable(sceneSection, { keepEmpty: true }),
     title: heading ? heading[1].trim() : null
   };
@@ -120,7 +113,6 @@ export function parseMarkdownProject(text) {
 export var MD_IMAGE_PREFIX_RE = /^!\[[^\]]*\]\((data:image\/[^)\s]+)\)\s*(?:<br\s*\/?>)?\s*/i;
 
 function markdownCellToHtml(s, md) {
-  // contenteditable emits nbsp; tag names need ordinary spaces
   var html = sanitizeHtml(legacyMdToHtml(String(md == null ? "" : md).replace(/\u00A0/g, " ")));
   var names = (s.productionTags || []).slice().sort(function (a, b) {
     return String(b.name || "").length - String(a.name || "").length;
@@ -143,7 +135,6 @@ function applyMarkdownVisualCell(s, row, md) {
   var m = MD_IMAGE_PREFIX_RE.exec(text);
   var rec = m ? internDataUrl(safeImageSrc(m[1]) || "") : null;
   if (rec) queuePersist([rec.sha256]);
-  // Picture missing when written is not a cell deletion
   var uncarried = !m && row.imageRef && !rowImageDataUrl(row);
   delete row.visualImage;
   if (!uncarried) {
@@ -159,7 +150,6 @@ function markdownCellChanged(cellText, was) {
   return String(cellText == null ? "" : cellText).trim() !== was;
 }
 
-// Older clients wrote non-canonical data: URI; same picture, unchanged
 function markdownVisualCellChanged(cellText, was) {
   if (!markdownCellChanged(cellText, was.visual)) return false;
   var text = String(cellText == null ? "" : cellText).trim();
@@ -227,7 +217,6 @@ function askMarkdownRowChoice(blockRows, tableRows) {
   });
 }
 
-// Resolve once; Esc means keep
 export function finishMarkdownRowChoice(choice) {
   var modal = document.getElementById("md-rows-modal");
   if (modal) modal.hidden = true;
@@ -248,7 +237,6 @@ export async function applyMarkdownProject(proj, opts) {
     var choice = await askMarkdownRowChoice(s.rows.length, proj.table.length);
     if (choice === "table") s.rows = rowsFromMarkdownTable(s, proj.table);
   }
-  // All state entry goes through migrateRows (invariant #2)
   return migrateRows(s);
 }
 

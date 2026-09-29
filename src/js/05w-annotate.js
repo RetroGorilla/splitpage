@@ -8,7 +8,6 @@ import { showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
-// Fractions of picture width; marks are resolution-independent
 var SIZES = {
   pen: [0.004, 0.008, 0.016],
   highlight: [0.02, 0.035, 0.06],
@@ -25,7 +24,6 @@ var ERASER_PX = 8;
 var MOVE_PX = 4;
 var ARM_MS = 2800;
 
-// Filled in __init; other modules' values absent at eval
 var memory = { tool: "pen", color: {}, size: { pen: 1, highlight: 1, text: 1 } };
 
 var ed = null;
@@ -87,7 +85,6 @@ export function openAnnotator(rowId, at) {
   return true;
 }
 
-// Reopened docs hold only flattened pictures; original fetched lazily
 function loadOriginal() {
   var sha = ed.original.sha256;
   var mine = ed;
@@ -139,7 +136,6 @@ export function closeAnnotator() {
   if (to) to.focus({ preventScroll: true });
 }
 
-// Match by original picture, not index; merges may move slots
 function locate() {
   var idx = findRowIndex(ed.rowId);
   if (idx === -1) return -1;
@@ -230,7 +226,6 @@ function drawMarks(ctx, marks, W, H) {
   });
 }
 
-// One stroke() call keeps highlights from darkening at self-crossings
 function drawStroke(ctx, m, W, H) {
   var p = m.points;
   var n = p.length / 2;
@@ -260,7 +255,6 @@ function drawStroke(ctx, m, W, H) {
   ctx.restore();
 }
 
-// TEXT_LINE must match the app.css text box line height
 function drawText(ctx, m, W, H) {
   var px = m.size * W;
   var lh = px * TEXT_LINE;
@@ -485,7 +479,6 @@ function eraseAt(x, y) {
   if (gone) { redraw(); paintTools(); }
 }
 
-// Edited text stays off canvas while its box is open
 function startText(index, at) {
   var m;
   if (index >= 0) {
@@ -694,7 +687,6 @@ function save(rec, marks) {
   closeAnnotator();
 }
 
-// JPEG at 0.9 if original was JPEG, else PNG
 function flatten(marks) {
   var img = imgEl();
   return fontsReady().then(function () {
@@ -727,7 +719,6 @@ function isRedoKey(e) {
     (((e.key === "z" || e.key === "Z") && e.shiftKey) || ((e.key === "y" || e.key === "Y") && !e.shiftKey));
 }
 
-// Capture phase: editor keys must never reach document undo
 function onWindowKeydown(e) {
   if (!ed) return;
   var inText = !!(e.target && e.target.classList && e.target.classList.contains("annotate-textbox"));

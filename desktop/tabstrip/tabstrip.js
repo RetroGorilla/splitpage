@@ -117,7 +117,6 @@
       draggedTabId = null;
       clearDropMarkers();
       if (!draggedId) return;
-      // dropEffect none means no strip accepted it: maybe tear off
       if (e.dataTransfer.dropEffect !== "none") return;
       var outside =
         e.clientX < 0 ||
@@ -171,7 +170,6 @@
 
   function handleDrop(e, dropIndex) {
     clearDropMarkers();
-    // Payload crosses windows, so it rides the drag data
     var raw = e.dataTransfer.getData("application/x-splitpage-tab");
     if (!raw) return;
     var payload;

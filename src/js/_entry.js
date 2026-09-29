@@ -41,6 +41,7 @@ import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
 import { __init as init_12a_undo } from "./12a-undo.js";
 import { __init as init_13_hosted } from "./13-hosted.js";
 import { __init as init_13a_presence } from "./13a-presence.js";
+import { __init as init_13b_collaborate } from "./13b-collaborate.js";
 import { __init as init_14_export } from "./14-export.js";
 import { __init as init_14b_export_kit } from "./14b-export-kit.js";
 import { __init as init_15_docx } from "./15-docx.js";
@@ -68,7 +69,6 @@ import { __init as init_20k_phone_bar } from "./20k-phone-bar.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { __init as init_21_events } from "./21-events.js";
 
-// Cyclic graph: order is manual; prelude captures PAGE_SHELL first
 init_00_prelude();
 init_00p_prefs();
 init_01_scene_status();
@@ -112,6 +112,7 @@ init_12_dirty_toast();
 init_12a_undo();
 init_13_hosted();
 init_13a_presence();
+init_13b_collaborate();
 init_14_export();
 init_14b_export_kit();
 init_15_docx();
@@ -137,5 +138,4 @@ init_20i_topbar();
 init_20j_newtab();
 init_20k_phone_bar();
 init_20s_settings();
-// Last: wires every listener and calls init()
 init_21_events();
