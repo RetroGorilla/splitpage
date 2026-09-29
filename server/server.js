@@ -13,49 +13,212 @@ const STATIC_DIR = process.env.STATIC_DIR || path.join(__dirname, "..", "public"
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
 const MAX_BLOB_BYTES = Number(process.env.MAX_BLOB_BYTES || 8 * 1024 * 1024);
 const REVIEW_BLOB_BUDGET = Number(process.env.REVIEW_BLOB_BUDGET_BYTES || 20 * 1024 * 1024);
+const LINK_EDIT_BLOB_BUDGET = Number(process.env.LINK_EDIT_BLOB_BUDGET_BYTES || 100 * 1024 * 1024);
 const REVIEW_BLOB_WINDOW_MS = 60 * 60 * 1000;
 const READ_ONLY = process.env.READ_ONLY === "1";
 const NO_API = process.env.NO_API === "1";
 
 const JOIN_PIN = String(process.env.JOIN_PIN || "");
-const SESSION_TOKEN = crypto.randomBytes(32).toString("hex");
+let ownerToken = crypto.randomBytes(32).toString("hex");
+const OWNER_KEY_MIN = 20;
 
 const REVIEW_PIN = String(process.env.REVIEW_PIN || "");
 const REVIEW_KEY = String(process.env.REVIEW_KEY || "");
 const REVIEW_ACTIVE = !!(JOIN_PIN && (REVIEW_PIN || REVIEW_KEY) && REVIEW_PIN !== JOIN_PIN);
 const REVIEW_TOKEN = crypto.randomBytes(32).toString("hex");
 
-// In-memory; restart invalidates every review link.
-const reviewGrantsByDoc = new Map();
-const reviewGrantsByKey = new Map();
-const reviewScopeByToken = new Map();
-const REVIEW_GRANT_MAX = 500;
+const PERSIST_LINKS = process.env.PERSIST_LINKS === "1";
+const LINKS_DIR = path.join(DATA_DIR, "links");
+const LINKS_FILE = path.join(LINKS_DIR, "links.json");
+const LINKS_SECRET_FILE = path.join(LINKS_DIR, "secret");
+const LINK_ROLES = ["edit", "review"];
+const LINK_ID_RE = /^[0-9a-f]{12}$/;
+const LINK_TOMBSTONE_MAX = 2000;
 
-function reviewGrantFor(docId) {
-  let grant = reviewGrantsByDoc.get(docId);
-  if (grant) return grant;
-  if (reviewGrantsByDoc.size >= REVIEW_GRANT_MAX) {
-    const oldest = reviewGrantsByDoc.keys().next().value;
-    const gone = reviewGrantsByDoc.get(oldest);
-    reviewGrantsByDoc.delete(oldest);
-    if (gone) { reviewGrantsByKey.delete(gone.key); reviewScopeByToken.delete(gone.token); }
+const linksById = new Map();
+const linkByKey = new Map();
+const linkByToken = new Map();
+const linkByDocRole = new Map();
+const linkTombstones = [];
+const tombKeyHashes = new Set();
+const tombTokenHashes = new Set();
+
+function docRoleKey(docId, role) {
+  return docId + "/" + role;
+}
+
+function indexLink(rec) {
+  linksById.set(rec.id, rec);
+  linkByKey.set(rec.key, rec);
+  linkByToken.set(rec.token, rec);
+  linkByDocRole.set(docRoleKey(rec.docId, rec.role), rec);
+}
+
+function unindexLink(rec) {
+  linksById.delete(rec.id);
+  linkByKey.delete(rec.key);
+  linkByToken.delete(rec.token);
+  const slot = docRoleKey(rec.docId, rec.role);
+  if (linkByDocRole.get(slot) === rec) linkByDocRole.delete(slot);
+}
+
+function addTombstone(tomb) {
+  linkTombstones.push(tomb);
+  tombKeyHashes.add(tomb.keyHash);
+  tombTokenHashes.add(tomb.tokenHash);
+  while (linkTombstones.length > LINK_TOMBSTONE_MAX) {
+    const oldest = linkTombstones.shift();
+    tombKeyHashes.delete(oldest.keyHash);
+    tombTokenHashes.delete(oldest.tokenHash);
   }
-  grant = {
+}
+
+function activeLink(docId, role) {
+  return linkByDocRole.get(docRoleKey(docId, role)) || null;
+}
+
+function mintLink(docId, role, createdBy) {
+  let id;
+  do { id = crypto.randomBytes(6).toString("hex"); } while (linksById.has(id));
+  const rec = {
+    id,
     key: crypto.randomBytes(24).toString("hex"),
-    token: crypto.randomBytes(32).toString("hex")
+    token: crypto.randomBytes(32).toString("hex"),
+    docId,
+    role,
+    createdAt: new Date().toISOString(),
+    createdBy: createdBy || null
   };
-  reviewGrantsByDoc.set(docId, grant);
-  reviewGrantsByKey.set(grant.key, { docId, token: grant.token });
-  reviewScopeByToken.set(grant.token, docId);
-  return grant;
+  indexLink(rec);
+  return rec;
 }
 
-function reviewScopeOfToken(token) {
-  return reviewScopeByToken.get(String(token || "")) || "";
+function revokeLink(rec) {
+  unindexLink(rec);
+  addTombstone({
+    id: rec.id,
+    keyHash: sha256Of(rec.key),
+    tokenHash: sha256Of(rec.token),
+    docId: rec.docId,
+    role: rec.role,
+    revokedAt: new Date().toISOString()
+  });
 }
 
-function reviewScopeOf(req) {
-  return reviewScopeOfToken(req.headers["x-splitpage-token"] || "");
+function linkAnswer(rec) {
+  return { id: rec.id, role: rec.role, key: rec.key, createdAt: rec.createdAt };
+}
+
+let linksWriting = Promise.resolve();
+
+function saveLinks() {
+  if (!PERSIST_LINKS) return Promise.resolve();
+  const write = () => writeFileDurable(LINKS_FILE, JSON.stringify({
+    version: 1,
+    links: Array.from(linksById.values()),
+    revoked: linkTombstones
+  }, null, 2) + "\n", 0o600);
+  const next = linksWriting.then(write, write);
+  linksWriting = next.catch(() => {});
+  return next;
+}
+
+async function linkFor(docId, role, opts) {
+  const existing = activeLink(docId, role);
+  if (existing && !(opts && opts.replace)) return { link: existing, created: false };
+  if (existing) revokeLink(existing);
+  const rec = mintLink(docId, role, opts && opts.by);
+  try {
+    await saveLinks();
+  } catch (err) {
+    unindexLink(rec);
+    throw err;
+  }
+  return { link: rec, created: true };
+}
+
+function revokeLinksOf(docId) {
+  let n = 0;
+  for (const role of LINK_ROLES) {
+    const rec = activeLink(docId, role);
+    if (rec) { revokeLink(rec); n++; }
+  }
+  return n;
+}
+
+function cleanLinkRecord(r) {
+  if (!r || typeof r !== "object") return null;
+  if (!LINK_ID_RE.test(String(r.id)) || !isValidId(r.docId) || LINK_ROLES.indexOf(r.role) === -1) return null;
+  if (typeof r.key !== "string" || !/^[0-9a-f]{48,128}$/.test(r.key)) return null;
+  if (typeof r.token !== "string" || !/^[0-9a-f]{64}$/.test(r.token)) return null;
+  return {
+    id: r.id, key: r.key, token: r.token, docId: r.docId, role: r.role,
+    createdAt: typeof r.createdAt === "string" ? r.createdAt : null,
+    createdBy: typeof r.createdBy === "string" ? r.createdBy : null
+  };
+}
+
+function cleanTombstone(t) {
+  if (!t || typeof t !== "object") return null;
+  if (!SHA_RE.test(String(t.keyHash)) || !SHA_RE.test(String(t.tokenHash))) return null;
+  return {
+    id: String(t.id || ""), keyHash: t.keyHash, tokenHash: t.tokenHash,
+    docId: String(t.docId || ""), role: String(t.role || ""),
+    revokedAt: typeof t.revokedAt === "string" ? t.revokedAt : null
+  };
+}
+
+async function loadLinkStore() {
+  await fsp.mkdir(LINKS_DIR, { recursive: true, mode: 0o700 });
+  await fsp.chmod(LINKS_DIR, 0o700).catch(() => {});
+
+  let secret;
+  try {
+    secret = (await fsp.readFile(LINKS_SECRET_FILE, "utf8")).trim();
+  } catch (err) {
+    if (!err || err.code !== "ENOENT") throw err;
+    secret = crypto.randomBytes(32).toString("hex");
+    await writeFileDurable(LINKS_SECRET_FILE, secret + "\n", 0o600);
+  }
+  if (!/^[0-9a-f]{64}$/.test(secret)) {
+    throw new Error(LINKS_SECRET_FILE + " is not 64 hex characters. Restore it from a backup, " +
+                    "or delete it to start a new one (which signs every owner device out).");
+  }
+  await fsp.chmod(LINKS_SECRET_FILE, 0o600).catch(() => {});
+  ownerToken = crypto.createHmac("sha256", Buffer.from(secret, "hex"))
+    .update("owner\0" + JOIN_PIN).digest("hex");
+
+  let raw = null;
+  try {
+    raw = await fsp.readFile(LINKS_FILE, "utf8");
+  } catch (err) {
+    if (!err || err.code !== "ENOENT") throw err;
+  }
+  if (raw === null) return;
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(LINKS_FILE + " is not valid JSON. Restore it from a backup, or move it " +
+                    "aside to start with no links (every link handed out stops working).", { cause: err });
+  }
+  await fsp.chmod(LINKS_FILE, 0o600).catch(() => {});
+  let skipped = 0;
+  for (const t of (data && Array.isArray(data.revoked)) ? data.revoked : []) {
+    const tomb = cleanTombstone(t);
+    if (tomb) addTombstone(tomb); else skipped++;
+  }
+  for (const r of (data && Array.isArray(data.links)) ? data.links : []) {
+    const rec = cleanLinkRecord(r);
+    if (!rec || linksById.has(rec.id) || linkByKey.has(rec.key) || linkByToken.has(rec.token) ||
+        activeLink(rec.docId, rec.role) || tombKeyHashes.has(sha256Of(rec.key))) {
+      skipped++;
+      continue;
+    }
+    indexLink(rec);
+  }
+  if (skipped) console.warn("[splitpage] " + skipped + " unreadable entr" + (skipped === 1 ? "y" : "ies") +
+                            " in " + LINKS_FILE + " were ignored");
 }
 
 // Literal "null" origin deliberately unsupported; sandboxed iframes send it (#63).
@@ -104,7 +267,9 @@ const PIN_WINDOW_MS = 60 * 1000;
 const PIN_MAX_FAILURES = 10;
 const pinFailures = new Map();
 
-const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const TRUST_PROXY_MODE = String(process.env.TRUST_PROXY || "").trim().toLowerCase();
+const TRUST_PROXY = TRUST_PROXY_MODE === "1";
+const TRUST_CLOUDFLARE = TRUST_PROXY_MODE === "cloudflare";
 const IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
 
 // Trust X-Forwarded-For only under TRUST_PROXY; first entry wins.
@@ -115,8 +280,16 @@ function forwardedIp(req) {
   return IP_RE.test(first) ? first : "";
 }
 
+function cloudflareIp(req) {
+  const raw = String(req.headers["cf-connecting-ip"] || "").trim().replace(/^\[|\]$/g, "");
+  return IP_RE.test(raw) ? raw : "";
+}
+
 function clientIp(req) {
-  if (TRUST_PROXY) {
+  if (TRUST_CLOUDFLARE) {
+    const connecting = cloudflareIp(req);
+    if (connecting) return connecting;
+  } else if (TRUST_PROXY) {
     const forwarded = forwardedIp(req);
     if (forwarded) return forwarded;
   }
@@ -142,21 +315,23 @@ function noteFailure(ip) {
 }
 
 function sameToken(given, token) {
-  if (given.length !== token.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token));
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(String(token));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function roleOfToken(given) {
+function sessionOfToken(given) {
   const token = String(given == null ? "" : given);
-  if (sameToken(token, SESSION_TOKEN)) return "edit";
-  if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return "review";
-  if (REVIEW_ACTIVE && reviewScopeByToken.has(token)) return "review";
+  if (!token) return null;
+  if (sameToken(token, ownerToken)) return { role: "edit", scope: "", token };
+  if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return { role: "review", scope: "", token };
+  const link = linkByToken.get(token);
+  if (link) return { role: link.role, scope: link.docId, token };
+  if (tombTokenHashes.size && tombTokenHashes.has(sha256Of(token))) return { revoked: true };
   return null;
 }
 
-function roleOf(req) {
-  return roleOfToken(req.headers["x-splitpage-token"] || "");
-}
+const OPEN_SESSION = Object.freeze({ role: "edit", scope: "", token: "" });
 
 function corsHeaders(req) {
   const origin = req.headers.origin;
@@ -293,12 +468,12 @@ async function syncDir(dir) {
   }
 }
 
-async function writeFileDurable(target, data) {
+async function writeFileDurable(target, data, mode) {
   const tmp = target + "." + crypto.randomBytes(4).toString("hex") + ".tmp";
   try {
     let handle;
     try {
-      handle = await fsp.open(tmp, "w");
+      handle = await fsp.open(tmp, "w", mode === undefined ? 0o666 : mode);
       await handle.writeFile(data, typeof data === "string" ? "utf8" : undefined);
       await handle.sync();
     } finally {
@@ -412,9 +587,7 @@ async function summaryOf(id) {
 
 function launcherAllowed(req) {
   if (!LAUNCH_TOKEN || HOST !== "127.0.0.1") return false;
-  const given = String(req.headers["x-splitpage-launch"] || "");
-  if (given.length !== LAUNCH_TOKEN.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(LAUNCH_TOKEN));
+  return sameToken(String(req.headers["x-splitpage-launch"] || ""), LAUNCH_TOKEN);
 }
 
 function handleLauncher(req, res, parts) {
@@ -780,12 +953,6 @@ async function hasBlob(sha) {
   }
 }
 
-async function blobsMissing(shas) {
-  const missing = [];
-  for (const sha of shas) if (!(await hasBlob(sha))) missing.push(sha);
-  return missing;
-}
-
 function touchBlobs(shas) {
   const now = new Date();
   for (const sha of shas) fsp.utimes(blobPath(sha), now, now).catch(() => {});
@@ -802,20 +969,23 @@ async function writeBlob(sha, buf) {
   await writeFileDurable(blobPath(sha), buf);
 }
 
-async function refusedRefs(incoming, docId, acceptMissing) {
+async function refusedRefs(incoming, docId, acceptMissing, visible) {
   if (!incoming.size) return [];
-  const missing = await blobsMissing(incoming);
+  const missing = [];
+  for (const sha of incoming) {
+    if ((visible && !visible(sha)) || !(await hasBlob(sha))) missing.push(sha);
+  }
   if (!missing.length) return [];
   const accept = new Set(Array.isArray(acceptMissing) ? acceptMissing.filter(isSha) : []);
   const stored = docId ? await storedRefsOf(docId) : null;
   return missing.filter((sha) => !accept.has(sha) && !(stored && stored.has(sha)));
 }
 
-async function commentRefsRefused(req, role, docId, html) {
+async function commentRefsRefused(session, docId, html) {
   const refs = new Set();
   if (typeof html === "string" && html.indexOf("data-blob") !== -1) blobAttrsIn(html, refs);
   if (!refs.size) return { refs, missing: [] };
-  const visible = await blobVisibility(req, role);
+  const visible = await blobVisibility(session);
   let stored;
   const missing = [];
   for (const sha of refs) {
@@ -833,12 +1003,18 @@ function clientKnowsBlobs(req) {
 }
 
 // Budget is reserved before body read, settled after upload.
-const reviewLedgers = new Map();
+const blobLedgers = new Map();
 
-function reviewLedger(token, now) {
-  const list = (reviewLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
-  if (list.length) reviewLedgers.set(token, list); else reviewLedgers.delete(token);
+function blobLedger(token, now) {
+  const list = (blobLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
+  if (list.length) blobLedgers.set(token, list); else blobLedgers.delete(token);
   return list;
+}
+
+function blobBudgetOf(session) {
+  if (session.role === "review") return REVIEW_BLOB_BUDGET;
+  if (session.scope) return LINK_EDIT_BLOB_BUDGET;
+  return 0;
 }
 
 const BLOB_MIN_CHARGE = 4096;
@@ -847,26 +1023,23 @@ function blobCharge(bytes) {
   return Math.max(BLOB_MIN_CHARGE, bytes);
 }
 
-function reviewBytesUsed(token, now) {
+function blobBytesUsed(token, now) {
   let used = 0;
-  for (const e of reviewLedger(token, now)) used += e.bytes;
+  for (const e of blobLedger(token, now)) used += e.bytes;
   return used;
 }
 
-function reviewUploaded(token, sha) {
-  return reviewLedger(token, Date.now()).some((e) => e.sha === sha);
+function blobUploaded(token, sha) {
+  return blobLedger(token, Date.now()).some((e) => e.sha === sha);
 }
 
-async function blobVisibility(req, role) {
-  if (role !== "review") return null;
-  const scope = reviewScopeOf(req);
-  if (!scope) return null;
-  const token = String(req.headers["x-splitpage-token"] || "");
-  const refs = (await storedRefsOf(scope)) || new Set();
-  return (sha) => refs.has(sha) || reviewUploaded(token, sha);
+async function blobVisibility(session) {
+  if (!session || !session.scope) return null;
+  const refs = (await storedRefsOf(session.scope)) || new Set();
+  return (sha) => refs.has(sha) || blobUploaded(session.token, sha);
 }
 
-async function handleBlobs(req, res, parts, role) {
+async function handleBlobs(req, res, parts, session) {
   if (parts[2] === "missing" && parts.length === 3) {
     if (req.method !== "POST") return sendJson(res, 405, { error: "method-not-allowed" });
     const body = await readBody(req, MISSING_BODY);
@@ -875,7 +1048,7 @@ async function handleBlobs(req, res, parts, role) {
       return sendJson(res, 400, { error: "bad-shas" });
     }
     const unique = Array.from(new Set(shas));
-    const visible = await blobVisibility(req, role);
+    const visible = await blobVisibility(session);
     const missing = [];
     for (const sha of unique) {
       if (visible && !visible(sha)) missing.push(sha);
@@ -889,7 +1062,7 @@ async function handleBlobs(req, res, parts, role) {
 
   if (req.method === "GET") {
     if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
-    const visible = await blobVisibility(req, role);
+    const visible = await blobVisibility(session);
     if (visible && !visible(sha)) return sendJson(res, 404, { error: "not-found" });
     let buf;
     try {
@@ -931,23 +1104,24 @@ async function handleBlobs(req, res, parts, role) {
       return sendJson(res, 413, { error: "too-large" });
     }
     let entry = null;
-    const token = String(req.headers["x-splitpage-token"] || "");
-    if (role === "review") {
+    const token = session.token;
+    const budget = blobBudgetOf(session);
+    if (budget) {
       const now = Date.now();
       const reserve = blobCharge(isFinite(declared) && declared >= 0 ? declared : MAX_BLOB_BYTES);
-      if (reviewBytesUsed(token, now) + reserve > REVIEW_BLOB_BUDGET) {
+      if (blobBytesUsed(token, now) + reserve > budget) {
         return sendJson(res, 429, { error: "review-budget" });
       }
       entry = { at: now, bytes: reserve, sha: "" };
-      const list = reviewLedger(token, now);
+      const list = blobLedger(token, now);
       list.push(entry);
-      reviewLedgers.set(token, list);
+      blobLedgers.set(token, list);
     }
     try {
       const buf = await readRawBody(req, MAX_BLOB_BYTES);
       if (sha256Of(buf) !== sha) return sendJson(res, 400, { error: "hash-mismatch" });
       if (!sniffImageMime(buf)) return sendJson(res, 415, { error: "unsupported-type" });
-      const visible = await blobVisibility(req, role);
+      const visible = await blobVisibility(session);
       const truthful = !visible || visible(sha);
       let present = false;
       if (await hasBlob(sha)) {
@@ -964,7 +1138,7 @@ async function handleBlobs(req, res, parts, role) {
       return sendJson(res, 201, { stored: true });
     } finally {
       if (entry) {
-        const list = reviewLedgers.get(token);
+        const list = blobLedgers.get(token);
         const at = list ? list.indexOf(entry) : -1;
         if (at !== -1) list.splice(at, 1);
       }
@@ -972,6 +1146,44 @@ async function handleBlobs(req, res, parts, role) {
   }
 
   return sendJson(res, 405, { error: "method-not-allowed" });
+}
+
+async function handleLinks(req, res, parts, id, session, who) {
+  if (parts.length > 5) return sendJson(res, 404, { error: "not-found" });
+  const linkId = parts[4];
+  const allowed = linkId === undefined
+    ? (req.method === "GET" || req.method === "POST")
+    : req.method === "DELETE";
+  if (!allowed) return sendJson(res, 405, { error: "method-not-allowed" });
+  if (session.scope || session.role !== "edit") return sendJson(res, 403, { error: "owner-only" });
+  if (!JOIN_PIN) return sendJson(res, 409, { error: "no-pin" });
+
+  if (req.method === "GET") {
+    const links = [];
+    for (const role of LINK_ROLES) {
+      const rec = activeLink(id, role);
+      if (rec) links.push(linkAnswer(rec));
+    }
+    return sendJson(res, 200, { links });
+  }
+
+  if (req.method === "POST") {
+    const body = await readBody(req, SMALL_BODY);
+    const role = body && body.role;
+    if (LINK_ROLES.indexOf(role) === -1) return sendJson(res, 400, { error: "bad-role" });
+    if (READ_ONLY && role === "edit") return sendJson(res, 403, { error: "read-only" });
+    return withDocLock(id, async () => {
+      if (!(await readDocMeta(id))) return sendJson(res, 404, { error: "not-found" });
+      const { link, created } = await linkFor(id, role, { replace: body.replace === true, by: who.name });
+      return sendJson(res, created ? 201 : 200, linkAnswer(link));
+    });
+  }
+
+  const rec = LINK_ID_RE.test(linkId) ? linksById.get(linkId) : null;
+  if (!rec || rec.docId !== id) return sendJson(res, 404, { error: "no-such-link" });
+  revokeLink(rec);
+  await saveLinks();
+  return sendJson(res, 200, { ok: true });
 }
 
 async function handleApi(req, res, url) {
@@ -984,14 +1196,16 @@ async function handleApi(req, res, url) {
       mode: "server",
       readOnly: READ_ONLY,
       authRequired: !!JOIN_PIN,
-      reviewAvailable: REVIEW_ACTIVE,
+      reviewAvailable: !!JOIN_PIN,
+      links: 1,
+      linksPersist: PERSIST_LINKS,
       blobs: 1,
       version: VERSION
     });
   }
 
   if (parts[1] === "join" && req.method === "POST") {
-    if (!JOIN_PIN) return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit", open: true });
+    if (!JOIN_PIN) return sendJson(res, 200, { token: ownerToken, role: "edit", open: true });
     const ip = clientIp(req);
     if (recentFailures(ip).length >= PIN_MAX_FAILURES) {
       return sendJson(res, 429, { error: "too-many-attempts" });
@@ -999,18 +1213,18 @@ async function handleApi(req, res, url) {
     const body = await readBody(req, SMALL_BODY);
     if (sameSecret(body && body.pin, JOIN_PIN)) {
       pinFailures.delete(ip);
-      return sendJson(res, 200, { token: SESSION_TOKEN, role: "edit" });
+      return sendJson(res, 200, { token: ownerToken, role: "edit" });
     }
-    if (REVIEW_ACTIVE && body && typeof body.key === "string") {
-      const grant = reviewGrantsByKey.get(body.key);
-      if (grant) {
-        pinFailures.delete(ip);
-        return sendJson(res, 200, { token: grant.token, role: "review", docId: grant.docId });
-      }
+    const key = body && typeof body.key === "string" ? body.key : "";
+    const link = key ? linkByKey.get(key) : null;
+    if (link) {
+      return sendJson(res, 200, { token: link.token, role: link.role, docId: link.docId, scope: link.docId });
+    }
+    if (key && tombKeyHashes.has(sha256Of(key))) {
+      return sendJson(res, 410, { error: "link-off" });
     }
     if (REVIEW_ACTIVE && ((REVIEW_PIN && sameSecret(body && body.pin, REVIEW_PIN)) ||
                           (REVIEW_KEY && sameSecret(body && body.key, REVIEW_KEY)))) {
-      pinFailures.delete(ip);
       return sendJson(res, 200, { token: REVIEW_TOKEN, role: "review" });
     }
     noteFailure(ip);
@@ -1021,15 +1235,18 @@ async function handleApi(req, res, url) {
 
   if (parts[1] === "presence" && req.method === "POST") {
     const given = String(req.headers["x-splitpage-token"] || "");
-    const headerRole = JOIN_PIN ? roleOfToken(given) : "edit";
-    if (JOIN_PIN && given && !headerRole) return sendJson(res, 401, { error: "pin-required" });
+    const fromHeader = JOIN_PIN ? sessionOfToken(given) : OPEN_SESSION;
+    if (fromHeader && fromHeader.revoked) return sendJson(res, 401, { error: "link-off" });
+    if (JOIN_PIN && given && !fromHeader) return sendJson(res, 401, { error: "pin-required" });
     const body = await readBody(req, SMALL_BODY);
-    const role = headerRole || (JOIN_PIN ? roleOfToken(body && body.token) : "edit");
-    if (!role) return sendJson(res, 401, { error: "pin-required" });
+    const session = fromHeader || sessionOfToken(body && body.token);
+    if (session && session.revoked) return sendJson(res, 401, { error: "link-off" });
+    if (!session) return sendJson(res, 401, { error: "pin-required" });
 
     const docId = body && body.docId;
     const me = presenceHandle(body && body.id);
     if (!isValidId(docId) || !me) return sendJson(res, 400, { error: "bad-presence" });
+    if (session.scope && session.scope !== docId) return sendJson(res, 403, { error: "wrong-document" });
 
     if (body && body.gone) {
       sweepPresence(Date.now());
@@ -1073,37 +1290,42 @@ async function handleApi(req, res, url) {
     return answer(here);
   }
 
-  const role = JOIN_PIN ? roleOf(req) : "edit";
-  if (!role) {
+  const session = JOIN_PIN ? sessionOfToken(req.headers["x-splitpage-token"] || "") : OPEN_SESSION;
+  if (session && session.revoked) return sendJson(res, 401, { error: "link-off" });
+  if (!session) {
     return sendJson(res, 401, { error: "pin-required" });
   }
+  const role = session.role;
+  const scope = session.scope;
 
   if (parts[1] === "me" && req.method === "GET") {
-    return sendJson(res, 200, Object.assign({ role }, who));
+    return sendJson(res, 200, Object.assign({ role, scope }, who));
   }
 
   if (parts[1] === "share" && req.method === "GET") {
+    if (scope) return sendJson(res, 403, { error: "owner-only" });
     if (role !== "edit") return sendJson(res, 403, { error: "review-only" });
-    if (!REVIEW_ACTIVE) return sendJson(res, 200, { reviewAvailable: false, reviewKey: "", docId: "" });
+    if (!JOIN_PIN) return sendJson(res, 200, { reviewAvailable: false, reviewKey: "", docId: "" });
     const wanted = url.searchParams.get("doc") || "";
     if (!isValidId(wanted)) return sendJson(res, 400, { error: "bad-id" });
-    if (!(await readDoc(wanted))) return sendJson(res, 404, { error: "not-found" });
-    const grant = reviewGrantFor(wanted);
-    return sendJson(res, 200, {
-      reviewAvailable: true,
-      reviewKey: grant.key,
-      docId: wanted
+    return withDocLock(wanted, async () => {
+      if (!(await readDocMeta(wanted))) return sendJson(res, 404, { error: "not-found" });
+      const { link } = await linkFor(wanted, "review", { by: who.name });
+      return sendJson(res, 200, {
+        reviewAvailable: true,
+        reviewKey: link.key,
+        docId: wanted
+      });
     });
   }
 
-  if (parts[1] === "blobs") return handleBlobs(req, res, parts, role);
+  if (parts[1] === "blobs") return handleBlobs(req, res, parts, session);
 
   if (parts[1] !== "docs") return sendJson(res, 404, { error: "not-found" });
 
   const id = parts[2];
 
   if (!id && req.method === "GET") {
-    const scope = role === "review" ? reviewScopeOf(req) : "";
     if (scope) {
       const only = await summaryOf(scope);
       return sendJson(res, 200, { docs: only ? [only] : [] });
@@ -1130,6 +1352,7 @@ async function handleApi(req, res, url) {
   if (!id && req.method === "POST") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
+    if (scope) return sendJson(res, 403, { error: "owner-only" });
     const body = await readBody(req);
     if (!body || typeof body.state !== "object" || body.state === null) {
       return sendJson(res, 400, { error: "bad-state" });
@@ -1164,10 +1387,17 @@ async function handleApi(req, res, url) {
 
   if (!isValidId(id)) return sendJson(res, 400, { error: "bad-id" });
 
-  if (role === "review") {
-    const scope = reviewScopeOf(req);
-    if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
+  if (parts.length > 3 && parts[3] !== "comments" && parts[3] !== "links") {
+    return sendJson(res, 404, { error: "not-found" });
   }
+
+  if (scope && req.method === "DELETE" && parts.length === 3) {
+    return sendJson(res, 403, { error: "owner-only" });
+  }
+
+  if (scope && scope !== id) return sendJson(res, 403, { error: "wrong-document" });
+
+  if (parts[3] === "links") return handleLinks(req, res, parts, id, session, who);
 
   if (parts[3] === "comments") {
     if (parts.length > 5) return sendJson(res, 404, { error: "not-found" });
@@ -1212,7 +1442,7 @@ async function handleApi(req, res, url) {
       const parentId = commentIdOf(body.replyTo);
       const reply = cleanReply(body.reply, now, by);
       if (!parentId || !reply) return sendJson(res, 400, { error: "bad-comment" });
-      const replyRefs = await commentRefsRefused(req, role, id, reply.body);
+      const replyRefs = await commentRefsRefused(session, id, reply.body);
       if (replyRefs.missing.length) {
         return sendJson(res, 422, { error: "missing-blobs", missing: replyRefs.missing });
       }
@@ -1243,7 +1473,7 @@ async function handleApi(req, res, url) {
     if (body.anchor !== undefined && body.anchor !== null && typeof body.anchor !== "object") {
       return sendJson(res, 400, { error: "bad-anchor" });
     }
-    const commentRefs = await commentRefsRefused(req, role, id, comment.body);
+    const commentRefs = await commentRefsRefused(session, id, comment.body);
     if (commentRefs.missing.length) {
       return sendJson(res, 422, { error: "missing-blobs", missing: commentRefs.missing });
     }
@@ -1311,7 +1541,8 @@ async function handleApi(req, res, url) {
         });
       }
 
-      const missing = await refusedRefs(putRefs, id, body.acceptMissing);
+      const visible = putRefs.size ? await blobVisibility(session) : null;
+      const missing = await refusedRefs(putRefs, id, body.acceptMissing, visible);
       if (missing.length) return sendJson(res, 422, { error: "missing-blobs", missing });
 
       const doc = {
@@ -1331,6 +1562,7 @@ async function handleApi(req, res, url) {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
     return withDocLock(id, async () => {
+      if (revokeLinksOf(id)) await saveLinks();
       try {
         await fsp.unlink(docPath(id));
       } catch (err) {
@@ -1342,6 +1574,25 @@ async function handleApi(req, res, url) {
   }
 
   return sendJson(res, 405, { error: "method-not-allowed" });
+}
+
+let dataDirReal = path.resolve(DATA_DIR);
+const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
+
+function foldPath(p) {
+  return FOLD_CASE ? p.toLowerCase() : p;
+}
+
+async function insideDataDir(full) {
+  let real;
+  try {
+    real = await fsp.realpath(full);
+  } catch (err) {
+    real = full;
+  }
+  const f = foldPath(real);
+  const d = foldPath(dataDirReal);
+  return f === d || f.startsWith(d.endsWith(path.sep) ? d : d + path.sep);
 }
 
 async function handleStatic(req, res, url) {
@@ -1364,6 +1615,10 @@ async function handleStatic(req, res, url) {
     res.writeHead(403).end();
     return;
   }
+  if (path.relative(root, full).split(path.sep).some((seg) => seg.charAt(0) === ".")) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
+    return;
+  }
 
   let stat;
   try {
@@ -1372,7 +1627,7 @@ async function handleStatic(req, res, url) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
     return;
   }
-  if (!stat.isFile()) {
+  if (!stat.isFile() || await insideDataDir(full)) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found");
     return;
   }
@@ -1445,6 +1700,8 @@ server.on("error", (err) => {
 
 async function start() {
   if (!NO_API) await fsp.mkdir(DATA_DIR, { recursive: true });
+  if (PERSIST_LINKS && !NO_API) await loadLinkStore();
+  dataDirReal = await fsp.realpath(DATA_DIR).catch(() => path.resolve(DATA_DIR));
   server.listen(PORT, HOST, () => {
     console.log("[splitpage] listening on " + HOST + ":" + PORT);
     console.log("[splitpage] documents in " + DATA_DIR);
@@ -1454,10 +1711,30 @@ async function start() {
     if (ALLOW_ORIGINS.length) console.log("[splitpage] cross-origin calls allowed from: " + ALLOW_ORIGINS.join(", "));
     if (TRUST_PROXY) {
       console.log("[splitpage] TRUST_PROXY=1 — the PIN rate limit counts X-Forwarded-For, so nothing " +
-                  "but your proxy may be able to reach this port");
+                  "but your proxy may be able to reach this port. Behind Cloudflare use TRUST_PROXY=cloudflare: " +
+                  "Cloudflare appends to a client's X-Forwarded-For, so its first entry is the caller's to choose");
+    } else if (TRUST_CLOUDFLARE) {
+      console.log("[splitpage] TRUST_PROXY=cloudflare — the PIN rate limit counts Cf-Connecting-Ip, so nothing " +
+                  "but Cloudflare may be able to reach this port");
+    } else if (TRUST_PROXY_MODE && TRUST_PROXY_MODE !== "0") {
+      console.warn("[splitpage] TRUST_PROXY=" + TRUST_PROXY_MODE + " is not a setting this server knows " +
+                   "(1 or cloudflare) — ignored; the PIN rate limit counts the socket");
+    }
+    if (PERSIST_LINKS && !NO_API) {
+      console.log("[splitpage] PERSIST_LINKS=1 — invite links and the owner's sign-in survive a restart (" + LINKS_DIR + ")");
     }
     if (JOIN_PIN) {
-      console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
+      if (PERSIST_LINKS) {
+        console.log("[splitpage] an owner key is required; guests come in on per-document links");
+        if (JOIN_PIN.length < OWNER_KEY_MIN) {
+          console.warn("[splitpage] WARNING: JOIN_PIN is shorter than " + OWNER_KEY_MIN + " characters on a server " +
+                       "that keeps its sessions (PERSIST_LINKS=1), which means one meant to stay up on the " +
+                       "internet. The rate limit slows a guesser down; it does not make a short code safe to " +
+                       "expose. Set it to 32 or more random characters.");
+        }
+      } else {
+        console.log("[splitpage] a join PIN is required — it travels in the clear, so keep this to your own network");
+      }
       if (REVIEW_ACTIVE) console.log("[splitpage] a review credential is set — it opens EVERY document here to read and comment on, nothing else. The link Splitpage itself offers is per-document.");
       else if (REVIEW_PIN || REVIEW_KEY) {
         console.log("[splitpage] the review credential was IGNORED — it is the same as the join PIN");

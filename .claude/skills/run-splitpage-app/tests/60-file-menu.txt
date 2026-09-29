@@ -83,10 +83,15 @@ expect document.querySelector('#file-menu [data-file-action="help"] .mi-keys') =
 expect document.querySelector('#file-menu [data-file-action="new"] .mi-keys') === null
 
 # --- an item that cannot work says why, on the item ------------------------
-expect document.getElementById('menu-share-link').disabled === false
-expect !document.querySelector('#menu-share-link .mi-why').hidden
-expect document.querySelector('#menu-share-link .mi-why').textContent == No server connected — set one up first
-expect document.querySelector('#menu-share-link .mi-why').getBoundingClientRect().height > 0
+eval (function(){ window.__hostedTest.setSession({ role: 'review', docId: null }); return window.__hostedTest.role(); })()
+expect document.getElementById('menu-collaborate').disabled === true
+expect !document.querySelector('#menu-collaborate .mi-why').hidden
+expect document.querySelector('#menu-collaborate .mi-why').textContent == Only the script's owner can invite people
+expect document.querySelector('#menu-collaborate .mi-why').getBoundingClientRect().height > 0
+eval (function(){ window.__hostedTest.setSession({ role: 'edit', docId: null }); var m = window.__shareTest.mode(); m.available = false; m.authRequired = false; m.reviewAvailable = false; window.__shareTest.updateMenu(); return document.getElementById('menu-collaborate').disabled; })()
+expect document.getElementById('menu-collaborate').disabled === false
+expect document.querySelector('#menu-collaborate .mi-why').hidden
+expect document.getElementById('menu-server-open').hidden === true
 
 # --- a switch leaves the menu open and moves --------------------------------
 jsclick #menu-autosave
@@ -179,7 +184,7 @@ expect F.docId() === window.__docId0
 # plus New script, Export… / Export again (#146) — the eleven formats' own
 # buttons wait, hidden, in the Export group for the dialog to click — and
 # Search commands… (#147), Minimize the rundown (#178) and Settings (#181).
-eval (function(){var ids=["settings","save-as","save-back","autosave","open","paste","gdoc-import","drive-open","server-open","server-publish","share-link","servers","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","toggle-hide-shot","toggle-rundown-min","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
+eval (function(){var ids=["settings","save-as","save-back","autosave","open","paste","gdoc-import","drive-open","server-open","server-publish","collaborate","servers","export-docx","export-md","export-md-table","export-csv","export-xlsx","export-breakdown","export-breakdown-xlsx","export-pdf","export-html","export-narration-docx","export-narration-txt","export-packing-gear","export-packing-prop","export-broll-pdf","export-broll-csv","export-broll-xlsx","history","find","toggle-hide-shot","toggle-rundown-min","setup","tagging-help","help","tour","about","export-app-data","import-app-data","prompter-open-in-browser","prompter-open-in-chromium","new","export","export-again","command-menu"];var counts=ids.map(function(a){return document.querySelectorAll('#file-menu [data-file-action="'+a+'"]').length;});window.__actionIds=ids;window.__actionCounts=counts;window.__actionTotal=document.querySelectorAll('#file-menu [data-file-action]').length;return counts.join(',')+' / total '+window.__actionTotal;})()
 expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 

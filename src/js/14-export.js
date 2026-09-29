@@ -45,6 +45,7 @@ import {
 } from "./12-dirty-toast.js";
 import {
   SERVER_RESUME_KEY,
+  linkTurnedOff,
   onServerDoc,
   saveToServer,
   serverSessionExpired
@@ -324,7 +325,7 @@ function readAutoSavePref() {
 }
 
 export function autoSaveTarget() {
-  if (serverSessionExpired) return null;
+  if (serverSessionExpired || (linkTurnedOff && onServerDoc())) return null;
   if (onServerDoc()) return "server";
   var file = fileHome();
   if (!file || !file.handle) return null;
@@ -386,12 +387,14 @@ export function haltAutoSave(reason) {
   clearAutoSaveTimers();
   autoSaveHalt = reason || "Autosave is paused — press Save to try again.";
   updateSaveStatus();
+  updateFileChip();
 }
 
 export function resumeAutoSave() {
   if (!autoSaveHalt) return;
   autoSaveHalt = "";
   updateSaveStatus();
+  updateFileChip();
 }
 
 // Distinct from saveButtonBusy; sharing one flag broke serialization

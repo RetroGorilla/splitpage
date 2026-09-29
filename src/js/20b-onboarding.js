@@ -4,7 +4,7 @@ import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { launcherFetch } from "./13-hosted.js";
+import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile } from "./18-local-files.js";
 import { toggleFileMenu } from "./18b-file-menu.js";
 import { openHelp, startTour } from "./20c-help.js";
@@ -282,6 +282,7 @@ async function submitOnboardJoin() {
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
+  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   // Restoring crash draft looks pristine; never welcome over it
   if (S.DESKTOP && draftRestorePending) return false;
   if (home.kind === "server" || home.kind === "file") return false;

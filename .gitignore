@@ -8,6 +8,10 @@ _*.html
 *.splitpage.html
 data/
 
+/data/
+/backups/
+/.env
+
 # Session hand-off notes — per-session scratch, not project documentation.
 # The durable equivalents are README.md, docs/help.md, DEPLOY.md, HANDOFF.md.
 .claude/handoff/
@@ -24,8 +28,8 @@ desktop.ini
 # docs/help.md and VERSION. It was tracked until #80, where 1.4MB of generated
 # HTML in every pull request diff — and a pre-commit hook nothing installed to
 # keep it honest — stopped being worth it. CI builds it and uploads it as the
-# `splitpage-app` artifact; `node package.mjs` builds it before packaging; a
-# server deploy takes it from the artifact (DEPLOY.md §2).
+# `splitpage-app` artifact; `node package.mjs` builds it before packaging; the
+# server image builds it itself (DEPLOY.md).
 #
 # Not being tracked is also what retired the hook's second job: a copy of the
 # app with YOUR script saved into it is now an untracked local file, so there

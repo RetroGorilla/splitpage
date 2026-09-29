@@ -33,14 +33,10 @@ expect true
 # that sharing a live document is possible at all.
 jsclick #btn-file
 expect !document.getElementById('file-menu').hidden
-expect document.getElementById('menu-share-link') !== null
-expect document.getElementById('menu-share-link').hidden == false
-expect document.getElementById('menu-share-link').disabled == false
-# it lives in the File menu's Share group (issue #145), next to
-# Servers…, the other tool that is never hidden either
-expect document.getElementById('menu-share-link').closest('.menu-group').getAttribute('data-menu-group') == share
-expect document.getElementById('menu-share-link').querySelector('.mi-why').textContent == No server connected — set one up first
-expect document.getElementById('menu-share-link').title.indexOf('same document') !== -1
+expect document.getElementById('menu-share-link') === null
+expect document.querySelectorAll('#file-menu [data-file-action="share-link"]').length === 0
+expect document.querySelector('#file-menu [data-menu-group="share"] .mi').id == menu-collaborate
+expect document.getElementById('menu-collaborate').disabled == false
 jsclick #file-menu-close
 
 # --- the address it builds -------------------------------------------------
@@ -68,8 +64,7 @@ eval (function(){ S.setIdentity(null); return true; })()
 # --- with no server it says so and opens Servers…, and publishes nothing --
 expect document.getElementById('connect-modal').hidden == true
 eval (function(){ window.__toastsBefore = document.querySelectorAll('.toast.warn').length; S.mode().available = false; return true; })()
-jsclick #btn-file
-jsclick #file-menu [data-file-action="share-link"]
+eval (function(){ S.publishAndCopy(); return true; })()
 wait document.querySelectorAll('.toast.warn').length > window.__toastsBefore
 eval (function(){ var t = document.querySelectorAll('.toast.warn'); window.__noServerText = t[t.length - 1].textContent; return window.__noServerText; })()
 expect window.__noServerText.indexOf('needs a Splitpage server') !== -1
@@ -79,12 +74,12 @@ wait document.getElementById('connect-modal').hidden == true
 
 # --- a read-only server disables it, with the reason in the tooltip -------
 eval (function(){ S.mode().available = true; S.mode().readOnly = true; S.updateMenu(); return true; })()
-expect document.getElementById('menu-share-link').disabled == true
-expect document.getElementById('menu-share-link').title.indexOf('read-only') !== -1
+expect document.getElementById('menu-collaborate').disabled == true
+expect document.querySelector('#menu-collaborate .mi-why').textContent == This server is read-only
 eval (async function(){ window.__roToastsBefore = document.querySelectorAll('.toast.warn').length; window.__roResult = await S.publishAndCopy(); return window.__roResult; })()
 expect window.__roResult == false
 eval (function(){ S.mode().readOnly = false; S.mode().available = false; S.updateMenu(); return true; })()
-expect document.getElementById('menu-share-link').disabled == false
+expect document.getElementById('menu-collaborate').disabled == false
 
 # --- the standalone HTML export is untouched: still a dead copy -----------
 # The decision this issue settled was that the export stays inert. It still

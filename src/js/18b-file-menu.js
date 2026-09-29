@@ -7,7 +7,7 @@ import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { applyReviewMode, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
+import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
 import { writerOpen } from "./19-writer.js";
 import {
@@ -122,6 +122,7 @@ export function fileCardView() {
   if (!S.state) return { name: "Loading…", bits: [] };
   if (home.kind === "server") {
     var srv = serverSessionExpired ? { text: "Signed out — reload to sign in", unsaved: true }
+      : linkTurnedOff ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
     return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + home.rev }] };
   }
