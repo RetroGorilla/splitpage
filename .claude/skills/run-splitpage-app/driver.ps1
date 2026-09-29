@@ -457,9 +457,7 @@ $KeyMap = @{
 # mouse down|move|up|right <js expression giving {x, y}> — one real CDP mouse
 # event at a viewport point the page works out (#204: a drag out of a text
 # box, which only a held button moving across the page can make). `move`
-# carries the held left button; `right` is a right-click (press + release);
-# `hover` moves the pointer with no button held (PR #233: a condensed header
-# button opening its name).
+# carries the held left button; `right` is a right-click (press + release).
 function Mouse-Event([string]$Rest) {
   if ($Rest -notmatch '^\s*(down|move|up|right|hover)\s+(.+)$') { throw 'mouse needs: down|move|up|right|hover <js giving {x,y}>' }
   $what = $Matches[1]; $expr = $Matches[2]

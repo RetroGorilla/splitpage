@@ -406,8 +406,8 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
     /* Loopback unless the user asked to host. There is no authentication in
        that process by design, so reaching the network is never the default
        and never silent — see the warning printed below. Putting it on the
-       INTERNET is a different job again: the Docker image behind a Cloudflare
-       tunnel, with a long owner key and PERSIST_LINKS=1, in DEPLOY.md. */
+       INTERNET is a different job again: the Docker image behind Cloudflare
+       Access, in DEPLOY.md. */
     HOST: HOSTING ? "0.0.0.0" : "127.0.0.1",
     STATIC_DIR: ROOT,
     DATA_DIR,

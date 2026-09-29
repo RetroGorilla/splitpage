@@ -303,8 +303,6 @@ var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
 export function desktopAppOffered() {
   /* Already in the desktop app — nothing to point it at. */
   if (S.DESKTOP) return false;
-  /* Somebody who came in on a link to one script (Collaborate, #233) came
-     to work on it, not to be sold an app: nothing to install is the point. */
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
   return /Windows/.test(ua) && !/Mobi|Android/.test(ua);

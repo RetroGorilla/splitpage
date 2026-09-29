@@ -246,11 +246,9 @@ expect window.__lastFile().name == untitled-script.csv
 expect document.getElementById('export-modal').hidden
 expect localStorage.getItem('splitpage-last-export') === 'export-csv'
 
-# --- the footer's link is Collaborate… --------------------------------------
-# (Publish & copy a link until Collaborate replaced it.) The dialog gets out
-# of the way first, and Collaborate's own opens — here with every api/ call
-# refused, as no server answers the harness, so it says it could not reach
-# the built-in one rather than going out to the network.
+# --- the footer's link is Publish & copy a link ------------------------------
+# With no server, that opens Servers… to set one up — the dialog gets out of
+# the way first.
 eval (function(){ var real = window.fetch.bind(window); window.fetch = function(u, o){ return String(u).indexOf('api/') !== -1 ? Promise.reject(new TypeError('Failed to fetch')) : real(u, o); }; return true; })()
 key ctrl KeyE
 sleep 400

@@ -31,70 +31,9 @@ import { setMenuItemReason } from "./18b-file-menu.js";
 import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
 
-/* ================= Collaborate =================
-
-   What Adam asked for: "The end user shouldn't have to know that this URL
-   exists — they just go Collaborate and then it gets stored on my server."
-
-   Before this, sharing a live script meant File ▸ Servers…, adding an
-   address, typing a join PIN, "Use this server", Put this script on the
-   server, then Publish & copy a link — and the recipient then needed the
-   PIN too. Now:
-
-   THE OWNER clicks File ▸ Collaborate… (or Ctrl K "Collaborate") on the
-   script they have open, and ends up with two links to send — Can edit and
-   Can comment. The dialog walks the steps it has to, and only those:
-
-     checking   → is the collaboration server there? (/api/health)
-     sign-in    → the owner key, once per device, remembered by default —
-                  asked HERE, never by sending the owner to Servers…
-     confirm    → "Collaborating stores this script on <host> — everyone
-                  edits that copy" (a script not on the server yet)
-     publishing → publishToServer() with this tab pointed there
-     links      → Can edit / Can comment: Copy, New link, Turn off
-
-   and says plainly when the server cannot be reached or refuses the key,
-   with the way to fix the address in Settings.
-
-   WHICH SERVER. Built in: DEFAULT_COLLAB_SERVER, changeable in Settings ▸
-   Collaboration (COLLAB_SERVER_KEY, a per-device preference). Two cases
-   come first (collabTarget): a script already on a server collaborates on
-   THAT server — its links are for the document where it lives; and a page
-   served by a Splitpage server itself (the web app at that address, a LAN
-   session's browser page, the desktop app hosting a session) collaborates
-   on that same server, whatever the setting says.
-
-   THE TAB'S CONNECTION IS PER TAB (#11). Everything up to "confirm" asks
-   the server with apiFetch's `base`/`token` override and leaves the tab
-   exactly where it was, so Cancel changes nothing; only publishing points
-   the tab there (pointTabAt), as the Servers dialog would, and a document
-   on the server is then this tab's home like any other. The next fresh tab
-   still starts where it always did — Collaborate never makes a default.
-
-   THE GUESTS never see any of this. They click a link —
-   `<server>?doc=<id>#invite=<key>` (inviteLink below) — and 13-hosted.js
-   reads the key out of the fragment, joins with it, opens that one
-   script, and asks who they are the first time (maybeAskGuestName, below).
-
-   CREDENTIALS. The owner's token is kept only where "Remember on this
-   device" has always kept tokens (13-hosted.js, per server, localStorage)
-   or in this tab. A link's key is in the link and, for a guest, in their
-   own browser (13-hosted.js). Nothing here writes either into the
-   document, a file, an export or the app-data bundle (invariant #29). */
-
-/* The server Collaborate uses when nothing else says which. Compiled in:
-   Adam's own, locked by its own owner key (the server's JOIN_PIN). */
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
-/* Settings ▸ Collaboration's address, when it is not the default. */
 export var COLLAB_SERVER_KEY = "splitpage-collab-server";
 
-/* ---- the pure half (src/test/collaborate.test.mjs) ---- */
-
-/* An address someone typed for the collaboration server, as the base the
-   app uses — or "" when it cannot be one. No scheme means https, since the
-   server this is for sits on the internet; a bare IP address or localhost
-   means http, since that is a LAN session. Only http(s), and never a path
-   the server was not given, a user name or a fragment. */
 export function normalizeCollabServer(input) {
   var raw = String(input == null ? "" : input).trim();
   if (!raw) return "";
@@ -110,11 +49,6 @@ export function normalizeCollabServer(input) {
   return normalizeServerUrl(u.origin + u.pathname.replace(/\/+$/, ""));
 }
 
-/* `#invite=<key>` (a Collaborate link) or `#review=<key>` (a review link
-   from before Collaborate), wherever it sits in the fragment. → {key,
-   kind, rest} with `rest` the fragment without it ("" when nothing else
-   was there), or null. A key is the characters a server mints one from and
-   nothing else, so nothing a link could smuggle is ever sent to /api/join. */
 export function parseLinkFragment(hash) {
   var h = String(hash || "");
   var m = /(^#|&)(invite|review)=([A-Za-z0-9_-]{1,256})(?=&|$)/.exec(h);
@@ -125,10 +59,6 @@ export function parseLinkFragment(hash) {
   return { key: m[3], kind: m[2], rest: rest };
 }
 
-/* The link to send: the server's own address with the script in the query
-   (the same `?doc=` Publish & copy a link used) and the key in the
-   fragment, which browsers never send to a server. Both roles have the same
-   shape; the key alone says which. "" for anything that could not be one. */
 export function inviteLink(base, docId, key) {
   if (!docId || !/^[A-Za-z0-9_-]{1,256}$/.test(String(key || ""))) return "";
   var u;
@@ -138,7 +68,6 @@ export function inviteLink(base, docId, key) {
   return u.href + "#invite=" + key;
 }
 
-/* "script.bigmanonline.uk" — how the dialog and Settings name a server. */
 export function serverLabel(url) {
   if (!url) {
     if (S.DESKTOP) return "this computer's shared session";
@@ -147,20 +76,14 @@ export function serverLabel(url) {
   try { return new URL(url).host || url; } catch (e) { return url; }
 }
 
-/* ---- which server ---- */
-
 export function readCollabServer() {
   return normalizeCollabServer(readPref(COLLAB_SERVER_KEY)) || DEFAULT_COLLAB_SERVER;
 }
 
-/* The page came from a Splitpage server, which is then the one to use. */
 function servedByServer() {
   return !conn.serverUrl && !!S.serverMode.available;
 }
 
-/* {url, onTab}: the server Collaborate works with right now, and whether
-   it is the one this tab already talks to. `maybeHere`: the page has not
-   heard back from its own origin yet, so that is asked first. */
 function collabTarget() {
   if (onServerDoc()) return { url: conn.serverUrl, onTab: true };
   if (servedByServer()) return { url: "", onTab: true };
@@ -170,10 +93,6 @@ function collabTarget() {
   return { url: url, onTab: url === conn.serverUrl, maybeHere: maybeHere };
 }
 
-/* For Settings ▸ Collaboration: where Collaborate goes from this page, and
-   whether this device is signed in there (as far as the page knows — a
-   remembered sign-in the server has since forgotten is found out, and
-   asked for again, the next time Collaborate is used). */
 export function collabServerView() {
   var here = servedByServer();
   var url = here ? "" : readCollabServer();
@@ -183,8 +102,6 @@ export function collabServerView() {
            isDefault: !here && url === DEFAULT_COLLAB_SERVER };
 }
 
-/* Settings ▸ Collaboration ▸ Sign out: this device forgets the owner's
-   sign-in there, and this tab too if it is on that server. */
 export function signOutCollab() {
   var view = collabServerView();
   rememberTokenForServer(view.url, "");
@@ -195,11 +112,6 @@ export function signOutCollab() {
   showToast("Signed out of " + view.label + " on this device.", "ok");
 }
 
-/* ---- the menu item ---- */
-
-/* Why Collaborate cannot work right now, or "". Someone who is themselves
-   on a link (or joined to comment) is not the owner, and the server would
-   refuse them every step (403 owner-only). */
 export function collaborateBlockedReason() {
   if (isLinkGuest() || linkTurnedOff || conn.role === "review" || reviewMode()) {
     return "Only the script's owner can invite people";
@@ -218,11 +130,6 @@ export function updateCollaborateMenu() {
   btn.title = why ? why + "."
     : "Stores this script on " + serverLabel(t.url) +
       " and gives you two links to send: one to edit it, one to comment on it.";
-  /* The header's Collab button (PR #233, Adam's ask) answers to the same
-     reason. aria-disabled, not disabled: a disabled button cannot be
-     tabbed to and shows most browsers no tooltip, and the reason is the
-     point. A click on it while blocked lands in openCollaborate(), which
-     says the same thing as a toast. */
   var head = document.getElementById("btn-collab");
   if (head) {
     if (why) head.setAttribute("aria-disabled", "true");
@@ -231,11 +138,9 @@ export function updateCollaborateMenu() {
   }
 }
 
-/* ---- the dialog ---- */
-
 var MODAL_ID = "collab-modal";
-var collab = null;            /* the dialog's state while it is open */
-var collabSeq = 0;            /* which opening an answer belongs to */
+var collab = null;
+var collabSeq = 0;
 var collabReturnFocus = null;
 var ARM_MS = 4000;
 
@@ -277,8 +182,6 @@ function ensureModal() {
   return m;
 }
 
-/* Opened from File ▸ Collaborate… (18-local-files.js), the command menu
-   (which clicks that item) and the Export dialog's note. */
 export async function openCollaborate() {
   if (!S.state) { showToast("Still loading…", "warn"); return; }
   var why = collaborateBlockedReason();
@@ -309,8 +212,6 @@ export function closeCollaborate() {
   }
 }
 
-/* An answer that arrives after the dialog was closed, or reopened, is
-   about a dialog that is no longer on screen. */
 function stale(c) { return !collab || collab !== c || c.seq !== collabSeq; }
 
 function go(c, step) {
@@ -319,15 +220,10 @@ function go(c, step) {
   paint();
 }
 
-/* ---- the steps ---- */
-
-/* Is the server there, and is this device signed in on it? */
 async function connectStep(c) {
   var t = c.target;
   c.error = null;
   if (t.maybeHere) {
-    /* The page may have come from a Splitpage server that simply has not
-       answered its own boot probe yet. */
     try {
       var own = await apiFetch("api/health", { base: "", token: conn.token });
       if (stale(c)) return;
@@ -366,8 +262,6 @@ async function connectStep(c) {
     } catch (e2) {
       if (stale(c)) return;
       if (e2 && (e2.code === "pin" || e2.code === "link-off")) {
-        /* a remembered sign-in the server no longer takes (it restarted, or
-           its key changed): forgotten, and asked for again right here */
         if (!t.onTab) rememberTokenForServer(t.url, "");
         else clearServerToken();
         c.note = "expired";
@@ -418,8 +312,6 @@ async function signInStep(c) {
     updateConnection({ role: "edit", scope: "" });
     updateServerMenu();
     applyReviewMode();
-    /* the tab may have been waiting for exactly this since it loaded (the
-       server asked for a code at boot and the dialog was dismissed) */
     finishServerDetect();
   } else {
     if (remember) rememberTokenForServer(t.url, joined.token);
@@ -446,14 +338,10 @@ function showSignInError(text) {
   el.hidden = !text;
 }
 
-/* Store the script on the server, with this tab pointed there, and go on
-   to its links. */
 async function publishStep(c) {
   var t = c.target;
   go(c, "publishing");
   if (!t.onTab) {
-    /* Never with a server document open: collabTarget() would have picked
-       that document's own server. */
     if (home.kind === "server") { c.error = { code: "moved" }; go(c, "error"); return; }
     S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                      reviewAvailable: false, version: null };
@@ -482,24 +370,17 @@ async function publishStep(c) {
   loadLinks(c);
 }
 
-/* the script on screen, as the server knows it */
 function hostedId() { return serverHomeId(); }
 
 function linksPath(extra) {
   return "api/docs/" + encodeURIComponent(hostedId()) + "/links" + (extra || "");
 }
 
-/* The script's links: the ones there are, and — the first time, when there
-   are none at all — one of each, so Collaborate always ends on two links
-   to send. A role that is off while the other is not stays off: that was
-   somebody's decision, and "Make a link" is one click. */
 async function loadLinks(c) {
   go(c, "links-loading");
   c.base = await linkBase();
   if (stale(c)) return;
   if (!(c.health && Number(c.health.links) >= 1)) {
-    /* A server from before Collaborate: one plain link, and what it takes
-       to get in, as Publish & copy a link said. */
     go(c, "legacy");
     return;
   }
@@ -535,18 +416,12 @@ async function loadLinks(c) {
   go(c, "links");
 }
 
-/* The links API's own refusals, as a step: no owner key on the server
-   (anyone can open everything — there is nothing private to link to), or
-   the owner's sign-in lapsed between two clicks. */
 function linksFailure(c, e) {
   if (e && e.code === "conflict" && e.payload && e.payload.error === "no-pin") { go(c, "open-server"); return true; }
   if (e && e.code === "pin") { clearServerToken(); c.note = "expired"; go(c, "sign-in"); return true; }
   return false;
 }
 
-/* The address a link starts with: the server's own; for a page it served
-   itself, this page's; and on the desktop app hosting a session, the LAN
-   address its guests reach it on (splitpage://app means nothing to them). */
 async function linkBase() {
   if (conn.serverUrl) return conn.serverUrl;
   if (S.DESKTOP && typeof S.DESKTOP.getSessionInfo === "function") {
@@ -564,19 +439,13 @@ function linkFor(c, role) {
   return l && c.base ? inviteLink(c.base, hostedId(), l.key) : "";
 }
 
-/* The script's plain address, no key — for a server too old to make links
-   and one with no owner key to guard them. From the same base as a link,
-   so the desktop app hosting a session hands out its LAN address. */
 function plainLink(c) {
   if (c.base) {
-    try { return new URL("?doc=" + encodeURIComponent(hostedId()), c.base).href; } catch (e) { /* below */ }
+    try { return new URL("?doc=" + encodeURIComponent(hostedId()), c.base).href; } catch (e) {}
   }
   return serverDocShareUrl(hostedId());
 }
 
-/* New link / Turn off: two presses, the first saying what the second does
-   — whoever already has the link loses it (the server retires the old key,
-   and every token it bought). */
 function arm(c, role, action) {
   var was = c.armed[role];
   if (was) clearTimeout(was.timer);
@@ -614,7 +483,6 @@ async function linkAction(c, role, action) {
   } catch (e) {
     if (stale(c)) return;
     c.busy[role] = false;
-    /* already off (another window, another device): what Turn off wanted */
     if (action === "off" && e && e.code === "404" && e.message === "no-such-link") {
       c.links[role] = null;
       paint();
@@ -629,7 +497,6 @@ async function linkAction(c, role, action) {
   paint();
 }
 
-/* "edit" / "comment", for the sentences a toast says about a link */
 function roleVerb(role) {
   return role === "review" ? "comment" : "edit";
 }
@@ -660,10 +527,9 @@ function selectText(el) {
     var sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(r);
-  } catch (e) { /* nothing to select */ }
+  } catch (e) {}
 }
 
-/* What went wrong, in words, for the dialog and its toasts. */
 function collabErrorText(e, url) {
   var host = serverLabel(url);
   var code = e && e.code;
@@ -684,7 +550,6 @@ function collabErrorText(e, url) {
   return host + " said: " + ((e && e.message) || "something went wrong") + ".";
 }
 
-/* Under "Could not reach <host>.", which already names it. */
 function unreachableText(c) {
   var code = c.error && c.error.code;
   if (code === "offline") {
@@ -696,8 +561,6 @@ function unreachableText(c) {
   return collabErrorText(c.error, c.target.url);
 }
 
-/* ---- drawing it ---- */
-
 function paint() {
   var c = collab;
   var m = modal();
@@ -708,9 +571,6 @@ function paint() {
   document.getElementById("collab-doc-where").textContent =
     onServerDoc() ? "On " + host : "On this device";
   var body = document.getElementById("collab-body");
-  /* What had the focus, so a repaint of the same step (arming a button, a
-     copy, a link made) leaves it where it was; a new step puts it on the
-     step's own first thing instead. A key being typed survives too. */
   var active = document.activeElement;
   var keep = null;
   if (active && m.contains(active) && c.paintedStep === c.step) {
@@ -940,13 +800,11 @@ function wireModal(m) {
     if (e.key !== "Tab") return;
     trapTab(m, e);
   });
-  /* the whole link is selected with one click, ready to copy by hand */
   m.addEventListener("focusin", function (e) {
     if (e.target && e.target.classList && e.target.classList.contains("collab-link-url")) selectText(e.target);
   });
 }
 
-/* keep Tab inside the dialog (invariant #19) */
 function trapTab(m, e) {
   var focusables = Array.prototype.filter.call(
     m.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
@@ -958,24 +816,13 @@ function trapTab(m, e) {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
-/* ================= a guest's first visit =================
-
-   Someone who opened a Collaborate link has never used Splitpage. Once the
-   script is on screen, and only if this browser has no name for them yet,
-   a small box asks who they are — the same name and colour the header's
-   name chip and Settings ▸ You keep (the comment author name and
-   `splitpage-person-color`, 00p-prefs.js), written the same way, so there
-   is still one identity, not a guest's second one. Asked once per tab:
-   Skip means Skip, and the header's name chip is always there to set it
-   later. */
-
 var GUEST_ID = "guest-modal";
 var GUEST_ASKED_KEY = "splitpage-guest-asked";
 
 export function maybeAskGuestName() {
   if (getSavedAuthorName()) return false;
-  try { if (sessionStorage.getItem(GUEST_ASKED_KEY)) return false; } catch (e) { /* ask */ }
-  try { sessionStorage.setItem(GUEST_ASKED_KEY, "1"); } catch (e) { /* asked once this load anyway */ }
+  try { if (sessionStorage.getItem(GUEST_ASKED_KEY)) return false; } catch (e) {}
+  try { sessionStorage.setItem(GUEST_ASKED_KEY, "1"); } catch (e) {}
   openGuestName();
   return true;
 }
@@ -1051,13 +898,8 @@ function wireGuest(m) {
   });
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order. */
 export function __init() {
   updateCollaborateMenu();
-  /* The header's Collab button: the dialog, or the reason it cannot open.
-     Asked again as it is pointed at or tabbed to, so the tooltip is never
-     a state behind (the File menu refreshes its item as it opens). */
   var headBtn = document.getElementById("btn-collab");
   if (headBtn) {
     headBtn.addEventListener("click", function () { openCollaborate(); });
@@ -1065,10 +907,6 @@ export function __init() {
     headBtn.addEventListener("focus", updateCollaborateMenu);
   }
 
-  /* ---- test hook ----
-     What a headless suite needs that it cannot click into existence: the
-     pure helpers, which server Collaborate would use, and the dialog's step.
-     Nothing in the app reads this. */
   window.__collabTest = {
     open: openCollaborate,
     close: closeCollaborate,

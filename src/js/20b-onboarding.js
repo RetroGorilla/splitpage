@@ -386,10 +386,6 @@ async function submitOnboardJoin() {
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
-  /* Somebody who clicked a link to one script (a Collaborate invite, a
-     review link, a plain ?doc=) came for that script: the page is the
-     pristine seed only until it arrives, and a setup wizard over it would
-     be the first thing a first-time guest sees (13-hosted.js). */
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   /* A tab restoring a crash draft looks exactly like a first run from here:
      the page IS the untouched seed until the draft is applied, which happens

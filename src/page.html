@@ -251,13 +251,9 @@
 
             <!-- The live counterpart of every export (issue #19): an export
                  hands someone a DEAD COPY whose edits never come back, and
-                 Collaborate doesn't. Collaborate… (13b-collaborate.js) is
-                 always offered and needs no server set up first: one is built
-                 in (Settings ▸ Collaboration). It stores the script there and
-                 hands back two links — Can edit, Can comment — that open this
-                 one script with nothing to install and no PIN. Disabled, with
-                 the reason, only for someone who is themselves on a link. It
-                 took the place of "Publish & copy a link". -->
+                 Publish & copy a link doesn't. It is always offered — with no
+                 server it says so on its second line and opens Servers… to
+                 set one up rather than failing. 13-hosted.js. -->
             <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
               <div class="menu-group-head" id="fm-g-share">Share</div>
               <button type="button" role="menuitem" class="mi" data-file-action="collaborate" id="menu-collaborate" title="Stores this script on your collaboration server and gives you two links to send: one to edit it, one to comment on it."><svg class="mi-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="mi-text"><span class="mi-label">Collaborate…</span><span class="mi-why" hidden></span></span></button>
@@ -414,26 +410,15 @@
         <!-- The four panels share one slot on the right; each is a quiet
              toggle — icon, label, and its count in the mono — pressed while
              its panel is open (syncPanelClass, 03-sync.js). Where the row
-             runs short (below 1300px, #174; 1250 before Collab) the labels close up — an
-             animation, not a snap (PR #233) — to the icon and the count,
-             and pointing at one or tabbing to it opens its name back out
-             over its neighbours without moving them (app.css, "the
-             toolbar's labels"). The label never leaves the button, so it
-             stays the button's name and its title the tooltip. -->
+             runs short (below 1250px, #174) the labels leave the screen but
+             not the button: .btn-label is then read to a screen reader and
+             shown as the tooltip, and the icon and the count stay. -->
         <div class="btn-group" role="group" aria-label="Panels">
           <button class="btn panel-toggle" id="btn-production" type="button" aria-pressed="false" title="Production"><svg class="btn-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="btn-label">Production</span><span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-gear" type="button" aria-pressed="false" title="Gear: an equipment list, tagged with <gear> or its own quick-add box"><svg class="btn-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="btn-label">Gear</span><span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="btn-label">B-roll</span><span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
-        <!-- File ▸ Collaborate… (13b-collaborate.js) in the header, beside
-             Write and Present (Adam, PR #233): the same dialog, and the same
-             "can it work right now" as the menu item (updateCollaborateMenu
-             keeps both). Blocked, it is aria-disabled rather than disabled,
-             so it can still be tabbed to and pointed at and its tooltip
-             says why. Its label closes up after the panels', below 1000
-             with Write's, and opens back out on hover or focus the way
-             theirs do. Not on the phone, where the File menu has it. -->
         <button class="btn btn-mode btn-collab" id="btn-collab" type="button" aria-label="Collaborate — invite people to this script" title="Collaborate — invite people to this script"><svg class="btn-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="btn-label">Collab</span></button>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
         <!-- The one primary action, and the one tally-red thing in the
@@ -1480,9 +1465,6 @@
       <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint" id="pin-reason">This server asks for its join PIN or key.</p>
-    <!-- Text, not numeric (Collaborate): a LAN session's six digits and a
-         server's long owner key both go in here, so no number keypad on a
-         phone and no length implied by the placeholder. -->
     <input type="text" id="pin-input" autocomplete="off" autocapitalize="off"
            spellcheck="false" placeholder="Join PIN or key" aria-labelledby="pin-title">
     <div class="connect-error" id="pin-error" hidden></div>

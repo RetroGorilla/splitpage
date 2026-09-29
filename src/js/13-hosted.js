@@ -140,34 +140,15 @@ var REMEMBERED_TOKENS_KEY = "splitpage-server-tokens";
 /* Minted per launch by start.mjs, arrives in the URL fragment, lives only
    as long as this tab. */
 var LAUNCH_TOKEN_KEY = "splitpage-launch-token";
-/* The key a link carries — a Collaborate link's `#invite=` or a review
-   link's `#review=` — in the fragment. Kept for this tab (sessionStorage)
-   so a reload does not send the guest back to a code they were never told;
-   the token it buys is sessionStorage too. The name is the one the review
-   link has always used, so a tab mid-review keeps its key across this
-   change. */
+/* The key a review link carries, also in the fragment and also per launch.
+   Kept for this tab so a reload does not send the reviewer back to a code
+   they were never told — the token it buys is sessionStorage too. */
 var REVIEW_KEY_KEY = "splitpage-review-key";
-/* A Collaborate link's key, remembered on this DEVICE for the server it
-   opens — {serverUrl: {key, doc}} in localStorage — so a new tab, or coming
-   back next week from the browser's history (which no longer has the
-   fragment), still gets in. Only for a server whose /api/health says its
-   links outlive a restart (`linksPersist: true`): a LAN session's links die
-   with the session, and those keys stay in the tab (suite 43 pins that a
-   review key never reaches localStorage). Forgotten the moment the server
-   says the link is off. The key names no password and the map's name
-   deliberately says nothing credential-shaped (suite 18's storage check). */
 var LINK_KEYS_KEY = "splitpage-invites";
 
 var launchToken = "";
-/* The link key this tab holds for its server, or "". `linkKeyFresh` is a
-   key that arrived in THIS load's address — a link just clicked — which is
-   the one case a key is used even though the tab already has a token: a
-   guest who follows a second link wants that link's document. */
 var linkKey = "";
 var linkKeyFresh = false;
-/* Set once a link's key has been refused as switched off (flagLinkOff):
-   no more saves, no retry loop, one sticky message. Like
-   serverSessionExpired, a latch until the page is reloaded. */
 export var linkTurnedOff = false;
 
 /* What this browser is allowed to do here, as the SERVER sees it — `conn.role`:
@@ -374,27 +355,15 @@ export function clearServerToken() {
   }
 }
 
-/* A token a LINK bought (#invite= / #review=): this tab's, for this
-   server, and never "Remember on this device" — that map is the owner's
-   sign-in, and a guest's token going into it (or a guest's join clearing
-   it, which setServerToken(token, false) would) would sign the owner out
-   of their own device the first time they tried their own link. */
 function setLinkToken(token) {
   updateConnection({ token: String(token || "") });
   saveTabServer();
 }
 
-/* The owner's sign-in on this device for `serverUrl` (13b-collaborate.js):
-   the token "Remember on this device" kept for that server, or "". */
 export function rememberedTokenForServer(serverUrl) {
   return rememberedTokenFor(normalizeServerUrl(serverUrl));
 }
 
-/* Keep (or with no token, forget) the owner's sign-in for a server this
-   tab may not be pointed at yet — the Collaborate dialog signs in before it
-   moves the tab, and Settings ▸ Collaboration signs out of a server the tab
-   may never have been on. The tab's own token is left alone: that is
-   setServerToken() / clearServerToken(), for the server the tab is on. */
 export function rememberTokenForServer(serverUrl, token) {
   var url = normalizeServerUrl(serverUrl);
   var map = rememberedTokens();
@@ -403,15 +372,12 @@ export function rememberTokenForServer(serverUrl, token) {
   writeRememberedTokens(map);
 }
 
-/* ---- the link a guest arrives on ----
+/* ---- the review link ----
 
-   `#invite=<key>` (a Collaborate link) or `#review=<key>` (a review link
-   from before Collaborate, still accepted) in the address — the same
-   delivery as the launcher's own key: the fragment is the one part of a URL
-   browsers never send to a server and no proxy logs. Read once, kept for
-   this tab, and taken out of the address bar so it is not in a screenshot
-   or a bookmark. parseLinkFragment() is 13b-collaborate.js's, beside the
-   function that builds the link. */
+   `#review=<key>` in the address, the same delivery as the launcher's own
+   key: the fragment is the one part of a URL browsers never send to a
+   server and no proxy logs. Read once, kept for this tab, and taken out of
+   the address bar so it is not in a screenshot or a bookmark. */
 function readLinkKey() {
   linkKeyFresh = false;
   var found = parseLinkFragment(location.hash || "");
@@ -426,7 +392,6 @@ function readLinkKey() {
   }
   try { linkKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { linkKey = ""; }
   if (linkKey) return;
-  /* A new tab, or a visit days later: the device's copy for this server. */
   var saved = deviceLinkKeys()[conn.serverUrl];
   if (saved && typeof saved.key === "string") linkKey = saved.key;
 }
@@ -440,12 +405,9 @@ function writeDeviceLinkKeys(map) {
   try {
     if (Object.keys(map).length) localStorage.setItem(LINK_KEYS_KEY, JSON.stringify(map));
     else localStorage.removeItem(LINK_KEYS_KEY);
-  } catch (e) { /* it just won't be remembered past this tab */ }
+  } catch (e) {}
 }
 
-/* A link's key worked: keep it for this tab always, and on this device too
-   when the server's links outlive a restart. A LAN session's (`linksPersist`
-   false, or a server too old to say) stays in the tab only. */
 function rememberLinkKey(serverUrl, key, docId, persist) {
   try { sessionStorage.setItem(REVIEW_KEY_KEY, key); } catch (e) {}
   var map = deviceLinkKeys();
@@ -454,8 +416,6 @@ function rememberLinkKey(serverUrl, key, docId, persist) {
   writeDeviceLinkKeys(map);
 }
 
-/* The link is off, or no longer anything this server knows: never offered
-   again, from this tab or this device. */
 function forgetLinkKey(serverUrl) {
   linkKey = "";
   linkKeyFresh = false;
@@ -467,25 +427,14 @@ function forgetLinkKey(serverUrl) {
   }
 }
 
-/* This page was opened from a link — one with a key, or a plain `?doc=` —
-   so it is somebody arriving at ONE script: the first-run wizard, the start
-   screen and the desktop-app pitch stay out of their way (20b, 20j, 20a).
-   Read at boot, after __init() below has taken both out of the address. */
 export function arrivingOnLink() {
   return !!linkKey || !!sharedDocId;
 }
 
-/* This tab's token opens one document only: a link's (#invite=, a review
-   link), as the server said (conn.scope). The File menu says why the
-   library-wide items do not work for it (updateServerMenu), and the
-   Collaborate item why it is the owner's (13b-collaborate.js). */
 export function isLinkGuest() {
   return !!conn.scope;
 }
 
-/* The token this tab holds is the one "Remember on this device" kept for
-   this server — the owner's own sign-in, which a link clicked on the
-   owner's own device must not replace. */
 function holdsOwnerSignIn() {
   return !!conn.token && conn.token === rememberedTokenFor(conn.serverUrl);
 }
@@ -534,13 +483,6 @@ function serverTakesBlobs() {
   return capsOf(conn).blobs;
 }
 
-/* `opts.base` / `opts.token` (the Collaborate dialog, 13b-collaborate.js):
-   ask a server this tab is NOT pointed at yet, with a token for that
-   server, so the dialog can check the address and the owner's sign-in
-   before anything about the tab moves — and leave it where it was if the
-   owner cancels. Such a call is judged by nothing this connection
-   remembers (capsOf is per connection); the header goes as it would to any
-   server new enough to have Collaborate at all. */
 function clientHeaders(headers, opts) {
   var other = !!(opts && opts.base !== undefined);
   var token = opts && opts.token !== undefined ? opts.token : conn.token;
@@ -605,13 +547,6 @@ export async function apiFetch(path, opts) {
     if (body403 && (body403.error === "pin-required" || body403.error === "bad-pin")) {
       throw ApiError("pin", "this server asks for a join PIN");
     }
-    /* A link's own refusals (Collaborate). "link-off": the owner turned
-       this link off (or replaced it) — nothing to type, nothing to retry,
-       and never the PIN dialog (flagLinkOff). "owner-only": the token is a
-       link's, and this is the owner's to do (make a script, delete one,
-       list the library, make links). "wrong-document": a link's token
-       asked about a document it does not open. The token is fine in the
-       last two, so neither is ever a lapsed sign-in. */
     if (body403 && body403.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
     if (body403 && body403.error === "owner-only") throw ApiError("owner-only", "only the script's owner can do that");
     if (body403 && body403.error === "wrong-document") {
@@ -619,8 +554,6 @@ export async function apiFetch(path, opts) {
     }
     throw ApiError("auth", "signed out");
   }
-  /* The join answers a switched-off link 410 rather than 401 — the key
-     was right once — and a gated route may too. */
   if (res.status === 410) {
     var body410 = await res.json().catch(function () { return null; });
     if (body410 && body410.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
@@ -735,24 +668,6 @@ function flagClientTooOld() {
   updateFileChip();
 }
 
-/* The owner turned this link off (Collaborate's Turn off, or New link,
-   which retires the old one) — or, for a guest, the server no longer knows
-   the token at all (a LAN session restarted, "gone"). A reload cannot fix
-   either: there is no code to type, so it is not the PIN dialog, and no
-   sign-in to renew, so it is not flagServerSessionExpired's "reload". What
-   the two latches share is kept: say so ONCE, sticky, stop saving (every
-   save path and the presence beat check `linkTurnedOff`), and keep what is
-   on screen — dirty, so the unload guard still asks, and stashed like a
-   lapsed sign-in's, so a fresh link to the same script opened in this tab
-   merges it back in (resumeServerDoc). Save a copy… still works, and the
-   toast offers it. The key is forgotten here and on this device, so no
-   later load tries it again.
-
-   "arrived" is the same latch for a link that was already off when this
-   tab opened it: the script never reached the screen, so there is nothing
-   of the reader's to keep or copy — what is showing is the start-up demo,
-   and "your changes can't be saved" or a Save a copy… button would be about
-   that. Only who to ask. */
 function flagLinkOff(kind) {
   if (linkTurnedOff) return;
   linkTurnedOff = true;
@@ -781,14 +696,6 @@ function flagLinkOff(kind) {
   offerDraftAfterLinkOff();
 }
 
-/* The browser keeps a guest's unsaved changes to a server script
-   (20g-drafts.js, PR #233) — through a link turned off mid-session too,
-   since the script stays on screen and dirty. Found off on a LATER load
-   (a reload, the link again next week), nothing of theirs is on screen:
-   the kept draft opens as an unsaved copy, so the last thing the link did
-   for them is give their work back. Both kinds of latch come here — an
-   "arrived" tab has no draft of this session, but may have one of the
-   last. Never on the desktop, whose drafts come back at launch. */
 function offerDraftAfterLinkOff() {
   if (S.DESKTOP || onServerDoc()) return;
   offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
@@ -1001,10 +908,6 @@ async function resumeServerDoc() {
 function handleApiError(err, whatFailed) {
   if (err && err.code === "auth") { flagServerSessionExpired(); return; }
   if (err && err.code === "link-off") { flagLinkOff("off"); return; }
-  /* A guest on a link has no code to type. A token the server no longer
-     knows (it restarted and its sessions went with it) is answered by the
-     link's own key, once, quietly; only when the key is refused too is the
-     link gone — never "enter the PIN". */
   if (err && err.code === "pin" && (isLinkGuest() || linkKey)) {
     joinWithLinkKey().then(function (r) {
       if (r === "ok") {
@@ -1050,8 +953,6 @@ function handleApiError(err, whatFailed) {
   if (err && err.code === "client-too-old") { flagClientTooOld(); return; }
   /* The image answers (#82): each says what to do about the picture, not
      about the connection, which is fine. */
-  /* a review link's, and since Collaborate an edit link's too: the server
-     meters every link's pictures the same way */
   if (err && err.code === "review-budget") {
     showToast(whatFailed + " — this link has used up its allowance for images for now. " +
       "Try again in an hour, or leave the picture out.", "warn", true);
@@ -1135,41 +1036,27 @@ export async function detectServer() {
   /* The server wants a code and this browser has not been given one (or
      the one it has is stale): ask before listing anything. Every route
      past here would answer 401 anyway, and a picker full of "could not
-     reach the server" is a worse way to say "type the PIN".
-
-     A link just clicked is the exception to "a token is enough": a guest
-     following a second link wants THAT link's script, so its key is used
-     even over a token the tab already has — unless the token is the
-     owner's own sign-in on this device, which a link must never replace
-     (the owner trying their own link gets the script as its owner). */
+     reach the server" is a worse way to say "type the PIN". */
   var useKey = !!linkKey && (!conn.token || (linkKeyFresh && !holdsOwnerSignIn()));
   if (linkKeyFresh && holdsOwnerSignIn()) {
-    /* The owner opened their own link: the script opens (its ?doc=) as
-       theirs, and the key is dropped from this tab so that nothing later —
-       a restart answering this token 401 — can quietly turn the owner into
-       a guest with it. */
     linkKey = "";
     linkKeyFresh = false;
-    try { sessionStorage.removeItem(REVIEW_KEY_KEY); } catch (e) { /* in memory only, then */ }
+    try { sessionStorage.removeItem(REVIEW_KEY_KEY); } catch (e) {}
   }
   if (S.serverMode.authRequired && (!conn.token || useKey)) {
-    /* Arrived on a link: the key in the fragment IS the code, so ask the
-       server with it rather than asking the reader for something they
-       were never given. */
+    /* Arrived on a review link: the key in the fragment IS the code, so
+       ask the server with it rather than asking the reader for something
+       they were never given. A key that is no longer good (the session was
+       restarted since the link was sent) simply falls through to the
+       dialog, which is the only place a code is ever typed. */
     var reason = null;
     if (useKey) {
       var r = await joinWithLinkKey();
       if (probing !== conn) return;
       if (r === "ok") { finishServerDetect(); return; }
-      /* flagLinkOff has said so, once; there is no code to type */
       if (r === "off") { updateServerMenu(); return; }
-      /* A key the server does not know (a LAN session restarted since the
-         link was sent, a link replaced) — the dialog, for someone who does
-         have the code, saying what happened to the link first. */
       if (r === "gone") reason = "This link no longer works — ask whoever sent it for a new one. " +
         "If you have this server's join PIN or key, enter it here.";
-      /* a guest who already had a token for another of this server's
-         scripts keeps it rather than being sent to the PIN dialog */
       if (conn.token) { finishServerDetect(); return; }
     }
     updateServerMenu();
@@ -1181,32 +1068,18 @@ export async function detectServer() {
   finishServerDetect();
 }
 
-/* What /api/health said, onto this tab: S.serverMode (the File menu, the
-   Collaborate dialog and every save read it) and what the server can do
-   (capsOf, #82). Also the Collaborate dialog's, once it has pointed the tab
-   at the server it just checked (13b-collaborate.js). */
 export function applyHealth(health) {
   S.serverMode.available = !!(health && health.ok);
   S.serverMode.readOnly = !!(health && health.readOnly);
   S.serverMode.authRequired = !!(health && health.authRequired);
   S.serverMode.reviewAvailable = !!(health && health.reviewAvailable);
   S.serverMode.version = (health && health.version) || null;
-  /* Collaborate's links (`links: 1`), and whether they outlive a restart —
-     a LAN session hosted from the desktop app says false, and its links'
-     keys are then never kept past the tab. */
   S.serverMode.links = !!(health && Number(health.links) >= 1);
   S.serverMode.linksPersist = !!(health && health.linksPersist === true);
   S.serverMode.checked = true;
   if (!capsOf(conn).known && health) noteCaps(conn, health, false);
 }
 
-/* Join with the link's key (#invite= or #review=), for this tab's server.
-   → "ok" (this tab has the link's token, and the key is remembered as
-   the server's links allow), "off" (the owner turned it off: flagLinkOff
-   has said so), "gone" (the server does not know the key: forgotten here
-   and on this device), "none" (no key to try), "failed" (no answer, or
-   too many tries — worth another go later), or "moved" (the tab went
-   elsewhere meanwhile). */
 async function joinWithLinkKey() {
   if (!linkKey || linkTurnedOff) return "none";
   var key = linkKey;
@@ -1216,20 +1089,15 @@ async function joinWithLinkKey() {
   if (joined && joined.ok) {
     linkKeyFresh = false;
     setLinkToken(joined.token);
-    /* What the join said the token is, straight away — /api/me says the
-       same a moment later, and a refusal in between should already know it
-       is talking to a link's token rather than an owner's. */
     var scope = typeof joined.scope === "string" ? joined.scope
       : typeof joined.docId === "string" && joined.role === "review" ? joined.docId : "";
     try {
       updateConnection({ role: joined.role === "review" ? "review" : "edit", scope: scope });
-    } catch (e) { /* a scope the server could not have meant: /api/me decides */ }
+    } catch (e) {}
     linkDocId = joined.docId || scope || "";
     rememberLinkKey(conn.serverUrl, key, linkDocId, !!S.serverMode.linksPersist);
     return "ok";
   }
-  /* Off before this tab ever held the script: nothing of theirs on screen.
-     A tab that has it open (or has edits) gets the mid-session wording. */
   if (joined && joined.error === "link-off") {
     flagLinkOff(onServerDoc() || S.dirty ? "off" : "arrived");
     return "off";
@@ -1238,9 +1106,6 @@ async function joinWithLinkKey() {
   return "failed";
 }
 
-/* The document the link's join named: opened when no `?doc=` says which
-   (a reload or a new tab on a remembered key), and for an old review link
-   whose token /api/me does not scope. */
 var linkDocId = "";
 
 /* /api/health for THIS connection, recording what the server can do
@@ -1281,10 +1146,7 @@ export async function finishServerDetect() {
     serverIdentity = me;
     /* The role rides along with identity: same answer, same round trip,
        and it comes from the token rather than from anything this page
-       could have decided for itself. So does the scope — the one script a
-       link's token opens, "" for the owner's (Collaborate). A server from
-       before links says nothing about scope: a review link's join still
-       named its document, so that stays; anything else is "". */
+       could have decided for itself. */
     var role = (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit";
     var scope = serverIdentity && typeof serverIdentity.scope === "string" ? serverIdentity.scope
       : (role === "review" ? conn.scope : "");
@@ -1296,10 +1158,7 @@ export async function finishServerDetect() {
     }
   } catch (e) {
     if (asking !== conn) return;
-    /* identity is a nicety, not a requirement — except when the answer is
-       that the link this tab came in on is off, or that the server no
-       longer knows its token (restarted): the link's key is tried once
-       before anything else is asked for */
+    /* identity is a nicety, not a requirement */
     if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
     if (e && e.code === "pin" && linkKey && !linkTurnedOff) {
       updateConnection({ token: "", role: "", scope: "" });
@@ -1317,15 +1176,7 @@ export async function finishServerDetect() {
   applyReviewMode();
   /* The link's document is opened only if nothing else claimed this page:
      resumeServerDoc() answers a crash draft or a lapsed sign-in first, and
-     both are unsaved work that must not be replaced (issue #19).
-
-     In the browser the crash draft is this browser's own (20g-drafts.js,
-     PR #233), looked for under the script this load is about to open — a
-     guest's link or reload (their token's scope, the link's ?doc=, what
-     the join named) — and armed before resumeServerDoc() looks, so it is
-     merged ahead of an older lapsed-sign-in stash of the same script, as
-     the desktop's is. The owner's plain reload opens no script by itself;
-     theirs is found when they open it (openServerDoc). */
+     both are unsaved work that must not be replaced (issue #19). */
   var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
@@ -1339,9 +1190,6 @@ export function updateServerMenu() {
     var el = document.getElementById(id);
     if (el) el.hidden = !S.serverMode.available;
   });
-  /* A link's token opens its one script and nothing else (Collaborate):
-     the server answers the library's list and a new script 403
-     owner-only, so the items say why rather than failing on a click. */
   var guest = isLinkGuest();
   var openBtn = document.getElementById("menu-server-open");
   if (openBtn) {
@@ -1360,8 +1208,6 @@ export function updateServerMenu() {
       : conn.role === "review" ? "Viewing only — publishing needs the editing code"
       : "This server is read-only");
   }
-  /* File ▸ Collaborate… (13b-collaborate.js) decides its own state from
-     the same facts. */
   updateCollaborateMenu();
 }
 
@@ -1402,11 +1248,6 @@ export function reviewBlocked() {
    itself a reviewer. */
 export async function fetchReviewLink() {
   if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
-  /* A server with Collaborate's links (`links: 1`) says reviewAvailable
-     whenever it has a JOIN_PIN, and its Can comment link — which the owner
-     can replace and turn off — is the one to hand out; the Servers dialog
-     points there instead (20e-connect.js). A link's own token has none to
-     hand on either way. */
   if (S.serverMode.links || isLinkGuest()) return "";
   if (!onServerDoc()) return "";
   var body;
@@ -1476,9 +1317,6 @@ function renderServerPicker() {
    waiting to open it (a restored desktop tab, 20f-desktop.js) can tell a
    PIN still to be typed from a document that opened. */
 export async function openServerDoc(id) {
-  /* This browser kept unsaved changes to this script from a page that is
-     gone (20g-drafts.js, PR #233): open it through the resume, which
-     merges them into what the server holds now, rather than over them. */
   if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc();
@@ -1532,11 +1370,8 @@ export async function openServerDoc(id) {
 }
 
 /* → true once the document is on the server. The boolean is what
-   publishAndCopyShareLink() (issue #19) and Collaborate need: a link must
-   never be handed out for a publish that did not happen.
-   opts (Collaborate, 13b-collaborate.js, which says it all in its own
-   dialog): {quiet} — no "Published…" toast; {onError(err)} — the failure
-   handed back instead of toasted. */
+   publishAndCopyShareLink() (issue #19) needs: a link must never be
+   copied for a publish that did not happen. */
 export async function publishToServer(opts) {
   opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
   if (S.serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
@@ -1611,15 +1446,7 @@ export async function publishToServer(opts) {
    It never connects anywhere on its own and never publishes silently:
    with no server it says so and opens the Servers dialog instead, and the
    toast names what the recipient will be asked for (a join PIN, an Access
-   sign-in, or nothing at all) before they get there.
-
-   SINCE COLLABORATE it is no longer in the File menu: File ▸ Collaborate…
-   (13b-collaborate.js) publishes to a server that is built in, signs the
-   owner in, and hands out links that need no PIN. What is left here is
-   what Collaborate still uses for a server too old to make links —
-   serverDocShareUrl() and shareAccessNote() — and the function itself,
-   which window.__shareTest keeps reachable for SKILL.md's by-hand "share
-   link end to end" run against a real server. */
+   sign-in, or nothing at all) before they get there. */
 
 /* conn.serverUrl is "" when this page was served BY the document server, in
    which case the address to share is this page's own. Built through the
@@ -1719,13 +1546,6 @@ function readSharedDocParam() {
   return id;
 }
 
-/* Which script: the link's own (?doc=), or — a guest reloading, opening a
-   new tab, or coming back on a remembered key, none of which carry ?doc=
-   any more — the one the link's token opens (conn.scope, else what the
-   join named). A link's token opens nothing else, so its scope wins over a
-   ?doc= that disagrees, rather than asking for a script it will be refused.
-   A guest who has not said who they are is asked once the script is on
-   screen (13b-collaborate.js). */
 async function openSharedDocFromLink() {
   var id = conn.scope || sharedDocId || linkDocId;
   sharedDocId = "";
@@ -3471,12 +3291,7 @@ export function __init() {
      the page's own store. */
   setRemoteSource(function (sha) { return onServerDoc() ? fetchBlob(sha) : null; });
 
-  /* after loadTabConnection(): a remembered link key is per server */
   readLinkKey();
-  /* A link pasted into this tab's address bar that differs from the page
-     only in its fragment does not reload the page, so the boot path above
-     never sees it: reload, and it does. (A link with another ?doc= is a
-     navigation anyway.) */
   window.addEventListener("hashchange", function () {
     if (parseLinkFragment(location.hash || "")) location.reload();
   });
@@ -3520,7 +3335,6 @@ export function __init() {
       S.serverMode.checked = true;
       S.serverMode.authRequired = true;
       S.serverMode.reviewAvailable = opts.reviewAvailable !== false;
-      /* `scope`: the one script a link's token opens (Collaborate) */
       updateConnection({ role: opts.role || "edit", scope: opts.scope || "" });
       /* `docId: null` says "not on a server document" — which leaves a
          local home exactly where it was, as zeroing serverDoc used to. */
@@ -3548,9 +3362,6 @@ export function __init() {
                tunnel: conn.tunnel ? Object.assign({}, conn.tunnel) : null,
                homeHoldsIt: home.kind === "server" && home.conn === conn };
     },
-    /* The link a guest came in on (Collaborate), reduced to whether there
-       is one — a suite has no business reading the key itself — plus the
-       latch, and which servers this device keeps a link for. */
     link: function () {
       return { hasKey: !!linkKey, fresh: linkKeyFresh, turnedOff: linkTurnedOff,
                deviceServers: Object.keys(deviceLinkKeys()), docId: linkDocId,

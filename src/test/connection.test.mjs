@@ -111,9 +111,6 @@ test("a document is only ever saved through the connection it was opened through
   setConnection({});
 });
 
-/* Collaborate: a link's token opens ONE document, and the server says
-   which (/api/me's `scope`). It is a fact about the token like the role —
-   validated, moved in place, and gone with the server. */
 test("a link's scope is a document id the server could have named, kept like the role", () => {
   const c = setConnection({ serverUrl: "https://s.example/", token: "t" });
   assert.equal(c.scope, "");
@@ -121,7 +118,6 @@ test("a link's scope is a document id the server could have named, kept like the
   updateConnection({ role: "edit", scope: "doc-7" });
   assert.equal(home.conn.scope, "doc-7", "the home sees it without a second copy");
   assert.equal(conn, c);
-  /* only what server.js's own id whitelist allows, or "" */
   assert.throws(() => updateConnection({ scope: "../etc" }), /a scope is/);
   assert.throws(() => updateConnection({ scope: "Doc 7" }), /a scope is/);
   assert.throws(() => updateConnection({ scope: 7 }), /a scope is/);
@@ -129,7 +125,6 @@ test("a link's scope is a document id the server could have named, kept like the
   updateConnection({ scope: "" });
   assert.equal(conn.scope, "");
   setHome("none");
-  /* a new server starts with nothing the old one said */
   setConnection({ serverUrl: "https://s.example/", token: "t", role: "review", scope: "doc-7" });
   assert.equal(setConnection({ serverUrl: "https://other.example/" }).scope, "");
   setConnection({});

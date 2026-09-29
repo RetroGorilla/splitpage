@@ -7,11 +7,7 @@
 #
 # Since #80 it also PRODUCES something. index.html is generated and no longer
 # committed, so this job is where a built copy comes from: the `splitpage-app`
-# artifact on a green run is a ready-built app for anyone running the server
-# without a checkout (DEPLOY.md, Other ways to run it). The owner's own server
-# does not need it — its Dockerfile builds the app from source — and the
-# Docker image itself is checked by docker.yml, which only runs when a
-# deploy-relevant file changes.
+# artifact on a green run is what a server deploy downloads (DEPLOY.md §2).
 #
 # driver.ps1 is not run here. It is Windows and Edge only, and since #57 the
 # Node driver's exit code agrees with its own RESULT line, which is what lets
@@ -169,16 +165,10 @@ jobs:
       - name: Browser suite 52 (content security policy)
         run: node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/52-csp.txt
 
-      # The built app, as the one place anybody can get it ready-made now that
-      # it is not in the repository. Unzipped, it is a complete Docker build
-      # context for Dockerfile.prebuilt, which copies exactly these files and
-      # builds nothing:
-      #
-      #   docker build -f Dockerfile.prebuilt -t splitpage .
-      #
-      # Not the root Dockerfile: that one builds index.html from src/, which
-      # the artifact does not carry. VERSION is here because server.js reads
-      # it for /api/health's `version`.
+      # The built app, as the one place anybody can get it now that it is not
+      # in the repository. Exactly the set of files DEPLOY.md §2 says to copy
+      # onto the server — including the Dockerfile, so the download IS the
+      # build context and `docker build` on it needs nothing else.
       #
       # Last, deliberately: a run whose tests failed uploads nothing, so an
       # artifact that exists is one every check above it passed.

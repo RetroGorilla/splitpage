@@ -134,12 +134,9 @@ function setPinError(message) {
 /* Its own fetch rather than apiFetch(): this is the one call that has to
    tell a wrong code from a missing one from too many tries, and apiFetch
    deliberately flattens all of that into "pin". */
-/* `key` is a link's own credential (13-hosted.js's readLinkKey — a
-   Collaborate link's #invite=, a review link's #review=): the same door,
-   opened by a link rather than by something typed. The server decides
-   which role either one buys, and which one script a link's token opens
-   (`docId`, `scope`) — this only carries it. A link its owner turned off
-   answers 410 {error:"link-off"}, which comes back as that code. */
+/* `key` is the review link's own credential (13-hosted.js's readReviewKey):
+   the same door, opened by a link rather than by something typed. The
+   server decides which role either one buys — this only carries it. */
 export async function joinServer(base, pin, key) {
   var url = (base ? String(base).replace(/\/+$/, "") + "/" : "") + "api/join";
   var res;
@@ -273,9 +270,6 @@ var reviewLinkUrl = "";
 async function renderReviewLink() {
   var box = document.getElementById("connect-review");
   if (!box) return;
-  /* A server with Collaborate's links hands out its own: Can edit and Can
-     comment, each replaceable and each able to be turned off. This dialog
-     only points there, for the owner of a script open on it. */
   if (S.serverMode.available && S.serverMode.links && home.kind === "server" &&
       conn.role !== "review" && !conn.scope) {
     reviewLinkUrl = "";

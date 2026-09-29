@@ -1,19 +1,13 @@
-# "Publish & copy a link" (issue #19): handing someone a LIVE document
-# rather than a dead copy.
-#
-# Since Collaborate, File ▸ Collaborate… (13b-collaborate.js, suites
-# 260-264) is the File menu's way to do that, and this entry is gone from
-# the menu. What is still here is what outlived it: the `?doc=` parameter
-# at the other end of every link (Collaborate's too), the plain address
-# and the "what they'll be asked for" note that Collaborate still shows for
-# a server too old to make links, and publishAndCopyShareLink() itself —
-# reached now only through window.__shareTest, for SKILL.md's by-hand
-# "share link end to end" run — with its no-server and read-only refusals.
+# "Publish & copy a link" (issue #19): the File menu's one entry that hands
+# someone a LIVE document rather than a dead copy.
 #
 # What is NOT here: a real publish. This harness serves static files and
 # cannot start server.js, the same limitation 18-connect.txt records — the
 # round trip against a real server is the by-hand recipe in SKILL.md, and
-# the API half it rides on is covered by `node tools/test-server.mjs`.
+# the API half it rides on is covered by `node tools/test-server.mjs`. What
+# IS here is everything that does not need one: the entry and its state, the
+# refusal-and-redirect when no server is connected, the address it builds,
+# what it says about getting in, and the ?doc= parameter at the other end.
 
 # --- the other end of the link: ?doc= ------------------------------------
 # First, before any DOM churn — it needs its own page load, and a goto after
@@ -34,10 +28,9 @@ goto /index.html
 eval (function(){ window.S = window.__shareTest; window.F0 = window.__splitpageFormats; return !!(S && S.url && S.note && F0); })()
 expect true
 
-# --- the File menu's Share group: Collaborate… where this entry was --------
-# (changed deliberately with Collaborate: the entry is gone, and the item
-# that replaced it is always offered too — with no server set up it needs
-# none, one is built in. Its own flow is 260's.)
+# --- the entry sits with the Server tools, always shown --------------------
+# Always shown on purpose: it is how someone with no server yet finds out
+# that sharing a live document is possible at all.
 jsclick #btn-file
 expect !document.getElementById('file-menu').hidden
 expect document.getElementById('menu-share-link') === null
@@ -79,8 +72,7 @@ wait document.getElementById('connect-modal').hidden == false
 jsclick #connect-modal [data-connect-action="close"]
 wait document.getElementById('connect-modal').hidden == true
 
-# --- a read-only server: nothing is published, and Collaborate… says why --
-# (this page served by that server, as the web app on it is)
+# --- a read-only server disables it, with the reason in the tooltip -------
 eval (function(){ S.mode().available = true; S.mode().readOnly = true; S.updateMenu(); return true; })()
 expect document.getElementById('menu-collaborate').disabled == true
 expect document.querySelector('#menu-collaborate .mi-why').textContent == This server is read-only

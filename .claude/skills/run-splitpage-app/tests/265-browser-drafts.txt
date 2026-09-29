@@ -1,34 +1,7 @@
-# Crash-safe drafts in the BROWSER for a script on a server (PR #233,
-# 20g-drafts.js over 03d-drafts-idb.js). A guest co-editing through an
-# invite link has no desktop app: until this their unsaved edits lived only
-# in the open tab. Now the page keeps a draft of a server document's unsaved
-# changes in this browser's IndexedDB — one per server and document id, the
-# page's own writer id on it, never a token or a link's key — and the next
-# time this browser opens that script (a reload, the link again, a new tab)
-# it is merged through the desktop's own server path (armServerDraftResume
-# → resumeServerDoc): both sides' edits kept, "Undo merge" armed, nothing
-# saved on its own. A save that lands removes it. A link turned off keeps
-# it; opened again after that, it comes back as an unsaved copy. No
-# IndexedDB at all: nothing said, nothing thrown.
-#
-# The fetch emulator is 263's (health, join, me, the documents, the links
-# API, presence) with one more switch, `failPut`: every PUT fails as if the
-# connection had dropped. It is kept in localStorage so every `goto` (a real
-# reload — a new tab, since sessionStorage is cleared first) reinstalls it
-# in one line; the page's own boot probe finds no server, as in 263, and
-# the real detection is run again with H.detect(). Before each `goto` the
-# page's "unsaved changes" prompt is disarmed (BeforeUnloadEvent's
-# preventDefault and returnValue made no-ops — a capturing listener that
-# stops the app's own does not stop the prompt) — the tab going away with
-# no prompt, which is the crash this is for. `wait` does not await a promise,
-# so the store is read into `__rec` every 100ms and the waits read that.
-# Every `eval` is one physical line.
-
 open /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){ localStorage.setItem('__emu265', "(function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false, failPut: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down || (__srv.failPut && m === 'PUT')) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\\/docs\\/([^/]+)\\/links(?:\\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\\/docs\\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()"); return true; })()
 
-# --- 1. a guest's edits while saves fail: a draft in this browser -----------
 goto /index.html?doc=doc-g#invite=gEdItKeY123
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.D = window.__desktopTest; window.DB = D.drafts.browser; window.__errs = []; window.addEventListener('error', function(e){ __errs.push(String(e.message)); }); window.addEventListener('unhandledrejection', function(e){ __errs.push(String(e.reason)); }); (0, eval)(localStorage.getItem('__emu265')); D.drafts.setTiming({ idle: 100, max: 300 }); window.__toasts = function(){ return document.getElementById('toast-host').textContent; }; window.__rec = {}; setInterval(function(){ DB.get('doc-g').then(function(r){ __rec.g = r; }); DB.get('doc-h').then(function(r){ __rec.h = r; }); }, 100); return true; })()
@@ -38,7 +11,6 @@ wait H.home().id === 'doc-g'
 wait !document.getElementById('guest-modal').hidden
 jsclick #guest-modal [data-guest-action="skip"]
 wait document.getElementById('guest-modal').hidden
-# nothing unsaved, nothing kept
 expect DB.status().keyOnDisk === null
 expect DB.status().target.docId == doc-g
 sleep 300
@@ -57,10 +29,8 @@ expect __g1.rev === 1
 expect __g1.title == Pilot episode
 expect __g1.writerId === DB.writerId()
 expect DB.status().keyOnDisk !== null
-# its ancestor is what the server last confirmed — the merge's base
 expect JSON.parse(__g1.baseJson).rows[0].visualText.indexOf('MINE-EDIT-G') === -1
 expect JSON.parse(__g1.baseJson).rows[0].audioText.indexOf('Hello from the server') !== -1
-# nothing credential-shaped in it: no token, no link key, no fragment
 eval (async function(){ window.__allJson = JSON.stringify(await DB.all()); return __allJson.length; })()
 expect __allJson.indexOf('MINE-EDIT-G') !== -1
 expect __allJson.indexOf('tok-') === -1
@@ -71,8 +41,6 @@ expect __g1.base.indexOf('#') === -1 && __g1.base.indexOf('?') === -1
 expect __toasts().indexOf('Crash recovery is paused') === -1
 expect __errs.length === 0
 
-# --- 2. a second script, in a new tab: its own draft, no collision; its link
-#        turned off mid-session and the draft goes on -------------------------
 eval (function(){ BeforeUnloadEvent.prototype.preventDefault = function(){}; Object.defineProperty(BeforeUnloadEvent.prototype, 'returnValue', { configurable: true, get: function(){ return ''; }, set: function(){} }); sessionStorage.clear(); return true; })()
 goto /index.html?doc=doc-h#invite=hEdItKeY456
 wait document.querySelectorAll('#rows .row').length > 0
@@ -83,7 +51,6 @@ wait H.home().id === 'doc-h'
 wait !document.getElementById('guest-modal').hidden
 jsclick #guest-modal [data-guest-action="skip"]
 wait document.getElementById('guest-modal').hidden
-# the first script's draft is not this script's: nothing merged here
 expect F.state().rows[0].visualText.indexOf('MINE-EDIT-G') === -1
 eval (function(){ __srv.failPut = true; return true; })()
 caret #rows .row .visual-cell .cell-editable
@@ -96,7 +63,6 @@ expect __n2 === 2
 expect __g2.stateJson.indexOf('MINE-EDIT-G') !== -1 && __g2.stateJson.indexOf('MINE-EDIT-H') === -1
 expect __h2.stateJson.indexOf('MINE-EDIT-H') !== -1 && __h2.stateJson.indexOf('MINE-EDIT-G') === -1
 expect __g2.writerId !== __h2.writerId
-# the owner turns this link off; saving stops, the typing goes on into the draft
 eval (function(){ __srv.failPut = false; __srv.links.forEach(function(l){ if (l.key === 'hEdItKeY456') l.off = true; }); return true; })()
 caret #rows .row .visual-cell .cell-editable
 type  AFTER-OFF
@@ -112,8 +78,6 @@ expect __allJson.indexOf('tok-') === -1
 expect __allJson.indexOf('hEdItKeY456') === -1
 expect __errs.length === 0
 
-# --- 3. the first link again, after the server moved on: offered back and
-#        merged, both sides kept, nothing saved until Save -------------------
 eval (function(){ BeforeUnloadEvent.prototype.preventDefault = function(){}; Object.defineProperty(BeforeUnloadEvent.prototype, 'returnValue', { configurable: true, get: function(){ return ''; }, set: function(){} }); sessionStorage.clear(); return true; })()
 goto /index.html?doc=doc-g#invite=gEdItKeY123
 wait document.querySelectorAll('#rows .row').length > 0
@@ -127,15 +91,12 @@ expect F.state().rows[0].visualText.indexOf('MINE-EDIT-G') !== -1
 expect F.state().rows[0].audioText.indexOf('THEIRS-V2') !== -1
 expect H.dirty() === true
 wait !document.getElementById('merge-banner').hidden
-# never saved by itself, however short autosave's wait — and the chip says so
 sleep 1500
 expect __srv.calls.filter(function(c){ return c.m === 'PUT'; }).length === 0
 expect document.getElementById('file-chip-state').textContent == · not saved yet
 shot 265-recovered
-# the draft is this page's now; the other script's is untouched
 wait __rec.g && __rec.g.writerId === DB.writerId() && __rec.g.stateJson.indexOf('THEIRS-V2') !== -1
 expect __rec.h && __rec.h.stateJson.indexOf('AFTER-OFF') !== -1
-# a save that lands takes it away
 eval (async function(){ await F.save(); return true; })()
 expect __srv.calls.some(function(c){ return c.m === 'PUT' && c.path === 'api/docs/doc-g' && c.status === 200; })
 expect H.dirty() === false
@@ -146,7 +107,6 @@ expect DB.status().keyOnDisk === null
 expect __rec.h && __rec.h.stateJson.indexOf('AFTER-OFF') !== -1
 expect __errs.length === 0
 
-# --- 4. no IndexedDB at all: the editor goes on, nothing said, nothing thrown -
 eval (function(){ DB.useIndexedDB(null); return true; })()
 caret #rows .row .audio-cell .cell-editable
 type  NO-IDB
@@ -158,8 +118,6 @@ sleep 500
 expect __errs.length === 0
 expect D.drafts.status().stopped === false
 
-# --- 5. the second link, off before it is opened again: the kept changes open
-#        as an unsaved copy -----------------------------------------------------
 eval (function(){ BeforeUnloadEvent.prototype.preventDefault = function(){}; Object.defineProperty(BeforeUnloadEvent.prototype, 'returnValue', { configurable: true, get: function(){ return ''; }, set: function(){} }); sessionStorage.clear(); return true; })()
 goto /index.html?doc=doc-h#invite=hEdItKeY456
 wait document.querySelectorAll('#rows .row').length > 0
@@ -176,7 +134,6 @@ expect H.dirty() === true
 expect DB.status().copy === true
 expect __srv.calls.filter(function(c){ return c.path === 'api/docs/doc-h'; }).length === 0
 shot 265-link-off-copy
-# kept — this page's now — until the copy is saved somewhere
 wait __rec.h && __rec.h.writerId === DB.writerId()
 expect __errs.length === 0
 eval (function(){ BeforeUnloadEvent.prototype.preventDefault = function(){}; Object.defineProperty(BeforeUnloadEvent.prototype, 'returnValue', { configurable: true, get: function(){ return ''; }, set: function(){} }); return true; })()

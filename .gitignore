@@ -8,11 +8,6 @@ _*.html
 *.splitpage.html
 data/
 
-# The server's own clone (DEPLOY.md). deploy.sh keeps the live documents,
-# their snapshots and the settings file — the owner key — inside the clone it
-# pulls into, so all three must stay invisible to git or a `git pull` there
-# would trip over them, and a stray `git add` could publish them. (data/ is
-# also ignored anywhere, above; this says so for the root on purpose.)
 /data/
 /backups/
 /.env
@@ -33,9 +28,8 @@ desktop.ini
 # docs/help.md and VERSION. It was tracked until #80, where 1.4MB of generated
 # HTML in every pull request diff — and a pre-commit hook nothing installed to
 # keep it honest — stopped being worth it. CI builds it and uploads it as the
-# `splitpage-app` artifact; `node package.mjs` builds it before packaging; the
-# Dockerfile's first stage builds it inside the image build, so a server
-# deploy needs no copy of its own (DEPLOY.md).
+# `splitpage-app` artifact; `node package.mjs` builds it before packaging; a
+# server deploy takes it from the artifact (DEPLOY.md §2).
 #
 # Not being tracked is also what retired the hook's second job: a copy of the
 # app with YOUR script saved into it is now an untracked local file, so there

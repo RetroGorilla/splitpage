@@ -109,10 +109,9 @@ function renderKeyChips(root) {
 
    An item that cannot do its job right now says so on the item, rather
    than failing (or toasting) on click. Whether it is also disabled is the
-   caller's decision: Collaborate… on a script with no server yet stays
-   enabled, because pressing it is how the script gets onto one; for a
-   guest on somebody else's link there is nothing to press for, so it is
-   disabled as well ("Only the script's owner can invite people"). */
+   caller's decision: Publish & copy a link with no server stays enabled,
+   because pressing it opens Servers… to set one up; on a read-only server
+   there is nothing to press for, so it is disabled as well. */
 export function setMenuItemReason(item, reason) {
   var why = item && item.querySelector(".mi-why");
   if (!why) return;

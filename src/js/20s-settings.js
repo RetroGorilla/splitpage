@@ -141,13 +141,6 @@ function importAvailable() {
   return !!(btn && !btn.hidden);
 }
 
-/* Collaboration (13b-collaborate.js): where File ▸ Collaborate… stores the
-   scripts you share, and whether this device is signed in there. The
-   address is a per-device preference like the rest; the sign-in is not a
-   preference at all (it is the token 13-hosted.js keeps per server), so
-   this only says whether there is one and offers to forget it. A page that
-   was itself served by a Splitpage server collaborates there, whatever the
-   address says, and says so instead of offering the field. */
 function collaborationHtml() {
   var v = collabServerView();
   var where = v.servedHere
@@ -265,10 +258,6 @@ function ensureModal() {
    changes while it is open, keeping the focused control focused. */
 /* Typed but not yet committed (no Enter, no blur) survives a redraw that
    was about some other setting. */
-/* A function, not a literal: the keys are other modules' exports, which
-   are not guaranteed to be assigned yet while this module is evaluated
-   (_entry.js — nothing may read another module's value at evaluation
-   time; the Collaboration key read that way came out undefined). */
 function typedFields() {
   return { "settings-name": COMMENT_NAME_KEY, "settings-default-wpm": DEFAULT_WPM_KEY,
            "settings-collab-server": COLLAB_SERVER_KEY };
@@ -304,8 +293,6 @@ function renderSettings(changedKey) {
   if (again) { try { again.focus({ preventScroll: true }); } catch (e) { again.focus(); } }
 }
 
-/* opts.focus: the id of the control to start on, scrolled into view — the
-   Collaborate dialog's "Change the address…" (13b-collaborate.js). */
 export function openSettings(opts) {
   opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
   var m = ensureModal();
@@ -383,7 +370,6 @@ function applyChange(target) {
   }
   if (id === "settings-collab-server") {
     var raw = (target.value || "").trim();
-    /* empty is "the default again", not "nowhere" */
     var url = raw ? normalizeCollabServer(raw) : DEFAULT_COLLAB_SERVER;
     if (!url) {
       showToast("That isn't a web address — something like https://script.example.com/", "warn");

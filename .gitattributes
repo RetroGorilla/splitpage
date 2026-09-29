@@ -3,9 +3,6 @@
 # which machine committed it.
 * text=auto eol=lf
 
-# Shell scripts: LF, always — the line above already says so, and this says
-# it again so nobody loosens it for them. A CRLF deploy.sh dies on the server
-# with "$'\r': command not found".
 *.sh text eol=lf
 
 # Windows-only launchers: cmd.exe wants CRLF.

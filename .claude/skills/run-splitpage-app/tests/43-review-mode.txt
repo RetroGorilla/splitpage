@@ -22,8 +22,6 @@ expect location.hash === ''
 expect location.href.indexOf('review=') === -1
 expect sessionStorage.getItem('splitpage-review-key') == abc123def456
 expect localStorage.getItem('splitpage-review-key') === null
-# nor on this device under Collaborate's map: that is only for a server
-# whose health says its links outlive a restart, and none has answered
 expect localStorage.getItem('splitpage-invites') === null
 
 # --- a key on its own restricts nothing --------------------------------------
@@ -45,7 +43,6 @@ expect document.getElementById('review-chip').hidden === false
 expect document.getElementById('review-chip').offsetParent !== null
 expect document.getElementById('review-chip').textContent.indexOf('comments only') !== -1
 expect document.getElementById('doc-title').readOnly === true
-# inviting people is the owner's (Collaborate): the item says so
 expect window.__collabTest.blocked() == Only the script's owner can invite people
 expect document.getElementById('menu-collaborate').disabled === true
 

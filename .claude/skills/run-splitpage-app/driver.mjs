@@ -622,7 +622,6 @@ async function mouseEvent(rest) {
   const x = Math.trunc(pt.x), y = Math.trunc(pt.y);
   if (m[1] === "down") await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
   else if (m[1] === "move") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 });
-  // no button held: a pointer passing over (PR #233, a header button's name opening)
   else if (m[1] === "hover") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
   else if (m[1] === "up") await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
   else {
