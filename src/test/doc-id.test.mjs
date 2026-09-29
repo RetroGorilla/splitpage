@@ -40,7 +40,6 @@ test("sha256Bytes: the NIST FIPS 180-2 byte vectors (#82, image content addresse
   assert.equal(sha256Bytes(bytes("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno" +
     "ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu")),
     "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1");
-  // Whole blocks straight from caller array, padding-only tail
   assert.equal(sha256Bytes(new Uint8Array(1000000).fill(0x61)),
     "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
 });
@@ -53,7 +52,6 @@ test("sha256Bytes agrees with node:crypto at every padding boundary, and on view
     assert.equal(sha256Bytes(b), createHash("sha256").update(b).digest("hex"), "length " + n);
   }
   const big = new Uint8Array(300).map(rnd);
-  // View hashes only its own bytes, not the buffer
   const view = big.subarray(37, 37 + 150);
   assert.equal(sha256Bytes(view), createHash("sha256").update(view).digest("hex"));
   assert.equal(sha256Bytes(Array.from(view)), sha256Bytes(view));

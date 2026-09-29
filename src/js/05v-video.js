@@ -8,7 +8,6 @@ import { markDirty } from "./12-dirty-toast.js";
 import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 
-// Test-only fakes; harness sets window.__splitpageNoRemote
 var testHooks = { fetch: null, bases: null, protocol: null };
 
 function noRemote() {
@@ -19,7 +18,6 @@ export function embeddableVideo(link) {
   return link && link.href ? parseVideoLink(link.href) : null;
 }
 
-// YouTube refuses playback without a referrer (file://, desktop)
 export function embedRefusal(v) {
   if (!v) return "";
   var protocol = testHooks.protocol || location.protocol;
@@ -35,7 +33,6 @@ export function playerSrc(v) {
   return { src: noRemote() && !testHooks.bases ? "about:blank" : real, real: real };
 }
 
-// Undecodable or non-hqdefault thumbnails are kept exactly as fetched
 function trimLetterbox(bytes, mime) {
   return new Promise(function (resolve) {
     var url;
@@ -79,7 +76,6 @@ export function thumbnailsAllowed() {
   return videoThumbsOn();
 }
 
-// Never rejects; resolves null on any failure
 export function fetchThumbnailRecord(href) {
   var v = parseVideoLink(href);
   if (!v) return Promise.resolve(null);
@@ -103,7 +99,6 @@ export function fetchThumbnailRecord(href) {
   }).then(null, function () { return null; });
 }
 
-// Edits touching these block folding thumbnail into paste entry
 var GALLERY_KEYS = { imageRef: true, imageLinks: true, moreImages: true, imageName: true, imageAnnotation: true };
 
 function touchesGallery(rowId) {

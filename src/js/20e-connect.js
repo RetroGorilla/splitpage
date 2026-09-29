@@ -78,7 +78,6 @@ export function openPinDialog(opts) {
   input.value = "";
   setPinError("");
   modal.hidden = false;
-  // Modal owns focus (invariant #19)
   input.focus();
 }
 
@@ -125,7 +124,6 @@ export function joinErrorText(code) {
   return "Could not join: " + code + ".";
 }
 
-// Unreachable machine hangs; prevents clickable-looking busy buttons
 async function withBusy(button, label, work) {
   var was = button ? button.textContent : "";
   if (button) { button.disabled = true; button.textContent = label; }
@@ -154,14 +152,12 @@ async function submitPin() {
   var done = pinRequest.onDone;
   var base = pinRequest.base;
   closePinDialog();
-  // Token is only set on its own connection
   var forThisTab = normalizeServerBase(base) === conn.serverUrl;
   if (forThisTab) setServerToken(result.token, remember);
   showToast("Joined" + (base ? " " + shortHost(base) : "") +
     (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
   if (done) { done({ token: result.token, remember: remember }); return; }
   if (!forThisTab) return;
-  // No caller waiting: resume interrupted detection
   if (S.serverMode.available) finishServerDetect();
   else detectServer();
 }
@@ -330,10 +326,8 @@ function tunnelOf(bookmark) {
   return { userHost: String(s.userHost || ""), remotePort: Number(s.remotePort), localPort: Number(s.localPort) };
 }
 
-// Per-tab connection; tokens never follow tab to another server
 async function useServer(bookmark, opts) {
   opts = opts || {};
-  // Local home stays; server home is invalid on new server
   if (home.kind === "server") setHome("none");
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
@@ -346,7 +340,6 @@ async function useServer(bookmark, opts) {
   updateConnectMenu();
   renderConnect();
   await detectServer();
-  // Not a review of a hosted document anymore; rebuild editable
   applyReviewMode();
   if (S.state) render();
   updateFileChip();
@@ -421,7 +414,6 @@ function showSshFor(id) {
   document.getElementById("connect-ssh-out").hidden = false;
 }
 
-// Clipboard API needs secure origin; LAN HTTP uses textarea path
 async function copyPlainText(text, okMsg, failMsg) {
   try {
     await navigator.clipboard.writeText(text);
@@ -458,7 +450,6 @@ async function copyReviewLink() {
     "Could not copy — select the address and copy it by hand.");
 }
 
-// .cmd not .bat; CRLF for Notepad and cmd
 function saveSshCmd() {
   if (!sshShownFor) return;
   var b = bookmarkById(sshShownFor);
@@ -541,7 +532,6 @@ export function __init() {
       }
     }
 
-    // Esc closes innermost first: PIN dialog opens over Servers
     window.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
       var pin = document.getElementById("pin-modal");

@@ -20,7 +20,6 @@ import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 brollInit();
 initStatus();
 
-// Old parser kept verbatim as reference oracle
 function brollFieldLines(body) {
   hoistNestedBrs(body);
   var kids = Array.prototype.slice.call(body.childNodes);
@@ -34,7 +33,6 @@ function brollFieldLines(body) {
   lines.push({ nodes: kids.slice(start), br: null });
   return lines;
 }
-// Old edits split formatting around every br; models do not
 function hoistNestedBrs(body) {
   var guard = 0;
   while (guard++ < 1000) {

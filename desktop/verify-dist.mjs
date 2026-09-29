@@ -21,12 +21,10 @@ const ARCHS = ARCH_ARG === "both" ? ["x64", "arm64"] : [ARCH_ARG];
 
 const PE_MACHINE = { 0x014c: "x86", 0x8664: "x64", 0xaa64: "arm64" };
 
-// Windows arm64 emulates x86 and x64, not the reverse
 const RUNS_ON = { x64: ["x86", "x64"], arm64: ["x86", "x64", "arm64"] };
 
 const UNPACKED = { x64: "win-unpacked", arm64: "win-arm64-unpacked" };
 
-// elevate.exe is x86 by design in every installer
 const ALLOW_OTHER_ARCH = { "resources/elevate.exe": ["x86"] };
 
 function peMachine(file) {

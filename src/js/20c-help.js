@@ -45,7 +45,6 @@ function closeHelp() {
   helpReturnFocus = null;
 }
 
-// Pause must not mark tour done; closeHelp() resumes it
 function suspendTourForHelp() {
   if (tourStepIndex < 0) return;
   var overlay = document.getElementById("tour-overlay");
@@ -155,7 +154,6 @@ function positionTourStep() {
 
   var vw = window.innerWidth, vh = window.innerHeight;
   if (vw <= 480) {
-    // Phone layout is pure CSS; nothing to compute
     card.style.left = "";
     card.style.top = "";
     return;
@@ -213,7 +211,6 @@ export function startTour() {
   var overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
   closeAllSidePanels();
-  // Clear first: closeHelp() resumes suspended tours
   tourSuspendedAt = -1;
   closeHelp();
   var taggingHelp = document.getElementById("tagging-help");

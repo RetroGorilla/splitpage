@@ -23,11 +23,9 @@ import {
 var presenceLastActive;
 
 var PRESENCE_BEAT_MS = 2000;
-// Idle tab stops beating; server TTL drops it
 var PRESENCE_IDLE_MS = 4 * 60 * 1000;
 var PRESENCE_BACKOFF_MS = 30000;
 var PRESENCE_MAX_SHOWN = 8;
-// sessionStorage so reload isn't a second ghost
 var PRESENCE_ID_KEY = "splitpage-presence-id";
 
 var presenceSelf = "";
@@ -48,7 +46,6 @@ function presenceSelfId() {
   return presenceSelf;
 }
 
-// Colour seed: name if present, else client id
 function presenceName(p) {
   return (p && p.name) || "Guest";
 }
@@ -115,7 +112,6 @@ function presenceWanted() {
   return (Date.now() - presenceLastActive) <= PRESENCE_IDLE_MS;
 }
 
-// Read from DOM: focus() without window focus fires no focusin
 function presenceLocation() {
   var el = document.activeElement;
   var cell = el && el.closest ? el.closest("#rows .cell-editable[data-id]") : null;
@@ -166,7 +162,6 @@ async function presenceTick() {
     presenceFailures = 0;
     presenceAnnounced = true;
     setPresenceHere((body && body.here) || []);
-    // Not awaited: merge is slower than the next beat
     notePresenceRev(body);
   } catch (e) {
     presenceFailures++;

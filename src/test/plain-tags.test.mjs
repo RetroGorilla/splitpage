@@ -78,7 +78,6 @@ test("what Tab wraps: the words, the spaces either side left out", () => {
   assert.equal(plainTagPhrase("   "), null);
   assert.equal(plainTagPhrase(ZW), null);
   assert.equal(plainTagPhrase(ZW + " " + NB), null);
-  // Name capped at 80 characters, like the Tag button
   const long = "a".repeat(50) + " " + "b".repeat(50);
   const p = plainTagPhrase(" " + long);
   assert.equal(p.text, long);

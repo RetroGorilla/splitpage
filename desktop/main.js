@@ -169,7 +169,6 @@ const TUNNEL_LOCAL_PORT = Number(argValueOf(rawArgv, "--local-port", String(TUNN
 
 const argvFilesToOpen = filesToOpenFrom(rawArgv, process.cwd());
 
-// Single instance: main is sole writer of state and history
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -205,7 +204,6 @@ const TITLEBAR_H = 36;
 const MIN_WINDOW_W = 480;
 const MIN_WINDOW_H = 400;
 
-// Crash-loop guard: past this many reloads the tab stays dead
 const CRASH_RELOAD_MAX = 2;
 const CRASH_RELOAD_WINDOW_MS = 60 * 1000;
 
@@ -262,7 +260,6 @@ function homeKeyForClaim(tab) {
   return null;
 }
 
-// Deterministic so both relaunches derive the same replacement id
 function replacementDocId(fromId, homeKey) {
   const digest = crypto.createHash("sha256")
     .update(duplicateReplacementInput(fromId, homeKey), "utf8")
@@ -672,7 +669,6 @@ function readDesktopStateV2() {
 const desktopStateQueue = [];
 let desktopStateDraining = false;
 
-// Serialized queue: mutators read-modify-write the whole state file
 function writeDesktopStateV2(mutator) {
   return new Promise((resolve) => {
     desktopStateQueue.push({ mutator, resolve });
@@ -1145,7 +1141,6 @@ function splitVersion(v) {
   };
 }
 
-// Network asset name becomes a disk filename; keep it tight
 const SAFE_ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
 
 const INSTALLER_EXT = { win32: ".exe", darwin: ".dmg", linux: ".appimage" };
@@ -1181,7 +1176,6 @@ function pickUpdateAsset(assets) {
   });
   if (!candidates.length) return null;
 
-  // Ambiguous arch match means no asset, never a guess
   const arch = process.arch;
   const other = ["x64", "arm64", "ia32", "armv7l"].filter((a) => a !== arch);
   const mentions = (name, token) => new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, "i").test(name);
@@ -1307,7 +1301,6 @@ function downloadUpdate() {
   updateDownloadPromise = (async () => {
     const dir = updateDir();
     const target = path.join(dir, asset.name);
-    // Wipe whole folder: stale partial installers must not linger
     await fsp.rm(dir, { recursive: true, force: true });
     await fsp.mkdir(dir, { recursive: true });
     if (path.dirname(path.resolve(target)) !== path.resolve(dir)) throw new Error("bad asset name");
@@ -1334,7 +1327,6 @@ function downloadUpdate() {
         await handle.write(buf);
         received += buf.length;
         const now = Date.now();
-        // Throttled: per-chunk IPC events would flood the renderer
         if (now - lastReport > 200) { lastReport = now; setDownloadState({ received }); }
       }
     } finally {
@@ -1347,7 +1339,6 @@ function downloadUpdate() {
     }
     const digest = hash.digest("hex");
     const published = await fetchPublishedChecksum(updateAssets, asset.name);
-    // Checksum is mandatory: this file is what the app executes
     if (!published) {
       throw new Error("this release has no published checksum, so it is not being installed");
     }
@@ -1371,11 +1362,9 @@ function downloadUpdate() {
 let installOnQuit = false;
 let installQuitWatcher = null;
 
-// Runs only from will-quit so a cancelled quit installs nothing
 function startInstallerNow() {
   try {
     if (process.platform === "win32") {
-      // Detached: installer must outlive this process
       const child = spawn(updateFile, [], { detached: true, stdio: "ignore", windowsHide: false });
       child.unref();
     } else {
@@ -1642,7 +1631,6 @@ function installPlayerReferer(ses) {
   ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
     const headers = details.requestHeaders || {};
     const hasReferer = Object.keys(headers).some((k) => k.toLowerCase() === "referer");
-    // Only tab subframes get the Referer YouTube embeds require
     const fromTab = details.resourceType === "subFrame" && typeof details.webContentsId === "number" &&
       webContentsIdToTabId.has(details.webContentsId);
     if (!hasReferer && fromTab && details.url.startsWith(embedPrefix)) headers.Referer = YOUTUBE_EMBED_REFERER;
@@ -1688,7 +1676,6 @@ function registerProtocol() {
       const stripEntry = TABSTRIP_ALLOWLIST[pathname === "/" ? "/index.html" : pathname];
       if (!stripEntry) return new Response("not found", { status: 404 });
       const stripPath = path.join(TABSTRIP_ROOT, stripEntry.file);
-      // Containment check backs up the fixed allowlist
       if (!stripPath.startsWith(TABSTRIP_ROOT)) return new Response("not found", { status: 404 });
       try {
         const buf = await fsp.readFile(stripPath);
@@ -1712,7 +1699,6 @@ function registerProtocol() {
       }
       const target = `http://127.0.0.1:${documentServerPort}${pathname}${url.search}`;
       const headers = new Headers(request.headers);
-      // Strip origin/host/referer so the server sees a same-origin call
       headers.delete("origin");
       headers.delete("host");
       headers.delete("referer");
@@ -1731,7 +1717,6 @@ function registerProtocol() {
       }
     }
 
-    // Served from memory, never disk
     if (pathname === "/update-status.json") {
       return new Response(JSON.stringify(updateStatus), {
         status: 200,
@@ -1838,7 +1823,6 @@ function createTabWindow(restoreSpec) {
       sandbox: true,
       nodeIntegration: false,
       webSecurity: true,
-      // Unthrottled in tests so hidden views keep running
       backgroundThrottling: !TEST_MODE
     }
   });
@@ -1857,7 +1841,6 @@ function createTabWindow(restoreSpec) {
   windowsById.set(windowId, rec);
   if (lastFocusedWindowId === null) lastFocusedWindowId = windowId;
 
-  // maximize() also shows a hidden window; skip in tests
   if (rec.maximized && saved && !TEST_MODE) win.maximize();
 
   win.once("ready-to-show", () => { if (!TEST_MODE) win.show(); });
@@ -1916,13 +1899,11 @@ function createTabWindow(restoreSpec) {
     settleDraftsForClose(rec.tabIds, true, "close-without-saving");
     if (HOSTING && isLastWindow) hostingConfirmed = true;
 
-    // Freeze before tabs are destroyed or session file loses them
     if (isLastWindow) sessionWritesFrozen = true;
 
     closeConfirmedWindows.add(win);
   });
 
-  // No time for dialogs: freeze session file, flush drafts
   win.on("session-end", () => {
     if (sessionEnding) return;
     sessionEnding = true;
@@ -2193,7 +2174,6 @@ function wireTabView(tab) {
   contents.on("render-process-gone", (_event, details) => {
     if (details && details.reason === "clean-exit") return;
     if (!tabs.has(tabId)) return;
-    // Hold draft so reload cannot overwrite it
     if (draftStore && draftsHasDraft(tabId)) {
       try { draftStore.hold(tabId); } catch { }
     }
@@ -2286,7 +2266,6 @@ function activateTab(tabId) {
   layoutWindow(w.id);
   applyWindowTitle(w);
   if (!TEST_MODE) {
-    // Never focus in tests: would steal focus from the machine
     try { tab.view.webContents.focus(); } catch { }
   }
   pushShellState(w.id);
@@ -2453,7 +2432,6 @@ function moveTabToWindow(tabId, targetWindowId, index) {
     from.activeTabId = from.tabIds.length ? from.tabIds[Math.max(0, Math.min(i, from.tabIds.length - 1))] : null;
   }
 
-  // Re-parent the view, never recreate it: page state survives
   try { from.win.contentView.removeChildView(tab.view); } catch { }
   to.win.contentView.addChildView(tab.view);
 
@@ -2638,7 +2616,6 @@ function payloadForSource(source) {
 function flushPendingPayload(tab, opts) {
   const payload = tab.pendingPayload;
   if (!payload) return;
-  // Restoring-draft tab is not handed its file
   if (!(opts && opts.force) && draftsHasDraft(tab.id)) return;
   tab.pendingPayload = null;
   if (payload.kind === "open-file") {
@@ -3017,7 +2994,6 @@ function isTrustedSender(event) {
   return senderOriginOf(event) === APP_ORIGIN;
 }
 
-// Strip origin alone is not trust; check window
 function isTrustedTabStripSender(event) {
   if (senderOriginOf(event) !== TABSTRIP_ORIGIN) return false;
   for (const w of windowsById.values()) {
@@ -3603,7 +3579,6 @@ function registerIpc() {
     if (typeof bytes === "string") return { ok: false, code: "BAD_BYTES" };
     let buf;
     try { buf = toBuffer(bytes); } catch { return { ok: false, code: "BAD_BYTES" }; }
-    // Image door only; the store itself accepts any bytes
     const refusal = imageBlobRefusal(buf);
     if (refusal) return { ok: false, code: refusal };
     if (!blobStore) return { ok: false, code: "UNAVAILABLE" };
@@ -3911,7 +3886,6 @@ app.on("before-quit", (event) => {
     }
   }
 
-  // Drafts settled before any view is destroyed
   settleDraftsForClose(tabIds, true, "quit-without-saving");
   if (HOSTING) hostingConfirmed = true;
   quitConfirmed = true;

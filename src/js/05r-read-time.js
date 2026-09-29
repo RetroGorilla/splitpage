@@ -121,7 +121,6 @@ function refocus(ed, wanted) {
 function onEditorKeydown(e) {
   if (e.key === "Enter") {
     e.preventDefault();
-    // Script shortcuts (Ctrl+B, tag keys) must not fire here
     e.stopPropagation();
     closeReadTimeEditor(true, false);
   } else if (e.key === "Escape") {
@@ -141,7 +140,6 @@ function onEditorBlur() {
 export function __init() {
   var rowsEl = document.getElementById("rows");
   if (!rowsEl) return;
-  // Keep caret cell focused so row stays current
   rowsEl.addEventListener("mousedown", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");
     if (btn && btn.getAttribute("aria-disabled") !== "true") e.preventDefault();
@@ -152,7 +150,6 @@ export function __init() {
     e.preventDefault();
     openReadTimeEditor(btn);
   });
-  // Window Ctrl+Z skips #rows; undo/redo answered here
   rowsEl.addEventListener("keydown", function (e) {
     if (!(e.target.classList && e.target.classList.contains("row-read"))) return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey || reviewMode()) return;

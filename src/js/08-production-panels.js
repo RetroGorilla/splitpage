@@ -41,7 +41,6 @@ import { queueAutoSave } from "./14-export.js";
 import { sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
 
-// Assigned in __init(): initialisers need fragment order
 export var IS_TOUCH;
 
 export function openProductionPanel() {
@@ -173,7 +172,6 @@ export function applyGearQuickAdd() {
   showToast("Gear list updated — " + parts.join(", ") + ".", "ok");
 }
 
-// Comma in body face; mono comma takes a full cell
 function joinSceneLinks(links) {
   return links.map(function (html, i) {
     return i < links.length - 1
@@ -286,13 +284,11 @@ export function tagAllMentions(key) {
   if (reviewBlocked()) return;
   var item = findTagByKey(key);
   if (!item) return;
-  // One entry, however many scenes it touches
   breakUndoCoalescing();
   var done = bulkTagRows(S.state.rows, item.name, item.cat.id, item.name, false, false);
   if (!done.hits) { showToast("No untagged mentions of " + item.name + " left.", "warn"); return; }
   registerProductionTag(item.cat.id, item.name);
   markDirty();
-  // Cell-only removal would coalesce with adjacent typing
   breakUndoCoalescing();
   render();
   queueAutoSave();
@@ -412,7 +408,6 @@ function tagEntityHtml(item, opts) {
   var renaming = S.tagRenaming === item.key;
   var expanded = S.tagExpanded === item.key || renaming;
   var k = escapeHtml(item.key);
-  // Selection is Production-panel only; Gear wires none
   var selected = opts.selection && !reviewMode() && productionSelection[item.key];
   var detailId = tagFieldId("detail", gear, item.key);
   var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
@@ -497,7 +492,6 @@ function renderProductionByPerson(all) {
 }
 
 function renderProductionByShoot(entries) {
-  // Needs owner and status; collectTags() rows lack them
   var live = entries || productionEntries();
   var byRow = {};
   live.forEach(function (item) {
@@ -580,13 +574,11 @@ function renderProductionByShoot(entries) {
   }).join("");
 }
 
-// Every tagged-data change refreshes both panels through here
 export function renderProduction() {
   renderProductionPanel();
   renderGearList();
 }
 
-// One scan threaded through pruning, list, badge and bulk bar
 function renderProductionPanel() {
   var panel = document.getElementById("production-panel");
   if (!panel || panel.hidden || !S.state) return;
@@ -663,7 +655,6 @@ function renderProductionList(entries) {
   }).join("");
 }
 
-// Live tag may lack registry entry until idle heal
 function trackedEntry(item) {
   healTagRegistry();
   return registryEntry(item.cat.id, item.name);
@@ -683,7 +674,6 @@ export function jumpToTag(rowId, key) {
   var item = findTagByKey(key);
   if (!item) return;
   Array.prototype.forEach.call(row.querySelectorAll(".tag-anchor"), function (el) {
-    // Match category too; same-name Prop and Cast flashed
     if (el.getAttribute("data-tag-cat") !== item.cat.id) return;
     if (normalizeTagName(el.getAttribute("data-tag-name")) !== normalizeTagName(item.name)) return;
     el.classList.remove("flash");
@@ -803,7 +793,6 @@ export function wireTouchSelection() {
   list.addEventListener("pointerup", cancelTouchPress);
   list.addEventListener("pointercancel", cancelTouchPress);
 
-  // Browser clicks after long-press; swallow if it acted
   list.addEventListener("click", function (e) {
     if (touchPress.fired) {
       touchPress.fired = false;
@@ -821,7 +810,6 @@ export function handleSelectionClick(e, card) {
   if (reviewMode()) return false;
   var key = card.getAttribute("data-key");
   if (!key) return false;
-  // Range order is live DOM order, per grouping
   var order = Array.prototype.map.call(
     document.querySelectorAll("#production-list .tag-entity"),
     function (el) { return el.getAttribute("data-key"); });
@@ -845,7 +833,6 @@ export function handleSelectionClick(e, card) {
   return true;
 }
 
-// Resolve keys to registry first; stale keys must not write
 function selectedEntries(entries) {
   var byKey = {};
   (entries || productionEntries()).forEach(function (e) { byKey[e.key] = e; });
@@ -899,7 +886,6 @@ export function bulkAddPerson() {
   bulkSetOwner(id);
 }
 
-// Single-step Delete; selections mix live and orphaned items
 export function bulkDeleteSelected() {
   var items = selectedEntries();
   if (!items.length) return;
@@ -988,7 +974,6 @@ function renderBulkBar(entries) {
           : 'Ctrl+click a card to add or drop it · Shift+click for a run') + '</div>');
 }
 
-// statusId null advances one step; sole writer of status
 export function setTagStatus(key, statusId) {
   var item = findTagByKey(key);
   if (!item) return;
@@ -1015,7 +1000,6 @@ export function setTagOwner(key, personId) {
   queueAutoSave();
 }
 
-// Must not re-render: it would destroy the textarea mid-sentence
 export function setTagNotes(key, text) {
   var item = findTagByKey(key);
   if (!item) return;
@@ -1106,7 +1090,6 @@ export function breakdownRows() {
         statusLabel: st.label,
         notes: item.notes || "",
         inScript: item.orphaned ? "no" : "yes",
-        // Orphans are exported but flagged, never silently dropped
         scenes: item.orphaned ? ["not in script"] : scenes,
         broll: shotsFor[item.key] || []
       });
@@ -1115,7 +1098,6 @@ export function breakdownRows() {
   return out;
 }
 
-// One flat sheet with Category column; filters into per-list views
 export function breakdownTable() {
   var starts = sceneFacts().map(function (f) { return f.start; });
   var out = {
@@ -1181,7 +1163,6 @@ function openTagMenuFor(btn, focusFirst) {
   }
 }
 
-// Re-render drops focus; restore it to the same control
 function refocusIn(panel, key, selector) {
   var a = document.activeElement;
   if (a && a !== document.body && a.isConnected) return;

@@ -1,11 +1,9 @@
 "use strict";
 
-// Raster only; never SVG (script-capable). No image/jpg.
 var IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 var SHA256_RE = /^[0-9a-f]{64}$/;
 
-// Sanity cap only; rejecting real images loses them on migration.
 var IMAGE_DIM_MAX = 1 << 20;
 
 function isSha256Hex(x) {
@@ -16,7 +14,6 @@ function dimOk(n) {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= IMAGE_DIM_MAX;
 }
 
-// Strict, never repairs; returns fresh object with four fields.
 function normalizeImageRef(x) {
   if (!x || typeof x !== "object" || Array.isArray(x)) return null;
   if (!isSha256Hex(x.sha256)) return null;
@@ -25,7 +22,6 @@ function normalizeImageRef(x) {
   return { sha256: x.sha256, width: x.width, height: x.height, mime: x.mime };
 }
 
-// Only inside <img>; escaped typed text cannot forge refs.
 var DATA_BLOB_RE = /<img\b[^>]*?\sdata-blob\s*=\s*(?:"([0-9a-fA-F]{64})"|'([0-9a-fA-F]{64})'|([0-9a-fA-F]{64})(?=[\s/>]))/gi;
 
 function refsInHtml(html, add) {
@@ -82,7 +78,6 @@ function ascii(b, i, s) {
   return true;
 }
 
-// Bytes decide type, never caller's claim.
 function sniffImageMime(bytes) {
   if (!bytes || typeof bytes.length !== "number") return null;
   var b = bytes;
@@ -127,7 +122,6 @@ function gifDims(b) {
   return null;
 }
 
-// Orientations 5-8 swap width and height.
 function exifOrientation(b, at, end) {
   if (!ascii(b, at, "Exif\0\0")) return 0;
   var t = at + 6;

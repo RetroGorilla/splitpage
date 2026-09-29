@@ -60,7 +60,6 @@ test("a paste keeps comments only from this tab's live cut, for comments that ex
   assert.equal(gone.fromCut, true);
   assert.deepEqual(gone.comments, []);
   assert.deepEqual(commentIds(gone.cell), []);
-  // Comment spans from other HTML are plain words
   const foreign = cellFromClipboard(cmt("c1", "hi"), "hi", { nonce: "n1", hasComment: have });
   assert.deepEqual(commentIds(foreign.cell), []);
 });

@@ -308,7 +308,6 @@ function createHistoryFsBackend(opts) {
         check("put", true);
         if (!isSha256(sha) || typeof text !== "string") throw codedError("io", "history: bad body");
         counts.put++;
-        // Body must hit disk before the index names it
         const r = await bodies.put(sha, Buffer.from(text, "utf8"));
         if (!r.ok) throw codedError(bodyErrorCode(r.code), `history: body write failed (${r.code})`);
         putShas.push(sha);
@@ -327,7 +326,6 @@ function createHistoryFsBackend(opts) {
           else delete buckets[b];
         }
         const named = namedShas(buckets);
-        // Unlink only after next index is durable; prev names them
         const eligible = doc.trash.filter((s) => !named.has(s) && !gone.has(s));
         const trash = [];
         const seen = new Set();

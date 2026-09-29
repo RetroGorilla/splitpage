@@ -5,7 +5,6 @@ import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } fro
 var BLOB_DB_NAME = "splitpage-blobs";
 var BLOB_DB_VERSION = 1;
 var BLOB_STORE = "blobs";
-// Nothing reads usedAt yet; kept for a future collector
 var BLOB_TOUCH_MS = 24 * 60 * 60 * 1000;
 
 var blobEntries = {};
@@ -13,10 +12,8 @@ var blobDurable = {};
 var blobPersisting = {};
 var blobLoading = {};
 
-// A hook, not an import: 02c sits below hosted client
 var blobRemote = null;
 var blobFetching = {};
-// Caches remote 404s so re-renders don't re-request
 var blobRemoteMissAt = {};
 var REMOTE_MISS_MS = 5 * 60 * 1000;
 
@@ -86,7 +83,6 @@ function base64Encode(bytes) {
   return parts.join("");
 }
 
-// Type is sniffed from bytes; never trust declared mime
 export function intern(bytes) {
   if (bytes instanceof ArrayBuffer) bytes = new Uint8Array(bytes);
   if (!bytes || typeof bytes.length !== "number" || typeof bytes.byteLength !== "number") return null;
@@ -116,7 +112,6 @@ export function recordFor(sha) {
   return has(sha) ? freshRecord(blobEntries[sha].record) : null;
 }
 
-// READ ONLY; returns the shared array, not a copy
 export function bytesForSync(sha) {
   return has(sha) ? blobEntries[sha].bytes : null;
 }
@@ -150,7 +145,6 @@ export function dataUrlForSync(sha) {
   return "data:" + e.record.mime + ";base64," + base64Encode(e.bytes);
 }
 
-// Crash stash asks this to decide on inlining bytes
 export function isDurableSync(sha) {
   return has(sha) && !!blobDurable[sha] && !!(blobBackend && blobBackend.persistent);
 }
@@ -185,7 +179,6 @@ export function rowImageDataUrl(row) {
   return img.dataUrl || dataUrlForSync(img.ref.sha256);
 }
 
-// mime is sniffed; a stored name can lie
 export function rowImageBytes(row) {
   var img = rowImage(row);
   if (!img) return null;
@@ -444,7 +437,6 @@ function resolveBlobBackend() {
   return p;
 }
 
-// Bytes are re-hashed on read; corrupt ones count as missing
 export function ensureBytes(shas, opts) {
   var list = uniqueStrings(shas);
   var need = list.filter(function (sha) { return isSha256Hex(sha) && !blobEntries[sha]; });
@@ -483,7 +475,6 @@ function fetchRemoteBlob(sha) {
   var source = blobRemote;
   var p = Promise.resolve().then(function () { return source ? source(sha) : null; }).then(function (bytes) {
     if (blobEntries[sha]) return;
-    // Record miss only if source is still the installed one
     if (!bytes) { if (source && source === blobRemote) blobRemoteMissAt[sha] = Date.now(); return; }
     var rec = intern(bytes);
     if (rec && rec.sha256 !== sha && window.console) {
@@ -602,7 +593,6 @@ function openBlobDb() {
   return p;
 }
 
-// Resolves on commit, not request completion
 function blobTx(mode, body) {
   return openBlobDb().then(function (db) {
     return new Promise(function (resolve, reject) {

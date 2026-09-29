@@ -96,7 +96,6 @@ export function fileKindFromName(name) {
   if (ext === "csv") return "csv";
   if (ext === "md" || ext === "markdown") return "md";
   if (ext === "txt") return "txt";
-  // md is ambiguous: data block decides, not extension
   if (ext === "splitpage") return "splitpage";
   if (ext === "html" || ext === "htm") return "html";
   return null;
@@ -186,7 +185,6 @@ export function exportBaseName() {
 
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
-  // Builders are sync; image bytes must be in memory first
   await ensureBytes(refsIn(S.state));
   var filename = exportFileName(kind, baseName);
   if (kind === "docx") return { data: buildDocx(), filename: filename };
@@ -203,7 +201,6 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
   if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
   if (kind === "md-table") return { data: toMarkdownTableDoc(null, { export: true }), filename: filename };
-  // Export omits docId: a copy would duplicate this document
   if (kind === "html") {
     warnImagesLeftOut(missingInlineImages(S.state).length, filename);
     return {
@@ -313,7 +310,6 @@ export async function parseProjectFileState(file, opts) {
     } catch (e) {
       return { error: "not-splitpage" };
     }
-    // Legacy pages have no id; derived from content
     var legacyEmbedded = docIdEmbeddedIn(legacy);
     return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
   }
@@ -353,7 +349,6 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
   setHome("file", { handle: handle || null, format: kind, lastModified: file.lastModified || null,
                     name: file.name, diskBase: cloneState(S.state) });
-  // Stale card state would spring open in new project
   resetProductionPanelState();
 
   S.docIdWrittenOut = true;
@@ -361,7 +356,6 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   render();
   updateIdentityChip();
   updateFileChip();
-  // silent suppresses only this toast; restore reports once
   var commentNote = S.state.comments.length
     ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
   if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
@@ -417,7 +411,6 @@ async function loadFileIntoEditor(file, handle, opts) {
   if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
   var newRows, newTitle = null;
-  // Busy bar wraps parse only, never the file picker
   var readBusy = beginBusy("Reading " + file.name + "…");
   try {
     if (kind === "docx") {
@@ -449,7 +442,6 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  // Open replaces whole script; keep way back
   if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
@@ -463,7 +455,6 @@ async function loadFileIntoEditor(file, handle, opts) {
     S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
     setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
     resetProductionPanelState();
-    // Id minted here never left page; first Save keeps it
     S.docIdWrittenOut = false;
   }
 
@@ -541,7 +532,6 @@ export function mimeForFilename(filename) {
   return "text/plain";
 }
 
-// Desktop uses native Save dialog; cancel returns false silently
 export async function deliverFile(filename, data, opts) {
   opts = opts || {};
   if (S.DESKTOP) {
@@ -599,7 +589,6 @@ export async function checkFileConflict(handle, lastModified) {
 }
 
 export var fileConflictCtx = { kind: "import" };
-// Stale probe must not open modal over later one
 var fileConflictShowToken = 0;
 
 function fileConflictHome() {

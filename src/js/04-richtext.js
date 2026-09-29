@@ -4,7 +4,6 @@ import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import { tagCategory } from "./07-production-tags.js";
 import { BROLL_MARKER_RE } from "./08c-broll.js";
 
-// Detached div runs handlers on innerHTML; DOMParser is inert
 export function inertBody(html) {
   var doc = new DOMParser().parseFromString(
     "<!doctype html><body>" + (html == null ? "" : String(html)), "text/html");
@@ -124,7 +123,6 @@ function walkSanitize(srcParent, destParent) {
     var tag = node.tagName;
 
     if (tag === "DIV" || tag === "P") {
-      // Lone <br> is caret placeholder, not an extra line break
       var isBlankPara = node.childNodes.length === 1 &&
         node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
       if (!isBlankPara) walkSanitize(node, destParent);
@@ -134,7 +132,6 @@ function walkSanitize(srcParent, destParent) {
     if (tag === "BR") { destParent.appendChild(document.createElement("br")); return; }
 
     if (tag === "STRONG" || tag === "B") {
-      // Docs wraps whole clipboard in fake <b>; check font-weight
       var bStyle = node.style || {};
       var bWeight = bStyle.fontWeight;
       var bWeightNum = parseInt(bWeight, 10);
@@ -165,7 +162,6 @@ function walkSanitize(srcParent, destParent) {
       tagSpan.className = "tag-anchor";
       tagSpan.setAttribute("data-tag-cat", tcat.id);
       tagSpan.setAttribute("data-tag-name", tname);
-      // Atomic so caret can't edit tag into mismatching its name
       tagSpan.setAttribute("contenteditable", "false");
       walkSanitize(node, tagSpan);
       destParent.appendChild(tagSpan);
@@ -243,7 +239,6 @@ function walkSanitize(srcParent, destParent) {
   });
 }
 
-// Atomic span at cell end leaves caret nowhere to land
 export function ensureTrailingCaretSpot(container) {
   var last = container && container.lastChild;
   if (last && last.nodeType === 1 && last.getAttribute && last.getAttribute("contenteditable") === "false") {
@@ -263,7 +258,6 @@ function walkToMd(node) {
     else if (tag === "U") out += "<u>" + inner + "</u>";
     else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
     else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
-    // Escape ] ( ) in link text; parsers close early
     else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
     else if (tag === "BR") out += "\n";
     else if (tag === "SPAN" && child.classList && child.classList.contains("stage-dir")) out += "((" + inner + "))";

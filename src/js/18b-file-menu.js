@@ -219,7 +219,6 @@ export function toggleFileMenu(force, opts) {
     if (!open && opts.returnFocus) btn.focus();
     return;
   }
-  // Read before hiding: focus moves to body afterwards
   var inside = menu.contains(document.activeElement);
   menu.hidden = !open;
   if (backdrop) backdrop.hidden = !open;
@@ -337,7 +336,6 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
   var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
-  // File the snapshot under new id too, for history panel
   if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
   S.state = next;
   setBaseState(cloneState(S.state), reason);

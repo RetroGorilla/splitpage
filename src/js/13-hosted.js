@@ -68,7 +68,6 @@ import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 var sharedDocId;
 
 var SERVER_BASE_KEY = "splitpage-server-base";
-// sessionStorage: per tab, survives reload, isolated from other tabs
 var TAB_SERVER_KEY = "splitpage-tab-server";
 var SERVER_TOKEN_KEY = "splitpage-server-token";
 var REMEMBERED_TOKENS_KEY = "splitpage-server-tokens";
@@ -288,16 +287,13 @@ export async function apiFetch(path, opts) {
   }
 
   var ctype = res.headers.get("content-type") || "";
-  // Proxy HTML 413 is too-large, not lapsed sign-in
   if (opts.raw && res.status === 413) throw ApiError("blob-too-large", "too-large");
-  // Expired Access session answers 200 HTML, not an error
   if (res.redirected || (!ctype.includes("application/json") && res.status !== 204)) {
     throw ApiError("auth", "signed out");
   }
   if (res.status === 401 || res.status === 403) {
     var body403 = await res.json().catch(function () { return null; });
     if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
-    // Token is fine; never route to PIN dialog
     if (body403 && body403.error === "review-only") {
       var e403 = ApiError("review-only", "this link can comment, but not change the script");
       e403.detail = body403.detail || "";
@@ -354,7 +350,6 @@ function stashForReload() {
 
 function flagServerSessionExpired() {
   if (serverSessionExpired) return;
-  // Latched so queued autosaves don't repeat failure
   serverSessionExpired = true;
   var stashed = stashForReload();
   showToast(stashed
@@ -390,7 +385,6 @@ async function resumeServerDoc() {
   }
   if (!pending || !pending.id) return false;
 
-  // init races loadInitialState; keep typed edits recoverable
   var seqAtStart = S.editSeq;
   var stateAtStart = S.state ? cloneState(S.state) : null;
 
@@ -401,7 +395,6 @@ async function resumeServerDoc() {
     if (via !== conn) return false;
     forgetRemoteMisses();
   } catch (err) {
-    // Draft's document deleted server-side: disarm, open as local
     if (override && err && err.code === "not-found") {
       S.draftServerResume = null;
       try { override.onDone("not-found"); } catch (e2) {}
@@ -446,7 +439,6 @@ async function resumeServerDoc() {
         source: "server-resume",
         newBase: cloneState(theirs),
         chips: true,
-        // Crash-draft restore must never publish unseen merge
         noAutoSave: !!override,
         toast: {
           text: function () {
@@ -502,7 +494,6 @@ async function resumeServerDoc() {
 
 function handleApiError(err, whatFailed) {
   if (err && err.code === "auth") { flagServerSessionExpired(); return; }
-  // Never latch expiry; nothing signed out, no stash needed
   if (err && err.code === "pin") {
     clearServerToken();
     openPinDialog({ reason: "This server asks for a join PIN." });
@@ -579,7 +570,6 @@ export async function detectServer() {
   updateServerMenu();
   if (!S.serverMode.available) {
     if (conn.serverUrl) {
-      // SSH-forwarded servers need the reader's ssh running
       showToast("Could not reach " + conn.serverUrl +
         (conn.tunnel ? " — is the SSH tunnel to " + conn.tunnel.userHost + " running? (" +
           tunnelCommand(conn.tunnel) + ") Or" : " —") +
@@ -589,7 +579,6 @@ export async function detectServer() {
   }
 
   if (S.serverMode.authRequired && !conn.token) {
-    // Fragment key is the code; stale key falls to dialog
     if (reviewKey) {
       var joined = await joinServer(conn.serverUrl, null, reviewKey);
       if (probing !== conn) return;
@@ -615,7 +604,6 @@ async function probeHealth(probing) {
   } catch (e) {
     if (!(e && e.code === "offline" && probing.serverUrl) || probing !== conn) throw e;
     health = await apiFetch("api/health", { noClientHeader: true });
-    // Server reporting blobs allows header; keep it on
     if (probing === conn) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
     return health;
   }
@@ -788,7 +776,6 @@ export async function publishToServer() {
     return false;
   }
   var published = cloneState(S.state);
-  // Fork id if held elsewhere; else shared version history
   var oldId = S.state.docId;
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
@@ -806,7 +793,6 @@ export async function publishToServer() {
   if (via !== conn) return false;
   setHome("server", { id: body.id, rev: body.rev || 1 });
   setBaseState(published, "publishToServer: what the server just accepted");
-  // Adopt only after server has it; guards concurrent open
   if (forkDocId && S.state.docId === oldId) {
     S.state.docId = forkDocId;
     copyDocHistorySafe(oldId, forkDocId);
@@ -1011,7 +997,6 @@ export async function fetchBlob(sha) {
 export async function saveToServer() {
   if (serverSessionExpired || clientTooOld) return false;
   if (reviewMode()) return sendReviewWrites();
-  // Picker unlocked during save; drop result if doc changed
   var docId = serverHomeId();
   var attempts = 0;
   var mergeResult = null;
@@ -1038,7 +1023,6 @@ export async function saveToServer() {
       setBaseState(published, "saveToServer: what the server just accepted");
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
-      // Report only after merged result is stored
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
@@ -1066,7 +1050,6 @@ export async function saveToServer() {
       }
 
       if (err && err.code === "not-found") {
-        // Home cleared; screen stays dirty as the only copy
         showToast("That document is no longer on the server. Use “Put this script on the server” to publish it again.", "warn");
         setHome("none");
         updateFileChip();
@@ -1255,7 +1238,6 @@ function adoptReviewAnswer(op, sent, body) {
     }
   }
 
-  // Own only if rev is exactly ours plus this write
   if (typeof body.rev === "number" && body.rev === (home.rev || 0) + (body.changed ? 1 : 0)) {
     home.rev = body.rev;
   }

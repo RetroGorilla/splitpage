@@ -45,7 +45,6 @@ function overlayHtml(p) {
 var lastOverlayHtml = "";
 var LABEL_GAP_PX = 4;
 
-// Rewritten only when markup changed; runs after every strip paint
 export function paintTargetOverlay() {
   var layer = document.getElementById("rundown-overlay");
   if (!layer) return;

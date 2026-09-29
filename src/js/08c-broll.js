@@ -35,7 +35,6 @@ import { renderBrollViews } from "./08d-broll-panel.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { htmlToPlainText } from "./14-export.js";
 
-// Built lazily in brollField(); assigned in __init()
 var brollInField;
 var brollPropsInField;
 var brollAnchorDeclined;
@@ -52,13 +51,11 @@ export function brollStatus(id) {
   return null;
 }
 
-// Anchored: a marker must start its line; mid-sentence stays prose
 export var BROLL_MARKER_RE = /^[ \t]*(b[ \t]?-?[ \t]?roll)[ \t]*([:—–-])[ \t]*/i;
 var BROLL_CLOSERS = ":—–-";
 
 export var BROLL_NAME_MAX = 200;
 export var BROLL_TEXT_MAX = 2000;
-// Cap only so a broken file cannot flood the panel
 var BROLL_PROP_NAME_MAX = 80;
 export var BROLL_PROPS_MAX = 40;
 
@@ -157,7 +154,6 @@ function brollMarkerLines(cell) {
   return out;
 }
 
-// Legacy media cells skip the model; use DOM path
 function holdsMedia(html) {
   return /<img[\s>]|video-embed-card/i.test(html || "");
 }
@@ -176,7 +172,6 @@ function brollHtmlLines(body) {
   return lines;
 }
 
-// Enter inside bold leaves <br> a child of formatting
 function hoistNestedBrs(body) {
   var guard = 0;
   while (guard++ < 1000) {
@@ -202,7 +197,6 @@ function brollHtmlLineText(nodes) {
   return nodes.map(function (n) { return n.textContent || ""; }).join("");
 }
 
-// Visual cells only; the audio column is read aloud
 function collectBrollFromRows(rows) {
   var out = [];
   var seen = Object.create(null);
@@ -221,7 +215,6 @@ function collectBrollFromRows(rows) {
   return out;
 }
 
-// Memoised and shared across callers: read, never mutate
 function brollField(html) {
   if (!brollInField) brollInField = contentMemo(function (h) { return brollInCell(cellOf(h)); });
   return brollInField(html);
@@ -300,7 +293,6 @@ export function deleteBrollRecord(id) {
   return before !== S.state.brollShots.length;
 }
 
-// Anchoring pass must ask id-then-name in this exact order
 function brollMatchRecord(found, claimed, byId, held) {
   var rec = found.id ? byId[found.id] : null;
   if (rec && !claimed[rec.id]) return rec;
@@ -379,7 +371,6 @@ function brollEntryFrom(rec, found) {
   };
 }
 
-// Tolerates garbage: stored lists come from files and merges
 export function normalizeBrollProps(list, registry) {
   var byId = Object.create(null), byName = Object.create(null);
   (registry || []).forEach(function (t) {
@@ -543,7 +534,6 @@ export function maybeCaptureBroll(e, cellEl) {
   var m = BROLL_MARKER_RE.exec(head);
   if (!m || m[0].length !== head.length) return;
 
-  // Caret goes outside the contenteditable=false key span
   var id = makeId("bs"), keyText = m[1] + m[2];
   editCell(cellEl, function (cell) {
     var from = domToPos(cellEl, node, 0), to = domToPos(cellEl, node, offset);
@@ -557,7 +547,6 @@ export function maybeCaptureBroll(e, cellEl) {
   scheduleBrollRefresh();
 }
 
-// contenteditable=false so the caret cannot edit into the marker
 function brollKeyHtml(id, text) {
   return '<span class="broll-key" data-broll-id="' + escapeHtml(id) +
     '" contenteditable="false">' + escapeHtml(text) + '</span>';
@@ -646,7 +635,6 @@ function brollRekeyHtmlLine(line, id) {
   return false;
 }
 
-// Reuse ids brollEntries assigned; fresh ones would orphan records
 function brollAnchorPlan() {
   var claimed = Object.create(null);
   var byId = Object.create(null);
@@ -663,7 +651,6 @@ function brollAnchorPlan() {
 }
 
 function brollLineKey(rowId, ordinal) {
-  // Escape, not raw NUL: HTML parser rewrites it in scripts
   return rowId + "\u0000" + ordinal;
 }
 
@@ -696,7 +683,6 @@ export function anchorBrollInRows(rows) {
       });
       if (n) row.visualText = sanitizeHtml(body.innerHTML);
     } else {
-      // Last line first so earlier lines stay put
       for (var i = todo.length - 1; i >= 0; i--) {
         var t = todo[i];
         var next = t.found.marker.key
@@ -711,7 +697,6 @@ export function anchorBrollInRows(rows) {
   return total;
 }
 
-// Rewriting a field holding the caret would lose the caret
 function brollAnchoringIdle() {
   var el = document.activeElement;
   return !(el && el.isContentEditable);
@@ -798,6 +783,5 @@ export function runBrollRefresh() {
 }
 
 export function __init() {
-  // Import-scoped browser state, never stored in the document
   brollAnchorDeclined = Object.create(null);
 }
