@@ -35,6 +35,8 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   the published copy waits on the server. **Save As** on a shared script
   now makes a copy without calling the shared one saved. And a malformed
   request can no longer stop a shared-script server.
+- **An empty scene deletes in one click**: its **⋯ ▸ Delete** no longer
+  asks twice when there is nothing in it to lose.
 
 ## What's new in 3.0
 
@@ -148,7 +150,10 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   the caret into a new scene below, in the same column.
 - **Move a scene**: <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd>,
   or drag it by its number. The scene's **⋯** menu also has **Move up**,
-  **Move down**, **Insert scene** and **Delete**.
+  **Move down**, **Insert scene** and **Delete**. **Delete** asks for a
+  second click, unless the scene is empty (no words, pictures, set length
+  or comments): then one click does it. <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings
+  a deleted scene back.
 - **The rundown**: the strip under the header shows every scene as a block.
   Hover it to magnify the scenes round the pointer, click a block to jump
   to that scene, or drop a
