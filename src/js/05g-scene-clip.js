@@ -9,115 +9,28 @@ import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.j
 import { collectTagsFromRows, mintTagId, normalizeTagName, registryKey } from "./07-production-tags.js";
 import { normalizeBrollProps, recordPastedBroll } from "./08c-broll.js";
 
-/* ================= whole scenes on the clipboard (#204) =================
-
-   A drag out of a script cell selects whole scenes (05h-scene-select.js);
-   this file is what those scenes are on the clipboard and what a paste of
-   them does to a document. No DOM here beyond the sanitiser's parser: it
-   is unit-tested in src/test/scene-clip.test.mjs.
-
-   THE PAYLOAD. A copy or a cut puts three flavours on the clipboard:
-
-   - SCENES_MIME ("application/x-splitpage-scenes"), JSON: the scenes as
-     the document holds them, EVERYTHING in them (Adam, #204): both
-     columns, status, a length set by hand, the gallery (picture, further
-     pictures, video links, captions), and beside them the records the
-     scenes name — every comment on them (replies, resolved, assignee), the
-     b-roll list's records for their keys, the breakdown's entries for
-     their tags, and the people those two name as owners. And the picture
-     BYTES, as data: URIs keyed by sha, up to SCENE_BLOB_CAP in all, so a
-     paste into another tab, window or origin gets them without a store it
-     may not share. A picture the cap leaves out (or whose bytes this page
-     does not hold at the moment of the copy) travels by reference only and
-     is named in `blobsLeftOut`: the paste asks its own store and server
-     for it (ensureBytes), and says so when nobody has it — the scene still
-     comes, with "Image unavailable" in its place, as for any picture whose
-     bytes are gone.
-
-         { format: "splitpage-scenes", version: 1,
-           source: { docId, title }, cut: "<nonce>" (a cut only),
-           rows: [...], comments: [...], people: [...],
-           productionTags: [...], brollShots: [...],
-           blobs: { "<sha>": "data:image/…;base64,…" }, blobsLeftOut: ["<sha>"] }
-
-   - text/html: a two-column table (Visual | Audio) for a word processor or
-     a sheet, the words with their formatting and no comment marks. The
-     table also carries the payload WITHOUT its picture bytes in a
-     `data-splitpage-scenes` attribute, for a browser or a clipboard tool
-     that drops custom types: a Splitpage paste reading only that still
-     rebuilds the scenes, its pictures by reference.
-   - text/plain: "Visual: …" / "Audio: …" per scene, a blank line between —
-     readable anywhere, and what File ▸ Paste a script… reads back as two
-     columns (11-import.js's labelled form).
-
-   THE PASTE (insertScenes) is new scenes after the scene the caret is in,
-   one undo entry. Everything comes in through migrateRows() first (the
-   one door, HANDOFF §3.2): the payload is untrusted, whoever wrote it.
-   Ids, so nothing pasted claims something the document already has:
-
-   - rows, comments and replies get fresh ids; a comment's anchor spans in
-     the pasted cells are renamed with it, so the copy is its own
-     conversation about its own words;
-   - a b-roll key keeps its id only when the document has no key and no
-     record with it (freshBrollIds, 05c-clipboard.js — HANDOFF invariant
-     #54). A key that keeps its id brings its record (status, notes, owner,
-     props): pasting into a new script keeps the shot list. A key given a
-     new id is a new shot to go and get, seeded from its scene as a pasted
-     line's is (recordPastedBroll) and with none of the old record;
-   - a breakdown entry the document lacks is added (a fresh registry id,
-     its status, notes and owner); one it has already is left as it is;
-   - an owner is matched to the document's crew by name, else added.
-
-   A CUT then its paste in the same tab and the same document is a MOVE
-   (the live cut, below): the rows keep their ids where they are free, the
-   comments — which a cut leaves in the document, as deleting a scene does
-   — are not copied again but follow their anchors back to the words, and
-   the b-roll keys keep their ids and find their records. A paste of the
-   same cut while its scenes are in the document again (pasted once
-   already, or the cut undone) is a copy (isMove). */
-
 export var SCENES_MIME = "application/x-splitpage-scenes";
 export var SCENES_ATTR = "data-splitpage-scenes";
 var FORMAT = "splitpage-scenes";
 var VERSION = 1;
 
-/* The most picture bytes one copy carries: 16 MiB, which is also the
-   largest single picture any store takes (desktop/blob-store.js), so a
-   copy of one scene always carries its pictures. Past it the rest go by
-   reference (above). The clipboard holds text: 16 MiB of pictures is about
-   22 MB of base64, which Chromium and the OS clipboard take in their
-   stride; much more makes every copy slow for a paste that usually lands
-   in a tab of this same app, whose store already has them. */
 export var SCENE_BLOB_CAP = 16 * 1024 * 1024;
 
-/* ---- this tab's live cut ---- */
-
-var liveCut = null;   /* {nonce, docId} */
+var liveCut = null;
 
 export function setLiveCut(nonce, docId) { liveCut = nonce ? { nonce: String(nonce), docId: docId || null } : null; }
 export function liveCutNonce() { return liveCut ? liveCut.nonce : null; }
 
-/* Whether a paste of `clip` into the document `state` is the move the
-   live cut began: the same cut, into the document it was cut from, while
-   none of its scenes are in it. That last part is read from the document
-   each time rather than kept, so it follows Ctrl+Z and Ctrl+Shift+Z: undo
-   the move's paste and the scenes are out again, and the next paste is
-   the move again; undo the cut itself, or paste once already, and they
-   are back, so a paste is a copy with comments and b-roll records of its
-   own, never a second claim on the originals. */
 export function isMove(clip, state) {
   return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId) &&
     scenesAway(clip, state);
 }
 
-/* Whether none of the scenes of `clip` are in `state`. */
 function scenesAway(clip, state) {
   var here = Object.create(null);
   (state.rows || []).forEach(function (r) { if (r) here[r.id] = true; });
   return !clip.rows.some(function (r) { return here[r.id]; });
 }
-
-/* ---- building the payload ---- */
 
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
 
@@ -129,13 +42,6 @@ function cellIdsOf(rows, pick) {
   return out;
 }
 
-/* What the scenes `rowIds` (in document order, whatever order they are
-   given in) put on the clipboard, from `state`:
-     {payload, json, html, text, rows, leftOut}
-   opts.cut: this tab's cut nonce (a cut). opts.dataUrl(sha): the bytes
-   as a data: URI, or null (default: the registry's, dataUrlForSync).
-   opts.cap: SCENE_BLOB_CAP. `leftOut` lists the pictures that travel by
-   reference only. */
 export function buildScenePayload(state, rowIds, opts) {
   opts = opts || {};
   var want = Object.create(null);
@@ -144,8 +50,6 @@ export function buildScenePayload(state, rowIds, opts) {
   var rowSet = Object.create(null);
   rows.forEach(function (r) { rowSet[r.id] = true; });
 
-  /* the comments on these scenes: by the row they point at, or by a mark
-     in their words (a comment split across a scene boundary) */
   var marked = cellIdsOf(rows, function (cell, out) {
     commentIds(cell).forEach(function (id) { out[id] = true; });
   });
@@ -154,8 +58,6 @@ export function buildScenePayload(state, rowIds, opts) {
     return rowSet[c.rowId] || marked[c.anchorId || c.id];
   }).map(clone);
 
-  /* the breakdown's entries for their tags, and for the props their b-roll
-     records name */
   var tagKeys = Object.create(null);
   collectTagsFromRows(rows).forEach(function (t) { tagKeys[registryKey(t.cat.id, t.name)] = true; });
   var keyIds = cellIdsOf(rows, function (cell, out) {
@@ -168,12 +70,10 @@ export function buildScenePayload(state, rowIds, opts) {
     return t && (tagKeys[registryKey(t.cat, t.name)] || propIds[t.id]);
   }).map(clone);
 
-  /* the people those name as owners */
   var owners = Object.create(null);
   productionTags.concat(brollShots).forEach(function (x) { if (x.owner) owners[x.owner] = true; });
   var people = (state.people || []).filter(function (p) { return p && owners[p.id]; }).map(clone);
 
-  /* the pictures: bytes up to the cap, the rest by reference */
   var dataUrl = opts.dataUrl || dataUrlForSync;
   var cap = typeof opts.cap === "number" ? opts.cap : SCENE_BLOB_CAP;
   var blobs = {}, leftOut = [], used = 0;
@@ -203,14 +103,12 @@ export function buildScenePayload(state, rowIds, opts) {
   };
 }
 
-/* a no-break space as a space, for another program */
 var NBSP_RE = new RegExp(String.fromCharCode(160), "g");
 
 function plainOf(html) {
   return toPlainText(cellOf(html || "")).replace(NBSP_RE, " ");
 }
 
-/* "Visual: …" / "Audio: …" per scene, a blank line between. */
 export function scenesPlainText(rows) {
   return rows.map(function (r) {
     return "Visual: " + plainOf(r.visualText) + "\nAudio: " + plainOf(r.audioText);
@@ -221,8 +119,6 @@ function escAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/* The table another program gets; the payload without its bytes rides on
-   it for a Splitpage paste that finds no custom type. */
 export function scenesTableHtml(rows, payload) {
   var marker = "";
   if (payload) {
@@ -241,10 +137,6 @@ export function scenesTableHtml(rows, payload) {
     "</tbody></table>";
 }
 
-/* ---- reading it back ---- */
-
-/* The scenes on a clipboard, from getData(type) (a DataTransfer's, bound),
-   or null when it holds none. */
 function readType(getData, type) {
   try { return String(getData(type) || ""); } catch (e) { return ""; }
 }
@@ -261,14 +153,6 @@ export function scenesOnClipboard(getData) {
   return el ? parseScenePayload(el.getAttribute(SCENES_ATTR)) : null;
 }
 
-/* The payload's JSON as scenes ready to insert, or null when it is not
-   ours. Its pictures' bytes are interned (each checked against the sha it
-   is filed under) and queued to be stored; everything else goes through
-   migrateRows(), which sanitises every cell, comment and record.
-     {rows, comments, people, productionTags, brollShots, cut, source,
-      carried: [sha], refs: [sha]}
-   refs is every picture the scenes name; carried the ones whose bytes
-   came with them. */
 export function parseScenePayload(json) {
   var p;
   try { p = typeof json === "string" ? JSON.parse(json) : json; } catch (e) { return null; }
@@ -310,11 +194,6 @@ export function parseScenePayload(json) {
   };
 }
 
-/* ---- the paste ---- */
-
-/* Whether a scene is empty enough for a paste to take its place: no
-   words in either column, no picture or gallery, no length set by hand,
-   and no comment on it. A new script's one blank scene is the case. */
 export function isBlankScene(state, row) {
   if (!row) return false;
   if (plainOf(row.visualText).trim() || plainOf(row.audioText).trim()) return false;
@@ -330,29 +209,13 @@ function mintFree(prefix, taken, mint) {
   return id;
 }
 
-/* The scenes of `clip` (parseScenePayload) put into S.state — the open
-   document — after the scene `opts.afterRowId` (at the end when it is
-   missing or not given); opts.replaceRowId, a blank scene the paste takes
-   the place of (isBlankScene). opts.move: this is the live cut's move
-   (isMove). opts.holdComments: do not add the comments, return them
-   instead — a server document's comments are sent the moment they are
-   added and never undone (12a-undo.js, design D5), so the caller adds
-   them as a second step and the scenes stay one undo entry of their own.
-   opts.mint(prefix): a new id (makeId); opts.stamp(row): stampRow.
-
-   Changes the document in place and marks nothing: the caller's one
-   markDirty() makes it one undo entry. Returns
-     {rowIds, comments, held, broll: {kept, minted}} */
 export function insertScenes(clip, opts) {
   opts = opts || {};
   var state = S.state;
   var mint = opts.mint || makeId;
-  /* all or nothing: with any of the scenes back, their comments are in the
-     document with their words, and a "move" would mark the copy with them */
   var move = !!opts.move && scenesAway(clip, state);
   var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
 
-  /* rows */
   var rowTaken = Object.create(null);
   state.rows.forEach(function (r) { rowTaken[r.id] = true; });
   var rowMap = Object.create(null);
@@ -362,7 +225,6 @@ export function insertScenes(clip, opts) {
   });
   var firstRowId = rowMap[clip.rows[0].id];
 
-  /* comments: which the document keeps (a move), which come as copies */
   var comments = list("comments");
   var cmtTaken = Object.create(null);
   comments.forEach(function (c) { if (c) { cmtTaken[c.id] = true; if (c.anchorId) cmtTaken[c.anchorId] = true; } });
@@ -377,8 +239,6 @@ export function insertScenes(clip, opts) {
       var here = comments.filter(function (x) { return x && x.id === c.id; })[0];
       if (here) {
         anchorMap[anchor] = here.anchorId || here.id;
-        /* orphaned by the cut: back with its scene (a marked one follows its
-           words below, whatever this says) */
         if (!liveRows[here.rowId] && rowMap[c.rowId]) here.rowId = rowMap[c.rowId];
         return;
       }
@@ -401,7 +261,6 @@ export function insertScenes(clip, opts) {
     added.push(copy);
   });
 
-  /* the cells: comment marks renamed, b-roll keys given ids of their own */
   var takenKeys = brollIdsTaken(state, null, null, null, move);
   var kept = [], minted = [];
   var mintedByRow = Object.create(null);
@@ -429,7 +288,6 @@ export function insertScenes(clip, opts) {
     return row;
   });
 
-  /* into the scene list */
   var at = state.rows.length;
   var replaceAt = opts.replaceRowId ? state.rows.findIndex(function (r) { return r.id === opts.replaceRowId; }) : -1;
   if (replaceAt !== -1) {
@@ -441,7 +299,6 @@ export function insertScenes(clip, opts) {
   }
   Array.prototype.splice.apply(state.rows, [at, 0].concat(rows));
 
-  /* the crew, matched by name, added only when something names them */
   var people = list("people");
   var personMap = Object.create(null);
   var peopleTaken = Object.create(null);
@@ -461,7 +318,6 @@ export function insertScenes(clip, opts) {
     return (personMap[id] = mine.id);
   }
 
-  /* the breakdown: an entry the document lacks comes with its details */
   var registry = list("productionTags");
   var haveTag = Object.create(null);
   registry.forEach(function (t) { haveTag[registryKey(t.cat, t.name)] = true; });
@@ -473,8 +329,6 @@ export function insertScenes(clip, opts) {
                     owner: ownerFor(t.owner), notes: t.notes || "", status: t.status });
   });
 
-  /* the b-roll list: a key that kept its id brings its record, unless the
-     document still has one (a move finds its own); a new id is a new shot */
   var shots = list("brollShots");
   var haveShot = Object.create(null);
   shots.forEach(function (b) { haveShot[b.id] = true; });
@@ -492,7 +346,6 @@ export function insertScenes(clip, opts) {
     recordPastedBroll(rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
   });
 
-  /* the comments, and every marked one pointed at its words */
   if (!opts.holdComments) added.forEach(function (c) { comments.push(c); });
   syncCommentAnchors(state);
 
@@ -504,15 +357,9 @@ export function insertScenes(clip, opts) {
   };
 }
 
-/* The scenes `rowIds` out of S.state, in place; how many went. A cut and a
-   delete take the scenes only: their comments stay in the document, as
-   deleting one scene from its menu leaves them (detached until a move's
-   paste brings their words back). A comment whose words are also in a
-   scene that stays (a phrase split across two) is pointed at them. */
 export function removeScenes(rowIds) {
   var gone = Object.create(null);
   (rowIds || []).forEach(function (id) { gone[id] = true; });
-  /* in place: the app holds references into S.state.rows (12a-undo.js) */
   var n = 0;
   for (var i = S.state.rows.length - 1; i >= 0; i--) {
     if (gone[S.state.rows[i].id]) { S.state.rows.splice(i, 1); n++; }
@@ -521,6 +368,4 @@ export function removeScenes(rowIds) {
   return n;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order. */
 export function __init() {}

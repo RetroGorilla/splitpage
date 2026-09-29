@@ -37,32 +37,6 @@ import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
 
-/* ================= the b-roll panel (#148) =================
-
-   The list itself — reading the markers, the records, anchoring, the
-   props a shot needs — is 08c-broll.js. This is how it is shown and
-   edited: the side panel, and the full-page shot list (#150, below).
-
-   One line per shot, because the question the panel is opened to answer
-   is "what is still to shoot", and a card per shot answered it three at a
-   time. The line is a checkbox (Shot / To shoot in one click), the name —
-   in full, however long (#169: nothing ends in "…") — and beside it where,
-   who and what it needs; everything else waits behind a click on the line.
-   The head says how far the whole list has got ("1 of 3 shot" and a small
-   bar), and text tabs under it cut the list down to what is left. The
-   look is B-BrollCalm, the calmer of the two boards (#169).
-
-   Nothing here keeps a copy of the document: every edit lands on the
-   record (brollRecord) and ends in markDirty(), so undo (12a-undo.js)
-   records it the way it records any edit — and a change to many shots at
-   once is one markDirty(), so one Ctrl+Z. */
-
-/* ---- how the list is looked at: per device, never the document's ----
-
-   Which filter is on and how the list is grouped are the reader's, not
-   the script's — the same shape as the comments panel's sort — so they
-   live in localStorage and never touch state: switching them must not
-   mark the document dirty or land on the undo stack. */
 var VIEW_KEY = "splitpage-broll-view";
 
 var FILTERS = [
@@ -72,8 +46,6 @@ var FILTERS = [
   { id: "shot",    label: "Shot" }
 ];
 
-/* The ids brollGroupBy always had: "flat" is the list with no groups.
-   `button` is what the quiet menu button in the tab bar says (#169). */
 var GROUPS = [
   { id: "scene",    label: "Scene",    button: "By scene" },
   { id: "location", label: "Location", button: "By location" },
@@ -95,13 +67,13 @@ function loadView() {
       view.group = oneOf(GROUPS, saved.group, view.group);
       loadPageView(saved);
     }
-  } catch (e) { /* unreadable or blocked storage: the defaults */ }
+  } catch (e) { }
 }
 
 function saveView() {
   try {
     localStorage.setItem(VIEW_KEY, JSON.stringify(Object.assign({}, view, pageViewToSave())));
-  } catch (e) { /* storage refused: it still works, it just forgets */ }
+  } catch (e) { }
 }
 
 function setFilter(id) {
@@ -126,40 +98,23 @@ function filterCounts(entries) {
   return n;
 }
 
-/* ---- the panel's own state, none of it the document's ---- */
-
-var openId = null;          /* the shot whose detail is showing */
+var openId = null;
 var renamingId = null;
 var addingPersonFor = null;
-var editingLocFor = null;   /* the location picker, open as a text box */
-var editingRefFor = null;   /* "Cuts against", open for editing */
-var menuFor = null;         /* the ⋯ menu at the foot of an open shot */
+var editingLocFor = null;
+var editingRefFor = null;
+var menuFor = null;
 var groupMenuOpen = false;
 var selection = Object.create(null);
 var selectionAnchor = null;
-var bulkInput = null;       /* "person" | "location": the bar's one text box */
+var bulkInput = null;
 
-/* ---- a review session (#30): the list to read, not to change ----
-
-   A reviewer (13-hosted.js reviewMode) can open a shot, filter, group, go
-   to its scene and take the CSV or the printed list away, and nothing
-   else: the server keeps none of a reviewer's edits to the list, so an
-   edit made here would look as if it had worked and then be lost. The
-   controls that change a shot are not drawn, or drawn disabled where the
-   value is what a reader wants (the tick, the assignee, the note), and
-   the handlers below refuse them anyway, as the script's click guard does
-   (21-events.js REVIEW_SAFE_ACTIONS). An allow-list for the same reason
-   as that one: an action added to the panel or the page has to be
-   thought about here before a reviewer can reach it. */
 var BROLL_REVIEW_SAFE_ACTIONS = {
   "broll-expand": 1, "broll-jump": 1, "broll-filter": 1, "broll-group-menu": 1, "broll-group": 1,
   "broll-bulk-clear": 1, "broll-open-page": 1, "broll-page-close": 1, "broll-page-jump": 1,
   "broll-page-csv": 1, "broll-page-print": 1
 };
 
-/* Whatever was half open when the role arrived — a rename, a location
-   box, a menu, a selection and its bar — goes, rather than being drawn
-   for somebody who cannot finish it. */
 function dropEditingForReview() {
   if (!reviewMode()) return;
   renamingId = null; addingPersonFor = null; editingLocFor = null; editingRefFor = null;
@@ -167,10 +122,6 @@ function dropEditingForReview() {
   clearSelection();
 }
 
-/* ---- small pieces of markup ---- */
-
-/* Inline stroke icons, never emoji or a font's glyphs: they take the text
-   colour they sit in, so a state colour and dark mode come for free. */
 var ICONS = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
@@ -197,17 +148,11 @@ export function brollIcon(name, size, cls) {
     'stroke-linejoin="round" aria-hidden="true" focusable="false">' + (ICONS[name] || "") + '</svg>';
 }
 
-/* An icon from the page's sprite (page.html, #169): the panel draws B's
-   1.75-stroke set wherever the sprite has the icon, and keeps brollIcon
-   above for the few it doesn't (a note, a pencil, a loose line). Sized
-   and stroked by .broll-si in app.css. */
 function icon(name, cls) {
   return '<svg class="broll-si' + (cls ? " " + cls : "") + '" aria-hidden="true" focusable="false"><use href="#i-' +
     name + '"/></svg>';
 }
 
-/* A category's colour, from TAG_CATEGORIES like every breakdown card's, so
-   a palette change lands here with no second copy of the hex. */
 function catColor(id) {
   var cat = tagCategory(id);
   return cat ? cat.color : "var(--text-dim)";
@@ -221,9 +166,6 @@ function initials(name) {
   return (first + last).toUpperCase();
 }
 
-/* A person in their own colour, the same everywhere they appear (#169:
-   personColor, 13a-presence.js — the header's avatars, comments, the
-   breakdown's owners); .person-avatar is the shared circle. */
 function avatarHtml(person) {
   return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
     escapeHtml(personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
@@ -237,9 +179,6 @@ function plural(n, one, many) {
   return n + " " + (n === 1 ? one : many);
 }
 
-/* Where each scene starts in the programme, by row id: the same running
-   sum paintRowTimes() (05-render.js) writes into each scene's gutter, so
-   "Scene 03 · 00:31" here reads what the script beside it says. */
 function sceneStarts() {
   var t = 0, out = Object.create(null);
   S.state.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row); });
@@ -250,14 +189,6 @@ function startOf(e, starts) {
   return e.rowId && starts[e.rowId] !== undefined ? formatTimecode(starts[e.rowId]) : "";
 }
 
-/* ---- props, as a shot shows them (#149) ----
-
-   A chip per prop: its name, and how far along the breakdown has it
-   (Needed / Sourcing / Have it / Returned) — the question a shooter asks
-   of a prop is "is it here yet". A hand-added one can be taken off here;
-   one the script names is taken off by editing the script, so it has no
-   ×. Since #169 the status is the breakdown's own lamp (Adam: the same
-   12×6 lamp wherever an item's status shows), with its word beside it. */
 function propChipHtml(e, p, removable) {
   var st = tagStatus(p.status);
   return '<span class="broll-prop-chip' + (p.tracked ? '' : ' is-untracked') + '" title="' +
@@ -275,10 +206,6 @@ function propChipHtml(e, p, removable) {
     '</span>';
 }
 
-/* An item's status as the shared lamp (app.css .item-lamp): a 12×6 bar,
-   or the return arrow for Returned. The word is its title and its name
-   for a screen reader; the wrapper carries both, since an <svg> shows no
-   title attribute. Beside its own word (a chip) it is only a picture. */
 function itemLampHtml(st, cls, besideWord) {
   var named = ' title="' + escapeHtml(st.label) + '"' +
     (besideWord ? ' aria-hidden="true"' : ' role="img" aria-label="' + escapeHtml(st.label) + '"');
@@ -290,7 +217,6 @@ function itemLampHtml(st, cls, besideWord) {
   return '<span class="item-lamp is-' + escapeHtml(st.id) + extra + '"' + named + '></span>';
 }
 
-/* The props the document already tracks, for Add prop to offer. */
 function propOptionsHtml() {
   var seen = Object.create(null);
   return productionEntries().filter(function (t) { return t.cat.id === "prop"; })
@@ -300,12 +226,6 @@ function propOptionsHtml() {
     .map(function (n) { return '<option value="' + escapeHtml(n) + '"></option>'; }).join("");
 }
 
-/* The props as a line of text with a status dot before each name (#149):
-   "is it here yet" readable at a glance, on the compact line and in the
-   sheet, without opening anything. The dot's colour is its status class's
-   (app.css, from the tokens, so dark mode follows); its title is the word.
-   A prop the breakdown no longer has has no status, so no dot. The names
-   stay the element's only text, separated by ", ". */
 function propStatusDot(p) {
   var st = tagStatus(p.status);
   if (!st) return "";
@@ -319,9 +239,6 @@ function propListHtml(e) {
   }).join(", ");
 }
 
-/* The panel's line says the same with the breakdown's lamp before each
-   name instead of the dot (#169, as the chips do); the full page keeps
-   the dot above in its table. */
 function propLampListHtml(e) {
   return e.props.map(function (p) {
     var st = tagStatus(p.status);
@@ -329,7 +246,6 @@ function propLampListHtml(e) {
   }).join(", ");
 }
 
-/* "Kettle (Sourcing), Drone (Needed)": the same, for a title attribute. */
 function propListTitle(e) {
   return e.props.map(function (p) {
     var st = tagStatus(p.status);
@@ -337,9 +253,6 @@ function propListTitle(e) {
   }).join(", ");
 }
 
-/* The chips, then the Add box as a field with its border at rest (#169:
-   "fields must be easy to find") — typing a name, or picking one the
-   breakdown already tracks from its list, adds it. */
 function propsEditHtml(e, readOnly) {
   var id = escapeHtml(e.id);
   if (readOnly && !e.props.length) return '<span class="broll-muted">None</span>';
@@ -351,8 +264,6 @@ function propsEditHtml(e, readOnly) {
     '</div>';
 }
 
-/* Every location anybody has named: the Location tags, and what shots
-   already say. */
 function knownLocations() {
   var seen = Object.create(null), out = [];
   function add(name) {
@@ -374,12 +285,6 @@ function datalistsHtml() {
     }).join("") + '</datalist>';
 }
 
-/* ---- the summary, the filters, the grouping ---- */
-
-/* One segment per shot, in list order: how far along the whole list is,
-   readable at a glance and before reading a single line. B draws it 56px
-   wide in the head (#169), so the gaps between segments close up as the
-   list grows rather than pushing it wider. */
 function progressBarHtml(entries) {
   var n = filterCounts(entries);
   var gap = n.all <= 12 ? 2 : n.all <= 24 ? 1 : 0;
@@ -394,7 +299,6 @@ function progressBarHtml(entries) {
     '</div>';
 }
 
-/* The head's "1 of 3 shot" (B-BrollCalm): the figures in the mono. */
 function summaryHtml(entries) {
   var n = filterCounts(entries);
   return '<span class="broll-summary-line"><span class="broll-summary-n">' + n.shot + '</span> of ' +
@@ -402,9 +306,6 @@ function summaryHtml(entries) {
     progressBarHtml(entries);
 }
 
-/* The panel's filters (#169): the shared text tabs, each with its count.
-   They keep .broll-chip and the data-filter the suites and focusKey know
-   them by. */
 function filterTabsHtml(entries) {
   var n = filterCounts(entries);
   return '<div class="panel-tabs broll-tabs" role="radiogroup" aria-label="Show shots">' +
@@ -417,7 +318,6 @@ function filterTabsHtml(entries) {
   '</div>';
 }
 
-/* The full page's filters: the same four, as chips (renderBrollPage). */
 function filterChipsHtml(entries) {
   var n = filterCounts(entries);
   return '<div class="broll-filters" role="radiogroup" aria-label="Show">' +
@@ -430,8 +330,6 @@ function filterChipsHtml(entries) {
   '</div>';
 }
 
-/* "By scene ▾" at the end of the tab bar (#169): quiet, since it changes
-   how the list reads rather than what is in it. */
 function groupMenuHtml() {
   var current = GROUPS.filter(function (g) { return g.id === view.group; })[0] || GROUPS[0];
   return '<div class="broll-group-wrap">' +
@@ -451,9 +349,6 @@ function groupMenuHtml() {
     '</div>';
 }
 
-/* Groups of entries, in order, each {key, kind, label, row, items}: shared
-   by the panel and the full page so the two can never disagree about what
-   "Scene" or "Location" puts together. */
 export function brollGroups(entries, by) {
   var sorted = brollSortedForList(entries);
   if (by === "flat") return [{ key: "all", kind: "flat", label: "", items: sorted }];
@@ -477,8 +372,6 @@ export function brollGroups(entries, by) {
     }
     byKey[key].items.push(e);
   });
-  /* Scene groups keep script order ("Added here" last, where the sort put
-     it); the others read alphabetically, the empty group last. */
   if (by !== "scene") {
     groups.sort(function (a, b) {
       if (a.none !== b.none) return a.none ? 1 : -1;
@@ -493,10 +386,6 @@ function doneCountHtml(items, cls) {
   return '<span class="' + cls + (done === items.length ? ' is-done' : '') + '">' + done + '/' + items.length + '</span>';
 }
 
-/* A 32px group head (B-BrollCalm): the scene and where it starts, then
-   done/total — in the b-roll colour once the group is all shot. The
-   scene's audio used to follow, cut short with "…"; B dropped it for the
-   start time, and the open shot's "Cuts against" has the words in full. */
 function groupHeadHtml(g, starts) {
   if (g.kind === "flat") return "";
   var title, time = "";
@@ -515,13 +404,6 @@ function groupHeadHtml(g, starts) {
   return '<h3 class="broll-group-head">' + title + time + doneCountHtml(g.items, "broll-group-count") + '</h3>';
 }
 
-/* ---- one shot, one line ---- */
-
-/* Beside the name, quietly (B-BrollCalm): where (a pin and the place),
-   who (their avatar; the name is its title and a screen reader's) and
-   what it needs (a lamp and the name of each prop). Most shots have one
-   of the three, which is all the board draws; a shot with more shows them
-   all, wrapping at the right rather than hiding any. */
 function rowMetaHtml(e) {
   var parts = [];
   if (e.location) {
@@ -542,9 +424,6 @@ function rowMetaHtml(e) {
 
 function rowStateIconsHtml(e) {
   var out = "";
-  /* Quieter than they were (badges): nothing is wrong yet, but a line
-     matched by name alone, or a shot whose line has gone, is worth being
-     able to see. */
   if (e.markerless) {
     out += '<span class="broll-state-ico broll-loose-badge" title="This line has no marker yet, so it is matched ' +
       'by name — click away from the script and it gets one." aria-label="Not anchored yet">' + brollIcon("unlink", 14) + '</span>';
@@ -568,9 +447,6 @@ function checkHtml(e) {
     '"><span class="broll-check-box">' + icon("check") + '</span></button>';
 }
 
-/* The whole line but the checkbox is one button that opens the shot, the
-   meta inside it, so the line is as easy to hit as it looks. The flag and
-   note icons, and Go to scene on hover, sit after it. */
 function rowHtml(e, starts) {
   var id = escapeHtml(e.id);
   var open = openId === e.id || renamingId === e.id;
@@ -592,35 +468,21 @@ function rowHtml(e, starts) {
     (open ? cardHtml(e, starts) : '');
 }
 
-/* ---- the open shot: label–value rows under its line ----
-
-   B-BrollCalm: on the line's own --surface-2, lined up under the name, a
-   definition list whose fields show their border at rest (#169, Adam:
-   "fields and buttons must be easy to find"), then Flag for reshoot and
-   the ⋯ menu (Rename, Delete) at its foot. */
-
 function field(label, valueHtml) {
   return '<dt class="broll-label">' + escapeHtml(label) + '</dt><dd class="broll-value">' + valueHtml + '</dd>';
 }
 
-/* The chevron an .ev-field draws at its right (app.css "side panel parts"). */
 function chevronHtml() {
   return '<svg class="ev-chevron" aria-hidden="true" focusable="false"><use href="#i-chevron-down"/></svg>';
 }
 
 var SHOT_STATUSES = [{ id: "unshot", label: "To shoot" }, { id: "shot", label: "Shot" }];
 
-/* The scene gutter's lamp, in the b-roll colour: an empty square to
-   shoot, filled with a tick once shot. */
 function statusLampHtml(status) {
   return '<span class="broll-status-lamp' + (status === "shot" ? ' is-shot' : '') + '" aria-hidden="true">' +
     (status === "shot" ? icon("check") : '') + '</span>';
 }
 
-/* Status as a field that flips To shoot ↔ Shot in one click (Adam, #169:
-   like the breakdown's status, which cycles), so no chevron and no menu.
-   It is the line's tick in words, with the same data-action. A reviewer
-   gets the value, disabled. */
 function statusFieldHtml(e, ro) {
   var id = escapeHtml(e.id);
   var cur = SHOT_STATUSES.filter(function (s) { return s.id === e.status; })[0] || SHOT_STATUSES[0];
@@ -639,7 +501,6 @@ function cardHtml(e, starts) {
   var off = ro ? ' disabled' : '';
   var renaming = renamingId === e.id;
 
-  /* "03 · 00:31": the scene and where it starts, one link to it */
   var when = startOf(e, starts);
   var scene = e.rowId
     ? '<button type="button" class="jump-link broll-scene-link" data-action="broll-jump" data-id="' + id + '" title="Go to scene ' +
@@ -648,8 +509,6 @@ function cardHtml(e, starts) {
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
       : '<span class="broll-muted">Added here</span>';
 
-  /* Looks like B's select; opens the text box with the known places in
-     its list, so a new place can still be typed in one go. */
   var location = ro
     ? '<span class="broll-static">' +
         (e.location ? escapeHtml(e.location) : '<span class="broll-muted">No location</span>') + '</span>'
@@ -685,7 +544,6 @@ function cardHtml(e, starts) {
         '</div>'
       : '');
 
-  /* The words in full, in the script's face (#169: never cut short) */
   var cuts = editingRefFor === e.id
     ? '<textarea class="broll-ref-input ev-field" data-id="' + id + '" rows="3" aria-label="Cuts against" ' +
         'placeholder="The line of audio this cuts against">' + escapeHtml(e.audioRef) + '</textarea>'
@@ -698,8 +556,6 @@ function cardHtml(e, starts) {
             '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 16) + '</button>') +
       '</div>';
 
-  /* Flag for reshoot, and ⋯ with what is left: outlined buttons (#169).
-     The menu opens upward, since it sits at the foot of the shot. */
   var foot = '<div class="broll-card-foot">' +
       '<button type="button" class="broll-flag-btn btn-outline is-small' + (e.reshoot ? ' is-active' : '') + '"' + off +
         ' data-action="broll-reshoot-toggle" data-id="' + id + '" aria-pressed="' + (e.reshoot ? 'true' : 'false') + '" title="' +
@@ -745,8 +601,6 @@ function cardHtml(e, starts) {
     '</div>';
 }
 
-/* ---- the bulk bar: several shots, one change, one undo ---- */
-
 function selectedIds(entries) {
   return entries.filter(function (e) { return selection[e.id]; }).map(function (e) { return e.id; });
 }
@@ -757,8 +611,6 @@ function bulkBarHtml(entries) {
   if (!chosen.length) return "";
   var allShot = chosen.every(function (e) { return e.status === "shot"; });
   var allFlagged = chosen.every(function (e) { return e.reshoot; });
-  /* #169: the panel's own language — outlined buttons and fields on a
-     raised strip — rather than the dark bar it was */
   return '<div class="broll-bulk-row">' +
       '<span class="broll-bulk-n">' + chosen.length + ' selected</span>' +
       '<button type="button" class="broll-bulk-btn btn-outline is-small" data-action="broll-bulk-shot">' +
@@ -797,12 +649,6 @@ function bulkBarHtml(entries) {
       : '');
 }
 
-/* ---- drawing ---- */
-
-/* A re-render replaces the list's markup, so whatever had the focus in it
-   is put back: the same control, and for a text box what was typed and
-   where the caret was. The list re-renders on the idle refresh, which can
-   land while a note is half written. */
 function focusKey(el) {
   if (!el || el === document.body) return null;
   if (el.id) return "#" + cssAttr(el.id);
@@ -830,7 +676,7 @@ function keepingFocus(container, draw) {
   if (!again) return;
   if (kept.typed) {
     again.value = kept.value;
-    try { again.setSelectionRange(kept.start, kept.end); } catch (e) { /* not a text control */ }
+    try { again.setSelectionRange(kept.start, kept.end); } catch (e) { }
   }
   again.focus({ preventScroll: true });
 }
@@ -861,7 +707,6 @@ export function renderBroll() {
   var bulk = document.getElementById("broll-bulk");
 
   keepingFocus(panel, function () {
-    /* the count and the bar live in the head, the tabs under it (#169) */
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
     var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
@@ -879,10 +724,6 @@ export function renderBroll() {
   fitNotes(listEl);
 }
 
-/* A note or a "Cuts against" being edited is one line tall until it has
-   more, then grows to show all of it (#169: nothing cut off). CSS
-   field-sizing does that where the browser has it; elsewhere the box is
-   measured after every draw and every keystroke. */
 function fitNotes(root) {
   if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
   Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field"), fitTextarea);
@@ -894,15 +735,10 @@ function fitTextarea(box) {
   box.style.height = (box.scrollHeight + box.offsetHeight - box.clientHeight) + "px";
 }
 
-/* Everything that shows the list: the panel, and the full page when it is
-   open. The idle refresh (08c-broll.js runBrollRefresh) and every edit
-   below end here. */
 export function renderBrollViews() {
   renderBroll();
   renderBrollPage();
 }
-
-/* ---- editing ---- */
 
 function entryById(id) {
   var all = brollEntries();
@@ -910,9 +746,6 @@ function entryById(id) {
   return null;
 }
 
-/* Every edit lands on the record, marks the document dirty and redraws —
-   the one exception being a rename, which has to reach the script itself
-   first (renameBrollInScript). */
 function updateRecord(id, fields) {
   var rec = brollRecord(id);
   if (!rec) return null;
@@ -929,9 +762,6 @@ export function toggleBrollShot(id) {
   updateRecord(id, { status: rec.status === "shot" ? "unshot" : "shot" });
 }
 
-/* The same change to every selected shot, as ONE edit: one markDirty, so
-   the undo stack records one entry (12a-undo.js diffs after it), and the
-   coalescing broken first so it never merges into the typing before it. */
 function bulkUpdate(apply, describe) {
   var entries = brollEntries();
   var ids = selectedIds(entries);
@@ -993,8 +823,6 @@ function bulkLocation(name) {
   }, function (n) { return clean ? "Moved " + shotsWord(n) + " to " + clean + "." : "Cleared the location of " + shotsWord(n) + "."; });
 }
 
-/* A new person named in the bar joins the crew list in the same edit as
-   the assignment, so one undo takes both. */
 function bulkAssignNewPerson(name) {
   var entries = brollEntries();
   if (!selectedIds(entries).length) return;
@@ -1026,8 +854,6 @@ function pruneSelection(entries) {
   if (!Object.keys(selection).length) bulkInput = null;
 }
 
-/* Ctrl/Cmd+click adds or drops a line; Shift+click takes the run of lines
-   between the last one clicked and this one, in the order they are shown. */
 function selectWithModifier(e, id, orderIds) {
   if (e.shiftKey && selectionAnchor && orderIds.indexOf(selectionAnchor) !== -1) {
     var a = orderIds.indexOf(selectionAnchor), b = orderIds.indexOf(id);
@@ -1053,8 +879,6 @@ function addBrollFromPanel() {
   if (!input) return;
   var name = plainText(input.value).trim().slice(0, BROLL_NAME_MAX);
   if (!name) return;
-  /* No line in the script, and no flag for it either: a shot nobody has
-     written a scene for yet is an ordinary thing to want on the list. */
   var rec = newBrollRecord({ name: name, origin: "list" });
   input.value = "";
   openId = rec.id;
@@ -1072,7 +896,6 @@ export function jumpToBrollShot(id) {
   return true;
 }
 
-/* The Add prop box: Enter, or a name picked from its list. */
 function commitPropInput(input) {
   var id = input.getAttribute("data-id");
   var name = input.value;
@@ -1101,8 +924,6 @@ function renameShot(id, box) {
   var e = entryById(id);
   var next = box ? plainText(box.value).trim().slice(0, BROLL_NAME_MAX) : "";
   renamingId = null;
-  /* the typing in the script before this is its own undo entry: broken
-     off first, since what is flushed unreported is taken in with no entry */
   breakUndoCoalescing();
   if (e && next && next !== e.name && renameBrollInScript(e, next)) {
     render();
@@ -1115,9 +936,6 @@ function renameShot(id, box) {
 function deleteShot(id) {
   var e = entryById(id);
   if (!e) return;
-  /* Deleting here only ever forgets the record. The words stay where they
-     were written — taking somebody's line out of their script from a side
-     panel is not this button's business. */
   deleteBrollRecord(id);
   if (openId === id) openId = null;
   menuFor = null;
@@ -1128,11 +946,6 @@ function deleteShot(id) {
   showToast(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
 }
 
-/* ---- the one set of handlers, for the panel and the full page ----
-
-   Both show the same controls (the checkbox, the assignee, the note) with
-   the same data-action names, so both are wired here: an edit made on the
-   page is the same edit, with the same undo, as one made in the panel. */
 function onBrollClick(e, root) {
   var btn = e.target.closest("[data-action]");
   if (!btn || !root.contains(btn)) {
@@ -1153,12 +966,9 @@ function onBrollClick(e, root) {
     e.stopPropagation();
     var fromField = btn.classList.contains("broll-status-btn");
     toggleBrollShot(id);
-    /* the open shot's Status field is drawn anew saying the other state;
-       the focus stays on it, for the next press of Space */
     var again = fromField && root.querySelector('.broll-status-btn[data-id="' + cssAttr(id) + '"]');
     if (again) again.focus();
   } else if (action === "broll-expand") {
-    /* a selection is only ever for the bulk bar, which a reviewer has none of */
     if ((e.shiftKey || e.ctrlKey || e.metaKey) && !reviewMode()) {
       e.preventDefault();
       selectWithModifier(e, id, shownOrder(root));
@@ -1174,8 +984,6 @@ function onBrollClick(e, root) {
     var raising = !rec.reshoot;
     openId = id;
     updateRecord(id, { reshoot: raising });
-    /* Raising the flag asks why: the note is the useful half of it, and
-       the moment it is raised is the only moment anyone knows the answer. */
     if (raising) {
       var notes = root.querySelector('.broll-notes-input[data-id="' + cssAttr(id) + '"]');
       if (notes) notes.focus();
@@ -1272,8 +1080,6 @@ function onBrollClick(e, root) {
 function onBrollChange(e) {
   var t = e.target;
   if (reviewMode()) {
-    /* a select a reviewer should never have had enabled: say so, and draw
-       it back as it was */
     if (t.classList.contains("broll-owner-select") || t.id === "broll-bulk-owner" || t.id === "broll-bulk-location") {
       reviewBlocked();
       renderBrollViews();
@@ -1296,8 +1102,6 @@ function focusBulkInput() {
   if (box) box.focus();
 }
 
-/* Typed fields commit on the way out rather than per keystroke: a redraw
-   on every character would take the caret with it. */
 function onBrollFocusOut(e) {
   if (reviewMode()) return;
   var el = e.target;
@@ -1322,10 +1126,6 @@ function onBrollKeydown(e, root) {
   var t = e.target;
   var onPage = root.id === "broll-page";
   if (e.key === "Escape") {
-    /* Escape takes back the most recent thing opened, one at a time: a
-       menu, a field being edited, the selection, then the open shot —
-       whose line gets the focus back. Only once there is nothing left to
-       close does it reach the window (the full page closes on it). */
     var refocus = null;
     if (groupMenuOpen) { groupMenuOpen = false; refocus = ".broll-group-btn"; }
     else if (menuFor) { refocus = '[data-action="broll-menu"][data-id="' + cssAttr(menuFor) + '"]'; menuFor = null; }
@@ -1346,7 +1146,6 @@ function onBrollKeydown(e, root) {
     if (back) back.focus();
     return;
   }
-  /* Up and Down move through an open menu's items, as in any menu. */
   if ((e.key === "ArrowDown" || e.key === "ArrowUp") && t.classList && t.classList.contains("broll-menu-item")) {
     var items = Array.prototype.slice.call(t.parentNode.querySelectorAll(".broll-menu-item"));
     var at = items.indexOf(t) + (e.key === "ArrowDown" ? 1 : -1);
@@ -1355,8 +1154,6 @@ function onBrollKeydown(e, root) {
     return;
   }
   if (e.key !== "Enter") return;
-  /* Every box Enter would commit writes a shot; in a review session the
-     only one left in the page is Add a shot's, hidden by app.css. */
   if (reviewMode()) {
     if (t.tagName === "INPUT" && !t.readOnly) { e.preventDefault(); reviewBlocked(); }
     return;
@@ -1382,8 +1179,6 @@ function onBrollInput(e) {
   if (reviewMode()) return;
   var box = e.target;
   if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
-  /* A name picked from the Add prop box's list is a choice made, not
-     typing on the way to one: it goes in at once. */
   if (box.classList && box.classList.contains("broll-prop-input") &&
       (e.inputType === "insertReplacementText" || e.inputType === undefined)) {
     commitPropInput(box);
@@ -1397,8 +1192,6 @@ function wireBrollRoot(root) {
   root.addEventListener("keydown", function (e) { onBrollKeydown(e, root); });
   root.addEventListener("input", onBrollInput);
 }
-
-/* ---- opening and closing the panel ---- */
 
 export function openBrollPanel() {
   if (!S.state) return;
@@ -1429,7 +1222,6 @@ export function wireBrollPanel() {
     var p = document.getElementById("broll-panel");
     if (p && !p.hidden) closeBrollPanel(); else openBrollPanel();
   });
-  /* A click outside an open menu closes it, like any menu. */
   document.addEventListener("mousedown", function (e) {
     if (!groupMenuOpen && !menuFor) return;
     if (e.target.closest && e.target.closest(".broll-menu, .broll-group-btn, [data-action=\"broll-menu\"]")) return;
@@ -1437,9 +1229,6 @@ export function wireBrollPanel() {
     menuFor = null;
     renderBrollViews();
   });
-  /* Ctrl+clicking lines leaves the focus wherever it was, so the panel's
-     own keydown may never see Escape: clearing a selection is caught at
-     the window too, as the production panel's is. */
   window.addEventListener("keydown", function (e) {
     if (e.key !== "Escape" || !Object.keys(selection).length) return;
     var p = document.getElementById("broll-panel");
@@ -1448,27 +1237,6 @@ export function wireBrollPanel() {
     renderBrollViews();
   });
 }
-
-/* ---- the full-page shot list (#150) ----
-
-   The same list, as a sheet: a table in a card over the whole screen,
-   grouped by location by default — the order a day of b-roll is actually
-   shot in — or by scene or by person. The panel is for keeping track while
-   writing; this is for planning the day and handing it over, with a CSV
-   and a printable PDF from its header.
-
-   It shows the same controls as the panel for what can be done on a sheet
-   — the checkbox, the assignee, the note — with the same data-action names
-   and classes, wired by the same wireBrollRoot(): an edit here is exactly
-   the edit the panel makes, with the same undo. The filter is the panel's
-   (one question, "what am I looking at", asked in two places); the page's
-   grouping is its own, since it defaults differently.
-
-   It covers the whole screen, so it closes the side panels through
-   closeAllSidePanels() (HANDOFF invariant #16) — the b-roll panel, which
-   is where the page is opened from, comes back when it closes if it was
-   open — and owns the focus while it is up (invariant #19): Escape or
-   "← Script" closes it and gives the focus back to what opened it. */
 
 var PAGE_GROUPS = [
   { id: "location", label: "Location" },
@@ -1513,8 +1281,6 @@ export function openBrollPage() {
   if (back) back.focus();
 }
 
-/* `andThen` runs once the page is gone and before the focus goes back: a
-   jump to a scene, which wants the focus in the script instead. */
 export function closeBrollPage(andThen) {
   var page = brollPageEl();
   if (!page || page.hidden) return;
@@ -1612,8 +1378,6 @@ export function renderBrollPage() {
   });
 }
 
-/* ---- the sheet, as files: a CSV, and a PDF to print ---- */
-
 export function shotRecordForFile(e) {
   var who = personById(e.owner);
   return {
@@ -1624,7 +1388,6 @@ export function shotRecordForFile(e) {
     flagged: !!e.reshoot,
     location: e.location || "",
     props: e.props.map(function (p) { return p.name; }),
-    /* for the printed sheet: "Kettle (sourcing)" */
     propsWithStatus: e.props.map(function (p) {
       var st = tagStatus(p.status);
       return p.name + (st ? " (" + st.label.toLowerCase() + ")" : "");
@@ -1636,14 +1399,6 @@ export function shotRecordForFile(e) {
   };
 }
 
-/* One row per shot — every shot, in script order, whatever the page is
-   filtered to: a spreadsheet filters and sorts itself. Read without
-   writing anything (brollEntries(true)), since building a file must not
-   be what adds a shot to the list. "Scene start" (#169) — the timecode
-   the shot's scene starts at, as the list's scene heads show it — goes
-   last, so a sheet built on the columns before it still lines up. */
-/* The same shots as a table, for the Excel workbook too (16b-xlsx.js):
-   the heading and a row per shot ({cells, shot, flagged}). */
 export function brollTable() {
   var out = {
     head: ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
@@ -1667,17 +1422,6 @@ export function buildBrollCsv() {
   return "﻿" + lines.join("\r\n");
 }
 
-/* What the printed sheet shows: the page as it is — its filter and its
-   grouping — so what is printed is what was being looked at. Each group
-   says what kind it is (brollGroups' kind: "location", "scene", "added",
-   "person") and a scene group where its scene starts; each shot where its
-   own scene starts ("" for one with no scene), as the group heads on
-   screen read "Scene 04 · 01:03"; `none` is the group of shots with no
-   location or nobody assigned, which the page heads with no pin or
-   avatar. */
-/* `as` ({filter, group}), when given, is the list asked for rather than
-   the page's: the Export dialog's shot list and the script PDF's appendix
-   are every shot, by scene, whatever the page was last left showing. */
 export function brollShotListForPrint(as) {
   var filterId = as && as.filter ? oneOf(FILTERS, as.filter, "all") : view.filter;
   var groupId = as && as.group ? oneOf(PAGE_GROUPS, as.group, "scene") : pageView.group;
@@ -1725,31 +1469,24 @@ function wireBrollPage() {
   var page = brollPageEl();
   if (!page) return;
   wireBrollRoot(page);
-  /* the grouping is a real <select>: its change is the page's own */
   page.addEventListener("change", function (e) {
     if (e.target.id !== "broll-page-group") return;
     pageView.group = oneOf(PAGE_GROUPS, e.target.value, "location");
     saveView();
     renderBrollPage();
   });
-  /* A note typed in the sheet goes in on Enter, like leaving the box. */
   page.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && e.target.classList && e.target.classList.contains("broll-page-note")) {
       e.preventDefault();
       e.target.blur();
     }
   });
-  /* Escape that nothing inside the page took (a menu, a field being
-     edited, a selection) closes it. */
   window.addEventListener("keydown", function (e) {
     if (e.key !== "Escape" || !brollPageOpen() || e.defaultPrevented) return;
     if (document.querySelector(".modal-backdrop:not([hidden])")) return;
     e.preventDefault();
     closeBrollPage();
   });
-  /* It owns the focus while it is up: anything that would take the focus
-     behind it — a Tab past its last control, a stray click — brings it
-     back, except a dialog or a toast opened over it. */
   document.addEventListener("focusin", function (e) {
     if (!brollPageOpen()) return;
     var el = e.target;
@@ -1760,11 +1497,8 @@ function wireBrollPage() {
   });
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   loadView();
-  /* For the browser suites: the view as remembered, and the selection. */
   window.__brollTest = {
     view: function () { return JSON.parse(JSON.stringify(Object.assign({}, view, pageViewToSave()))); },
     selected: function () { return Object.keys(selection); },

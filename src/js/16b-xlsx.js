@@ -5,43 +5,12 @@ import { strBytes, tagPrintColor, xmlEscape, zipWrite } from "./14-export.js";
 import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT } from "./14b-export-kit.js";
 import { scriptTable } from "./16-csv.js";
 
-/* ================= Excel workbooks (.xlsx) =================
-
-   Adam, 2026-09-28: a spreadsheet export "that comes out cleanly with
-   enough space for notes stuff" — which a .csv cannot do, being values
-   and commas with nowhere to keep a column's width. The same tables the
-   .csv files are written from (scriptTable, 16-csv.js; breakdownTable,
-   08-production-panels.js; brollTable, 08d-broll-panel.js), so the two
-   never disagree, written as SpreadsheetML:
-
-   - every column its own width, the long ones (Visual, Audio, Notes)
-     wide, and every cell wrapped and top-aligned, so a scene's words
-     read in full;
-   - the heading row bold on a grey band, frozen, with a filter on it,
-     and repeated on every printed page; the Visual and Audio headings in
-     the app's column colours;
-   - statuses and categories in the colours the PDF and Word exports
-     print them in (PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT,
-     TAG_PRINT_COLORS — the light palette whatever the app's theme);
-   - a blank, ruled Notes column on the script sheet to write in, and
-     room in the breakdown's and the shot list's own notes;
-   - landscape pages, fitted to the width, "Page N of M" at the foot.
-
-   The script's workbook is a sheet per part — Script, then Comments,
-   Breakdown and B-roll when there are any — where the .csv strings the
-   comments under the scenes. Strings go in the shared-string table (every
-   reader takes it); a count ("Mentions") is a number. Nothing in it is
-   stamped finer than the day, so two exports are the same bytes (suite
-   98), as the Word export's are. Zipped by zipWrite (14-export.js), store
-   only, which Excel, Numbers, Sheets and LibreOffice all open. */
-
 var NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-var MAX_CELL = 32767;   /* the most characters a cell holds */
+var MAX_CELL = 32767;
 
 function pad2(n) { return (n < 10 ? "0" : "") + n; }
 
-/* Column n (0-based) as letters: 0 A, 25 Z, 26 AA. */
 export function colName(n) {
   var s = "";
   n += 1;
@@ -53,12 +22,6 @@ export function colName(n) {
   return s;
 }
 
-/* ---- styles ----
-
-   A small registry: each distinct look ({bold, italic, color, fill, wrap,
-   align, border}) becomes one cellXfs entry, its font, fill and border
-   shared with any other look that has the same. Index 0 is the plain
-   default every workbook must start with. */
 function styleSheet() {
   var fonts = ['<font><sz val="11"/><color rgb="FF' + PRINT_COLORS.text + '"/><name val="Calibri"/><family val="2"/></font>'];
   var fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
@@ -74,7 +37,6 @@ function styleSheet() {
     return color ? "<" + tag + ' style="thin"><color rgb="FF' + color + '"/></' + tag + ">" : "<" + tag + "/>";
   }
   return {
-    /* the cellXfs index for look `o` */
     id: function (o) {
       o = o || {};
       var key = JSON.stringify([o.bold, o.italic, o.color, o.fill, o.wrap, o.align, o.valign, o.border]);
@@ -84,8 +46,6 @@ function styleSheet() {
       var fill = o.fill
         ? indexOf(fills, '<fill><patternFill patternType="solid"><fgColor rgb="FF' + o.fill + '"/><bgColor indexed="64"/></patternFill></fill>')
         : 0;
-      /* "rule": a hairline under a row; "head": a stronger one under the
-         heading; "total": a strong one over the totals */
       var b = o.border === "head" ? "<border><left/><right/><top/>" + side("bottom", PRINT_COLORS.borderStrong) + "<diagonal/></border>"
         : o.border === "total" ? "<border><left/><right/>" + side("top", PRINT_COLORS.borderStrong) + "<bottom/><diagonal/></border>"
         : o.border === "rule" ? "<border><left/><right/><top/>" + side("bottom", PRINT_COLORS.border) + "<diagonal/></border>"
@@ -112,7 +72,6 @@ function styleSheet() {
   };
 }
 
-/* ---- shared strings ---- */
 function stringTable() {
   var list = [], at = Object.create(null), count = 0;
   return {
@@ -125,7 +84,6 @@ function stringTable() {
       return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<sst xmlns="' + NS + '" count="' + count + '" uniqueCount="' + list.length + '">' +
         list.map(function (s) {
-          /* leading or trailing space, or a line break, is kept only when said so */
           var keep = /^\s|\s$|\n/.test(s) ? ' xml:space="preserve"' : "";
           return "<si><t" + keep + ">" + xmlEscape(s) + "</t></si>";
         }).join("") + "</sst>";
@@ -133,19 +91,11 @@ function stringTable() {
   };
 }
 
-/* A cell's text: one line ending per break, no carriage returns, at most
-   what a cell holds. */
 function cellText(v) {
   var s = String(v == null ? "" : v).replace(/\r\n?/g, "\n");
   return s.length > MAX_CELL ? s.slice(0, MAX_CELL - 1) + "…" : s;
 }
 
-/* ---- a sheet ----
-
-   `sheet`: {name, cols: [widths in characters], head: [cells], headStyles
-   (optional, per column), rows: [{cells, styles: [xf per column], total}]}.
-   A cell is a string or a number; "" is written as an empty cell that
-   still carries its style, so the Notes column is ruled all the way down. */
 function sheetXml(sheet, index, strings) {
   var ncol = sheet.cols.length;
   var last = colName(ncol - 1);
@@ -184,12 +134,8 @@ function sheetXml(sheet, index, strings) {
     "</worksheet>";
 }
 
-/* A sheet's name in a formula: always quoted, a quote doubled. */
 function sheetRef(name) { return "'" + name.replace(/'/g, "''") + "'"; }
 
-/* The package around the sheets: the workbook naming them (with each
-   one's filter range and printed heading row), the styles, the strings
-   and the document's properties. */
 export function buildWorkbook(sheets, title, styles) {
   var strings = stringTable();
   var parts = sheets.map(function (sh, i) { return sheetXml(sh, i, strings); });
@@ -236,7 +182,6 @@ export function buildWorkbook(sheets, title, styles) {
     '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
     '<Relationship Id="rId3" Type="' + NS_R + '/extended-properties" Target="docProps/app.xml"/>' +
     "</Relationships>";
-  /* the day, not the second: two exports of one script are one file */
   var d = new Date();
   var day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
   var core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -260,13 +205,10 @@ export function buildWorkbook(sheets, title, styles) {
     { name: "xl/_rels/workbook.xml.rels", data: strBytes(wbRels) }
   ];
   parts.forEach(function (xml, i) { entries.push({ name: "xl/worksheets/sheet" + (i + 1) + ".xml", data: strBytes(xml) }); });
-  /* the strings last: every sheet above has put its own in */
   entries.push({ name: "xl/styles.xml", data: strBytes(styles.xml()) });
   entries.push({ name: "xl/sharedStrings.xml", data: strBytes(strings.xml()) });
   return zipWrite(entries);
 }
-
-/* ---- the sheets ---- */
 
 function looks(styles) {
   var body = { wrap: true, border: "rule" };
@@ -287,8 +229,6 @@ function looks(styles) {
 
 function fill(n, v) { var a = []; for (var i = 0; i < n; i++) a.push(v); return a; }
 
-/* Script: the scenes, then Total (and Target), then a blank ruled Notes
-   column to write in. */
 function scriptSheet(L, t) {
   var head = t.head.concat(["Notes"]);
   var headStyles = head.map(function (h) { return h === "Visual" ? L.headVisual : h === "Audio" ? L.headAudio : L.head; });
@@ -310,10 +250,8 @@ function scriptSheet(L, t) {
     name: "Script",
     head: head,
     headStyles: headStyles,
-    /*      Scene Start Status Read Set Visual Audio Tags B-roll Open Notes */
     cols: [7, 9, 10, 8, 9, 46, 60, 32, 30, 11, 40],
     rows: rows,
-    /* the filter covers the scenes, not the totals under them */
     filterRows: t.scenes.length
   };
 }
@@ -324,7 +262,6 @@ function commentsSheet(L, t) {
     name: "Comments",
     head: t.commentHead,
     headStyles: fill(t.commentHead.length, L.head),
-    /*      No. Location Status Assigned Author Date Quoted Comment */
     cols: [6, 20, 18, 16, 18, 20, 36, 60],
     rows: t.comments.map(function (c) {
       var base = c.reply ? L.reply : c.resolved ? L.dim : L.body;
@@ -354,16 +291,11 @@ function breakdownSheet(L, standalone) {
     name: "Breakdown",
     head: t.head,
     headStyles: fill(t.head.length, L.head),
-    /*      Category Item Status Assigned Mentions Scenes In Notes B-roll First Group */
     cols: [13, 28, 11, 16, 10, 16, 9, 44, 30, 12, 22],
     rows: rows
   };
 }
 
-/* "Cuts against" is the whole narration a shot plays under — a paragraph,
-   which wrapped in its column made one shot a page tall (Excel sizes a row
-   to its tallest cell). The sheet shows its opening words, enough to find
-   the place; the .csv keeps all of it. */
 var CUTS_CHARS = 90;
 
 function opening(s) {
@@ -393,7 +325,6 @@ function brollSheet(L, standalone) {
     name: "B-roll",
     head: t.head,
     headStyles: fill(t.head.length, L.head),
-    /*      Scene Shot Status Flagged Location Props Cuts Assigned Note Description Start */
     cols: [7, 32, 10, 9, 18, 26, 30, 16, 40, 40, 11],
     rows: rows
   };
@@ -401,7 +332,6 @@ function brollSheet(L, standalone) {
 
 function titleOf() { return (S.state && S.state.title) || "Untitled Script"; }
 
-/* File ▸ Export ▸ Spreadsheet ▸ Excel: the whole script, a sheet per part. */
 export function buildScriptXlsx() {
   var styles = styleSheet();
   var L = looks(styles);
@@ -410,18 +340,14 @@ export function buildScriptXlsx() {
   return buildWorkbook(sheets, titleOf(), styles);
 }
 
-/* … ▸ Breakdown ▸ Excel: every tagged item. */
 export function buildBreakdownXlsx() {
   var styles = styleSheet();
   return buildWorkbook([breakdownSheet(looks(styles), true)], titleOf() + " - breakdown", styles);
 }
 
-/* … ▸ B-roll shot list ▸ Excel: every shot, in script order. */
 export function buildBrollXlsx() {
   var styles = styleSheet();
   return buildWorkbook([brollSheet(looks(styles), true)], titleOf() + " - b-roll shot list", styles);
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

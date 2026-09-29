@@ -1,15 +1,3 @@
-/* The production panel's tag operations on the document model (#85,
- * docs/DOCUMENT-MODEL.md §4, step 4's leftovers): tagging a phrase from the
- * composer (one occurrence or all of them), renaming a tag and removing it
- * (07-production-tags.js).
- *
- * Each used to rewrite a parse of the stored HTML and sanitise it. The old
- * code is kept here verbatim as the reference, and the new one is checked
- * against it over stored-shaped cells (_stored-cells.mjs): rename and
- * remove must leave every cell reading exactly as the old code left it;
- * tagging a phrase finds what the old walk found, except where reading the
- * cell's text rather than one text node at a time is the point.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -21,8 +9,6 @@ import {
 } from "../js/07-production-tags.js";
 import { domProjection } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
-
-/* ---- the old code, verbatim but for its imports ---- */
 
 function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
@@ -100,11 +86,8 @@ const oldRemove = (html, cat, name) => oldEachTagSpan(html, cat, name, (el) => {
   el.parentNode.removeChild(el);
 });
 
-/* ---- helpers ---- */
-
 const MARK = "t:prop:Zz";
 
-/* The stretches of a cell carrying tag `id`, as [from, to) offsets. */
 function tagStretches(cell, id) {
   const out = [];
   let pos = 0, open = null;
@@ -119,8 +102,6 @@ function tagStretches(cell, id) {
   return out;
 }
 
-/* Where each "Zz" span of some HTML sits, as [from, to) offsets — span by
-   span, since two side by side are one stretch to the model. */
 function spanRanges(html) {
   const spans = new Map();
   domProjection(inertBody(html)).forEach((c, i) => {
@@ -133,8 +114,6 @@ function spanRanges(html) {
   return [...spans.values()].map(([a, b]) => a + ":" + b);
 }
 
-/* A cell's model with the "Zz" tag taken off again: what tagging must not
-   have changed. */
 function withoutMark(cell) {
   return JSON.stringify(cell.map((r) => {
     if (r.atom || r.marks.tag !== MARK) return r;
@@ -152,8 +131,6 @@ function withoutMark(cell) {
 const WORD = /[\p{L}\p{N}]/u;
 const PHRASES = ["red", "mug", "the", "red mug", "bo", "ld", "é", "two", "lines", "'s", "q", "tab", "x"];
 
-/* More cells, each written with the phrases in: mostly plain, some split
-   by formatting, some inside comments, links and tags. */
 function phraseCells() {
   const r = rng(4242);
   const out = [];
@@ -177,11 +154,7 @@ function phraseCells() {
   return out;
 }
 
-/* the demo, the hand-written cells and 600 random ones: enough to meet
-   every shape, in a suite that parses each several times per phrase */
 const CELLS = STORED.slice(0, STORED.length - 900).concat(phraseCells());
-
-/* ---- tagging a phrase ---- */
 
 test("tagging: every occurrence the old walk tagged is tagged, but for a neighbour across a formatting edge", () => {
   let crossed = 0, neighbour = 0, compared = 0;
@@ -191,7 +164,6 @@ test("tagging: every occurrence the old walk tagged is tagged, but for a neighbo
     assert.equal(dom.map((c) => c.text).join(""), text, html);
     for (const phrase of PHRASES) {
       compared++;
-      /* nowhere in the text, nowhere in any one text node either */
       if (text.toLowerCase().indexOf(phrase) === -1) {
         assert.deepEqual(tagOccurrences(cellOf(html), phrase), []);
         continue;
@@ -202,22 +174,17 @@ test("tagging: every occurrence the old walk tagged is tagged, but for a neighbo
       const newRanges = found.map((m) => m.from + ":" + m.to);
       for (const r of oldRanges) {
         if (newRanges.includes(r)) continue;
-        /* the old walk looked no further than the text node's own ends;
-           "bo" in "<strong>bo</strong>ld" is not a whole word */
         const [a, b] = r.split(":").map(Number);
         assert.ok(WORD.test(text.charAt(a - 1)) || WORD.test(text.charAt(b)), JSON.stringify({ html, phrase, r, newRanges }));
         neighbour++;
       }
       for (const r of newRanges) {
         if (oldRanges.includes(r)) continue;
-        /* found only now: it runs across more than one text node (a
-           formatting edge), which the old walk could never see */
         const [a, b] = r.split(":").map(Number);
         const nodes = new Set(dom.slice(a, b).map((c) => c.sc));
         assert.ok(nodes.size > 1, JSON.stringify({ html, phrase, r, oldRanges }));
         crossed++;
       }
-      /* the cell after tagging: only the tag is new */
       const res = tagFieldOccurrences(html, phrase, "prop", "Zz", false);
       assert.equal(res.hits, found.length);
       if (!res.hits) { assert.equal(res.html, html); continue; }
@@ -233,24 +200,18 @@ test("tagging: every occurrence the old walk tagged is tagged, but for a neighbo
 
 test("tagging: the rules, one by one", () => {
   const tagged = (html, phrase, only) => tagStretches(cellOf(tagFieldOccurrences(html, phrase, "prop", "Zz", false, only).html), MARK);
-  /* case does not matter, and the words keep theirs */
   assert.equal(tagFieldOccurrences("A Red Mug.", "red mug", "prop", "Zz", false).html,
     'A <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Zz" contenteditable="false">Red Mug</span>.');
-  /* whole words, in any script */
   assert.deepEqual(tagged("Ana Anaïs ana", "ana"), ["0:3", "10:13"]);
-  /* never inside a tag or a link, across a line break or a b-roll key */
   assert.deepEqual(tagged(tagSpan("prop", "Mug", "mug") + " mug", "mug"), ["4:7"]);
   assert.deepEqual(tagged('<a href="https://e.x/">mug</a> mug', "mug"), ["4:7"]);
   assert.deepEqual(tagged("red<br>mug red mug", "red mug"), ["8:15"]);
   assert.deepEqual(tagged('red <span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span> mug', "b-roll"), []);
-  /* across formatting, yes; into or out of a comment, no; inside one, yes */
   assert.deepEqual(tagged("red <strong>mug</strong>", "red mug"), ["0:7"]);
   assert.deepEqual(tagged('red <span class="cmt-anchor" data-cmt="c1">mug</span>', "red mug"), []);
   assert.deepEqual(tagged('<span class="cmt-anchor" data-cmt="c1">a red mug</span>', "red mug"), ["2:9"]);
-  /* one occurrence, by its index among them all */
   assert.deepEqual(tagged("mug, mug, mug", "mug", 1), ["5:8"]);
   assert.deepEqual(tagged("mug, mug, mug", "mug", 3), []);
-  /* the count, with nothing changed */
   assert.deepEqual(tagFieldOccurrences("mug, mug", "mug", "prop", "Zz", true), { hits: 2, html: "mug, mug" });
 });
 
@@ -263,8 +224,6 @@ test("tagging: a cell still holding a video card is tagged in place, the card ke
   assert.deepEqual(tagStretches(cellOf(res.html), MARK), ["2:9"]);
   assert.equal(sanitizeHtml(res.html), res.html);
 });
-
-/* ---- rename and remove ---- */
 
 function withRows(cells, fn) {
   S.state = { rows: cells.map((html, i) => ({ id: "r" + i, visualText: html, audioText: "" })), productionTags: [] };
@@ -286,9 +245,6 @@ test("rename and remove leave every stored cell reading as the old code left it,
       const gone = oldRemove(html, cat, name);
       let count = 0;
       const m = withRows([html], () => { count = removeTag(cat, name); return S.state.rows[0].visualText; });
-      /* the count is the tag's mentions, as the panel shows them: stretches
-         of it in the model, which is the old code's count of spans except
-         where two spans of it sat side by side */
       assert.equal(count, modelMentions(html, cat, name), html);
       assert.ok(count <= gone.changed, html);
       if (count < gone.changed) joined++;
@@ -335,17 +291,6 @@ test("rename and remove in a cell still holding a video card keep the card", () 
   });
 });
 
-/* ---- the production index reads the model ----
-
-   tagsInField used to count tag SPANS in the HTML, one mention each. It
-   counts stretches of one tag in the cell's model now: what the editor
-   shows as one tagged phrase. On the shapes below, which older copies of
-   the app stored, the two differ — and the span count was the one that
-   moved: every one of these cells is written in the model's shape the
-   first time anything edits it, after which the spans agree with the
-   model. The model's count is the one a cell keeps. */
-
-/* the tag's stretches in the model, found here without tagsInField */
 function modelMentions(html, cat, name) {
   const want = normalizeTagName(name);
   let n = 0, last = null;
@@ -360,7 +305,6 @@ function modelMentions(html, cat, name) {
   return n;
 }
 
-/* the old reader's count: one per tag span with a category and a name */
 function spanCount(html) {
   return [...inertBody(html).querySelectorAll(".tag-anchor")]
     .filter((el) => el.getAttribute("data-tag-cat") && (el.getAttribute("data-tag-name") || "").trim()).length;
@@ -369,20 +313,15 @@ function spanCount(html) {
 test("tagsInField: on the shapes where spans and the model disagree, it counts what the cell keeps", () => {
   const broll = '<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span>';
   const cases = [
-    /* "[mug][mug]" typed, before the model wrote cells: one phrase now */
     [tagSpan("prop", "Mug", "mug") + tagSpan("prop", "Mug", "mug"), 2, [["Mug", "mugmug"]]],
-    /* a tag nested in a tag: the inner one, the outer either side of it */
     [tagSpan("prop", "Mug", "a " + tagSpan("prop", "Cup", "b") + " c"), 2, [["Mug", "a"], ["Cup", "b"], ["Mug", "c"]]],
-    /* an empty tag span shows nothing, and is nothing */
     ["x" + tagSpan("prop", "Mug", "") + "y", 1, []],
-    /* a b-roll key inside a tag: the tag either side of it */
     [tagSpan("prop", "Mug", "a" + broll + "b"), 1, [["Mug", "a"], ["Mug", "b"]]]
   ];
   for (const [raw, spans, mentions] of cases) {
     const html = sanitizeHtml(raw);
     assert.equal(spanCount(html), spans, html);
     assert.deepEqual(tagsInField(html).map((t) => [t.name, t.text]), mentions, html);
-    /* written once through the model, the cell's spans say the same */
     const written = toHtml(cellOf(html));
     assert.equal(spanCount(written), mentions.length, written);
     assert.deepEqual(tagsInField(written), tagsInField(html), written);

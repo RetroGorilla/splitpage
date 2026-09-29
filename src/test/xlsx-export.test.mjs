@@ -1,12 +1,3 @@
-/* The Excel workbooks (2026-09-28, 16b-xlsx.js) over the long demo (#215):
- * each one unzipped with the app's own zipRead and read back as XML — the
- * package's parts and content types, the sheets and their names, every
- * cell of each sheet equal to the .csv's (the same tables: scriptTable,
- * breakdownTable, brollTable), the columns' widths, the heading frozen
- * with a filter over it and printed on every page, statuses and
- * categories in the print palette, a count as a number, a blank ruled
- * Notes column, and two exports the same bytes.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -28,7 +19,6 @@ initStatus();
 const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))); return S.state; };
 const MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
-/* The workbook as {parts, sheets: [{name, rows: [[text]], xml}], styles}. */
 async function open(bytes) {
   assert.ok(bytes instanceof Uint8Array);
   assert.equal(String.fromCharCode(bytes[0], bytes[1]), "PK");
@@ -60,7 +50,6 @@ async function open(bytes) {
   return { names, text, xml, sheets, wb, styles: xml("xl/styles.xml") };
 }
 
-/* A cell's look: its xf's font colour and boldness, and fill. */
 function look(book, sheet, ref) {
   const c = sheet.cells.find((x) => x.getAttribute("r") === ref);
   const xf = [...book.styles.getElementsByTagNameNS(MAIN, "cellXfs")[0].getElementsByTagNameNS(MAIN, "xf")][Number(c.getAttribute("s") || 0)];
@@ -100,7 +89,6 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   const want = t.scenes.map((s) => s.cells).concat(t.summary).map((r) => pad(r, 11));
   assert.deepEqual(asText(script.rows.slice(1)), asText(want));
   assert.equal(script.rows.length, 1 + 30 + t.summary.length);
-  /* the Notes column: empty, but ruled all the way down */
   const notes = script.cells.filter((c) => /^K\d+$/.test(c.getAttribute("r")) && c.getAttribute("r") !== "K1");
   assert.equal(notes.length, 30 + t.summary.length);
   assert.ok(notes.every((c) => !c.getElementsByTagNameNS(MAIN, "v").length && c.getAttribute("s")));
@@ -111,13 +99,11 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
 
   const bd = breakdownTable();
   assert.deepEqual(asText(book.sheets[2].rows.slice(1)), asText(bd.rows.map((r) => r.cells)));
-  /* a count is a number */
   assert.equal(typeof book.sheets[2].rows[1][4], "number");
   const br = brollTable();
   const opening = (s) => { s = String(s); return s.length <= 90 ? s : null; };
   book.sheets[3].rows.slice(1).forEach((row, i) => {
     const want = br.rows[i].cells;
-    /* every cell the .csv's, but Cuts against: its opening words */
     assert.deepEqual(asText([row.filter((_, c) => c !== 6)]), asText([want.filter((_, c) => c !== 6)]));
     if (opening(want[6]) !== null) assert.equal(row[6], want[6] === "" ? "" : want[6]);
     else {
@@ -146,19 +132,15 @@ test("clean to read: widths, wrapping, the heading frozen, filtered and printed 
     assert.equal(setup.getAttribute("fitToWidth"), "1");
     assert.equal(setup.getAttribute("fitToHeight"), "0");
   }
-  /* the filter covers the scenes, not the totals under them */
   assert.equal(script.doc.getElementsByTagNameNS(MAIN, "autoFilter")[0].getAttribute("ref"), "A1:K31");
   const defined = [...book.wb.getElementsByTagNameNS(MAIN, "definedName")].map((d) => d.getAttribute("name") + "@" + d.getAttribute("localSheetId") + "=" + d.textContent);
   assert.ok(defined.includes("_xlnm.Print_Titles@0='Script'!$1:$1"));
   assert.ok(defined.includes("_xlnm.Print_Titles@3='B-roll'!$1:$1"));
   assert.ok(defined.includes("_xlnm._FilterDatabase@0='Script'!$A$1:$K$31"));
-  /* the heading bold on grey; Visual and Audio in their column colours */
   assert.deepEqual(look(book, script, "A1"), { bold: true, color: PRINT_COLORS.text, fill: PRINT_COLORS.surface2, wrap: true });
   assert.equal(look(book, script, "F1").color, PRINT_COLORS.visual);
   assert.equal(look(book, script, "G1").color, PRINT_COLORS.audio);
-  /* the words wrap */
   assert.equal(look(book, script, "G2").wrap, true);
-  /* statuses as the PDF prints them: Shot bold, Ready amber on its tint */
   const statusCell = (label) => {
     const i = script.rows.findIndex((r, n) => n > 0 && r[2] === label);
     return look(book, script, "C" + (i + 1));
@@ -166,12 +148,9 @@ test("clean to read: widths, wrapping, the heading frozen, filtered and printed 
   assert.equal(statusCell("Shot").bold, true);
   assert.deepEqual([statusCell("Ready").color, statusCell("Ready").fill], [PRINT_COLORS.audio, PRINT_COLORS.audioSoft]);
   assert.equal(statusCell("To do").color, PRINT_COLORS.faint);
-  /* the total row bold */
   assert.equal(look(book, script, "A32").bold, true);
-  /* a category in its colour */
   const propRow = breakdown.rows.findIndex((r, n) => n > 0 && r[0] === "Prop");
   assert.equal(look(book, breakdown, "A" + (propRow + 1)).color, TAG_PRINT_COLORS.prop);
-  /* the first sheet is the one it opens on */
   assert.equal(script.doc.getElementsByTagNameNS(MAIN, "sheetView")[0].getAttribute("tabSelected"), "1");
   assert.equal(broll.doc.getElementsByTagNameNS(MAIN, "sheetView")[0].getAttribute("tabSelected"), null);
 });
@@ -200,7 +179,6 @@ test("awkward text survives: markup characters, line breaks, spaces at the ends,
   const row = book.sheets[0].rows[1];
   assert.equal(row[5], "A <b> & C\nsecond line");
   assert.equal(row[2], "Ready");
-  /* the title, whatever migrateRows left of it, escaped and read back whole */
   assert.ok(S.state.title.indexOf("Tom & Jerry's") === 0);
   assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, S.state.title);
 });

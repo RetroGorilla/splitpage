@@ -1,44 +1,8 @@
-#!/usr/bin/env node
-/* Splitpage build.
- *
- * Source lives in src/ as separate files so it can be edited like normal code:
- * page.html (shell), app.css, seed-state.json (the demo document) and the
- * numbered ES modules in src/js/. docs/help.md (the user guide) and VERSION
- * are inputs too — the first is rendered into the in-app Help page, the
- * second is stamped into both outputs.
- * The SHIPPED app is a single index.html, and that is not a packaging
- * preference — it is load-bearing. A save writes
- *   "<!doctype html>" + document.documentElement.outerHTML
- * with the new document spliced into #state-data (see buildPublishHtml in
- * src/js/02-state.js). If the page linked out to app.css / app.js, every
- * saved .splitpage.html would be a shell that only works next to those files.
- * So we inline everything back into one self-contained page here.
- *
- * Substitution of a handful of marker lines, plus one bundler. Two outputs:
- * index.html, and sw.js, which cannot be inlined into it (a service worker
- * has to have its own URL) and so is stamped in place — see "sw.js (#79)".
- *   node build.mjs           write index.html and stamp sw.js
- *   node build.mjs --check   verify both are current (exit 1 if not)
- *
- * index.html is NOT in the repository (#80): it is generated, it is in
- * .gitignore, and a fresh clone has none until this runs. So --check's
- * index.html half reports "not built yet" rather than crashing, and CI
- * builds rather than checks — see .github/workflows/ci.yml. sw.js stays
- * tracked, because it is the file you edit as well as the file that ships.
- *
- * esbuild is the only dependency, and it is a build-time one: nothing it
- * produces needs a runtime, and the shipped page still has no <script src>.
- * `npm install` (or `npm ci`) before either command.
- */
-
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-/* Imported this way, rather than at the top, so a checkout that has not run
-   `npm install` yet gets told what is wrong instead of a module-resolution
-   stack trace. CI and desktop/stage.mjs both shell out to this file. */
 let esbuild;
 try {
   esbuild = await import("esbuild");
@@ -51,32 +15,8 @@ try {
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
 
-/* Each marker sits alone on its line in src/page.html. Stripping one trailing
-   newline from the inserted file makes the join exact: the marker line's own
-   newline becomes the inserted block's last one. */
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-/* src/js/*.js are ES modules (#66). They used to be fragments of one IIFE,
-   concatenated in filename order — which is why they are still numbered: the
-   numbers are the order src/js/_entry.js calls their __init()s in, and that
-   is the app's boot order. Nothing else depends on the filenames now, so a
-   rename costs an edit to _entry.js and the imports that name the file.
-
-   One esbuild call, no plugins and no config file, producing one IIFE with
-   everything in it — the same shape the concatenated fragments had, which is
-   what lets it be inlined into the page exactly as before.
-
-   - bundle: follow the imports from _entry.js; nothing is left external.
-   - format iife: a classic script, not a module. <script type="module"> is
-     deferred, and 00-prelude has to capture PAGE_SHELL while the parser is
-     still paused on this tag (that is the whole reason the page is one file).
-   - minify: names, whitespace and dead code. The window.__* test backdoors
-     survive it because they are property assignments, not bindings.
-   - charset utf8: leave the app's text alone rather than re-escaping every
-     non-ASCII character. The page is <meta charset="utf-8"> and the CSP hash
-     below is taken over the same characters the parser will see.
-   - legalComments none: keep the output a single pure line of JS, so the
-     hash and the byte count only move when the source does. */
 function appJs() {
   const result = esbuild.buildSync({
     entryPoints: [join(ROOT, "src", "js", "_entry.js")],
@@ -93,36 +33,9 @@ function appJs() {
     throw new Error("esbuild produced " + result.outputFiles.length + " files, expected 1");
   }
   const code = result.outputFiles[0].text;
-  /* The bundle is inlined into <script id="app-logic">, so an unescaped
-     "</script" anywhere in it would end the tag early and leave the rest of
-     the app as text on the page. esbuild escapes the sequence inside string
-     literals; this is the guard for everything else. */
   if (/<\/script/i.test(code)) throw new Error("the bundle contains a literal </script");
   return code;
 }
-
-/* ---- docs/help.md -> in-app Help ----
- *
- * A dependency-free Markdown-to-HTML converter, just capable enough for
- * docs/help.md's own vocabulary (headings, lists, blockquotes, pipe tables,
- * fenced code, horizontal rules, and inline code/bold/italic/links, plus a
- * few literal <kbd> tags the guide writes by hand). Not a general Markdown
- * engine — anything the guide doesn't use isn't handled.
- *
- * The guide used to be README.md, with <!-- help:skip --> markers around the
- * sections that are for people working on the repo rather than people using
- * the app (#80). Splitting the two files apart retired the markers: every
- * heading in docs/help.md is meant for the reader of the Help page, and the
- * README can now change without rebuilding the app. An HTML comment left in
- * this file would render as visible text, since nothing strips comments any
- * more — keep them inside fenced code, as the export-format section does.
- *
- * Order matters (HANDOFF.md's escaping rule, applied to a build-time
- * converter rather than live text): escape HTML first, so nothing in the
- * document can inject markup into the shipped page; then fenced code, which
- * must not be touched by anything after it; then block structure; then
- * inline formatting last, since it only ever narrows already-safe text.
- */
 
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -135,16 +48,6 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
-/* ---- the pristine-seed gate (invariant #30) ----
- *
- * A cheap synchronous checksum over a JS string's own UTF-16 code units —
- * not real FNV-1a over bytes, but the same mixing step, and it only has to
- * agree with ITSELF: this exact function runs again in the browser
- * (20b-onboarding.js) against the live #state-data element's textContent,
- * and both sides are plain JS strings, so there is no encoding to agree on.
- * No crypto.subtle (that's async; this gate runs synchronously at boot,
- * before the first paint has a chance to flash the wizard open then shut).
- */
 function checksumText(str) {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
@@ -154,17 +57,7 @@ function checksumText(str) {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/* The exact string that ends up as #state-data's textContent once
- * {{SEED_STATE}} below is substituted: the template surrounds that marker
- * with one newline on each side, and PARTS chomps the loaded file's own
- * trailing newline before splicing it in. Recomputing that shape here,
- * rather than reading it back out of `html`, keeps this independent of
- * where the marker ends up landing in page.html. */
 function seedCheckValue() {
-  /* The seed is copied into every fresh copy of the app, so a docId in it
-     would give every new document everywhere the same identity — one shared
-     version history for strangers' scripts. migrateRows mints a random id at
-     boot instead (src/js/02b-doc-id.js). */
   const seed = JSON.parse(src("seed-state.json"));
   if (seed && typeof seed === "object" && Object.prototype.hasOwnProperty.call(seed, "docId")) {
     throw new Error("seed-state.json must not contain docId — every fresh copy of the app would share one document identity");
@@ -173,10 +66,6 @@ function seedCheckValue() {
   return text.length + "-" + checksumText(text);
 }
 
-/* Inline formatting: code spans first (so `**not bold**` inside backticks is
-   protected), then links, then bold, then italic. <kbd>/</kbd> are the only
-   literal HTML the guide writes outside of code — everything else stays
-   escaped text. */
 function mdInline(text) {
   const codeSpans = [];
   text = text.replace(/`([^`]+)`/g, (_, code) => {
@@ -199,13 +88,6 @@ function mdInline(text) {
   return text;
 }
 
-/* Parses a run of consecutive list lines into <ul>/<ol> HTML. Lines indented
-   2+ spaces and starting with "-" nest one level deep inside the preceding
-   top-level item — the guide only ever goes one level, so that's all this
-   supports. Any other line (a wrapped physical line of the same paragraph)
-   is a "lazy continuation" of whichever item/sub-item came before it, joined
-   with a space — the guide wraps list-item prose onto following lines without
-   re-indenting it to any marker. */
 function mdList(lines) {
   const ordered = /^\d+\.\s/.test(lines[0]);
   const tag = ordered ? "ol" : "ul";
@@ -248,15 +130,11 @@ function mdTable(lines) {
   return html + "</tbody></table>";
 }
 
-/* Returns { html, toc } — toc is a nested <ul> of <h2>/<h3> links, in
-   document order, for #help-toc. Heading ids are "help-" + a slug of the
-   heading text, so a docs/help.md anchor link and a Help deep link land on
-   the same element. */
 function mdToHtml(markdown) {
   const escaped = escapeHtml(markdown);
   const lines = escaped.split("\n");
   const out = [];
-  const toc = []; /* { li: "<li>...", subs: ["<li>...", ...] } — one per h2 */
+  const toc = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
@@ -267,7 +145,7 @@ function mdToHtml(markdown) {
       const code = [];
       i++;
       while (i < lines.length && !lines[i].trim().startsWith("```")) { code.push(lines[i]); i++; }
-      i++; /* the closing fence */
+      i++;
       out.push("<pre><code>" + code.join("\n") + "</code></pre>");
       continue;
     }
@@ -306,11 +184,6 @@ function mdToHtml(markdown) {
     }
 
     if (/^-\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      /* A blank line normally ends a list, but the guide also uses blank lines
-         to separate ordered items that carry a trailing paragraph or nested
-         bullets. So a blank line doesn't end the list by itself — only when
-         nothing after it (skipping further blank lines) continues the list:
-         another item at the same marker, or an indented continuation line. */
       const itemRe = /^\d+\.\s+/.test(line) ? /^\d+\.\s+/ : /^-\s+/;
       const list = [line];
       let j = i + 1;
@@ -348,24 +221,15 @@ function mdToHtml(markdown) {
   return { html: out.join("\n"), toc: tocHtml };
 }
 
-/* Computed once and reused for both markers below, rather than re-parsing
-   docs/help.md twice. */
 let helpRendered = null;
 function helpHtml() {
   if (!helpRendered) helpRendered = mdToHtml(readFileSync(join(ROOT, "docs", "help.md"), "utf8"));
   return helpRendered;
 }
 
-/* VERSION is one line. Two different outputs splice it in — index.html's
-   <meta> and sw.js's cache name — and only one of them goes through chomp(),
-   so trim it here rather than leaving the second one to inherit whatever
-   line ending an editor left behind. */
 const version = () => readFileSync(join(ROOT, "VERSION"), "utf8").trim();
 
 const PARTS = [
-  /* Inline, not a line of its own: stamps the release into a <meta> so the
-     About box can name a version even on a file:// open, where there is no
-     launcher to ask. */
   ["{{VERSION}}", version],
   ["{{SEED_CHECK}}", seedCheckValue],
   ["/*{{APP_CSS}}*/", () => src("app.css")],
@@ -375,72 +239,6 @@ const PARTS = [
   ["//{{APP_JS}}", appJs]
 ];
 
-/* ---------- the Content Security Policy (#65) ----------
-
-   Substituted last, because the one directive that cannot be written by hand
-   is the hash of the app's own inline script — which does not exist until
-   every other marker has been filled in.
-
-   What each directive is holding back, in a page whose whole job is to parse
-   somebody else's script file and put it in a contenteditable:
-
-   default-src 'self'   everything not named below, from this page's own
-                        origin only. Under file:// that origin matches almost
-                        nothing, which is the right default for a copy opened
-                        by double-clicking it.
-   script-src           the inline app, by the SHA-256 of its body, plus
-                        'self' for sw.js. Nothing else runs: not an injected
-                        <script>, not an onerror= on a pasted <img>, not a
-                        javascript: href sanitizeHtml missed.
-   style-src            'unsafe-inline' because the app sets style attributes
-                        (the drag ghost, panel widths, the teleprompter's
-                        transform), and Google Fonts for the one stylesheet.
-   font-src             the same, plus data: for anything embedded.
-   img-src              'self' data: blob: — every image in a document is a
-                        data: URI (safeImageSrc allows nothing else) and
-                        exports build blob: URLs. A YouTube or Vimeo link's
-                        thumbnail (#141) is no exception: it is fetched
-                        once, when the link is pasted, and kept as a blob
-                        like any pasted picture, so no remote host is ever
-                        needed here.
-   media-src            'self' blob: — a video file dropped or pasted into a
-                        scene is read through a blob: URL the page made from
-                        it, for its first frame (#135), and played through
-                        one in the gallery's dialog (#168). Nothing remote:
-                        a web video plays in its site's own player, a
-                        frame (frame-src), never in a <video> here.
-   connect-src          this origin, and any http(s) server the user points
-                        File > Servers... at, which is a documented feature
-                        and includes a LAN address over plain http. Narrower
-                        than '*': ws:, data: and the rest stay refused.
-   object-src 'none'    the app has no plugins.
-   frame-src            'self' and the two video players the gallery's
-                        dialog plays a YouTube or Vimeo link in (#168):
-                        YouTube's no-cookie embed and Vimeo's player, both
-                        exact origins (shared/video-embed.js PLAYER_ORIGINS;
-                        src/test/video-embed.test.mjs holds the two in
-                        step). Adam's call: playing a reference
-                        clip beside the script beats leaving the app for
-                        it, so long as nothing is asked of either site
-                        until the play button is pressed — the frame is
-                        only ever made then, in the dialog, never in the
-                        script's own tiles — and no other host is framed:
-                        every other video site stays a link. 'self' because
-                        24-history.txt frames a second copy of the app in
-                        this origin to race it against the first over one
-                        IndexedDB store. walkSanitize drops an <iframe> from
-                        every untrusted path, so the only way to get another
-                        frame into this page is to be running script in it
-                        already.
-   worker-src 'self'    the service worker that makes a hosted copy work
-                        offline, and nothing else. Named explicitly, or it
-                        falls back to child-src and from there to default-src.
-   base-uri 'self'      an injected <base> cannot re-point every relative URL
-                        on the page.
-   form-action 'none'   the app has no <form> at all.
-
-   frame-ancestors is deliberately absent: browsers ignore it in a meta
-   policy. desktop/main.js adds it to the header it serves, where it works. */
 const CSP_DIRECTIVES = (scriptHash) => [
   "default-src 'self'",
   `script-src 'self' 'sha256-${scriptHash}'`,
@@ -458,16 +256,6 @@ const CSP_DIRECTIVES = (scriptHash) => [
 
 const APP_SCRIPT_OPEN = '<script id="app-logic">';
 
-/* The hash has to be taken over exactly the characters the browser will treat
-   as the script's body — everything between the open tag's ">" and the
-   closing tag, newlines included, AFTER the two rewrites the HTML parser
-   makes to script data on the way in. Both are silent and both are
-   length-preserving in UTF-16, so getting them wrong produces a policy that
-   looks right, hashes to something else, and refuses to run the app.
-
-   A raw NUL in a source file is the one that actually happened
-   (08c-broll.js used one as a key separator), and it is escaped there now —
-   this normalisation is the guard that stops the next one being a puzzle. */
 function asParsed(text) {
   /* eslint-disable-next-line no-control-regex -- matching a NUL is the entire
      point: this is the rewrite the HTML parser makes, reproduced. */
@@ -488,27 +276,6 @@ export function buildCsp(html) {
   return CSP_DIRECTIVES(hash).join("; ");
 }
 
-/* ---------- sw.js (#79) ----------
- *
- * The service worker is the one shipped file that is NOT inlined into
- * index.html, and it cannot be: a worker has to have its own URL or the
- * browser will not register it. So package.mjs, the Dockerfile and
- * desktop/stage.mjs all copy the repo-root sw.js out verbatim, and there is
- * no template for it to be spliced into on the way past.
- *
- * It is therefore stamped IN PLACE. sw.js in the tree is both the file you
- * edit and the artifact that ships, and exactly one line of it belongs to
- * this build: the cache name, which has to carry VERSION so that a deploy
- * renames the cache and the worker's activate handler drops the previous
- * release's entries (the whole of issue #79 — see sw.js's own header).
- *
- * --check is meaningful for it in the way that matters: what it catches is
- * VERSION and sw.js having drifted apart, which is the only way this file
- * can be wrong, and it is exactly the failure a version bump committed on
- * its own would otherwise ship. It cannot catch a hand-edit elsewhere in
- * sw.js, because there is no other source for the rest of the file to
- * disagree with.
- */
 const SW_CACHE_LINE = /^var CACHE = "(splitpage-[^"]*)";$/m;
 const swCacheName = (text) => SW_CACHE_LINE.exec(text)[1];
 
@@ -517,17 +284,9 @@ function buildSw() {
   if (!SW_CACHE_LINE.test(current)) {
     throw new Error('sw.js: no `var CACHE = "splitpage-<version>";` line for the build to stamp');
   }
-  /* A function replacement, not "$1...$2": VERSION is data, and replace()
-     would expand a "$&" in it — the same reason build() splits and joins. */
   return current.replace(SW_CACHE_LINE, () => 'var CACHE = "splitpage-' + version() + '";');
 }
 
-/* src/page.html is full of HTML comments: notes to whoever edits it, with
-   design reasons and issue numbers. Nobody using the app reads them, and the
-   page ships to them (and inside every saved copy) verbatim, so they come out
-   here, before the script and styles go in. Only the shell is touched: the
-   bundle and the stylesheet have their own comment syntax, and a "<!--" inside
-   the bundle's strings (the exports write HTML) must stay exactly as it is. */
 function stripHtmlComments(shell) {
   return shell
     .replace(/^[ \t]*<!--[\s\S]*?-->[ \t]*\r?\n/gm, "")
@@ -538,8 +297,6 @@ function build() {
   let html = stripHtmlComments(src("page.html"));
   for (const [marker, load] of PARTS) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
-    /* split/join rather than replace(): the content is data and may well
-       contain "$&" or "$1", which replace() would expand. */
     html = html.split(marker).join(chomp(load()));
   }
   if (!html.includes("{{CSP}}")) throw new Error("marker {{CSP}} missing from src/page.html");
@@ -553,10 +310,6 @@ const swBuilt = buildSw();
 
 if (process.argv.includes("--check")) {
   let stale = false;
-  /* index.html is untracked and generated (#80), so "no file at all" is the
-     normal state of a fresh clone rather than a corrupt one. Said plainly
-     here, because "ENOENT: no such file or directory" is a confusing way to
-     learn that the answer is simply `node build.mjs`. */
   const current = existsSync(out) ? readFileSync(out, "utf8") : null;
   if (current === null) {
     console.error("index.html has not been built yet — run `node build.mjs`");
@@ -569,8 +322,6 @@ if (process.argv.includes("--check")) {
     console.error("  on disk: " + Buffer.byteLength(current) + " bytes");
     stale = true;
   }
-  /* Reported separately, and both are reported, so a run that is wrong twice
-     does not have to be fixed twice to find that out. */
   const swCurrent = readFileSync(swOut, "utf8");
   if (swCurrent === swBuilt) {
     console.log("sw.js is stamped with VERSION (cache " + swCacheName(swBuilt) + ")");

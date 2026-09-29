@@ -1,21 +1,3 @@
-/* migrateRows (02-state.js) — the ONE door (HANDOFF §3.2).
- *
- * Everything that arrives from outside the page goes through here: a file
- * on disk, a version somebody else published, a restored snapshot, a
- * paste, a merge result. It is the only place untrusted content is
- * normalised and sanitised, and it is the last thing that runs before a
- * document becomes `state`. If it drops a field, the field is gone from
- * the document for good.
- *
- * There was no unit test over it before #67 — it was reachable only as
- * window.__splitpageFormats.migrate from a booted browser. These cases are
- * what tests/17-formats.txt, tests/22-doc-id.txt and tests/51-merge-fields
- * .txt asserted through that hook, plus the per-field normalisation rules
- * that were carrying nothing but a comment.
- *
- * This file needs a DOM because sanitizeHtml does (see _dom.mjs); it needs
- * no page.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -27,20 +9,10 @@ import { dataUrlForSync } from "../js/02c-blobs.js";
 import { DEFAULT_WPM } from "../js/01-scene-status.js";
 import { __init as initTags, collectTagsFromRows, mintTagId } from "../js/07-production-tags.js";
 
-/* One of migrateRows' branches — back-filling the production registry out
-   of a script that predates it — reads the tags in a cell through
-   `tagsInField`, and that is a memoised closure 07-production-tags.js
-   builds in its own __init(). Calling it is not booting the app: this
-   __init() only assigns two module-scope values and touches nothing
-   outside itself. Without it that one branch throws, which is worth
-   knowing about rather than routing around. */
 initTags();
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-/* schema: 2 is "already migrated once" — without it every cell goes
-   through the legacy plain-text conversion, which is a different code
-   path and the one the legacy cases below exercise deliberately. */
 function doc(over) {
   return migrateRows(Object.assign({ schema: 2, title: "T", rows: [] }, over));
 }
@@ -55,8 +27,6 @@ test("garbage in is a document out, never a throw", () => {
 });
 
 test("a stray non-object in a list never takes the whole load down", () => {
-  /* A bad merge, a hand-edited save, a truncated file: one null must not
-     throw on the field access that follows. */
   const s = migrateRows({
     schema: 2, title: "T",
     rows: [null, 7, { id: "r1", audioText: "one" }, "x"],
@@ -93,8 +63,6 @@ test("rows: a legacy inline image becomes an imageRef, content-addressed (#82)",
   const row = doc({ rows: [{ id: "r1", visualImage: PNG }] }).rows[0];
   assert.deepEqual(row.imageRef, PNG_REF);
   assert.equal("visualImage" in row, false, "the data: URI is gone from the row");
-  /* the bytes are in the page's registry, so everything that shows or
-     writes the picture still can */
   assert.equal(dataUrlForSync(PNG_SHA), PNG);
 });
 
@@ -108,7 +76,7 @@ test("rows: the migration is deterministic, and migrating twice changes nothing"
 
 test("rows: only an inline data: image or a valid imageRef is a visual", () => {
   for (const bad of ["https://evil.test/x.png", "javascript:alert(1)", "data:text/html;base64,AAA", 42,
-    "data:image/png;base64,AAAA" /* passes safeImageSrc, but is not a picture */]) {
+    "data:image/png;base64,AAAA" ]) {
     const row = doc({ rows: [{ id: "r1", visualImage: bad }] }).rows[0];
     assert.equal(row.imageRef, null, "rejected " + JSON.stringify(bad));
     assert.equal("visualImage" in row, false);
@@ -117,12 +85,9 @@ test("rows: only an inline data: image or a valid imageRef is a visual", () => {
     { ...PNG_REF, width: 0 }, "a string", [PNG_REF]]) {
     assert.equal(doc({ rows: [{ id: "r1", imageRef: bad }] }).rows[0].imageRef, null, "rejected " + JSON.stringify(bad));
   }
-  /* a valid ref is kept, normalised to its four fields */
   assert.deepEqual(doc({ rows: [{ id: "r1", imageRef: { ...PNG_REF, extra: "x" } }] }).rows[0].imageRef, PNG_REF);
-  /* a valid inline picture wins over a ref the row also carries */
   const other = { sha256: "a".repeat(64), width: 5, height: 5, mime: "image/jpeg" };
   assert.deepEqual(doc({ rows: [{ id: "r1", visualImage: PNG, imageRef: other }] }).rows[0].imageRef, PNG_REF);
-  /* and an unreadable one does not wipe out a good ref */
   assert.deepEqual(doc({ rows: [{ id: "r1", visualImage: "data:image/png;base64,AAAA", imageRef: other }] }).rows[0].imageRef, other);
 });
 
@@ -138,8 +103,6 @@ test("comments: an image conflict card holds its picture as imageValue, its body
   }] }).comments[0];
   assert.deepEqual(kept.imageValue, PNG_REF);
   assert.equal(kept.body, STORED_PNG, "a body drawn from the record");
-  /* a body naming a picture the record does not: the record wins unless
-     this page holds the body's bytes */
   const ghost = "e".repeat(64);
   const stale = doc({ rows: [{ id: "r1" }], comments: [{
     id: "c1", rowId: "r1", field: "visualImage", kind: "conflict",
@@ -171,26 +134,17 @@ test("rows: an id that could escape a selector is replaced", () => {
 });
 
 test("rows: updatedAt is '' rather than null when nothing ever stamped it", () => {
-  /* new Date(null) is a VALID date (the epoch) while new Date("") is not,
-     so null here rendered as a fabricated "Jan 1, 12:00 AM". */
   assert.equal(doc({ rows: [{ id: "r1" }] }).rows[0].updatedAt, "");
   assert.equal(doc({ rows: [{ id: "r1", updatedAt: null }] }).rows[0].updatedAt, "");
 });
 
 test("legacy rows are converted once, and a stray '<' survives as text", () => {
-  /* There used to be an early return for text containing a '<'. A row
-     older than the schema predates rich text by definition, so it can
-     never legitimately contain markup — that check only ever fired on
-     plain text with a bracketed note in it, and deleted it. */
   const s = migrateRows({ title: "T", rows: [{ id: "r1", audioText: "Bring the **tape** <insert B-roll here>" }] });
   assert.ok(s.rows[0].audioText.includes("<strong>tape</strong>"));
   assert.ok(s.rows[0].audioText.includes("insert B-roll here"), s.rows[0].audioText);
 });
 
 test("legacyMdToHtml round-trips everything htmlToMarkdown can emit", () => {
-  /* Without these, a Markdown cell edited outside Splitpage and reconciled
-     back in lost every strikethrough, underline and highlight, and every
-     line break came back as the literal text "<br>". */
   assert.equal(legacyMdToHtml("~~gone~~"), "<s>gone</s>");
   assert.equal(legacyMdToHtml("<u>under</u>"), "<u>under</u>");
   assert.equal(legacyMdToHtml("<mark>lit</mark>"), "<mark>lit</mark>");
@@ -200,28 +154,20 @@ test("legacyMdToHtml round-trips everything htmlToMarkdown can emit", () => {
 });
 
 test("legacyMdToHtml reads the elements the model's toMarkdown falls back to", () => {
-  /* the plain Markdown export (toMarkdown, 04c-doc-model.js) writes these
-     where a delimiter could not open or close; Import reads it back */
   assert.equal(legacyMdToHtml('a<strong>"q"</strong>b'), "a<strong>&quot;q&quot;</strong>b");
   assert.equal(legacyMdToHtml("*de* <em>fgh</em> <strong>a <em>b</em></strong>"), "<em>de</em> <em>fgh</em> <strong>a <em>b</em></strong>");
   assert.equal(legacyMdToHtml("x<S>y</S>"), "x<s>y</s>");
-  /* only a closed pair; anything else stays the text it was */
   assert.equal(legacyMdToHtml("<em>open"), "&lt;em&gt;open");
   assert.equal(legacyMdToHtml("<strong>a</em>"), "&lt;strong&gt;a&lt;/em&gt;");
 });
 
 test("legacyMdToHtml does not double-encode a link's query string", () => {
-  /* safeHref only validates a scheme prefix; escaping the already-escaped
-     URL a second time turned "&" into "&amp;amp;" and corrupted the link. */
   const out = legacyMdToHtml("[go](https://x.test/?a=1&b=2)");
   assert.ok(out.includes('href="https://x.test/?a=1&amp;b=2"'), out);
-  /* A hostile scheme is left as the literal Markdown, not turned into a link. */
   assert.ok(!legacyMdToHtml("[x](javascript:alert(1))").includes("<a "));
 });
 
 test("comments: a document-level conflict card is never given a fake row", () => {
-  /* Forcing rowId through safeId would fabricate a row id out of null and
-     quietly turn the card into an ordinary row comment pointing at it. */
   const c = doc({ comments: [{ id: "c1", field: "title", kind: "conflict", body: "mine" }] }).comments[0];
   assert.equal(c.rowId, null);
   assert.equal(c.anchorId, null);
@@ -229,9 +175,6 @@ test("comments: a document-level conflict card is never given a fake row", () =>
 });
 
 test("comments: anchorId falls back to the comment's own id, never to null", () => {
-  /* deleteComment looks the anchor span up by anchorId; null never matches
-     any real span, so deleting such a comment left a dangling wrapper in
-     the row forever. */
   const c = doc({ comments: [{ id: "c1", rowId: "r1", field: "audioText" }] }).comments[0];
   assert.equal(c.anchorId, "c1");
 });
@@ -248,7 +191,6 @@ test("comments: an unresolved comment never shows a resolver", () => {
   const c = doc({ comments: [{ id: "c1", rowId: "r1", resolved: false, resolvedBy: "Sam", resolvedAt: "2026-01-01" }] }).comments[0];
   assert.equal(c.resolvedBy, null);
   assert.equal(c.resolvedAt, null);
-  /* And a resolve with no recorded resolver has no timestamp to show either. */
   const d = doc({ comments: [{ id: "c1", rowId: "r1", resolved: true, resolvedAt: "2026-01-01" }] }).comments[0];
   assert.equal(d.resolvedBy, null);
   assert.equal(d.resolvedAt, null);
@@ -276,8 +218,6 @@ test("people: nameless entries are dropped, names are plain text", () => {
 });
 
 test("productionTags: a dangling owner reads as unassigned", () => {
-  /* Including one that collides with an inherited Object.prototype member,
-     which a plain {} lookup used to resolve truthy. */
   const s = doc({
     people: [{ id: "p1", name: "Sam" }],
     productionTags: [
@@ -299,17 +239,6 @@ test("productionTags: an unknown category or status falls back, a nameless tag i
   assert.ok(s.productionTags[0].status);
 });
 
-/* KNOWN BROKEN, recorded rather than asserted away — the first thing this
-   file found. migrateRows still carries the back-fill branch
-   (`if (!Array.isArray(s.productionTags)) s.productionTags =
-   collectTagsFromRows(...)`) whose comment promises that opening a file
-   saved before the registry existed "doesn't just silently start tracking
-   nothing". #60 then put the STATE_FIELDS defaults pass AHEAD of it, and
-   that pass gives every document a `productionTags: []` — so the branch
-   below it can never run again, and such a file now opens tracking
-   nothing, exactly as the comment says it must not. Either the default
-   goes or the back-fill moves in front of it; both are a behaviour change
-   this issue (#67, tests only) must not make on its own. */
 test("productionTags: a file saved before the registry existed is back-filled from the script", () => {
   const s = migrateRows({
     schema: 2, title: "T",
@@ -319,10 +248,6 @@ test("productionTags: a file saved before the registry existed is back-filled fr
 });
 
 test("productionTags: a live tag missing from an existing registry is healed in, once (#84)", () => {
-  /* The registry self-heal used to happen as a side effect of the first
-     read of the breakdown after a load; it is a migration step now, so a
-     document still looks the same the moment it is on screen. An orphaned
-     entry (no live tag) is kept, and a second migration adds nothing. */
   const s = doc({
     rows: [{ id: "r1", audioText: 'Bring the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span> and the <span class="tag-anchor" data-tag-cat="location" data-tag-name="Roof">Roof</span>.' }],
     productionTags: [{ cat: "prop", name: "Kettle", owner: "", notes: "", status: "have" }, { cat: "location", name: "roof" }]
@@ -340,8 +265,6 @@ test("productionTags: an emptied registry stays empty when nothing is tagged liv
 });
 
 test("productionTags: the collector the back-fill was meant to use still reads the script", () => {
-  /* So the todo above is a wiring failure in migrateRows, not a claim that
-     tag collection itself is broken. */
   const rows = [{ id: "r1", audioText: 'Bring the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="gaffer tape">gaffer tape</span>.' }];
   assert.deepEqual(collectTagsFromRows(rows).map((t) => t.name), ["gaffer tape"]);
 });
@@ -373,10 +296,6 @@ test("the title is plain text, and bounded", () => {
 });
 
 test("migrating twice changes nothing the second time", () => {
-  /* Every ingress path can run this over content that has already been
-     through it — a merge result is migrated, then saved, then migrated
-     again on open. A second pass that keeps escaping or re-converting
-     would corrode a document a little on every round trip. */
   const once = migrateRows({
     title: "T", schema: 2,
     rows: [{ id: "r1", audioText: "<strong>bold</strong> &amp; <em>it</em>", visualImage: PNG, status: "shot" }],
@@ -389,14 +308,6 @@ test("migrating twice changes nothing the second time", () => {
   const twice = migrateRows(JSON.parse(JSON.stringify(once)));
   assert.deepEqual(twice, once);
 });
-
-/* ---- pictures and video cards out of script cells (#85, design D7) ----
-
-   A script cell holds words. A picture or a video card a paste put into
-   one before D7 moves, as the document is read, into a comment on the same
-   scene and column — with an id derived from the row, the column and the
-   picture's sha or the link, so reading it twice or merging two copies
-   that both moved it gives one comment. */
 
 const SHA_X = "ab".repeat(32);
 const cellPic = (sha) => '<img class="comment-img" data-blob="' + sha + '" data-w="4" data-h="3" data-mime="image/png">';
@@ -428,11 +339,8 @@ test("a picture in a script cell becomes one comment on that scene holding it", 
   assert.equal(c.kind, "anchor");
   assert.equal(c.resolved, false);
   assert.equal(c.createdAt, "2026-05-01T10:00:00.000Z", "when the row last changed, not now");
-  /* not anchored to any words: no cell carries a span naming it */
   assert.ok(!s.rows.some((r) => (r.visualText + r.audioText).indexOf('data-cmt="' + c.anchorId + '"') !== -1));
-  /* the picture is still referenced, so its bytes are kept */
   assert.deepEqual(refsIn(s), [SHA_X]);
-  /* the comment that was there is untouched */
   assert.equal(s.comments[0].id, "c1");
   assert.equal(s.comments[0].body, "a note");
 });
@@ -451,10 +359,8 @@ test("moving pictures out of cells is idempotent", () => {
   assert.equal(once.comments.length, 3);
   const twice = migrateRows(JSON.parse(JSON.stringify(once)));
   assert.deepEqual(twice, once);
-  /* the same picture twice in one cell is one comment */
   const dup = migrateRows({ schema: 2, title: "T", rows: [{ id: "r1", visualText: cellPic(SHA_X) + " and " + cellPic(SHA_X), audioText: "" }] });
   assert.equal(dup.comments.length, 1);
-  /* reading the unmigrated original again gives the same ids */
   assert.deepEqual(migrateRows(withPictureInCell()).comments.map((c) => c.id), once.comments.map((c) => c.id));
 });
 
@@ -470,14 +376,11 @@ test("a picture two copies both moved merges into one comment", () => {
   assert.equal(merged.comments.length, 3);
   assert.equal(merged.rows[0].audioText, "hello there");
   assert.equal(merged.rows[1].visualText, "close up");
-  /* one side from an older copy of the app, which never moved it: still one */
   const old = withPictureInCell();
   const half = migrateRows(mergeStates(old, mine, old).merged);
   assert.equal(half.comments.filter((c) => c.rowId === "r1" && c.field === "visualText").length, 1);
   assert.equal(half.rows[0].visualText.indexOf("<img"), -1);
 });
-
-/* ---- a shot's hand-added props (#149) ---- */
 
 test("brollShots props: every shot has a list, and garbage is tolerated rather than thrown on", () => {
   const junk = [null, 42, "Ladder", { name: "" }, { id: "not an id", name: "Rope" }, [], { name: { x: 1 } },
@@ -503,8 +406,6 @@ test("brollShots props: an id takes its entry's current name; a known name takes
   const t = doc({ productionTags: s.productionTags, brollShots: [{ id: "b1", name: "Rooftop", props: [
     { id: kettle, name: "old kettle name" }, { name: "KETTLE" }, { name: "tripod" }
   ] }] });
-  /* the second is the same prop as the first (by name), and "tripod" is not
-     a prop — a Gear entry of that name is not what a name-only prop means */
   assert.deepEqual(t.brollShots[0].props, [{ id: kettle, name: "Kettle" }, { id: "", name: "tripod" }]);
   assert.notEqual(tripod, "");
 });

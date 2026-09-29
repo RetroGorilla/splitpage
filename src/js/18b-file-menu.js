@@ -19,42 +19,8 @@ import {
 import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
 
-/* ================= the File menu (issue #145) =================
-
-   A dropdown under the File button: a card saying where this document is
-   kept and whether it is all there yet, four plain headed groups — New &
-   open, Share, Export, This document — and a footer of Help and settings.
-   It replaced the left drawer #51 made, whose collapsible sections hid the
-   things people were looking for behind a heading they had to guess.
-
-   WHAT STAYS PUT. The element is still #file-menu and every item is still a
-   <button data-file-action>, each exactly once: 21-events.js sends a click
-   on one to handleFileMenuAction() (18-local-files.js); 20b, 20c and 20e
-   each catch their own actions in the capture phase before that; and the
-   desktop native menu clicks these same buttons (runDesktopMenuCommand,
-   20f-desktop.js). This file adds the parts a dropdown needs and a drawer
-   did not: where it sits, what it says about the file, why an item cannot
-   work right now, which shortcuts are real, and the keyboard.
-
-   THE DOM IS THE STATE. Whether an item is offered, enabled, or has a
-   reason under it is written onto its button by whichever module knows
-   (updateServerMenu in 13-hosted.js, updateHeaderFileChip in
-   18-local-files.js, initDesktop in 20f-desktop.js, refreshFileMenu here),
-   and read back from the button by everything else — the command menu
-   (#147) included. Two copies of "is Publish available" would drift apart;
-   one cannot. */
-
 function el(id) { return document.getElementById(id); }
 
-/* ---- shortcut chips ----
-
-   An item names its shortcut in data-keys ("mod+shift+s", "F1"), and the
-   chips are drawn from that for the platform it is running on. Only a
-   shortcut that works in THIS build gets a chip: data-keys-only="desktop"
-   marks one that only the desktop app's native menu provides (F1, Ctrl+
-   Shift+P). Everything else works in both builds — the desktop app through
-   its menu accelerators (desktop/main.js), the browser through the keydown
-   handler at the bottom of this file. */
 export var IS_MAC = typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
 
@@ -65,7 +31,6 @@ var KEY_WORDS = {
 };
 var ARIA_KEYS = { mod: IS_MAC ? "Meta" : "Control", shift: "Shift", alt: "Alt" };
 
-/* "mod+shift+s" -> ["Ctrl", "Shift", "S"] (or the Mac symbols). */
 export function keyChipWords(spec) {
   return String(spec || "").split("+").filter(Boolean).map(function (part) {
     var low = part.toLowerCase();
@@ -95,7 +60,6 @@ function renderKeyChips(root) {
       box = document.createElement("span");
       box.className = "mi-keys";
       box.setAttribute("aria-hidden", "true");
-      /* before a switch's track, so the switch stays the last thing */
       item.insertBefore(box, item.querySelector(".mi-switch-track"));
     }
     box.innerHTML = keyChipsHtml(spec);
@@ -105,13 +69,6 @@ function renderKeyChips(root) {
   });
 }
 
-/* ---- the second line: why an item cannot work ----
-
-   An item that cannot do its job right now says so on the item, rather
-   than failing (or toasting) on click. Whether it is also disabled is the
-   caller's decision: Publish & copy a link with no server stays enabled,
-   because pressing it opens Servers… to set one up; on a read-only server
-   there is nothing to press for, so it is disabled as well. */
 export function setMenuItemReason(item, reason) {
   var why = item && item.querySelector(".mi-why");
   if (!why) return;
@@ -124,16 +81,11 @@ export function menuItemReason(item) {
   return why && !why.hidden ? why.textContent : "";
 }
 
-/* The label an updater may rewrite (Servers… names the server it is on).
-   Written into .mi-label, never the button's own textContent, which would
-   take the icon and the reason line with it. */
 export function setMenuItemLabel(item, text) {
   var label = item && item.querySelector(".mi-label");
   if (label) label.textContent = text;
   else if (item) item.textContent = text;
 }
-
-/* ---- the file card ---- */
 
 var FORMAT_NAMES = {
   md: "Markdown",
@@ -158,10 +110,6 @@ export function timeAgo(at, now) {
   return new Date(at).toLocaleDateString();
 }
 
-/* The header's words (#208, savedStatusText in 00p-prefs.js), not an age:
-   "Saved 43 min ago" here read as autosave having stalled, just as it did
-   beside the Save button. `at` is the file's own timestamp — when it was
-   last written, by this page or anyone — and goes in the tooltip. */
 function savedWord(at) {
   if (S.saveButtonBusy) return { text: "Saving…" };
   if (S.dirty) return { text: "Unsaved changes", unsaved: true };
@@ -170,9 +118,6 @@ function savedWord(at) {
   return { text: savedStatusText(at, now), title: when ? "Last saved at " + when : "" };
 }
 
-/* What the card says: the file's name (or that there is none yet), and
-   whether what is on screen is in it. Derived from `home` every time the
-   menu opens rather than kept, like the header's file chip. */
 export function fileCardView() {
   if (!S.state) return { name: "Loading…", bits: [] };
   if (home.kind === "server") {
@@ -209,18 +154,10 @@ function refreshFileCard() {
   }).join(" · ");
 }
 
-/* ---- what is offered right now ---- */
-
 function recentsSupported() {
   return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
 }
 
-/* Everything about the menu that can have changed since it last opened —
-   decided each time it opens rather than once at boot, the same way the
-   teleprompter's voice button decides when it opens: a browser suite swaps
-   a fake desktop bridge in after boot, and an older bridge without a call
-   has nothing to offer. The command menu (#147) calls this too, before it
-   reads the items. */
 export function refreshFileMenu() {
   var presentBrowser = el("menu-present-browser");
   if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
@@ -230,9 +167,6 @@ export function refreshFileMenu() {
   if (recent) recent.hidden = !recentsSupported();
   if (typeof updateServerMenu === "function") updateServerMenu();
 
-  /* Paste a script… replaces the rows of the document on screen, which a
-     review session may not change (#30). Open and New script start a
-     document of this tab's own, which it may. */
   var paste = document.querySelector('#file-menu [data-file-action="paste"]');
   if (paste) {
     var viewing = reviewMode();
@@ -244,32 +178,22 @@ export function refreshFileMenu() {
   renderKeyChips(el("file-menu"));
   if (typeof refreshExtraMenuItems === "function") refreshExtraMenuItems();
 
-  /* A group whose every item is hidden goes too, heading and all — the
-     "nothing to show" rule the items themselves follow. */
   document.querySelectorAll("#file-menu .menu-group").forEach(function (g) {
     var any = Array.prototype.some.call(g.querySelectorAll(":scope > .mi"), function (b) { return !b.hidden; });
     g.hidden = !any;
   });
 }
 
-/* Other features add items of their own (the Export dialog's "Export again
-   as …", #146) and register how to refresh them here. */
 var extraRefreshers = [];
 export function onFileMenuRefresh(fn) { extraRefreshers.push(fn); }
 function refreshExtraMenuItems() {
-  extraRefreshers.forEach(function (fn) { try { fn(); } catch (e) { /* one item's refresh never takes the menu down */ } });
+  extraRefreshers.forEach(function (fn) { try { fn(); } catch (e) { } });
 }
-
-/* ---- opening and closing ---- */
 
 function isPhoneSheet() {
   return typeof matchMedia === "function" && matchMedia("(max-width: 760px)").matches;
 }
 
-/* Under the button, as tall as the window below it allows (the list
-   scrolls inside itself past that), and pulled left if the window is too
-   narrow for it to hang off the button's left edge. The phone sheet is
-   all CSS. */
 function positionMenu() {
   var menu = el("file-menu");
   var btn = el("btn-file");
@@ -284,13 +208,6 @@ function positionMenu() {
   if (over > 0) menu.style.left = -Math.min(over, Math.max(0, wrap.left - 12)) + "px";
 }
 
-/* opts.focusFirst: opened from the keyboard, so the first item takes the
-   focus (the menu button pattern). Otherwise the menu itself does, which
-   shows no ring but puts the arrow keys to work at once.
-   opts.returnFocus: closing by Esc, which always hands the focus back to
-   the File button. Closing any other way hands it back only when it was
-   inside the menu, since leaving it on a hidden element strands the
-   keyboard on nothing. */
 export function toggleFileMenu(force, opts) {
   opts = opts || {};
   var menu = el("file-menu");
@@ -302,9 +219,6 @@ export function toggleFileMenu(force, opts) {
     if (!open && opts.returnFocus) btn.focus();
     return;
   }
-  /* Asked before the menu is hidden: reading activeElement after that can
-     already find the browser has moved the focus off the hidden element
-     and onto the body. */
   var inside = menu.contains(document.activeElement);
   menu.hidden = !open;
   if (backdrop) backdrop.hidden = !open;
@@ -328,10 +242,6 @@ export function fileMenuOpen() {
   return !!menu && !menu.hidden;
 }
 
-/* ---- submenus (Open recent, Import, Export until #146) ----
-
-   They open in place, under their item, rather than as flyouts: a flyout
-   is clipped by the list's own scroll, and has nowhere to go on a phone. */
 function closeSubmenus(except) {
   document.querySelectorAll("#file-menu .mi-parent").forEach(function (p) {
     if (p === except) return;
@@ -356,12 +266,6 @@ export function toggleSubmenu(name, force, focusFirst) {
   }
 }
 
-/* ---- Open recent (desktop) ----
-
-   The same list the New Tab page shows (DESKTOP-RECENTS): an opaque
-   fileId, the file's basename, the title it last reported, and when —
-   never a path (invariant #34). Asked for each time the submenu opens,
-   since main is the only authority on it. */
 function formatRecentWhen(at) {
   var ago = timeAgo(at);
   return ago === "just now" ? "today" : ago;
@@ -391,9 +295,6 @@ async function refreshRecents(focusFirst) {
   }
 }
 
-/* The same open the New Tab page's recent cards make (20j-newtab.js): main
-   already holds the path behind this fileId and still decides which tab it
-   lands in. A file moved or deleted since says so. */
 async function openRecentFile(fileId) {
   if (!fileId || !recentsSupported()) return;
   var entry;
@@ -409,23 +310,11 @@ async function openRecentFile(fileId) {
   await openProjectFile(await handle.getFile(), handle);
 }
 
-/* ---- New script ----
-
-   An empty script in THIS tab, the way File ▸ Open puts a foreign file in
-   it (#7): the document on screen goes into Version history first, then a
-   genuinely empty one takes its place — one blank scene, no tags, no
-   comments, no b-roll, a fresh identity — built the way the New Tab page
-   builds its blank (blankDocumentState, 20j-newtab.js) and with no home,
-   so nothing it does can write into the file or server the old one came
-   from. Not dirty: nobody has typed into it yet. On the desktop, main
-   reads the report that follows (fileId and serverKey both null) as "this
-   tab holds no document any more" and forgets the old file for it. */
 export function startNewScript() {
   if (!S.state) { showToast("Still loading…", "warn"); return false; }
   var kept = replaceWithNewDocument(migrateRows({
     title: "Untitled Script",
     rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
-    /* Settings' starting reading speed (#181) */
     wordsPerMinute: readDefaultWpm()
   }), "startNewScript: a new blank document", "Before starting a new script");
   var first = document.querySelector('#rows .row .audio-cell .cell-editable');
@@ -434,10 +323,6 @@ export function startNewScript() {
   return true;
 }
 
-/* The long demo (#215, _starters.js), from the command menu: a new
-   untitled copy of it in this tab, exactly as New script puts a blank one
-   there — the document on screen into Version history first, no home, so
-   autosave writes it nowhere until it is saved, and not dirty. */
 export function openLongDemo() {
   if (!S.state) { showToast("Still loading…", "warn"); return false; }
   var kept = replaceWithNewDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))),
@@ -447,25 +332,10 @@ export function openLongDemo() {
   return true;
 }
 
-/* What New script and the long demo share: `next` becomes the document,
-   with the one before it kept in Version history (labelled `keepLabel`)
-   when it had anything in it. Answers whether it kept one. */
 function replaceWithNewDocument(next, reason, keepLabel) {
-  /* Let go of the field being typed in first, as a click on a menu would:
-     its last words then land in the document going into history, and the
-     render cannot keep the focused cell (05-render.js keeps it by row id,
-     which a starter's "r1" can share with the script it replaces) with
-     the old script's words in it. The command menu hands the focus back
-     to the cell before it runs anything, so this is not hypothetical. */
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
   var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
-  /* That snapshot is filed under the old script's id, where its file finds
-     it when it is opened again; but the Version history panel lists the
-     document on screen, and a script never saved has no file to go back
-     to. So the new document's history gets the same snapshot too, and
-     restoring it there brings the old script back (a restore keeps the
-     identity it lands in, 03-sync.js). */
   if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
   S.state = next;
   setBaseState(cloneState(S.state), reason);
@@ -484,12 +354,6 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   return kept;
 }
 
-/* ---- the keyboard ----
-
-   ↑/↓ move through every item that is showing and enabled (a submenu's
-   items once it is open), wrapping; Home/End go to either end; → or Enter
-   opens a submenu and ← closes it again; Esc closes the menu and gives the
-   focus back to the File button; Tab leaves it. */
 function navigableItems() {
   return Array.prototype.filter.call(document.querySelectorAll("#file-menu .mi"), function (b) {
     return !b.disabled && b.getClientRects().length > 0;
@@ -537,16 +401,6 @@ function onMenuKeydown(e) {
   }
 }
 
-/* ---- Save, Save a copy, Open from the keyboard in the browser ----
-
-   The desktop app already has these as real menu accelerators
-   (desktop/main.js: CmdOrCtrl+S, +Shift+S, +O), which Electron consumes
-   before the page ever sees the keystroke — so this listener stands down
-   whenever there is a desktop bridge, and nothing fires twice. In the
-   browser nothing else answers them: Ctrl+S would offer to save the web
-   page, and Ctrl+O would open some other file in place of the app. Each
-   runs exactly what the button does (the header's Save, the File menu's
-   item), never a copy of it. */
 function runMenuItem(action) {
   var item = document.querySelector('#file-menu [data-file-action="' + action + '"]');
   if (item && !item.disabled) item.click();
@@ -563,8 +417,6 @@ function onShortcutKeydown(e) {
   if (S.DESKTOP) return;
   var k = String(e.key || "").toLowerCase();
   if (k === "s") {
-    /* Taken even while a dialog is up — "save this web page" is never what
-       Ctrl+S means here — but only acted on when nothing is in front. */
     e.preventDefault();
     if (modalIsOpen() || !S.state) return;
     if (e.shiftKey) runMenuItem("save-as");
@@ -580,15 +432,11 @@ function onShortcutKeydown(e) {
   }
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   var menu = el("file-menu");
   var btn = el("btn-file");
   if (!menu || !btn) return;
   menu.addEventListener("keydown", onMenuKeydown);
-  /* ↓ on the button opens the menu on its first item, as Enter and Space
-     do (21-events.js's click handler sees a keyboard click as detail 0). */
   btn.addEventListener("keydown", function (e) {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
@@ -605,18 +453,12 @@ export function __init() {
       openRecentFile(item.getAttribute("data-recent-id"));
     });
   }
-  /* the list may be scrolled when the window is resized under it */
   window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
   window.addEventListener("keydown", onShortcutKeydown);
   renderKeyChips(menu);
-  /* the header's Search button (#175) wears the same Ctrl K chip */
   var search = el("btn-command");
   if (search && search.parentElement) renderKeyChips(search.parentElement);
 
-  /* ---- test hook ----
-     What a headless suite cannot reach by clicking: the view the card is
-     drawn from, and the time words under a frozen clock. Nothing in the
-     app reads this. */
   window.__fileMenuTest = {
     cardView: fileCardView,
     timeAgo: timeAgo,

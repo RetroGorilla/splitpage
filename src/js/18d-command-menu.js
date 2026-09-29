@@ -17,39 +17,8 @@ import {
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
 import { writerOpen } from "./19-writer.js";
 
-/* ================= the command menu (issue #147) =================
-
-   Ctrl/Cmd+K, or File ▸ Search commands… on a keyboard with no Ctrl: a
-   search box over the script. Typing narrows every command the File menu
-   has — each export format on its own line, the panels, Write and Present
-   too — by its name or by a word someone might use for it ("teleprompter"
-   finds Present), grouped the way the menu groups them, with their
-   shortcuts. ↑/↓ move, Enter runs, Esc closes and puts the focus (and the
-   caret) back where it was. With nothing typed it lists what was run last
-   on this device first.
-
-   NOTHING OF ITS OWN TO RUN. A File-menu command clicks that command's
-   button in #file-menu; a format clicks its hidden export button; a panel,
-   Write, Present and Save click the header's own button. So it runs
-   exactly what the menu or the button runs, capture-phase listeners and
-   all (20b, 20c, 20e), and whether a command is offered, enabled or has a
-   reason is read off that same button — refreshFileMenu() first, so it is
-   current. An unavailable command is listed greyed with the menu's own
-   reason under it, and Enter on it does nothing. The one command with no
-   button, "Set target length…" (#170), opens the clock's own popover
-   (promptForTarget, 03-sync.js), which is what clicking the clock does.
-
-   WHERE IT DOES NOT OPEN. Not over the teleprompter, the writer, a modal
-   dialog or the tour: each of those owns the keyboard while it is up. And
-   it never takes a keystroke something else already handled — a script
-   cell's own shortcuts run first and mark the event. */
-
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
-/* "Tags" sits right under Recent (Adam, 2026-09-27: the tag reference
-   wants to be near the top, not the last thing under Help). Being early
-   in this order also wins it the ties when a query scores two groups the
-   same. */
 var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This document", "Help"];
 
 function el(id) { return document.getElementById(id); }
@@ -58,9 +27,6 @@ function menuButton(action) {
   return document.querySelector('#file-menu [data-file-action="' + action + '"]');
 }
 
-/* A command read off a File-menu button: its label (the menu's own, unless
-   a clearer one out of the menu's context is given), its icon, its
-   shortcut when it works in this build, and why it cannot run. */
 function fromMenu(action, group, words, label) {
   return {
     id: action,
@@ -69,9 +35,6 @@ function fromMenu(action, group, words, label) {
     read: function () {
       var btn = menuButton(action);
       if (!btn || btn.hidden) return null;
-      /* Save to file is disabled whenever there is no foreign file to
-         write back to — the menu does not offer it then, and neither does
-         this. */
       if (action === "save-back" && btn.disabled) return null;
       var use = btn.querySelector(".mi-icon use");
       var lab = btn.querySelector(".mi-label");
@@ -92,7 +55,6 @@ function fromMenu(action, group, words, label) {
   };
 }
 
-/* One export format, run through its own hidden button. */
 function fromExport(action, words) {
   return {
     id: action,
@@ -107,7 +69,6 @@ function fromExport(action, words) {
   };
 }
 
-/* A header button: a panel, Write, Present, Save. */
 function fromButton(id, btnId, group, label, icon, words, keys, blockedWhy) {
   return {
     id: id,
@@ -152,8 +113,6 @@ function commands() {
     fromExport("export-docx", "word docx document google docs"),
     fromExport("export-md", "markdown md text stacked"),
     fromExport("export-md-table", "markdown md table two columns side by side"),
-    /* the workbook first: "excel" finds it before the CSV, whose words
-       still say excel for anyone who asks for that by habit */
     fromExport("export-xlsx", "excel xlsx spreadsheet workbook sheets numbers table"),
     fromExport("export-csv", "spreadsheet csv excel sheets table"),
     fromExport("export-html", "splitshare share standalone page html web browser send any device app"),
@@ -177,7 +136,6 @@ function commands() {
     fromMenu("find", "This document", "search replace look for"),
     fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
     fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
-    /* #170: the clock's popover, the caret in its target field */
     {
       id: "set-target",
       group: "This document",
@@ -193,7 +151,6 @@ function commands() {
     fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
     fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
     fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
-    /* #215: no menu button of its own, like "Set target length…" */
     {
       id: "long-demo",
       group: "Help",
@@ -212,8 +169,6 @@ function commands() {
   return COMMANDS;
 }
 
-/* ---- recently run (per device) ---- */
-
 function recentIds() {
   var list;
   try { list = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch (e) { list = []; }
@@ -223,17 +178,9 @@ function recentIds() {
 function noteRecent(id) {
   var list = recentIds().filter(function (x) { return x !== id; });
   list.unshift(id);
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (e) { /* storage full or blocked — still runs, just not remembered */ }
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (e) { }
 }
 
-/* ---- matching ----
-
-   Every word typed has to be found: at the start of a word of the label
-   (best), anywhere in the label, or at the start of one of the command's
-   other words. Ranked by how well, then the menu's own order. A plural
-   counts as its singular at the start of a label word, so "tags" finds
-   Tagging reference by its name and not only by a keyword — otherwise
-   every tag command tied and the reference came last. */
 function scoreFor(view, cmd, terms) {
   var label = view.label.toLowerCase();
   var labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
@@ -253,7 +200,6 @@ function scoreFor(view, cmd, terms) {
   return total;
 }
 
-/* What the list shows for `query`: [{group, items:[{cmd, view}]}]. */
 export function commandResults(query) {
   var q = String(query || "").trim().toLowerCase();
   var terms = q.split(/\s+/).filter(Boolean);
@@ -280,8 +226,6 @@ export function commandResults(query) {
     });
   }
   var out = GROUP_ORDER.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] }; });
-  /* With a query, the group holding the best match comes first, so Enter
-     straight after typing runs what was most plainly asked for. */
   if (terms.length) {
     var best = function (g) { return Math.max.apply(null, g.items.map(function (it) { return it.score; })); };
     out.sort(function (a, b) { return best(b) - best(a) || GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group); });
@@ -289,17 +233,10 @@ export function commandResults(query) {
   return out;
 }
 
-/* ---- the list ---- */
-
-var shown = [];          /* the rows in list order: {cmd, view} */
+var shown = [];
 var active = -1;
-var returnFocus = null;  /* {el, range} to go back to */
+var returnFocus = null;
 
-/* A label with the letters typed marked, as B-Command draws them (#169):
-   each term where scoreFor() found it — at the start of a word of the
-   label, else anywhere in it. A term found only among the command's other
-   words ("teleprompter" for Present) marks nothing. Only the markup
-   changes; the label's text is the same. */
 function labelHtml(label, terms) {
   var lower = label.toLowerCase();
   var marks = [];
@@ -309,7 +246,6 @@ function labelHtml(label, terms) {
     while ((m = re.exec(lower))) {
       if (m[0].indexOf(t) === 0) { at = m.index; break; }
     }
-    /* a plural matched as its singular (scoreFor) marks the singular */
     if (at === -1 && t.length > 3 && /s$/.test(t)) {
       var one = t.slice(0, -1);
       re.lastIndex = 0;
@@ -362,7 +298,6 @@ function renderList() {
     html += '</div>';
   });
   list.innerHTML = html;
-  /* the first one that can run, so Enter does something useful */
   var first = shown.findIndex(function (it) { return !it.view.disabled; });
   setActive(first === -1 ? 0 : first);
 }
@@ -386,15 +321,11 @@ function move(delta) {
   setActive(((active === -1 ? (delta > 0 ? -1 : 0) : active) + delta + n) % n);
 }
 
-/* ---- opening, closing, running ---- */
-
 export function commandMenuOpen() {
   var m = el("cmdk");
   return !!m && !m.hidden;
 }
 
-/* Why it would not open right now, or "" — the places that own the
-   keyboard while they are up. */
 function blockedNow() {
   if (!S.state) return "loading";
   if (S.prompterOpen) return "prompter";
@@ -408,15 +339,11 @@ function blockedNow() {
 export function openCommandMenu() {
   if (commandMenuOpen() || blockedNow()) return false;
   if (fileMenuOpen()) toggleFileMenu(false);
-  /* Where to go back to: the element, and — for a script cell — where the
-     caret was in it, since focusing a contenteditable again would put it
-     at the start. */
   var ae = document.activeElement;
   var range = null;
   var sel = window.getSelection && window.getSelection();
   if (ae && ae.isContentEditable && sel && sel.rangeCount && ae.contains(sel.anchorNode)) range = sel.getRangeAt(0).cloneRange();
   returnFocus = ae && ae !== document.body ? { el: ae, range: range } : null;
-  /* whether each command is offered right now is read off the menu */
   refreshFileMenu();
   var modal = el("cmdk");
   var input = el("cmdk-input");
@@ -443,23 +370,19 @@ export function closeCommandMenu(restore) {
       var sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(back.range);
-    } catch (e) { /* the cell was redrawn meanwhile — focus alone will do */ }
+    } catch (e) { }
   }
 }
 
 function runAt(i) {
   var it = shown[i];
   if (!it || it.view.disabled) return false;
-  /* focus goes back first, so whatever the command opens takes it from
-     there, as it would from a click */
   closeCommandMenu();
   noteRecent(it.cmd.id);
   it.cmd.run();
   return true;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   var modal = el("cmdk");
   var input = el("cmdk-input");
@@ -480,42 +403,27 @@ export function __init() {
     var row = e.target.closest(".cmdk-item");
     if (row && +row.getAttribute("data-index") !== active) setActive(+row.getAttribute("data-index"));
   });
-  /* mousedown would take the focus out of the box before the click lands */
   list.addEventListener("mousedown", function (e) { e.preventDefault(); });
   list.addEventListener("click", function (e) {
     var row = e.target.closest(".cmdk-item");
     if (row) runAt(+row.getAttribute("data-index"));
   });
   modal.addEventListener("mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } });
-  /* the phone's close button (page.html); mousedown kept off it so the
-     focus stays in the box until the click has landed */
   var closeBtn = el("cmdk-close");
   if (closeBtn) {
     closeBtn.addEventListener("mousedown", function (e) { e.preventDefault(); });
     closeBtn.addEventListener("click", function () { closeCommandMenu(); });
   }
-  /* Focus leaving for somewhere else (another shortcut, a click through)
-     takes the box with it — it is a question asked of this moment, not
-     something to come back to. */
   modal.addEventListener("focusout", function (e) {
     if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget))) closeCommandMenu(false);
   });
 
-  /* The header's "Search or run a command" button (#175): the same menu,
-     for whoever has not met Ctrl K yet. Its tooltip names the shortcut in
-     the words the chips use; where it is only a magnifier that tooltip is
-     all the hint there is. Opened from it, Esc hands the focus back to it
-     (returnFocus above). */
   var trigger = el("btn-command");
   if (trigger) {
     trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
     trigger.addEventListener("click", function () { openCommandMenu(); });
   }
 
-  /* Ctrl/Cmd+K, in both builds: nothing in desktop/main.js registers it
-     (its Search Commands… item shows the accelerator without registering
-     it, like Find), and nothing in the page used it before. Pressed again
-     while the box is up, it closes it. */
   window.addEventListener("keydown", function (e) {
     if (e.defaultPrevented || e.isComposing) return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
@@ -526,9 +434,6 @@ export function __init() {
     openCommandMenu();
   });
 
-  /* ---- test hook ----
-     The ranked list for a query without typing it, for a suite to read.
-     Nothing in the app reads this. */
   window.__commandTest = {
     results: function (q) {
       return commandResults(q).map(function (g) {

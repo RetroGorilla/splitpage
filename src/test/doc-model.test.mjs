@@ -1,17 +1,3 @@
-/* The structured document model (#85, step 1 of docs/DOCUMENT-MODEL.md §10):
- * src/js/04c-doc-model.js, pure, with nothing in the app calling it yet.
- *
- * What has to hold before any reader or writer is moved onto it:
- *   - fromHtml/toHtml round-trip: toHtml's output is a fixed point of the
- *     sanitiser, and reading it back gives the same cell;
- *   - toPlainText and toDocxRuns give exactly what the HTML readers they
- *     replace (htmlToPlainText, htmlToRuns) give for the same cell's HTML;
- *     toMarkdown writes htmlToMarkdown's notation laid out so a Markdown
- *     reader shows the cell's formatting (its own tests below);
- *   - edits, steps and their inverses, and the three-way merge.
- * Every property is checked on hand-written cells covering every construct
- * the sanitiser keeps, on the demo document, and on seeded random cells.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -31,8 +17,6 @@ const B = (id, text, marks) => ({ atom: "broll", id, text: text || "B-roll:", ma
 const tagSpan = (cat, name, inner) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${inner}</span>`;
 
-/* Every construct the sanitiser keeps, alone and nested, plus the messy
-   input it is there for. */
 const FIXTURES = [
   "",
   "plain words",
@@ -66,7 +50,6 @@ const FIXTURES = [
 const seed = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));
 for (const r of seed.rows) FIXTURES.push(r.visualText || "", r.audioText || "");
 
-/* ---- seeded random cells ---- */
 function rng(seed) {
   let s = seed >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
@@ -93,8 +76,6 @@ function randomCell(r) {
 const RANDOM = [];
 { const r = rng(85); for (let i = 0; i < 400; i++) RANDOM.push(randomCell(r)); }
 
-/* ---- reading and writing HTML ---- */
-
 test("fromHtml reads each construct into runs and marks", () => {
   assert.deepEqual(fromHtml("a <strong>b</strong>"), [T("a "), T("b", { b: true })]);
   assert.deepEqual(fromHtml("x<br>y"), [T("x\ny")]);
@@ -112,7 +93,6 @@ test("fromHtml takes the registry's id for a tag when told how", () => {
   assert.deepEqual(cell, [T("mug", { tag: "t_1" })]);
   assert.equal(toHtml(cell, { tagOf: (id) => (id === "t_1" ? { cat: "prop", name: "Red mug" } : null) }),
     tagSpan("prop", "Red mug", "mug"));
-  /* a tag the registry cannot name is written as its text */
   assert.equal(toHtml(cell, { tagOf: () => null }), "mug");
 });
 
@@ -153,8 +133,6 @@ test("round trip: fromHtml(toHtml(c)) is normalizeCell(c)", () => {
 test("a cell keeps the words the stored HTML shows", () => {
   for (const html of FIXTURES) {
     const clean = sanitizeHtml(html);
-    /* a line feed inside a text node shows as a space (white-space: normal),
-       and a zero-width space is a caret spot, never content */
     const shown = htmlToPlainText(clean.replace(/\n/g, " ").replace(/\u200B/g, ""));
     assert.equal(toPlainText(fromHtml(html)), shown, JSON.stringify(html));
   }
@@ -169,14 +147,6 @@ test("the plain-text and Word readers agree with the HTML readers they replace",
   }
 });
 
-/* ---- toMarkdown ----
-
-   Not htmlToMarkdown's output: that follows the nesting of the elements,
-   and Markdown's delimiters only open and close where CommonMark's
-   flanking rules let them. Each case below is one the HTML walker wrote
-   wrong (checked against markdown-it and commonmark.js when this was
-   written: the old output rendered other formatting than the cell's, the
-   new renders the cell's), or one it wrote right and toMarkdown keeps. */
 test("toMarkdown: what htmlToMarkdown wrote right, it writes the same", () => {
   for (const html of [
     "plain <strong>bold</strong> and <em>it</em> <s>gone</s> <u>under</u> <mark>lit</mark>",
@@ -195,25 +165,15 @@ test("toMarkdown: what htmlToMarkdown wrote right, it writes the same", () => {
 
 test("toMarkdown: where the elements' nesting made broken Markdown, it writes working Markdown", () => {
   const cases = [
-    /* two elements side by side, as a comment's edge inside a word is in
-       the model's own nesting */
     ["<strong>a</strong><strong>b</strong>", "**a****b**", "**ab**"],
     ['<strong>bo</strong><span class="cmt-anchor" data-cmt="c1"><strong>ld</strong></span>x', "**bo****ld**x", "**bold**x"],
-    /* the model's fixed nesting over italic "x " then bold-italic "y" */
     ["<em>x </em><strong><em>y</em></strong> z", "*x ****y*** z", "*x **y*** z"],
-    /* a delimiter next to a space opens or closes nothing */
     ["<strong>bold </strong>text", "**bold **text", "**bold** text"],
     ["<u>a </u>b", "<u>a </u>b", "<u>a</u> b"],
-    /* two marks that cross: the second one's reopening would share a run
-       of asterisks with the first one's close */
     ["<strong>abc<em>de</em></strong><em>fgh</em>", "**abc*de****fgh*", "**abc*de***<em>fgh</em>"],
-    /* inside a word, next to punctuation, ** cannot open */
     ['a<strong>"q"</strong>b', 'a**"q"**b', 'a<strong>"q"</strong>b'],
-    /* a blank line ends a Markdown paragraph, and emphasis with it */
     ["<strong>one<br><br>two</strong>", "**one\n\ntwo**", "**one**\n\n**two**"],
-    /* an element alone on a paragraph's first line starts an HTML block */
     ["<mark><br>x</mark>", "<mark>\nx</mark>", "<mark>x</mark>"],
-    /* underline outside bold, so the ** sits between letters */
     ["x<strong><u>y</u></strong>z", "x**<u>y</u>**z", "x<u>**y**</u>z"]
   ];
   for (const [html, before, after] of cases) {
@@ -225,12 +185,9 @@ test("toMarkdown: where the elements' nesting made broken Markdown, it writes wo
 test("toMarkdown: the same cell writes the same Markdown however its HTML nested", () => {
   assert.equal(toMarkdown(fromHtml("<em><strong>a</strong> b</em>")), toMarkdown(fromHtml("<strong><em>a</em></strong><em> b</em>")));
   assert.equal(toMarkdown(fromHtml("<em><strong>a</strong> b</em>")), "***a** b*");
-  /* tags and comments are words: their edges never split emphasis */
   assert.equal(toMarkdown(fromHtml("<strong>" + tagSpan("prop", "Mug", "mug") + ' and <span class="cmt-anchor" data-cmt="c1">cup</span></strong>')),
     "**mug and cup**");
 });
-
-/* ---- canonical form ---- */
 
 test("normalizeCell: one canonical form", () => {
   assert.deepEqual(normalizeCell([T("a", { b: true }), T("b", { b: true }), T(""), T("c")]),
@@ -247,7 +204,6 @@ test("normalizeCell: one canonical form", () => {
 test("a comment or link covers all of a tag or none of it", () => {
   const cell = normalizeCell([T("re", { tag: "t:prop:Mug", cmt: ["c1"] }), T("d mug", { tag: "t:prop:Mug", href: "https://e.x/" })]);
   assert.deepEqual(cell, [T("red mug", { href: "https://e.x/", tag: "t:prop:Mug", cmt: ["c1"] })]);
-  /* so toHtml never splits one tag into two spans */
   const html = toHtml([T("ab", { tag: "t:prop:X", cmt: ["c1"] }), T("cd", { tag: "t:prop:X" }), T("ef", { cmt: ["c1"] })]);
   assert.equal((html.match(/tag-anchor/g) || []).length, 1, html);
 });
@@ -258,8 +214,6 @@ test("elements nest in one fixed order, and stay open across runs that share the
   assert.equal(toHtml(fromHtml("<em><strong>x</strong></em>")), "<strong><em>x</em></strong>");
   assert.equal(toHtml([T("a\u00a0 <b>&")]), "a&nbsp; &lt;b&gt;&amp;");
 });
-
-/* ---- positions and edits ---- */
 
 test("positions: an atom is one character", () => {
   const cell = [T("ab"), B("bs1"), T(" cd")];
@@ -288,20 +242,15 @@ test("deleteRange, replaceText, setMark", () => {
   assert.deepEqual(setMark([T("a"), B("bs1")], 0, 2, "tag", "t:prop:X"), [T("a", { tag: "t:prop:X" }), B("bs1")]);
 });
 
-/* ---- the editor's formatting edits (05-render.js toggleCellFormat and
-   insertLineBreak call these through editCell) ---- */
-
 test("markThroughout: every visible character, line breaks and b-roll keys aside", () => {
   const cell = [T("one "), T("two", { b: true }), T(" three")];
   assert.equal(markThroughout(cell, 4, 7, "b"), true);
   assert.equal(markThroughout(cell, 3, 7, "b"), false);
   assert.equal(markThroughout(cell, 4, 8, "b"), false);
   assert.equal(markThroughout(cell, 7, 4, "b"), true, "a backwards range is the same range");
-  /* two lines bolded one at a time read as bold across the break */
   const lines = [T("ab", { b: true }), T("\n"), T("cd", { b: true })];
   assert.equal(markThroughout(lines, 0, 5, "b"), true);
   assert.equal(markThroughout([T("a", { hl: true }), B("bs1"), T("b", { hl: true })], 0, 3, "hl"), true);
-  /* nothing that could be bold is not bold */
   assert.equal(markThroughout(cell, 4, 4, "b"), false);
   assert.equal(markThroughout([T("\n")], 0, 1, "b"), false);
 });
@@ -318,24 +267,18 @@ test("toggleMark: over an existing run's edge it goes on for all, then off for a
 
 test("breakLine: one break inside a line, a sentinel pair at the end", () => {
   assert.deepEqual(breakLine([T("abcd")], 2, 2), { cell: [T("ab\ncd")], pos: 3 });
-  /* at the end there is nothing to give the new line a box: two breaks, pos between */
   assert.deepEqual(breakLine([T("abcd")], 4, 4), { cell: [T("abcd\n\n")], pos: 5 });
   assert.equal(toHtml(breakLine([T("abcd")], 4, 4).cell), "abcd<br><br>");
   assert.deepEqual(breakLine([], 0, 0), { cell: [T("\n\n")], pos: 1 });
-  /* a trailing break already gives the new line its box: just one more */
   assert.deepEqual(breakLine([T("ab\n")], 2, 2), { cell: [T("ab\n\n")], pos: 3 });
-  /* over a selection, the selection goes; at the end, the pair again */
   assert.deepEqual(breakLine([T("one two")], 3, 7), { cell: [T("one\n\n")], pos: 4 });
   assert.deepEqual(breakLine([T("one two")], 7, 0), { cell: [T("\n\n")], pos: 1 });
   assert.deepEqual(breakLine([T("one two")], 0, 3), { cell: [T("\n two")], pos: 1 });
-  /* formatting carries on through the break, as typing does */
   assert.deepEqual(breakLine([T("bold", { b: true })], 4, 4), { cell: [T("bold\n\n", { b: true })], pos: 5 });
-  /* a comment or a link only where the text on both sides is in it */
   const inside = [T("say "), T("two words", { cmt: ["c1"], href: "https://e.x/" })];
   assert.deepEqual(breakLine(inside, 7, 7).cell, [T("say "), T("two\n words", { href: "https://e.x/", cmt: ["c1"] })]);
   assert.deepEqual(breakLine(inside, 4, 4).cell, [T("say \n"), T("two words", { href: "https://e.x/", cmt: ["c1"] })]);
   assert.deepEqual(breakLine(inside, 13, 13).cell, [T("say "), T("two words", { href: "https://e.x/", cmt: ["c1"] }), T("\n\n")]);
-  /* never a tag */
   const tagged = [T("x", { tag: "t:prop:X" }), T("y", { tag: "t:prop:Y" })];
   assert.deepEqual(breakLine(tagged, 1, 1).cell, [T("x", { tag: "t:prop:X" }), T("\n"), T("y", { tag: "t:prop:Y" })]);
 });
@@ -378,7 +321,6 @@ test("insertBrollKey puts the key in as one atom", () => {
 });
 
 test("replaceWithTag: typed words become one tag, keeping their formatting", () => {
-  /* "[red mug]" closed: the brackets go, the phrase is the tag */
   const typed = [T("pick up the "), T("[red mug]", { b: true }), T(" now")];
   const id = namedTagId("prop", "red mug");
   assert.equal(id, "t:prop:red mug");
@@ -387,11 +329,9 @@ test("replaceWithTag: typed words become one tag, keeping their formatting", () 
   assert.deepEqual(r.cell, [T("pick up the "), T("red mug", { b: true, tag: id }), T(" now")]);
   assert.equal(r.end, 19);
   assert.equal(toHtml(r.cell), "pick up the " + tagSpan("prop", "red mug", "<strong>red mug</strong>") + " now");
-  /* at the very end of a cell, reversed bounds, and a comment over it all */
   const end = replaceWithTag([T("a [lamp", { cmt: ["c1"] })], 7, 2, "Lamp", namedTagId("prop", "Lamp"));
   assert.deepEqual(end.cell, [T("a ", { cmt: ["c1"] }), T("Lamp", { tag: "t:prop:Lamp", cmt: ["c1"] })]);
   assert.equal(end.end, cellLength(end.cell));
-  /* what is typed next is not part of the tag */
   assert.deepEqual(insertText(end.cell, end.end, " on"), [T("a ", { cmt: ["c1"] }), T("Lamp", { tag: "t:prop:Lamp", cmt: ["c1"] }), T(" on")]);
 });
 
@@ -400,8 +340,6 @@ test("replaceWithBrollKey: the typed marker becomes the key, the caret just afte
   assert.deepEqual(r.cell, [T("intro\n"), B("bs_9")]);
   assert.equal(r.end, 7);
   assert.equal(r.end, cellLength(r.cell));
-  /* typed in bold, the key is still a plain one at the top of its line —
-     the only place the b-roll list reads a key — and the rest stays bold */
   const bold = replaceWithBrollKey([T("b-roll -", { b: true }), T(" gulls", { b: true })], 0, 8, "bs_1", "b-roll -");
   assert.deepEqual(bold.cell, [B("bs_1", "b-roll -"), T(" gulls", { b: true })]);
   assert.equal(bold.end, 1);
@@ -425,8 +363,6 @@ test("random edits keep lengths and never leave a cell out of canonical form", (
     }
   }
 });
-
-/* ---- steps ---- */
 
 const doc = () => ({
   title: "T",
@@ -469,8 +405,6 @@ test("a step that no longer applies is refused whole", () => {
   assert.throws(() => applySteps(doc(), [{ op: "insertRow", index: 0, row: { id: "r2" } }]), (e) => e.code === "STEP_REFUSED");
 });
 
-/* ---- three-way merge ---- */
-
 const merged = (o, a, b) => mergeCells(o, a, b);
 
 test("merge: one side changed, or both the same way, takes it", () => {
@@ -484,15 +418,15 @@ test("merge: one side changed, or both the same way, takes it", () => {
 
 test("merge: edits to different words both land", () => {
   const o = [T("the quick brown fox jumps")];
-  const mine = replaceText(o, 4, 9, "slow");               // quick -> slow
-  const theirs = replaceText(o, 20, 25, "sleeps");         // jumps -> sleeps
+  const mine = replaceText(o, 4, 9, "slow");
+  const theirs = replaceText(o, 20, 25, "sleeps");
   assert.deepEqual(merged(o, mine, theirs), { cell: [T("the slow brown fox sleeps")], conflict: false, markConflicts: 0 });
 });
 
 test("merge: a tag added on one side and a word fixed on the other is not a conflict (#85)", () => {
   const o = [T("pick up the red mug and go")];
-  const mine = setMark(o, 12, 19, "tag", "t_mug");        // tag "red mug"
-  const theirs = replaceText(o, 24, 26, "leave");          // go -> leave
+  const mine = setMark(o, 12, 19, "tag", "t_mug");
+  const theirs = replaceText(o, 24, 26, "leave");
   const r = merged(o, mine, theirs);
   assert.equal(r.conflict, false);
   assert.deepEqual(r.cell, [T("pick up the "), T("red mug", { tag: "t_mug" }), T(" and leave")]);
@@ -505,7 +439,6 @@ test("merge: formatting and comments merge per character", () => {
   const r = merged(o, mine, theirs);
   assert.deepEqual(r.cell, [T("one", { b: true }), T(" two "), T("three", { cmt: ["c1"] })]);
   assert.equal(r.conflict, false);
-  /* both linked the same word to different places: theirs, reported */
   const l1 = setMark(o, 4, 7, "href", "https://a.x/"), l2 = setMark(o, 4, 7, "href", "https://b.x/");
   const rl = merged(o, l1, l2);
   assert.deepEqual(rl.cell, l2);

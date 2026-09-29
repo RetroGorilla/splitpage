@@ -1,21 +1,3 @@
-/* desktop/test/history-fs-backend.test.mjs: unit tests for
- * desktop/history-fs-backend.js (issue #83, step 2a).
- *
- * Two halves. The first runs shared/history-store.js — the real store, the
- * one main will run — over this backend on a temp folder: the store's
- * contract (put/get/list/copy/evict/Older/read-only/self-healing) has to
- * hold on disk, across a relaunch, exactly as it does over the memory
- * backend in src/test/history-store.test.mjs. The second drives the backend
- * directly: the two-generation index write, torn index → prev, both torn →
- * .corrupt + empty, the deferred unlink through `trash`, and kills (test
- * hooks that throw) between a body and its index and inside the index write.
- *
- * Node built-ins only, no Electron. Every case works in its own folder under
- * os.tmpdir(); the temp root is removed at the end. Prints ALL PASS and exits
- * 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/history-fs-backend.test.mjs
- */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -47,7 +29,6 @@ function killer(label) {
   return () => { throw Object.assign(new Error("killed at " + label), { killed: true }); };
 }
 
-/* fsp with injectable faults: fault(method, predicate(firstArg), code, times) */
 function faultyFsp() {
   const faults = [];
   const wrapped = new Proxy(fsp, {
@@ -86,7 +67,6 @@ function makeStore(backend, clock, extra = {}) {
   });
 }
 
-/* A store over a fresh backend on `dir` (a relaunch when dir is reused). */
 function launch(dir, opts = {}) {
   const clock = opts.clock || { t: 1_000_000 };
   const backend = makeBackend(dir, clock, opts.backend);
@@ -116,7 +96,6 @@ function walk(dir) {
   return out.sort();
 }
 
-/* Raw backend helpers for the generation tests. */
 const entry = (id, atMs, text) => ({ id, atMs, sizeBytes: historyUtf8Length(text), sha: sha(text) });
 const rec = (...entries) => ({ title: "", lastOpenedAt: 1, snapshots: entries });
 async function commit(backend, puts, changes, dropped = []) {
@@ -128,8 +107,6 @@ async function commit(backend, puts, changes, dropped = []) {
 
 const cases = [];
 function test(name, fn) { cases.push({ name, fn }); }
-
-/* ================= the store's contract, on disk ================= */
 
 test("store: put / get / list over the fs backend — the layout on disk and 03a's shapes", async () => {
   const dir = freshDir();
@@ -315,8 +292,6 @@ test("store: an index.json whose formatVersion is newer is read-only too", async
   assert.deepEqual(await store.put(DOC_A, meta("s01", 1), body("one")), { stored: false, code: "read-only" });
 });
 
-/* ================= the backend itself ================= */
-
 test("FORMAT: written \"2\" on a fresh folder; an unreadable one is treated as ours", async () => {
   const dir = freshDir();
   const b = launch(dir).backend;
@@ -363,7 +338,6 @@ test("torn index.json → the previous generation is loaded, the torn one moved 
   assert.equal(fs.readFileSync(path.join(dir, "index.json.corrupt-77000"), "utf8"), current.slice(0, Math.floor(current.length / 2)));
   assert.ok(!fs.existsSync(path.join(dir, "index.json")));
   const prev = fs.readFileSync(path.join(dir, "index.prev.json"), "utf8");
-  /* the next commit must not rotate anything torn over the good prev */
   await b.store.put(DOC_A, meta("s03", 3), body("three"));
   assert.equal(fs.readFileSync(path.join(dir, "index.prev.json"), "utf8"), prev);
   assert.deepEqual(await ids(launch(dir, { clock }).store, DOC_A), ["s03", "s01"]);
@@ -402,7 +376,6 @@ test("a kill between a body and its index: the prior generation is readable, no 
   assert.deepEqual(await ids(b.store, DOC_A), ["s01"]);
   assert.equal((await b.store.get(DOC_A, "s01")).stateJson, body("one"));
   assert.equal(b.backend.openError, null);
-  /* the same capture retried after the relaunch lands, reusing the body */
   assert.equal((await b.store.put(DOC_A, meta("s02", 2), body("two"))).stored, true);
   assert.equal((await b.store.get(DOC_A, "s02")).stateJson, body("two"));
 });
@@ -438,12 +411,11 @@ test("trash: a body dropped in generation N survives until N+1 is durable (prev 
   const dir = freshDir();
   const { backend } = launch(dir);
   const eX = entry("s01", 1, "X"), eY = entry("s02", 2, "Y");
-  await commit(backend, ["X", "Y"], { [DOC_A]: rec(eX, eY) });                 /* N-1 */
-  await commit(backend, [], { [DOC_A]: rec(eY) }, [sha("X")]);                 /* N: drops X */
+  await commit(backend, ["X", "Y"], { [DOC_A]: rec(eX, eY) });
+  await commit(backend, [], { [DOC_A]: rec(eY) }, [sha("X")]);
   assert.deepEqual(readJson(path.join(dir, "index.json")).trash, [sha("X")]);
   assert.ok(hasBody(backend, "X"), "N is durable but N-1 (prev) names X");
 
-  /* the reason: tear N now, and N-1 comes back — with X readable */
   const copy = path.join(path.dirname(dir), "copy");
   fs.cpSync(dir, copy, { recursive: true });
   fs.writeFileSync(path.join(copy, "index.json"), "{");
@@ -451,11 +423,11 @@ test("trash: a body dropped in generation N survives until N+1 is durable (prev 
   assert.deepEqual(await ids(c.store, DOC_A), ["s02", "s01"]);
   assert.equal((await c.store.get(DOC_A, "s01")).stateJson, "X");
 
-  await commit(backend, [], { [DOC_B]: rec(eY) });                              /* N+1 */
+  await commit(backend, [], { [DOC_B]: rec(eY) });
   assert.ok(!hasBody(backend, "X"), "N+1 is durable and does not name X: unlinked");
   assert.deepEqual(readJson(path.join(dir, "index.json")).trash, [sha("X")],
     "listed once more until the unlink is known to have happened");
-  await commit(backend, [], { [DOC_B]: null });                                 /* N+2 */
+  await commit(backend, [], { [DOC_B]: null });
   assert.deepEqual(readJson(path.join(dir, "index.json")).trash, []);
   assert.ok(hasBody(backend, "Y"));
   assert.equal(backend.counts.unlinked, 1);
@@ -465,7 +437,7 @@ test("trash: a body named again in N+1 is not unlinked", async () => {
   const { backend } = launch(freshDir());
   await commit(backend, ["X"], { [DOC_A]: rec(entry("s01", 1, "X")) });
   await commit(backend, [], { [DOC_A]: null }, [sha("X")]);
-  await commit(backend, ["X"], { [DOC_B]: rec(entry("s05", 5, "X")) });        /* the same content came back */
+  await commit(backend, ["X"], { [DOC_B]: rec(entry("s05", 5, "X")) });
   await commit(backend, [], { [DOC_B]: rec(entry("s05", 5, "X"), entry("s06", 6, "X")) });
   assert.ok(hasBody(backend, "X"));
   assert.deepEqual(backend.inspect().index.trash, []);
@@ -516,11 +488,6 @@ test("exclusive: jobs never interleave; a read job cannot write; a tx dies with 
   await assert.rejects(backend.exclusive(async (tx) => { await tx.commit({}, []); await tx.commit({}, []); }), /twice/);
 });
 
-/* #100: the v1 migrator is gone. A folder still in the v1 layout (someone
-   who skipped 3.0.0) opens as an empty history and v1's docs/ and older/
-   stay exactly as they were — through puts, an eviction that unlinks
-   bodies, a relaunch and a torn index — even a v1 file named like one of
-   this backend's temp files. */
 test("a raw v1 tree: opened as an empty history; docs/ and older/ never touched", async () => {
   const dir = freshDir();
   const v1 = {
@@ -559,7 +526,6 @@ test("a raw v1 tree: opened as an empty history; docs/ and older/ never touched"
     a.clock.t += 1000;
     assert.equal((await a.store.put(DOC_A, meta("s0" + i, a.clock.t), body("v" + i, 400))).stored, true);
   }
-  /* an eviction: shas go into trash and are unlinked a generation later */
   cap.bytes = 1000;
   a.clock.t += 1000;
   const r = await a.store.put(DOC_B, meta("b01", a.clock.t), body("b", 400));
@@ -568,7 +534,6 @@ test("a raw v1 tree: opened as an empty history; docs/ and older/ never touched"
   assert.ok(a.backend.counts.unlinked > 0);
   assert.deepEqual(v1Tree(), before);
 
-  /* relaunch over a torn index.json: it is moved aside, prev loads */
   fs.writeFileSync(path.join(dir, "index.json"), "{\"formatVersion\":2,\"buck");
   const b = launch(dir, { store: { capBytes: () => cap.bytes } });
   assert.ok((await ids(b.store, DOC_B)).length > 0);
@@ -578,8 +543,6 @@ test("a raw v1 tree: opened as an empty history; docs/ and older/ never touched"
   assert.equal(idx.migratedFrom, undefined, "no migration happened, so none is recorded");
   assert.ok(fs.readdirSync(dir).includes("docs") && fs.readdirSync(dir).includes("older"));
 });
-
-/* ------------------------------------------------------------------ */
 
 const failures = [];
 for (const c of cases) {
@@ -592,7 +555,7 @@ for (const c of cases) {
   }
 }
 
-try { fs.rmSync(ROOT, { recursive: true, force: true }); } catch { /* best effort */ }
+try { fs.rmSync(ROOT, { recursive: true, force: true }); } catch { }
 
 if (failures.length) {
   console.log(`\n${failures.length} FAILED of ${cases.length}`);

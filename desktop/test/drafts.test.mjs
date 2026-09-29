@@ -1,11 +1,3 @@
-/* desktop/test/drafts.test.mjs: unit tests for desktop/drafts.js.
- *
- * Node built-ins only, no Electron. Every case works in its own folder under
- * os.tmpdir() and the whole temp root is removed at the end. Prints ALL PASS
- * and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/drafts.test.mjs
- */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -55,7 +47,6 @@ function wait(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/* Flips one character in the body (line 2) without changing its length. */
 function damageBody(file) {
   const buf = fs.readFileSync(file);
   const nl = buf.indexOf(0x0a);
@@ -68,8 +59,6 @@ const cases = [];
 function test(name, fn) {
   cases.push({ name, fn });
 }
-
-/* ------------------------------------------------------------------ */
 
 test("a torn write keeps the previous generation, and the temp file is swept on init", async () => {
   const dir = freshDir();
@@ -88,7 +77,6 @@ test("a torn write keeps the previous generation, and the temp file is swept on 
   assert.deepEqual(fs.readFileSync(tabFile(dir, "current.draft")), gen1Bytes, "current.draft is still generation 1");
   assert.equal(fs.existsSync(tabFile(dir, "previous.draft")), false);
 
-  /* Relaunch: a new store on the same folder, as the next process would be. */
   const b = makeStore(dir);
   const res = b.init();
   assert.equal(res.previousSession, "running", "the killed process never marked a clean exit");
@@ -112,7 +100,6 @@ test("a checksum mismatch falls back to previous; both bad -> quarantine, never 
   assert.equal((await a.write(TAB, header("t"), stateJ("gen1"), baseJ("b"), 1)).ok, true);
   assert.equal((await a.write(TAB, header("t"), stateJ("gen2"), null, 2)).ok, true);
 
-  /* A torn current (truncated body) must not verify. */
   const cur = tabFile(dir, "current.draft");
   const full = fs.readFileSync(cur);
   fs.writeFileSync(cur, full.subarray(0, full.length - 3));
@@ -125,7 +112,6 @@ test("a checksum mismatch falls back to previous; both bad -> quarantine, never 
   assert.equal(t.baseJson, baseJ("b"));
   assert.ok(fs.existsSync(cur), "take never deletes");
 
-  /* Now damage previous too (same length, one byte flipped). */
   damageBody(tabFile(dir, "previous.draft"));
   const curBytes = fs.readFileSync(cur);
   const prevBytes = fs.readFileSync(tabFile(dir, "previous.draft"));
@@ -146,7 +132,6 @@ test("a checksum mismatch falls back to previous; both bad -> quarantine, never 
   assert.deepEqual(fs.readFileSync(path.join(qdir, "previous.draft")), prevBytes, "quarantined previous is byte-identical");
   assert.deepEqual(fs.readFileSync(path.join(qdir, baseName)), baseBytes, "the base went with them");
 
-  /* A fresh init keeps the quarantine (it is young). */
   makeStore(dir).init();
   assert.equal(fs.readdirSync(path.join(dir, "corrupt")).length, 1);
 });
@@ -154,8 +139,6 @@ test("a checksum mismatch falls back to previous; both bad -> quarantine, never 
 test("discardForUserDecision during a delayed write: folder gone, DISCARDED, tombstone persisted first, recreated folder removed by next init", async () => {
   const dir = freshDir();
   const order = [];
-  /* An fs that checks, at the moment the tab folder is renamed to trash, that
-     session.json on disk already carries the tombstone. */
   const spyFs = {
     ...fs,
     renameSync(from, to) {
@@ -172,7 +155,7 @@ test("discardForUserDecision during a delayed write: folder gone, DISCARDED, tom
   assert.equal((await a.write(TAB2, header("other"), stateJ("other"), baseJ("o"), 1)).ok, true);
 
   const pending = a.write(TAB, header("t"), stateJ("gen2"), null, 2);
-  await wait(80); /* the write is inside its delay: temp files written, not renamed */
+  await wait(80);
   assert.ok(rootTmps(dir).length > 0, "the delayed write has its temp file in place");
 
   const d = a.discardForUserDecision([TAB], "leave-without-saving");
@@ -189,7 +172,6 @@ test("discardForUserDecision during a delayed write: folder gone, DISCARDED, tom
   assert.deepEqual(await a.write(TAB, header("t"), stateJ("gen3"), baseJ("b"), 3), { ok: false, code: "DISCARDED" });
   assert.equal(a.hasDraft(TAB2), true, "the other tab's draft is untouched");
 
-  /* Something recreates the folder by hand (a sync client restoring it). */
   fs.mkdirSync(path.join(dir, TAB));
   fs.writeFileSync(tabFile(dir, "current.draft"), "resurrected");
   const b = makeStore(dir);
@@ -197,7 +179,6 @@ test("discardForUserDecision during a delayed write: folder gone, DISCARDED, tom
   assert.equal(fs.existsSync(path.join(dir, TAB)), false, "next init removed the tombstoned folder");
   assert.deepEqual(readSession(dir).discardedTabIds, [], "the tombstone list is pruned once the folder is gone");
   assert.deepEqual(res.drafts.map((x) => x.tabId), [TAB2]);
-  /* The same tabId can hold a new draft after that (a file tab reopened). */
   assert.equal((await b.write(TAB, header("t"), stateJ("new"), baseJ("b"), 1)).ok, true);
 });
 
@@ -211,7 +192,6 @@ test("STALE_SEQ, NEED_BASE, TOO_LARGE, NO_TAB, BAD_PAYLOAD, hold and resetSeq", 
   assert.equal((await s.write(TAB, header("t"), "{}", "{}", 1)).ok, true);
   assert.deepEqual(await s.write(TAB, header("t"), "{}", "{}", 1), { ok: false, code: "STALE_SEQ" });
   assert.deepEqual(await s.write(TAB, header("t"), "{}", "{}", 0), { ok: false, code: "STALE_SEQ" });
-  /* After any failed write the store forgets the base, so the renderer resends it. */
   assert.deepEqual(await s.write(TAB, header("t"), "{\"a\":1}", null, 2), { ok: false, code: "NEED_BASE" });
   assert.equal((await s.write(TAB, header("t"), "{\"a\":1}", "{}", 2)).ok, true);
   assert.equal((await s.write(TAB, header("t"), "{\"a\":2}", null, 3)).ok, true, "a known base is reused");
@@ -219,7 +199,6 @@ test("STALE_SEQ, NEED_BASE, TOO_LARGE, NO_TAB, BAD_PAYLOAD, hold and resetSeq", 
   assert.equal(t.stateJson, "{\"a\":2}");
   assert.equal(t.baseJson, "{}");
 
-  /* Queued writes serialize and a late lower seq loses. */
   const [w5, w4] = await Promise.all([
     s.write(TAB, header("t"), "{\"a\":5}", null, 5),
     s.write(TAB, header("t"), "{\"a\":4}", "{}", 4),
@@ -227,20 +206,17 @@ test("STALE_SEQ, NEED_BASE, TOO_LARGE, NO_TAB, BAD_PAYLOAD, hold and resetSeq", 
   assert.equal(w5.ok, true);
   assert.deepEqual(w4, { ok: false, code: "STALE_SEQ" });
 
-  /* TOO_LARGE through the fake cap of 100 bytes. */
   assert.deepEqual(await s.write(TAB, header("t"), "x".repeat(101), "{}", 6), { ok: false, code: "TOO_LARGE" });
   assert.deepEqual(await s.write(TAB, header("t"), "{}", "x".repeat(101), 6), { ok: false, code: "TOO_LARGE" });
   assert.deepEqual(await s.write(TAB, header("t"), "\u00e9".repeat(51), "{}", 6), { ok: false, code: "TOO_LARGE" }, "the cap counts UTF-8 bytes");
   assert.equal((await s.write(TAB, header("t"), "\u00e9".repeat(50), "{}", 6)).ok, true);
 
-  /* NO_TAB and BAD_PAYLOAD. */
   assert.deepEqual(await s.write("ABC", header("t"), "{}", "{}", 7), { ok: false, code: "NO_TAB" });
   assert.deepEqual(await s.write(TAB.toUpperCase(), header("t"), "{}", "{}", 7), { ok: false, code: "NO_TAB" });
   assert.deepEqual(await s.write(TAB, header("t"), 42, "{}", 7), { ok: false, code: "BAD_PAYLOAD" });
   assert.deepEqual(await s.write(TAB, null, "{}", "{}", 7), { ok: false, code: "BAD_PAYLOAD" });
   assert.deepEqual(await s.write(TAB, header("t"), "{}", "{}", NaN), { ok: false, code: "BAD_PAYLOAD" });
 
-  /* discardClean: refused while held, refused below the last written seq. */
   s.hold(TAB);
   assert.equal(s.isHeld(TAB), true);
   assert.deepEqual(await s.discardClean(TAB, 100), { ok: false, code: "HELD" });
@@ -253,7 +229,6 @@ test("STALE_SEQ, NEED_BASE, TOO_LARGE, NO_TAB, BAD_PAYLOAD, hold and resetSeq", 
   assert.deepEqual(await s.write(TAB, header("t"), "{}", null, 7), { ok: false, code: "NEED_BASE" }, "the discard forgot the base");
   assert.equal((await s.write(TAB, header("t"), "{}", "{}", 7)).ok, true);
 
-  /* resetSeq: the reloaded renderer starts at 1 again and must send its base. */
   s.resetSeq(TAB);
   assert.deepEqual(await s.write(TAB, header("t"), "{}", null, 1), { ok: false, code: "NEED_BASE" });
   assert.equal((await s.write(TAB, header("t"), "{\"after\":1}", "{}", 1)).ok, true);
@@ -266,7 +241,6 @@ test("a hold keeps an unrestored draft byte-identical against writes called unde
   const folder = path.join(dir, TAB);
   const snapshot = () => Object.fromEntries(fs.readdirSync(folder).sort().map((n) => [n, fs.readFileSync(path.join(folder, n)).toString("base64")]));
 
-  /* The previous session left both generations: gen1 in previous, gen2 in current. */
   const a = makeStore(dir);
   a.init();
   assert.equal((await a.write(TAB, header("crash work"), stateJ("gen1"), baseJ("b"), 1)).ok, true);
@@ -274,9 +248,6 @@ test("a hold keeps an unrestored draft byte-identical against writes called unde
   const before = snapshot();
   const gen2Bytes = fs.readFileSync(tabFile(dir, "current.draft"));
 
-  /* Relaunch. An AV scan or sync client has both generations locked, so the
-     restore's take() reports corrupt without quarantining, the restore
-     settles as 'failed' and main keeps the hold. */
   let locked = true;
   const lockingFsp = {
     ...fsp,
@@ -291,7 +262,6 @@ test("a hold keeps an unrestored draft byte-identical against writes called unde
   assert.deepEqual(await b.take(TAB), { corrupt: true });
   assert.deepEqual(snapshot(), before, "a locked draft is not quarantined");
 
-  /* The user types in the tab: the renderer's writer sends its fresh state twice. */
   assert.deepEqual(await b.write(TAB, header("typed after"), stateJ("new1"), baseJ("seed"), 1), { ok: false, code: "HELD" });
   assert.deepEqual(await b.write(TAB, header("typed after"), stateJ("new2"), baseJ("seed"), 2), { ok: false, code: "HELD" });
   assert.deepEqual(snapshot(), before, "neither generation was rotated or overwritten");
@@ -300,22 +270,18 @@ test("a hold keeps an unrestored draft byte-identical against writes called unde
   assert.equal(b.status(TAB).failures, 0, "HELD is a deliberate refusal, not a disk failure");
   assert.deepEqual(await b.discardClean(TAB, Infinity), { ok: false, code: "HELD" });
 
-  /* A second hold of the same draft does not open a gap for writes called under the first. */
   b.hold(TAB);
   assert.deepEqual(await b.write(TAB, header("typed after"), stateJ("new3"), baseJ("seed"), 3), { ok: false, code: "HELD" });
 
-  /* Once the lock is gone, take() still returns the crash work... */
   locked = false;
   const t = await b.take(TAB);
   assert.equal(t.stateJson, stateJ("gen2"));
   assert.equal(t.baseJson, baseJ("b"));
   assert.equal(t.usedPrevGeneration, false);
-  /* ...and so does the next launch, if the hold is never released. */
   const c = makeStore(dir);
   assert.deepEqual(c.init().drafts.map((x) => x.title), ["crash work"]);
   assert.equal((await c.take(TAB)).stateJson, stateJ("gen2"));
 
-  /* After a successful restore releases the hold, writes rotate normally. */
   b.release(TAB);
   assert.equal((await b.write(TAB, header("restored"), stateJ("new4"), baseJ("seed"), 4)).ok, true);
   assert.deepEqual(fs.readFileSync(tabFile(dir, "previous.draft")), gen2Bytes, "the restored crash work is the fallback generation");
@@ -328,21 +294,15 @@ test("a hold does not refuse a write called before it, nor protect a tab with no
   s.init();
   assert.equal((await s.write(TAB, header("t"), stateJ("gen1"), baseJ("b"), 1)).ok, true);
 
-  /* The renderer handed over seq 2, then crashed while it was still on its way
-     to disk; main holds the tab. That write is the newest crash work. */
   const inFlight = s.write(TAB, header("t"), stateJ("gen2"), null, 2);
   await wait(50);
   s.hold(TAB);
-  /* Queued behind it: a write called under the hold. */
   const underHold = s.write(TAB, header("t"), stateJ("reloaded page"), baseJ("seed"), 3);
   assert.equal((await inFlight).ok, true, "a write called before the hold lands");
   assert.deepEqual(await underHold, { ok: false, code: "HELD" });
   assert.equal((await s.take(TAB)).stateJson, stateJ("gen2"));
   assert.equal(fs.readFileSync(tabFile(dir, "previous.draft"), "utf8").split("\n")[1], stateJ("gen1"));
 
-  /* A tab that crashed before its first write is held with nothing on disk.
-     Its reloaded page has nothing to restore and never releases the hold, so
-     the store does: otherwise its crash recovery would stay paused. */
   s.hold(TAB2);
   assert.equal(s.hasDraft(TAB2), false);
   assert.equal((await s.write(TAB2, header("o"), stateJ("o1"), baseJ("o"), 1)).ok, true);
@@ -390,7 +350,6 @@ test("a base referenced only by previous survives the sweep", async () => {
   assert.equal(fs.existsSync(tabFile(dir, stray)), false, "an unreferenced base is swept");
   assert.equal(fs.existsSync(tabFile(dir, ".tmp-stray")), false);
 
-  /* The previous generation still restores with its own base. */
   damageBody(tabFile(dir, "current.draft"));
   const t = await b.take(TAB);
   assert.equal(t.usedPrevGeneration, true);
@@ -398,7 +357,6 @@ test("a base referenced only by previous survives the sweep", async () => {
   assert.equal(t.baseJson, baseJ("B1"));
   assert.equal(t.baseProblem, null);
 
-  /* A missing base is reported, not fatal. */
   const b1 = t.header.base.file;
   fs.renameSync(tabFile(dir, b1), path.join(dir, "moved-away"));
   const t2 = await b.take(TAB);
@@ -441,7 +399,6 @@ test("writeFileDurableSync replaces content atomically", async () => {
   assert.equal(fs.readFileSync(file, "utf8"), text);
   assert.deepEqual(fs.readdirSync(dir), ["desktop-state.json"], "no temp file left");
 
-  /* A rename that fails leaves the target as it was and removes the temp file. */
   const blocked = path.join(dir, "blocked");
   fs.mkdirSync(blocked);
   fs.writeFileSync(path.join(blocked, "keep"), "k");
@@ -480,15 +437,14 @@ test("session states, take never deletes, list fields, init sweeps trash and old
   assert.equal(a.markCleanExit(), true);
   assert.equal(readSession(dir).state, "clean-exit");
 
-  /* Trash and quarantine entries to sweep. */
   fs.mkdirSync(path.join(dir, `.trash-${TAB2}-abc`, "inner"), { recursive: true });
   const day = 24 * 60 * 60 * 1000;
   const now = Date.now();
   const q = path.join(dir, "corrupt");
   const mk = (ts, i) => fs.mkdirSync(path.join(q, `${TAB2}-${ts}${i ? "-" + i : ""}`), { recursive: true });
-  mk(now - 1000, 0);                               /* fresh */
-  mk(now - day, 1); mk(now - day, 2);              /* 1 day old */
-  for (let i = 0; i < 11; i++) mk(now - 40 * day - i * 1000, 0); /* 40 days old */
+  mk(now - 1000, 0);
+  mk(now - day, 1); mk(now - day, 2);
+  for (let i = 0; i < 11; i++) mk(now - 40 * day - i * 1000, 0);
   fs.mkdirSync(path.join(q, "not-ours"));
 
   const b = makeStore(dir);
@@ -522,8 +478,6 @@ test("session states, take never deletes, list fields, init sweeps trash and old
   assert.equal(await b.take("nope"), null);
 });
 
-/* ------------------------------------------------------------------ */
-
 const failures = [];
 for (const c of cases) {
   try {
@@ -538,7 +492,6 @@ for (const c of cases) {
 try {
   fs.rmSync(ROOT, { recursive: true, force: true });
 } catch (_) {
-  /* a leftover temp folder is not a test failure */
 }
 
 if (failures.length) {

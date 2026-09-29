@@ -36,28 +36,6 @@ import { renderDesktopAppNotice } from "./20a-update.js";
 import { TOUR_DONE_KEY, startTour } from "./20c-help.js";
 import { openServersDialog } from "./20e-connect.js";
 
-/* ================= Settings (#181) =================
-
-   One dialog for how Splitpage behaves for me: File ▸ Settings (the
-   menu's foot), Ctrl K "Settings", and the desktop app's File ▸ Settings…
-   (which clicks the same File-menu button). No shortcut of its own.
-
-   PER PERSON, NEVER THE SCRIPT. Nothing here writes into the document —
-   the one per-script thing it mentions, the reading speed, it only offers
-   as the starting value for NEW scripts.
-
-   ONE SOURCE OF TRUTH. Every control reads the same localStorage key its
-   old home does (the File menu's switches, the prompter's buttons, the
-   writer's size slider), and changes it through the same setter, so the
-   two can never disagree. Every change is also announced as a
-   "splitpage:pref" event (writePref, 00p-prefs.js): the rundown strip and
-   the script zoom listen for their keys, and this dialog listens for all of
-   them — and for another tab's `storage` event — and redraws while it is
-   open, so a change made elsewhere shows here at once.
-
-   Built here rather than in page.html: the whole dialog is this module's,
-   and none of its markup is needed before it is opened. */
-
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
 
@@ -95,8 +73,6 @@ function currentWriterSize() {
   var v = el ? parseInt(el.value, 10) : NaN;
   return isFinite(v) ? v : 20;
 }
-
-/* ---- the markup ---- */
 
 function segHtml(name, label, options, value) {
   return '<div class="settings-field">' +
@@ -217,10 +193,6 @@ function ensureModal() {
   return m;
 }
 
-/* Redrawn from storage every time it opens and whenever a preference
-   changes while it is open, keeping the focused control focused. */
-/* Typed but not yet committed (no Enter, no blur) survives a redraw that
-   was about some other setting. */
 var TYPED_FIELDS = { "settings-name": COMMENT_NAME_KEY, "settings-default-wpm": DEFAULT_WPM_KEY };
 
 function renderSettings(changedKey) {
@@ -269,19 +241,12 @@ export function closeSettings() {
   m.hidden = true;
   var back = settingsReturnFocus;
   settingsReturnFocus = null;
-  /* The File menu is closed by now, so its items are hidden — go back to
-     the File button itself rather than to nowhere. */
   if (back && back.closest && back.closest("#file-menu")) back = document.getElementById("btn-file");
   if (back && document.contains(back) && back.offsetParent !== null) {
     try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); }
   }
 }
 
-/* ---- changing things ----
-
-   Each goes through the setter the setting's old home uses — which stores
-   it and says so (writePref) — so the old home and everything listening
-   stay in step. announce() is for the two that write storage themselves. */
 function announce(key) {
   writePref(key, readPref(key));
 }
@@ -292,11 +257,8 @@ function applyChange(target) {
   if (name === "settings-clock") { writePref(CLOCK_KEY, target.value === "system" ? null : target.value); return; }
   if (name === "settings-person-color") { setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { writePref(RUNDOWN_MIN_KEY, target.checked ? "1" : "0"); return; }
-  /* off is the default, so off is no key at all */
   if (id === "settings-tag-icons") { writePref(TAG_ICONS_KEY, target.checked ? "1" : null); return; }
-  /* on is the default, so on is no key at all */
   if (id === "settings-video-thumbs") { writePref(VIDEO_THUMBS_KEY, target.checked ? null : "0"); return; }
-  /* these setters store and announce the change themselves (writePref) */
   if (id === "settings-hide-shot") { setHideShotScenes(target.checked); return; }
   if (id === "settings-autosave") { setAutoSaveEnabled(target.checked); return; }
   if (id === "settings-prompter-mirror") { setPrompterMirror(target.checked); return; }
@@ -323,8 +285,6 @@ function applyChange(target) {
   }
 }
 
-/* A range moves its readout while it is dragged; the value is stored on
-   change, once. */
 function applyInput(target) {
   if (target.id === "settings-writer-size") {
     var out = document.getElementById("settings-writer-size-out");
@@ -378,7 +338,6 @@ function wireModal(m) {
     }
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSettings(); return; }
     if (e.key !== "Tab") return;
-    /* keep Tab inside the dialog */
     var focusables = Array.prototype.filter.call(
       m.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
       function (el) { return !el.disabled && el.offsetParent !== null && !(el.type === "radio" && !el.checked); }
@@ -395,12 +354,10 @@ function wireModal(m) {
   });
 }
 
-/* A preference changed, here or anywhere: bring what shows it up to date. */
 function onPrefChanged(key) {
   if (key === THEME_KEY) applyTheme();
   if (key === TAG_ICONS_KEY) applyTagIcons();
   if (key === CLOCK_KEY) {
-    /* every clock time on screen: the save status, the gutters, comments, History */
     updateSaveStatus();
     if (S.state) { render(); renderComments(); }
     var hist = document.getElementById("history-panel");
@@ -410,20 +367,14 @@ function onPrefChanged(key) {
   if (settingsOpen()) renderSettings(key);
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order. */
 export function __init() {
   document.addEventListener(PREF_EVENT, function (e) {
     onPrefChanged(e.detail && e.detail.key);
   });
-  /* another tab: same thing, since localStorage is shared between them */
   window.addEventListener("storage", function (e) {
     if (e.key && e.key.indexOf("splitpage-") === 0) onPrefChanged(e.key);
   });
 
-  /* File ▸ Settings — the capture-phase pattern 20c-help.js and
-     20b-onboarding.js use, so 18-local-files.js needs no branch for it.
-     The desktop menu and the command menu click this same button. */
   var menu = document.getElementById("file-menu");
   if (menu) {
     menu.addEventListener("click", function (e) {
@@ -435,7 +386,6 @@ export function __init() {
     }, true);
   }
 
-  /* Test hook: nothing in the app reads it. */
   window.__settingsTest = {
     open: openSettings,
     close: closeSettings,

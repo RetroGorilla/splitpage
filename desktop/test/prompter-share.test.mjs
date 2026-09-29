@@ -1,16 +1,3 @@
-/* desktop/test/prompter-share.test.mjs: unit tests for desktop/prompter-share.js,
- * the loopback listener behind the teleprompter's "Open in browser" (#86).
- *
- * Node built-ins only, no Electron: prompter-share.js is plain CommonJS, so
- * it is loaded for real and driven over real HTTP on 127.0.0.1. What this
- * cannot cover is main.js choosing WHAT to share from a tab's record and
- * handing the URL to the OS — that is desktop/test/smoke.mjs's
- * "teleprompter: open in browser" group.
- *
- * Prints ALL PASS and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/prompter-share.test.mjs
- */
 import assert from "node:assert/strict";
 import http from "node:http";
 import path from "node:path";
@@ -37,7 +24,6 @@ function makeShare(extra) {
   }, extra));
 }
 
-/* A raw request, so the Host header is whatever the case says it is. */
 function request(port, pathname, opts) {
   const o = opts || {};
   return new Promise((resolve, reject) => {
@@ -183,7 +169,6 @@ test("a share expires after its TTL", async () => {
     assert.equal(gone.status, 404);
     assert.deepEqual(JSON.parse(gone.body), { error: "expired" });
     assert.ok(!share.status().shares.includes("tab1"));
-    /* tab2 was published at the same moment, so it is past its TTL too. */
     assert.equal((await request(keep.port, "/prompter-script/" + keep.token)).status, 404);
   } finally { share.closeAll(); }
 });
@@ -212,10 +197,6 @@ test("closeAll drops every share and the listener", async () => {
   assert.deepEqual(share.status(), { listening: false, port: null, shares: [], voiceStreams: 0 });
 });
 
-/* ---- the voice relay (issue #122) ------------------------------------ */
-
-/* A fake of main's voice helper: start answers a session, and `emit` plays
-   an event for that session back through the share, as main's onEvent does. */
 function makeVoice(share, answer) {
   const log = [];
   let session = 0;
@@ -235,7 +216,6 @@ function makeVoice(share, answer) {
   return voice;
 }
 
-/* Opens a relay stream and collects its `data:` events. */
 function openStream(port, pathname, headers) {
   return new Promise((resolve, reject) => {
     const events = [];
@@ -309,7 +289,6 @@ test("opening the stream starts the listener; its events arrive as data lines; c
     voice.emit({ type: "start", lang: "en-US" });
     voice.emit({ type: "final", text: "hello world" });
     voice.emit({ type: "device", name: "USB mic" });
-    /* another session's event is not this stream's */
     share.pushVoice("tab1", { type: "final", session: 999, text: "stale" });
     assert.ok(await until(() => s.events.length === 3), JSON.stringify(s.events));
     assert.deepEqual(s.events.map((e) => e.type), ["start", "final", "device"]);

@@ -1,14 +1,3 @@
-/* Plain-language tagging (#210, 07b-plain-tags.js): the pure parts.
- *
- * The convention is Adam's (2026-09-24) and every line of it is pinned
- * here: the trigger is a category name and a colon — Prop, Location, Loc
- * (the one short form), Cast, VFX, Gear, SFX and Music (both Music/SFX) —
- * in any case, standing as a word of its own, and nothing else. Tab turns
- * the keyword and the words after it into the words, tagged, with the mark
- * every other typed route puts on (namedTagId), so a Cast or Music/SFX tag
- * made this way is the one the Tag button makes. The page half (the open
- * tag on screen, Tab, Esc, undo) is tests/195-plain-tags.txt.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -23,7 +12,6 @@ import {
 } from "../js/07b-plain-tags.js";
 
 const cat = (s) => (matchPlainTagKeyword(s) || {}).cat || null;
-/* the caret spot, a no-break space and a b-roll key's place in the text */
 const ZW = String.fromCharCode(0x200B), NB = String.fromCharCode(0xA0), OBJ = String.fromCharCode(0xFFFC);
 
 test("every name, and only those names, is a keyword", () => {
@@ -39,10 +27,8 @@ test("every name, and only those names, is a keyword", () => {
   assert.equal(cat("Gear:"), "gear");
   assert.equal(cat("SFX:"), "sound");
   assert.equal(cat("Music:"), "sound");
-  /* every category is reachable, Music/SFX by two names */
   const reached = new Set(Object.values(PLAIN_TAG_KEYWORDS));
   assert.deepEqual([...reached].sort(), TAG_CATEGORIES.map((c) => c.id).sort());
-  /* no other names or short forms */
   for (const s of ["Sound:", "Props:", "Locat:", "Locations:", "L:", "V:", "FX:", "Visual:",
     "Audio:", "B-roll:", "Graphics:", "Wardrobe:", "Kit:", "Equipment:", "Actor:"]) {
     assert.equal(matchPlainTagKeyword(s), null, s);
@@ -78,7 +64,6 @@ test("a word of its own: never the end of a longer word", () => {
     OBJ + "VFX:", "-Prop:", "\"Cast:", "Music/SFX:"]) {
     assert.ok(matchPlainTagKeyword(s), JSON.stringify(s));
   }
-  /* Location is not Loc plus "ation", and Loc is not the start of it */
   assert.equal(matchPlainTagKeyword("Location:").length, 9);
   assert.equal(matchPlainTagKeyword("Loc:").length, 4);
 });
@@ -88,15 +73,11 @@ test("what Tab wraps: the words, the spaces either side left out", () => {
     { lead: 1, text: "lens flare sweeps across the logo", trail: 0, name: "lens flare sweeps across the logo" });
   assert.deepEqual(plainTagPhrase(ZW + " lens flare  "), { lead: 1, text: "lens flare", trail: 2, name: "lens flare" });
   assert.deepEqual(plainTagPhrase("flare"), { lead: 0, text: "flare", trail: 0, name: "flare" });
-  /* a no-break space the browser typed is a space */
   assert.deepEqual(plainTagPhrase(NB + "lens" + NB + " flare" + NB), { lead: 1, text: "lens" + NB + " flare", trail: 1, name: "lens flare" });
-  /* nothing typed, or only spaces: nothing to tag */
   assert.equal(plainTagPhrase(""), null);
   assert.equal(plainTagPhrase("   "), null);
   assert.equal(plainTagPhrase(ZW), null);
   assert.equal(plainTagPhrase(ZW + " " + NB), null);
-  /* the name is at most 80 characters, as the Tag button names one; the
-     words themselves are all tagged */
   const long = "a".repeat(50) + " " + "b".repeat(50);
   const p = plainTagPhrase(" " + long);
   assert.equal(p.text, long);
@@ -121,14 +102,11 @@ test("the Tab edit: keyword gone, the words one tag, caret after it", () => {
 
 test("a space typed before Tab stays after the tag, the caret after it", () => {
   const { res } = tagAt("VFX: flare ", "VFX:", "vfx");
-  /* at the end of the cell, as the no-break space the browser types there,
-     or the repaint collapses it and the next word runs on from the tag */
   assert.equal(projection(res.cell), "flare" + NB);
   assert.equal(res.caret, 6);
   assert.match(toHtml(res.cell), /<\/span>&nbsp;$/);
   const nb = tagAt("VFX: flare&nbsp;", "VFX:", "vfx").res;
   assert.match(toHtml(nb.cell), /<\/span>&nbsp;$/);
-  /* anywhere else it is left as it was */
   const cell = fromHtml("VFX: flare more");
   const mid = applyPlainTag(cell, 0, 11, "vfx");
   assert.equal(projection(mid.cell), "flare more");
@@ -171,7 +149,6 @@ test("refused when the words there are not a keyword of that category and someth
   assert.equal(tagAt("myVFX: flare", "myVFX:", "vfx").res, null);
   assert.equal(tagAt("Sound: boom", "Sound:", "sound").res, null);
   assert.equal(tagAt("lens flare", "lens", "vfx").res, null);
-  /* a colon later in the words is theirs */
   const { res } = tagAt("VFX: title: Intro", "VFX:", "vfx");
   assert.equal(res.cell.find((r) => r.marks && r.marks.tag).text, "title: Intro");
 });

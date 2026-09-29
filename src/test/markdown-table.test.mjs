@@ -1,16 +1,3 @@
-/* parseMarkdownTable (11-import.js) — the pipe-table reader.
- *
- * Two callers with very different needs, which is why this is worth
- * pinning on its own: the Paste/Import modal reads a table somebody made
- * somewhere else, and parseMarkdownProject (20d-formats.js) reads the
- * scene table out of one of our OWN `.md` files, where the row count has
- * to line up with the file's record exactly or every scene after a
- * dropped one is misread as shifted.
- *
- * It had no test of its own before #67 — it was only ever exercised
- * through an import in a real browser, where a wrong answer shows up as
- * mangled rows several steps later.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -55,8 +42,6 @@ test("the header names the columns, wherever they sit", () => {
 });
 
 test("a header naming only one column never points both fields at it", () => {
-  /* The unresolved side used to fall back to its bare default (0), which
-     collides with the found one and silently duplicates a column. */
   const audioFirst = parseMarkdownTable("| Audio | Notes |\n| --- | --- |\n| Hello. | wide shot |");
   assert.deepEqual(cells(audioFirst), [["wide shot", "Hello."]]);
 
@@ -68,8 +53,6 @@ test("a header naming only one column never points both fields at it", () => {
 });
 
 test("an escaped pipe stays inside its cell", () => {
-  /* A plain split("|") cuts the cell in two and shifts every following
-     column into the next index, truncating whatever lands past the end. */
   const out = parseMarkdownTable([
     "| Visual | Audio | Status |",
     "| --- | --- | --- |",
@@ -103,12 +86,6 @@ test("lines with no pipe in them are ignored", () => {
 });
 
 test("a scene with nothing typed in it is dropped by default and kept with keepEmpty", () => {
-  /* keepEmpty is for one of our own files, where a scene with nothing
-     typed in it yet is still a scene — dropping it shifts every later row
-     out of line with the file's own record and pops the "scenes were added
-     or removed" question on every open. Our own writer always emits the
-     scene number and the status, which is what makes the row visible to
-     the reader at all — see the all-blank case below. */
   const md = [
     "| # | Visual | Audio | Status |",
     "| --- | --- | --- | --- |",
@@ -122,9 +99,6 @@ test("a scene with nothing typed in it is dropped by default and kept with keepE
 });
 
 test("a row with nothing in ANY column reads as a separator, keepEmpty or not", () => {
-  /* Not a scene: a table whose every cell is blank is indistinguishable
-     from the "| --- | --- |" line, and is dropped by the same test. Worth
-     pinning because keepEmpty's name suggests otherwise. */
   const md = "| Visual | Audio |\n| --- | --- |\n| a | b |\n|  |  |\n| c | d |";
   assert.deepEqual(cells(parseMarkdownTable(md, { keepEmpty: true })), [["a", "b"], ["c", "d"]]);
 });
@@ -142,7 +116,6 @@ test("CRLF and untrimmed cells", () => {
 test("nothing table-shaped at all gives an empty list, never a throw", () => {
   assert.deepEqual(parseMarkdownTable(""), []);
   assert.deepEqual(parseMarkdownTable("just some prose\nwith no pipes"), []);
-  /* A header and separator with no data rows under them. */
   assert.deepEqual(parseMarkdownTable("| Visual | Audio |\n| --- | --- |"), []);
 });
 
@@ -152,9 +125,6 @@ test("a short row does not read a neighbour's column", () => {
   assert.equal(out[0].statusText, "");
 });
 
-/* A "Two columns" Markdown export reopened (Import, no data block): the
-   breakdown and comments after the script are pipe tables and lines too,
-   and used to come back as extra scenes, "Item | Status" among them. */
 test("a Two columns export reads back as its scenes only, not its breakdown or comments", () => {
   const tag = (cat, name) =>
     `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
@@ -177,15 +147,10 @@ test("a Two columns export reads back as its scenes only, not its breakdown or c
 });
 
 test("someone else's table keeps what follows its own Comments heading", () => {
-  /* Only our own scene header ("# | Visual | Audio | Status") ends the
-     table at those headings, as only our table style does in a .docx. */
   const md = "| Visual | Audio |\n| --- | --- |\n| a | b |\n\n## Comments\n\n| c | d |";
   assert.deepEqual(cells(parseMarkdownTable(md)), [["a", "b"], ["c", "d"]]);
 });
 
-/* The plain (stacked) Markdown export reopened: every paragraph used to be
-   a scene, the title, the meta line and each "### Scene 01" among them,
-   and "*Visual —* …" landed in the Audio column. */
 test("the stacked Markdown export of the long demo reads back as its 30 scenes", () => {
   S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
   const orig = S.state.rows;
@@ -195,7 +160,6 @@ test("the stacked Markdown export of the long demo reads back as its 30 scenes",
   assert.equal(detectTwoColumnFormat(md), "stacked");
   const out = parseImportRows(md, "twocolumn");
   assert.equal(out.length, 30);
-  /* each cell exactly as the export wrote it */
   out.forEach((r, i) => {
     assert.equal(r.visualText, toMarkdown(cellOf(orig[i].visualText)), "scene " + (i + 1) + " Visual");
     assert.equal(r.audioText, toMarkdown(cellOf(orig[i].audioText)), "scene " + (i + 1) + " Audio");
@@ -225,15 +189,6 @@ test("Markdown that only looks like the stacked export reads as it always did", 
   assert.equal(detectTwoColumnFormat("### Scene 01\n\nWords.\n\n### Scene 02\n\nMore."), null);
 });
 
-/* ---- #169's look in the text exports ----
-
-   The stacked export now says what the app shows round the words: the
-   kit's meta line, each scene's start in its heading, its status and read
-   time under it, the open threads' numbers after their words, and a tail
-   in the Production panel's and the b-roll list's shapes. None of it may
-   come back in as script, and a file exported before any of it must still
-   read exactly as it did. */
-
 const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))); return S.state; };
 
 test("the stacked export of the long demo: meta line, scene headings, status and read time", () => {
@@ -243,16 +198,13 @@ test("the stacked export of the long demo: meta line, scene headings, status and
   assert.equal(lines[0], "# " + LONG_DEMO.state.title);
   assert.equal(lines[2], "_" + exportMetaLine() + "_");
   assert.match(lines[2], /^_30 scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot · .*2026_$/);
-  /* the gutter: the start timecode in the heading, status and read time under it */
   assert.ok(md.includes("### Scene 01 · 00:00\n\n**Shot** · Read 0:10\n\n*Visual —* Cold open"));
   assert.ok(md.includes("### Scene 04 · 01:03\n\n**Shot** · Read 0:37\n"));
   assert.ok(md.includes("### Scene 10 · 02:48\n\n**Ready** · Read 0:38\n"));
   assert.ok(md.includes("### Scene 13 · 03:43\n\n**To do** · Read 0:45\n"));
-  /* a read time set by hand says so, the way the app's box does */
   assert.ok(md.includes("### Scene 02 · 00:10\n\n**Shot** · Read 0:06, set by hand\n"));
   assert.equal((md.match(/, set by hand$/gm) || []).length, 2);
   assert.ok(!/\bRow\b/.test(md), "the app says Scene");
-  /* a cell's line breaks as hard breaks, so a renderer keeps each line its own */
   assert.ok(md.includes("*Visual —* Close-up: the back door open, crumbling foam in the channels.  \n" +
     "Lower third: “Problem 1 — light seals”  \nB-roll: fingertip pushing on the sticky old foam\n\nFirst problem."));
 });
@@ -265,14 +217,12 @@ test("the stacked export numbers each open thread after its words, and a resolve
   assert.ok(md.includes("nothing left to show you.<sup>3</sup>\n"), "scene 24");
   assert.equal((md.match(/<sup>\d+<\/sup>/g) || []).length, 3, "scene 09's resolved thread has none");
   assert.ok(md.includes("gummy in the escapement.\n"));
-  /* each marker's number heads its thread in the Comments section */
   const tail = md.slice(md.indexOf("## Comments"));
   assert.ok(tail.includes("**1 · Scene 03 · Audio** — Jo (editor)"));
   assert.ok(tail.includes("**2 · Scene 18 · Audio** _(assigned to Jo (editor))_ — Sam"));
   assert.ok(tail.includes("**3 · Scene 24 · Audio** — Jo (editor)"));
   assert.ok(tail.includes("**Scene 09 · Audio** _(resolved by Sam)_ — Jo (editor)"));
   assert.ok(tail.indexOf("**1 · ") < tail.indexOf("**Scene 09") && tail.indexOf("**Scene 09") < tail.indexOf("**2 · "), "script order");
-  /* the reply keeps its shape */
   assert.ok(tail.includes("> ↳ **Sam** · "));
 });
 
@@ -282,7 +232,6 @@ test("the export tail: the breakdown by category, the b-roll shot list as task l
     const at = (s) => md.indexOf(s);
     assert.ok(at("## Production breakdown") < at("## B-roll shot list") && at("## B-roll shot list") < at("## Comments"));
     const bd = md.slice(at("## Production breakdown"), at("## B-roll shot list"));
-    /* a sub-heading per category, the plural and the count, in the panel's order */
     assert.deepEqual(bd.match(/^### .*$/gm), [
       "### Props & set dressing (6)", "### Locations & shots (4)", "### Cast & wardrobe (2)",
       "### VFX & graphics (10)", "### Music & SFX (6)", "### Gear (3)"
@@ -333,10 +282,8 @@ test("a thread's marker sits outside a mark that ends with it, inside one that g
   S.state = doc;
   const md = toMarkdownDoc();
   assert.ok(md.includes("**Bold words<sup>1</sup> run on** and *end here*<sup>2</sup>. Then trailing<sup>3</sup> space."), md);
-  /* two threads ending together: the inner one's number first, as the script draws them */
   assert.ok(md.includes("*Visual —* Look one two<sup>4</sup><sup>5</sup> [1] stays"), md);
   assert.ok(md.includes("Say (1) and gone too."), "resolved: no marker");
-  /* back in: the words exactly as they were, a "[1]" typed into the script kept */
   const out = parseImportRows(md, "twocolumn");
   assert.deepEqual(out.map((r) => [r.visualText, r.audioText]),
     doc.rows.map((r) => [toMarkdown(cellOf(r.visualText)), toMarkdown(cellOf(r.audioText))]));
@@ -344,8 +291,6 @@ test("a thread's marker sits outside a mark that ends with it, inside one that g
 });
 
 test("a stacked export written before #169's look still reads back as its scenes", () => {
-  /* exactly the shape the export had until now: the old meta line, bare
-     scene headings, "Row" places, the breakdown as one flat table */
   const old = [
     "# Old one", "",
     "_3 scenes · est. 0:12 running time_", "",
@@ -382,7 +327,6 @@ test("the two-column export: the meta line and the gutter's columns, reopened as
   assert.equal(detectTwoColumnFormat(md), "table");
   const out = parseImportRows(md, "twocolumn");
   assert.equal(out.length, 30);
-  /* the cells are the project's own (mdSceneCellSource), a direction as "((…))" */
   const project = parseMarkdownTable(toMarkdownTableDoc());
   assert.deepEqual(cells(out), cells(project));
   assert.equal(out[12].statusText, "To do");
@@ -390,7 +334,6 @@ test("the two-column export: the meta line and the gutter's columns, reopened as
 });
 
 test("a tail that opens on the b-roll list ends the script too, in either shape", () => {
-  /* nothing tagged, no comments: the b-roll shot list is the tail's first section */
   S.state = migrateRows({
     schema: 2, title: "Just b-roll",
     rows: [
@@ -414,7 +357,6 @@ test("a script with no target, tags, b-roll or comments: the meta line says less
   assert.ok(!/^## /m.test(md));
   const table = toMarkdownTableDoc(null, { export: true });
   assert.ok(!/^## /m.test(table) && !/Target/.test(table));
-  /* no scenes at all */
   S.state = migrateRows({ schema: 2, title: "Empty", rows: [] });
   assert.equal(toMarkdownDoc(), "# Empty\n\n_No scenes yet._\n");
   assert.equal(toMarkdownTableDoc(null, { export: true }), "# Empty\n\n_No scenes yet._\n");

@@ -1,41 +1,9 @@
-/* Splitpage desktop — finding a Chromium browser for "Use Chromium Speech
- * Recognition" (issue #123).
- *
- * WHY. Present in Browser (main.js section 9b) opens the teleprompter in the
- * DEFAULT browser, and since #122 Follow My Voice there listens through this
- * app. Someone who would rather have Chrome's or Edge's own recogniser (the
- * Web Speech API) needs the page in a Chromium browser, whatever the default
- * is — so this finds one that is installed, and main starts it with the
- * prompter's URL instead of handing the URL to shell.openExternal. That also
- * steps round a default browser whose ProgID has no open command
- * (0x80070483), where openExternal opens nothing at all.
- *
- * WHERE IT LOOKS.
- *   Windows  the default browser first, if it is a Chromium one (its
- *            UserChoice ProgId under HKCU\…\UrlAssociations\http); then, in
- *            the order below, each browser's App Paths entry (HKCU, then
- *            HKLM) and its usual install folders. Edge ships with Windows,
- *            so in practice there is always one.
- *   macOS    the .app bundles in /Applications.
- *   Linux    the usual command names on PATH.
- *
- * WHAT IT NEVER DOES. Take a path or a URL from the page. The executable is
- * one this file found on disk from its own table, and main builds the URL.
- *
- * Plain CommonJS, Node built-ins only, no Electron: main.js requires it, and
- * desktop/test/chromium-browsers.test.mjs drives it with a fake file system
- * and registry. Listed in electron-builder.yml's `files` for the same reason
- * drafts.js is.
- */
-
 "use strict";
 
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFile, spawn: nodeSpawn } = require("node:child_process");
 
-/* Most likely first, after the default browser. Edge leads because Windows
-   always has it. */
 const BROWSERS = [
   {
     id: "edge", name: "Microsoft Edge", exe: "msedge.exe", progId: /^MSEdgeHTM/i,
@@ -78,7 +46,6 @@ const BROWSERS = [
 const USER_CHOICE_KEY = "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice";
 const APP_PATHS = "\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\";
 
-/* `reg.exe query <key> [/v name | /ve]`: the value's data, or null. */
 function defaultRegQuery(env) {
   const systemRoot = env.SystemRoot || env.windir || "C:\\Windows";
   const reg = path.join(systemRoot, "System32", "reg.exe");
@@ -112,9 +79,6 @@ async function windowsCandidates(entry, env, regQuery, exists) {
   return found.find((p) => isFile(exists, p)) || null;
 }
 
-/* Installed Chromium browsers, the default browser first if it is one.
-   opts: platform, env, exists(path), regQuery(key, valueName) — all
-   replaceable for tests. Resolves to [{id, name, path}]. */
 async function findChromiumBrowsers(options) {
   const opts = options || {};
   const platform = opts.platform || process.platform;
@@ -153,14 +117,11 @@ async function findChromiumBrowsers(options) {
   return out;
 }
 
-/* The display name for a browser id, from this file's own table. */
 function chromiumBrowserName(id) {
   const entry = BROWSERS.find((b) => b.id === id);
   return entry ? entry.name : null;
 }
 
-/* Starts `browser` (one findChromiumBrowsers answered) on `url`, detached:
-   from then on it is the person's own browser, not a child of this app. */
 function launchChromiumBrowser(browser, url, spawnFn) {
   const spawn = spawnFn || nodeSpawn;
   return new Promise((resolve, reject) => {

@@ -17,43 +17,11 @@ import {
 import { applyStashedWork, htmlToPlainText } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 
-/* ================= merging a local file that changed on disk =================
-
-   The on-disk conflict guard (checkFileConflict, 18-local-files.js) used to
-   offer four outcomes, and every one of them means picking one version
-   whole, sight unseen. "Merge them" is the fifth: it lists every field the
-   two versions disagree about, side by side, and only then runs the same
-   three-way mergeStates() the hosted save and the crash-draft restore
-   already run. Nothing is read into the document and nothing is written to
-   disk until the user confirms (HANDOFF #1) — Cancel leaves the file, the
-   document and the modal exactly as they were.
-
-   The merge is genuinely three-way wherever there is an ancestor to use:
-   the state as parsed at the last read from, or write to, THIS file is
-   kept on the file's own home record (home.diskBase, _home.js, set by
-   adoptProjectState and by saveDoc's successful write). Keeping it there
-   rather than in a variable of its own means it is dropped the moment the
-   document's home changes, and can never be mistaken for some other
-   file's ancestor. With no ancestor at all it degrades to the two-way
-   merge mergeStates already does, where everything that differs becomes a
-   conflict comment: nothing is lost either way, there is just far more to
-   review. */
-
-/* What "Merge them" would merge, parsed once when the conflict modal goes
-   up: {theirs, base, home, fileName, lastModified}, or null while there is
-   nothing mergeable on disk. */
 var mergeCandidate = null;
-/* A second conflict can raise the modal while the first probe is still
-   reading — only the newest one may reveal the button. */
 var mergeProbeToken = 0;
 
-/* The common ancestor for a local-file merge, or null for a two-way one. */
 function fileMergeBase(home) {
   if (home && home.diskBase) return home.diskBase;
-  /* saveDoc() sets baseState to exactly what it wrote (HANDOFF §3.6), so on
-     the project path it holds the same ancestor — the fallback for a
-     document that reached this file by a route predating diskBase (a
-     crash-draft restore, a boot stash merge). Only ever this document's. */
   if (home && home === fileHome() && S.baseState && S.state &&
       normalizeDocId(S.baseState.docId) === normalizeDocId(S.state.docId)) return S.baseState;
   return null;
@@ -66,15 +34,6 @@ export function resetMergeOffer() {
   if (btn) btn.hidden = true;
 }
 
-/* Can the version now on disk be read back as a document? Only then is
-   there anything to merge with. A .docx, a .csv, a .txt or somebody else's
-   .md re-read through loadFileIntoEditor() comes back with fresh row ids,
-   which mergeStates would read as "every scene deleted and every scene
-   added again" — and the import re-save path writes exactly those formats
-   (buildFileData's lossy exports, never a project file), so "Merge them"
-   simply never appears there. The parse is told not to raise the
-   row-count question (noAsk): nothing may put a second modal on screen
-   for a merge nobody has asked for yet. */
 export async function offerFileMerge(currentFile, home) {
   resetMergeOffer();
   var token = mergeProbeToken;
@@ -85,19 +44,11 @@ export async function offerFileMerge(currentFile, home) {
   } catch (e) {
     parsed = null;
   }
-  if (token !== mergeProbeToken) return;   /* a newer conflict owns the modal */
+  if (token !== mergeProbeToken) return;
   if (!parsed || parsed.error || !parsed.state) return;
 
   var theirs = parsed.state;
   var base = fileMergeBase(home);
-  /* THE docIdEmbedded RULE, the same one restoreFileDraft() applies
-     (20g-drafts.js): a file that carries its own id and now carries a
-     DIFFERENT one is a different script saved into the same place, and
-     splicing two unrelated scripts together is not a merge. Anything else
-     — above all a legacy file whose id is derived from its own bytes, and
-     whose bytes have just changed — is still this file, so line the disk
-     copy up with the document's identity before merging, or mergedDocId
-     would take the freshly derived id and split the version history. */
   var refId = normalizeDocId((base && base.docId) || S.state.docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
@@ -113,26 +64,16 @@ export async function offerFileMerge(currentFile, home) {
   if (btn) btn.hidden = false;
 }
 
-/* ---- what differs, field by field ---- */
-
 var MERGE_OUTCOME_TEXT = {
   theirs: "The file's version is taken",
   mine: "Your version is kept",
   conflict: "Changed on both sides — the file's version goes live, yours is kept as a comment",
-  /* shown for a "conflict" (and styled as one) that is only a link or a
-     tag both sides set differently: everything else in the cell merged */
   conflictMarks: "Linked or tagged differently on both sides — the file's link or tag goes live with the rest combined, yours is kept as a comment",
   merged: "Changed on both sides — both sets of changes are combined",
   status: "Whichever got further wins",
   both: "Both sides are kept"
 };
 
-/* Mirrors mergeRow()'s ladder in 03-sync.js exactly for the fields it
-   still compares whole — the title and the picture: the pane has to say
-   what the merge is actually going to do, not something close to it. `b`
-   is null when there is no ancestor, which is what makes every difference
-   a conflict in a two-way merge. A script cell is decided by the merge's
-   own mergeTextField() instead (#85). */
 function mergeFieldOutcome(b, m, t) {
   if (m === t) return null;
   if (b !== null && m === b) return "theirs";
@@ -140,8 +81,6 @@ function mergeFieldOutcome(b, m, t) {
   return "conflict";
 }
 
-/* Which way a row present on only one side goes — the same three rules
-   mergeStates applies when it walks each side's rows. */
 function mergeRowFate(b, m, t) {
   if (m && t) return null;
   if (m && !t) {
@@ -164,10 +103,6 @@ function mergeStatusLabel(id) {
   return s ? s.label : "To do";
 }
 
-/* One item of the breakdown registry / crew / b-roll list as a single line
-   of text, so the three of them can be diffed the same way a field is.
-   All three merge by union (mergePeople, mergeProductionTags,
-   mergeBrollShots), so the outcome is always "both". */
 function mergeItemSummary(bits) {
   return bits.filter(function (b) { return b; }).join(" · ");
 }
@@ -199,8 +134,6 @@ function mergeListEntries(label, mineList, theirList, keyOf, nameOf, summaryOf) 
   return entries;
 }
 
-/* The whole pane's content: groups of entries, in the order the merged
-   document will be in (theirs first, then anything only this side has). */
 function mergeDiffModel(base, mine, theirs) {
   var groups = [];
   var b = base || null;
@@ -227,8 +160,6 @@ function mergeDiffModel(base, mine, theirs) {
     var entries = [];
     ROW_FIELDS.forEach(function (f) {
       if (GALLERY_FIELDS[f]) {
-        /* the rest of the gallery (#135): merged as sets, both sides'
-           additions kept — the outcome is always "both" */
         if (rowFieldKey(m, f) === rowFieldKey(t, f)) return;
         var gm = mergeGallerySummary(m, f), gt = mergeGallerySummary(t, f);
         var gPair = mergeDiffPairHtml(gm, gt);
@@ -241,7 +172,6 @@ function mergeDiffModel(base, mine, theirs) {
         return;
       }
       if (f === "imageRef") {
-        /* Compared as rowImageKey says: the sha the ref names. */
         var mi = rowImageKey(m), ti = rowImageKey(t);
         if (mi === ti) return;
         entries.push({
@@ -252,20 +182,12 @@ function mergeDiffModel(base, mine, theirs) {
         });
         return;
       }
-      /* Decided the way mergeStates decides it, by mergeTextField() on the
-         cells themselves rather than the plain text diffed below: two
-         cells can read identically while differing in a tag or a comment
-         anchor, and two different strings can be the same cell. A scene
-         only one side has is decided by mergeRowFate() and shown whole. */
       var decided = m && t
         ? mergeTextField(bb ? (bb[f] || "") : undefined, m[f], t[f], textCtx)
         : { outcome: mergeFieldOutcome(bb ? (bb[f] || null) : null, (m && m[f]) || null, (t && t[f]) || null) };
       var outcome = decided.outcome;
       if (outcome === "same" || outcome === null) return;
       var mv = mergeFieldText(m, f), tv = mergeFieldText(t, f);
-      /* A difference in formatting, a tag or a comment anchor alone has
-         nothing to show side by side as text — unless it is a conflict,
-         which leaves a card behind and so is always listed. */
       if (mv === tv && outcome !== "conflict") return;
       var pair = mergeDiffPairHtml(mv, tv);
       entries.push({
@@ -284,8 +206,6 @@ function mergeDiffModel(base, mine, theirs) {
     groups.push({ label: "Scene " + pad2(sceneNo[id]), note: mergeRowFate(bb, m, t), entries: entries });
   });
 
-  /* by id, the way mergeProductionTags() merges them (#85): a rename shows
-     as one item whose name differs, not as one deleted and one added */
   var tagEntries = mergeListEntries("Breakdown", mine.productionTags, theirs.productionTags,
     function (t) { return t.id || registryKey(t.cat, t.name); },
     function (t) { var c = tagCategory(t.cat); return (c ? c.label + " " : "") + t.name; },
@@ -305,7 +225,6 @@ function mergeDiffModel(base, mine, theirs) {
     function (s) { return s.id; },
     function (s) { return s.name || "Shot"; },
     function (s) {
-      /* the panel's words (#148), and the props added to it (#149) */
       return mergeItemSummary([s.name, s.desc, s.location, s.owner, s.audioRef, s.notes,
         s.status === "shot" ? "Shot" : "To shoot", s.reshoot ? "Flagged" : "",
         (Array.isArray(s.props) ? s.props : []).map(function (p) { return p && p.name; }).filter(Boolean).join(", ")]);
@@ -314,15 +233,6 @@ function mergeDiffModel(base, mine, theirs) {
 
   return groups;
 }
-
-/* ---- a word-level diff, dependency-free ----
-
-   Tokenise both sides into words and the whitespace between them, find the
-   longest common subsequence, mark whatever is not in it. Quadratic, so a
-   pair of very long fields falls back to marking each side whole rather
-   than making the modal wait on a table of millions of cells — the pane is
-   still correct there, just less precise. Every token is escaped on the
-   way out; nothing reaches innerHTML unescaped. */
 
 var MERGE_DIFF_TOKEN_CAP = 600;
 
@@ -376,8 +286,6 @@ function mergeDiffPairHtml(mineText, theirText) {
   return { mine: mergeDiffSideHtml(ops, "del"), theirs: mergeDiffSideHtml(ops, "add") };
 }
 
-/* A gallery field (#135) as one line of text to diff: its pictures
-   counted, its links by what a caption shows. */
 function mergeGallerySummary(row, f) {
   var v = row && Array.isArray(row[f]) ? row[f] : [];
   if (f === "imageLinks") return v.map(videoLinkLabel).join(", ");
@@ -387,8 +295,6 @@ function mergeGallerySummary(row, f) {
   return v.length + (v.length === 1 ? " picture" : " pictures") + (links.length ? " · " + links.join(", ") : "");
 }
 
-/* A ref'd picture goes out as <img data-blob>, filled in by the hydrator
-   (02c-blobs.js) once its bytes are here. */
 function mergeDiffImageHtml(row) {
   var img = rowImage(row);
   if (img && img.ref) return blobImgHtml(img.ref, "diff-img");
@@ -396,8 +302,6 @@ function mergeDiffImageHtml(row) {
   return ok ? '<img class="diff-img" src="' + escapeHtml(ok) + '" alt="">'
             : '<em class="diff-empty">(no image)</em>';
 }
-
-/* ---- the review pane ---- */
 
 function mergeEntryHtml(e) {
   return '<div class="merge-entry" data-outcome="' + escapeHtml(e.outcome || "both") + '">' +
@@ -419,8 +323,6 @@ function mergeGroupHtml(g) {
   "</div>";
 }
 
-/* Opens over the conflict modal rather than replacing it: Cancel here puts
-   the four original choices straight back, having changed nothing. */
 export function openMergeReview() {
   if (!mergeCandidate || !S.state) return;
   var groups = mergeDiffModel(mergeCandidate.base, S.state, mergeCandidate.theirs);
@@ -441,19 +343,12 @@ export function openMergeReview() {
   document.getElementById("merge-review-confirm").focus();
 }
 
-/* Back to the conflict modal with the candidate intact — nothing on disk
-   and nothing on screen has been touched. */
 export function cancelMergeReview() {
   document.getElementById("merge-review-modal").hidden = true;
   document.getElementById("merge-review-list").innerHTML = "";
   if (mergeCandidate) document.getElementById("file-conflict-modal").hidden = false;
 }
 
-/* The one place the merge actually happens, and the first moment anything
-   changes. Still nothing is written: the merged document is on screen and
-   dirty, autosave is halted (reportMerge's noAutoSave, invariant #51), and
-   the Save the user presses when they have looked it over is what puts it
-   on disk. */
 export function confirmFileMerge() {
   var cand = mergeCandidate;
   if (!cand || !S.state) { cancelMergeReview(); return; }
@@ -463,23 +358,10 @@ export function confirmFileMerge() {
 
   var diskCopy = cloneState(cand.theirs);
   var prevDocId = S.state.docId;
-  /* What is on disk is this document's ancestor from here on, and the next
-     Save has to write the merged version over exactly the bytes we just
-     read — so the conflict guard's baseline moves with it, or the very
-     next Save would raise this same modal again. Set before the merge and
-     not after it: the two fields are one fact about the bytes that were
-     read, and the merge below is what puts the merged version on screen. */
   if (cand.home) {
     cand.home.diskBase = diskCopy;
     if (cand.lastModified) cand.home.lastModified = cand.lastModified;
   }
-  /* applyStashedWork (14-export.js) is the shared merge entry point: it
-     files the "Before merging your unsaved changes" snapshot, arms Undo
-     merge and runs mergeStates — the same steps the boot-stash and
-     crash-draft paths take. The third argument is what applyMerge
-     (03-sync.js) does with the result: adopt it, move the history if the
-     disk copy's id won the merge, make what is on disk the new base,
-     redraw and say so. One call, no second copy of the sequence (#72). */
   applyStashedWork(migrateRows(cloneState(cand.theirs)), {
     base: cand.base, mine: cloneState(S.state)
   }, {
@@ -497,6 +379,4 @@ export function confirmFileMerge() {
   mergeCandidate = null;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

@@ -1,22 +1,3 @@
-/* desktop/test/fake-voice-helper.mjs: stands in for desktop/voice/listen.ps1
- * (issue #8) wherever there is no Windows recogniser and no microphone — the
- * unit tests in voice-helper.test.mjs, and smoke.mjs through main's
- * SPLITPAGE_TEST_VOICE_HELPER (honoured only under SPLITPAGE_TEST=1).
- *
- * Speaks the same protocol: JSON lines on stdout, and it exits when stdin
- * closes. What it says is chosen by FAKE_VOICE_MODE:
- *
- *   listen (default)  start, then an interim and a final line of
- *                     FAKE_VOICE_TEXT (default "hello world"), then waits
- *   no-recognizer     an error line, then exits 2
- *   junk              lines the parser must drop, then one good final line
- *   crash             start, then exits 3 at once
- *   stubborn          start, then ignores stdin closing (must be killed)
- *
- * With FAKE_VOICE_DEVICE set, every mode that starts says {"type":"device"}
- * with that name first, as listen.ps1 does when Windows names the
- * microphone (issue #118).
- */
 const mode = process.env.FAKE_VOICE_MODE || "listen";
 const text = process.env.FAKE_VOICE_TEXT || "hello world";
 const say = (obj) => process.stdout.write(JSON.stringify(obj) + "\n");
@@ -29,7 +10,7 @@ if (process.env.FAKE_VOICE_DEVICE) say({ type: "device", name: process.env.FAKE_
 if (mode === "stubborn") {
   say({ type: "start", lang: "en-US" });
   process.stdin.resume();
-  process.stdin.on("end", () => { /* ignored on purpose */ });
+  process.stdin.on("end", () => { });
   setInterval(() => {}, 1000);
 } else {
   say({ type: "start", lang: "en-US" });

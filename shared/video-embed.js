@@ -1,43 +1,4 @@
 "use strict";
-/* ---------------------------------------------------------------------
- * shared/video-embed.js: which video links Splitpage can play in a scene's
- * gallery (#168) and fetch a thumbnail for (#141), and the fixed places it
- * talks to for them.
- *
- * Two hosts and no others: YouTube and Vimeo. A link is reduced to its
- * host and the video's id (plus, for an unlisted Vimeo video, its privacy
- * hash) and everything the app ever sends anywhere is REBUILT from those
- * two against the hosts below — never the link as the user pasted it. So
- * the player's address, the thumbnail's address and Vimeo's oEmbed call
- * can only ever name these hosts:
- *
- *   player (a frame, after the play button is pressed — never before):
- *     https://www.youtube-nocookie.com/embed/<id>   YouTube's no-cookie
- *                                                   embed
- *     https://player.vimeo.com/video/<id>?dnt=1     Vimeo's, "do not track"
- *   thumbnail (fetched once, when a link is pasted, and kept as a blob):
- *     https://i.ytimg.com/vi/<id>/hqdefault.jpg
- *     https://vimeo.com/api/oembed.json?url=…       whose thumbnail_url must
- *     https://i.vimeocdn.com/video/…                be on this host
- *
- * The same file is bundled into the page (esbuild), required by the
- * desktop main process (its thumbnail IPC takes only a host name and a
- * video ref, which it checks here, and fetches from here) and imported by
- * node --test — the reason it is CommonJS, like blob-policy.js beside it.
- * PURE: no DOM, no Electron, no network of its own. fetchVideoThumbnail
- * is handed the fetch to use, and a test hands it a fake one.
- *
- * What a thumbnail may be: a JPEG, PNG or WebP (sniffed from the bytes,
- * never the Content-Type), at most THUMB_MAX_BYTES. No redirect is
- * followed: a redirect off these hosts would be a request to an address
- * nobody checked.
- *
- * shared/ names no globals (eslint.config.mjs). The five below are the
- * exception this file needs, and each is the same object in all three
- * places it runs — a browser, Electron's main process and node — with no
- * document, filesystem or process behind it: URL parses a link, and a
- * fetch is timed out and its JSON decoded with the other four.
- * --------------------------------------------------------------------- */
 /* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */
 
 var blobPolicy = require("./blob-policy.js");
@@ -45,8 +6,6 @@ var blobPolicy = require("./blob-policy.js");
 var YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 var VIMEO_ID_RE = /^[0-9]{1,12}$/;
 var VIMEO_HASH_RE = /^[0-9a-f]{6,32}$/;
-/* A video's ref as it crosses a boundary (the desktop IPC): a YouTube id,
-   or a Vimeo id with its hash after a colon when it has one. */
 var VIDEO_REF_RE = /^(?:[A-Za-z0-9_-]{11}|[0-9]{1,12}(?::[0-9a-f]{6,32})?)$/;
 
 var THUMB_MAX_BYTES = 1024 * 1024;
@@ -54,9 +13,6 @@ var THUMB_MIMES = ["image/jpeg", "image/png", "image/webp"];
 var OEMBED_MAX_BYTES = 64 * 1024;
 var FETCH_TIMEOUT_MS = 8000;
 
-/* Where each thing lives. A test (the browser suites' fake host, the
-   desktop's SPLITPAGE_TEST_VIDEO_BASE) passes its own copy; nothing else
-   ever does. */
 var VIDEO_HOSTS = {
   youtubePlayer: "https://www.youtube-nocookie.com",
   youtubeThumbs: "https://i.ytimg.com",
@@ -65,14 +21,11 @@ var VIDEO_HOSTS = {
   vimeoThumbs: "https://i.vimeocdn.com"
 };
 
-/* The two origins a player frame comes from: build.mjs's frame-src, and
-   what the desktop app lets such a frame do. */
 var PLAYER_ORIGINS = [VIDEO_HOSTS.youtubePlayer, VIDEO_HOSTS.vimeoPlayer];
 
 var YOUTUBE_HOST_RE = /^(?:www\.|m\.|music\.)?youtube\.com$|^(?:www\.)?youtube-nocookie\.com$/i;
 var VIMEO_HOST_RE = /^(?:www\.)?vimeo\.com$/i;
 
-/* "90", "90s", "1m30s", "1h2m3s" (YouTube's t=) as whole seconds, or 0. */
 function parseStart(v) {
   if (typeof v !== "string" || !v) return 0;
   var m = /^(?:(\d{1,2})h)?(?:(\d{1,4})m)?(?:(\d{1,6})s?)?$/i.exec(v.trim());
@@ -81,9 +34,6 @@ function parseStart(v) {
   return s > 0 && s < 86400 ? s : 0;
 }
 
-/* A pasted link as {host: "youtube" | "vimeo", id, hash?, start?}, or null
-   for anything else — another site, a channel or a playlist rather than
-   one video, an id of the wrong shape. */
 function parseVideoLink(href) {
   if (typeof href !== "string" || href.length > 2048) return null;
   var u;
@@ -127,8 +77,6 @@ function parseVideoLink(href) {
   return out;
 }
 
-/* The ref a video crosses the desktop IPC as ("dQw4w9WgXcQ", "76979871",
-   "76979871:abcdef1234"), and back. */
 function videoRef(v) {
   if (!v) return "";
   return v.host === "vimeo" && v.hash ? v.id + ":" + v.hash : v.id;
@@ -153,9 +101,6 @@ function hostsOr(bases) {
   return out;
 }
 
-/* The player's address for a parsed link: YouTube's no-cookie embed or
-   Vimeo's player with dnt=1, both starting at once (the play button was
-   the click that asked for it). */
 function playerUrl(v, bases) {
   if (!v) return null;
   var h = hostsOr(bases);
@@ -169,8 +114,6 @@ function playerUrl(v, bases) {
   return null;
 }
 
-/* The first request for a video's thumbnail: the picture itself
-   (YouTube), or Vimeo's oEmbed answer that names it. */
 function thumbnailRequest(v, bases) {
   var h = hostsOr(bases);
   if (!v) return null;
@@ -184,8 +127,6 @@ function thumbnailRequest(v, bases) {
   return null;
 }
 
-/* The picture an oEmbed answer names, if it is on Vimeo's image host and
-   nowhere else; else null. */
 function oembedThumbnailUrl(json, bases) {
   var h = hostsOr(bases);
   var raw = json && typeof json === "object" ? json.thumbnail_url : null;
@@ -197,7 +138,6 @@ function oembedThumbnailUrl(json, bases) {
   return u.href;
 }
 
-/* Why these bytes may not be a thumbnail, or null when they may. */
 function thumbnailRefusal(bytes) {
   if (!bytes || typeof bytes.length !== "number") return "NOT_AN_IMAGE";
   if (!bytes.length) return "EMPTY";
@@ -209,12 +149,10 @@ function thumbnailRefusal(bytes) {
 
 function fail(code) { return { ok: false, code: code }; }
 
-/* A response's body as bytes, stopping (and failing) past `cap` — read in
-   pieces when the body is a stream, so a huge answer is never all held. */
 function readCapped(res, cap) {
   var declared = Number(res.headers && res.headers.get ? res.headers.get("content-length") : NaN);
   if (declared > cap) {
-    try { if (res.body && res.body.cancel) res.body.cancel(); } catch (e) { /* nothing to cancel */ }
+    try { if (res.body && res.body.cancel) res.body.cancel(); } catch (e) { }
     return Promise.resolve(null);
   }
   if (res.body && typeof res.body.getReader === "function") {
@@ -229,7 +167,7 @@ function readCapped(res, cap) {
         }
         var chunk = r.value instanceof Uint8Array ? r.value : new Uint8Array(r.value);
         total += chunk.length;
-        if (total > cap) { try { reader.cancel(); } catch (e) { /* done anyway */ } return null; }
+        if (total > cap) { try { reader.cancel(); } catch (e) { } return null; }
         parts.push(chunk);
         return pump();
       });
@@ -241,8 +179,6 @@ function readCapped(res, cap) {
   });
 }
 
-/* One request to a fixed address: no cookies, no referrer, no redirects,
-   a timeout. Resolves {res} or {code}. */
 function request(fetchImpl, url, timeoutMs) {
   var ctl = typeof AbortController === "function" ? new AbortController() : null;
   var timedOut = false;
@@ -265,9 +201,6 @@ function request(fetchImpl, url, timeoutMs) {
   });
 }
 
-/* A video's thumbnail, fetched: resolves {ok: true, bytes, mime} or
-   {ok: false, code}, and never rejects. opts: {fetch (required), bases?,
-   timeoutMs?}. */
 function fetchVideoThumbnail(v, opts) {
   opts = opts || {};
   var fetchImpl = opts.fetch;

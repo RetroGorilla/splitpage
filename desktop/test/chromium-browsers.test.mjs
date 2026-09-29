@@ -1,16 +1,3 @@
-/* desktop/test/chromium-browsers.test.mjs: unit tests for
- * desktop/chromium-browsers.js, which finds an installed Chromium browser for
- * "Use Chromium Speech Recognition" (issue #123).
- *
- * Node built-ins only, no Electron, and no real registry or file system:
- * every lookup goes through the fakes passed in. What this cannot cover is
- * main.js starting the browser on the prompter's URL — that is
- * desktop/test/smoke.mjs's "present in chromium" group.
- *
- * Prints ALL PASS and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/chromium-browsers.test.mjs
- */
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import path from "node:path";

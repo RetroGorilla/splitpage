@@ -4,12 +4,6 @@ import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import { tagCategory } from "./07-production-tags.js";
 import { BROLL_MARKER_RE } from "./08c-broll.js";
 
-/* ================= sanitizing rich text ================= */
-
-/* Parse untrusted HTML INERTLY. A detached <div> is still live: assigning
-   innerHTML loads images and fires onerror/onload handlers, so parsing a
-   hostile string that way executes it before any sanitizer can run. A
-   DOMParser document has no browsing context, so nothing loads or fires. */
 export function inertBody(html) {
   var doc = new DOMParser().parseFromString(
     "<!doctype html><body>" + (html == null ? "" : String(html)), "text/html");
@@ -22,39 +16,11 @@ export function sanitizeHtml(html) {
   return out.innerHTML;
 }
 
-/* Only ever accept images we produced ourselves: an inline data: image. */
 export function safeImageSrc(src) {
   if (typeof src !== "string") return null;
   return /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]*$/.test(src) ? src : null;
 }
 
-/* ---- images inside HTML (#82 P6) ----
-
-   An image in a comment, a reply or a pasted cell is stored the way a row's
-   picture is: by the SHA-256 of its bytes, which live in the image registry
-   (02c-blobs.js) and its durable store, never in the HTML. The one stored
-   form is
-
-     <img class="comment-img" data-blob="<sha>" data-w="<w>" data-h="<h>" data-mime="<type>">
-
-   with NO src. The src is added only in the live DOM, by the hydrator
-   (02c-blobs.js), which gives every <img data-blob> a blob: URL once it has
-   the bytes; storedHtmlFromDom() takes it (and the hydrator's other
-   attributes) back out wherever the app reads the DOM into state without
-   sanitising it.
-
-   The sanitiser decides what an <img> becomes, synchronously:
-     - a valid data-blob sha stays, with data-w/h/mime taken from the
-       registry's record when this page holds the bytes, else from the
-       element's own attributes when they form a valid record, else left
-       off. An unknown sha is kept: its bytes may be in the durable store or
-       on the server, and the hydrator asks both. Any src it carries — a
-       blob: URL from the live DOM, or anything else — is dropped.
-     - otherwise an inline data: image (png/jpeg/gif/webp, safeImageSrc) is
-       interned — hashed and measured by its bytes, never by what it
-       claims — and becomes the stored form, its bytes queued to be stored.
-     - anything else — an http src, an SVG, a data: URI that is not a
-       picture, an upper-case or short sha — is dropped, as before. */
 export function imageRefOf(node) {
   var sha = node.getAttribute("data-blob");
   if (isSha256Hex(sha)) {
@@ -87,18 +53,12 @@ function storedImageEl(ref) {
   return img;
 }
 
-/* The stored form of an image record, as the sanitiser writes it — for
-   HTML built outside the sanitiser (an image conflict card's body). */
 export function storedImageHtml(ref) {
   var clean = normalizeImageRef(ref);
   if (!clean) return "";
   return storedImageEl(clean).outerHTML;
 }
 
-/* HTML read out of the live DOM, with what the hydrator added to every
-   <img data-blob> taken back out, so it can go into state: everything on
-   such an image but its stored attributes. Only the images change;
-   anything else is left for the sanitiser, wherever it runs. */
 var STORED_IMG_ATTRS = { "class": true, "data-blob": true, "data-w": true, "data-h": true, "data-mime": true };
 
 export function storedHtmlFromDom(html) {
@@ -117,7 +77,6 @@ export function storedHtmlFromDom(html) {
 export function safeHref(href) {
   if (typeof href !== "string") return null;
   var trimmed = href.trim();
-  /* strip control characters browsers ignore when resolving a scheme */
   /* eslint-disable-next-line no-control-regex -- deliberate: "java\\0script:"
      resolves as javascript: in a browser, so the probe has to see past them. */
   var probe = trimmed.replace(/[\u0000-\u0020]/g, "").toLowerCase();
@@ -127,7 +86,6 @@ export function safeHref(href) {
   return null;
 }
 
-/* names and titles are plain text — never markup */
 export function plainText(v) {
   /* eslint-disable-next-line no-control-regex -- C0 controls, minus tab/LF/CR,
      are exactly what a plain-text field must not carry. */
@@ -139,17 +97,11 @@ export function plainName(v) {
   return name || "Anonymous";
 }
 
-/* ids end up inside CSS selectors and HTML attributes */
 export function safeId(id, prefix) {
   var clean = String(id == null ? "" : id).replace(/[^A-Za-z0-9_-]/g, "");
   return clean || makeId(prefix);
 }
 
-/* Escape a value for use inside a double-quoted CSS attribute selector.
-   Merely stripping quotes (what these lookups used to do) leaves any
-   backslash behind, and CSS then reads it as the start of an escape
-   sequence — so an item named "cam\rig" quietly matched nothing, and some
-   values threw a SyntaxError straight out of querySelector. */
 export function cssAttr(value) {
   return String(value == null ? "" : value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
@@ -171,12 +123,6 @@ function walkSanitize(srcParent, destParent) {
     var tag = node.tagName;
 
     if (tag === "DIV" || tag === "P") {
-      /* A div/p whose only content is a single <br> is contenteditable's
-         way of marking "this paragraph is empty" (so the empty line
-         stays visible/selectable) — it is not an extra line break ON TOP
-         OF the paragraph separator appended below. Walking into it first
-         re-emitted that same <br>, so a single blank paragraph between
-         two others doubled into two blank lines instead of one. */
       var isBlankPara = node.childNodes.length === 1 &&
         node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
       if (!isBlankPara) walkSanitize(node, destParent);
@@ -186,12 +132,6 @@ function walkSanitize(srcParent, destParent) {
     if (tag === "BR") { destParent.appendChild(document.createElement("br")); return; }
 
     if (tag === "STRONG" || tag === "B") {
-      /* Google Docs wraps its whole clipboard fragment in a <b
-         style="font-weight:normal" id="docs-internal-guid-…">, relying on
-         that inline style to cancel the tag's own boldness — real bold
-         runs inside it are separate <span style="font-weight:700"> spans
-         (below). Reading the tag alone as bold ignored that override and
-         made the entire paste bold. The inline style, when present, wins. */
       var bStyle = node.style || {};
       var bWeight = bStyle.fontWeight;
       var bWeightNum = parseInt(bWeight, 10);
@@ -222,21 +162,11 @@ function walkSanitize(srcParent, destParent) {
       tagSpan.className = "tag-anchor";
       tagSpan.setAttribute("data-tag-cat", tcat.id);
       tagSpan.setAttribute("data-tag-name", tname);
-      /* A tag is a fixed label, not prose — the caret should never be able
-         to land inside it and grow it (by typing) or shrink it (by
-         backspacing) into silently no longer matching its own name. This
-         makes it a single atomic unit: click-to-select still works, arrow
-         keys and clicks skip over it as one piece, same as an <img>. */
       tagSpan.setAttribute("contenteditable", "false");
       walkSanitize(node, tagSpan);
       destParent.appendChild(tagSpan);
       return;
     }
-    /* A b-roll marker (08c-broll.js). Only the keyword itself is markup —
-       the shot's description is ordinary prose after it — so all this
-       span carries is the id that ties the line to its record. Atomic for
-       the same reason a tag is: the caret must never be able to land
-       inside the marker and type it into no longer being one. */
     if (tag === "SPAN" && node.classList && node.classList.contains("broll-key")) {
       var brollText = (node.textContent || "").trim();
       if (!BROLL_MARKER_RE.test(brollText)) { walkSanitize(node, destParent); return; }
@@ -257,9 +187,6 @@ function walkSanitize(srcParent, destParent) {
       destParent.appendChild(anchorSpan);
       return;
     }
-    /* A stage direction for the performer (#167, 04c-doc-model.js): the
-       words stay editable — it is prose, not a label — and the class is
-       all it carries. Its brackets are drawn by app.css, never stored. */
     if (tag === "SPAN" && node.classList && node.classList.contains("stage-dir")) {
       var dirSpan = document.createElement("span");
       dirSpan.className = "stage-dir";
@@ -267,10 +194,6 @@ function walkSanitize(srcParent, destParent) {
       destParent.appendChild(dirSpan);
       return;
     }
-    /* A sound cue line of the Audio column (#219, 04c-doc-model.js): its
-       words, keyword and all, stay editable; the class is all it carries,
-       and normalizeCell keeps it to whole lines that start "SFX:" or
-       "Music:". */
     if (tag === "SPAN" && node.classList && node.classList.contains("audio-cue")) {
       var cueSpan = document.createElement("span");
       cueSpan.className = "audio-cue";
@@ -312,28 +235,16 @@ function walkSanitize(srcParent, destParent) {
       current.forEach(function (n) { destParent.appendChild(n); });
       return;
     }
-    /* unknown tag: unwrap, keep its text/children */
     walkSanitize(node, destParent);
   });
 }
 
-/* A tag/b-roll span is contenteditable="false" — an atomic unit the caret
-   skips over rather than enters. That's fine wherever something follows
-   it, but as the very last node in a cell there is nothing after it for
-   contenteditable to put the caret AT either: no click target, no
-   ArrowRight/End destination, nowhere for typing to land. A trailing
-   zero-width space is real DOM the caret can actually sit in, invisible,
-   and harmless if left in place — syncFieldFromDom strips it back out
-   before anything is saved (see there), so it never reaches stored text
-   or an export. */
 export function ensureTrailingCaretSpot(container) {
   var last = container && container.lastChild;
   if (last && last.nodeType === 1 && last.getAttribute && last.getAttribute("contenteditable") === "false") {
     container.appendChild(document.createTextNode("​"));
   }
 }
-
-/* ================= html -> markdown (for export) ================= */
 
 function walkToMd(node) {
   var out = "";
@@ -347,14 +258,8 @@ function walkToMd(node) {
     else if (tag === "U") out += "<u>" + inner + "</u>";
     else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
     else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
-    /* A link's visible text becomes markdown's [text](href) — but a
-       literal "]" in that text closes the link early for any standard
-       parser, and "(" / ")" break the destination parse the same way;
-       escaping them is what CommonMark itself expects inside link text. */
     else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
     else if (tag === "BR") out += "\n";
-    /* a stage direction (#167) in the notation that types one, so a table
-       cell edited by hand keeps it (importDirections, 20d-formats.js) */
     else if (tag === "SPAN" && child.classList && child.classList.contains("stage-dir")) out += "((" + inner + "))";
     else out += inner;
   });
@@ -365,8 +270,6 @@ export function htmlToMarkdown(html) {
   if (!html) return "";
   return walkToMd(inertBody(html)).replace(/\n{3,}/g, "\n\n").trim();
 }
-
-/* ================= video link cards (comments) ================= */
 
 export function buildVideoCardEl(href) {
   var a = document.createElement("a");
@@ -390,6 +293,4 @@ export function buildVideoCardEl(href) {
   return a;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}
