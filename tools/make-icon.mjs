@@ -1,21 +1,3 @@
-#!/usr/bin/env node
-// Rasterises icon.svg into the Windows icon.ico that electron-builder, the
-// NSIS installer and the dev-mode BrowserWindow all point at.
-//
-// The committed .ico used to hold RGB PNGs with the area outside the rounded
-// square painted opaque white, so every dark surface Windows draws the icon on
-// — taskbar, dark-theme Explorer, Alt+Tab — showed four white corners. The
-// frames written here are RGBA, and anything the SVG leaves uncovered stays
-// transparent.
-//
-//   node tools/make-icon.mjs          rewrite the .ico files from icon.svg
-//   node tools/make-icon.mjs --check  fail if they are stale or opaque
-//
-// No dependencies: icon.svg is nothing but rounded rectangles and circles
-// (since #169, the tally light on the mark), so the few hundred lines of
-// scanline work below beat pulling in a renderer. A stroke is not drawn —
-// write an outline as a filled shape with a smaller one on top.
-
 import { readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { dirname, join } from "node:path";
@@ -23,16 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = join(ROOT, "icon.svg");
-// #75 deleted installer/ (the IExpress setup), which carried the second copy.
-// The Electron build's icon is the only one left.
 const TARGETS = [join(ROOT, "desktop", "build", "icon.ico")];
 
-// Windows picks per surface: 16 in the title bar, 24 in some small-icon
-// lists at 150% scaling, 32 on the taskbar, 256 for Explorer's extra-large
-// view.
 const SIZES = [16, 24, 32, 48, 64, 128, 256];
-// Samples per axis when rasterising. 4 is enough to keep the 16px corners from
-// looking chewed without making the 256px frame slow.
 const SUPERSAMPLE = 4;
 
 function parseSvg(svg) {
@@ -40,11 +15,9 @@ function parseSvg(svg) {
   if (!viewBox) throw new Error("icon.svg has no viewBox");
   const [minX, minY, width, height] = viewBox[1].trim().split(/\s+/).map(Number);
 
-  // Rects and circles together, in document order: that is painter's order.
   const shapes = [];
   for (const tag of svg.matchAll(/<(rect|circle)\b([^>]*)\/?>/g)) {
     const attr = (name) => {
-      // The leading boundary matters: a bare /x="/ also matches inside rx="96".
       const m = new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(tag[2]);
       return m ? m[1] : null;
     };
@@ -81,9 +54,6 @@ function parseHex(fill) {
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 }
 
-// Point-in-shape. A circle is the distance test; for a rounded rect,
-// outside the corner quadrants this is a plain box test and inside one it is
-// the ellipse the corner radius describes.
 function covers(shape, px, py) {
   if (shape.kind === "circle") {
     const dx = px - shape.cx;
@@ -98,16 +68,12 @@ function covers(shape, px, py) {
   if (rx <= 0 || ry <= 0) return true;
   const cx = px < x + rx ? x + rx : px > x + w - rx ? x + w - rx : null;
   const cy = py < y + ry ? y + ry : py > y + h - ry ? y + h - ry : null;
-  if (cx === null || cy === null) return true; // edge band, not a corner
+  if (cx === null || cy === null) return true;
   const dx = (px - cx) / rx;
   const dy = (py - cy) / ry;
   return dx * dx + dy * dy <= 1;
 }
 
-// Renders one frame as straight (non-premultiplied) RGBA. Each sample is either
-// fully covered by the topmost rect under it or fully transparent; averaging
-// the samples is what produces the anti-aliased edge and the partial alpha
-// along the rounded corners.
 function render(doc, size) {
   const px = new Uint8Array(size * size * 4);
   const step = doc.width / (size * SUPERSAMPLE);
@@ -124,7 +90,7 @@ function render(doc, size) {
         for (let sx = 0; sx < SUPERSAMPLE; sx++) {
           const ux = doc.minX + (x * SUPERSAMPLE + sx) * step + half;
           let hit = null;
-          for (const shape of doc.shapes) if (covers(shape, ux, uy)) hit = shape; // last wins: painter's order
+          for (const shape of doc.shapes) if (covers(shape, ux, uy)) hit = shape;
           if (!hit) continue;
           r += hit.color[0];
           g += hit.color[1];
@@ -134,10 +100,7 @@ function render(doc, size) {
       }
       const o = (y * size + x) * 4;
       const total = SUPERSAMPLE * SUPERSAMPLE;
-      if (!hits) continue; // leave it transparent black
-      // Average over the covered samples only, so an edge pixel keeps the
-      // shape's colour and carries the coverage in alpha instead of bleeding
-      // toward transparent black.
+      if (!hits) continue;
       px[o] = Math.round(r / hits);
       px[o + 1] = Math.round(g / hits);
       px[o + 2] = Math.round(b / hits);
@@ -169,13 +132,13 @@ function encodePng(pixels, size) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // colour type 6 = RGBA. Colour type 2 is the bug this fixes.
+  ihdr[8] = 8;
+  ihdr[9] = 6;
 
   const stride = size * 4;
   const raw = Buffer.alloc((stride + 1) * size);
   for (let y = 0; y < size; y++) {
-    raw[y * (stride + 1)] = 1; // Sub filter: cheap and good on flat colour
+    raw[y * (stride + 1)] = 1;
     const row = Buffer.from(pixels.buffer, pixels.byteOffset + y * stride, stride);
     for (let x = 0; x < stride; x++) {
       raw[y * (stride + 1) + 1 + x] = (row[x] - (x >= 4 ? row[x - 4] : 0)) & 0xff;
@@ -193,19 +156,19 @@ function encodePng(pixels, size) {
 function buildIco(frames) {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0);
-  header.writeUInt16LE(1, 2); // 1 = icon
+  header.writeUInt16LE(1, 2);
   header.writeUInt16LE(frames.length, 4);
 
   const dir = Buffer.alloc(16 * frames.length);
   let offset = header.length + dir.length;
   frames.forEach((frame, i) => {
     const o = i * 16;
-    dir[o] = frame.size === 256 ? 0 : frame.size; // 0 means 256 in an ICO
+    dir[o] = frame.size === 256 ? 0 : frame.size;
     dir[o + 1] = frame.size === 256 ? 0 : frame.size;
-    dir[o + 2] = 0; // palette size: 0 for true colour
+    dir[o + 2] = 0;
     dir[o + 3] = 0;
-    dir.writeUInt16LE(1, o + 4); // colour planes
-    dir.writeUInt16LE(32, o + 6); // bits per pixel, now honestly RGBA
+    dir.writeUInt16LE(1, o + 4);
+    dir.writeUInt16LE(32, o + 6);
     dir.writeUInt32LE(frame.png.length, o + 8);
     dir.writeUInt32LE(offset, o + 12);
     offset += frame.png.length;

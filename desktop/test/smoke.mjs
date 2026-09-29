@@ -1,36 +1,3 @@
-#!/usr/bin/env node
-/* Splitpage desktop — automated smoke/integration suite.
- *
- * Drives the real Electron window over the Chrome DevTools Protocol (no
- * npm test dependencies — Node 22 built-ins only, plus the global fetch
- * and WebSocket Node ships with). See "THE DESKTOP BRIDGE CONTRACT" and
- * "TEST/ISOLATION HOOKS" in the project handoff notes for the exact shape
- * this drives against.
- *
- * Usage:
- *   node test/smoke.mjs                       # dev + both packaged unpacked exes (whichever exist)
- *   node test/smoke.mjs --exe <path to .exe>   # just that one target
- *   node test/smoke.mjs --only-target dev      # the dev target alone
- *
- * On Linux there is no display, so the run needs one of its own:
- *
- *   xvfb-run -a node test/smoke.mjs --only-target dev
- *
- * The dev target runs on every platform (#89) — that is what exercises
- * main.js and preload.js where they are actually being changed. The
- * packaged targets are Windows-only, because dist/win-unpacked and
- * dist/win-arm64-unpacked are the only packaged output anything builds.
- * A handful of assertions probe Windows itself (MainWindowHandle); those
- * are SKIPped by name off Windows and listed in the run summary, never
- * silently dropped and never rewritten into something weaker.
- *
- * Every launch gets its own fresh temp SPLITPAGE_USER_DATA, its own free
- * --remote-debugging-port, and SPLITPAGE_NO_UPDATE_CHECK=1 unless the case
- * needs the real update check. Nothing here ever touches the developer's
- * real Splitpage profile or documents — every fixture lives under
- * os.tmpdir(), created fresh and removed at the end of the run.
- */
-
 "use strict";
 
 import { spawn, execFileSync } from "node:child_process";
@@ -42,10 +9,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/* ----------------------------------------------------------------------
- * 0. Paths, targets, small utilities.
- * -------------------------------------------------------------------- */
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, "..");
 
@@ -55,16 +18,7 @@ function parseCliArgs(argv) {
   const out = { exe: null, onlyTarget: null, onlyGroup: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--exe") out.exe = argv[++i];
-    // Debugging-only, undocumented: restrict a default (no --exe) run to a
-    // single named target (dev | packaged-x64 | packaged-arm64) without
-    // having to comment code out. Not part of the public CLI contract.
     if (argv[i] === "--only-target") out.onlyTarget = argv[++i];
-    /* Same spirit, for one group out of ~60: a case-insensitive substring
-       of the group's REGISTERED name in runTargetSuite (not the tag each
-       check line prints). A filter matching no group exits 1.
-       A filtered run prints a loud banner and carries "GROUP FILTER" into
-       the summary, because a partial run that read like a full one is the
-       thing this file is not allowed to do. */
     if (argv[i] === "--only-group") out.onlyGroup = argv[++i];
   }
   return out;
@@ -72,19 +26,13 @@ function parseCliArgs(argv) {
 
 const IS_WINDOWS = process.platform === "win32";
 
-/* The dev Electron's executable is named differently on every platform —
-   electron.exe, a bare electron, or the binary buried in Electron.app. Its
-   own installer already records which one it unpacked, in
-   node_modules/electron/path.txt, so read that rather than keep a second
-   copy of the mapping here that could drift; the per-platform names below
-   are only the fallback for a tree whose path.txt is missing. */
 function devElectronExe() {
   const pkgDir = path.join(DESKTOP_DIR, "node_modules", "electron");
   const distDir = path.join(pkgDir, "dist");
   try {
     const recorded = fs.readFileSync(path.join(pkgDir, "path.txt"), "utf8").trim();
     if (recorded) return path.join(distDir, recorded);
-  } catch { /* not installed, or installed by something that wrote no path.txt */ }
+  } catch { }
   if (IS_WINDOWS) return path.join(distDir, "electron.exe");
   if (process.platform === "darwin") return path.join(distDir, "Electron.app", "Contents", "MacOS", "Electron");
   return path.join(distDir, "electron");
@@ -98,18 +46,10 @@ function resolveTargets(exeOverride) {
   const targets = [];
   const devExe = devElectronExe();
   if (fs.existsSync(devExe)) targets.push({ name: "dev", kind: "dev", exe: devExe, appPath: DESKTOP_DIR });
-  /* Packaged discovery stays Windows-only on purpose: dist/*-unpacked/ holds
-     Splitpage.exe and nothing builds any other packaged shape. Looking for
-     them elsewhere would only ever find nothing. */
   if (IS_WINDOWS) {
     const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
     if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
     const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
-    /* An x64 host cannot start an arm64 exe at all — every group fails with
-       `spawn UNKNOWN` — while an arm64 host runs x64 under emulation, so
-       only that one direction is gated. The target is named as a skip rather
-       than dropped: a build sitting in dist/ that this run did not test must
-       show up in the summary (#89's rule). */
     if (fs.existsSync(arm64Exe)) {
       if (process.arch === "arm64") targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
       else targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe,
@@ -119,22 +59,6 @@ function resolveTargets(exeOverride) {
   return targets;
 }
 
-/* Extra Chromium switches a target needs on THIS platform, prepended to
-   every spawn of it (launchApp's own and the three raw second-instance
-   spawns alike).
-
-   --no-sandbox, on Linux, for the DEV target only. Chromium's Linux sandbox
-   needs either a setuid chrome-sandbox helper or unprivileged user
-   namespaces; a dev tree's node_modules/electron/dist/chrome-sandbox is not
-   setuid, and the containers this suite runs in (the cloud dev container and
-   the CI runner) provide neither. Without it Electron refuses to start at
-   all, so the choice is this switch or no Linux run.
-
-   It is deliberately scoped to the dev target so it can never reach a
-   packaged binary, and it is a test-harness launch argument only — nothing
-   in main.js, electron-builder.yml or the installer passes it, so how the
-   app SHIPS is untouched. It does weaken a real boundary in the process it
-   applies to, which is why it is not applied more widely than it has to be. */
 function platformFlagsFor(target) {
   if (target.kind === "dev" && process.platform === "linux") return ["--no-sandbox"];
   return [];
@@ -151,10 +75,6 @@ async function freePort() {
   });
 }
 
-// A truly wedged TCP peer (see teardown()'s comment on the DevTools port
-// going unresponsive after any window-close attempt) can leave a plain
-// fetch() pending indefinitely — Node/undici has no default timeout, so
-// every fetchJson call here gets an explicit bound via AbortSignal.
 async function fetchJson(url, opts, timeoutMs) {
   const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs || 8000) });
   const text = await res.text();
@@ -172,14 +92,6 @@ async function portClosed(port, host) {
     socket.setTimeout(1500, () => done(true));
   });
 }
-
-/* ----------------------------------------------------------------------
- * 1. A tiny CDP client — one WebSocket, JSON-RPC request/response
- *    correlation by id, plus a method->listeners map for events. Works
- *    identically for a page-level target's webSocketDebuggerUrl and for
- *    the browser-level one from /json/version (Browser.close lives only
- *    on the latter).
- * -------------------------------------------------------------------- */
 
 class CDPConn {
   constructor(wsUrl, opts) {
@@ -222,10 +134,6 @@ class CDPConn {
         if (cbs) cbs.slice().forEach((cb) => { try { cb(msg.params); } catch {} });
       }
     });
-    // Without this, a target that dies mid-request (the app crashed, or the
-    // process was killed out from under us) leaves every in-flight send()
-    // awaiting a reply that will never arrive — a silent hang forever, not
-    // a failure any case's own try/catch or poll() timeout could ever see.
     const onGone = (why) => {
       this.closed = true;
       const err = new Error("CDP connection closed: " + why);
@@ -267,12 +175,6 @@ class CDPConn {
   close() { try { if (this.ws) this.ws.close(); } catch {} }
 }
 
-/* Runs `expression` in the page's own top-level context (same world the
-   real app's IIFE already ran in, so window.__splitpageFormats,
-   window.__desktopTest and window.splitpageDesktop are all reachable —
-   the app's own closure-local functions, like markDirty, are not, which
-   is exactly why every case below drives the app through those two test
-   hooks or through real DOM clicks instead of trying to reach inside). */
 async function evalPage(cdp, expression, opts) {
   opts = opts || {};
   const params = {
@@ -281,12 +183,6 @@ async function evalPage(cdp, expression, opts) {
     returnByValue: true,
     allowUnsafeEvalBlockedByCSP: true
   };
-  // Chromium only honours a page's beforeunload block (and therefore
-  // Electron's 'will-prevent-unload') after the page has had USER
-  // ACTIVATION. A Runtime.evaluate call is not itself a user gesture unless
-  // this flag is set — every click or window.close() a close/unsaved-
-  // changes test drives through evalPage needs it, or the prompt this suite
-  // means to exercise simply never fires.
   if (opts.userGesture) params.userGesture = true;
   const res = await cdp.send("Runtime.evaluate", params);
   if (res.exceptionDetails) {
@@ -297,11 +193,6 @@ async function evalPage(cdp, expression, opts) {
   return res.result ? res.result.value : undefined;
 }
 
-/* Polls `expression` (page-side) until it's truthy or the timeout hits.
-   Swallows eval errors while polling (not just "not ready yet" values) —
-   a page mid-navigation (Page.reload, a close in flight) throws "Cannot
-   find context" for a moment, which should read as "keep waiting", not
-   as a hard failure, from a poll's point of view. */
 async function poll(cdp, expression, timeoutMs, intervalMs) {
   const deadline = Date.now() + (timeoutMs || 15000);
   let last;
@@ -309,7 +200,7 @@ async function poll(cdp, expression, timeoutMs, intervalMs) {
     try {
       last = await evalPage(cdp, expression);
       if (last) return last;
-    } catch { /* not ready — keep polling */ }
+    } catch { }
     await sleep(intervalMs || 250);
   }
   throw new Error("timed out waiting for: " + expression + " (last value: " + JSON.stringify(last) + ")");
@@ -318,10 +209,6 @@ async function poll(cdp, expression, timeoutMs, intervalMs) {
 async function waitForRows(cdp, timeoutMs) {
   return poll(cdp, "document.querySelectorAll('#rows > *').length", timeoutMs || 20000);
 }
-
-/* ----------------------------------------------------------------------
- * 2. Launching and tearing down the app.
- * -------------------------------------------------------------------- */
 
 async function waitForCdpReady(port, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -336,22 +223,12 @@ async function waitForCdpReady(port, timeoutMs) {
   throw new Error("CDP never came up on port " + port + (lastErr ? " (" + lastErr.message + ")" : ""));
 }
 
-// Pulls the ?tab=<tabId> query param off a page target's url, tab-strip and
-// pre-navigation (about:blank) targets included — those just come back null.
 function parseTabIdFromUrl(url) {
   if (typeof url !== "string") return null;
   const m = /[?&]tab=([^&]+)/.exec(url);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/* SMOKE-HARNESS target discovery. Today (pre-F1) the app is still a single
-   splitpage://app/index.html page with no tab strip and no ?tab= query
-   string at all — tabTargets/tabStripTargets and the tabId-less findPageTarget
-   call below must keep finding exactly that one page unchanged. Once F1 lands,
-   splitpage://tabstrip/... becomes the window's primary webContents and each
-   tab page gets its own ?tab=<tabId>; findTargetsByKind is what lets every
-   other helper (and F1's own suite) tell the two apart without ever treating
-   the strip as a page a case can drive assertions against. */
 async function findTargetsByKind(port) {
   const { body } = await fetchJson(`http://127.0.0.1:${port}/json`);
   const list = Array.isArray(body) ? body : [];
@@ -363,10 +240,6 @@ async function findTargetsByKind(port) {
   return { tabStripTargets, tabTargets };
 }
 
-// Returns a splitpage://app/index.html tab target — NEVER the tab-strip
-// target, even once one exists. opts.tabId narrows to that one tab; with no
-// tabId (today's single-window app, or "any tab is fine") the first tab
-// target found wins.
 async function findPageTarget(port, timeoutMs, opts) {
   opts = opts || {};
   const wantTabId = opts.tabId || null;
@@ -376,21 +249,16 @@ async function findPageTarget(port, timeoutMs, opts) {
       const { tabTargets } = await findTargetsByKind(port);
       const candidates = wantTabId ? tabTargets.filter((t) => t.tabId === wantTabId) : tabTargets;
       if (candidates.length) return candidates[0];
-    } catch { /* keep trying */ }
+    } catch { }
     await sleep(300);
   }
   throw new Error("no page target appeared on port " + port + (wantTabId ? " for tabId=" + wantTabId : ""));
 }
 
-// window.__desktopTest.tabId doesn't exist until F1/F3 land (it's the
-// renderer's own copy of TAB-BOOT-SYNC's tabId) — harness plumbing ahead of
-// that landing, not exercised by any case in this step.
 async function tabIdOfTarget(cdp) {
   return evalPage(cdp, "(window.__desktopTest && window.__desktopTest.tabId) || null");
 }
 
-// A second CDP connection to one specific tab, alongside the app's primary
-// one (e.g. the tab strip's) — used once multiple pages can be live at once.
 async function connectTab(app, tabId) {
   const t = await findPageTarget(app.port, 30000, { tabId });
   const cdp = new CDPConn(t.webSocketDebuggerUrl);
@@ -398,17 +266,10 @@ async function connectTab(app, tabId) {
   return cdp;
 }
 
-// window.splitpageDesktop.__testShell(op, args) is F1's TEST_MODE-only main-
-// process driver hook (create/close/move tabs etc. without real DOM/menu
-// interaction) — not defined until F1 lands. Harness side implemented now
-// per SMOKE-HARNESS so F1 is verifiable against it without touching this file.
 async function shell(cdp, op, args) {
   return evalPage(cdp, "window.splitpageDesktop.__testShell(" + JSON.stringify(op) + ", " + JSON.stringify(args === undefined ? null : args) + ")");
 }
 
-// --- desktop/drafts.js on-disk layout (DRAFT-STORE), read directly rather
-// than through any IPC — the harness must be able to see a draft that
-// survived a real crash even though nothing is left alive to ask over CDP.
 function parseDraftFile(p) {
   if (!fs.existsSync(p)) return null;
   const text = fs.readFileSync(p, "utf8");
@@ -416,15 +277,11 @@ function parseDraftFile(p) {
   const line1 = nl === -1 ? text : text.slice(0, nl);
   const rest = nl === -1 ? "" : text.slice(nl + 1);
   let header = null, state = null;
-  try { header = JSON.parse(line1); } catch { /* corrupt/partial write */ }
-  try { state = JSON.parse(rest); } catch { /* corrupt/partial write */ }
+  try { header = JSON.parse(line1); } catch { }
+  try { state = JSON.parse(rest); } catch { }
   return { header, state, bytes: Buffer.byteLength(text, "utf8") };
 }
 
-// { <tabId>: { dir, current, previous, baseFiles: [...] } } for every tab
-// folder under <userDataDir>/drafts — corrupt/, .trash-* and .tmp-* entries
-// (DRAFT-STORE's own transient/quarantine names) are not tab folders and are
-// skipped.
 function readDraftDirs(userDataDir) {
   const draftsRoot = path.join(userDataDir, "drafts");
   const out = {};
@@ -445,43 +302,14 @@ function readDraftDirs(userDataDir) {
   return out;
 }
 
-// <userDataDir>/drafts/session.json — null for "doesn't exist yet" or
-// "unparseable", exactly like DRAFT-STORE's own init() treats a missing file.
 function readSession(userDataDir) {
   const p = path.join(userDataDir, "drafts", "session.json");
   if (!fs.existsSync(p)) return null;
   try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
 }
 
-/* ----------------------------------------------------------------------
- * 1a. Step N extras: crash-safe-draft helpers shared by the cases at the
- *     bottom of this file. Real content changes (never window.__desktopTest's
- *     markDirtyForTest, which sets the dirty flag with no document content
- *     behind it) go through the SAME DOM path a person typing would: click
- *     the real "+ Add row" button, then set one cell's text and dispatch a
- *     real 'input' event so onRootInput -> syncFieldFromDom -> markDirty()
- *     runs exactly as it does for a keystroke (05-render.js/21-events.js).
- *     That is what lets a case assert the RESTORED document still holds a
- *     specific marker string, not merely that some dirty flag survived.
- * -------------------------------------------------------------------- */
-
-// Clicks "+ Add row", waits for the new row to render, then sets the LAST
-// visualText cell's content to `marker` and dispatches a real 'input' event
-// — a genuine content edit, indistinguishable on disk from a person typing.
-// Waits for the dirty indicator so the caller never races noteDraftChange().
 async function addMarkerRow(cdp, marker) {
-  // Counts actual editable-cell rows, never '#rows > *' — a document with
-  // ZERO rows (a freshly-created server doc, among others) still renders one
-  // empty-state placeholder child, which addRow() REPLACES rather than
-  // supplements: '#rows > *'.length can stay unchanged across the very add
-  // this is waiting for.
   const countExpr = "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length";
-  /* waitForRows only proves SOMETHING is in #rows. Under load the opened
-     file can still be arriving — the rows on screen then are whatever was
-     there before it — and a count read then is one the file never gets
-     back to: the add lands, the count ends below `before + 1`, and the case
-     times out (CI, "file changed on disk while down"). So wait for the
-     count to hold still for a moment first. */
   let before = await evalPage(cdp, countExpr);
   for (let settle = Date.now() + 10000; Date.now() < settle;) {
     await new Promise((r) => setTimeout(r, 600));
@@ -489,13 +317,6 @@ async function addMarkerRow(cdp, marker) {
     if (now === before) break;
     before = now;
   }
-  /* Clicked again, up to three times, while no row has appeared: under load
-     a boot-time re-render can replace the button between the query and the
-     click, and a click on the detached node adds nothing — which failed a
-     full run twice (once with nothing of the case's own under test yet).
-     Only re-clicked while the count is still `before`, so it never adds two.
-     A count that FELL meanwhile is a document still arriving after all:
-     that is the count to beat. */
   for (let attempt = 0; attempt < 3; attempt++) {
     await evalPage(cdp, "(function(){ var b = document.querySelector('.add-row-btn'); if (b) b.click(); return true; })()", { awaitPromise: false });
     const added = await poll(cdp, countExpr + " > " + before, 4000).then(() => true, () => false);
@@ -513,23 +334,14 @@ async function addMarkerRow(cdp, marker) {
   return ok;
 }
 
-// DRAFT-RENDERER-API's window.__desktopTest.drafts.flushNow() — the same
-// path main's splitpage:draft-flush drives, called directly so a case never
-// has to wait out draftTiming.idle/max just to get a write on disk.
 async function flushDraft(cdp) {
   return evalPage(cdp, "window.__desktopTest.drafts.flushNow()");
 }
 
-// TEST_MODE's splitpage:test-draft-status (DRAFT-IPC-AND-SHAPES). With no
-// tabId this asks about the CALLING page's own tab; a case driving a crashed
-// tab from a witness connection passes the crashed tab's id explicitly.
 async function draftStatusFor(cdp, tabId) {
   return evalPage(cdp, "window.splitpageDesktop.__testDraftStatus(" + (tabId ? JSON.stringify(tabId) : "") + ")");
 }
 
-// window.__splitpageFormats.state().rows — true if any row's visualText
-// contains `marker`. Reads the document's real content, not just a dirty
-// flag, so a restore case can prove the RIGHT text came back.
 function markerExpr(marker) {
   return "(function(){ var s = window.__splitpageFormats.state(); if (!s || !s.rows) return false; " +
     "return s.rows.some(function(r){ return (r.visualText || '').indexOf(" + JSON.stringify(marker) + ") !== -1; }); })()";
@@ -537,19 +349,10 @@ function markerExpr(marker) {
 async function markerPresent(cdp, marker) {
   return evalPage(cdp, markerExpr(marker));
 }
-// Polls until the marker shows up (a restore is asynchronous — the merge/
-// adopt/etc. runs after takeDraft() resolves) or the timeout elapses, in
-// which case it resolves false rather than throwing (poll()'s own error
-// message would just say "false", which tells a failed assertion nothing).
 async function waitForMarker(cdp, marker, timeoutMs) {
   return poll(cdp, markerExpr(marker), timeoutMs || 20000).catch(() => false);
 }
 
-// main.js counts every dialog it would have shown (getSessionInfo().
-// testDialogsSeen, TEST_MODE only). Read it before firing a close/quit/
-// Save As, then wait for it to move: that is the moment the pre-answered
-// (or defaulted-to-Cancel) prompt has been consumed and the app has made
-// its decision — which is what the old fixed sleeps were guessing at.
 async function dialogsSeen(cdp) {
   const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
   return (info && typeof info.testDialogsSeen === "number") ? info.testDialogsSeen : 0;
@@ -559,33 +362,20 @@ async function waitForDialogAnswered(cdp, before, timeoutMs) {
     .catch(() => false);
 }
 
-// Same "•" convention dirtyTabForTest already polls for, exposed as a
-// one-shot read for cases that need to assert clean vs dirty after a restore.
 async function isDirty(cdp) {
   return evalPage(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()");
 }
 
-// Polls for a .toast whose text contains `substr`, returning its full text
-// (or null on timeout) — never throws, so a case can assert absence too.
 async function toastContaining(cdp, substr, timeoutMs) {
   return poll(cdp, "(function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) { " +
     "if (t[i].textContent.indexOf(" + JSON.stringify(substr) + ") !== -1) return t[i].textContent; } return null; })()",
     timeoutMs || 20000).catch(() => null);
 }
 
-// splitpage:test-crash-renderer (DRAFT-IPC-AND-SHAPES): kills this tab's
-// renderer the way a real crash does (no clean-exit reason), so main's
-// render-process-gone path runs for real. Fire-and-forget like every other
-// call that ends the very page issuing it (see fireEval's own comment) — the
-// renderer dies mid-request, so a reply can never arrive.
 function crashRenderer(cdp) {
   return fireEval(cdp, "window.splitpageDesktop.__testCrashRenderer()", { awaitPromise: false });
 }
 
-// Recursively scans every file under `dir` for a literal substring — used by
-// caseDraftNoSecrets to prove a PIN, a server token or a launch URL never
-// reaches disk anywhere under drafts/ (DRAFT-IPC-AND-SHAPES: "The header
-// never contains a PIN, token, session info or fileId").
 function dirContainsText(dir, needle) {
   let found = null;
   (function walk(d) {
@@ -604,58 +394,29 @@ function dirContainsText(dir, needle) {
   return found;
 }
 
-/* ----------------------------------------------------------------------
- * 1b. Step L2 extras: helpers the tab-shell cases below share. TAB-IDENTITY's
- *     tabId/windowId are 32 lowercase hex from crypto.randomBytes(16) — the
- *     v1-migration and restore-at-launch cases hand-write desktop-state.json
- *     themselves (rather than build a session live through the UI) and need
- *     ids in that exact shape so main's own normalizeDesktopStateV2 accepts
- *     them unchanged instead of minting replacements out from under the test.
- * -------------------------------------------------------------------- */
-
 function newHexId() { return crypto.randomBytes(16).toString("hex"); }
 
-// Hand-writes <userDataDir>/desktop-state.json (DESKTOP-STATE-V2 / v1) BEFORE
-// a launch, so a case can control exactly what session main restores without
-// driving a whole prior app run through the UI first.
 function writeDesktopStateFile(userDataDir, state) {
   fs.mkdirSync(userDataDir, { recursive: true });
   fs.writeFileSync(path.join(userDataDir, "desktop-state.json"), JSON.stringify(state), "utf8");
 }
 
-// Reads it back — null for "doesn't exist" or "unparseable", same convention
-// as readSession above.
 function readDesktopStateFile(userDataDir) {
   const p = path.join(userDataDir, "desktop-state.json");
   if (!fs.existsSync(p)) return null;
   try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
 }
 
-// window.__desktopTest.markDirtyForTest() (20f-desktop.js) calls markDirty()
-// directly with zero DOM interaction — see caseCloseAuthorityNoGesture's own
-// comment on why that matters for a close/quit prompt to actually fire. Every
-// L2 case that needs a dirty tab uses this same no-gesture path so a real
-// user click is never required just to set up a precondition.
 async function dirtyTabForTest(cdp) {
   await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
   await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
 }
 
-// Fire-and-forget __testShell call: for an op whose target tab or window may
-// be destroyed as a direct RESULT of the call (closing the tab/window the
-// calling page itself lives in) — same reasoning as fireEval's own comment.
-// A normal awaited shell() would hang until CDPConn's own long sendTimeoutMs
-// on exactly this case, since the reply can never arrive once the context is
-// gone.
 async function fireShell(cdp, op, args) {
   const expr = "window.splitpageDesktop.__testShell(" + JSON.stringify(op) + "," + JSON.stringify(args === undefined ? null : args) + ")";
   await fireEval(cdp, expr, { awaitPromise: false });
 }
 
-// Node-side poll (unlike poll() above, which evaluates an EXPRESSION on the
-// page) — for waiting on a condition that itself has to run several page
-// evals / CDP calls to compute, such as "a tab other than this known one has
-// appeared". Swallows errors while polling, same as poll().
 async function pollNode(fn, timeoutMs, intervalMs) {
   const deadline = Date.now() + (timeoutMs || 15000);
   let last;
@@ -663,24 +424,18 @@ async function pollNode(fn, timeoutMs, intervalMs) {
     try {
       last = await fn();
       if (last) return last;
-    } catch { /* keep polling */ }
+    } catch { }
     await sleep(intervalMs || 250);
   }
   throw new Error("pollNode: timed out (last value: " + JSON.stringify(last) + ")");
 }
 
-// Opens a fresh, independent CDP connection to a /json target object (as
-// returned by findTargetsByKind), alongside whatever connection(s) a case
-// already has open.
 async function connectTarget(t) {
   const cdp = new CDPConn(t.webSocketDebuggerUrl);
   await cdp.open();
   return cdp;
 }
 
-// Polls __testShell('listTargets') (over ANY still-alive tab's connection —
-// a witness tab in a window/tab that is not itself being closed) until
-// `predicate` accepts the shell state, or times out.
 async function pollShellState(cdp, predicate, timeoutMs) {
   return pollNode(async () => {
     const listing = await shell(cdp, "listTargets", {});
@@ -688,11 +443,6 @@ async function pollShellState(cdp, predicate, timeoutMs) {
   }, timeoutMs || 15000);
 }
 
-// Shared fixture for the close/quit multi-window cases below: window1 keeps
-// the launch's own first tab plus a second tab created alongside it; a third
-// tab is created and immediately torn off into its own new window2. Returns
-// every id and a live CDP connection to each of the three tabs so a case can
-// dirty/close/read any of them independently.
 async function setupTwoDirtyWindows(target, opts) {
   const app = await launchApp(target, opts);
   await waitForRows(app.cdp, 20000);
@@ -718,43 +468,17 @@ async function setupTwoDirtyWindows(target, opts) {
   };
 }
 
-/* ----------------------------------------------------------------------
- * 1c. Step M extras: DOC-CLAIMS + HISTORY-IPC helpers shared by the new
- *     cases below. Every history call goes straight at
- *     window.splitpageDesktop.history* (the real bridge/IPC, HISTORY-IPC)
- *     rather than through window.__historyTest (03a-history-store.js's
- *     backend-agnostic wrapper) — the point of these cases is proving the
- *     real main-process implementation (desktop/main.js section 8b), not
- *     the renderer's dispatch to it.
- * -------------------------------------------------------------------- */
-
-// 32 lowercase hex after "d" (DOC-ID-FORMAT) — Node-side so a case can name
-// a docId before any document carrying it exists.
 function randDocId() { return "d" + crypto.randomBytes(16).toString("hex"); }
 
-/* DOC-CLAIMS' homeKey for a file-backed document, predicted Node-side so a
-   case can compute the replacement id the app is about to choose without
-   asking the app for it. It mirrors main.js's own rule exactly, INCLUDING
-   the part that is platform-dependent: the resolved path is lower-cased on
-   win32 only, because an NTFS path is case-insensitive and an ext4 one is
-   not (main.js: `process.platform === "win32" ? resolved.toLowerCase() :
-   resolved`). Hard-coding the lower-case half here made the prediction
-   silently wrong everywhere but Windows. */
 function fileHomeKey(p) {
   const resolved = path.resolve(p);
   return "file:" + (IS_WINDOWS ? resolved.toLowerCase() : resolved);
 }
 
-// HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/ — lowercase hex keeps
-// every generated id inside that shape without thinking about it further.
 function randSnapId(prefix) {
   return (prefix || "s") + crypto.randomBytes(6).toString("hex");
 }
 
-// A HISTORY-IPC snapshot meta with sane defaults, override anything. atMs is
-// stamped forward by main anyway when it would not sort after the bucket's
-// current newest (historyStampAfter) — callers that care about ordering
-// still pass a monotonic atMs so intent is clear from the fixture itself.
 function historyMeta(overrides) {
   var now = Date.now();
   return Object.assign({
@@ -763,27 +487,15 @@ function historyMeta(overrides) {
   }, overrides || null);
 }
 
-// Calls window.splitpageDesktop.<method>(...args) in the page and returns
-// its resolved value, or throws (awaitPromise already rejects evalPage's own
-// promise on an invoke rejection — exactly what HISTORY-IPC's "an invalid
-// docId/meta/body makes the invoke reject" needs a case to observe).
 async function historyCall(cdp, method, args) {
   var argsJson = (args || []).map(function (a) { return JSON.stringify(a === undefined ? null : a); }).join(",");
   return evalPage(cdp, "window.splitpageDesktop." + method + "(" + argsJson + ")");
 }
 
-// true if the call rejected (an invalid id, a malformed meta, …), false if
-// it resolved — never throws itself, so a validation case can assert
-// rejection without its own try/catch at every call site.
 async function historyCallRejects(cdp, method, args) {
   try { await historyCall(cdp, method, args); return false; } catch { return true; }
 }
 
-// HISTORY-STORAGE's on-disk layout (#83: desktop/history-fs-backend.js),
-// read directly (never through IPC) so a case can see what main actually
-// wrote — the same reason readDraftDirs reads DRAFT-STORE's files straight
-// off disk instead of asking the app. history/index.json holds every
-// bucket; bodies live content-addressed under history/bodies/sha256/<aa>/.
 function historyDirOnDisk(userDataDir) { return path.join(userDataDir, "history"); }
 function historyShaHex(text) { return crypto.createHash("sha256").update(text, "utf8").digest("hex"); }
 function historyBodyPathOnDisk(userDataDir, sha) {
@@ -802,9 +514,6 @@ function writeHistoryFormatOnDisk(userDataDir, version) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "FORMAT"), String(version) + "\n", "utf8");
 }
-// A v2 folder written by hand, before any launch: every body under its sha,
-// and one index generation (`file`, default index.json) naming them. buckets
-// = {bucket: [{meta, body}]}, oldest first. Returns the index document.
 function seedHistoryV2OnDisk(userDataDir, buckets, opts) {
   const o = opts || {};
   const dir = historyDirOnDisk(userDataDir);
@@ -826,12 +535,6 @@ function seedHistoryV2OnDisk(userDataDir, buckets, opts) {
   return doc;
 }
 
-// The v1 layout (desktop/main.js §8b before #83): per-bucket folders
-// docs/d-<docId>/ and older/, each with an index.json and one s-<id>.snap
-// per snapshot — "splitpage-snapshot 1", the meta JSON (no document id: the
-// folder was the document), then the state JSON verbatim. Nothing migrates
-// it any more (#100); these write one for the cases that prove it is left
-// alone (a raw tree) or deleted (3.0.0's v1-backup/).
 function historyV1SnapText(meta, stateJson) {
   return "splitpage-snapshot 1\n" + JSON.stringify(meta) + "\n" + stateJson;
 }
@@ -841,10 +544,6 @@ function writeHistoryV1Snap(folder, meta, stateJson) {
   fs.writeFileSync(path.join(folder, "s-" + m.id + ".snap"), historyV1SnapText(m, stateJson), "utf8");
   return m;
 }
-/* docs/ + older/ as v1 left them under `root` (history/ itself, or 3.0.0's
-   history/v1-backup/): a healthy document, one whose index.json is torn,
-   an Older bucket, and a file named like the v2 backend's own temp files
-   (`.tmp-…`, which its sweep must never reach inside docs/). */
 function seedHistoryV1Folders(root) {
   const docA = randDocId(), docB = randDocId();
   const body = (tag) => JSON.stringify({ rows: [{ id: "r1", text: "ünïcödé " + tag }], title: tag });
@@ -862,8 +561,6 @@ function seedHistoryV1Folders(root) {
   fs.writeFileSync(path.join(older, "index.json"), JSON.stringify({ formatVersion: 1, migratedAt: 0, expiresAt: 0, snapshots: oList }), "utf8");
   return { docA, docB };
 }
-// relpath -> sha256 of every file under `dir` (missing dir -> {}), to prove
-// a folder's files are byte-for-byte what they were.
 function historyTreeDigest(dir) {
   const out = {};
   (function walk(d) {
@@ -881,10 +578,6 @@ function historyV1Digest(root) {
   return JSON.stringify({ docs: historyTreeDigest(path.join(root, "docs")), older: historyTreeDigest(path.join(root, "older")) });
 }
 
-// Second-instance send, scoped to one userDataDir — same technique
-// caseTabRoutingRules uses locally, promoted here so the new DOC-CLAIMS case
-// can open A.md and B.md into two tabs of the SAME launch without a
-// dedicated test-shell op for "open this path".
 async function sendSecondInstanceTo(target, userDataDir, filePath) {
   const port = await freePort();
   const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
@@ -894,19 +587,7 @@ async function sendSecondInstanceTo(target, userDataDir, filePath) {
   await waitForExit(proc, 15000);
 }
 
-/* One spawn attempt: builds the env/flags/args for `target` against `port`
-   and `userDataDir`, spawns it, and waits just long enough for an immediate
-   ENOENT-style spawn error to surface. Split out of launchApp so a CDP-never-
-   came-up retry (see launchApp) can spawn a fresh process on a fresh port
-   without duplicating this setup. */
 async function spawnAttempt(target, opts, userDataDir, port) {
-  /* SPLITPAGE_TEST=1: the window never shows, unanswered dialogs cancel
-     themselves, and a main-process crash exits with its stack on stderr
-     instead of popping a modal error box on whoever's desktop this is.
-     opts.env is merged in AFTER these built-in vars (so a case can override
-     anything here, e.g. SPLITPAGE_NO_UPDATE_CHECK), but SPLITPAGE_TEST itself
-     is re-pinned to "1" below no matter what opts.env said — it must never be
-     the thing that lets an automated run show a real window on this machine. */
   const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1" };
   if (opts.allowUpdateCheck) delete env.SPLITPAGE_NO_UPDATE_CHECK;
   else env.SPLITPAGE_NO_UPDATE_CHECK = "1";
@@ -936,34 +617,20 @@ async function spawnAttempt(target, opts, userDataDir, port) {
   let spawnErr = null;
   proc.on("error", (e) => { spawnErr = e; });
 
-  await sleep(150); // let an immediate ENOENT-style spawn error surface
+  await sleep(150);
   if (spawnErr) throw new Error("failed to spawn " + target.exe + ": " + spawnErr.message);
 
   return { proc, dialogsPath, getStdout: () => stdout, getStderr: () => stderr };
 }
 
-/* opts: { flags:[], fixtures:[], dialogs:[]|null, userDataDir, dataDir,
-           allowUpdateCheck:false, updateApi, label, env } */
 async function launchApp(target, opts) {
   opts = opts || {};
   const userDataDir = opts.userDataDir || fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   if (!opts.userDataDir) fs.mkdirSync(userDataDir, { recursive: true });
 
-  // A second instance that loses the single-instance lock calls app.quit()
-  // before app.whenReady() ever runs — it never opens a --remote-debugging
-  // port at all, so waiting on CDP here would just time out. Callers that
-  // expect exactly that (case 7) ask for skipCdp and drive teardown/exit
-  // detection off `proc` directly instead. That's also not a "CDP never came
-  // up" failure, so it gets exactly one attempt, no retry.
   const maxAttempts = opts.skipCdp ? 1 : 2;
   let lastErr = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    // freePort() only PROBES a port free and releases the listener straight
-    // back — under two suite runs going at once (one per tree, per the
-    // orchestrator's own concurrency rule) another process can grab that
-    // same port in the gap before Electron binds its own listener. Retrying
-    // with a freshly probed port recovers from that race instead of failing
-    // the whole launch outright.
     const port = await freePort();
     const { proc, dialogsPath, getStdout, getStderr } = await spawnAttempt(target, opts, userDataDir, port);
 
@@ -987,15 +654,11 @@ async function launchApp(target, opts) {
       };
     } catch (e) {
       lastErr = e;
-      // PID-scoped kill, exactly like teardown() — never by image name, this
-      // is someone's working computer and other launches (this tree's other
-      // targets, or the other tree's own concurrent run) must be untouched.
       killPid(proc.pid);
       await waitForExit(proc, 10000);
       if (attempt >= maxAttempts) {
         throw new Error("launchApp: CDP never came up after " + attempt + " attempt(s) on " + target.name + ": " + (lastErr && lastErr.message || lastErr), { cause: e });
       }
-      // else: loop retries with a fresh freePort() and a fresh spawn.
     }
   }
   throw lastErr || new Error("launchApp: exhausted attempts with no error recorded");
@@ -1012,16 +675,11 @@ function waitForExit(proc, timeoutMs) {
 }
 
 function win32ProcessesMatching(substrings) {
-  // Case-insensitive CommandLine contains-any-of check via Get-CimInstance,
-  // exactly per the harness design note. -EncodedCommand sidesteps quoting
-  // headaches from backslash-heavy Windows temp paths.
   const needles = substrings.map((s) => s.replace(/'/g, "''"));
   const conditions = needles.map((n) => `$_.CommandLine -like '*${n}*'`).join(" -or ");
   const script = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and (${conditions}) } | Select-Object -ExpandProperty ProcessId`;
   const buf = Buffer.from(script, "utf16le");
   try {
-    // ignore stderr: a first-use PowerShell module load can write a CLIXML
-    // progress record there, which is noise, not a failure signal.
     const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", buf.toString("base64")], { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "ignore"] });
     return out.split(/\r?\n/).map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
   } catch {
@@ -1029,13 +687,6 @@ function win32ProcessesMatching(substrings) {
   }
 }
 
-/* The POSIX stand-in for Win32_Process: [{ pid, ppid, cmdline }] for every
-   process this user can see. /proc is preferred where it exists (Linux) —
-   no external command at all, so nothing to be missing from a minimal
-   container image — with `ps` as the fallback everywhere else (macOS).
-   `cmdline` is the same thing the Windows query matches on, which is what
-   makes "a process tagged with THIS launch's user-data dir" mean the same
-   on both: Chromium passes --user-data-dir=<dir> to every child it spawns. */
 function posixProcessTable() {
   if (fs.existsSync("/proc")) {
     const rows = [];
@@ -1049,11 +700,9 @@ function posixProcessTable() {
       let ppid = 0;
       try {
         const stat = fs.readFileSync(`/proc/${entry}/stat`, "utf8");
-        /* field 2 is the comm, in parentheses, and may itself contain spaces
-           and parentheses — so split what follows the LAST ')': state, ppid. */
         const after = stat.slice(stat.lastIndexOf(")") + 1).trim().split(/\s+/);
         ppid = Number(after[1]) || 0;
-      } catch { /* exited between readdir and here */ }
+      } catch { }
       rows.push({ pid: Number(entry), ppid, cmdline });
     }
     return rows;
@@ -1078,14 +727,6 @@ function psProcessesMatching(substrings) {
     .map((p) => String(p.pid));
 }
 
-/* taskkill /T /F, and its POSIX equivalent. There is no single POSIX call
-   for "this process and its descendants": killing the process GROUP is the
-   usual stand-in, but these children are spawned without `detached`, so they
-   share this test runner's own group and a group kill would take the suite
-   down with them. So walk the tree from the process table and SIGKILL it
-   leaf-first, which is the order taskkill /T uses too. Scoped to one pid's
-   descendants exactly like the Windows path — never by image name, so a
-   concurrent run is never touched. */
 function killPid(pid) {
   if (!pid || pid <= 1) return;
   if (IS_WINDOWS) {
@@ -1110,18 +751,6 @@ function killPid(pid) {
   try { process.kill(pid, "SIGKILL"); } catch {}
 }
 
-// document.visibilityState reads "visible" even in TEST_MODE (backgroundThrottling:false
-// makes Electron report that) — it proves nothing about the screen. The only honest way to
-// confirm no visible top-level window exists is to ask the OS: a process with no visible
-// window has MainWindowHandle 0. The BrowserWindow's native HWND belongs to Electron's
-// browser (main) process, not a renderer subprocess, so checking the pid we spawned is right
-// for both dev and packaged targets.
-//
-// Genuinely Windows-only, and with no honest equivalent elsewhere: the point
-// of the assertion is "nothing appeared on the developer's screen", which X11
-// cannot be asked in the same way (and under Xvfb the answer would be
-// meaningless anyway). Its one caller SKIPs it by name off Windows rather
-// than asserting something weaker that would read as the same coverage.
 function getMainWindowHandle(pid) {
   try {
     const out = execFileSync("powershell.exe", [
@@ -1133,15 +762,10 @@ function getMainWindowHandle(pid) {
   } catch { return -1; }
 }
 
-// Fires a page-side expression (typically window.close()) without blocking on a reply that
-// may never arrive: when the requested close actually goes through, the execution context —
-// and sometimes the whole CDP target — can vanish mid-flight, which would otherwise hang this
-// call until CDPConn's own (much longer) sendTimeoutMs. A short local race is exactly the
-// "don't assume a reply" pattern the rest of this close case already has to use.
 async function fireEval(cdp, expression, opts) {
   try {
     await Promise.race([evalPage(cdp, expression, opts), sleep(5000)]);
-  } catch { /* context/target gone — expected on the close that actually succeeds */ }
+  } catch { }
 }
 
 async function closeBrowserGracefully(app) {
@@ -1154,21 +778,6 @@ async function closeBrowserGracefully(app) {
   } catch { return false; }
 }
 
-/* Always: CDP Browser.close first (the clean path), then killPid's
-   force-kill of the tree as a fallback (taskkill /T /F on Windows, a
-   leaf-first SIGKILL walk on POSIX), then confirm from the process table
-   that nothing naming this launch's user-data dir survives.
-
-   Also always records two checks under `tag` (case 15 in the harness
-   design applies to EVERY case, so it lives here once instead of being
-   repeated at each of the ~10 call sites): that teardown left no orphaned
-   process, and that this launch's stderr never printed a
-   "[splitpage-test] uncaught" line — a main-process crash must fail the
-   suite loudly even when the case's own assertions all happened to pass
-   before the crash. `app.getStderr()` reads a closure over already-
-   captured output, so it's safe to call after the process has exited. */
-// Polls the process table until nothing tagged with this launch's user-data
-// dir is left, or the deadline passes; returns whatever is still there.
 async function waitForNoProcesses(userDataDir, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let left = psProcessesMatching([userDataDir]);
@@ -1179,16 +788,6 @@ async function waitForNoProcesses(userDataDir, timeoutMs) {
   return left;
 }
 
-/* opts.expectForceKill (a reason string): this launch is known to end in a
-   state where Browser.close cannot close it — a dirty tab whose unsaved-
-   changes prompt test mode answers Cancel, or a process the case already
-   crashed — so go straight to the kill instead of waiting 12 s for a close
-   that is not going to happen. The same launches were force-killed on
-   Linux AND on Windows (the first Windows run, at eb9904f), so this is how
-   those cases end everywhere, not a platform difference. Any OTHER teardown
-   that falls back to the kill is listed under FORCE-KILLED in the summary:
-   not a failure (nothing is orphaned), but a change worth seeing. */
-// The reason every expectForceKill call site in this file gives today.
 const ENDS_DIRTY = "the case ends with a dirty tab, and test mode answers the unsaved-changes prompt Cancel";
 
 async function teardown(app, tag, opts) {
@@ -1205,19 +804,9 @@ async function teardown(app, tag, opts) {
       unexpectedForceKills.push(tag || "(untagged teardown)");
     }
     killPid(app.proc.pid);
-    /* 30 s, not 10: taskkill /F is authoritative, but an x64 Electron tree
-       under ARM64 emulation on a loaded machine (an installer build or the
-       browser suite running alongside) can take well over 10 s to REPORT
-       its exit — which once failed a case whose processes were all gone. */
     exited = await waitForExit(app.proc, 30000);
     if (!exited) notes.push("process still reported alive after the force-kill");
   }
-  // A packaged app's launcher exe can spawn a child renderer/utility process
-  // tree under a different top pid than the one we spawned — search by the
-  // user-data dir string (unique per launch) rather than trust one pid.
-  // PID/userDataDir-scoped, same as killPid above — never by image name, so
-  // a concurrent run (this tree's other targets, or the other tree's own
-  // suite) is never touched.
   const leftover = await waitForNoProcesses(app.userDataDir, 3000);
   if (leftover.length) {
     notes.push("leftover processes after teardown: " + leftover.join(","));
@@ -1238,10 +827,6 @@ async function teardown(app, tag, opts) {
         app.proc.exitCode === opts.expectExitCode,
         "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
     }
-    /* The POSIX half of expectExitCode: a process that died from a real
-       signal has no exit code at all, so "how did it die" has to be asked
-       the other way round there. Same strength of assertion, named in the
-       platform's own terms — see caseHistoryKillAfterBody's call site. */
     if (opts.expectSignal !== undefined) {
       record(tag + ": killed by " + opts.expectSignal,
         app.proc.signalCode === opts.expectSignal,
@@ -1251,12 +836,6 @@ async function teardown(app, tag, opts) {
   return notes;
 }
 
-// Simulates a real crash: no CDP Browser.close negotiation at all, just a
-// hard PID-scoped kill (same killPid as teardown's fallback path — never by
-// image name) and a wait for the OS to actually report the process gone.
-// Leaves app.userDataDir's drafts/session.json exactly as DRAFT-STORE's own
-// crash-detection (previousSession !== 'clean-exit') expects to find it on
-// the next launchApp({ userDataDir: app.userDataDir }).
 async function crashApp(app) {
   killPid(app.proc.pid);
   const exited = await waitForExit(app.proc, 30000);
@@ -1266,21 +845,11 @@ async function crashApp(app) {
 
 function rmrf(p) { try { fs.rmSync(p, { recursive: true, force: true }); } catch {} }
 
-/* ----------------------------------------------------------------------
- * 3. Reporting.
- * -------------------------------------------------------------------- */
-
 let totalChecks = 0, passedChecks = 0;
-// Groups that passed --only-group's filter, across every target. A filter
-// that matches nothing must fail the run, not print "ALL PASS - 0/0".
 let groupsRun = 0;
-// Every registered group name, so a filter that matched nothing can say
-// what it could have matched.
 const groupNames = new Set();
 const failureLines = [];
 const skippedLines = [];
-// Teardowns that fell back to the force-kill without expecting to (see
-// teardown()). Listed in the summary; not failures.
 const unexpectedForceKills = [];
 
 function record(name, ok, detail) {
@@ -1291,19 +860,11 @@ function record(name, ok, detail) {
   if (!ok) failureLines.push(name + (detail ? " :: " + detail : ""));
 }
 
-/* A check or a whole group that CANNOT run here, recorded by name with the
-   reason (#89). Deliberately not counted as a pass and not counted in
-   totalChecks: a skip is absent coverage, and a run that printed the same
-   "ALL PASS - n/n" as a full one would be worse than no run at all. Every
-   skip is echoed again in the summary, so the tail of the output says what
-   this machine did not test even when nothing failed. */
 function skip(name, reason) {
   skippedLines.push(name + " :: " + reason);
   console.log("SKIP - " + name + " :: " + reason);
 }
 
-// The reason string every off-Windows skip in this file shares, so the
-// summary groups them at a glance.
 const WINDOWS_ONLY = "Windows-only probe (PowerShell/Win32), this run is on " + process.platform;
 
 async function guarded(name, fn) {
@@ -1314,13 +875,6 @@ async function guarded(name, fn) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * 4. Fixtures.
- * -------------------------------------------------------------------- */
-
-// Hand-written per HANDOFF §4 / src/js/20d-formats.js's parseSplitpageFile:
-// only `rows` needs to be an array — migrateRows (02-state.js) fills in
-// every id/status/timestamp default, exactly like an untrusted load does.
 function splitpageFixtureText(title, rowPairs) {
   const rows = rowPairs.map(([visual, audio]) => ({
     visualText: "<p>" + visual + "</p>",
@@ -1335,14 +889,6 @@ function writeFixture(dir, name, title, rowPairs) {
   return p;
 }
 
-/* ----------------------------------------------------------------------
- * 5. The thirteen cases, grouped into launches so a ~10-15s emulated
- *    teardown isn't paid once per assertion. Cases that the harness design
- *    marks as needing the SAME user-data dir across two launches (7, 8)
- *    are written as exactly that; everything else gets its own fresh temp
- *    profile per the "every launch is isolated" rule.
- * -------------------------------------------------------------------- */
-
 async function caseBootAndSecurity(target) {
   const tag = target.name + " boot+security";
   let app = null;
@@ -1350,17 +896,7 @@ async function caseBootAndSecurity(target) {
     app = await launchApp(target, { label: "boot" });
     const cdp = app.cdp;
 
-    // Right when CDP attaches, the target can still be showing about:blank
-    // for a moment before loadURL's navigation lands — poll instead of a
-    // single read so this isn't a coin flip on how fast the app boots.
     const url = await poll(cdp, "location.href !== 'about:blank' && location.href", 15000).catch(() => "about:blank");
-    // TAB-IDENTITY: every tab page is splitpage://app/index.html?tab=<32 hex>.
-    // The exact-equality form this check used before F1 can never hold again —
-    // the tabId in the query string is what findTargetsByKind/connectTab use to
-    // tell one tab from another — so it is matched as a whole here instead,
-    // which also proves the tabId is well formed (a stricter check, not a
-    // looser one). Step L2 owns this file; this one line moved with F1 because
-    // nothing else in the suite could pass until it did.
     record(tag + ": origin is splitpage://app/index.html with a tabId",
       /^splitpage:\/\/app\/index\.html\?tab=[0-9a-f]{32}$/.test(url), url);
 
@@ -1382,16 +918,6 @@ async function caseBootAndSecurity(target) {
     record(tag + ": document.title contains 'Splitpage'", typeof title === "string" && title.indexOf("Splitpage") !== -1, title);
 
     await guarded(tag + ": no service worker registered", async () => {
-      // On this build, navigator.serviceWorker.getRegistrations() itself
-      // rejects on the splitpage:// origin (observed: Electron's custom
-      // "standard: true, secure: true" scheme isn't wired into Chromium's
-      // service-worker-eligible-scheme allowlist the way http/https are —
-      // a platform characteristic of protocol.handle-based custom schemes,
-      // not anything src/js/21-events.js's DESKTOP-gated skip controls).
-      // Either a rejection or an empty list is equally good evidence that
-      // no service worker is running, which is the actual thing this case
-      // cares about — the app itself never calls .register() when DESKTOP
-      // is set, precisely because it doesn't need to.
       const outcome = await evalPage(cdp,
         "navigator.serviceWorker.getRegistrations().then(function(r){return {ok:true,length:r.length};})" +
         ".catch(function(e){return {ok:false,length:0,error:String(e && e.message || e)};})");
@@ -1399,7 +925,6 @@ async function caseBootAndSecurity(target) {
       record(tag + ": no service worker registered", noSw, JSON.stringify(outcome));
     });
 
-    // --- security ---
     await guarded(tag + ": writeFile('bogus-id', ...) rejects", async () => {
       const writeRejected = await evalPage(cdp,
         "(async function(){ try { await window.splitpageDesktop.writeFile('bogus-id','x'); return false; } catch(e){ return true; } })()");
@@ -1431,11 +956,6 @@ async function caseBootAndSecurity(target) {
       const traversalToNonAllowlisted = await evalPage(cdp, "fetch('splitpage://app/../../server/server.js').then(function(r){return r.status;})");
       record(tag + ": '../..' traversal to a non-allowlisted file is refused (404)", traversalToNonAllowlisted === 404, "status=" + traversalToNonAllowlisted);
 
-      // VERSION genuinely IS on the static allowlist by design (main.js
-      // STATIC_ALLOWLIST) — a dotted-path request that normalizes onto it
-      // is expected to succeed. Recorded, not asserted as a "should be
-      // blocked" failure, so this doesn't misreport an intentional
-      // allowlist entry as a traversal bug.
       const versionViaDots = await evalPage(cdp, "fetch('splitpage://app/../../VERSION').then(function(r){return r.status;})");
       record(tag + ": '../../VERSION' resolves onto the (intentionally allowlisted) /VERSION entry", versionViaDots === 200, "status=" + versionViaDots + " -- VERSION is in STATIC_ALLOWLIST by design, so this is expected, not a traversal escape");
     });
@@ -1466,13 +986,11 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
 
-    // --- case 2: open via argv ---
     const stateTitle = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify(openTitle), 20000);
     record(tag + ": argv-opened file's title reaches state", !!stateTitle, "");
     const rowCount = await evalPage(cdp, "window.__splitpageFormats.state().rows.length");
     record(tag + ": argv-opened file's row count matches", rowCount === 2, "rows=" + rowCount);
 
-    // --- case 3: save in place round trip ---
     await evalPage(cdp, "window.__splitpageFormats.state().title = " + JSON.stringify(savedTitle) + "; true");
     await evalPage(cdp, "window.__splitpageFormats.save()");
     let onDisk = null;
@@ -1481,7 +999,6 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
     }
     record(tag + ": save() writes the new title to disk, byte-exact non-ASCII", !!onDisk && onDisk.title === savedTitle, onDisk ? onDisk.title : "no parse");
 
-    // --- case 4: conflict guard ---
     const beforeConflictBytes = fs.readFileSync(fixturePath);
     const st = fs.statSync(fixturePath);
     const bumped = new Date(st.mtime.getTime() + 5000);
@@ -1492,7 +1009,6 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
     const afterConflictBytes = fs.readFileSync(fixturePath);
     record(tag + ": conflicted file is left unchanged on disk", beforeConflictBytes.equals(afterConflictBytes));
 
-    // --- case 5: Save As via test dialogs (answered, then cancelled) ---
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     let saveAsOk = false;
     for (let i = 0; i < 30 && !saveAsOk; i++) {
@@ -1505,18 +1021,14 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
       record(tag + ": Save As file parses as a .splitpage document", !!parsed && Array.isArray(parsed.rows), parsed ? "" : "parse failed");
     }
 
-    /* Error and warning toasts only: the answered Save As just above shows an
-       "ok" toast of its own, and on a loaded machine it can land after this
-       count is taken — which once failed this check with nothing wrong. */
     const problemToasts = "document.querySelectorAll('.toast.error, .toast.warn').length";
     const toastsBefore = await evalPage(cdp, problemToasts);
     const seenBeforeSaveAs = await dialogsSeen(cdp);
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
-    await waitForDialogAnswered(cdp, seenBeforeSaveAs); // the cancelled dialog has been consumed
+    await waitForDialogAnswered(cdp, seenBeforeSaveAs);
     const toastsAfter = await evalPage(cdp, problemToasts);
     record(tag + ": cancelled Save As shows no error toast", toastsAfter === toastsBefore, `before=${toastsBefore} after=${toastsAfter}`);
 
-    // --- case 6: export via test dialogs ---
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('export-md')", { awaitPromise: false });
     let exportOk = false;
     for (let i = 0; i < 30 && !exportOk; i++) {
@@ -1554,14 +1066,6 @@ async function caseSecondInstance(target, fixturesDir) {
     const secondExited = await waitForExit(second.proc, 15000);
     record(tag + ": second launch exits quickly (single-instance lock)", secondExited === true);
 
-    // DOCUMENT-STATE-AND-ROUTING-IPC's route-open rule: the running instance's
-    // tab already holds fixtureA, so it is no longer pristine
-    // (isPristineSeedDocument() requires no file ever opened, 03a-history-
-    // store.js) — routeOpenPath's "reuse this tab" branch therefore does NOT
-    // apply, and the second file has to land in a brand-new tab, leaving the
-    // first tab and its document completely untouched (TAB-IDENTITY). Before
-    // F3 wired up real pristine reporting this landed in the SAME tab; see
-    // F1's own deviations note on this exact case.
     const newTabTarget = await pollNode(async () => {
       const { tabTargets } = await findTargetsByKind(first.port);
       const extra = tabTargets.filter((t) => t.tabId && t.tabId !== firstTabId);
@@ -1582,8 +1086,6 @@ async function caseSecondInstance(target, fixturesDir) {
   } finally {
     if (secondTabCdp) { try { secondTabCdp.close(); } catch {} }
     if (second) {
-      // Only close what still needs closing — a real single-instance exit
-      // already tore this one down.
       if (second.proc.exitCode === null) killPid(second.proc.pid);
       try { second.cdp.close(); } catch {}
     }
@@ -1594,13 +1096,6 @@ async function caseSecondInstance(target, fixturesDir) {
   }
 }
 
-// SMOKE-HARNESS: caseLastFileResume renamed caseSessionRestore for the tab
-// shell — same flow (open a fixture via argv, save, teardown, relaunch with
-// the same userDataDir, assert the title and row count), now proving
-// DESKTOP-STATE-V2's own session restore (the tab this fixture landed in is
-// written back to desktop-state.json as a file source on save, and
-// restoreSessionAtLaunch recreates it) rather than the old single-window
-// "last file" bookkeeping it used to exercise.
 async function caseSessionRestore(target, fixturesDir) {
   const tag = target.name + " session restore";
   const fixtureC = writeFixture(fixturesDir, "case8-resume.splitpage", "Resume Me — 🎬", [["x", "y"], ["p", "q"]]);
@@ -1683,9 +1178,6 @@ async function caseHostMode(target) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
   let app = null;
   try {
-    /* dialogs: ["confirm"] answers the "stop sharing and close" prompt that
-       teardown's Browser.close raises — without it test mode answers Cancel,
-       the app rightly stays open, and teardown can only force-kill it. */
     app = await launchApp(target, { label: "host", flags: ["--host", "--pin", "4821"], dataDir, dialogs: ["confirm"] });
     await waitForRows(app.cdp, 20000);
 
@@ -1729,14 +1221,6 @@ async function startTinyUpdateServer() {
   return { server, url: `http://127.0.0.1:${port}/repos/x/releases/latest` };
 }
 
-/* The same thing, but a release that HAS an installer for this machine, plus
-   the asset itself and a SHA256SUMS for it. That is what lets the in-app
-   download be driven for real: main.js allows a download from the update
-   API's own origin precisely so a fork — or this — can serve one.
-
-   The "installer" is a few KB of deterministic bytes, never executed: this
-   case stops at "downloaded and verified". Running it is what
-   runUpdateInstaller does, and a test must never install anything. */
 async function startTinyReleaseServer(opts) {
   const noSums = !!(opts && opts.noSums);
   const arch = process.arch === "arm64" ? "arm64" : "x64";
@@ -1762,8 +1246,6 @@ async function startTinyReleaseServer(opts) {
       tag_name: "v99.0.0",
       html_url: "https://example.com/r",
       assets: noSums
-        /* A release that published no checksum at all — see
-           caseUpdateNoChecksum. */
         ? [{ name: assetName, size: payload.length, browser_download_url: base + "/asset" }]
         : [
           { name: assetName, size: payload.length, browser_download_url: base + "/asset" },
@@ -1789,15 +1271,10 @@ async function caseUpdateStatus(target) {
     record(tag + ": update-status.json reports updateAvailable:true", !!status && status.updateAvailable === true, JSON.stringify(status));
     record(tag + ": update-status.json reports the release URL", !!status && status.releaseUrl === "https://example.com/r", JSON.stringify(status));
 
-    // main pushes every status change to the page now (splitpage:update-status),
-    // so the notice should appear WITHOUT a reload: the launch check answers
-    // after the page has already loaded and read the status once, and having
-    // to reload to see it was the bug. Assert that before reloading anything.
     const barWithoutReload = await poll(app.cdp,
       "(function(){ var b = document.getElementById('update-bar'); return b && b.hidden === false; })()", 15000);
     record(tag + ": the notice appears without a reload, from main's push", !!barWithoutReload);
 
-    // It must also survive a reload, which re-reads the in-memory status.
     await app.cdp.send("Page.reload", {}).catch(() => {});
     await waitForRows(app.cdp, 20000);
     const barVisible = await poll(app.cdp, "(function(){ var b = document.getElementById('update-bar'); return b && b.hidden === false; })()", 15000);
@@ -1813,14 +1290,6 @@ async function caseUpdateStatus(target) {
   }
 }
 
-/* The in-app update download: a release that HAS an installer for this
-   platform and architecture is offered as "Download" rather than a link, and
-   pressing it fetches and verifies the file inside the app.
-
-   It deliberately stops short of installing. runUpdateInstaller() spawns the
-   downloaded installer and quits the app, which a test on someone's working
-   machine must never do (invariant #33) — and it already refuses to in
-   TEST_MODE, which is the last assertion here. */
 async function caseUpdateDownload(target) {
   const tag = target.name + " update download";
   const mini = await startTinyReleaseServer();
@@ -1835,7 +1304,6 @@ async function caseUpdateDownload(target) {
     record(tag + ": ...and recognises an installer for this machine",
       !!status && status.canInstall === true, JSON.stringify(status));
 
-    // The bar offers Download, not a link out.
     const label = await poll(app.cdp,
       "(function(){ var b = document.getElementById('update-bar-action'); return b && !b.hidden ? b.textContent : null; })()", 15000);
     record(tag + ": the notice offers Download", label === "Download", String(label));
@@ -1849,15 +1317,12 @@ async function caseUpdateDownload(target) {
     record(tag + ": ...having received the whole file", dl.received === mini.size, JSON.stringify(dl));
     record(tag + ": ...verified against the published checksum", dl.verified === true, JSON.stringify(dl));
 
-    // The file is on disk, under this launch's own userData — nothing was
-    // written next to the app, and the page never learned the path.
     const updatesDir = path.join(app.userDataDir, "updates");
     const onDisk = fs.existsSync(path.join(updatesDir, mini.assetName));
     record(tag + ": the installer is in userData/updates", onDisk, updatesDir);
     record(tag + ": the page is never told the path",
       !JSON.stringify(after).includes(app.userDataDir), JSON.stringify(after.download));
 
-    // The bar now offers the install, and asking for it is a no-op in a test.
     const label2 = await poll(app.cdp,
       "(function(){ var b = document.getElementById('update-bar-action'); return b && !b.hidden ? b.textContent : null; })()", 15000);
     record(tag + ": the notice offers Install and restart", label2 === "Install and restart", String(label2));
@@ -1873,13 +1338,6 @@ async function caseUpdateDownload(target) {
   }
 }
 
-/* A release with no published checksum is REFUSED (#64).
-
-   The downloaded file is the one thing this app will execute and it is not
-   code-signed, so the checksum is the whole chain of trust. It used to be
-   optional: no SHA256SUMS asset meant the download was simply accepted, on
-   the strength of HTTPS to GitHub alone. Same fixture as the case above,
-   minus the sums asset. */
 async function caseUpdateNoChecksum(target) {
   const tag = target.name + " update without a checksum";
   const mini = await startTinyReleaseServer({ noSums: true });
@@ -1901,8 +1359,6 @@ async function caseUpdateNoChecksum(target) {
     const dl = (after && after.download) || {};
     record(tag + ": ...and the state is failed, never ready", dl.state === "failed", JSON.stringify(dl));
 
-    /* Nothing executable is left behind: "ready" is the only state that lets
-       the file be run, and a refused download is cleaned off disk. */
     const stillThere = fs.existsSync(path.join(app.userDataDir, "updates", mini.assetName));
     record(tag + ": ...and the file it fetched is not left on disk", !stillThere);
 
@@ -1918,16 +1374,6 @@ async function caseUpdateNoChecksum(target) {
   }
 }
 
-/* Case 14: clean-close regression test for the fixed "Object has been
-   destroyed" bug. main.js's window 'closed' handler used to read
-   win.webContents AFTER the BrowserWindow was already destroyed, throwing
-   on every single close and popping Electron's modal error box (which
-   blocks the main thread — the ORIGINAL, wrong diagnosis in this file
-   attributed that hang to "CDP window-closing is flaky in this
-   environment"; it was this crash). The fix captures webContents before
-   destruction. This case is the regression guard: an untouched (never
-   dirtied, so no unsaved-changes prompt in the way at all) document,
-   closed for real, must exit clean — code 0, no crash line on stderr. */
 async function caseCleanClose(target) {
   const tag = target.name + " clean close (regression)";
   let app = null;
@@ -1938,7 +1384,7 @@ async function caseCleanClose(target) {
 
     const t0 = Date.now();
     await fireEval(cdp, "window.close()", { awaitPromise: false, userGesture: true });
-    const exited = await waitForExit(app.proc, 45000); // x64-on-ARM64 emulation teardown is slow
+    const exited = await waitForExit(app.proc, 45000);
     const elapsedMs = Date.now() - t0;
     record(tag + ": process exits within 45s of window.close()", exited === true, "elapsed=" + elapsedMs + "ms");
     record(tag + ": exit code is 0", app.proc.exitCode === 0, "exitCode=" + app.proc.exitCode + " signal=" + app.proc.signalCode);
@@ -1956,32 +1402,9 @@ async function caseCleanClose(target) {
   }
 }
 
-/* Case 13: unsaved-changes close. Drives the SAME will-prevent-unload path
-   main.js actually implements (see main.js's own comment block just above
-   `win.webContents.on("will-prevent-unload", ...)`): "cancel" leaves the
-   block in place (window stays open), "confirm" overrides it (window
-   closes). This used to be mis-diagnosed as unobservable over CDP — that
-   was really the "Object has been destroyed" crash above; with that fixed,
-   the debug port stays alive across a close the app itself cancels, so
-   this drives both outcomes for real instead of giving up on them.
-
-   Two things matter for this to actually exercise the app's logic rather
-   than silently no-op:
-     - the edit that dirties the document needs userGesture:true, because
-       Chromium only honours a beforeunload block after the page has had
-       real user activation (see evalPage's userGesture comment);
-     - window.close() itself is fired through fireEval(), which does not
-       wait for a reply that may never arrive — when "confirm" actually
-       goes through, the page's execution context (and sometimes the
-       whole CDP target) can vanish out from under the in-flight
-       Runtime.evaluate call. */
 async function caseUnsavedChangesClose(target) {
   const tag = target.name + " unsaved-changes close";
 
-  // --- part A: cancel keeps it open; a second close, now answered
-  //     "confirm", actually closes it. One shared SPLITPAGE_TEST_DIALOGS
-  //     cursor (main.js's own design — see its own comment on
-  //     testDialogAnswers), consumed in the order the app calls it. ---
   let app = null;
   try {
     app = await launchApp(target, { label: "unsaved-close-cancel-then-confirm", dialogs: ["cancel", "confirm"] });
@@ -1994,9 +1417,6 @@ async function caseUnsavedChangesClose(target) {
     const dirtyShown = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
     record(tag + ": editing marks the document dirty (Save button shows the dot)", !!dirtyShown);
 
-    // First close request: dialogs[0] = "cancel" -> will-prevent-unload's
-    // event.preventDefault() is NOT called -> the page's own block stands
-    // -> window stays open.
     const seenBeforeClose = await dialogsSeen(cdp);
     await fireEval(cdp, "window.close()", { awaitPromise: false, userGesture: true });
     await waitForDialogAnswered(cdp, seenBeforeClose);
@@ -2010,15 +1430,11 @@ async function caseUnsavedChangesClose(target) {
       stillAliveAfterCancel && pageStillThere,
       "exitCode=" + app.proc.exitCode + " pageStillThere=" + pageStillThere);
 
-    // Still the same dirty document, not a fresh window — confirms "kept
-    // open" actually means what it says, not just "process alive".
     const stillDirty = await evalPage(cdp,
       "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()"
     ).catch(() => null);
     record(tag + ": the same dirty document is still showing after 'cancel'", stillDirty === true, String(stillDirty));
 
-    // Second close request: dialogs[1] = "confirm" -> event.preventDefault()
-    // IS called -> overrides the page's block -> window closes for real.
     await fireEval(cdp, "window.close()", { awaitPromise: false, userGesture: true });
     const exited = await waitForExit(app.proc, 20000);
     record(tag + ": 'confirm' on the unsaved-changes prompt closes the window", exited === true);
@@ -2030,12 +1446,6 @@ async function caseUnsavedChangesClose(target) {
     }
   }
 
-  // --- part B: a dirty close with NO pre-answered dialog. TEST_MODE
-  //     monkeypatches dialog.showMessageBoxSync to auto-answer its
-  //     cancelId (main.js) whenever SPLITPAGE_TEST_DIALOGS didn't supply
-  //     one — for this prompt's button order that's "Stay" — so the
-  //     window must stay open and, per the hard rule for this machine,
-  //     nothing must ever have appeared on screen while that happened. ---
   let app2 = null;
   try {
     app2 = await launchApp(target, { label: "unsaved-close-no-dialogs-default-stay" });
@@ -2049,7 +1459,7 @@ async function caseUnsavedChangesClose(target) {
 
     const seenBeforeClose2 = await dialogsSeen(cdp2);
     await fireEval(cdp2, "window.close()", { awaitPromise: false, userGesture: true });
-    await waitForDialogAnswered(cdp2, seenBeforeClose2); // the un-answered prompt defaulted to Stay
+    await waitForDialogAnswered(cdp2, seenBeforeClose2);
     const stillAlive2 = app2.proc.exitCode === null;
     record(tag + ": dirty close with NO pre-answered dialog stays open (test-mode default = Stay)",
       stillAlive2, "exitCode=" + app2.proc.exitCode);
@@ -2069,34 +1479,6 @@ async function caseUnsavedChangesClose(target) {
   }
 }
 
-/* Regression case for "close-relies-on-beforeunload-activation": the main
-   process must be the sole authority on unsaved changes, not the page's own
-   beforeunload block, which Chromium only honours after real user
-   activation (a click, a keypress) has happened THIS session. This case
-   never clicks anything at all — window.__desktopTest.markDirtyForTest()
-   (20f-desktop.js) calls markDirty() directly with zero DOM interaction,
-   the same shape as a real no-gesture dirty path (applyStashedWork merging
-   a stash at load, a resumed project, an OS-opened file marked dirty on
-   open).
-
-   The close itself is driven through window.splitpageDesktop.__testRequestClose()
-   (preload.js/main.js, TEST_MODE-only), NOT the page's own window.close().
-   An experiment run while diagnosing this case proved those are not the
-   same operation: a page-initiated window.close() asks Chromium's own
-   beforeunload negotiation, which — with no user activation having ever
-   happened — Chromium settles on its own without asking the main process
-   at all, then tears the WebContents down directly. BrowserWindow's
-   'close' event, which main.js's dirty check (lastDirtyByWebContents) lives
-   entirely inside, never fires; only 'closed' does, after the fact. So a
-   dirty, never-activated document closed with no prompt whenever the test
-   used window.close(), REGARDLESS of what main.js's own close authority
-   fix did — the fix was never being exercised at all.
-   __testRequestClose() instead calls BrowserWindow#close() from the main
-   process, exactly like a real user's title-bar X / Alt+F4 does
-   (NativeWindow::Close() is that same call), which DOES fire 'close'. See
-   main.js's own comment on splitpage:test-request-close for the full
-   story, and caseCloseFromPageIsUnguarded below, which documents the
-   window.close() behaviour this case used to (wrongly) rely on. */
 async function caseCloseAuthorityNoGesture(target) {
   const tag = target.name + " close authority (no user gesture anywhere)";
   let app = null;
@@ -2109,20 +1491,8 @@ async function caseCloseAuthorityNoGesture(target) {
     const dirtyShown = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
     record(tag + ": markDirtyForTest() dirties the document with zero DOM interaction", !!dirtyShown);
 
-    // setDocumentState() (called from markDirty() via notifyDesktopDocumentState())
-    // reaches main over ipcRenderer.send — fire-and-forget from the
-    // renderer's point of view, so the DOM already showing the dirty dot is
-    // no guarantee main.js's lastDirtyByWebContents map has been updated
-    // yet. An ipcRenderer.invoke() round trip on the SAME WebContents is
-    // delivered in order after that earlier send, so awaiting one here
-    // guarantees main has already processed it before we ask it to close.
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
-    // First close request, no userGesture at all, driven through
-    // __testRequestClose() -> main's BrowserWindow#close() -> the SAME
-    // 'close' event a real title-bar X / Alt+F4 fires: dialogs[0] =
-    // "cancel" -> the 'close' handler's own dirty check answers "Stay" ->
-    // window stays open.
     const seenBeforeClose = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     await waitForDialogAnswered(cdp, seenBeforeClose);
@@ -2136,9 +1506,6 @@ async function caseCloseAuthorityNoGesture(target) {
       stillAliveAfterCancel && pageStillThere,
       "exitCode=" + app.proc.exitCode + " pageStillThere=" + pageStillThere);
 
-    // Second close request: dialogs[1] = "confirm" -> "Leave without saving"
-    // -> the window actually closes, still with no gesture ever having
-    // happened this session.
     await fireEval(cdp, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 20000);
     record(tag + ": 'confirm' closes the window for real, still with no user gesture", exited === true);
@@ -2151,24 +1518,6 @@ async function caseCloseAuthorityNoGesture(target) {
   }
 }
 
-/* Documents (rather than regression-tests a fix for) the OTHER close path:
-   the page's OWN window.close(), fired with no user gesture. Confirmed by
-   experiment while building caseCloseAuthorityNoGesture above: with no
-   activation ever having happened, Chromium settles its beforeunload
-   negotiation on its own, WITHOUT ever asking the main process, then tears
-   the WebContents down directly — BrowserWindow's 'close' event never
-   fires, so main.js's dirty check (which lives entirely in that handler)
-   never runs, and a dirty document is lost with no prompt at all.
-   Leaving this undefended is only safe because it is not a user-reachable
-   path: src/js never calls window.close() anywhere (grep it) — every real
-   close goes through the title bar / Alt+F4 (BrowserWindow#close(),
-   exercised above via __testRequestClose) or File > Exit (app.quit(),
-   exercised in caseQuitAuthorityNoGesture below). If src/js ever grows a
-   call to window.close() (a "close this document" menu command, say),
-   this check starts failing and the app would need the same main-process
-   authority the real close path already has extended to that new caller
-   too. No dialogs are pre-answered here — none should be consulted, since
-   'close' never fires to ask them. */
 async function caseCloseFromPageIsUnguarded(target) {
   const tag = target.name + " page-initiated window.close() (documented, not user-reachable)";
   let app = null;
@@ -2193,20 +1542,6 @@ async function caseCloseFromPageIsUnguarded(target) {
   }
 }
 
-/* Same regression as caseCloseAuthorityNoGesture, but through the File >
-   Exit path (role: "quit" -> app.quit(), main.js section 13) instead of a
-   single window's close button. app.quit() asks every open BrowserWindow
-   to close before the app actually exits, which fires the same
-   win.on('close') handler this whole fix is about — this proves the
-   authority holds on the quit path too, not only a direct window close. */
-/* Regression case: a CANCELLED quit must leave the document server running.
-   Electron emits 'before-quit' before it asks the windows to close, and a
-   window's close handler can still cancel the quit (unsaved changes -> Stay).
-   main.js used to kill the server in before-quit, so File ▸ Exit -> Stay left
-   the app running with no server behind /api: sharing silently stopped and
-   the Save the user stayed for could not reach it. The kill lives in
-   'will-quit' now, which only fires once every window has really closed —
-   the second half of this case proves it still happens then. */
 async function caseQuitCancelKeepsServer(target) {
   const tag = target.name + " --library quit cancelled keeps the document server";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
@@ -2223,10 +1558,8 @@ async function caseQuitCancelKeepsServer(target) {
 
     await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
     await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
-    // invoke round trip: main has processed the dirty report before the quit
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
-    // First quit: dialogs[0] = "cancel" -> Stay.
     const seenBeforeQuit = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     await waitForDialogAnswered(cdp, seenBeforeQuit);
@@ -2239,8 +1572,6 @@ async function caseQuitCancelKeepsServer(target) {
       : 0;
     record(tag + ": the document server itself still answers on its port", direct === 200, "port=" + port + " status=" + direct);
 
-    // Second quit: dialogs[1] = "confirm" -> the app really exits, and the
-    // server goes with it (will-quit).
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": 'confirm' quits for real with exit code 0", exited === true && app.proc.exitCode === 0, "exitCode=" + app.proc.exitCode);
@@ -2270,17 +1601,12 @@ async function caseQuitAuthorityNoGesture(target) {
     await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
     await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
 
-    // First quit request, no userGesture at all: dialogs[0] = "cancel" ->
-    // the 'close' handler answers "Stay" -> app.quit() aborts, process
-    // stays alive.
     const seenBeforeQuit = await dialogsSeen(cdp);
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     await waitForDialogAnswered(cdp, seenBeforeQuit);
     record(tag + ": quitting still prompts with no user gesture, and 'cancel' keeps the app alive",
       app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
 
-    // Second quit request: dialogs[1] = "confirm" -> the app actually
-    // exits, still with no gesture ever having happened this session.
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 20000);
     record(tag + ": 'confirm' quits for real, still with no user gesture", exited === true);
@@ -2293,12 +1619,6 @@ async function caseQuitAuthorityNoGesture(target) {
   }
 }
 
-/* Regression case for "second-instance-wrong-cwd": a RELATIVE path handed
-   to a second launch must resolve against that second (launching) process's
-   own working directory, not against the already-running first instance's.
-   Spawns the second process directly (not through launchApp(), which always
-   passes absolute fixture paths) with `cwd: fixturesDir` and just the
-   fixture's basename as the argument. */
 async function caseSecondInstanceRelativePath(target, fixturesDir) {
   const tag = target.name + " second instance (relative path from a different cwd)";
   const fixtureName = "case7c-relative.splitpage";
@@ -2315,8 +1635,6 @@ async function caseSecondInstanceRelativePath(target, fixturesDir) {
     const port = await freePort();
     const env = { ...process.env, SPLITPAGE_USER_DATA: userDataDir, SPLITPAGE_TEST: "1", SPLITPAGE_NO_UPDATE_CHECK: "1" };
     const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`];
-    // Only the basename — the whole point is that this must resolve against
-    // the SECOND process's cwd (fixturesDir, set below), not the first's.
     const args = target.kind === "dev" ? [target.appPath, ...flags, fixtureName] : [...flags, fixtureName];
     secondProc = spawn(target.exe, args, { cwd: fixturesDir, env, stdio: ["ignore", "pipe", "pipe"] });
     const secondExited = await waitForExit(secondProc, 15000);
@@ -2331,16 +1649,11 @@ async function caseSecondInstanceRelativePath(target, fixturesDir) {
   }
 }
 
-/* Regression case for "unpinned-shared-session-shortcut": "--pin" with no
-   value (exactly what the installer's shared-session shortcut now passes,
-   per installer.nsh) must auto-generate a real 6-digit PIN rather than
-   leaving JOIN_PIN empty. */
 async function caseHostModeAutoPin(target) {
   const tag = target.name + " --host --pin (no value, auto-generated)";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
   let app = null;
   try {
-    // "confirm": the stop-sharing prompt at teardown (see caseHostMode)
     app = await launchApp(target, { label: "host-auto-pin", flags: ["--host", "--pin"], dataDir, dialogs: ["confirm"] });
     await waitForRows(app.cdp, 20000);
     const info = await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
@@ -2352,18 +1665,11 @@ async function caseHostModeAutoPin(target) {
   }
 }
 
-/* Regression case for the other half of "unpinned-shared-session-shortcut":
-   renderDesktopShareInfo() (20f-desktop.js) must say so explicitly on the
-   rare occasion a session genuinely has no PIN (typing --host by hand, with
-   no --pin at all — bypassing the installer's own shortcut, which now
-   always adds one) instead of silently omitting the whole PIN section like
-   it used to. */
 async function caseHostModeNoPinWarning(target) {
   const tag = target.name + " --host with no --pin at all shows an explicit warning";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
   let app = null;
   try {
-    // "confirm": the stop-sharing prompt at teardown (see caseHostMode)
     app = await launchApp(target, { label: "host-no-pin", flags: ["--host"], dataDir, dialogs: ["confirm"] });
     await waitForRows(app.cdp, 20000);
     await poll(app.cdp, "(function(){ var el = document.getElementById('desktop-share-info'); return el && el.hidden === false; })()", 15000);
@@ -2377,21 +1683,6 @@ async function caseHostModeNoPinWarning(target) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * 5b. Step L2 — the tab shell cases (SMOKE-HARNESS, TAB-IDENTITY,
- *     DESKTOP-STATE-V2, TAB-BOOT-SYNC, DOCUMENT-STATE-AND-ROUTING-IPC,
- *     TABSTRIP-BRIDGE, CLOSE-QUIT-LIFECYCLE). Every case launches through
- *     launchApp (SPLITPAGE_TEST=1), drives tab/window operations through
- *     window.splitpageDesktop.__testShell — the same functions the menu, the
- *     strip and drag-and-drop call in real use (invariant #33: no click ever
- *     has to land on this machine's screen) — and closes only through the
- *     TEST_MODE hooks (__testRequestClose/__testRequestQuit/__testShell
- *     closeTab), never a page window.close().
- * -------------------------------------------------------------------- */
-
-/* "tabstrip origin: on the strip target, typeof window.splitpageDesktop ===
-   'undefined'; window.splitpageTabStrip.readFile is undefined;
-   fetch('splitpage://tabstrip/api/health') is refused or 404" — TABSTRIP-BRIDGE. */
 async function caseTabstripOrigin(target) {
   const tag = target.name + " tabstrip origin: no file/draft/history bridge, no /api proxy";
   let app = null;
@@ -2416,17 +1707,6 @@ async function caseTabstripOrigin(target) {
     const noReadFile = await evalPage(stripCdp, "typeof (window.splitpageTabStrip && window.splitpageTabStrip.readFile) === 'undefined'");
     record(tag + ": window.splitpageTabStrip.readFile is undefined", noReadFile === true, String(noReadFile));
 
-    /* TABSTRIP-BRIDGE asked for a 404 here: /api/* is deliberately not
-       special-cased for the strip's host in registerProtocol(), so the
-       request falls through to "not found" and the strip has no proxy to the
-       document server. Since #65 the strip's own response headers also carry
-       connect-src 'none', so the request is refused one layer EARLIER — it
-       never leaves the page, and the fetch REJECTS instead of resolving with
-       a status. That is strictly more than the original check claimed, so it
-       is asserted as what it now is (the violated directive, read off the
-       page's own securitypolicyviolation event) rather than relaxed into
-       "didn't come back 200". Nothing had run this assertion since #65
-       landed the header — that is the gap #89 is about. */
     const apiAttempt = await evalPage(stripCdp,
       "new Promise(function(resolve){" +
       "  var out = { outcome: null, violated: null, blocked: null };" +
@@ -2447,8 +1727,6 @@ async function caseTabstripOrigin(target) {
   }
 }
 
-/* "Ctrl+T via __testShell createTab → a new pristine blank tab whose
-   DESKTOP.launchIntent.type === 'blank'". */
 async function caseCtrlTNewTab(target) {
   const tag = target.name + " Ctrl+T (__testShell createTab): a new pristine blank tab";
   let app = null;
@@ -2477,13 +1755,6 @@ async function caseCtrlTNewTab(target) {
   }
 }
 
-/* "pristine reuse vs new tab: route a file open from a fresh tab → count
-   stays 1; from a dirty tab → count 2 and the original is untouched" +
-   "path dedupe: opening the same path twice → switches, no duplicate; also
-   from a second window" + "second-instance argv → a tab in the running
-   instance, same dedupe" — all three exercised through real second-instance
-   launches (the actual DOCUMENT-STATE-AND-ROUTING-IPC path, not a stand-in),
-   since routeOpenPath is exactly what app.on('second-instance') calls. */
 async function caseTabRoutingRules(target, fixturesDir) {
   const tag = target.name + " routing: pristine reuse, dirty->new tab, path dedupe (same and cross window)";
   const fixtureA = writeFixture(fixturesDir, "case-route-a.splitpage", "Route A Doc", [["1", "2"]]);
@@ -2506,7 +1777,6 @@ async function caseTabRoutingRules(target, fixturesDir) {
     await waitForRows(app.cdp, 20000);
     const tab1Id = await tabIdOfTarget(app.cdp);
 
-    // --- pristine reuse: a fresh, never-touched tab absorbs the file ---
     await sendSecondInstance(fixtureA);
     const reused = await poll(app.cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Route A Doc"), 15000).catch(() => null);
     record(tag + ": routing into a pristine tab reuses it (count stays 1)", !!reused);
@@ -2514,9 +1784,6 @@ async function caseTabRoutingRules(target, fixturesDir) {
     let totalTabs = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
     record(tag + ": tab count is still 1 after the pristine reuse", totalTabs === 1, "total=" + totalTabs);
 
-    // --- dirty tab: this same tab now holds a real file (no longer
-    //     pristine) — dirty it explicitly too, then route a second file. It
-    //     must land in a NEW tab, and the first tab must be untouched. ---
     await dirtyTabForTest(app.cdp);
     await sendSecondInstance(fixtureB);
     const newTabTarget = await pollNode(async () => {
@@ -2530,16 +1797,10 @@ async function caseTabRoutingRules(target, fixturesDir) {
     if (!newTabTarget) return;
 
     cdpB = await connectTarget(newTabTarget);
-    // findTargetsByKind already parsed the tabId straight off the target's
-    // own URL (?tab=<tabId>) — reading it there avoids a race against this
-    // brand-new page's own preload/boot script actually having run yet,
-    // which a page-side tabIdOfTarget() eval cannot avoid the moment after
-    // the target first appears.
     const tabBId = newTabTarget.tabId;
     const gotB = await poll(cdpB, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Route B Doc — 🧭"), 15000).catch(() => null);
     record(tag + ": the new tab shows the second file's document", !!gotB);
 
-    // --- path dedupe, same window: opening fixtureB again switches, no dup ---
     await sendSecondInstance(fixtureB);
     listing = await shell(app.cdp, "listTargets", {});
     totalTabs = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
@@ -2547,9 +1808,6 @@ async function caseTabRoutingRules(target, fixturesDir) {
     let ownerWindow = listing.windows.find((w) => w.tabs.some((t) => t.tabId === tabBId));
     record(tag + ": the existing tab for that path is activated, not duplicated", !!ownerWindow && ownerWindow.activeTabId === tabBId, JSON.stringify(ownerWindow));
 
-    // --- path dedupe, from a second window: move fixtureB's tab out, then
-    //     open the same path again — it must still resolve to that tab,
-    //     wherever it now lives, not spawn a third one. ---
     const newWindowId = await shell(app.cdp, "moveTabToWindow", { tabId: tabBId, windowId: null });
     record(tag + ": the tab moved into a new window", typeof newWindowId === "string");
     await sendSecondInstance(fixtureB);
@@ -2567,11 +1825,6 @@ async function caseTabRoutingRules(target, fixturesDir) {
   }
 }
 
-/* "middle-click/close-tab on a clean tab closes with no dialog consumed; a
-   dirty tab honours 'cancel' then 'confirm'" + "close-tab affects only that
-   tab" (a driver and a witness tab are never touched throughout). __testShell
-   closeTab(tabId) IS the middle-click/Ctrl+W path (requestCloseTab) per
-   TABSTRIP-BRIDGE's own comment — not a stand-in for it. */
 async function caseCloseTabCleanAndDirty(target) {
   const tag = target.name + " close-tab (same path as middle-click): clean vs dirty, only that tab";
   let app = null;
@@ -2579,13 +1832,12 @@ async function caseCloseTabCleanAndDirty(target) {
   try {
     app = await launchApp(target, { label: "close-tab-clean-dirty", dialogs: ["cancel", "confirm"] });
     await waitForRows(app.cdp, 20000);
-    const tab1Id = await tabIdOfTarget(app.cdp); // driver — never closed
+    const tab1Id = await tabIdOfTarget(app.cdp);
 
     const witnessId = await shell(app.cdp, "createTab", {});
     cdpWitness = await connectTab(app, witnessId);
     await waitForRows(cdpWitness, 20000);
 
-    // --- a CLEAN tab closes immediately, no dialog consumed ---
     const cleanId = await shell(app.cdp, "createTab", {});
     await shell(app.cdp, "closeTab", { tabId: cleanId });
     let listing = await shell(app.cdp, "listTargets", {});
@@ -2593,9 +1845,6 @@ async function caseCloseTabCleanAndDirty(target) {
     record(tag + ": closing a clean tab removes it immediately, no dialog needed", allTabIds.indexOf(cleanId) === -1, JSON.stringify(allTabIds));
     record(tag + ": the app is still running", app.proc.exitCode === null);
 
-    // --- a DIRTY tab: 'cancel' keeps it, 'confirm' closes it. The clean-tab
-    //     close above touched nothing unsaved, so it consumed no dialog
-    //     answer — dialogs[0] is still 'cancel' here, proving that. ---
     const dirtyId = await shell(app.cdp, "createTab", {});
     cdpDirty = await connectTab(app, dirtyId);
     await waitForRows(cdpDirty, 20000);
@@ -2620,8 +1869,6 @@ async function caseCloseTabCleanAndDirty(target) {
   }
 }
 
-/* "close-tab affects only that tab; the last tab closes the window; the last
-   window quits with exit 0." */
 async function caseLastTabClosesWindowLastWindowQuits(target) {
   const tag = target.name + " close-tab: last tab closes the window; last window quit exits 0";
   let app = null;
@@ -2638,10 +1885,6 @@ async function caseLastTabClosesWindowLastWindowQuits(target) {
       JSON.stringify(listing.windows));
     record(tag + ": the app is still running", app.proc.exitCode === null);
 
-    // Closing the LAST tab of the only window closes the window, which
-    // (being the only window) quits the app — fire-and-forget: the reply
-    // can never arrive once this tab's own context is gone (fireShell, same
-    // reasoning as fireEval's own comment on window.close()).
     await fireShell(app.cdp, "closeTab", { tabId: tab1Id });
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": the last tab closing takes the window, and the last window quit exits 0",
@@ -2651,9 +1894,6 @@ async function caseLastTabClosesWindowLastWindowQuits(target) {
   }
 }
 
-/* "a window with 2 dirty tabs and another window open → one dialog; 'review'
-   focuses the first dirty tab and cancels; 'confirm' closes only that
-   window." */
 async function caseWindowCloseTwoDirtyTabs(target) {
   const tag = target.name + " window close: 2 dirty tabs + another window open (one dialog)";
   let ctx = null;
@@ -2664,10 +1904,6 @@ async function caseWindowCloseTwoDirtyTabs(target) {
     await dirtyTabForTest(cdp1);
     await dirtyTabForTest(cdp2);
 
-    // First close attempt on window1 (2 unsaved tabs -> the scoped 3-button
-    // dialog, CLOSE-QUIT-LIFECYCLE): dialogs[0] = "review" -> the first
-    // unsaved tab (tab1, listed first in strip order) is activated and the
-    // close is cancelled.
     await fireEval(cdp1, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     const afterReview = await pollShellState(cdp3, (l) => {
       const w1 = l.windows.find((w) => w.windowId === window1Id);
@@ -2679,8 +1915,6 @@ async function caseWindowCloseTwoDirtyTabs(target) {
     const w1 = afterReview && afterReview.windows.find((w) => w.windowId === window1Id);
     record(tag + ": 'review' activates the first unsaved tab", !!w1 && w1.activeTabId === tab1Id, JSON.stringify(w1));
 
-    // Second close attempt: dialogs[1] = "confirm" -> window1 closes (both
-    // tabs go with it); window2, never touched, stays open.
     await fireEval(cdp1, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     const afterConfirm = await pollShellState(cdp3, (l) => (l.windows.every((w) => w.windowId !== window1Id) ? l : null), 20000).catch(() => null);
     record(tag + ": 'confirm' closes only window1", !!afterConfirm, afterConfirm ? "" : "window1 still present after 'confirm'");
@@ -2695,8 +1929,6 @@ async function caseWindowCloseTwoDirtyTabs(target) {
   }
 }
 
-/* "quit with dirty tabs in two windows → exactly one answer consumed;
-   'review' does not quit; 'confirm' → exit 0." One dirty tab per window. */
 async function caseQuitTwoWindowsDirty(target) {
   const tag = target.name + " quit: dirty tabs in two windows (one answer per attempt)";
   let ctx = null;
@@ -2704,18 +1936,14 @@ async function caseQuitTwoWindowsDirty(target) {
     ctx = await setupTwoDirtyWindows(target, { label: "quit-2-windows-dirty", dialogs: ["review", "confirm"] });
     const { app, cdp1, cdp3 } = ctx;
 
-    await dirtyTabForTest(cdp1); // window1
-    await dirtyTabForTest(cdp3); // window2
+    await dirtyTabForTest(cdp1);
+    await dirtyTabForTest(cdp3);
 
     const seenBeforeReview = await dialogsSeen(cdp1);
     await fireEval(cdp1, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     await waitForDialogAnswered(cdp1, seenBeforeReview);
     record(tag + ": 'review' does not quit", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
 
-    // If before-quit had wrongly consumed more than one dialog answer on the
-    // first attempt, this second attempt would not see dialogs[1] ===
-    // "confirm" and the quit would not go through — this assertion is what
-    // "exactly one answer consumed" actually proves.
     await fireEval(cdp1, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": 'confirm' quits for real (exactly one answer per attempt was consumed)",
@@ -2730,13 +1958,6 @@ async function caseQuitTwoWindowsDirty(target) {
   }
 }
 
-/* "--host + quit: the stop-sharing prompt fires once at quit, not when
-   closing a non-last window." Exactly one dialog answer in the whole run: if
-   the hosting prompt wrongly fired at the non-last window's close, it would
-   consume that single answer there, leaving the real quit's own hosting
-   prompt with an empty cursor -> TEST_MODE default (Cancel) -> the quit
-   would wrongly abort, and the final assertion below would fail — which is
-   exactly what this case is proving does not happen. */
 async function caseHostQuitStopSharingOnce(target) {
   const tag = target.name + " --host: stop-sharing prompt fires once at quit, not at a non-last close";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
@@ -2752,14 +1973,12 @@ async function caseHostQuitStopSharingOnce(target) {
     await waitForRows(cdp2, 20000);
     await shell(app.cdp, "moveTabToWindow", { tabId: tab2Id, windowId: null });
 
-    // Close window2 (non-last, nothing unsaved): must ask nothing at all.
     await fireEval(cdp2, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     const afterClose = await pollShellState(app.cdp, (l) => (l.windows.length === 1 ? l : null), 15000).catch(() => null);
     record(tag + ": closing a non-last window with nothing unsaved asks nothing and just closes",
       !!afterClose, afterClose ? "" : "window2 did not close cleanly");
     record(tag + ": the app is still running after the non-last close", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
 
-    // Quit the now-last window: the hosting prompt fires exactly once here.
     await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": quitting the last window asks the stop-sharing prompt once, then exits cleanly",
@@ -2771,10 +1990,6 @@ async function caseHostQuitStopSharingOnce(target) {
   }
 }
 
-/* "tear-off preserves live state: edit, __testShell moveTabToWindow null →
-   same tabId, same content, no reload (a window.__marker set before the move
-   survives)." moveTabToWindow re-parents the WebContentsView; it must never
-   recreate it (invariant #42). */
 async function caseTearOffPreservesState(target) {
   const tag = target.name + " tear-off preserves live tab state (no reload)";
   let app = null;
@@ -2798,8 +2013,6 @@ async function caseTearOffPreservesState(target) {
     const newWindowId = await shell(app.cdp, "moveTabToWindow", { tabId: tab2Id, windowId: null });
     record(tag + ": the move creates a new window", typeof newWindowId === "string" && newWindowId.length === 32, String(newWindowId));
 
-    // Same tabId, over the SAME CDP connection: a reload would have torn
-    // cdp2's execution context (and window.__marker) down.
     const tabIdAfter = await tabIdOfTarget(cdp2);
     record(tag + ": the tab keeps the same tabId after the move", tabIdAfter === tab2Id, "before=" + tab2Id + " after=" + tabIdAfter);
     const markerAfter = await evalPage(cdp2, "window.__marker");
@@ -2816,25 +2029,14 @@ async function caseTearOffPreservesState(target) {
   }
 }
 
-/* "restore at launch: two windows with tabs + a deleted file → the
-   composition, order and active tab are reproduced; the missing file is
-   skipped with a restore-notice toast." desktop-state.json is hand-written
-   (DESKTOP-STATE-V2) rather than built live through the UI, so the exact
-   session main has to restore is fully under this case's control. */
 async function caseRestoreAtLaunch(target, fixturesDir) {
   const tag = target.name + " restore at launch: two windows, order, active tab, missing file skipped";
-  // Both of window1's tabs are real, existing files — NOT a blank tab:
-  // restoreSessionAtLaunch drops a blank tab with no crash draft outright
-  // (there is nothing to restore), so a blank tab only survives when it is
-  // the SOLE tab left in its window (the "window left with nothing" fallback
-  // a few lines further down in main.js). Two real files exercise
-  // composition/order/active-tab without depending on that fallback at all.
   const fixtureKeep1 = writeFixture(fixturesDir, "case-restore-keep1.splitpage", "Restore Keep One", [["a", "b"]]);
   const fixtureKeep2 = writeFixture(fixturesDir, "case-restore-keep2.splitpage", "Restore Keep Two", [["g", "h"]]);
   const missingName = "case-restore-missing.splitpage";
   const fixtureMissing = path.join(fixturesDir, missingName);
   writeFixture(fixturesDir, missingName, "Restore Missing Doc", [["c", "d"]]);
-  fs.unlinkSync(fixtureMissing); // real basename, but gone before this launch
+  fs.unlinkSync(fixtureMissing);
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const win1Id = newHexId(), win2Id = newHexId();
@@ -2862,8 +2064,6 @@ async function caseRestoreAtLaunch(target, fixturesDir) {
   let cdp2 = null;
   try {
     app = await launchApp(target, { label: "restore-at-launch", userDataDir });
-    // window1's active tab (tab2) is where the launch's one restore notice
-    // is delivered (DOCUMENT-STATE-AND-ROUTING-IPC).
     cdp2 = await connectTab(app, tab2Id);
 
     const notice = await poll(cdp2,
@@ -2901,12 +2101,6 @@ async function caseRestoreAtLaunch(target, fixturesDir) {
   }
 }
 
-/* Recent documents (DESKTOP-RECENTS, issue #15): the list the New Tab page's
-   third column draws. Restoring two file tabs records both; the bridge lists
-   them with a name, a title and an opaque id but NO PATH (invariant #34);
-   per-entry remove and "clear" both land on disk; the cap, the de-duplication
-   and a relative path are enforced on read; and reopening an entry whose file
-   has since been deleted rejects rather than failing silently. */
 async function caseRecentDocuments(target, fixturesDir) {
   const tag = target.name + " recents: recorded, listed without paths, removable, capped";
   const fixtureA = writeFixture(fixturesDir, "case-recent-a.splitpage", "Recent Doc A", [["a", "b"]]);
@@ -2932,9 +2126,6 @@ async function caseRecentDocuments(target, fixturesDir) {
     app = await launchApp(target, { label: "recents", userDataDir });
     cdp = await connectTab(app, tabAId);
 
-    // Both restored tabs report their documents, so both are recorded with
-    // their real titles. Most recent first — whichever loaded last is in
-    // front, so this asserts the SET and the titles, not the order.
     const listed = await poll(cdp,
       "window.splitpageDesktop.listRecents().then(function(r){ return r.length === 2 ? r : null; })", 20000);
     const names = listed.map((r) => r.name).sort();
@@ -2951,12 +2142,6 @@ async function caseRecentDocuments(target, fixturesDir) {
     record(tag + ": each entry carries the title the document actually reported",
       !!titles, JSON.stringify(titles));
 
-    // INVARIANT #34: an entry is a name, a title, a time and an opaque id.
-    // Nothing in it may be (or contain) a path — not even the fixtures dir.
-    // Polled, not a bare evalPage: on a loaded machine the view can still be
-    // swapping in a fresh document when this runs, and `window.splitpageDesktop`
-    // is momentarily undefined — the same reason every other read in this
-    // case goes through poll/pollNode.
     const current = await poll(cdp,
       "window.splitpageDesktop && window.splitpageDesktop.listRecents().then(function(r){ return r.length ? r : null; })", 20000);
     const keys = Object.keys(current[0] || {}).sort().join(",");
@@ -2969,7 +2154,6 @@ async function caseRecentDocuments(target, fixturesDir) {
     record(tag + ": each fileId is an opaque 32-hex registry key, never a name",
       current.every((r) => /^[0-9a-f]{32}$/.test(r.fileId)), JSON.stringify(current.map((r) => r.fileId)));
 
-    // It is on disk, in desktop-state.json beside the windows.
     const onDisk = await pollNode(async () => {
       const st = readDesktopStateFile(userDataDir);
       return st && Array.isArray(st.recents) && st.recents.length === 2 ? st : null;
@@ -2977,7 +2161,6 @@ async function caseRecentDocuments(target, fixturesDir) {
     record(tag + ": the list is persisted in desktop-state.json", !!onDisk,
       JSON.stringify(onDisk && onDisk.recents));
 
-    // Per-entry remove: the call answers with the list as it stands after.
     const targetId = current.find((r) => r.name === "case-recent-a.splitpage").fileId;
     const afterRemove = await pollNode(async () =>
       evalPage(cdp, "window.splitpageDesktop.removeRecent(" + JSON.stringify(targetId) + ")"), 20000);
@@ -2991,15 +2174,12 @@ async function caseRecentDocuments(target, fixturesDir) {
     record(tag + ": the removal reaches disk", !!diskAfterRemove,
       JSON.stringify(diskAfterRemove && diskAfterRemove.recents));
 
-    // An id main does not know removes nothing and does not throw.
     const forged = await pollNode(async () =>
       evalPage(cdp, "window.splitpageDesktop.removeRecent(" + JSON.stringify("f".repeat(32)) + ")"), 20000)
       .catch(() => null);
     record(tag + ": an unknown fileId removes nothing and does not throw",
       Array.isArray(forged) && forged.length === 1, JSON.stringify(forged));
 
-    // Reopening an entry whose file is gone rejects — the case the column
-    // turns into "that file isn't there any more".
     const goneId = afterRemove[0].fileId;
     fs.unlinkSync(fixtureB);
     const rejected = await poll(cdp,
@@ -3008,7 +2188,6 @@ async function caseRecentDocuments(target, fixturesDir) {
     record(tag + ": reopening a deleted file rejects rather than opening nothing",
       rejected === "rejected", String(rejected));
 
-    // Clear everything.
     const afterClear = await pollNode(async () => {
       const r = await evalPage(cdp, "window.splitpageDesktop.clearRecents()");
       return Array.isArray(r) ? { r } : null;
@@ -3027,7 +2206,6 @@ async function caseRecentDocuments(target, fixturesDir) {
     rmrf(userDataDir);
   }
 
-  // --- the read-side rules, from a hand-written file -----------------------
   const tagB = target.name + " recents: capped at 20, de-duplicated, relative paths dropped";
   const userDataDirB = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   const winIdB = newHexId(), tabIdB = newHexId();
@@ -3035,8 +2213,6 @@ async function caseRecentDocuments(target, fixturesDir) {
   for (let i = 0; i < 25; i++) {
     many.push({ absPath: path.join(fixturesDir, "many-" + i + ".splitpage"), title: "Many " + i, at: 1000 + i });
   }
-  // A duplicate of the first, a relative path, and two shapes that are not
-  // entries at all — none of which may survive the read.
   many.splice(3, 0, { absPath: many[0].absPath, title: "Duplicate", at: 9999 });
   many.push({ absPath: "not-absolute.splitpage", title: "Relative", at: 9999 });
   many.push(null, { title: "No path at all" });
@@ -3073,8 +2249,6 @@ async function caseRecentDocuments(target, fixturesDir) {
   }
 }
 
-/* "v1→v2 migration: a hand-written v1 file → one window/one tab, version 2
-   on disk; corrupt JSON boots like a fresh install." */
 async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
   const tagA = target.name + " v1 -> v2 migration on read, and version 2 on disk";
   const fixtureV1 = writeFixture(fixturesDir, "case-v1-migrate.splitpage", "V1 Migrated Doc", [["e", "f"]]);
@@ -3124,29 +2298,7 @@ async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * 5b. Step M: document id + desktop history smoke cases.
- * -------------------------------------------------------------------- */
-
-/* caseAtomicSaveKeepsBirthtime. Measured, then held against the code.
-   chooseDuplicateLoser's win32 rule (DOC-CLAIMS) used to judge "which of two
-   identical files is the copy" on birthtime, which only works if an ordinary
-   Save-in-place — atomicWrite's write-a-temp-then-rename-over — leaves the
-   file's creation time alone. NTFS is documented to carry the destination's
-   creation time across such a rename (file tunnelling); on Windows 11 here
-   it does not, and every save moves birthtime forward by the elapsed time.
-   The rule is therefore gone — #76 deleted the branch and the stat that fed
-   it, so shared/doc-id-policy.js's chooseDuplicateLoser decides on the seq
-   alone — and this case no longer asserts the filesystem behaves one way. It
-   asserts the two AGREE: whatever the filesystem does to birthtime, the real
-   verdict must not be fooled by it. That is the guard against a birthtime
-   rule being written back in on a machine where saves still re-date files.
-   The claims below still carry a birthtimeMs for exactly that reason: the
-   hook drops it, and a rule that started reading one again would fail here. */
 async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
-  /* The function keeps step M's name for traceability; the reported tag says
-     what it actually asserts now, so a PASS line never reads as a claim that
-     birthtime was preserved when the measurement below says it was not. */
   const tag = target.name + " save-in-place birthtime agrees with the duplicate rule";
   const aPath = path.join(fixturesDir, "case-m-birthtime-a.md");
   let app = null;
@@ -3154,13 +2306,6 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     app = await launchApp(target, { label: "atomic-save-birthtime", dialogs: [aPath] });
     await waitForRows(app.cdp, 20000);
 
-    // "open A.md": create it through the app's own Save As (guarantees a
-    // byte-exact Markdown project — a hand-written fixture risks the table
-    // and the data block's row counts disagreeing, which pops the real
-    // #md-rows-modal in-page confirm and would hang this case, invariant
-    // #33's "never trigger one" included), then treat this tab exactly as
-    // "A.md is open": the tab's "file" home is bound to aPath from here on,
-    // same as if the file had been opened from disk.
     await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     let saveAsOk = false;
     for (let i = 0; i < 30 && !saveAsOk; i++) {
@@ -3168,14 +2313,13 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     }
     record(tag + ": setup — Save As creates A.md", saveAsOk);
     if (!saveAsOk) return;
-    await sleep(300); // let the save fully settle (file home retargeted, clean)
+    await sleep(300);
 
     const stBefore = fs.statSync(aPath);
     const birthtimeBefore = stBefore.birthtimeMs;
 
     await sleep(2500);
 
-    // Save in place: no saveAs, reuses the handle Save As just retargeted to.
     await evalPage(app.cdp, "window.__splitpageFormats.save()");
     let onDiskAfter = null;
     for (let i = 0; i < 20 && onDiskAfter === null; i++) {
@@ -3187,11 +2331,6 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
     const birthtimeAfter = stAfter.birthtimeMs;
     const preserved = birthtimeBefore === birthtimeAfter;
 
-    /* Ask the real function what it would do with two claims on one docId
-       whose birthtimes say the opposite of their seq order: file A was
-       created first and adopted the id first (seq 1) but was saved since, so
-       it now carries the LATER birthtime. Trusting birthtime here names A —
-       the document the user has been working in — as the copy. */
     const older = { docId: "d" + "a".repeat(32), homeKey: "file:c:\\x\\a.md", seq: 1, birthtimeMs: 2_000_000 };
     const newer = { docId: "d" + "a".repeat(32), homeKey: "file:c:\\x\\b.md", seq: 2, birthtimeMs: 1_000_000 };
     const verdict = await evalPage(app.cdp,
@@ -3205,8 +2344,6 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
       preserved || verdict === "b",
       "before=" + birthtimeBefore + " after=" + birthtimeAfter + " loser=" + verdict);
 
-    /* Symmetry is the property that keeps BOTH tabs from re-iding, so it is
-       worth asserting on the same pair from both sides. */
     record(tag + ": the verdict is symmetric — the same claim loses whichever way round it is asked",
       verdict !== null && mirrored !== null && verdict !== mirrored,
       "a,b=" + verdict + " b,a=" + mirrored);
@@ -3215,11 +2352,6 @@ async function caseAtomicSaveKeepsBirthtime(target, fixturesDir) {
   }
 }
 
-/* caseDuplicateDocIdAcrossTabs. DOC-CLAIMS end to end against a real main
-   process: two tabs open byte-identical files (one a real fs.copyFileSync of
-   the other, exactly like copying a file in Explorer), the copy is told to
-   re-id, and — orchestrator override §1 — nothing is written to disk on its
-   own. */
 async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
   const tag = target.name + " duplicate document id across tabs (DOC-CLAIMS)";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3232,9 +2364,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     await waitForRows(app.cdp, 20000);
     const tabAId = await tabIdOfTarget(app.cdp);
 
-    // "save A.md through the app": Save As from the launch's own blank
-    // pristine tab, for the same "must be a byte-exact project file" reason
-    // as caseAtomicSaveKeepsBirthtime above.
     await evalPage(app.cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     let saveAsOk = false;
     for (let i = 0; i < 30 && !saveAsOk; i++) {
@@ -3245,20 +2374,11 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     await sleep(300);
     const idA = await poll(app.cdp, "window.__splitpageFormats.docId()", 10000);
 
-    // The 2.5 s gap used to matter because it put the copy's birthtime
-    // outside chooseDuplicateLoser's 2 s noise window. That rule is gone
-    // (#76 — see caseAtomicSaveKeepsBirthtime), so the seq tie-break names B
-    // either way; the gap is kept only so the two files are unambiguously
-    // distinguishable on disk to anything reading this fixture, and so Save
-    // As has fully settled before the copy is taken.
     await sleep(2500);
     fs.copyFileSync(aPath, bPath);
     const aBytesOriginal = fs.readFileSync(aPath);
     const bBytesAfterCopy = fs.readFileSync(bPath);
 
-    // Open B.md into a new tab: tab A is no longer pristine (it has a real
-    // file), so routeOpenPath's pristine-reuse rule does not apply and this
-    // lands in a fresh tab (TAB-IDENTITY / DOCUMENT-STATE-AND-ROUTING-IPC).
     await sendSecondInstanceTo(target, userDataDir, bPath);
     const tabBTarget = await pollNode(async () => {
       const { tabTargets } = await findTargetsByKind(app.port);
@@ -3271,20 +2391,10 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     cdpB = await connectTarget(tabBTarget);
     await waitForRows(cdpB, 20000);
 
-    // The predicted replacement id (DOC-CLAIMS' Reassignment), computed
-    // independently of the app: 'd' + sha256('splitpage-dup\n'+idA+'\n'+
-    // fileHomeKey(absB)).slice(0,32) — byte-identical to both
-    // replacementDocId (main.js) and deriveDocId (02b-doc-id.js). See
-    // fileHomeKey for the one part of that string that is platform-
-    // dependent.
     const homeKeyB = fileHomeKey(bPath);
     const toId = "d" + crypto.createHash("sha256")
       .update("splitpage-dup\n" + idA + "\n" + homeKeyB, "utf8").digest("hex").slice(0, 32);
 
-    // Read the pre-reassignment id only as a courtesy — per step G's own
-    // report the re-id can land inside a second, faster than a poll can
-    // catch it "still idA". The authoritative proof is the docIdEvents()
-    // copy entry checked below, not this snapshot.
     const bIdEarly = await evalPage(cdpB, "window.__splitpageFormats.docId()").catch(() => null);
 
     const reassigned = await poll(cdpB, "window.__splitpageFormats.docId() === " + JSON.stringify(toId), 20000).catch(() => null);
@@ -3308,14 +2418,10 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
       "if (t[i].textContent.indexOf('is a copy of')!==-1) return t[i].textContent; } return null; })()");
     record(tag + ": B shows the sticky \"is a copy of\" toast", !!toastText, String(toastText));
 
-    // Override §1: reassignment never calls markDirty/queueAutoSave — B.md's
-    // bytes must be untouched on disk right after the id changed in memory.
     record(tag + ": B.md's bytes are unchanged on disk immediately after the reassignment (no autosave)",
       fs.readFileSync(bPath).equals(bBytesAfterCopy));
     record(tag + ": A.md's bytes are unchanged on disk", fs.readFileSync(aPath).equals(aBytesOriginal));
 
-    // "Once a save is made through the app in B's tab, B.md contains the new
-    // id, and A.md's bytes are unchanged throughout" (override §1).
     await evalPage(cdpB, "window.__splitpageFormats.save()");
     let bTextAfterSave = null;
     for (let i = 0; i < 30 && bTextAfterSave === null; i++) {
@@ -3327,9 +2433,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     record(tag + ": after an explicit save through B's tab, B.md contains the new id on disk", !!bTextAfterSave);
     record(tag + ": A.md's bytes are STILL unchanged after B's save", fs.readFileSync(aPath).equals(aBytesOriginal));
 
-    // "close and reopen B → no reassignment": B is clean (just saved), so
-    // closeTab needs no dialog. Route the same path back in — a brand new
-    // tab, since the closed one's pathToTabId entry is gone.
     await shell(app.cdp, "closeTab", { tabId: tabBId });
     await pollNode(async () => {
       const { tabTargets } = await findTargetsByKind(app.port);
@@ -3347,16 +2450,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     if (reopenTarget) {
       cdpReopen = await connectTarget(reopenTarget);
       await waitForRows(cdpReopen, 20000);
-      /* Polled for the expected id, not read once — the same shape as the
-         first reassignment assertion above, and for a sharper reason here.
-         routeOpenPath creates the tab with a pendingPayload and the renderer
-         boots a blank seed document FIRST; the file is delivered after it
-         reports ready. waitForRows is therefore satisfied while the page is
-         still showing the seed, whose own random docId is what a single read
-         catches (measured: it did, on Linux, where nothing else in the case
-         was slow enough to hide the gap). A second reassignment — the thing
-         this assertion exists to catch — settles on some OTHER id, so the
-         poll still times out and still fails. */
       const keptItsId = await poll(cdpReopen,
         "window.__splitpageFormats.docId() === " + JSON.stringify(toId), 15000).catch(() => null);
       const reopenedId = await evalPage(cdpReopen, "window.__splitpageFormats.docId()").catch(() => null);
@@ -3371,15 +2464,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
     try { if (cdpB) cdpB.close(); } catch {}
     cdpB = null;
 
-    // "quit and restore → no reassignment": a graceful teardown persists the
-    // session (both tabs), then a fresh launch on the same userDataDir
-    // restores it — B's id is already unique, so nothing re-fires.
-    /* Evidence for the restore assertion below, captured because it failed
-       once on CI's fast runner (A came back as an untitled pristine tab, B
-       came back fine) and could not be reproduced here in eight runs. Main's
-       own view of every tab just before the quit, and the session file the
-       quit actually wrote, are what tell a race in A's last document-state
-       report apart from a race in the write. Printed only on failure. */
     const preQuitListing = await shell(app.cdp, "listTargets", {}).catch((e) => ({ error: String(e && e.message || e) }));
     await teardown(app, tag + " (pre-quit)");
     app = null;
@@ -3389,16 +2473,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
 
     const appRestored = await launchApp(target, { label: "dup-doc-id-restore", userDataDir });
     try {
-      /* Main restored both tabs from desktop-state.json with their paths.
-         Each restored page then boots the starter document before its file
-         is handed to it, and a report of that starter used to reach main as
-         "this tab holds no document" and wipe the path it was created for —
-         briefly on a slow machine, and for as long as it took on CI's fast
-         runner to fail the single read below. Sampled from the moment main
-         answers, rather than read once, so the wipe is caught even here
-         where it closes before a one-off read lands: main's record must
-         never lose either path, not merely have them back by the time
-         someone looks. */
       const pathLost = [];
       const sampleUntil = Date.now() + 4000;
       while (Date.now() < sampleUntil) {
@@ -3416,12 +2490,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
       const w = listing.windows[0];
       const restoredA = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(aPath).toLowerCase());
       const restoredB = w && w.tabs.find((t) => t.path && path.resolve(t.path).toLowerCase() === path.resolve(bPath).toLowerCase());
-      /* What each restored PAGE believes, captured only on failure: its
-         home, the launch intent main gave it, and whether it counts itself
-         pristine. A.md and B.md were made by Save As from an untouched
-         starter, so their content IS the starter's — this separates "a
-         report of the starter wiped main's record" from "the opened file
-         itself reads as no document". */
       let pageViews = null;
       if (!(restoredA && restoredB) && w && Array.isArray(w.tabs)) {
         pageViews = [];
@@ -3469,11 +2537,6 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
   }
 }
 
-/* caseHistoryRoundTripAndRelaunch. put/list/get/copy/touch, a put into Older
-   ({older:true}, what history-import-older became in #83 step 4) and the
-   usage history-list now answers with, against the real main process, the on-disk layout HISTORY-STORAGE
-   documents (#83: one index.json, content-addressed bodies), and that all of
-   it survives a relaunch (not just this process's cached index). */
 async function caseHistoryRoundTripAndRelaunch(target) {
   const tag = target.name + " history: put/list/get/copy/touch/Older put/usage + relaunch";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3561,7 +2624,6 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       !!docRow && docRow.title === "Touched Title" && typeof docRow.lastOpenedAt === "number" &&
       docs.some((d) => d.docId === docId2) && !docs.some((d) => d.docId === "_older"), JSON.stringify(docs));
 
-    // ---- on-disk layout (HISTORY-STORAGE, #83) ----
     const formatText = fs.readFileSync(path.join(historyDirOnDisk(userDataDir), "FORMAT"), "utf8").trim();
     record(tag + ": FORMAT is \"2\" on disk", formatText === "2", formatText);
     const idxOnDisk = readHistoryIndexOnDisk(userDataDir);
@@ -3573,7 +2635,7 @@ async function caseHistoryRoundTripAndRelaunch(target) {
       recA.snapshots[0].sha === shaA && recA.snapshots[1].sha === shaB && !("docId" in recA.snapshots[0]),
       JSON.stringify(idxOnDisk));
     let bodyOnDisk = null;
-    try { bodyOnDisk = fs.readFileSync(historyBodyPathOnDisk(userDataDir, shaA), "utf8"); } catch { /* recorded below */ }
+    try { bodyOnDisk = fs.readFileSync(historyBodyPathOnDisk(userDataDir, shaA), "utf8"); } catch { }
     record(tag + ": the body is stored verbatim under bodies/sha256/<aa>/<sha>", bodyOnDisk === bodyA, String(bodyOnDisk).slice(0, 80));
     const recCopy = idxOnDisk && idxOnDisk.buckets && idxOnDisk.buckets[docId2];
     record(tag + ": a copy is index-only — its entries name the same bodies",
@@ -3582,7 +2644,6 @@ async function caseHistoryRoundTripAndRelaunch(target) {
     record(tag + ": the index is kept in two generations (index.prev.json beside index.json)",
       !!readHistoryIndexOnDisk(userDataDir, "index.prev.json"), "");
 
-    // ---- relaunch: everything above must be ON DISK, not just this process's memory ----
     await teardown(app, tag + " (pre-relaunch)");
     app = null;
     const app2 = await launchApp(target, { label: "history-roundtrip-relaunch", userDataDir });
@@ -3608,14 +2669,12 @@ async function caseHistoryRoundTripAndRelaunch(target) {
   }
 }
 
-// The file's bytes once they have stopped changing for quietMs (null if it
-// never appears), giving up after timeoutMs with the last bytes seen.
 async function waitForQuietFile(file, quietMs, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let last = null, since = Date.now();
   while (Date.now() < deadline) {
     let cur = null;
-    try { cur = fs.readFileSync(file); } catch { /* not written yet */ }
+    try { cur = fs.readFileSync(file); } catch { }
     if (cur && last && cur.equals(last)) {
       if (Date.now() - since >= quietMs) return cur;
     } else {
@@ -3627,12 +2686,6 @@ async function waitForQuietFile(file, quietMs, timeoutMs) {
   return last;
 }
 
-/* caseHistoryIdValidation. Every bad docId/snapshot id HISTORY-IPC's
-   handlers see must reject the invoke rather than quietly doing something
-   with it (invariant #38 — the renderer can never name a folder), a valid
-   positive control proves the validator isn't simply rejecting everything,
-   and nothing any of this touches leaks outside history/ or perturbs
-   desktop-state.json. */
 async function caseHistoryIdValidation(target) {
   const tag = target.name + " history: id validation — nothing outside history/, desktop-state.json untouched";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3653,11 +2706,6 @@ async function caseHistoryIdValidation(target) {
     record(tag + ": positive control — a put into Older with (null, …, {older:true}) succeeds",
       putOlderGood && putOlderGood.ok === true, JSON.stringify(putOlderGood));
 
-    /* The page's own document-state report and the debounced bounds write
-       legitimately rewrite desktop-state.json after boot (persistShellState),
-       and on a loaded machine that write can land after a first read. So the
-       "before" is taken once the file has stopped changing — the comparison
-       below stays byte-for-byte. */
     const stateFile = path.join(userDataDir, "desktop-state.json");
     const stateBefore = await waitForQuietFile(stateFile, 1000, 10000);
     const topLevelBefore = fs.readdirSync(userDataDir).sort();
@@ -3669,7 +2717,7 @@ async function caseHistoryIdValidation(target) {
       record(tag + ": historyPut(" + JSON.stringify(bad) + ", …) rejects", rejected, "");
     }
     for (const bad of badDocIds) {
-      if (bad === null) continue; // historyList(null) is the documented "Older bucket only" call, not invalid
+      if (bad === null) continue;
       const rejected = await historyCallRejects(cdp, "historyList", [bad]);
       record(tag + ": historyList(" + JSON.stringify(bad) + ") rejects", rejected, "");
     }
@@ -3683,11 +2731,6 @@ async function caseHistoryIdValidation(target) {
     const olderBypassRejects = await historyCallRejects(cdp, "historyGet", [{ docId: "_older" }, goodMeta.id]);
     record(tag + ": historyGet with docId '_older' (bypassing the older:true query) rejects", olderBypassRejects, "");
 
-    /* The Older bucket is written only by the flag (#83 step 4 folded
-       history-import-older into history-put): the flag with a docId string
-       beside it — "_older" or a real one — rejects, and so does anything but
-       a literal true (the preload drops it, leaving a null docId with no
-       flag, which rejects). "_older" with no flag is in badDocIds above. */
     for (const [label, args] of [
       ["'_older' with {older:true}", ["_older", historyMeta(), "{}", { older: true }]],
       ["a real docId with {older:true}", [goodDocId, historyMeta(), "{}", { older: true }]],
@@ -3724,8 +2767,6 @@ async function caseHistoryIdValidation(target) {
     const suspicious = historyEntries.filter((e) => (/\.\.|CON|[A-Z]/.test(e)) && path.basename(e) !== "FORMAT");
     record(tag + ": history/ contains nothing named after a rejected id", suspicious.length === 0, JSON.stringify(historyEntries));
     const idx = readHistoryIndexOnDisk(userDataDir);
-    /* "_older" is there because the Older positive control put it there —
-       through the flag; its one entry is checked above. */
     record(tag + ": index.json names the control document and no bucket that is not a document id (or Older)",
       !!idx && !!idx.buckets[goodDocId] && Object.keys(idx.buckets).every((b) => /^d[0-9a-f]{32}$/.test(b) || b === "_older"),
       JSON.stringify(idx && Object.keys(idx.buckets)));
@@ -3735,11 +2776,6 @@ async function caseHistoryIdValidation(target) {
   }
 }
 
-/* caseHistoryKillAfterBody. SPLITPAGE_TEST_HISTORY_FAULT=exit-after-body
-   SIGKILLs main between a snapshot's body and the index write that would
-   name it — a power cut mid-snapshot. The accepted loss (#83) is exactly
-   that newest snapshot: the relaunch shows the prior generation, with no
-   error, and the same snapshot can be stored again. */
 async function caseHistoryKillAfterBody(target) {
   const tag = target.name + " history: exit-after-body fault — relaunch shows the prior generation, no error";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3757,23 +2793,12 @@ async function caseHistoryKillAfterBody(target) {
     });
     await waitForRows(app.cdp, 20000);
 
-    // The reply never arrives — the process kills itself mid-put — so this
-    // is fire-and-forget, same reasoning as fireEval's own comment.
     await fireEval(app.cdp,
       "window.splitpageDesktop.historyPut(" + JSON.stringify(docId) + "," + JSON.stringify(meta) + "," + JSON.stringify(body) + ")",
       { awaitPromise: false });
 
     const exited = await waitForExit(app.proc, 20000);
     record(tag + ": the process actually exits (the fault fired)", exited);
-    // Empirically, process.kill(pid,'SIGKILL') from inside a Windows process
-    // reports exit code 1 (no POSIX signals on Windows; libuv maps a
-    // self-inflicted SIGKILL to TerminateProcess(1)) — not a code this
-    // process chose, so it's pinned and explained rather than left to guess.
-    // On POSIX the very same call in main.js is a real signal: no exit code
-    // at all, signalCode 'SIGKILL'. One event, two ways of reporting it, so
-    // the expectation is written in each platform's own terms rather than
-    // loosened to "died somehow" — which would stop noticing a main process
-    // that exited cleanly when the fault was supposed to kill it.
     await teardown(app, tag + " (post-crash)", IS_WINDOWS ? { expectExitCode: 1 } : { expectSignal: "SIGKILL" });
     app = null;
 
@@ -3783,7 +2808,6 @@ async function caseHistoryKillAfterBody(target) {
     record(tag + ": …but index.json is still the prior generation (A only, the new one unnamed)",
       !!recBefore && recBefore.snapshots.length === 1 && recBefore.snapshots[0].id === metaA.id, JSON.stringify(recBefore));
 
-    // Relaunch WITHOUT the fault env — otherwise the next put would kill it again.
     const app2 = await launchApp(target, { label: "history-kill-after-body-relaunch", userDataDir });
     try {
       await waitForRows(app2.cdp, 20000);
@@ -3811,10 +2835,6 @@ async function caseHistoryKillAfterBody(target) {
   }
 }
 
-/* caseHistoryTornIndex. index.json torn mid-write (a disk that lied about the
-   flush) beside a good index.prev.json: the launch loads the previous
-   generation, sets the torn one aside as index.json.corrupt-<ts> (never
-   deleted), and the next write lands a valid index.json again. */
 async function caseHistoryTornIndex(target) {
   const tag = target.name + " history: torn index.json falls back to index.prev.json";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3855,12 +2875,6 @@ async function caseHistoryTornIndex(target) {
   }
 }
 
-/* caseHistoryCapEviction. SPLITPAGE_TEST_HISTORY_CAP_BYTES lets a case reach
-   the eviction planner's cap without writing hundreds of megabytes: the
-   per-document 50-snapshot trim, and cap-driven eviction across documents by
-   lastOpenedAt ascending, a document's newest snapshot never deleted. An
-   evicted body is unlinked only once the NEXT generation is durable (the
-   previous index still names it), so it is gone after the next write. */
 async function caseHistoryCapEviction(target) {
   const tag = target.name + " history: cap-driven eviction + 50-per-document trim";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3874,7 +2888,6 @@ async function caseHistoryCapEviction(target) {
     await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
 
-    // ---- per-document trim to HISTORY_PER_DOC (50) ----
     const trimDocId = randDocId();
     let firstSnapId = null, lastSnapId = null;
     for (let i = 0; i < 55; i++) {
@@ -3891,8 +2904,6 @@ async function caseHistoryCapEviction(target) {
     record(tag + ": the oldest is evicted, the newest survives",
       trimIds.indexOf(firstSnapId) === -1 && trimIds.indexOf(lastSnapId) !== -1, "");
 
-    // ---- cap-driven eviction across two documents ----
-    // Four different ≈900 KB bodies, so an evicted entry's body is its own.
     const bigBody = (n) => JSON.stringify({ blob: "x".repeat(900000), n });
     const docOld = randDocId(), docNew = randDocId();
     const oldSnap1 = historyMeta({ id: randSnapId("o"), atMs: 10000 });
@@ -3933,11 +2944,6 @@ async function caseHistoryCapEviction(target) {
   }
 }
 
-/* caseHistoryConcurrentPuts. The history backend's queue is ONE chain across
-   every sender — 60+10 puts and a copy, fired without awaiting each one, and
-   the same stress repeated from two different tabs (two different
-   webContents) of the same launch, proves the queue serializes across pages
-   too, not just within one. */
 async function caseHistoryConcurrentPuts(target) {
   const tag = target.name + " history: concurrent puts + a copy are serialized correctly (one queue)";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -3989,11 +2995,6 @@ async function caseHistoryConcurrentPuts(target) {
   }
 }
 
-/* caseHistoryLegacyMigration. The one-time migration of the shared
-   localStorage 'splitpage-snapshots' key into the desktop Older bucket
-   (startHistoryMigration, HISTORY-STORAGE's "Legacy migration"): put-if-
-   absent, and a repeat leaves the bucket's expiresAt untouched (it was not
-   re-created). */
 async function caseHistoryLegacyMigration(target) {
   const tag = target.name + " history: legacy localStorage migration into Older (put-if-absent, expiresAt stable)";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4029,7 +3030,6 @@ async function caseHistoryLegacyMigration(target) {
     record(tag + ": Older has an expiresAt set, in the future (90-day TTL from the migration)",
       typeof expiresAt1 === "number" && expiresAt1 > Date.now(), String(expiresAt1));
 
-    // ---- repeat: the key reappears with the SAME two entries ----
     const list2 = await seedLegacyKeyAndReload();
     record(tag + ": a repeat migration stays at 2 (put-if-absent, no duplicates)", !!list2, JSON.stringify(list2));
     record(tag + ": expiresAt is unchanged by the repeat (the bucket was not re-created)",
@@ -4040,10 +3040,6 @@ async function caseHistoryLegacyMigration(target) {
   }
 }
 
-/* caseHistoryNewerFormatReadOnly. A FORMAT number ahead of ours ("3" — this
-   build writes "2") means a newer build wrote this folder: history goes
-   read-only rather than let this build rewrite an index shape it does not
-   understand (HISTORY-STORAGE). */
 async function caseHistoryNewerFormatReadOnly(target) {
   const tag = target.name + " history: FORMAT ahead of ours goes read-only";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4090,11 +3086,6 @@ async function caseHistoryNewerFormatReadOnly(target) {
   }
 }
 
-/* caseHistoryV1BackupRemoved (#100). A profile 3.0.0 migrated: v2 history
-   (its index carrying migratedFrom:1) beside v1-backup/ with docs/ and
-   older/ in it, nested files and a read-only one among them. After launch
-   main deletes v1-backup/ in the background — and nothing else: the v2
-   history lists, reads and writes as before. */
 async function caseHistoryV1BackupRemoved(target) {
   const tag = target.name + " history: 3.0.0's v1-backup/ is deleted at launch";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4144,12 +3135,6 @@ async function caseHistoryV1BackupRemoved(target) {
   }
 }
 
-/* caseHistoryV1RawTreeDormant (#100). A profile still in the v1 layout —
-   FORMAT "1", docs/ and older/, no index.json: someone who skipped 3.0.0,
-   so nothing ever migrated it. Nothing migrates it now either. It launches,
-   history works (a fresh v2 index beside the old folders), and docs/ and
-   older/ stay byte-for-byte as they were — past the launch's v1-backup/
-   sweep and across a relaunch. */
 async function caseHistoryV1RawTreeDormant(target) {
   const tag = target.name + " history: a raw v1 tree is left dormant, history starts fresh";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4177,7 +3162,6 @@ async function caseHistoryV1RawTreeDormant(target) {
     const older = await historyCall(cdp, "historyList", [null]);
     record(tag + ": the Older bucket answers too (empty: v1's older/ is not read)",
       Array.isArray(older.older) && older.older.length === 0, JSON.stringify(older));
-    /* past main's v1-backup/ sweep (3 s after the folder opens) */
     await sleep(5000);
     record(tag + ": docs/ and older/ are byte-for-byte what they were (" + v1Files + " files, the torn index and the .tmp- file included)",
       historyV1Digest(root) === v1Before && v1Files >= 7, "");
@@ -4201,23 +3185,12 @@ async function caseHistoryV1RawTreeDormant(target) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * Issue #82: the content-addressed blob folder (desktop/blob-store.js,
- * main.js § 8c), driven through the real bridge from the page.
- * -------------------------------------------------------------------- */
-
-// A real PNG signature and a random tail: an image by its magic, and a sha
-// of its own every run.
 function blobPngBytes(n) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), crypto.randomBytes(n || 256)]);
 }
 function blobSha(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
 function blobBytesExpr(buf) { return "new Uint8Array(" + JSON.stringify([...buf]) + ")"; }
 
-// window.splitpageDesktop.<method>(...) in the page, where each argument is
-// already a page-side expression (blobBytesExpr for bytes, JSON otherwise).
-// A blobGet answer's bytes come back as a plain array, which is what
-// returnByValue can carry. Throws when the invoke rejects.
 async function blobCall(cdp, method, argExprs) {
   return evalPage(cdp, "window.splitpageDesktop." + method + "(" + argExprs.join(",") + ")" +
     ".then(function (r) { return r && r.bytes ? { mime: r.mime, isU8: r.bytes instanceof Uint8Array, bytes: Array.from(r.bytes) } : r; })");
@@ -4240,12 +3213,6 @@ function blobFilesOnDisk(userDataDir) {
   return out.sort();
 }
 
-/* caseBlobRoundTripAndRelaunch. put/get/missing over the real bridge; the
-   on-disk layout is sha256/<aa>/<sha> with FORMAT "1"; a bad sha, a
-   mismatched body, an SVG and an oversized missing() are all refused and
-   write nothing; no answer carries a path (invariant #28); and after a
-   relaunch on the same profile the bytes are still there, byte for byte,
-   with a stray temp file from a "power cut" swept at launch. */
 async function caseBlobRoundTripAndRelaunch(target) {
   const tag = target.name + " blobs: put/get/missing over the bridge + relaunch (#82)";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4286,7 +3253,6 @@ async function caseBlobRoundTripAndRelaunch(target) {
     record(tag + ": no answer names a path (invariant #28)",
       !answers.includes(userDataDir) && !answers.includes("blobs") && !answers.includes(path.sep + sha), answers);
 
-    // ---- refusals: shape (the table), content (the handler) ----
     for (const bad of [sha.toUpperCase(), sha.slice(1), "../" + sha.slice(3), "..", path.join(userDataDir, "x"), ""]) {
       const r1 = await blobCallRejects(cdp, "blobGet", [JSON.stringify(bad)]);
       const r2 = await blobCallRejects(cdp, "blobPut", [JSON.stringify(bad), blobBytesExpr(bytes)]);
@@ -4309,10 +3275,8 @@ async function caseBlobRoundTripAndRelaunch(target) {
     const onDiskAfter = blobFilesOnDisk(userDataDir);
     record(tag + ": every refusal wrote nothing", JSON.stringify(onDiskAfter) === JSON.stringify(onDisk), JSON.stringify(onDiskAfter));
 
-    // ---- relaunch on the same profile ----
     await teardown(app, tag + " (pre-relaunch)");
     app = null;
-    // What a power cut between a put's fsync and its rename leaves behind.
     const strayTmp = path.join(userDataDir, "blobs", "sha256", absent.slice(0, 2), ".tmp-0123456789ab");
     fs.mkdirSync(path.dirname(strayTmp), { recursive: true });
     fs.writeFileSync(strayTmp, blobPngBytes(16));
@@ -4334,22 +3298,6 @@ async function caseBlobRoundTripAndRelaunch(target) {
   }
 }
 
-/* "window.close() canary: grep src/js for 'window.close(' finds nothing (fs
-   read in Node)." Pure source-text check — no launch, no target-dependent
-   behaviour; runs once per target invocation but is cheap and idempotent. */
-/* ----------------------------------------------------------------------
- * 5c. Step N: crash-safe drafts smoke cases (single and multi tab), against
- *     the real main process, the real preload bridge and a real crash — see
- *     DRAFT-STORE, DRAFT-IPC-AND-SHAPES, DRAFT-RENDERER-API and
- *     CLOSE-QUIT-LIFECYCLE. Every content edit goes through addMarkerRow (a
- *     real DOM edit, never markDirtyForTest) so a case can assert the exact
- *     text that comes back, not merely that a dirty flag survived.
- * -------------------------------------------------------------------- */
-
-/* caseDraftCrashUntitled. Marker row, flush, crash, relaunch: the document
-   is restored (title, marker row), dirty, with a recovery toast, onboarding
-   stays hidden, and the draft folder survives (nothing has been saved) until
-   Save As gives it a home, at which point invariant #40 discards it. */
 async function caseDraftCrashUntitled(target) {
   const tag = target.name + " draft crash-recovery: untitled document";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4410,12 +3358,6 @@ async function caseDraftCrashUntitled(target) {
   }
 }
 
-/* caseDraftCrashWithImage (#82 P2b). A picture dropped onto a scene the way
-   a person drops one (a real DragEvent carrying a File), a marker row,
-   flush, crash, relaunch. The draft names the picture by imageRef — no
-   base64 in it — and the blob folder held the bytes BEFORE the draft was
-   written (invariant 52), so the restored document shows the picture,
-   read back out of <userData>/blobs through the bridge. */
 async function caseDraftCrashWithImage(target) {
   const tag = target.name + " draft crash-recovery: a picture comes back from the blob folder";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4466,20 +3408,11 @@ async function caseDraftCrashWithImage(target) {
     record(tag + ": the restored picture renders, read from the blob folder", shown === true);
   } finally {
     if (appA) await teardown(appA, tag + " (first launch)");
-    /* the restored document is dirty (nothing has saved it) */
     if (appB) await teardown(appB, tag + " (second launch)", { expectForceKill: ENDS_DIRTY });
     rmrf(userDataDir);
   }
 }
 
-/* caseGalleryVideoFile (#135). A video file dropped or pasted into a scene
-   is named in the scene's gallery caption, and on desktop that name opens
-   the file with its own app — but only through main, and only for a file
-   a drop or a paste handed the page this run. What is real here: a File
-   with a real path (put on an <input type=file> over CDP, the only way a
-   page ever gets one), the preload reading that path (webUtils), main's
-   checks and its token, and a drop of the same File onto a scene. TEST_MODE
-   records the open instead of starting a player (videoFileOpens). */
 async function caseGalleryVideoFile(target) {
   const tag = target.name + " gallery: a dropped video file opens through main only (#135)";
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-video-"));
@@ -4495,7 +3428,6 @@ async function caseGalleryVideoFile(target) {
     const bridgeHas = await evalPage(cdp, "typeof window.splitpageDesktop.grantVideoFile === 'function' && typeof window.splitpageDesktop.openVideoFile === 'function'");
     record(tag + ": the bridge exposes grantVideoFile and openVideoFile", bridgeHas === true, String(bridgeHas));
 
-    /* a real File, with a real path, the way a drop or a paste gives one */
     async function fileInput(id, filePath) {
       const made = await cdp.send("Runtime.evaluate", {
         expression: "(function(){ var i = document.createElement('input'); i.type = 'file'; i.id = " + JSON.stringify(id) + "; i.hidden = true; document.body.appendChild(i); return i; })()",
@@ -4522,7 +3454,6 @@ async function caseGalleryVideoFile(target) {
     let opens = await shell(cdp, "videoFileOpens", {});
     record(tag + ": main opened exactly that path", JSON.stringify(opens) === JSON.stringify([clip]), JSON.stringify(opens));
 
-    /* the whole way: dropped on a scene, named in its caption, opened from there */
     await evalPage(cdp, "(function(){ var dt = new DataTransfer(); dt.items.add(document.getElementById('__vf').files[0]); " +
       "var media = document.querySelectorAll('#rows .visual-media'); media[media.length - 1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); return true; })()", { awaitPromise: false });
     const link = await poll(cdp, "(function(){ var l = document.querySelectorAll('#rows .scene-gallery-caption .scene-gallery-link.is-file'); return l.length ? l[l.length - 1].textContent : null; })()", 10000).catch(() => null);
@@ -4536,7 +3467,6 @@ async function caseGalleryVideoFile(target) {
     }, 10000).catch(() => null);
     record(tag + ": its caption link opens it through main", !!opens && opens[1] === clip, JSON.stringify(opens));
 
-    /* gone from disk: nothing to open, and it says so */
     fs.rmSync(clip);
     const gone = await evalPage(cdp, "window.splitpageDesktop.openVideoFile(" + JSON.stringify(token) + ")");
     record(tag + ": a file since deleted answers GONE", !!gone && gone.ok === false && gone.code === "GONE", JSON.stringify(gone));
@@ -4546,16 +3476,8 @@ async function caseGalleryVideoFile(target) {
   }
 }
 
-/* caseGalleryVideoThumbnail (#141). A pasted YouTube or Vimeo link's
-   thumbnail is fetched by MAIN (main.js § 9e), asked for by host and video
-   id and nothing else. SPLITPAGE_TEST_VIDEO_BASE points every host at a
-   fake served here, so nothing leaves the machine. What is real: the
-   bridge, the table's typed arguments, main's fetch (no redirect followed,
-   no cookie or referrer sent, the type and size checks), and the page
-   putting the answer in the scene's gallery. */
 async function caseGalleryVideoThumbnail(target) {
   const tag = target.name + " gallery: a pasted video link's thumbnail comes through main, by host and id (#141)";
-  /* just enough of a JPEG and a PNG for the sniffer to classify and measure */
   const jpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, 1, 14, 1, 224, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 7, 0xFF, 0xD9]);
   const png = Buffer.alloc(33);
   Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 2, 128, 0, 0, 1, 104]).copy(png);
@@ -4603,7 +3525,6 @@ async function caseGalleryVideoThumbnail(target) {
     const gone = await evalPage(cdp, call("youtube", "nnnnnnnnnnn"));
     record(tag + ": a video with no thumbnail answers NOT_FOUND", !!gone && gone.ok === false && gone.code === "NOT_FOUND", JSON.stringify(gone));
 
-    /* the table refuses anything but a host name and an id, before main runs */
     before = seen.length;
     const refused = [];
     for (const [host, ref] of [["youtube", "https://evil.example/x.jpg"], ["loom", "dQw4w9WgXcQ"], ["https://i.ytimg.com", "dQw4w9WgXcQ"], ["vimeo", "dQw4w9WgXcQ"]]) {
@@ -4612,7 +3533,6 @@ async function caseGalleryVideoThumbnail(target) {
     record(tag + ": a URL, another host, or an id of the wrong kind is refused and fetches nothing",
       refused.every((r) => r && r.ok === false) && seen.length === before, JSON.stringify(refused) + " " + (seen.length - before));
 
-    /* the whole way: a pasted link's thumbnail in the scene's gallery */
     await evalPage(cdp, "(function(){ var el = document.querySelector('#rows .row .audio-cell .cell-editable'); el.focus(); var d = new DataTransfer(); " +
       "d.setData('text/plain', 'https://youtu.be/dQw4w9WgXcQ'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: d, bubbles: true, cancelable: true })); return true; })()");
     const landed = await poll(cdp, "(function(){ var r = window.__splitpageFormats.state().rows[0]; var all = [r].concat(r.moreImages || []); " +
@@ -4625,9 +3545,6 @@ async function caseGalleryVideoThumbnail(target) {
   }
 }
 
-/* caseDraftCrashDirtyFile (F1F2-01). A RENDERER crash (not a whole-process
-   one) of a dirty file tab: the reloaded tab still holds the unsaved edit,
-   and splitpage:test-draft-status reports hasDraft:true. */
 async function caseDraftCrashDirtyFile(target, fixturesDir) {
   const tag = target.name + " draft crash-recovery: renderer crash of a dirty file tab";
   const filePath = writeFixture(fixturesDir, "case-n-dirty-file-" + Date.now() + ".splitpage", "Dirty File Doc", [["a", "b"]]);
@@ -4645,9 +3562,7 @@ async function caseDraftCrashDirtyFile(target, fixturesDir) {
     record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
 
     await crashRenderer(cdp);
-    // Kept as a fixed wait on purpose: the reload reuses the same WebContents,
-    // so the target id does not change and there is no "new target" to poll for.
-    await sleep(1000); // let render-process-gone's hold + reload run
+    await sleep(1000);
 
     const reconnected = await findPageTarget(app.port, 30000, { tabId });
     cdp2 = new CDPConn(reconnected.webSocketDebuggerUrl);
@@ -4665,9 +3580,6 @@ async function caseDraftCrashDirtyFile(target, fixturesDir) {
   }
 }
 
-/* caseDraftFileChangedOnDisk. The open file moved on while the app was
-   down: a real three-way merge, nothing autosaved, the file on disk left
-   exactly as the "other editor" wrote it. */
 async function caseDraftFileChangedOnDisk(target, fixturesDir) {
   const tag = target.name + " draft crash-recovery: file changed on disk while down (merge)";
   const fileName = "case-n-changed-" + Date.now() + ".splitpage";
@@ -4685,8 +3597,6 @@ async function caseDraftFileChangedOnDisk(target, fixturesDir) {
     await crashApp(app);
     app = null;
 
-    // Someone else (a sync client, another editor) saved this file while
-    // the app was down — content differs from the draft's own base.
     writeFixture(fixturesDir, fileName, "Changed On Disk Doc", [["a", "b"], [diskMarker, "x"]]);
     const diskTextBeforeRelaunch = fs.readFileSync(filePath, "utf8");
 
@@ -4713,8 +3623,6 @@ async function caseDraftFileChangedOnDisk(target, fixturesDir) {
   }
 }
 
-/* caseDraftFileDeleted. The open file is gone at relaunch: the recovered
-   edit opens as an unsaved copy rather than being lost. */
 async function caseDraftFileDeleted(target, fixturesDir) {
   const tag = target.name + " draft crash-recovery: file deleted while down (unsaved copy)";
   const filePath = writeFixture(fixturesDir, "case-n-deleted-" + Date.now() + ".splitpage", "Deleted File Doc", [["a", "b"]]);
@@ -4748,10 +3656,6 @@ async function caseDraftFileDeleted(target, fixturesDir) {
   }
 }
 
-/* caseQuitWithoutSavingDeletesDrafts. Two dirty file tabs, one 3-button
-   quit dialog answered 'confirm' (discard): exit 0, no tab folders left,
-   session.json says 'clean-exit', both tabIds recorded as discarded — and a
-   relaunch reopens both files clean, with nothing to recover. */
 async function caseQuitWithoutSavingDeletesDrafts(target, fixturesDir) {
   const tag = target.name + " draft: quit without saving discards every draft";
   const aPath = writeFixture(fixturesDir, "case-n-quit-a-" + Date.now() + ".splitpage", "Quit Discard A", [["a", "b"]]);
@@ -4781,8 +3685,6 @@ async function caseQuitWithoutSavingDeletesDrafts(target, fixturesDir) {
     const dirsBefore = readDraftDirs(userDataDir);
     record(tag + ": both draft folders exist before quit", !!dirsBefore[tabAId] && !!dirsBefore[tabBId], JSON.stringify(Object.keys(dirsBefore)));
 
-    // File > Exit with 2 unsaved tabs in one window -> ONE 3-button dialog;
-    // dialogs[0] = "confirm" -> discard/leave -> quit proceeds, exit 0.
     await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": quit with 'confirm' exits the process", exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
@@ -4795,8 +3697,6 @@ async function caseQuitWithoutSavingDeletesDrafts(target, fixturesDir) {
     const discarded = (session && session.discardedTabIds) || [];
     record(tag + ": both tabIds are recorded as discarded", discarded.indexOf(tabAId) !== -1 && discarded.indexOf(tabBId) !== -1, JSON.stringify(discarded));
 
-    // Relaunch: the files themselves are untouched, so both tabs reopen
-    // clean, with nothing to recover.
     app = await launchApp(target, { label: "quit-discard-drafts-relaunch", userDataDir });
     await waitForRows(app.cdp, 20000);
     const listing1 = await pollNode(async () => {
@@ -4814,9 +3714,6 @@ async function caseQuitWithoutSavingDeletesDrafts(target, fixturesDir) {
   }
 }
 
-/* caseLeaveWithoutSavingDeletesOnlyThatDraft. Tabs A and B, close-tab on A
-   with 'confirm': only A's folder disappears. Crash, relaunch: only B is
-   recovered. */
 async function caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir) {
   const tag = target.name + " draft: closing one tab without saving discards only that draft";
   const aPath = writeFixture(fixturesDir, "case-n-leave-a-" + Date.now() + ".splitpage", "Leave Discard A", [["a", "b"]]);
@@ -4843,8 +3740,6 @@ async function caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir) {
     const dirsBefore = readDraftDirs(userDataDir);
     record(tag + ": both draft folders exist before closing A", !!dirsBefore[tabAId] && !!dirsBefore[tabBId], JSON.stringify(Object.keys(dirsBefore)));
 
-    // Ctrl+W on A alone: the 2-button ['Leave without saving','Stay']
-    // dialog, scoped to that one tab (CLOSE-QUIT-LIFECYCLE).
     await fireEval(app.cdp, "window.splitpageDesktop.__testRequestCloseTab()", { awaitPromise: false });
     const closed = await pollShellState(cdpB, (l) => {
       const allTabs = l.windows.flatMap((w) => w.tabs.map((t) => t.tabId));
@@ -4872,11 +3767,6 @@ async function caseLeaveWithoutSavingDeletesOnlyThatDraft(target, fixturesDir) {
   }
 }
 
-/* caseDraftCrashMidWrite. SPLITPAGE_TEST_DRAFT_KILL_BEFORE_RENAME='2': the
-   whole main process is SIGKILLed with the SECOND write's temp file written
-   but not yet renamed — a power cut mid-write. The first (fully-written)
-   generation is restored; the never-renamed second write never lands; and
-   init()'s own sweep leaves no leftover .tmp-*. */
 async function caseDraftCrashMidWrite(target) {
   const tag = target.name + " draft: power-cut mid-write keeps the FIRST generation, no leftover .tmp-*";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4892,7 +3782,6 @@ async function caseDraftCrashMidWrite(target) {
     const tabId = await tabIdOfTarget(app.cdp);
     const cdp = app.cdp;
 
-    // Write #1: completes fully — this is the "first generation".
     await addMarkerRow(cdp, markerGen1);
     await flushDraft(cdp);
 
@@ -4900,9 +3789,6 @@ async function caseDraftCrashMidWrite(target) {
     const gen1 = fs.existsSync(tabDir) ? fs.readdirSync(tabDir) : [];
     record(tag + ": the first write lands normally", gen1.indexOf("current.draft") !== -1, JSON.stringify(gen1));
 
-    // Write #2: reaches the rename step and the process is SIGKILLed right
-    // there (draftTestHooksFromEnv's onKill). Fire-and-forget: no reply can
-    // ever arrive.
     await evalPage(cdp,
       "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
       "var cell = cells[cells.length - 1]; cell.textContent = " + JSON.stringify(markerGen2) + "; " +
@@ -4932,10 +3818,6 @@ async function caseDraftCrashMidWrite(target) {
   }
 }
 
-/* caseDraftCorrupt. Two full generations, then BOTH garbled on disk: the
-   tab seed-boots (a fresh document, not stuck), a toast explains the
-   changes couldn't be read, and corrupt/<tabId>-<ts>/ holds both bad
-   files — the hold stays (DRAFT-STORE's 'failed' contract). */
 async function caseDraftCorrupt(target) {
   const tag = target.name + " draft: both generations corrupt -> quarantined, seed boot, a toast";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -4946,7 +3828,6 @@ async function caseDraftCorrupt(target) {
     const tabId = await tabIdOfTarget(app.cdp);
     const cdp = app.cdp;
 
-    // Two full writes -> both current.draft and previous.draft exist.
     await addMarkerRow(cdp, "MARKER-CORRUPT-1");
     await flushDraft(cdp);
     await evalPage(cdp,
@@ -4994,10 +3875,6 @@ async function caseDraftCorrupt(target) {
   }
 }
 
-/* caseDraftDiskFull. SPLITPAGE_TEST_DRAFT_FAIL='ENOSPC:3': exactly one
-   sticky "paused — disk is full" toast (never one per refusal), then
-   "working again" once the injected failures run out. Backoff shrunk via
-   the real DRAFT-RENDERER-API setTiming test hook so this stays fast. */
 async function caseDraftDiskFull(target) {
   const tag = target.name + " draft: ENOSPC pauses writes, exactly one sticky toast, then resumes";
   let app = null;
@@ -5031,13 +3908,6 @@ async function caseDraftDiskFull(target) {
   }
 }
 
-/* caseDraftForgedFileId. A draft written directly (bypassing the app's own
-   writer entirely) with a fileId nothing registered: main can only build
-   filePath:null for it, and the restore opens it as an unsaved copy rather
-   than losing it, throwing or trusting the fileId as a path (invariant
-   #34). crashApp, not a normal close, because a clean close of this
-   never-dirtied-in-page tab would otherwise discardClean the very draft
-   this case forged. */
 async function caseDraftForgedFileId(target) {
   const tag = target.name + " draft: forged fileId with no registered path opens as an untitled copy";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -5054,9 +3924,6 @@ async function caseDraftForgedFileId(target) {
       schema: 2, originKind: "file", fileId: "deadbeef", fileKind: "splitpage",
       importName: null, baseLastModified: null, baseSize: null, server: null,
       stateJson: JSON.stringify({ title: "Forged File", rows: [{ id: "r1", visualText: marker, audioText: "", status: "todo" }] }),
-      // A non-null base: DRAFT-STORE requires one on a tab's FIRST write in
-      // this process (NEED_BASE otherwise) — real captureAndSendDraft() calls
-      // always carry one on a first write for exactly this reason.
       baseJson: JSON.stringify({ title: "Forged File", rows: [] })
     };
     const write = await evalPage(cdp, "window.splitpageDesktop.writeDraft(" + JSON.stringify(payload) + ")");
@@ -5084,9 +3951,6 @@ async function caseDraftForgedFileId(target) {
   }
 }
 
-/* caseDraftNoSecrets. --host --pin 482915: no file under drafts/ contains
-   the PIN, the real join token, or 'launch='; header server.base (when
-   present) carries no userinfo ('@'). */
 async function caseDraftNoSecrets(target) {
   const tag = target.name + " draft: no PIN, token or launch URL ever reaches disk";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
@@ -5134,10 +3998,6 @@ async function caseDraftNoSecrets(target) {
   }
 }
 
-/* caseDraftServerDocMerges and caseDraftServerGone: --library mode makes
-   this same app both the document server and a client of it, so a real
-   server document can be created, edited, crashed on and recovered against
-   the real server — no fake fetch needed. */
 async function caseDraftServerDocMerges(target) {
   const tag = target.name + " draft: server document reachable at relaunch -> merged (no autosave)";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
@@ -5167,10 +4027,6 @@ async function caseDraftServerDocMerges(target) {
 
     const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
     const port = info && info.port;
-    // Simulate another client saving a different version while this copy
-    // is down — a raw PUT, never through this tab's own document. POST
-    // /api/docs starts a fresh document at rev 1 (server/server.js), so the
-    // compare-and-set base is created.rev, not 0.
     const serverRevAfterExternalEdit = created.rev + 1;
     const putRes = port ? await fetchJson(`http://127.0.0.1:${port}/api/docs/${created.id}`, {
       method: "PUT", headers: { "content-type": "application/json" },
@@ -5256,10 +4112,6 @@ async function caseDraftServerGone(target) {
   }
 }
 
-/* caseRendererCrashRestores (J-1). A renderer crash of a CLEAN tab must
-   never leave a hold — nothing sends draft-restore-done to release one that
-   was never taken over a draft that never existed — and closing the
-   reloaded tab must raise no unsaved-changes prompt. */
 async function caseRendererCrashRestores(target) {
   const tag = target.name + " draft: renderer crash of a CLEAN tab reloads unheld, closes with no prompt";
   let app = null;
@@ -5271,7 +4123,7 @@ async function caseRendererCrashRestores(target) {
     const cdp = app.cdp;
 
     await crashRenderer(cdp);
-    await sleep(1000); // same target id after the reload — see the dirty-file-tab crash case above
+    await sleep(1000);
 
     const reconnected = await findPageTarget(app.port, 30000, { tabId });
     cdp2 = new CDPConn(reconnected.webSocketDebuggerUrl);
@@ -5281,9 +4133,6 @@ async function caseRendererCrashRestores(target) {
     const status = await draftStatusFor(cdp2);
     record(tag + ": a clean tab's crash never leaves a hold (nothing to protect)", !!status && status.held === false, JSON.stringify(status));
 
-    // Closing through the SAME test hook, with no dialog answers queued: a
-    // dialog would sit there auto-cancelling, which would leave the window
-    // open and the process alive — the loud way this assertion fails.
     await fireEval(cdp2, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 30000);
     record(tag + ": closing the reloaded, still-clean tab raises no unsaved dialog (exits clean)",
@@ -5294,8 +4143,6 @@ async function caseRendererCrashRestores(target) {
   }
 }
 
-/* caseCleanTabsWriteNothing. 8s idle, nothing ever typed: no draft write,
-   no tab folder — the writer never runs over a clean document. */
 async function caseCleanTabsWriteNothing(target) {
   const tag = target.name + " draft: an untouched tab writes nothing, even after idle";
   let app = null;
@@ -5304,7 +4151,7 @@ async function caseCleanTabsWriteNothing(target) {
     await waitForRows(app.cdp, 20000);
     const cdp = app.cdp;
 
-    await sleep(8000); // well past draftTiming.idle/max — nothing should ever fire
+    await sleep(8000);
 
     const status = await draftStatusFor(cdp);
     record(tag + ": no draft write was ever made", !!status && status.writes === 0, JSON.stringify(status));
@@ -5316,9 +4163,6 @@ async function caseCleanTabsWriteNothing(target) {
   }
 }
 
-/* caseTornOffDirtyTabCrashRestoresOnce. A dirty tab moved into its own
-   window, then a whole-process crash: relaunch recovers it exactly once,
-   under its original tabId — never twice, never under the wrong window. */
 async function caseTornOffDirtyTabCrashRestoresOnce(target) {
   const tag = target.name + " draft: a torn-off dirty tab crashes and restores exactly once";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -5366,24 +4210,8 @@ async function caseTornOffDirtyTabCrashRestoresOnce(target) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * Issue #86: the teleprompter's "Open in browser".
- *
- * No test can watch a real default browser start, so TEST_MODE stubs
- * shell.openExternal (main.js section 1) and records every URL it WOULD have
- * opened; __testShell('externalOpens') reads them back. What IS real here:
- * main choosing what to share from the tab's own record, the file read off
- * disk, the loopback listener (desktop/prompter-share.js) answering over
- * real HTTP, the save-first path, and the share going away with its tab.
- * The browser page's own half (reading #script=, opening the prompter) is
- * the browser suite 58-prompter-open-in-browser.txt.
- * -------------------------------------------------------------------- */
-
 const PROMPTER_URL_RE = /^http:\/\/127\.0\.0\.1:(\d+)\/\?teleprompter=1#script=([0-9a-f]{64})$/;
 
-/* fetch() will not send a Host header of the caller's choosing, which is the
-   whole point of this probe — a DNS-rebinding page's request names the
-   attacker's host — so it goes over node:http instead. */
 function statusWithHost(port, pathname, hostHeader) {
   return new Promise((resolve) => {
     const req = http.request({ host: "127.0.0.1", port, path: pathname, method: "GET",
@@ -5412,19 +4240,15 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     [["Wide shot", "The first line the reader says out loud."], ["Close up", "A second line — with an em dash."]]);
   let app = null;
   try {
-    /* No dialog answers at all: any native dialog this flow raised would be
-       answered Cancel, and counted by testDialogsSeen. */
     app = await launchApp(target, { label: "prompter-open", fixtures: [fixturePath] });
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
     await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Prompter — 🎬 Browser"), 20000);
     const dialogsBefore = await dialogsSeen(cdp);
 
-    // --- the bridge takes no argument, and hands back no URL ------------
     const bridgeArity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInBrowser === 'function' && window.splitpageDesktop.openPrompterInBrowser.length");
     record(tag + ": the bridge has openPrompterInBrowser() and it takes no argument", bridgeArity === 0, "length=" + bridgeArity);
 
-    // --- A: a clean file tab, from the View menu ------------------------
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
     const opens1 = await waitForExternalOpens(cdp, 1);
     record(tag + ": View ▸ Present in Browser asks the OS to open exactly one URL", !!opens1 && opens1.length === 1, JSON.stringify(opens1));
@@ -5453,7 +4277,6 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
       record(tag + ": a request naming another Host is refused", forged === 403, "status=" + forged);
     }
 
-    // --- B: dirty, from the teleprompter's own button -------------------
     await addMarkerRow(cdp, marker);
     const dirtyNow = await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent.indexOf('\\u2022') !== -1); })()", 10000).catch(() => false);
     record(tag + ": setup — the tab is dirty", !!dirtyNow);
@@ -5483,7 +4306,6 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     const voiceStatus = await poll(cdp, "(function(){ var t = document.getElementById('pp-voice-status').textContent; return t.indexOf('Opened in your browser') !== -1 ? t : null; })()", 10000).catch(() => null);
     record(tag + ": the prompter's status line says so too", !!voiceStatus, String(voiceStatus));
 
-    // --- C: the share goes with its tab ---------------------------------
     const tab1Id = await tabIdOfTarget(cdp);
     const status1 = await shell(cdp, "prompterShareStatus", {});
     record(tag + ": main holds exactly one share, for this tab", !!status1 && status1.listening === true &&
@@ -5497,9 +4319,6 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     const status2 = await shell(witness, "prompterShareStatus", {});
     record(tag + ": main holds no share afterwards", !!status2 && status2.listening === false && status2.shares.length === 0, JSON.stringify(status2));
 
-    // --- D: a document with nowhere to live is not saved behind the back -
-    /* Through the page's own File drawer this time, the route Windows has:
-       its title bar is the tab strip, so the View menu is never drawn. */
     const pristineBefore = await dialogsSeen(witness);
     const inPage = await evalPage(witness, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-browser'); var shown = !!b && !b.hidden && !document.getElementById('file-menu').hidden; if (shown) b.click(); return shown; })()");
     record(tag + ": File ▸ This document ▸ Present in browser is offered in the desktop app", inPage === true, String(inPage));
@@ -5509,22 +4328,13 @@ async function caseTeleprompterOpenInBrowserFile(target, fixturesDir) {
     record(tag + ": ... and no Save dialog appears for it", (await dialogsSeen(witness)) === pristineBefore);
     const opens3 = await externalOpens(witness);
     record(tag + ": ... and nothing is opened in the browser", opens3.length === 2, JSON.stringify(opens3.length));
-    /* The first tab's connection died with it; teardown drives the witness. */
-    try { cdp.close(); } catch { /* already gone */ }
+    try { cdp.close(); } catch { }
     app.cdp = witness;
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
 }
 
-/* Follow My Voice on desktop (issue #8, main.js section 9d). The real
-   listener is Windows' recogniser through powershell.exe, and no automated
-   run may open a microphone (invariant #33) — so main runs
-   desktop/test/fake-voice-helper.mjs instead, through
-   SPLITPAGE_TEST_VOICE_HELPER, and this drives everything around it: the
-   button offering to listen instead of the browser, the heard words moving
-   the prompter, stop, a second tab taking the microphone over, and the
-   listener going with its tab. */
 async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
   const tag = target.name + " teleprompter: Follow My Voice on desktop";
   const fixturePath = writeFixture(fixturesDir, "prompter-voice.splitpage", "Prompter — voice",
@@ -5574,7 +4384,6 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
     const idle = await evalPage(cdp, "document.getElementById('pp-voice').textContent");
     record(tag + ": ... and the button is back to Follow My Voice", idle === "Follow My Voice", String(idle));
 
-    // --- a second tab takes the microphone over -------------------------
     await evalPage(cdp, "document.getElementById('pp-voice').click(); true", { awaitPromise: false });
     await poll(cdp, "document.getElementById('pp-voice').classList.contains('is-active')", 15000).catch(() => false);
     const tab2Id = await shell(cdp, "createTab", {});
@@ -5589,23 +4398,16 @@ async function caseTeleprompterVoiceDesktop(target, fixturesDir) {
     const st2 = await shell(tab2, "voiceStatus", {});
     record(tag + ": main's one listener now belongs to the second tab", !!st2 && st2.running === true && st2.tabId === tab2Id, JSON.stringify(st2));
 
-    // --- the listener goes with its tab ---------------------------------
     await fireShell(cdp, "closeTab", { tabId: tab2Id });
     const gone = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
     record(tag + ": closing the listening tab stops its listener", !!gone, JSON.stringify(gone));
-    try { tab2.close(); } catch { /* already gone */ }
+    try { tab2.close(); } catch { }
     record(tag + ": no native dialog was raised by any of it", (await dialogsSeen(cdp)) === dialogsBefore);
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
 }
 
-/* Follow My Voice relayed to Present in Browser (issue #122, main.js section
-   9b). With a listener (the fake, as above), the URL main opens carries a
-   voice relay beside the script, and a browser page's EventSource on it is
-   what starts and stops main's listener — driven here over node:http as the
-   browser would, since no test can drive a real Firefox. The page's half is
-   the browser suite 87-voice-relay.txt. */
 function openRelayStream(port, pathname) {
   return new Promise((resolve) => {
     const events = [];
@@ -5619,7 +4421,7 @@ function openRelayStream(port, pathname) {
         let i;
         while ((i = buf.indexOf("\n\n")) !== -1) {
           const block = buf.slice(0, i); buf = buf.slice(i + 2);
-          if (block.startsWith("data: ")) { try { events.push(JSON.parse(block.slice(6))); } catch { /* not ours */ } }
+          if (block.startsWith("data: ")) { try { events.push(JSON.parse(block.slice(6))); } catch { } }
         }
       });
       resolve({ status: res.statusCode, type: res.headers["content-type"], events, ended, close: () => req.destroy() });
@@ -5678,7 +4480,6 @@ async function caseTeleprompterVoiceRelay(target, fixturesDir) {
     const stopped = await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
     record(tag + ": the browser closing the stream stops main's listener", !!stopped, JSON.stringify(stopped));
 
-    // --- the tab going away ends the relay, and its listener, with it ---
     const again = await openRelayStream(port, "/prompter-voice/" + m[4]);
     await pollNode(async () => { const st = await shell(cdp, "voiceStatus", {}); return st && st.running ? st : null; }, 10000).catch(() => null);
     const witnessId = await shell(cdp, "createTab", {});
@@ -5689,18 +4490,13 @@ async function caseTeleprompterVoiceRelay(target, fixturesDir) {
     record(tag + ": closing the desktop tab ends its browser copy's relay", ended === true);
     const gone = await pollNode(async () => { const st = await shell(witness, "voiceStatus", {}); return st && st.running === false ? st : null; }, 10000).catch(() => null);
     record(tag + ": ... and stops the listener", !!gone, JSON.stringify(gone));
-    try { cdp.close(); } catch { /* already gone */ }
+    try { cdp.close(); } catch { }
     app.cdp = witness;
   } finally {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
 }
 
-/* "Use Chromium Speech Recognition" (issue #123, main.js section 9b): the same
-   share, started in an installed Chromium browser instead of handed to the
-   default one, and with no voice relay even where main could listen — that
-   page uses the browser's own Web Speech. SPLITPAGE_TEST_CHROMIUM stands in
-   for what is installed; main records the launch instead of making it. */
 async function chromiumLaunches(cdp) {
   return (await shell(cdp, "chromiumLaunches", {})) || [];
 }
@@ -5725,7 +4521,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     const arity = await evalPage(cdp, "typeof window.splitpageDesktop.openPrompterInChromium === 'function' && window.splitpageDesktop.openPrompterInChromium.length");
     record(tag + ": the bridge has openPrompterInChromium() and it takes no argument", arity === 0, "length=" + arity);
 
-    // --- from the page's own File drawer (Windows draws no menu bar) -----
     const inPage = await evalPage(cdp, "(function(){ document.getElementById('btn-file').click(); var b = document.getElementById('menu-present-chromium'); var shown = !!b && !b.hidden && b.textContent === 'Use Chromium Speech Recognition'; if (shown) b.click(); return shown; })()");
     record(tag + ": File ▸ This document ▸ Use Chromium Speech Recognition is offered", inPage === true, String(inPage));
     const launched = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length ? l : null; }, 15000).catch(() => null);
@@ -5742,7 +4537,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     const toast = await toastContaining(cdp, "Opened in Microsoft Edge", 10000);
     record(tag + ": the page names the browser and its own speech recognition", !!toast && toast.indexOf("own speech recognition") !== -1, String(toast));
 
-    // --- the native menu item reaches the same thing --------------------
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-chromium')", { awaitPromise: false });
     const twice = await pollNode(async () => { const l = await chromiumLaunches(cdp); return l.length >= 2 ? l : null; }, 15000).catch(() => null);
     record(tag + ": View ▸ Use Chromium Speech Recognition does the same", !!twice && twice.length === 2 && PROMPTER_URL_RE.test(twice[1].url), JSON.stringify(twice));
@@ -5750,7 +4544,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
   }
 
-  // --- no Chromium browser: said plainly, nothing shared, nothing opened --
   app = null;
   try {
     app = await launchApp(target, { label: "prompter-chromium-none", fixtures: [fixturePath], env: { SPLITPAGE_TEST_CHROMIUM: "none" } });
@@ -5769,8 +4562,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
   }
 }
 
-/* Without a listener (every automated run that does not name the fake, and
-   any machine that is not Windows) the button keeps Present in Browser. */
 async function caseTeleprompterOpenInBrowserServer(target) {
   const tag = target.name + " teleprompter: open in browser (--library server document)";
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
@@ -5809,28 +4600,6 @@ async function caseTeleprompterOpenInBrowserServer(target) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * Issue #10: Google Drive through a loopback OAuth redirect.
- *
- * Main owns the whole flow (desktop/google-drive.js, main.js § 9c). Every
- * Google endpoint is pointed at desktop/test/fake-google.mjs through
- * SPLITPAGE_TEST_GOOGLE_BASE, which main honours only under SPLITPAGE_TEST=1.
- * TEST_MODE already turns shell.openExternal into a recorder, so the
- * consent URL main WOULD have opened in the browser is read back with
- * __testShell('externalOpens'); this harness then plays the browser by
- * asking the fake to approve that request and fetching the loopback
- * callback it answers with. What is real: main's listener, PKCE, the state
- * check, the code-for-token exchange, safeStorage, and every Drive request
- * main makes. The modal's own half is the browser suite
- * 64-desktop-drive.txt; the module on its own is google-drive.test.mjs.
- *
- * On a Linux runner with no keyring safeStorage's backend is "basic_text",
- * which main counts as unavailable (a key compiled into Chromium is not
- * encryption). SPLITPAGE_TEST_DRIVE_BASIC_TEXT=1 lets the round-trip case
- * exercise the stored-token path there anyway; the bad-state case runs
- * without it and checks whichever behaviour this machine's backend calls for.
- * -------------------------------------------------------------------- */
-
 function driveEnv(fake, extra) {
   return Object.assign({
     SPLITPAGE_TEST_GOOGLE_BASE: fake.base,
@@ -5839,17 +4608,11 @@ function driveEnv(fake, extra) {
   }, extra || {});
 }
 
-/* A bridge call, with any bytes turned into text in the page — CDP's
-   returnByValue cannot carry a Uint8Array. */
 async function driveCall(cdp, expr) {
   return evalPage(cdp, "(" + expr + ").then(function (r) { if (r && r.bytes) { r.bytesIsView = ArrayBuffer.isView(r.bytes); " +
     "r.text = new TextDecoder().decode(r.bytes); delete r.bytes; } return r; }, function (e) { return { rejected: String(e && e.message || e) }; })");
 }
 
-/* Starts driveSignIn() in the page, waits for the consent URL main hands the
-   (recorded) browser, lets the fake approve it — with `override` to forge
-   the state or refuse — and fetches the loopback callback as the browser
-   would. */
 async function driveSignInThroughFake(cdp, fake, override) {
   const before = (await externalOpens(cdp)).length;
   await evalPage(cdp, "window.__driveSignIn = null; window.splitpageDesktop.driveSignIn().then(function (r) { window.__driveSignIn = r; }, " +
@@ -5873,8 +4636,6 @@ function driveSecretOnDisk(dir, secrets) {
   return null;
 }
 
-/* Everything the page can see that a token could have landed in: both
-   storages, the whole document, and the bridge's own member names. */
 async function driveSecretsInPage(cdp, secrets) {
   const blob = await evalPage(cdp, "JSON.stringify({ ls: Object.assign({}, localStorage), ss: Object.assign({}, sessionStorage), " +
     "html: document.documentElement.outerHTML, keys: Object.keys(window.splitpageDesktop) })");
@@ -5887,8 +4648,6 @@ async function caseGoogleDriveNotConfigured(target) {
   const fake = await startFakeGoogle();
   let app = null;
   try {
-    /* The endpoints point at the fake, but no client at all — an inherited
-       real client id in this shell's environment is blanked out. */
     app = await launchApp(target, { label: "drive-unconfigured",
       env: { SPLITPAGE_TEST_GOOGLE_BASE: fake.base, SPLITPAGE_GOOGLE_CLIENT_ID: "", SPLITPAGE_GOOGLE_CLIENT_SECRET: "" } });
     const cdp = app.cdp;
@@ -5906,8 +4665,6 @@ async function caseGoogleDriveNotConfigured(target) {
     const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
     record(tag + ": a Drive call before any sign-in answers SIGNED_OUT", !!list && list.ok === false && list.code === "SIGNED_OUT", JSON.stringify(list));
 
-    /* The file Google Cloud Console downloads, dropped in while the app
-       runs: picked up on the next call, no restart. */
     fs.writeFileSync(expectedPath, JSON.stringify({ installed: { client_id: fake.clientId, client_secret: fake.clientSecret,
       redirect_uris: ["http://localhost"] } }));
     const st2 = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
@@ -5935,19 +4692,14 @@ async function caseGoogleDriveRoundTrip(target) {
     const info = await shell(cdp, "driveInfo", {});
     record(tag + ": main points Google's endpoints at the fake (test mode only)", !!info && info.tokenEndpoint === fake.base + "/token", JSON.stringify(info));
 
-    // --- what the page is given ------------------------------------------
     const surface = await evalPage(cdp, "(function () { var d = window.splitpageDesktop; var keys = Object.keys(d); " +
       "return { drive: keys.filter(function (k) { return /drive/i.test(k); }).sort(), " +
       "suspicious: keys.filter(function (k) { return /token|oauth|secret|credential|google/i.test(k); }) }; })()");
-    /* contextBridge proxies report length 0 for every function, so which
-       calls take no argument is ipc-table.test.mjs's to prove (the table
-       refuses one); here it is the set the page is given. */
     record(tag + ": the bridge has exactly the six drive calls",
       !!surface && JSON.stringify(surface.drive) === JSON.stringify(["driveDownload", "driveList", "driveSignIn", "driveSignOut", "driveStatus", "driveUpload"]),
       JSON.stringify(surface));
     record(tag + ": no bridge member is named for a token or a credential", !!surface && surface.suspicious.length === 0, JSON.stringify(surface && surface.suspicious));
 
-    // --- sign in through the fake ------------------------------------------
     const signIn = await driveSignInThroughFake(cdp, fake);
     const auth = signIn.authUrl ? new URL(signIn.authUrl) : null;
     const p = auth ? auth.searchParams : new URLSearchParams();
@@ -5966,7 +4718,6 @@ async function caseGoogleDriveRoundTrip(target) {
     record(tag + ": the loopback listener is gone after its one callback", closed);
     record(tag + ": main exchanged the code with the verifier (the fake checks it)", fake.log.includes("POST /token"), JSON.stringify(fake.log));
 
-    // --- Drive through main --------------------------------------------------
     const root = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
     answers.push(root);
     record(tag + ": list My Drive", !!root && root.ok === true && root.files.map((f) => f.name).join(",") === "Scripts", JSON.stringify(root));
@@ -5990,7 +4741,6 @@ async function caseGoogleDriveRoundTrip(target) {
     record(tag + ": upload with a fileId replaces that file's content", !!upd && upd.ok === true && !!created &&
       created.data.toString("utf8") === "{\"rows\":[1]}" && created.name === "Smoke — 🎬.splitpage", JSON.stringify(upd));
 
-    // --- what main refuses ---------------------------------------------------
     const requestsBefore = fake.log.length;
     const refusals = {
       urlAsFolder: await driveCall(cdp, "window.splitpageDesktop.driveList('https://www.googleapis.com/drive/v3/files')"),
@@ -6004,7 +4754,6 @@ async function caseGoogleDriveRoundTrip(target) {
       refusals.notBytes.code === "BAD_ARGS" && refusals.tooLarge.code === "TOO_LARGE", JSON.stringify(refusals));
     record(tag + ": none of the refused calls reached Google", fake.log.length === requestsBefore, JSON.stringify(fake.log.slice(requestsBefore)));
 
-    // --- the token never reaches the page or disk in the clear --------------
     const secrets = fake.secrets();
     record(tag + ": setup — the fake issued a refresh and an access token", secrets.some((s) => s.startsWith("1//")) && secrets.some((s) => s.startsWith("ya29.")));
     const inAnswers = secrets.filter((s) => JSON.stringify(answers).indexOf(s) !== -1);
@@ -6016,7 +4765,6 @@ async function caseGoogleDriveRoundTrip(target) {
     const mentionsGoogle = dirContainsText(userDataDir, fake.base);
     record(tag + ": nothing under the profile (desktop-state.json, drafts, history) even names the Google endpoint", !mentionsGoogle, String(mentionsGoogle || ""));
 
-    // --- next launch: the stored sign-in comes back ---------------------------
     await teardown(app, tag + " (first launch)");
     app = await launchApp(target, { label: "drive-relaunch", env, userDataDir });
     cdp = app.cdp;
@@ -6029,7 +4777,6 @@ async function caseGoogleDriveRoundTrip(target) {
     record(tag + ": ... and Drive works, through a refresh-token exchange", !!again && again.ok === true &&
       fake.log.filter((l) => l === "POST /token").length === tokenCallsBefore + 1, JSON.stringify(again && again.code));
 
-    // --- sign out --------------------------------------------------------------
     const refreshToken = fake.secrets().find((s) => s.startsWith("1//"));
     const out = await driveCall(cdp, "window.splitpageDesktop.driveSignOut()");
     record(tag + ": sign-out answers signed out", !!out && out.ok === true && out.status && out.status.signedIn === false, JSON.stringify(out));
@@ -6051,8 +4798,6 @@ async function caseGoogleDriveBadState(target) {
   const fake = await startFakeGoogle();
   let app = null;
   try {
-    /* No SPLITPAGE_TEST_DRIVE_BASIC_TEXT: this launch gets the real rule for
-       this machine's safeStorage backend. */
     app = await launchApp(target, { label: "drive-bad-state", env: driveEnv(fake) });
     const cdp = app.cdp;
     await waitForRows(cdp, 20000);
@@ -6072,9 +4817,6 @@ async function caseGoogleDriveBadState(target) {
     const denied = await driveSignInThroughFake(cdp, fake, { error: "access_denied" });
     record(tag + ": consent refused in the browser answers DENIED", !!denied.result && denied.result.code === "DENIED", JSON.stringify(denied.result));
 
-    /* A good sign-in on the same launch, with this machine's own storage
-       rule: basic_text (Linux, no keyring) keeps it for the session only and
-       writes nothing; a real backend (DPAPI, Keychain, libsecret) stores it. */
     const info = await shell(cdp, "driveInfo", {});
     const good = await driveSignInThroughFake(cdp, fake);
     const sessionOnly = !info.encryptionAvailable || info.backend === "basic_text";
@@ -6093,25 +4835,8 @@ async function caseGoogleDriveBadState(target) {
   }
 }
 
-/* ----------------------------------------------------------------------
- * 5c. Per-tab server connections (#11).
- *
- *     Every case here runs against REAL document servers — server/server.js
- *     forked by this harness on free loopback ports, each with its own PIN
- *     and its own data folder, and ALLOW_ORIGINS=splitpage://app so the
- *     desktop page may call them cross-origin exactly as it calls a
- *     colleague's shared session. The app itself is launched with no
- *     --library: none of these documents is on its own server.
- *
- *     Tabs are connected the way a person connects them — the Servers
- *     dialog's own form, the File menu's own "Open from the server…" picker
- *     — so the path under test is the real one, routeOpen and all.
- * -------------------------------------------------------------------- */
-
 const SERVER_JS = path.join(DESKTOP_DIR, "..", "server", "server.js");
 
-/* opts.port/opts.dataDir restart a server where an earlier one was — the
-   same address and documents, a new session (and so a new token). */
 async function startDocServer(pin, opts) {
   const o = opts || {};
   const port = o.port || await freePort();
@@ -6166,9 +4891,6 @@ function serverDocHas(doc, marker) {
   return rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1);
 }
 
-/* Who else the server says is in `docId`, asked as an observer of our own —
-   a presence beat with a made-up tab id, which the server answers with
-   everyone BUT that id. */
 async function presenceOthers(srv, token, docId) {
   const r = await fetchJson(srv.url + "api/presence", {
     method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
@@ -6179,9 +4901,6 @@ async function presenceOthers(srv, token, docId) {
 
 const connOf = (cdp) => evalPage(cdp, "window.__hostedTest.conn()");
 
-/* The Servers dialog's own "add a server" form, PIN and all — which joins,
-   saves the bookmark and points THIS tab there (20e-connect.js). ssh is
-   {userHost, remotePort, localPort} to fill in the SSH fields too. */
 async function connectTabViaDialog(cdp, srv, opts) {
   const o = opts || {};
   const js = "(function(){" +
@@ -6205,8 +4924,6 @@ async function connectTabViaDialog(cdp, srv, opts) {
   return !!ok;
 }
 
-/* File ▸ Open from the server…, then that document's own row in the picker
-   — which routes through main (21-events.js) with this tab's connection. */
 async function openViaPicker(cdp, docId) {
   await evalPage(cdp, "(function(){ document.getElementById('menu-server-open').click(); return true; })()", { awaitPromise: false });
   const sel = "#server-modal [data-action=\"server-open\"][data-id=" + JSON.stringify(docId) + "]";
@@ -6229,11 +4946,6 @@ function tabRow(listing, tabId) {
   return null;
 }
 
-/* Two tabs, two servers, one window: each tab keeps its own connection, the
-   same document id on both servers is two documents (not "already open"),
-   each server hears only its own tab, a save goes where its document is,
-   a crashed tab comes back on ITS server although the other tab picked a
-   server since, and closing one tab leaves the other connected. */
 async function caseTwoServersSideBySide(target) {
   const tag = target.name + " per-tab connections: two servers side by side";
   let srvX = null, srvY = null, app = null, cdp2 = null;
@@ -6245,9 +4957,6 @@ async function caseTwoServersSideBySide(target) {
     const twin = await createServerDoc(srvX, tokX, "Twin On X");
     record(tag + ": setup — a document on server X", !!twin, JSON.stringify(twin));
     if (!twin) return;
-    /* The same id on server Y, holding a different script: the file is
-       copied across with only its title changed, so the two servers really
-       do hold one id each. */
     const text = fs.readFileSync(path.join(srvX.dataDir, twin.id + ".json"), "utf8").split("Twin On X").join("Twin On Y");
     fs.writeFileSync(path.join(srvY.dataDir, twin.id + ".json"), text, "utf8");
     const onY = await readServerDoc(srvY, tokY, twin.id);
@@ -6287,16 +4996,6 @@ async function caseTwoServersSideBySide(target) {
     record(tag + ": each tab's review-role chip follows its own server (both editors here)",
       r1 && r1.role === "edit" && r2 && r2.role === "edit", JSON.stringify([r1 && r1.role, r2 && r2.role]));
 
-    /* The heartbeat follows the document's connection: each server hears
-       from its own tab and no other.
-
-       Under SPLITPAGE_TEST=1 no window is ever shown (invariant #33), so
-       every tab page reports document.hidden === true, and a hidden page
-       deliberately sends no heartbeat (13a-presence.js; that rule has its
-       own browser suite, 44-presence). What this case is about is WHICH
-       server a beat goes to, so each page is told it is visible — a
-       page-local override of one getter, nothing in the app — and beats
-       once straight away. */
     const beatNow = "(function(){ Object.defineProperty(document, 'hidden', { configurable: true, get: function(){ return false; } }); " +
       "window.__presenceTest.beat(); return true; })()";
     await evalPage(cdp1, beatNow);
@@ -6311,7 +5010,6 @@ async function caseTwoServersSideBySide(target) {
     record(tag + ": server X hears exactly one tab (tab 1)", !!hereX && settledX && settledX.length === 1, JSON.stringify(settledX) + " tab1=" + beatX);
     record(tag + ": server Y hears exactly one tab (tab 2)", !!hereY && settledY && settledY.length === 1, JSON.stringify(settledY) + " tab2=" + beatY);
 
-    /* A save goes where its document lives. */
     const m1 = "ON-X-" + Date.now(), m2 = "ON-Y-" + Date.now();
     await addMarkerRow(cdp1, m1);
     record(tag + ": tab 1 saves", !!(await saveTabNow(cdp1)));
@@ -6321,8 +5019,6 @@ async function caseTwoServersSideBySide(target) {
     record(tag + ": tab 1's edit is on server X and not on Y", serverDocHas(docX, m1) && !serverDocHas(docY, m1));
     record(tag + ": tab 2's edit is on server Y and not on X", serverDocHas(docY, m2) && !serverDocHas(docX, m2));
 
-    /* Tab 2 picked Y last, so Y is where a FRESH page starts. Tab 1's page
-       dies and comes back: it must come back on X, with its document. */
     const tokenFree = !JSON.stringify(await shell(cdp2, "listTargets", {})).includes(tokX);
     record(tag + ": the test shell's listing never carries a token", tokenFree);
     await crashRenderer(cdp1);
@@ -6338,7 +5034,6 @@ async function caseTwoServersSideBySide(target) {
     record(tag + ": a crashed tab reloads onto ITS server (X), not the last one picked (Y), with its document",
       !!back && back.cn.serverUrl === srvX.url, JSON.stringify(back));
 
-    /* Closing tab 1 leaves tab 2 connected. */
     await shell(cdp2, "closeTab", { tabId: tab1Id });
     await pollShellState(cdp2, (l) => !tabRow(l, tab1Id), 15000).catch(() => null);
     const goneX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length === 0 ? true : null; }, 25000).catch(() => false);
@@ -6360,11 +5055,6 @@ async function caseTwoServersSideBySide(target) {
   }
 }
 
-/* A server tab beside a local-file tab, and a document opened from a tab
-   that is NOT pristine: it goes to a new tab that boots on the right server
-   with the token handed over (no PIN asked twice), while the file tab keeps
-   its file. What reaches desktop-state.json is the server and the id,
-   never the token or the PIN. */
 async function caseServerTabBesideFileTab(target, fixturesDir) {
   const tag = target.name + " per-tab connections: a server tab beside a file tab";
   const fixture = writeFixture(fixturesDir, "case-conn-file.splitpage", "Local File Doc", [["local a", "local b"]]);
@@ -6384,8 +5074,6 @@ async function caseServerTabBesideFileTab(target, fixturesDir) {
     const c1 = await connOf(cdp1);
     record(tag + ": a file tab starts on no remote server", c1.serverUrl === "" && !c1.hasToken, JSON.stringify(c1));
 
-    /* The file tab joins the server itself — its FILE stays its home — and
-       opens a document from it. Not pristine, so main opens a new tab. */
     record(tag + ": the file tab joins the server", await connectTabViaDialog(cdp1, srv));
     record(tag + ": joining leaves the file tab on its file", !!(await evalPage(cdp1, titleExpr("Local File Doc"))));
     await openViaPicker(cdp1, doc.id);
@@ -6443,13 +5131,6 @@ async function caseServerTabBesideFileTab(target, fixturesDir) {
   }
 }
 
-/* Session restore of server tabs on two servers. Nothing on disk holds a
-   token, so each restored tab comes back on its own server and: reconnects
-   silently where the reader chose "Remember on this device" for THAT
-   server, asks for the PIN where they did not. A token or a role planted in
-   desktop-state.json is not believed, an address that is not http(s) is
-   not restored at all, and a tunnel's host and ports come back with the tab
-   — so a tunnelled server that is down names the ssh command to start. */
 async function caseRestoreServerTabs(target) {
   const tag = target.name + " per-tab connections: session restore of server tabs";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -6502,8 +5183,6 @@ async function caseRestoreServerTabs(target) {
     const draftsHit = dirContainsText(path.join(userDataDir, "drafts"), tokY) || dirContainsText(path.join(userDataDir, "drafts"), tokX);
     record(tag + ": no token anywhere under drafts/", !draftsHit, String(draftsHit));
 
-    /* Plant what must not be believed: a token and a role on both server
-       sources, and a third tab whose address is not http(s). */
     const planted = JSON.parse(raw1);
     const PLANT = "f".repeat(64);
     for (const w of planted.windows) for (const t of w.tabs) {
@@ -6540,8 +5219,6 @@ async function caseRestoreServerTabs(target) {
     const after = readDesktopStateFile(userDataDir);
     record(tag + ": the rewritten desktop-state.json holds no planted token", !!after && !JSON.stringify(after).includes(PLANT));
 
-    /* The tunnel rides along: with Y down, the restored tab's reload says
-       which ssh command it is waiting on. */
     await srvY.stop();
     await crashRenderer(cdpY);
     try { cdpY.close(); } catch {}
@@ -6555,10 +5232,6 @@ async function caseRestoreServerTabs(target) {
     record(tag + ": a tunnelled server that is down names the ssh command to start",
       !!hint && hint.indexOf("ssh -N -L " + ssh.localPort + ":localhost:" + ssh.remotePort + " " + ssh.userHost) !== -1, String(hint));
 
-    /* The host restarts their session: same address, same documents, a new
-       token. The X tab's token (remembered, and in its own session) is now
-       stale; its reload finds that out on the document request, asks for
-       the PIN, and opens the document once it is typed. */
     await srvX.stop();
     srvX = await startDocServer(srvX.pin, { port: srvX.port, dataDir: srvX.dataDir });
     await crashRenderer(cdpX);
@@ -6604,18 +5277,9 @@ async function caseWindowCloseCanary() {
   record(tag + ": no window.close( call anywhere in src/js", offenders.length === 0, offenders.join(", "));
 }
 
-/* ----------------------------------------------------------------------
- * 6. Runner.
- * -------------------------------------------------------------------- */
-
 async function runTargetSuite(target, groupFilter) {
   console.log(`\n==== target: ${target.name} (${target.exe}) ====`);
   const fixturesDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-fixtures-"));
-  // Each group gets its own top-level guard: one group crashing outright
-  // (not just failing an assertion — an uncaught exception past its own
-  // internal try/finally) must not skip every group after it for this
-  // target. Groups already tear down their own launches in their own
-  // finally blocks; this only protects the group sequencing.
   const groups = [
     ["open/boot/security", () => caseBootAndSecurity(target)],
     ["open/save/conflict/save-as/export", () => caseOpenSaveConflictExport(target, fixturesDir)],
@@ -6635,7 +5299,6 @@ async function runTargetSuite(target, groupFilter) {
     ["quit authority (no user gesture)", () => caseQuitAuthorityNoGesture(target)],
     ["--library quit cancelled keeps the server", () => caseQuitCancelKeepsServer(target)],
     ["clean close (regression)", () => caseCleanClose(target)],
-    // --- step L2: the tab shell ---
     ["tabstrip origin", () => caseTabstripOrigin(target)],
     ["Ctrl+T new tab (__testShell createTab)", () => caseCtrlTNewTab(target)],
     ["routing: pristine reuse / dirty->new tab / path dedupe", () => caseTabRoutingRules(target, fixturesDir)],
@@ -6648,7 +5311,6 @@ async function runTargetSuite(target, groupFilter) {
     ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir)],
     ["v1->v2 migration; corrupt JSON boots fresh", () => caseV1MigrationAndCorruptJson(target, fixturesDir)],
     ["recents: recorded/listed/removed/cleared, capped and path-free", () => caseRecentDocuments(target, fixturesDir)],
-    // --- step M: document id + desktop history ---
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
     ["history: round trip (put/list/get/copy/touch/Older put/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
@@ -6661,9 +5323,7 @@ async function runTargetSuite(target, groupFilter) {
     ["history: FORMAT ahead of ours goes read-only", () => caseHistoryNewerFormatReadOnly(target)],
     ["history: 3.0.0's v1-backup/ is deleted at launch, v2 history intact", () => caseHistoryV1BackupRemoved(target)],
     ["history: a raw v1 tree is left dormant, history starts fresh", () => caseHistoryV1RawTreeDormant(target)],
-    // --- issue #82: the content-addressed blob folder ---
     ["blobs: put/get/missing over the bridge, bad sha refused, relaunch", () => caseBlobRoundTripAndRelaunch(target)],
-    // --- step N: crash-safe drafts (single and multi tab) ---
     ["draft: crash-recovery of an untitled document", () => caseDraftCrashUntitled(target)],
     ["draft: crash-recovery brings a picture back from the blob folder (#82)", () => caseDraftCrashWithImage(target)],
     ["gallery: a dropped video file opens through main only (#135)", () => caseGalleryVideoFile(target)],
@@ -6683,17 +5343,14 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: renderer crash of a clean tab (J-1)", () => caseRendererCrashRestores(target)],
     ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target)],
     ["draft: a torn-off dirty tab crashes and restores exactly once", () => caseTornOffDirtyTabCrashRestoresOnce(target)],
-    // --- issue #86: the teleprompter in the browser ---
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
     ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
     ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
     ["teleprompter: voice relay to Present in Browser (fake listener)", () => caseTeleprompterVoiceRelay(target, fixturesDir)],
     ["teleprompter: present in chromium (Use Chromium Speech Recognition)", () => caseTeleprompterPresentInChromium(target, fixturesDir)],
-    // --- issue #10: Google Drive through a loopback OAuth redirect ---
     ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
     ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],
     ["google drive: bad state refused, storage follows the backend", () => caseGoogleDriveBadState(target)],
-    // --- issue #11: per-tab server and tunnel connections ---
     ["per-tab connections: two servers side by side, close one", () => caseTwoServersSideBySide(target)],
     ["per-tab connections: a server tab beside a file tab", () => caseServerTabBesideFileTab(target, fixturesDir)],
     ["per-tab connections: session restore of server tabs", () => caseRestoreServerTabs(target)],
@@ -6702,16 +5359,6 @@ async function runTargetSuite(target, groupFilter) {
   try {
     groups.forEach(([name]) => groupNames.add(name));
     for (const [name, fn, opts] of groups) {
-      /* A group marked windowsOnly is named in the summary as a skip rather
-         than run and failed, or — worse — quietly dropped. Nothing in the
-         list carries the mark today: after #89 the only thing on this file
-         that Windows alone can answer is one assertion inside the
-         unsaved-changes case, which skips itself. The hook stays so the next
-         genuinely Windows-bound case is skipped loudly instead of tempting
-         somebody to weaken its assertion until it passes here. */
-      // The debugging filter first: a group this run never asked for is not
-      // "skipped because the platform cannot run it", and must not land in
-      // the summary's skip list claiming that it was.
       if (groupFilter && !name.toLowerCase().includes(groupFilter)) continue;
       groupsRun++;
       if (opts && opts.windowsOnly && !IS_WINDOWS) {
@@ -6776,9 +5423,6 @@ async function main() {
   }
 
   console.log("");
-  /* The skip list prints BEFORE the pass/fail line and on every run, passing
-     or not: the whole point of #89 is that a thinner run must not read as a
-     full one. "ALL PASS" below always carries the skip count with it. */
   if (skippedLines.length) {
     console.log(`SKIPPED (${skippedLines.length}) — not run here, so not covered:`);
     skippedLines.forEach((l) => console.log("  - " + l));

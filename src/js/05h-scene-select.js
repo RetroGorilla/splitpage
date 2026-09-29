@@ -21,56 +21,24 @@ import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
 
-/* ================= selecting whole scenes (#204) =================
-
-   A press in a script cell and a drag past its top or bottom edge selects
-   whole scenes: from the scene the drag started in to the one under the
-   pointer, both columns, as one block. The text selection is dropped the
-   moment the pointer leaves the box (a drag that stays inside it selects
-   words, as it always did), and the page scrolls on its own near the top
-   and bottom of the window. Only from inside a text box, for now (#204's
-   decision); the grip still drags one scene to a new place (#185) and
-   never starts this — it is not in a text box.
-
-   With scenes selected:
-     Ctrl/Cmd+C, right-click › Copy scenes    — onto the clipboard (05g)
-     Ctrl/Cmd+X, right-click › Cut scenes     — the same, then taken out
-     Delete / Backspace, › Delete scenes      — taken out
-     › New script from these scenes           — File › New script, with them
-     Ctrl/Cmd+V                               — scenes pasted after them
-     Esc, a click anywhere, any other key     — the selection goes
-   Each change is one undo entry, with an Undo on its toast. A review
-   session can select and copy, and nothing else (#204).
-
-   A paste of scenes into a script cell comes through 21-events.js's paste
-   handler (pasteScenesAt, below): new scenes after the scene the caret is
-   in — in its place when that scene is blank.
-
-   The highlight is a <style> element naming the selected rows by id, not
-   a class on them: render() resets every row's class (HANDOFF §3.16), and
-   a rule keyed by id survives any repaint of the rows it names. */
-
-var TOLERANCE = 4;            /* px past the box's edge before scenes take over */
-var SCROLL_ZONE = 120;        /* as a dragged scene's (06-rows.js) */
+var TOLERANCE = 4;
+var SCROLL_ZONE = 120;
 var SCROLL_MIN = 6;
 var SCROLL_MAX = 28;
 
-var track = null;   /* {cell, rowId, x, y, scene} while a press that began in a cell is held */
-var sel = null;     /* {anchor, focus, doc} while scenes are selected */
-var scroll = null;  /* {dir, speed, raf} while the page scrolls under a selecting drag */
+var track = null;
+var sel = null;
+var scroll = null;
 var styleEl = null;
 var menuEl = null;
 var pendingCut = false;
 var clipWritten = null;
-
-/* ---- the selection ---- */
 
 export function hasSceneSelection() {
   if (sel && sel.doc !== S.state) clearSceneSelection();
   return !!sel;
 }
 
-/* The selected scenes' ids, in document order. */
 export function selectedSceneIds() {
   if (!hasSceneSelection()) return [];
   var rows = S.state.rows;
@@ -83,9 +51,6 @@ export function selectedSceneIds() {
   if (a === -1) a = b;
   if (b === -1) b = a;
   var ids = rows.slice(Math.min(a, b), Math.max(a, b) + 1).map(function (r) { return r.id; });
-  /* With shot scenes hidden (01b-hide-shot.js) a folded one between two
-     selected scenes is not on screen, so it is not selected: nothing is
-     copied, cut or deleted that was not highlighted. */
   if (document.querySelector("#rows .hidden-shot-strip")) {
     ids = ids.filter(function (id) { return !!document.querySelector('#rows .row[data-id="' + cssAttr(id) + '"]'); });
   }
@@ -123,14 +88,10 @@ function paint() {
       ",inset 0 -2px 0 var(--focus-ring);}";
 }
 
-/* ---- the gesture ---- */
-
 function rowEls() {
   return document.querySelectorAll("#rows .row[data-id]");
 }
 
-/* The scene at the pointer's height: the one it is over, else the nearest
-   (the first above the list, the last below it). */
 function rowIdAtY(y) {
   var els = rowEls();
   if (!els.length) return null;
@@ -168,8 +129,6 @@ function startScenes() {
   document.body.classList.add("is-scene-selecting");
   var s = window.getSelection();
   if (s) s.removeAllRanges();
-  /* The caret goes too: the keys now act on the scenes. What was typed is
-     stored as the cell is left (focusout), as for any other click away. */
   if (document.activeElement === track.cell) track.cell.blur();
   closeRowMenus();
   paint();
@@ -196,21 +155,15 @@ function onMouseUp() {
   if (track) endTrack();
 }
 
-/* A press on words already selected drags them (the browser's own drag of
-   text): that is not this. */
 function onDragStart() {
   if (track && !track.scene) track = null;
 }
 
-/* The browser may carry on extending its own selection while the button
-   is held; while scenes are being chosen there is none. */
 function onSelectionChange() {
   if (!track || !track.scene) return;
   var s = window.getSelection();
   if (s && s.rangeCount && !s.isCollapsed) s.removeAllRanges();
 }
-
-/* ---- scrolling at the window's edges ---- */
 
 function updateScroll() {
   var vh = window.innerHeight;
@@ -236,8 +189,6 @@ function stopScroll() {
   scroll = null;
 }
 
-/* The pictures the selection names, fetched now, so a copy a moment later
-   finds their bytes in memory — the copy itself cannot wait for them. */
 function prefetchPictures() {
   var ids = selectedSceneIds();
   if (!ids.length) return;
@@ -249,36 +200,28 @@ function prefetchPictures() {
   if (shas.length) ensureBytes(shas);
 }
 
-/* ---- copy, cut, delete ---- */
-
 function count(n) { return n === 1 ? "1 scene" : n + " scenes"; }
 
-/* Whether this document refuses changes (a review session), with a toast. */
 function refused(what) {
   if (!reviewMode()) return false;
   showToast("This is a review copy — scenes can be copied from it, not " + what + ".", "warn");
   return true;
 }
 
-/* Fills a copy or cut event's clipboard with the selected scenes. */
 function writeScenes(cd, cut) {
   var ids = selectedSceneIds();
   var nonce = cut ? randomHexBytes(16) : null;
   var out = buildScenePayload(S.state, ids, { cut: nonce });
-  try { cd.setData(SCENES_MIME, out.json); } catch (e) { /* the table's marker still carries them */ }
+  try { cd.setData(SCENES_MIME, out.json); } catch (e) { }
   cd.setData("text/html", out.html);
   cd.setData("text/plain", out.text);
   return { ids: ids, nonce: nonce, out: out };
 }
 
 function onBeforeCopy(e) {
-  /* With nothing but scenes selected the browser counts Copy and Cut as
-     having nothing to act on; answering here is what enables them. */
   if (hasSceneSelection() && !inEditable()) e.preventDefault();
 }
 
-/* Whether the keys and the clipboard belong to a text box right now — a
-   caret somewhere means the scenes are only highlighted. */
 function inEditable() {
   var a = document.activeElement;
   return !!(a && a !== document.body && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)));
@@ -312,12 +255,7 @@ function announceLeftOut(msg, leftOut, kind) {
   }
 }
 
-/* Copy or cut from the keyboard or the menu: the browser's own command, so
-   the clipboard gets every flavour (a script cannot write a custom type
-   any other way); the copy event above fills it. */
 function execCopy() {
-  /* the one command no edit uses (HANDOFF invariant #2 is about edits):
-     it only asks the browser to fire its copy event */
   try { return document.execCommand("copy"); } catch (e) { return false; }
 }
 
@@ -327,8 +265,6 @@ function runClipboardCommand(cut) {
   var ok = execCopy();
   pendingCut = false;
   if (ok && clipWritten) return;
-  /* Refused (no user gesture reached it): the asynchronous clipboard, which
-     takes text and HTML — the table's marker still carries the scenes. */
   var ids = selectedSceneIds();
   if (!ids.length || !navigator.clipboard) { showToast("Could not reach the clipboard.", "warn"); return; }
   if (cut && refused("cut")) cut = false;
@@ -354,7 +290,6 @@ function afterCut(w) {
   else offerUndo(msg, entry);
 }
 
-/* The scenes out of the document, as one undo entry. The entry, or null. */
 function takeOut(ids) {
   breakUndoCoalescing();
   var before = lastUndoEntry();
@@ -396,20 +331,12 @@ function repaint() {
   scheduleProductionRefresh();
 }
 
-/* ---- paste ---- */
-
-/* The clipboard's scenes put in after the scene `afterRowId` (in its place
-   when it is blank), as one undo entry. The pasted scenes are left
-   selected. */
 function pasteClip(clip, afterRowId, opts) {
   opts = opts || {};
   breakUndoCoalescing();
   var before = lastUndoEntry();
   var row = S.state.rows.filter(function (r) { return r.id === afterRowId; })[0];
   var move = isMove(clip, S.state);
-  /* On a server document a comment is sent as it is added and never
-     undone (12a-undo.js, design D5): the scenes go in as their own entry,
-     their comments after it as a change of their own. */
   var hold = onServerDoc();
   var res = insertScenes(clip, {
     afterRowId: afterRowId,
@@ -438,8 +365,6 @@ function pasteClip(clip, afterRowId, opts) {
   var entry = lastUndoEntry();
   var msg = opts.message || count(res.rowIds.length) + " pasted";
   offerUndo(msg, entry === before ? null : entry);
-  /* pictures that did not come with them: this page's store, then the
-     server's, else "Image unavailable" in their place */
   var want = clip.refs.filter(function (sha) { return clip.carried.indexOf(sha) === -1; });
   if (want.length) {
     ensureBytes(want).then(function (missing) {
@@ -451,21 +376,16 @@ function pasteClip(clip, afterRowId, opts) {
   return res;
 }
 
-/* A paste into a script cell (21-events.js onRootPaste): when the
-   clipboard holds scenes, they go in after this cell's scene and the
-   answer is true; otherwise false and the paste is the cell's own. */
 export function pasteScenesAt(cd, cellEl) {
   if (!cd || !S.state) return false;
   var clip = scenesOnClipboard(function (t) { return cd.getData(t); });
   if (!clip) return false;
   if (refused("pasted into")) return true;
-  /* what was typed a moment ago is stored, and its own undo entry */
   syncFieldFromDom(cellEl);
   pasteClip(clip, cellEl.getAttribute("data-id"));
   return true;
 }
 
-/* A paste with scenes selected and no caret anywhere: after them. */
 function onPasteEvent(e) {
   if (!hasSceneSelection() || inEditable() || !e.clipboardData) return;
   var clip = scenesOnClipboard(function (t) { return e.clipboardData.getData(t); });
@@ -476,8 +396,6 @@ function onPasteEvent(e) {
   var ids = selectedSceneIds();
   pasteClip(clip, ids[ids.length - 1]);
 }
-
-/* ---- a new script from them ---- */
 
 export function newScriptFromSelection() {
   var ids = selectedSceneIds();
@@ -497,12 +415,9 @@ export function newScriptFromSelection() {
   });
 }
 
-/* ---- the keys ---- */
-
 function onKeyDown(e) {
   if (!hasSceneSelection() || e.isComposing) return;
   if (menuEl && !menuEl.hidden) {
-    /* Esc puts the menu away and keeps the scenes */
     if (e.key === "Escape") { e.preventDefault(); closeSceneMenu(); return; }
     if (menuEl.contains(e.target)) return;
   }
@@ -516,14 +431,10 @@ function onKeyDown(e) {
     runClipboardCommand(k === "x");
     return;
   }
-  /* a paste arrives as its own event (onPasteEvent) */
   if (mod && k === "v") return;
   if (/^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key)) return;
-  /* anything else — Ctrl+Z included, which then does what it always does */
   clearSceneSelection();
 }
-
-/* ---- the right-click menu ---- */
 
 function menuItem(action, icon, label, keys, danger) {
   return '<button class="gutter-btn row-menu-item' + (danger ? " danger" : "") + '" type="button" role="menuitem" data-scene-action="' +
@@ -591,26 +502,17 @@ function onContextMenu(e) {
   clearSceneSelection();
 }
 
-/* A press anywhere but the menu ends the selection (#204: "Esc or a
-   click clears it"). Capture phase, so it has gone before the press does
-   anything else — which may be to start a new one. */
 function onDocMouseDown(e) {
   if (menuEl && menuEl.contains(e.target)) return;
   if (e.button === 2 && hasSceneSelection()) {
     var row = e.target.closest && e.target.closest("#rows .row[data-id]");
-    /* a right-click on the selection is for its menu: no caret put down
-       in the words under it, which would take the keys from the scenes */
     if (row && selectedSceneIds().indexOf(row.getAttribute("data-id")) !== -1) { e.preventDefault(); return; }
   }
   closeSceneMenu();
   if (sel) clearSceneSelection();
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order. */
 export function __init() {
-  /* On the document, each checking for #rows itself: this runs before
-     21-events.js's init() has the page to hand. */
   document.addEventListener("mousedown", onDocMouseDown, true);
   document.addEventListener("mousedown", onRowsMouseDown);
   document.addEventListener("mousemove", onMouseMove);
@@ -626,7 +528,6 @@ export function __init() {
   document.addEventListener("contextmenu", onContextMenu);
   window.addEventListener("resize", closeSceneMenu);
   window.addEventListener("scroll", closeSceneMenu, true);
-  /* for the browser suites (tests/190-scene-select.txt) */
   window.__sceneSelectTest = {
     select: selectScenes,
     clear: clearSceneSelection,

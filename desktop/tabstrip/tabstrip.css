@@ -1,17 +1,3 @@
-/* Splitpage desktop — title-bar tab strip styles.
- *
- * Plain CSS, no build step (this page is not part of the src/js/src/app.css
- * build — see HOUSE-RULES). Self-only CSP means no external fonts: Chivo is
- * named first so a machine that has it installed uses the app's face, and
- * the system stack does the rest.
- *
- * The colours are the app's own tokens (src/app.css, #169), copied by value
- * under the same names since this page cannot read that file. The strip's
- * background is also the title-bar overlay colour desktop/main.js hands
- * Electron (titleBarOverlayColors, backgroundColorForTheme): change one and
- * change the other, or the caption buttons sit on a different shade.
- */
-
 :root {
   color-scheme: light dark;
   --bg: #F1F0ED;
@@ -21,10 +7,6 @@
   --text: #171613;
   --visual: #2863AB;
   --danger: #C4302A;
-  /* Set by tabstrip.js from navigator.windowControlsOverlay.getTitlebarAreaRect()
-     when that API reports real caption-button geometry. Falls back to 150px
-     below on win32 (Electron's own Windows caption buttons) when the
-     overlay API is unavailable or before the first geometrychange fires. */
   --titlebar-inset: 150px;
 }
 
@@ -36,10 +18,6 @@ html,
 body {
   margin: 0;
   padding: 0;
-  /* Height must stay in lockstep with TITLEBAR_H in desktop/main.js, which
-     sizes the BrowserWindow's custom title bar around this page (added in
-     step F1). Changing one without the other clips the strip or leaves a
-     gap above the document view. */
   height: 36px;
   overflow: hidden;
   font-family: Chivo, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
@@ -69,29 +47,12 @@ body {
   display: flex;
   align-items: stretch;
   height: 36px;
-  /* The strip background is draggable window chrome. Everything that must
-     receive mouse or drag events opts back out with -webkit-app-region:
-     no-drag below: the tab row (.tabstrip__tabs, a drop target), each pill,
-     its close button and the "+" button. */
   -webkit-app-region: drag;
   padding-left: 8px;
   padding-right: var(--titlebar-inset);
 }
 
 .tabstrip__tabs {
-  /* WHY no-drag: tabstrip.js listens for dragover/drop on this row itself
-     so a tab dropped past the last pill (or in the gaps between pills)
-     appends/reorders. Electron hit-tests an app-region:drag area as native
-     caption (HTCAPTION on Windows) and never delivers mouse or drag events
-     there to the page, so inheriting `drag` from .tabstrip would silently
-     swallow those drops.
-     WHY 0 1 auto instead of growing: a no-drag row that stretched to fill
-     the strip would leave no empty title bar to move the window by. The row
-     is only as wide as its pills (shrinking and scrolling when they don't
-     fit, via min-width:0 + overflow-x), and everything to the right of the
-     "+" button stays draggable chrome.
-     WHY padding-right: gives "drop past the last tab" a real target a bit
-     wider than a pill's 2px margin, before the "+" button begins. */
   -webkit-app-region: no-drag;
   display: flex;
   align-items: stretch;
@@ -115,15 +76,6 @@ body {
   flex: 0 1 180px;
   min-width: 76px;
   max-width: 180px;
-  /* WHY width + contain: inline-size (issue #17): .tabstrip__tabs is
-     auto-sized, so it sizes itself from what each .tab reports as its
-     natural width. A nested flex container reports its CONTENT width, not
-     its flex-basis, so the longest title set the width every tab reported,
-     and flex-shrink then spread that one number across all of them: every
-     tab tracked one title and none reached 180px. `contain: inline-size`
-     makes a .tab report only its explicit `width` outward, so the row is
-     sized from the strip's real space and ordinary flex-shrink takes over.
-     The tab's rendered width still governs .tab__title's ellipsis. */
   width: 180px;
   contain: inline-size;
   padding: 0 8px;
@@ -180,9 +132,6 @@ body {
   opacity: 0.65;
 }
 
-/* A tab whose renderer died past the reload budget: muted, and marked with
-   something that is plainly not the unsaved dot. Closing it prompts for
-   nothing, which is precisely what the dot would have promised. */
 .tab--crashed .tab__title {
   opacity: 0.55;
   font-style: italic;

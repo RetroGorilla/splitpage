@@ -22,27 +22,18 @@ import {
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { sniffImageMime } from "../../shared/blob-policy.js";
 
-/* ================= pdf ================= */
-
-/* Adobe's Helvetica metrics (units per 1000) for codes 32..126 — enough to
-   wrap text accurately without shipping a font file. */
 var HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 var HELVB_W = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
 
-/* map the typographic characters a script actually contains into WinAnsi */
 var WINANSI_MAP = { "—": 151, "–": 150, "‘": 145, "’": 146, "“": 147, "”": 148, "…": 133, "•": 149, " ": 32 };
 
 function pdfEncodeChar(ch) {
   if (WINANSI_MAP[ch] !== undefined) return WINANSI_MAP[ch];
   var code = ch.charCodeAt(0);
   if (code >= 32 && code <= 255) return code;
-  return 63; /* "?" for anything we can't represent */
+  return 63;
 }
 
-/* widths for those same high codes — an em dash is a full em wide, and
-   guessing it narrow silently swallows the space that follows it; the
-   middle dot the exports join their facts with (183) is narrow, and
-   guessed a letter's width it left a gap after it */
 var HELV_HIGH = { 133: 1000, 145: 222, 146: 222, 147: 333, 148: 333, 149: 350, 150: 556, 151: 1000, 183: 278 };
 var HELVB_HIGH = { 133: 1000, 145: 278, 146: 278, 147: 500, 148: 500, 149: 350, 150: 556, 151: 1000, 183: 278 };
 
@@ -71,14 +62,10 @@ export function pdfEscapeText(s) {
   return out;
 }
 
-/* A category's print colour (#171; TAG_PRINT_COLORS, 14-export.js) as the
-   operands of a PDF colour operator: "RRGGBB" to "0.463 0.290 0.635". */
 export function pdfRgb(hex) {
   return [0, 2, 4].map(function (i) { return (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3); }).join(" ");
 }
 
-/* A filled circle's path, centred on (cx, cy): four Bézier quarters, the
-   usual 0.5523 control distance. The caller sets the colour and fills. */
 export function pdfCirclePath(cx, cy, r) {
   var k = r * 0.5523;
   function p(x, y) { return x.toFixed(2) + " " + y.toFixed(2); }
@@ -89,25 +76,14 @@ export function pdfCirclePath(cx, cy, r) {
     p(cx + k, cy - r) + " " + p(cx + r, cy - k) + " " + p(cx + r, cy) + " c h";
 }
 
-/* ---- the pieces every PDF here draws with ----
-
-   Each returns content-stream operators as one string, wrapped in q/Q
-   where it sets a colour, so a caller can push it anywhere. Colours are
-   print hexes (PRINT_COLORS, 14b-export-kit.js; TAG_PRINT_COLORS). */
-
 function n2(v) { return (+v).toFixed(2); }
 
-/* One string of Helvetica: F1 regular, F2 bold, F3 oblique, F4 bold
-   oblique. With a colour it is wrapped so the colour does not leak. The
-   uncoloured form is byte for byte the text op the writers always
-   emitted, which the tests read. */
 export function pdfTextOp(str, x, y, font, size, hex) {
   var op = "BT /" + font + " " + size + " Tf 1 0 0 1 " + n2(x) + " " + n2(y) +
     " Tm (" + pdfEscapeText(str) + ") Tj ET";
   return hex ? "q " + pdfRgb(hex) + " rg " + op + " Q" : op;
 }
 
-/* A rounded rectangle's path, (x, y) its lower-left corner. */
 export function pdfRoundRectPath(x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
   var k = r * 0.5523;
@@ -122,15 +98,10 @@ export function pdfRoundRectPath(x, y, w, h, r) {
     n2(x) + " " + n2(y + r - k) + " " + n2(x + r - k) + " " + n2(y) + " " + n2(x + r) + " " + n2(y) + " c h";
 }
 
-/* A hairline from (x1, y) to (x2, y). */
 export function pdfRuleOp(x1, y, x2, hex, width) {
   return "q " + pdfRgb(hex) + " RG " + (width || 0.5) + " w " + n2(x1) + " " + n2(y) + " m " + n2(x2) + " " + n2(y) + " l S Q";
 }
 
-/* A status lamp centred on (cx, cy), radius r (#169's lamps, which
-   STATUS_PRINT / TAG_STATUS_PRINT name): "outline" an unlit ring,
-   "fill" lit, "half" the left half lit inside a ring, "check" lit with a
-   small white check, "ring" a thin ring with a dot (Returned). */
 export function pdfLampOp(kind, cx, cy, r, hex) {
   var c = pdfRgb(hex);
   if (kind === "fill") return "q " + c + " rg " + pdfCirclePath(cx, cy, r) + " f Q";
@@ -146,13 +117,11 @@ export function pdfLampOp(kind, cx, cy, r, hex) {
       n2(cx - k) + " " + n2(cy + r) + " " + n2(cx - r) + " " + n2(cy + k) + " " + n2(cx - r) + " " + n2(cy) + " c " +
       n2(cx - r) + " " + n2(cy - k) + " " + n2(cx - k) + " " + n2(cy - r) + " " + n2(cx) + " " + n2(cy - r) + " c h f Q";
   }
-  /* check */
   return "q " + c + " rg " + pdfCirclePath(cx, cy, r) + " f 1 1 1 RG " + n2(r * 0.32) + " w 1 J 1 j " +
     n2(cx - r * 0.45) + " " + n2(cy + r * 0.02) + " m " + n2(cx - r * 0.1) + " " + n2(cy - r * 0.34) + " l " +
     n2(cx + r * 0.48) + " " + n2(cy + r * 0.36) + " l S Q";
 }
 
-/* A box to tick, lower-left (x, y), `size` square; ticked in `tickHex`. */
 export function pdfCheckboxOp(x, y, size, ticked, boxHex, tickHex) {
   var op = "q " + pdfRgb(boxHex || "64635E") + " RG 0.9 w " + pdfRoundRectPath(x, y, size, size, size * 0.18) + " S Q";
   if (ticked) {
@@ -163,10 +132,6 @@ export function pdfCheckboxOp(x, y, size, ticked, boxHex, tickHex) {
   return op;
 }
 
-/* The running footer every page of these PDFs carries: the title at the
-   left, "Page n of N" at the right, small and faint, over a hairline —
-   so a printed page that has come loose still says what it is from. `y`
-   is the footer's baseline. */
 export function pdfFooterOps(title, pageNo, pageCount, PW, M, y, hex, ruleHex) {
   var size = 7.5;
   var right = "Page " + pageNo + " of " + pageCount;
@@ -183,9 +148,6 @@ export function pdfFooterOps(title, pageNo, pageCount, PW, M, y, hex, ruleHex) {
   ];
 }
 
-/* A PDF text string for the document information dictionary: plain
-   ASCII as a literal, anything else as UTF-16BE with its byte-order mark,
-   which is how PDF says "Unicode". */
 function pdfInfoString(s) {
   s = String(s || "");
   if (/^[\x20-\x7e]*$/.test(s)) return "(" + s.replace(/([()\\])/g, "\\$1") + ")";
@@ -194,32 +156,11 @@ function pdfInfoString(s) {
   return "<" + hex + ">";
 }
 
-/* The day, not the second (PDF allows "D:YYYYMMDD"): the same script
-   exported twice in a day is the same bytes, which is how the Export
-   dialog's suite proves every route runs the one code path — and all a
-   reader needs is the day, which the title block prints anyway. */
 function pdfDate(d) {
   function p(v) { return (v < 10 ? "0" : "") + v; }
   return "D:" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
 }
 
-/* ---- one assembler for every PDF here ----
-
-   spec.pages     [{ops: [operator strings], images: [image names used],
-                    links: [{x, y, w, h, uri}], size}], in order — a
-                  page's own `size` [PW, PH] (the script PDF's landscape
-                  shot-list pages) in place of the document's
-   spec.size      [PW, PH]
-   spec.images    [{name, bytes, w, h}] — JPEG streams (/DCTDecode)
-   spec.info      {title} — the document information dictionary: its
-                  title (which a viewer shows in place of the file name,
-                  /DisplayDocTitle), Splitpage as its creator, and when
-   spec.outline   [{title, page (index), y}] — bookmarks, a viewer's
-                  sidebar of the document's sections
-
-   Four Helvetica faces as F1..F4 (regular, bold, oblique, bold oblique),
-   on every page. Content streams are uncompressed, one operator a line:
-   the tests read them back as text. */
 export function assemblePdf(spec) {
   var PW = spec.size[0], PH = spec.size[1];
   var pages = spec.pages, images = spec.images || [];
@@ -237,7 +178,6 @@ export function assemblePdf(spec) {
   var contentObjBase = firstPageObj + numPages;
   var imageObjBase = contentObjBase + numPages;
   var next = imageObjBase + images.length;
-  /* each link its own annotation object, numbered in page order */
   var annotObjs = pages.map(function (pg) {
     return (pg.links || []).map(function () { return next++; });
   });
@@ -334,21 +274,8 @@ export function assemblePdf(spec) {
   return concatBytes(chunks);
 }
 
-/* break styled runs into lines that fit maxWidth. A stage direction's
-   runs (#167, toDocxRuns: dir, already bracketed) are set in italic and
-   keep dir, which drawLines prints grey. A sound cue line's runs (#219,
-   cue) keep cue, which drawLines prints smaller (CUE_SCALE, measured at
-   that size here) in the Music/SFX colour; a cue is a whole line, so it
-   is its own line on the page. */
 var CUE_SCALE = 0.85;
 
-/* The annotations an export's runs carry (exportRuns, 14b-export-kit.js)
-   ride along on every piece of the run they came from — href, tag, cmt,
-   broll — except `markers`, the comment numbers drawn after a thread's
-   words, which only the run's last word takes. opts.markerWidth(markers),
-   when given, is the room those need, counted into that word's line so a
-   marker never runs past the column: it lands on the segment as
-   `markerWidth`, beside its own `width`. */
 export function pdfWrapRuns(runs, maxWidth, size, opts) {
   var lines = [], line = [], lineWidth = 0;
   var markerWidth = opts && opts.markerWidth;
@@ -377,7 +304,6 @@ export function pdfWrapRuns(runs, maxWidth, size, opts) {
       if (isSpace && !line.length) return;
       var w = pdfTextWidth(word, run.b, sz);
       if (!isSpace && lineWidth + w > maxWidth && line.length) pushLine();
-      /* a single word longer than the column: hard-split it */
       if (!isSpace && w > maxWidth) {
         var chunk = "";
         for (var i = 0; i < word.length; i++) {
@@ -401,9 +327,6 @@ export function pdfWrapRuns(runs, maxWidth, size, opts) {
       line.push(piece);
       lineWidth += w;
     });
-    /* the thread markers after the run's last word: counted into its line,
-       and when they would not fit there that word goes to the next line
-       with them (whatever followed it on the line, spaces, goes too) */
     if (run.markers && lastWord) {
       var extra = markerWidth ? markerWidth(run.markers) : 0;
       lastWord.markers = run.markers;
@@ -426,21 +349,10 @@ export function pdfWrapRuns(runs, maxWidth, size, opts) {
   return lines;
 }
 
-/* ---- pictures, as JPEG ----
-
-   This writer embeds images one way only, /Filter /DCTDecode — the image
-   stream IS a JPEG file. A PNG, GIF or WebP written the same way was a
-   stream no reader could decode: the picture silently never appeared
-   (#82 found it). So every picture is JPEG by the time buildPdf() sees it:
-   a JPEG as it is, anything else drawn onto a white canvas (PDF has no
-   use for its transparency here) and encoded — which needs the browser's
-   decoder, and is why this is async and done before buildPdf(). */
 var PDF_IMAGE_MAX_PX = 2000;
 
 function pdfJpegOf(pic) {
   if (!pic) return Promise.resolve(null);
-  /* jpegSize: the CODED size, which is what /Width and /Height must say —
-     an EXIF-rotated record's width/height would not be. */
   if (pic.mime === "image/jpeg") return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
   return new Promise(function (resolve) {
     var url;
@@ -475,17 +387,11 @@ function pdfJpegOf(pic) {
   });
 }
 
-/* One entry per row (by index): {bytes, size} or null. Bytes behind an
-   imageRef have to be in memory first — buildFileData awaits
-   ensureBytes() before it calls this. */
 export function pdfImagesFor(rows) {
   rows = rows || [];
   var first = Promise.all(rows.map(function (row) {
     return pdfJpegOf(rowImageBytes(row)).then(null, function () { return null; });
   }));
-  /* and the rest of each scene's gallery (#135), as `.more[index]`: a
-     list per row of the same {bytes, size}, the ones that would not
-     decode left out */
   var more = Promise.all(rows.map(function (row) {
     return Promise.all(morePictureRefs(row).map(function (ref) {
       return pdfJpegOf(pictureBytes(ref)).then(null, function () { return null; });
@@ -497,9 +403,6 @@ export function pdfImagesFor(rows) {
   });
 }
 
-/* A picture inside a comment or reply, by sha (commentEntries' pieces):
-   its bytes and type from the registry — the type sniffed, as a row's
-   is, since that is what the bytes are. null when the bytes are not here. */
 function commentPic(sha) {
   var bytes = bytesForSync(sha);
   if (!bytes) return null;
@@ -522,11 +425,6 @@ function commentImageShas(entries) {
   return out;
 }
 
-/* Every picture in the comments and replies, as JPEG: {sha: {bytes,
-   size} | null}, null for one whose bytes are not here or will not
-   decode. Like pdfImagesFor, the bytes must be in memory first —
-   buildFileData's ensureBytes(refsIn(state)) covers comment and reply
-   bodies and an image conflict card's imageValue. */
 export function pdfCommentImagesFor() {
   var shas = commentImageShas(commentEntries({ pieces: true }));
   return Promise.all(shas.map(function (sha) {
@@ -538,32 +436,6 @@ export function pdfCommentImagesFor() {
   });
 }
 
-/* ================= the script, as a PDF =================
-
-   File ▸ Export… ▸ PDF: the whole script, to print or to send someone to
-   read, laid out the way the app lays it out (#169), so a page on a desk
-   reads like the screen it came from. Page 1 opens with a title block:
-   the title, one line of the document's facts (exportSummaryParts,
-   14b-export-kit.js) and a rundown strip — a block per scene as wide as
-   its read time, filled by its status, the target a line across it. Then
-   the scenes, under column heads every page of the script repeats: each
-   scene's gutter (its number, the timecode it starts at, its status), its
-   Visual and its Audio, and its read time at the right edge, boxed when
-   it was set by hand. In the words, what the app draws round them: a tag
-   in its category's colour and underlined in it, the b-roll key as a
-   chip, a link in the Visual blue that can be clicked, a comment's dotted
-   underline with its thread's number after it. Then an appendix, each
-   part on a page of its own with a bookmark: the production breakdown by
-   category, the b-roll shots by scene, and the comments, numbered as the
-   script numbers them. Every page has a footer: the title, "Page 2 of 9".
-
-   Helvetica's WinAnsi throughout, so every mark (a lamp, a dot, a box, a
-   tick) is drawn rather than typed. */
-
-/* A thread's marker as the script draws it (app.css .cmt-anchor::after):
-   a rounded box whose lower-left corner is nearly square, like a speech
-   bubble's tail. (x, y) its lower-left corner; `r` the other corners'
-   radius and `low` that one's. */
 function pdfBubblePath(x, y, w, h, r, low) {
   var kr = r * 0.5523, kl = low * 0.5523;
   return n2(x + low) + " " + n2(y) + " m " +
@@ -577,8 +449,6 @@ function pdfBubblePath(x, y, w, h, r, low) {
     n2(x) + " " + n2(y + low - kl) + " " + n2(x + low - kl) + " " + n2(y) + " " + n2(x + low) + " " + n2(y) + " c h";
 }
 
-/* `str` cut short with an ellipsis where it would not fit `width` — at a
-   word's end, when that loses no more than a few letters. */
 function pdfFitText(str, bold, size, width) {
   str = String(str || "");
   if (pdfTextWidth(str, bold, size) <= width) return str;
@@ -588,46 +458,25 @@ function pdfFitText(str, bold, size, width) {
   return str.replace(/[\s,;:]+$/, "") + "…";
 }
 
-/* A web address as the page prints it: without its scheme or "www.", as
-   the scene's gallery captions it (videoLinkLabel, 02d-gallery.js) — but
-   whole, since on paper it is the only way to find the thing. */
 function pdfAddress(href) {
   return String(href).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
 }
 
 function pdfCount(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
-/* `jpegs` is pdfImagesFor(S.state.rows)'s answer and `commentJpegs`
-   pdfCommentImagesFor()'s. Without them only pictures that are already
-   JPEG are drawn. */
 export function buildPdf(jpegs, commentJpegs) {
   var PW = 612, PH = 792, M = 54;
   var C = PRINT_COLORS;
   var TW = PW - 2 * M;
-  /* The script's columns, left to right: each scene's gutter, its Visual,
-     its Audio, and its read time at the right edge. Audio a step larger
-     than Visual, as the app sets them: the words someone reads aloud are
-     the ones to make easy to read. */
   var GUT = 46, VW = 184, GAP = 14, RW = 32;
   var VX = M + GUT, AX = VX + VW + GAP, AW = PW - M - RW - AX;
   var VS = 9, VL = 12.5, AS = 10, AL = 14;
-  /* the appendix's text */
   var SIZE = 9.5, LEAD = 13;
-  /* A scene's rhythm. Its top is ROW_GAP under the rule above it (or the
-     column heads' rule), every column's first baseline TOPB under its
-     top, and its own rule TAIL under the last baseline of its longest
-     column — or EMPTY under a column with nothing in it, which for a
-     picture with no words under it is PIC_GAP + EMPTY under the picture.
-     The gutter is a column too: the number's line, then the status's. */
   var ROW_GAP = 10, TOPB = 10, TAIL = 14, PIC_GAP = 8, EMPTY = 4;
-  /* the column heads: their baseline 8 under the top of the page, their
-     rule 5 under that, the first scene ROW_GAP under the rule */
   var HEADS_H = 13 + ROW_GAP;
-  /* where a scene starts on a fresh page, and so the most room it gets */
   var ROW_TOP = PH - M - HEADS_H;
   var PAGE_ROOM = ROW_TOP - M;
   var FOOT_Y = 28;
-  /* the read time's right edge, inside the box a time set by hand gets */
   var READ_R = PW - M - 3.5;
   var CUE = tagPrintColor("sound") || "AB413E";
   var HIGHLIGHT = "FCE38A";
@@ -639,14 +488,12 @@ export function buildPdf(jpegs, commentJpegs) {
 
   var pages = [];
   var ops = [];
-  var images = [];      /* {bytes, w, h, name} */
-  var pageImages = [];  /* image names used on the current page */
-  var pageLinks = [];   /* {x, y, w, h, uri} clickable on the current page */
+  var images = [];
+  var pageImages = [];
+  var pageLinks = [];
   var outline = [{ title: "Script", page: 0, y: PH }];
   var y = 0;
 
-  /* Every page starts in the text colour; whatever draws in another
-     wraps itself in q ... Q (pdfTextOp), so the page comes back to it. */
   function newPage() {
     if (ops.length) pages.push({ ops: ops, images: pageImages, links: pageLinks });
     ops = [pdfRgb(C.text) + " rg"];
@@ -665,17 +512,11 @@ export function buildPdf(jpegs, commentJpegs) {
   function text(str, x, yy, font, size, hex) { ops.push(pdfTextOp(str, x, yy, font, size, hex)); }
   function fill(hex, path) { ops.push("q " + pdfRgb(hex) + " rg " + path + " f Q"); }
   function stroke(hex, width, path) { ops.push("q " + pdfRgb(hex) + " RG " + width + " w " + path + " S Q"); }
-  /* a filled bar: an underline, a strikethrough, a highlight */
   function bar(x, yy, w, h, hex) {
     ops.push("q " + pdfRgb(hex) + " rg " + x.toFixed(2) + " " + yy.toFixed(2) + " " +
       w.toFixed(2) + " " + h.toFixed(2) + " re f Q");
   }
 
-  /* ---- the words, and what the app draws round them ---- */
-
-  /* A thread's number after its words (exportRuns' markers): an amber
-     outlined bubble each. pdfWrapRuns keeps markersWidth() of room for
-     them on their word's line, so they never run past the column. */
   var MK_SIZE = 6, MK_PAD = 2, MK_H = 7.8, MK_GAP = 1.5;
   function markerW(n) { return Math.max(8, pdfTextWidth(String(n), false, MK_SIZE) + 2 * MK_PAD); }
   function markersWidth(markers) {
@@ -683,17 +524,12 @@ export function buildPdf(jpegs, commentJpegs) {
   }
   var WRAP = { markerWidth: markersWidth };
 
-  /* A cell's runs, annotated (exportRuns): what the page draws round
-     them rides along on every segment pdfWrapRuns makes. The b-roll key's
-     own run ("B-roll:") becomes "B-roll", the width of the chip drawn in
-     its place. */
   function cellRuns(html) {
     return exportRuns(html, nums).map(function (r) {
       return r.broll ? Object.assign({}, r, { text: "B-roll" }) : r;
     });
   }
 
-  /* the b-roll key (#148): a small outlined chip in the b-roll teal */
   var CHIP_SIZE = 6.5, CHIP_PAD = 2.4;
   function chip(x, b, room) {
     var tw = pdfTextWidth("B-roll", false, CHIP_SIZE);
@@ -702,9 +538,6 @@ export function buildPdf(jpegs, commentJpegs) {
     text("B-roll", x + (w - tw) / 2, b + 0.3, "F1", CHIP_SIZE, C.broll);
   }
 
-  /* A segment's colour: its own (a caption, a quote), a link's blue, its
-     tag's category colour, a stage direction's grey (#167), a sound
-     cue's brick (#219) — or null, the page's text colour. */
   function segHex(seg) {
     if (seg.color) return seg.color;
     if (seg.href) return C.visual;
@@ -715,16 +548,11 @@ export function buildPdf(jpegs, commentJpegs) {
   }
 
   function blank(seg) { return !seg.text.trim(); }
-  /* Whether segment i carries a mark that `test` looks for — a space only
-     when the words both sides of it do: the one inside a two-word tag is
-     underlined, the one after it is not. */
   function marked(line, i, test) {
     if (!blank(line[i])) return test(line[i]);
     return i > 0 && i < line.length - 1 && test(line[i - 1]) && test(line[i]) && test(line[i + 1]);
   }
 
-  /* One line of pdfWrapRuns' segments from x, its baseline at b, set at
-     `size` (the size it was wrapped at). */
   function drawSegs(line, x, b, size) {
     var cx = x, link = null;
     line.forEach(function (seg, i) {
@@ -733,26 +561,20 @@ export function buildPdf(jpegs, commentJpegs) {
       if (seg.mark) bar(cx, b - 2.5, seg.width, size + 1, HIGHLIGHT);
       if (!sp) {
         if (seg.broll) chip(cx, b, seg.width);
-        /* a cue is set smaller (CUE_SCALE, as pdfWrapRuns measured it) */
         else text(seg.text, cx, b, fontFor(seg), seg.cue ? size * CUE_SCALE : size, hex);
       }
-      /* underlined, or a link — which the app underlines in its blue */
       if (marked(line, i, function (s) { return (s.u || s.href) && s.href === seg.href; })) {
         bar(cx, b - 1.7, seg.width, 0.5, ink);
       }
-      /* a tag: underlined in its category's colour */
       if (seg.tag && seg.tag.color && marked(line, i, function (s) { return s.tag && s.tag.name === seg.tag.name; })) {
         bar(cx, b - 2.2, seg.width, 0.6, seg.tag.color);
       }
       if (seg.s && !sp) bar(cx, b + size * 0.28, seg.width, 0.5, ink);
-      /* a comment's words: a dotted underline, amber while its thread is
-         open and faint once it is resolved (app.css .cmt-anchor) */
       if (seg.cmt && marked(line, i, function (s) { return !!s.cmt; })) {
         var open = seg.cmt.some(function (id) { return nums[id]; });
         ops.push("q " + pdfRgb(open ? C.audio : C.faint) + " RG 0.9 w 1 J [0 1.8] 0 d " +
           n2(cx + 0.5) + " " + n2(b - 3.8) + " m " + n2(cx + seg.width) + " " + n2(b - 3.8) + " l S Q");
       }
-      /* a link, a rectangle to click: one per run of its words on a line */
       if (seg.href) {
         if (link && link.uri === seg.href && Math.abs(link.x + link.w - cx) < 0.01) link.w += seg.width;
         else {
@@ -761,7 +583,6 @@ export function buildPdf(jpegs, commentJpegs) {
         }
       }
       cx += seg.width;
-      /* the numbers of the open threads whose words end here */
       (seg.markers || []).forEach(function (n) {
         var s = String(n), w = markerW(n);
         cx += MK_GAP;
@@ -772,9 +593,6 @@ export function buildPdf(jpegs, commentJpegs) {
     });
   }
 
-  /* Lines from x, the first baseline at startY, `lead` apart (the
-     appendix's SIZE and LEAD unless given); returns where the next line's
-     baseline would go. */
   function drawLines(lines, x, startY, size, lead) {
     var yy = startY;
     lines.forEach(function (line) {
@@ -784,22 +602,12 @@ export function buildPdf(jpegs, commentJpegs) {
     return yy;
   }
 
-  /* ---- a scene's columns, in one arithmetic ----
-
-     A column of n lines `lead` apart, from cursor c: its first baseline
-     c - TOPB, its last c - TOPB - (n-1)*lead, and the scene's rule TAIL
-     under that — or EMPTY under c when it has no lines. colFit is the
-     most lines that fit from c with every baseline on or above M. */
   function colHeight(n, lead) { return n ? TOPB + (n - 1) * lead + TAIL : EMPTY; }
   function colBottom(c, n, lead) { return c - colHeight(n, lead); }
   function colFit(c, lead) { return Math.max(0, Math.floor((c - TOPB - M) / lead) + 1); }
 
-  /* ---- the title block ---- */
-
   function titleBlock() {
     var TS = 20, TLEAD = 24;
-    /* the title, two lines at most — the second cut short when it would
-       need a third, so a long one never runs off the page */
     var tl = pdfWrapRuns([{ text: title, b: true }], TW, TS).map(function (l) {
       return l.map(function (s) { return s.text; }).join("").trim();
     });
@@ -807,7 +615,6 @@ export function buildPdf(jpegs, commentJpegs) {
     var b = PH - M - 16;
     tl.forEach(function (s, i) { text(s, M, b - i * TLEAD, "F2", TS); });
     b -= (tl.length - 1) * TLEAD + 17;
-    /* the facts, then the date */
     pdfWrapRuns([{ text: exportSummaryParts(facts).concat(facts.date).join(" · ") }], TW, 8.5).forEach(function (l, i) {
       if (i) b -= 11;
       text(l.map(function (s) { return s.text; }).join("").trim(), M, b, "F1", 8.5, C.dim);
@@ -820,25 +627,16 @@ export function buildPdf(jpegs, commentJpegs) {
     y = rundownStrip(b - 14);
   }
 
-  /* The rundown, as the strip over the app's script shows it: a block per
-     scene across the text width, as wide as its read time — a sliver at
-     least, so every scene shows — filled by its status (shot dark, ready
-     amber, to do the raised grey), its number in it where it fits. With a
-     target, a line at the target and the strip as long as the target or
-     the script, whichever is longer. Under it the statuses' lamps and
-     counts. `top` is the strip's top; returns where the script starts. */
   function rundownStrip(top) {
     var SH = 15, R = 1.5, NS = 6.5;
     var n = scenes.length;
     var total = facts.seconds, target = facts.target ? facts.target.seconds : 0;
     var span = Math.max(total, target);
-    if (facts.target) top -= 12;          /* the target's label goes above */
+    if (facts.target) top -= 12;
     var G = n > 1 ? Math.min(1.5, TW * 0.2 / (n - 1)) : 0;
     var avail = TW - G * (n - 1);
     var minW = Math.min(2.5, avail / n);
     var room = Math.max(span > 0 ? avail * total / span : avail, n * minW);
-    /* widths in proportion to the seconds, with the slivers held at minW
-       and the rest sharing what they leave */
     var secs = scenes.map(function (f) { return f.seconds; });
     var small = secs.map(function () { return false; });
     var k = 0;
@@ -868,7 +666,6 @@ export function buildPdf(jpegs, commentJpegs) {
       x += w + G;
     });
     if (facts.target) {
-      /* on or past the script's end: the strip's end, which is the target */
       if (tx === null) tx = M + TW;
       stroke(C.text, 0.8, n2(tx) + " " + n2(top + 9) + " m " + n2(tx) + " " + n2(bottom - 2.5) + " l");
       var label = "Target " + facts.target.text, lw = pdfTextWidth(label, false, 7);
@@ -884,8 +681,6 @@ export function buildPdf(jpegs, commentJpegs) {
     return lb - 20;
   }
 
-  /* ---- the column heads, on every page of the script ---- */
-
   function drawHeads() {
     var b = y - 8;
     text("Scene", M, b, "F2", 8, C.dim);
@@ -900,12 +695,7 @@ export function buildPdf(jpegs, commentJpegs) {
 
   function scriptPage() { newPage(); drawHeads(); }
 
-  /* ---- a scene's gutter ---- */
-
   var NUM_SIZE = 12, TC_SIZE = 7, ST_SIZE = 7.5, READ_SIZE = 8.5;
-  /* The number, the timecode it starts at beside it (under it, when the
-     two would not fit side by side — a hundredth scene an hour in), and
-     its status a line lower. */
   function gutterOf(f) {
     var nw = pdfTextWidth(f.number, true, NUM_SIZE);
     var stacked = nw + 4 + pdfTextWidth(f.start, false, TC_SIZE) > GUT - 6;
@@ -921,14 +711,11 @@ export function buildPdf(jpegs, commentJpegs) {
     var sb = b - g.drop, sp = STATUS_PRINT[f.status.id] || STATUS_PRINT.todo;
     ops.push(pdfLampOp(sp.lamp, M + 3, sb + 2.6, 3, sp.color));
     text(f.status.label, M + 9, sb, "F1", ST_SIZE, C.dim);
-    /* the read time at the right edge, boxed when it was set by hand
-       (#179), as the app boxes it */
     var rw = pdfTextWidth(f.read, false, READ_SIZE);
     text(f.read, READ_R - rw, b, "F1", READ_SIZE, C.dim);
     if (f.readSet) stroke(C.borderStrong, 0.6, pdfRoundRectPath(READ_R - rw - 3.5, b - 3, rw + 7, 11.5, 2));
   }
 
-  /* a scene carried onto another page says which it is, faint */
   function drawGutterCont(f, top) {
     var b = top - TOPB;
     text(f.number, M, b, "F2", NUM_SIZE, C.faint);
@@ -942,12 +729,6 @@ export function buildPdf(jpegs, commentJpegs) {
   S.state.rows.forEach(function (row, idx) {
     var f = scenes[idx];
     var g = gutterOf(f);
-    /* The scene's video links (#135) head its Visual column, under its
-       pictures: the site's name, faint, then the address in the Visual
-       blue — whole, since on paper it is all there is to go on, and a
-       link besides, since a PDF on a screen can be clicked. The name only
-       when the two fit on one line: alone on a line of its own it reads
-       as a heading, and the address says the same. */
     var vLines = [];
     rowVideoLinks(row).forEach(function (l) {
       var runs = l.href ? [{ text: pdfAddress(l.href), href: l.href }] : [{ text: videoLinkText(l) }];
@@ -958,11 +739,6 @@ export function buildPdf(jpegs, commentJpegs) {
         vLines.push(line);
       });
     });
-    /* Runs from the document model (#85), annotated (exportRuns).
-       Neighbours in one format that the stored markup kept in separate
-       elements come out as one run, so a word split across two <strong>s
-       is one word to wrap, never broken between its halves at the end of
-       a line. */
     vLines = vLines.concat(pdfWrapRuns(cellRuns(row.visualText), VW, VS, WRAP));
     var aLines = pdfWrapRuns(cellRuns(row.audioText), AW, AS, WRAP);
 
@@ -979,35 +755,14 @@ export function buildPdf(jpegs, commentJpegs) {
         var name = "Im" + (images.length + 1);
         images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
         var natW = VW, natH = VW * dim.ratio;
-        /* A tall/portrait image (a phone-screenshot crop, say) can have a
-           natural height that alone exceeds a WHOLE page's usable height
-           — safeAspect() only guards against a zero/negative width, not
-           an extreme ratio. The draw guard further down only checks
-           whether it fits from the current y, with no fallback if it
-           can't fit ANYWHERE — even a fresh page — so it was silently
-           skipped: never drawn, no warning. Cap it to the most room a
-           scene ever gets — PAGE_ROOM, a fresh page's under its column
-           heads — shrinking width to match, so there's always at least
-           one page it fits on. */
         var maxH = PAGE_ROOM;
-        /* ...and when nothing will follow the picture onto a later page —
-           no visual text under it, and all the audio beside it fits on
-           its page — the scene's rule is PIC_GAP + EMPTY under the
-           picture on that same page, so the cap leaves room for that too,
-           or the rule would fall under the bottom margin. With visual
-           text the picture keeps the whole page and the text (and the
-           rule) carry on overleaf. */
         if (!vLines.length && colHeight(aLines.length, AL) <= PAGE_ROOM) maxH = PAGE_ROOM - PIC_GAP - EMPTY;
         if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
         imgRef = { name: name, w: natW, h: natH };
         imgH = imgRef.h + PIC_GAP;
-      } catch (e) { /* skip an unreadable image */ }
+      } catch (e) { }
     }
 
-    /* The rest of the gallery (#135): small pictures under the first, three
-       to a line, each as wide as a third of the column and at most half as
-       tall again, aspect kept. A line that does not fit where the row is
-       drawn is left out, as the first picture is. */
     var moreJpegs = jpegs && jpegs.more ? (jpegs.more[idx] || []) : [];
     if (!jpegs) {
       morePictureRefs(row).forEach(function (ref) {
@@ -1029,14 +784,10 @@ export function buildPdf(jpegs, commentJpegs) {
         var line = stripLines[stripLines.length - 1];
         line.items.push({ name: mname, w: tw, h: th, x: (k % STRIP_N) * (thumbW + STRIP_GAP) });
         line.h = Math.max(line.h, th);
-      } catch (e) { /* skip an unreadable image */ }
+      } catch (e) { }
     });
     stripLines.forEach(function (line) { imgH += line.h + STRIP_GAP; });
 
-    /* The first scene stays on page 1 (see below), so its picture shrinks
-       to fit under the title block with the rest of its gallery — unless
-       that would leave it smaller than a thumbnail, when the scene goes
-       over to page 2 after all. */
     var stay = idx === 0;
     if (stay && imgRef) {
       var room1 = y - M - (imgH - imgRef.h) - (vLines.length ? 0 : EMPTY);
@@ -1050,12 +801,6 @@ export function buildPdf(jpegs, commentJpegs) {
       }
     }
 
-    /* The scene's height to its rule: its tallest column — Visual with its
-       pictures, Audio, or the gutter. One that does not fit in what is
-       left of the page starts the next page, where it gets PAGE_ROOM —
-       unless it is already at the top of one, or it is the first scene:
-       going over would leave page 1 its title block and nothing else, so
-       it starts there and carries on overleaf if it must. */
     var need = Math.max(imgH + colHeight(vLines.length, VL), colHeight(aLines.length, AL), g.h);
     if (y - need < M && y < ROW_TOP - 0.01 && !stay) scriptPage();
 
@@ -1079,17 +824,8 @@ export function buildPdf(jpegs, commentJpegs) {
       vy -= line.h + STRIP_GAP;
     });
 
-    /* The loop below is the only thing that moves y past the picture, and
-       a scene with no words in either column never enters it — so the
-       next scene was once drawn over this one's picture. End such a scene
-       where the loop would have ended it with nothing to draw: EMPTY
-       under its pictures (vy), or under its gutter, whichever is lower. */
     if (!vLines.length && !aLines.length) y = Math.min(vy - EMPTY, top - g.h);
 
-    /* A scene can be taller than a page. Draw what fits, break, and
-       continue — otherwise the overflow is emitted below the page edge and
-       disappears. Each column fits as many lines as keep every baseline
-       on or above M (colFit), in its own leading. */
     var vRest = vLines, aRest = aLines;
     var vCursor = vy, aCursor = top;
     var drewPic = vy !== top;
@@ -1097,13 +833,6 @@ export function buildPdf(jpegs, commentJpegs) {
     var guard = 0;
     while ((vRest.length || aRest.length) && guard++ < 400) {
       var vTake = vRest.slice(0, colFit(vCursor, VL)), aTake = aRest.slice(0, colFit(aCursor, AL));
-      /* A chunk that finishes the scene puts its rule TAIL under the lower
-         column's last baseline. Every baseline clearing M does not make
-         that rule clear it: so when the rule would fall below M, the lower
-         column's last line goes overleaf instead and the rule follows it
-         there — never alone at the top of a page. Only a chunk that would
-         finish the scene: one that fits whole passed the `need` check and
-         never gets here short. */
       if (vTake.length === vRest.length && aTake.length === aRest.length) {
         var vLow = colBottom(vCursor, vTake.length, VL), aLow = colBottom(aCursor, aTake.length, AL);
         if (Math.min(vLow, aLow) < M - 1e-6) {
@@ -1121,10 +850,6 @@ export function buildPdf(jpegs, commentJpegs) {
         if (onFirst) y = Math.min(y, top - g.h);
         break;
       }
-      /* nothing fits — bail out safely. Unless this page holds the scene's
-         picture: a picture filling its page left no room for a first line
-         of visual text under it, and bailing here dropped that text and
-         drew the rule at the top of the page, across the picture. */
       if (!vTake.length && !aTake.length && !drewPic) break;
       drewPic = false;
       onFirst = false;
@@ -1138,11 +863,6 @@ export function buildPdf(jpegs, commentJpegs) {
     y -= ROW_GAP;
   });
 
-  /* ---- the appendix ----
-
-     Each part on a page of its own, headed by its name and one line that
-     sums it up, and a bookmark to it; a part that runs onto another page
-     says so at the top of that page. */
   function section(name, summary) {
     newPage();
     outline.push({ title: name, page: pages.length, y: PH });
@@ -1156,8 +876,6 @@ export function buildPdf(jpegs, commentJpegs) {
     y -= 26;
   }
 
-  /* split into discrete "\n" runs so pdfWrapRuns treats them as real
-     line breaks, same convention toDocxRuns() uses for a line break */
   function linesToRuns(str) {
     return String(str || "").split(/\r\n|\r|\n/).reduce(function (runs, line, i) {
       if (i > 0) runs.push({ text: "\n" });
@@ -1170,13 +888,6 @@ export function buildPdf(jpegs, commentJpegs) {
     return lines;
   }
 
-  /* ---- production breakdown ----
-
-     By category, as the Production panel groups it (breakdownGroups): a
-     head per category — its dot, its plural, how many — then its items
-     under the panel's columns, Item, Status (a lamp and its word),
-     Scenes and Assigned to; under an item its notes, and the b-roll shots
-     that need it (#149). */
   var groups = breakdownGroups();
   if (groups.length) {
     var bdItems = [];
@@ -1222,7 +933,6 @@ export function buildPdf(jpegs, commentJpegs) {
     bdHeads();
     groups.forEach(function (gr) {
       var list = gr.items.map(bdItem);
-      /* a group's head never ends a page on its own */
       if (y - 24 - list[0].h < M) { sectionGoesOn("Production breakdown"); bdHeads(); }
       bdGroupHead(gr);
       list.forEach(function (it) {
@@ -1241,14 +951,6 @@ export function buildPdf(jpegs, commentJpegs) {
     });
   }
 
-  /* ---- the b-roll shot list ----
-
-     The shot list the b-roll page prints and the Export dialog makes
-     (shotListAppendixPages): every shot, by scene, as a table on
-     landscape pages of their own — the one sheet, wherever it is printed
-     from, and one that can be pulled out of the script and taken on the
-     day. The page drawn so far goes in first; nothing is left pending, so
-     the next part's newPage() adds no empty page. */
   var shotData = brollShotListForPrint({ filter: "all", group: "scene" });
   if (shotData.groups.length) {
     pages.push({ ops: ops, images: pageImages, links: pageLinks });
@@ -1261,20 +963,11 @@ export function buildPdf(jpegs, commentJpegs) {
     pageLinks = [];
   }
 
-  /* ---- comments ----
-
-     Numbered as the script's markers number them (exportComments): an
-     open thread's number in a filled amber badge, then where it is —
-     "Scene 03 · Audio" — who and when; a resolved one no number, and who
-     resolved it. The words it is about, its body, its replies indented
-     under it. */
   var comments = exportComments({ pieces: true });
   if (comments.length) {
     var openN = comments.filter(function (c) { return !c.resolved; }).length;
     section("Comments", [openN + " open"].concat(comments.length > openN ? [(comments.length - openN) + " resolved"] : []).join(" · "));
     var FULLW = TW;
-    /* a thread's own lines sit CI in, its badge in front of them; a
-       reply's RI */
     var CI = 20, RI = CI + 14;
     var badge = function (n, x, b) {
       var s = String(n), tw = pdfTextWidth(s, true, 7), w = Math.max(13, tw + 7);
@@ -1282,14 +975,6 @@ export function buildPdf(jpegs, commentJpegs) {
       text(s, x + (w - tw) / 2, b, "F2", 7, "FFFFFF");
     };
 
-    /* Pictures in comments (#82 P6 stores them in the body as <img
-       data-blob>). Each is a block of its own in the thread, in the order
-       the body has it, at the body's indent: at most CIMG_MAXW of the
-       column's width and CIMG_MAXH tall — well under a fresh page's room,
-       so one always fits somewhere — its aspect kept, and never larger
-       than its own pixels at 96 dpi (0.75pt a pixel), so a small picture
-       stays small. A picture drawn twice is embedded once. One with no
-       bytes, or that would not convert, prints as "[image unavailable]". */
     var CIMG_MAXW = 0.6, CIMG_MAXH = 260, CIMG_ABOVE = 3, CIMG_BELOW = 7;
     var commentImageNames = {};
 
@@ -1313,14 +998,11 @@ export function buildPdf(jpegs, commentJpegs) {
           }
           var scale = Math.min(0.75, colW * CIMG_MAXW / dim.w, CIMG_MAXH / dim.h);
           return { pic: { name: name, w: dim.w * scale, h: dim.h * scale }, x: x };
-        } catch (e) { /* unreadable — fall through to the note */ }
+        } catch (e) { }
       }
       return { line: pdfWrapRuns([{ text: "[image unavailable]", i: true }], colW, SIZE)[0], x: x };
     }
 
-    /* A comment's or reply's body as thread items — {line, x} and {pic,
-       x} — in order. A body with no picture wraps exactly as it always
-       did, "(empty)" and all. */
     function commentBodyItems(entry, x) {
       var colW = PW - M - x;
       var pieces = entry.pieces || [];
@@ -1337,9 +1019,6 @@ export function buildPdf(jpegs, commentJpegs) {
       return items;
     }
 
-    /* Top CIMG_ABOVE below y (which a text line leaves LEAD under its
-       baseline, clear of descenders); the next line's glyphs start
-       CIMG_BELOW under the picture. */
     function drawCommentPic(pic, x) {
       var top = y - CIMG_ABOVE;
       if (pageImages.indexOf(pic.name) === -1) pageImages.push(pic.name);
@@ -1349,8 +1028,6 @@ export function buildPdf(jpegs, commentJpegs) {
     }
 
     comments.forEach(function (c) {
-      /* where, in bold; who, when, whom it is assigned to and who
-         resolved it, faint */
       var meta = [c.author + (c.when ? " · " + c.when : "")];
       if (c.assignee) meta.push("Assigned to " + c.assignee);
       if (c.resolved) meta.push("Resolved" + (c.resolvedBy ? " by " + c.resolvedBy : ""));
@@ -1366,16 +1043,6 @@ export function buildPdf(jpegs, commentJpegs) {
         return { headerLines: hl, bodyItems: commentBodyItems(rp, M + RI) };
       });
 
-      /* Flattened into one ordered (line, indent) list and drawn one line
-         at a time, each checked against the bottom margin as it goes —
-         a single up-front `need` check (the old approach) only proved
-         the START of the thread fit on the page; a long body or several
-         replies still ran straight past the margin with no further
-         check, silently losing whatever text landed below it. This
-         mirrors how the scene-row loop above already paginates. */
-      /* Each line carries its block — the header, the quote, the body, a
-         reply's header, a reply's body — so the layout can tell a wrapped
-         line from the start of the next part. */
       var threadLines = [], block = 0;
       function addBlock(items, x) {
         block++;
@@ -1384,7 +1051,6 @@ export function buildPdf(jpegs, commentJpegs) {
         });
       }
       addBlock(headerLines, M + CI);
-      /* an open thread's number, in front of its header's first line */
       if (c.number) threadLines[0].badge = c.number;
       addBlock(quoteLines, M + CI);
       addBlock(bodyItems);
@@ -1393,9 +1059,6 @@ export function buildPdf(jpegs, commentJpegs) {
         addBlock(rb.bodyItems);
       });
 
-      /* `need`: how far below y the next thing reaches — a line's LEAD,
-         or a picture's gap and height (commentBodyItems). Returns whether
-         it started a new page. */
       function ensureCommentRoom(need) {
         if (y - (need || LEAD) < M) {
           sectionGoesOn("Comments");
@@ -1404,15 +1067,6 @@ export function buildPdf(jpegs, commentJpegs) {
         return false;
       }
 
-      /* After a line y is its baseline - LEAD (what drawLines returns).
-         The next line of the same block goes LEAD under it — baseline y —
-         as the lines of a scene's text do; the first line of a block, or
-         the first after a picture or a page break, goes SIZE lower still
-         (baseline y - SIZE), the gap between the parts of a thread that
-         predates the line-by-line room check. That check drew every line
-         as a block's first, so a wrapped comment was spaced SIZE + LEAD
-         (22.5pt) a line rather than LEAD (13pt). Either way the line's
-         LEAD - SIZE of descender room below its baseline must clear M. */
       var prevBlock = 0;
       ensureCommentRoom();
       threadLines.forEach(function (b) {
@@ -1435,13 +1089,8 @@ export function buildPdf(jpegs, commentJpegs) {
     });
   }
 
-  /* (nothing pending when the b-roll's landscape pages were the last part) */
   if (ops.length) pages.push({ ops: ops, images: pageImages, links: pageLinks });
 
-  /* The running footer, now the pages are counted. Marked as a pagination
-     artifact, which is what it is: a reader that extracts or reads the
-     text aloud leaves it out. A landscape page's footer spans its own
-     width, inside its own margin. */
   pages.forEach(function (pg, i) {
     pg.ops.push("/Artifact << /Type /Pagination /Subtype /Footer >> BDC");
     pdfFooterOps(title, i + 1, pages.length, pg.size ? pg.size[0] : PW, pg.margin || M, FOOT_Y, C.faint, C.border)
@@ -1449,44 +1098,13 @@ export function buildPdf(jpegs, commentJpegs) {
     pg.ops.push("EMC");
   });
 
-  /* bookmarks only when there is somewhere to go: a script with no
-     appendix is one part, and a sidebar with its one name in it is noise */
   return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: title },
     outline: outline.length > 1 ? outline : [] });
 }
 
-/* ================= the lists: packing lists and the shot list =================
-
-   Two sheets people print and carry on a shoot day — a category's packing
-   list and the b-roll shot list (#150, below) — drawn as one family, in
-   the app's look (#169) and the script PDF's measure: Letter, its
-   margins, Helvetica. The head is a small faint kicker saying what the
-   sheet is, the heading large, and a line or two of what it covers and
-   the day it was printed (exportDateText: a date, never a time, so the
-   same list printed twice in a day is the same file); then the list; and
-   on every page the running footer (pdfFooterOps), so a page that has
-   come loose still says what it is from. Everything is drawn through the
-   pieces above — a lamp, a box, a pin where the app has an icon — so no
-   glyph outside WinAnsi reaches the page.
-
-   Deliberately not buildPdf()'s machinery: these need no pictures, no
-   two-column wrap and no links, and sharing a page-builder with the
-   script export would put a working, tested writer at risk for sheets
-   that are supposed to be simple. What the two share with each other is
-   here: the page, the head, a line of runs. */
-
 var LIST_PW = 612, LIST_PH = 792, LIST_M = 54;
-/* The footer's baseline: its hairline sits 11 above it, clear of the
-   bottom margin every list stops at. */
 var LIST_FOOT_Y = 30;
 
-/* A sheet as it is drawn: `ops` the page being drawn, `y` the cursor, top
-   down from the top margin, and `body` whether anything but heads is on
-   the page yet — a row too tall for a page is drawn where it is rather
-   than starting page after empty page. finish() puts the last page in and
-   gives every page its footer, last, since "Page n of N" wants N. */
-/* `size` [PW, PH, M], when given, is the sheet's page and margin — the
-   shot list is landscape — otherwise the lists' Letter portrait. */
 function listSheet(size) {
   var sheet = { pages: [], ops: null, y: 0, body: false };
   sheet.PW = size ? size[0] : LIST_PW;
@@ -1502,8 +1120,6 @@ function listSheet(size) {
     sheet.ops.push(pdfTextOp(str, x, y, font, size, hex));
   };
   sheet.push = function (ops) { Array.prototype.push.apply(sheet.ops, ops); };
-  /* the pages as drawn, with no footer: for a document that numbers its
-     own pages (the script PDF's appendix) */
   sheet.bare = function () {
     if (sheet.ops) sheet.pages.push(sheet.ops);
     sheet.ops = null;
@@ -1522,17 +1138,10 @@ function listSheet(size) {
   return sheet;
 }
 
-/* Words as they are printed: a line break or a run of spaces is one space
-   (a line feed is no WinAnsi character; it would print as "?"). */
 function listClean(s) {
   return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
 }
 
-/* Runs ({text, b, i}) wrapped to `width` at `size` — pdfWrapRuns, which
-   measures each weight as it is drawn — with each line's words put back
-   together, one piece per face: [[{text, b, i, width}]]. A line is then
-   one string, or two where a label leads it, which is what a reader's
-   copy and paste (and the tests) want. */
 function listWrap(runs, width, size) {
   return pdfWrapRuns(runs, width, size).map(function (line) {
     var out = [];
@@ -1545,8 +1154,6 @@ function listWrap(runs, width, size) {
   });
 }
 
-/* One of listWrap's lines, its baseline at (x, y): the bold pieces — a
-   name, a label, "Flagged" — in `boldHex`, the rest in `hex`. */
 function listLineOps(line, x, y, size, hex, boldHex) {
   var ops = [], cx = x;
   line.forEach(function (piece) {
@@ -1558,11 +1165,6 @@ function listLineOps(line, x, y, size, hex, boldHex) {
   return ops;
 }
 
-/* A sheet's head, from the top of its first page: the kicker; the heading
-   at 20pt, wrapped — however long, it never runs off the page, as the
-   packing list's title once did — after a dot in `dotHex` when there is
-   one; then each line of `meta`, wrapped, the first dim and any after it
-   faint. Leaves the cursor under it. */
 function listHead(sheet, kicker, heading, dotHex, meta) {
   var C = PRINT_COLORS, M = sheet.M, W = sheet.PW - 2 * sheet.M;
   var y = sheet.y - 7;
@@ -1583,25 +1185,6 @@ function listHead(sheet, kicker, heading, dotHex, meta) {
   sheet.y = y - 24;
 }
 
-/* ================= packing list (gear, props — any category) =================
-
-   Meant to be printed and ticked off by hand: packed for the shoot, and
-   back after it — a box for each, under "Out" and "Back". The breakdown
-   (the script PDF's, the spreadsheet) is a table to read; this is what
-   "did we pack it, did it come back" needs. One row per item, in
-   alphabetical order: the two boxes, the name in bold, its status as a
-   four-level pill filled as far as it has got, to fill in further by
-   hand (packingPillOp, below — amber while it is not in hand yet), who
-   has it and the scenes it is in; under the name, dim, its notes and the
-   b-roll shots that need it. At the end a line to sign for whoever packed it and
-   whoever brought it back. Blank where nobody has it: a printed sheet
-   invites the name in pen.
-
-   The items are the breakdown's (breakdownGroups, 14b-export-kit.js), so
-   the sheet says what the Production panel and every other export say
-   about them — the scenes, the owner, and for a prop the b-roll shots
-   that need it (#149: the packer then knows it goes out with the second
-   unit too). */
 export function buildPackingListPdf(catId) {
   var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
   var cat = tagCategory(catId);
@@ -1613,9 +1196,6 @@ export function buildPackingListPdf(catId) {
     .sort(function (a, b) { return a.name.localeCompare(b.name); });
 
   var sheet = listSheet();
-  /* the category's dot in its colour (#171): every item on the sheet is
-     that category, so one mark at the top says it, where a dot on each
-     line would only repeat it */
   var meta = [title + " · " + exportDateText()];
   if (items.length) meta.push(packingSummary(items));
   listHead(sheet, "Packing list", heading, cat ? tagPrintColor(cat.id) : null, meta);
@@ -1625,9 +1205,6 @@ export function buildPackingListPdf(catId) {
     return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
   }
 
-  /* The pill's key, once, under the heading: the four levels at full
-     size with their names, so the pill on each row can be half that and
-     need no words. */
   var ky = sheet.y - 4;
   var KEY_X = M + 40, KEY_W = 46, KEY_GAP = 2, KEY_H = 9;
   sheet.ops.push(pdfTextOp("Status", M, ky, "F1", 8.5, C.dim));
@@ -1639,18 +1216,11 @@ export function buildPackingListPdf(catId) {
   sheet.ops.push(pdfTextOp("Fill in each step as it happens", KEY_X + 4 * KEY_W + 3 * KEY_GAP + 12, ky, "F3", 8, C.faint));
   sheet.y = ky - 26;
 
-  /* The columns, from the margin: each box under its head ("Out" and
-     "Back" centred over them), then Item / Status (the pill) / Owner /
-     Scenes, each wrapping to its own width. */
   var BOX = 11, OUT_X = M + 1.4, BACK_X = M + 29.4;
   var ITEM_X = M + 58, ITEM_W = 188;
   var STATUS_X = M + 256;
-  /* room for a double-barrelled surname on one line */
   var OWNER_X = M + 338, OWNER_W = 100;
   var SCENES_X = M + 448, SCENES_W = W - 448;
-  /* the rows' measure: the first baseline under a row's top, the leads of
-     its name, of the lines under it and of the other columns, and the room
-     under its lowest line */
   var TOP = 16, NAME_LEAD = 13.5, UNDER_GAP = 13, UNDER_LEAD = 11.5, COL_LEAD = 12.5, TAIL = 8;
 
   function columnHeads(continued) {
@@ -1678,8 +1248,6 @@ export function buildPackingListPdf(catId) {
       under: under,
       status: { id: item.status, label: item.statusLabel },
       owner: item.owner ? listWrap([{ text: listClean(item.owner) }], OWNER_W, 10) : [],
-      /* still on the list, and still to pack, but flagged the way the
-         panel flags it rather than left looking like a scene list */
       scenes: listWrap([{ text: orphaned ? "Not in script" : item.scenes.join(", ") }], SCENES_W, 9.5),
       orphaned: orphaned
     };
@@ -1721,8 +1289,6 @@ export function buildPackingListPdf(catId) {
     drawRow(r);
   });
 
-  /* the sign-off, on one page: who packed it and when, who brought it all
-     back and when — lines to write on, not underscores */
   var SIGN_GAP = 40, SIGN_LEAD = 30;
   if (sheet.y - SIGN_GAP - SIGN_LEAD - 6 < M) {
     sheet.newPage();
@@ -1741,28 +1307,11 @@ export function buildPackingListPdf(catId) {
   return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
 }
 
-/* ---- the packing list's status pill ----
-
-   An item's status as a row of four segments, one per level in
-   TAG_STATUSES' order — Needed, Sourcing, Have it, Returned — filled up to
-   and including the one the item is at, and the rest left empty to fill
-   in by hand as it moves along on the day: a printed word goes stale the
-   moment the sheet is in someone's hand, a half-filled pill does not. The
-   fill says how far along it is at a glance: amber while it is not in hand
-   yet (Needed, Sourcing — the sheet's one warm colour, what the eye should
-   find), the dim text colour once it is (Have it), faint once it has gone
-   back (Returned). An empty segment is an outline a pen can fill. The
-   key under the sheet's heading draws it once at full size with each
-   level's name, so the one on each row can be half that, with no words. */
-/* read when drawn, not when this module is evaluated: PRINT_COLORS is
-   another module's, and the bundle's order is not the import order */
 function pillFill(id) {
   var C = PRINT_COLORS;
   return { needed: C.audio, sourcing: C.audio, have: C.dim, returned: C.faint }[id] || C.audio;
 }
 
-/* One segment's outline, (x, y) its lower-left corner: the pill's round
-   ends on the first and the last, square sides between. */
 function pillSegmentPath(x, y, w, h, roundLeft, roundRight) {
   var r = h / 2, k = r * 0.5523;
   function p(a, b) { return a.toFixed(2) + " " + b.toFixed(2); }
@@ -1779,14 +1328,9 @@ function pillSegmentPath(x, y, w, h, roundLeft, roundRight) {
   return out + "h";
 }
 
-/* The pill for status `id`, its lower-left corner at (x, y); size.seg
-   each segment's width, size.gap between them, size.h its height. A null
-   `id` is the key's pill: every segment empty. */
 function packingPillOp(id, x, y, size) {
   var level = id === null ? -1 : Math.max(0, TAG_STATUSES.map(function (st) { return st.id; }).indexOf(id));
   var fill = level === -1 ? "" : pdfRgb(pillFill(TAG_STATUSES[level].id));
-  /* the faint text colour, not a rule's grey: an empty segment has to
-     survive a cheap printer to be filled in */
   var edge = pdfRgb(PRINT_COLORS.faint);
   return TAG_STATUSES.map(function (st, i) {
     var path = pillSegmentPath(x + i * (size.seg + size.gap), y, size.seg, size.h, i === 0, i === TAG_STATUSES.length - 1);
@@ -1796,9 +1340,6 @@ function packingPillOp(id, x, y, size) {
   }).join(" ");
 }
 
-/* "6 items · 5 have it · 1 sourcing": what is in hand, what is on its
-   way, what is still needed, what has gone back — the ones there are.
-   `items` are breakdownRows(), each with its status's id and label. */
 function packingSummary(items) {
   var n = {}, label = {};
   items.forEach(function (e) {
@@ -1812,10 +1353,6 @@ function packingSummary(items) {
   return out.join(" · ");
 }
 
-/* assemblePdf (above) for a PDF of text and lines only, no images: the
-   packing list's, and the b-roll shot list's (#150), which is the same
-   kind of page. `pages` is one array of content-stream operators per
-   page; `title` is the document's, for a viewer's title bar. */
 function assembleTextPdf(pages, PW, PH, title) {
   return assemblePdf({
     size: [PW, PH],
@@ -1824,24 +1361,8 @@ function assembleTextPdf(pages, PW, PH, title) {
   });
 }
 
-/* ================= the b-roll shot list (#150) =================
-
-   A sheet to take on the day, landscape, one row a shot (drawShotTable,
-   below): what the full-page shot list's "Print shot list" makes — the
-   list as it is on screen, its filter and its grouping
-   (brollShotListForPrint, 08d-broll-panel.js) — and what File ▸ Export… ▸
-   B-roll shot list makes, every shot by scene; the script PDF's appendix
-   is the same table (shotListAppendixPages).
-
-   A PDF, the way the packing lists are, rather than the browser's print of
-   the page: the same file in the browser and the desktop app, one that can
-   be sent to whoever is shooting as well as printed, and a page laid out
-   for paper rather than a screen's table squeezed onto one. */
 var FLAG_PRINT = "C4302A";
 
-/* The start of a "cuts against" line, cut at a word end with "…" once it
-   is longer than `max` characters — about two lines of the column it is
-   printed in. */
 function shotCutsOpening(text, max) {
   if (text.length <= max) return text;
   var cut = text.slice(0, max);
@@ -1850,8 +1371,6 @@ function shotCutsOpening(text, max) {
   return cut.replace(/[\s,;:.–—-]+$/, "") + "…";
 }
 
-/* Landscape Letter, a narrower margin than the portrait lists, and a
-   bottom that keeps clear of the footer's hairline. */
 var SHOT_PW = 792, SHOT_PH = 612, SHOT_M = 36, SHOT_BOTTOM = 54;
 
 export function buildShotListPdf(data) {
@@ -1864,10 +1383,6 @@ export function buildShotListPdf(data) {
   return assembleTextPdf(sheet.finish(docTitle), SHOT_PW, SHOT_PH, docTitle);
 }
 
-/* The script PDF's appendix part (buildPdf): the same table on landscape
-   pages of its own, headed as the script PDF heads a part — its name and
-   one line that sums it up — with no footer, which buildPdf adds when it
-   numbers every page. [ops, …], a page each. */
 export function shotListAppendixPages(data) {
   var C = PRINT_COLORS, M = SHOT_M;
   var sheet = listSheet([SHOT_PW, SHOT_PH, SHOT_M]);
@@ -1878,30 +1393,8 @@ export function shotListAppendixPages(data) {
   return sheet.bare();
 }
 
-/* The shot list as a table, one row a shot, the whole width of a
-   landscape page (Adam, 2026-09-26: denser, room for notes, a flag's
-   reason beside it, the props always there to see):
-
-     Done | Scene | B-roll shot | Location | Props | Assigned | Flagged | Notes
-
-   Done is a box, ticked in the b-roll teal once the shot is in the can
-   (B's "done", #169). The shot in bold (faint once shot), the lines under
-   its marker in the script, and the opening of the line it cuts against,
-   in italic. Props one to a line, each with its status. Flagged says so in
-   red and gives the reason — the note, which is what raising the flag
-   asks for (08d-broll-panel.js). Notes is a note that is not a flag's
-   reason, then lines to write on to the foot of the row: every row keeps
-   room for a pen. A column with nothing in it is left empty, to fill in.
-
-   By scene, the Scene column groups the rows: a scene's number and where
-   it starts on its first shot only, and a stronger rule between scenes.
-   Grouped any other way (location, person, as the b-roll page can be),
-   each group is a band — its label after a pin for a location, done/total
-   at the right — and every row names its scene. Column heads on every
-   page; a page the table runs on to says so at its top. */
 function drawShotTable(sheet, data, name) {
   var C = PRINT_COLORS, M = sheet.M, W = sheet.PW - 2 * sheet.M;
-  /* Notes the widest after the shot itself: it is the column a pen goes in */
   var COLS = {
     done: { x: 0, w: 16 }, scene: { x: 22, w: 40 }, shot: { x: 66, w: 184 },
     location: { x: 258, w: 72 }, props: { x: 338, w: 102 }, owner: { x: 448, w: 58 },
@@ -1909,8 +1402,6 @@ function drawShotTable(sheet, data, name) {
   };
   var HEADS = [["done", "Done"], ["scene", "Scene"], ["shot", "B-roll shot"], ["location", "Location"],
     ["props", "Props"], ["owner", "Assigned"], ["flag", "Flagged"], ["notes", "Notes"]];
-  /* a row's first baseline under its top, the room under its last line,
-     and the least a row is — two lines to write on in Notes */
   var TOP = 12, TAIL = 8, MIN_ROW = 34, WRITE_LEAD = 11;
 
   function heads(continued) {
@@ -1921,8 +1412,6 @@ function drawShotTable(sheet, data, name) {
     sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.borderStrong, 0.75));
   }
 
-  /* a column's lines: [{line, size, hex, boldHex, lead}] — lead is the
-     step down from the line above */
   function col(runs, w, size, hex, lead, boldHex) {
     return listWrap(runs, w, size).map(function (line) {
       return { line: line, size: size, hex: hex, boldHex: boldHex || hex, lead: lead };
@@ -1932,8 +1421,6 @@ function drawShotTable(sheet, data, name) {
     return lines.reduce(function (n, l, i) { return n + (i ? l.lead : 0); }, 0);
   }
 
-  /* `g` the row's group: what its band already says — the location, the
-     person — the row does not repeat */
   function rowOf(r, showScene, g) {
     var cells = {};
     var nameHex = r.shot ? C.faint : C.text;
@@ -1945,7 +1432,6 @@ function drawShotTable(sheet, data, name) {
     String(r.desc || "").split("\n").forEach(function (para) {
       if (listClean(para)) shot = shot.concat(col([{ text: listClean(para) }], COLS.shot.w, 8, r.shot ? C.faint : C.dim, 10));
     });
-    /* which moment it is, not the paragraph (often a scene's whole Audio) */
     if (r.cuts) shot = shot.concat(col([{ text: "“" + shotCutsOpening(listClean(r.cuts), 84) + "”", i: true }], COLS.shot.w, 7.5, C.faint, 9.5));
     cells.shot = shot;
     if (r.location && g.kind !== "location") cells.location = col([{ text: listClean(r.location) }], COLS.location.w, 8.5, C.dim, 10.5);
@@ -1979,8 +1465,6 @@ function drawShotTable(sheet, data, name) {
       });
       if (k === "notes") notesLow = y;
     });
-    /* lines to write on, under whatever the Notes column already says,
-       down to the foot of the row */
     for (var wy = notesLow - WRITE_LEAD + 1; wy > bottom + 4; wy -= WRITE_LEAD) {
       sheet.ops.push(pdfRuleOp(M + COLS.notes.x, wy, M + W, C.borderStrong, 0.5));
     }
@@ -2007,7 +1491,6 @@ function drawShotTable(sheet, data, name) {
     var byScene = g.kind === "scene";
     var rows = g.items.map(function (r, i) { return rowOf(r, !byScene || i === 0, g); });
     var bandH = byScene ? 0 : 20;
-    /* a band, or a scene's first row, never ends a page on its own */
     if (sheet.y - bandH - (rows.length ? rows[0].height : 0) < SHOT_BOTTOM && sheet.body) { sheet.newPage(); heads(true); }
     else if (gi && byScene) sheet.ops.push(pdfRuleOp(M, sheet.y, M + W, C.borderStrong, 0.6));
     if (!byScene) band(g, false);
@@ -2016,7 +1499,6 @@ function drawShotTable(sheet, data, name) {
         sheet.newPage();
         heads(true);
         if (!byScene) band(g, true);
-        /* a scene carried over names itself again */
         else if (i) row = rowOf(row.r, true, g);
       } else if (i) {
         sheet.ops.push(pdfRuleOp(M + COLS.shot.x, sheet.y, M + W, C.border, 0.5));
@@ -2026,16 +1508,10 @@ function drawShotTable(sheet, data, name) {
   });
 }
 
-/* The pin the shot list's page heads a location with (#169), as a shape —
-   a head and a point, in `hex`, with a hole — since WinAnsi has no glyph
-   for it. (cx, cy) is the centre of its head, r its radius; the point is
-   2.1 r below, its sides tangent to the head. */
 function listPinOp(cx, cy, r, hex) {
   return "q " + pdfRgb(hex) + " rg " + pdfCirclePath(cx, cy, r) + " f " +
     n2(cx - r * 0.88) + " " + n2(cy - r * 0.476) + " m " + n2(cx) + " " + n2(cy - r * 2.1) + " l " +
     n2(cx + r * 0.88) + " " + n2(cy - r * 0.476) + " l h f 1 1 1 rg " + pdfCirclePath(cx, cy, r * 0.4) + " f Q";
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

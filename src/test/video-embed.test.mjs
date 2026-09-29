@@ -1,17 +1,3 @@
-/* YouTube and Vimeo in a scene's gallery (#141, #168):
- *   - shared/video-embed.js: which links are one of the two sites' videos,
- *     the player's address (the no-cookie embed; Vimeo with dnt=1), the ref
- *     the desktop IPC carries, and the thumbnail fetch over a FAKE fetch —
- *     the fixed hosts, no redirects or cookies, JPEG/PNG/WebP only, the
- *     1 MiB cap, Vimeo's oEmbed naming only its own image host. No test
- *     here touches the network.
- *   - build.mjs's frame-src naming exactly those two player origins.
- *   - setVideoThumbnail (02d-gallery.js): the picture given to the video
- *     that has none.
- *   - foldIntoEdit (12a-undo.js): the thumbnail landing inside the paste's
- *     own undo entry, or nowhere when something since is about it.
- * The dialog's player and the paste are tests/160-gallery-video.txt.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -29,7 +15,6 @@ const {
   parseVideoLink, parseVideoRef, playerUrl, thumbnailRefusal, videoRef
 } = videoEmbed;
 
-/* Just enough of each format for the sniffer to classify and measure. */
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 function pngBytes(w, h) {
   const b = new Uint8Array(33);
@@ -38,8 +23,6 @@ function pngBytes(w, h) {
   return b;
 }
 const gifBytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 4, 0, 3, 0, 0, 0, 0]);
-
-/* ---- which links ---- */
 
 test("a YouTube link in any of its spellings is its 11-character id, with a start time when it has one", () => {
   const id = "dQw4w9WgXcQ";
@@ -94,7 +77,6 @@ test("the player: YouTube's no-cookie embed and Vimeo's player with dnt=1, both 
   assert.equal(playerUrl({ host: "vimeo", id: "76979871" }), "https://player.vimeo.com/video/76979871?autoplay=1&dnt=1");
   assert.equal(playerUrl({ host: "vimeo", id: "76979871", hash: "abcdef1234", start: 45 }),
     "https://player.vimeo.com/video/76979871?autoplay=1&dnt=1&h=abcdef1234#t=45s");
-  /* nothing a caller made up gets through */
   assert.equal(playerUrl({ host: "youtube", id: "../../x" }), null);
   assert.equal(playerUrl({ host: "loom", id: "abc" }), null);
   for (const u of [playerUrl({ host: "youtube", id: "dQw4w9WgXcQ" }), playerUrl({ host: "vimeo", id: "1" })]) {
@@ -107,7 +89,6 @@ test("build.mjs's frame-src is 'self' and exactly the two player origins", () =>
   const m = /"frame-src ([^"]*)"/.exec(src);
   assert.ok(m, "frame-src is in CSP_DIRECTIVES");
   assert.deepEqual(m[1].split(/\s+/).sort(), ["'self'"].concat(PLAYER_ORIGINS).sort());
-  /* and img-src still names no remote host: a thumbnail is a blob */
   assert.match(src, /"img-src 'self' data: blob:"/);
 });
 
@@ -124,8 +105,6 @@ test("the ref the desktop IPC carries, and its check against the host", () => {
     assert.equal(parseVideoRef("vimeo", bad), null, String(bad));
   }
 });
-
-/* ---- the thumbnail fetch, over a fake ---- */
 
 function fakeFetch(routes) {
   const calls = [];
@@ -163,7 +142,6 @@ test("what a thumbnail may be: JPEG, PNG or WebP, at most 1 MiB, sniffed from th
   assert.deepEqual(got, { ok: false, code: "NOT_AN_IMAGE" });
   got = await fetchVideoThumbnail(v, { fetch: fakeFetch({ [url]: { body: "<svg xmlns='http://www.w3.org/2000/svg'/>", headers: { "content-type": "image/svg+xml" } } }) });
   assert.deepEqual(got, { ok: false, code: "NOT_AN_IMAGE" });
-  /* too big: by what it says, and by what it sends */
   got = await fetchVideoThumbnail(v, { fetch: fakeFetch({ [url]: { body: "x", headers: { "content-length": String(THUMB_MAX_BYTES + 1) } } }) });
   assert.deepEqual(got, { ok: false, code: "TOO_LARGE" });
   const big = new Uint8Array(THUMB_MAX_BYTES + 10);
@@ -197,12 +175,10 @@ test("Vimeo: the oEmbed answer's thumbnail, and only from Vimeo's image host", a
   let got = await fetchVideoThumbnail({ host: "vimeo", id: "76979871" }, { fetch: f });
   assert.equal(got.ok, true);
   assert.deepEqual(f.calls.map((c) => c.url), [oembed, thumb]);
-  /* an unlisted video's hash goes into the page address oEmbed is asked about */
   const hashed = "https://vimeo.com/api/oembed.json?url=" + encodeURIComponent("https://vimeo.com/76979871/abcdef1234") + "&width=640";
   f = fakeFetch({ [hashed]: { body: JSON.stringify({ thumbnail_url: thumb }) }, [thumb]: { body: jpg } });
   got = await fetchVideoThumbnail({ host: "vimeo", id: "76979871", hash: "abcdef1234" }, { fetch: f });
   assert.equal(got.ok, true);
-  /* a thumbnail named anywhere else is never fetched */
   for (const other of ["https://evil.example/video/1.jpg", "http://i.vimeocdn.com/video/1.jpg", "https://i.vimeocdn.com.evil.example/video/1.jpg",
     "https://user:pw@i.vimeocdn.com/video/1.jpg", "https://i.vimeocdn.com/other/1.jpg", 42]) {
     f = fakeFetch({ [oembed]: { body: JSON.stringify({ thumbnail_url: other }) } });
@@ -240,11 +216,8 @@ test("Settings ▸ Fetch video thumbnails: on unless switched off, and carried b
   assert.equal(row.valid("0"), true);
   assert.equal(row.valid("1"), true);
   assert.equal(row.valid("off"), false);
-  /* invariant #48: no bundle key may look like a credential */
   assert.doesNotMatch(row.name, /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i);
 });
-
-/* ---- the thumbnail in the gallery ---- */
 
 const T1 = intern(jpegBytes(480, 270, 11));
 const T2 = intern(jpegBytes(480, 270, 12));
@@ -260,18 +233,14 @@ test("setVideoThumbnail gives a video with no picture its thumbnail, once, first
   assert.equal(setVideoThumbnail(row, yt, T1), true);
   assert.equal(row.imageRef.sha256, T1.sha256);
   assert.deepEqual(row.imageLinks, [{ href: "https://youtu.be/dQw4w9WgXcQ", poster: true }]);
-  /* never over a picture it has */
   assert.equal(setVideoThumbnail(row, yt, T2), false);
   assert.equal(row.imageRef.sha256, T1.sha256);
-  /* never the same bytes on two items: that would be one item */
   assert.equal(setVideoThumbnail(row, vm, T1), false);
   assert.equal(setVideoThumbnail(row, vm, T2), true);
   assert.equal(row.moreImages[1].imageRef.sha256, T2.sha256);
   assert.equal(row.moreImages[1].links[0].href, "https://vimeo.com/76979871");
   assert.equal(setVideoThumbnail(row, "u:https://nowhere.example/", T2), false);
 });
-
-/* ---- the thumbnail inside the paste's undo entry ---- */
 
 function freshDoc() {
   S.state = migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
@@ -282,8 +251,6 @@ function freshDoc() {
   trackDocument();
 }
 
-/* An edit as the app makes one: change the state, markDirty's noteEdit,
-   and the flush that records it. */
 function edit(fn) {
   fn(S.state);
   noteEdit();
@@ -298,7 +265,6 @@ const giveThumb = (ref) => (state) => setVideoThumbnail(state.rows[0], ytKey, re
 test("the thumbnail lands in the paste's own entry: one undo takes both back, one redo brings both", () => {
   freshDoc();
   const entry = edit((s) => { s.rows[0].audioText = "Alpha pasted"; addGalleryVideo(s.rows[0], { href: "https://youtu.be/dQw4w9WgXcQ" }); });
-  /* typing somewhere else meanwhile does not stand in the way */
   edit((s) => { s.rows[1].audioText = "Bravo typed"; });
   const sizes = undoSizes();
   assert.equal(foldIntoEdit(entry, touchesR1, giveThumb(T1)), true);

@@ -1,11 +1,3 @@
-/* desktop/test/blob-store.test.mjs: unit tests for desktop/blob-store.js.
- *
- * Node built-ins only, no Electron. Every case works in its own folder under
- * os.tmpdir() and the whole temp root is removed at the end. Prints ALL PASS
- * and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/blob-store.test.mjs
- */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -35,7 +27,6 @@ function makeStore(dir, extra) {
 
 const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 
-/* Real magic numbers, then a random tail so each fixture has its own sha. */
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 function png(n = 64) {
   return Buffer.concat([Buffer.from(PNG_MAGIC), crypto.randomBytes(n)]);
@@ -62,8 +53,6 @@ const cases = [];
 function test(name, fn) {
   cases.push({ name, fn });
 }
-
-/* ------------------------------------------------------------------ */
 
 test("init creates FORMAT \"1\" and sha256/, and is repeatable", () => {
   const dir = freshDir();
@@ -122,7 +111,6 @@ test("re-putting a stored blob is a no-op (stored:false, file untouched)", async
   const before = fs.statSync(file).mtimeMs;
   assert.deepEqual(await s.put(h, bytes), { ok: true, stored: false });
   assert.equal(fs.statSync(file).mtimeMs, before, "not rewritten");
-  /* Concurrent puts of one sha: one writes, the rest see it there. */
   const bytes2 = gif();
   const results = await Promise.all([1, 2, 3, 4].map(() => s.put(sha(bytes2), bytes2)));
   assert.equal(results.filter((r) => r.ok && r.stored).length, 1, JSON.stringify(results));
@@ -172,8 +160,6 @@ test("a stored file that no longer matches its name: get deletes it and returns 
   assert.deepEqual(await s.missing([h]), [h]);
   assert.deepEqual(await s.put(h, bytes), { ok: true, stored: true });
   assert.ok((await s.get(h)).equals(bytes));
-  /* A truncated (torn) file is shorter than the bytes, so even a re-put
-     without a get in between rewrites it rather than trusting it. */
   fs.writeFileSync(file, bytes.subarray(0, 4));
   assert.deepEqual(await s.put(h, bytes), { ok: true, stored: true });
   assert.ok(fs.readFileSync(file).equals(bytes));
@@ -191,8 +177,6 @@ test("a put that dies between fsync and rename leaves only a .tmp- file, which t
   assert.ok(seen && path.basename(seen).startsWith(".tmp-"), "the temp file is named .tmp-*");
   assert.equal(path.dirname(seen), path.join(dir, "sha256", h.slice(0, 2)), "and it is in the shard folder");
   assert.equal(await s.has(h), false, "nothing was published");
-  /* The in-process failure path already cleans up; simulate the case where
-     the process itself died and nothing could. */
   const blob = jpeg();
   const s2 = makeStore(dir);
   s2.init();
@@ -224,7 +208,6 @@ test("list() names every stored sha and nothing else; delete() removes one", asy
   s.init();
   const blobs = [png(), jpeg(), gif(), webp()];
   for (const b of blobs) await s.put(sha(b), b);
-  /* Things in the folder that are not blobs of this store. */
   const stray = sha(png());
   fs.mkdirSync(path.join(dir, "sha256", "zz"), { recursive: true });
   fs.writeFileSync(path.join(dir, "sha256", "zz", stray), "x");
@@ -278,15 +261,11 @@ test("a get racing a put of the same sha never loses the good copy", async () =>
   const damaged = Buffer.from(bytes);
   damaged[20] ^= 1;
   fs.writeFileSync(s.pathFor(h), damaged);
-  /* The get sees the damaged file and deletes it; the put queued behind it
-     then writes the good copy, which nothing deletes afterwards. */
   const [got, put] = await Promise.all([s.get(h), s.put(h, bytes)]);
   assert.equal(got, null);
   assert.deepEqual(put, { ok: true, stored: true });
   assert.ok((await s.get(h)).equals(bytes));
 });
-
-/* ---- the IPC door's image rule ---------------------------------------- */
 
 test("sniffImageMime knows PNG, JPEG, GIF and WebP by their magic, and nothing else", () => {
   assert.equal(sniffImageMime(png()), "image/png");
@@ -329,8 +308,6 @@ test("the store itself stores any bytes: the image rule is the IPC layer's, not 
   assert.ok((await s.get(sha(body))).equals(body));
 });
 
-/* ------------------------------------------------------------------ */
-
 const failures = [];
 for (const c of cases) {
   try {
@@ -342,7 +319,7 @@ for (const c of cases) {
   }
 }
 
-try { fs.rmSync(ROOT, { recursive: true, force: true }); } catch { /* best effort */ }
+try { fs.rmSync(ROOT, { recursive: true, force: true }); } catch { }
 
 if (failures.length) {
   console.log(`\n${failures.length} FAILED of ${cases.length}`);

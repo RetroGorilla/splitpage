@@ -2,32 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Content Security Policy (#65). First thing after the charset, because a
-     meta policy only governs what the parser reaches AFTER it.
-
-     The renderer parses untrusted .splitpage and .md files and copies
-     innerHTML into state on every keystroke; on the desktop it sits in front
-     of the whole file and history bridge. sanitizeHtml() is the first line
-     and this is the second, so one slip in it is not one HTML injection away
-     from running code.
-
-     Written by build.mjs: the app's one inline script is allowed by the
-     SHA-256 of its own body, so nothing else inline can run — not an
-     injected <script>, not an onerror= in a pasted <img>. See buildCsp()
-     there for what each directive is holding back, and desktop/main.js,
-     which serves this same policy as a response header so it also covers
-     the tab strip's origin. -->
 <meta http-equiv="Content-Security-Policy" content="{{CSP}}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
 <meta name="splitpage-version" content="{{VERSION}}">
-<!-- The pristine-seed gate (invariant #30): "<#state-data text length>-<checksum>"
-     for the demo document this build shipped with, computed by build.mjs
-     from src/seed-state.json. 20b-onboarding.js recomputes the same checksum
-     from the live #state-data element and only offers the first-run wizard
-     when the two agree — the one way it can tell a fresh copy of the app
-     from one that already has somebody's script open. -->
 <meta name="splitpage-seed-check" content="{{SEED_CHECK}}">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#F1F0ED" media="(prefers-color-scheme: light)">
@@ -36,23 +15,6 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Loaded without blocking. A stylesheet still pending stops the browser
-     running ANY classic script after it, so an unreachable or slow
-     fonts.googleapis.com does not merely leave the page unstyled — it stops
-     the whole app from starting, which for something that advertises working
-     offline is the wrong failure. media="print" makes it non-render-blocking;
-     onload promotes it to the real stylesheet once it has actually arrived.
-     The <noscript> copy keeps the fonts for a scripting-disabled reader, who
-     has no app to block anyway.
-
-     The promotion used to be an inline onload= attribute. Under the CSP
-     above an inline event handler is exactly what is being blocked, and an
-     exception for it ('unsafe-hashes' or 'unsafe-inline') would have been a
-     hole big enough to drive the rest through — so 00-prelude.js does it
-     instead, from the one script the policy trusts. -->
-<!-- The faces (#169): Chivo for the interface, Chivo Mono for figures,
-     Atkinson Hyperlegible Next for the script. All three are variable, so
-     one request carries every weight app.css asks for. -->
 <link id="font-css"
       href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap"
       rel="stylesheet" media="print">
@@ -62,10 +24,6 @@
 </style>
 </head>
 <body>
-<!-- The icons the File menu, the Export dialog and the command menu draw
-     (issues #145-#147): one stroke set, 24-unit grid, drawn in currentColor
-     through <use href="#i-…">. Never emoji — they render in a different
-     colour and weight on every platform. -->
 <svg class="icon-sprite" aria-hidden="true" focusable="false">
   <defs>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
@@ -103,9 +61,6 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
     <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1 1 17.5 9H15zm0 0v6m0 0h2.5a2.5 2.5 0 1 1-2.5 2.5V15zm0 0H9m0 0v2.5A2.5 2.5 0 1 1 6.5 15H9z"/></symbol>
-    <!-- The editor's own (#169, Direction B): the header's panel toggles,
-         the gutter's grip and "⋯" menu, the picture slot and the format
-         toolbar. Same grid, same 1.75 stroke. -->
     <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/></symbol>
     <symbol id="i-comment" viewBox="0 0 24 24"><path d="M4.5 5h15a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></symbol>
@@ -117,18 +72,12 @@
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5a1 1 0 0 0 1 .9h7a1 1 0 0 0 1-.9l1-12.5"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8 8"/></symbol>
     <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M13.5 5l5.5 5.5-7.5 7.5H6v-5.5z"/><path d="M4 21h16"/></symbol>
-    <!-- the annotation editor's (05w-annotate.js): the eraser, a text box,
-         and undo / redo as a hooked arrow either way -->
     <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M9 19.5L4.5 15a1.5 1.5 0 0 1 0-2.1L13 4.4a1.5 1.5 0 0 1 2.1 0l4.5 4.5a1.5 1.5 0 0 1 0 2.1L11.1 19.5z"/><path d="M8.5 9l6.5 6.5M9 19.5h11"/></symbol>
     <symbol id="i-text" viewBox="0 0 24 24"><path d="M5.5 7.5V5h13v2.5M12 5v14M9 19h6"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 13.5L4.5 9 9 4.5"/><path d="M4.5 9h10a5 5 0 0 1 0 10H11"/></symbol>
     <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 13.5L19.5 9 15 4.5"/><path d="M19.5 9h-10a5 5 0 0 0 0 10H13"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.75"/></symbol>
     <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
-    <!-- The side panels', the start page's, the prompter's and the phone's
-         (#169, Direction B phases 3 and 4), added in one go so the lanes
-         that draw those never have to edit the sprite. Paths from the
-         boards. -->
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></symbol>
     <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4.5M5 4.5h11l-2 4 2 4H5"/></symbol>
@@ -147,69 +96,23 @@
     <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
     <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
     <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
-    <!-- THE MARK (#169, #166): the one copy of the logo the page draws —
-         the header's File button and the New Tab page's wordmark both
-         <use> it. "On air": preview blue beside program amber, the tally
-         lamp cut into the amber corner; icon.svg without its script lines,
-         which turn to mud this small. Fixed colours, the same in both
-         themes — it is the logo, not a themed control. A new logo is a
-         change to this symbol and nothing else: every place it is drawn
-         sizes it by its own box (22px square), never by its shape. -->
     <symbol id="i-mark" viewBox="0 0 512 512"><rect x="12" y="12" width="488" height="488" rx="100" fill="#0F0E0C" stroke="#43423F" stroke-width="24"/><rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/><rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/><circle cx="404" cy="116" r="50" fill="#0F0E0C"/><circle cx="404" cy="116" r="38" fill="#D7352D"/><circle cx="404" cy="116" r="26" fill="#F45246"/></symbol>
-    <!-- The rundown strip put away to a thin line (#178) -->
     <symbol id="i-rundown-min" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="6" height="6" rx="1"/><rect x="11" y="5.5" width="3.5" height="6" rx="1"/><rect x="16" y="5.5" width="4.5" height="6" rx="1"/><path d="M3.5 17.5h17"/></symbol>
   </defs>
 </svg>
 <div id="root">
-  <!-- The header (#169, Direction B): one row and the rundown strip under
-       it. Left, the app and the document — the mark, File, the title, and
-       Save as a status rather than a box; right, the panels as quiet
-       toggles, Write as a mode, and Present, the one primary action and the
-       one thing in tally red. The script's length is at the end of the
-       rundown (#207), no longer a clock in the middle of the row. Every id
-       the rest of the app and the suites reach for is the one it always
-       was; only where each sits has changed. -->
   <header class="topbar">
     <div class="topbar-row">
       <div class="topbar-left">
       <div class="menu-wrap">
-        <!-- The mark and the name ARE the File button (#166): the mark (the
-             sprite's #i-mark, the one copy of the logo), "Splitpage", and the
-             chevron that says it opens something. Still #btn-file with its
-             menu-button attributes, so every handler, the desktop native
-             menu and every suite that reaches for it are untouched.
-             .btn-phone-icon is its face at phone width, where the mark and
-             the name are not drawn (the responsive block). -->
         <button class="btn btn-quiet btn-brand" id="btn-file" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" aria-label="Splitpage: File menu" title="File menu"><svg class="brand-mark" width="22" height="22" aria-hidden="true"><use href="#i-mark"/></svg><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-file"/></svg><span class="brand-name">Splitpage</span><svg class="btn-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
-        <!-- Only drawn at phone width, where the menu is a sheet from the
-             bottom of the screen; a dropdown needs no scrim. -->
         <div class="menu-backdrop" id="file-menu-backdrop" hidden></div>
-        <!-- A dropdown hung off the File button (issue #145), not the left
-             drawer #51 made it: a file card on top, then plain headed groups,
-             none of them collapsed, and a footer. Same element and id, and
-             every data-file-action button is still in here exactly once, so
-             the capture-phase listeners other fragments hang off #file-menu
-             (20b, 20c, 20e) and the desktop native menu, which clicks these
-             buttons (runDesktopMenuCommand, 20f-desktop.js), keep working
-             untouched. 18b-file-menu.js opens it, keeps the card and the
-             reasons current, draws the shortcut chips and does the keyboard.
-
-             Every item is .mi: an icon, a label, an optional second line
-             (.mi-why) saying why it cannot work right now, and the shortcut
-             chips 18b draws from data-keys — only for a shortcut that works
-             in this build (data-keys-only="desktop" for one only the desktop
-             app's native menu has). -->
         <div class="menu" id="file-menu" hidden role="menu" aria-label="File" tabindex="-1">
           <div class="menu-head">
             <span class="menu-title">File</span>
             <button type="button" class="menu-close" id="file-menu-close" aria-label="Close the File menu" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
           </div>
           <div class="menu-body" role="none">
-            <!-- The file card: where this document is kept and whether it is
-                 all there yet (refreshFileCard(), 18b-file-menu.js), and the
-                 two things every save touches. Save to file is only here
-                 while a foreign file is open (#menu-save-back: disabled, and
-                 so hidden, the rest of the time). -->
             <div class="fm-card" role="group" aria-labelledby="fm-card-name">
               <div class="fm-card-file">
                 <svg class="fm-card-icon" aria-hidden="true"><use href="#i-file"/></svg>
@@ -218,27 +121,17 @@
                   <div class="fm-card-meta" id="fm-card-meta"></div>
                 </div>
               </div>
-              <!-- A switch, not "Autosave: on" text. updateAutoSaveMenu()
-                   (14-export.js) keeps aria-checked; the click keeps the
-                   menu open so the switch is seen to move. -->
               <button type="button" role="menuitemcheckbox" aria-checked="true" class="mi mi-switch" data-file-action="autosave" id="menu-autosave" title="With autosave on, edits are written to the file you saved to a moment after you stop typing"><svg class="mi-icon" aria-hidden="true"><use href="#i-autosave"/></svg><span class="mi-text"><span class="mi-label">Autosave</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="save-back" id="menu-save-back" disabled><svg class="mi-icon" aria-hidden="true"><use href="#i-save"/></svg><span class="mi-text"><span class="mi-label">Save to file</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="save-as" data-keys="mod+shift+s" title="Writes this script to a new file of your choosing — the one on screen keeps its own"><svg class="mi-icon" aria-hidden="true"><use href="#i-copy"/></svg><span class="mi-text"><span class="mi-label">Save a copy…</span><span class="mi-why" hidden></span></span></button>
             </div>
-            <!-- The command menu (issue #147) — here for a keyboard with no
-                 Ctrl, and so the shortcut is written down somewhere. -->
             <button type="button" role="menuitem" class="mi mi-command" data-file-action="command-menu" id="menu-command" data-keys="mod+k"><svg class="mi-icon" aria-hidden="true"><use href="#i-search"/></svg><span class="mi-text"><span class="mi-label">Search commands…</span><span class="mi-why" hidden></span></span></button>
 
             <div class="menu-group" role="group" aria-labelledby="fm-g-new" data-menu-group="new">
               <div class="menu-group-head" id="fm-g-new">New &amp; open</div>
               <button type="button" role="menuitem" class="mi" data-file-action="new" title="An empty script in this tab — the one on screen goes into Version history first"><svg class="mi-icon" aria-hidden="true"><use href="#i-file-plus"/></svg><span class="mi-text"><span class="mi-label">New script</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="open" data-keys="mod+o"><svg class="mi-icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="mi-text"><span class="mi-label">Open…</span><span class="mi-why" hidden></span></span></button>
-              <!-- shown only when the page was served by a Splitpage document
-                   server; hidden on file:// and on plain static hosting
-                   (updateServerMenu, 13-hosted.js) -->
               <button type="button" role="menuitem" class="mi" data-file-action="server-open" id="menu-server-open" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-server"/></svg><span class="mi-text"><span class="mi-label">Open from the server…</span><span class="mi-why" hidden></span></span></button>
-              <!-- Desktop only: main keeps the list (DESKTOP-RECENTS), and it
-                   is asked for each time the submenu opens. -->
               <button type="button" role="menuitem" class="mi mi-parent" data-submenu="recent" id="menu-recent" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-recent" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-clock"/></svg><span class="mi-text"><span class="mi-label">Open recent</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
               <div class="menu-sub" id="menu-sub-recent" role="menu" aria-label="Open recent" hidden></div>
               <button type="button" role="menuitem" class="mi mi-parent" data-submenu="import" id="menu-import" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-import"><svg class="mi-icon" aria-hidden="true"><use href="#i-import"/></svg><span class="mi-text"><span class="mi-label">Import</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
@@ -249,11 +142,6 @@
               </div>
             </div>
 
-            <!-- The live counterpart of every export (issue #19): an export
-                 hands someone a DEAD COPY whose edits never come back, and
-                 Publish & copy a link doesn't. It is always offered — with no
-                 server it says so on its second line and opens Servers… to
-                 set one up rather than failing. 13-hosted.js. -->
             <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
               <div class="menu-group-head" id="fm-g-share">Share</div>
               <button type="button" role="menuitem" class="mi" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document."><svg class="mi-icon" aria-hidden="true"><use href="#i-share"/></svg><span class="mi-text"><span class="mi-label">Publish &amp; copy a link</span><span class="mi-why" hidden></span></span></button>
@@ -261,18 +149,10 @@
               <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
 
-            <!-- One Export… (issue #146) where there were thirteen items: the
-                 dialog picks the format (18c-export-dialog.js). "Export again
-                 as …" appears once something has been exported on this
-                 device and repeats it in one click. -->
             <div class="menu-group" role="group" aria-labelledby="fm-g-export" data-menu-group="export">
               <div class="menu-group-head" id="fm-g-export">Export</div>
               <button type="button" role="menuitem" class="mi" data-file-action="export" id="menu-export" data-keys="mod+e" title="PDF, Word, Markdown, a spreadsheet, a SplitShare, or part of the script"><svg class="mi-icon" aria-hidden="true"><use href="#i-export"/></svg><span class="mi-text"><span class="mi-label">Export…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="export-again" id="menu-export-again" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-repeat"/></svg><span class="mi-text"><span class="mi-label">Export again</span><span class="mi-why" hidden></span></span></button>
-              <!-- Every format's own action, as it always was: what the
-                   dialog's Export button, "Export again", the command menu
-                   and the desktop native menu's Export submenu all click.
-                   Never shown — the dialog is how a person picks one. -->
               <div class="menu-hidden-actions" hidden>
                 <button type="button" data-file-action="export-pdf">PDF (.pdf)</button>
                 <button type="button" data-file-action="export-docx">Word (.docx)</button>
@@ -296,50 +176,20 @@
             <div class="menu-group" role="group" aria-labelledby="fm-g-doc" data-menu-group="document">
               <div class="menu-group-head" id="fm-g-doc">This document</div>
               <button type="button" role="menuitem" class="mi" data-file-action="history"><svg class="mi-icon" aria-hidden="true"><use href="#i-history"/></svg><span class="mi-text"><span class="mi-label">Version history…</span><span class="mi-why" hidden></span></span></button>
-              <!-- Ctrl+F everywhere else; this entry exists because phone
-                   keyboards have no Ctrl -->
               <button type="button" role="menuitem" class="mi" data-file-action="find" data-keys="mod+f"><svg class="mi-icon" aria-hidden="true"><use href="#i-find"/></svg><span class="mi-text"><span class="mi-label">Find &amp; replace</span><span class="mi-why" hidden></span></span></button>
-              <!-- Collapses every scene marked Shot into a thin strip — issue
-                   #25. A switch; updateHideShotMenu() (01b-hide-shot.js) keeps
-                   aria-checked. Ctrl/Cmd+Alt+H, mirrored in the desktop View
-                   menu (desktop/main.js). -->
               <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-hide-shot" id="menu-hide-shot" data-keys="mod+alt+h" title="Collapse scenes marked Shot into a thin strip"><svg class="mi-icon" aria-hidden="true"><use href="#i-eye-off"/></svg><span class="mi-text"><span class="mi-label">Hide shot scenes</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
-              <!-- Shrinks the rundown strip under the header to a thin
-                   progress line — issue #178. A per-device view setting
-                   (localStorage "splitpage-rundown-min"), the same switch as
-                   the chevron on the strip itself; 05f-rundown.js keeps
-                   aria-checked. Mirrored in the desktop View menu. -->
               <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimise the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
-              <!-- Desktop app only (issue #86): the in-page twin of View ▸
-                   Present in Browser, which a Windows user cannot reach —
-                   the window's title bar is the tab strip, so there is no
-                   menu bar to open. toggleFileMenu() (18b-file-menu.js)
-                   unhides it whenever the bridge can hand the script to the
-                   browser; the native item clicks this same button
-                   (runDesktopMenuCommand, 20f-desktop.js). -->
               <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-browser" id="menu-present-browser" data-keys="mod+shift+p" data-keys-only="desktop" hidden title="Opens this script's teleprompter in your browser — Follow My Voice there listens through this app"><svg class="mi-icon" aria-hidden="true"><use href="#i-present"/></svg><span class="mi-text"><span class="mi-label">Present in browser (Follow My Voice)</span><span class="mi-why" hidden></span></span></button>
-              <!-- Desktop app only (issue #123): the in-page twin of View ▸ Use
-                   Chromium Speech Recognition — the same script in an
-                   installed Chromium browser whatever the default is, where
-                   Follow My Voice uses that browser's own recognition.
-                   Unhidden like the item above. -->
               <button type="button" role="menuitem" class="mi" data-file-action="prompter-open-in-chromium" id="menu-present-chromium" hidden title="Opens this script's teleprompter in Edge, Chrome or another Chromium browser, which follows your voice with its own speech recognition"><svg class="mi-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="mi-text"><span class="mi-label">Use Chromium Speech Recognition</span><span class="mi-why" hidden></span></span></button>
             </div>
           </div>
-          <!-- Help and the app's own settings: small, always at the bottom,
-               outside the scrolling list so they are never scrolled away. -->
           <div class="menu-foot" role="group" aria-label="Help and settings">
-            <!-- Settings (#181): the per-person preferences in one dialog
-                 (20s-settings.js, which catches this click first). -->
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="settings" id="menu-settings"><svg class="mi-icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="mi-label">Settings</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="help" data-keys="F1" data-keys-only="desktop"><svg class="mi-icon" aria-hidden="true"><use href="#i-help"/></svg><span class="mi-label">Help</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tour"><svg class="mi-icon" aria-hidden="true"><use href="#i-compass"/></svg><span class="mi-label">Tour</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="setup" title="Set up Splitpage…"><svg class="mi-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span class="mi-label">Set up</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="about" title="About Splitpage"><svg class="mi-icon" aria-hidden="true"><use href="#i-info"/></svg><span class="mi-label">About</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="tagging-help"><svg class="mi-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="mi-label">Tagging reference</span></button>
-            <!-- Browser build: takes history, bookmarks and prefs to the
-                 desktop app. 20f-desktop.js's initDesktop unhides the import
-                 entry there. -->
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="export-app-data" id="menu-export-app-data"><svg class="mi-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="mi-label">Export app data…</span></button>
             <button type="button" role="menuitem" class="mi mi-foot" data-file-action="import-app-data" id="menu-import-app-data" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="mi-label">Import app data…</span></button>
           </div>
@@ -347,32 +197,12 @@
       </div>
         <span class="topbar-rule" aria-hidden="true"></span>
         <input id="doc-title" class="doc-title" type="text" value="" aria-label="Script title" spellcheck="false">
-        <!-- Save is a status that is also the button (#169): "Saved 2 min
-             ago", "Unsaved changes", "Saving…" — click it to save. The words
-             come from updateSaveStatus() (12-dirty-toast.js), which writes
-             them onto #btn-save as data-status for the CSS to draw; the
-             button's own text stays "Save" / "Save •", which the writer's
-             Save button mirrors (invariant #20). #save-status is the same
-             words for a screen reader, `aria-live="polite"` so it hears
-             "Saved" without being interrupted mid-sentence. -->
         <div class="save-state">
           <span class="save-status" id="save-status" role="status" aria-live="polite" hidden></span>
           <button class="save-btn" id="btn-save" type="button" data-status="Save">Save</button>
         </div>
-        <!-- Who else is in this hosted document, filled in by 13a-presence.js
-             from /api/presence. Empty and hidden on a local document, and never
-             part of the document itself. -->
         <div class="presence-bar" id="presence-bar" hidden aria-label="Other people in this document"></div>
-        <!-- The document's facts that are not the clock: a review session,
-             an imported file, the shot count, and who you are. Quiet text,
-             one dot between each item that is showing, drawn in CSS
-             (.doc-meta in app.css) so a hidden item never leaves a stray
-             separator behind — and only in the room the title leaves. -->
         <div class="doc-meta">
-          <!-- Shown by 13-hosted.js's applyReviewMode() whenever this session was
-               joined with the review credential and a hosted document is open:
-               the fields are not editable and the server would refuse the save
-               anyway, so say which before anyone types. -->
           <div class="review-chip" id="review-chip" hidden
                title="You joined this session with the review code — you can read, present, export and comment, but not change the script">
             <svg class="review-chip-icon" aria-hidden="true"><use href="#i-eye"/></svg>
@@ -390,29 +220,11 @@
             <span class="identity-dot"></span><span id="identity-name">Anonymous</span>
           </button>
         </div>
-        <!-- The script's length at phone widths (#207, Adam's call): small
-             text at the right of the status line, where the rundown has no
-             room for it. The same figures as the label at the end of the
-             rundown (#runtime-chip), written by updateScriptStats(), and the
-             same popover on a click. Not shown on a wider screen. -->
         <button type="button" class="length-status" id="length-status"
                 title="The script's read time, from the Audio column — click to set your reading speed or a target length"><span class="rd-length-total">0:00</span><span class="rd-length-slot"></span></button>
       </div>
       <div class="toolbar">
-        <!-- Search or run a command (#175): a button shaped like a search
-             field that opens the command menu (18d-command-menu.js), the
-             same one Ctrl K and File ▸ Search commands… open — typing starts
-             in the menu's own box. Its key hint is the File menu's chip,
-             drawn from data-keys by 18b-file-menu.js. It gives way to a
-             magnifier when the row runs short (app.css, the header's
-             widths), and is a magnifier on the phone. -->
         <button class="btn cmdk-trigger" id="btn-command" type="button" title="Search or run a command" data-keys="mod+k"><svg class="btn-icon" aria-hidden="true"><use href="#i-search"/></svg><span class="btn-label">Search<span class="cmdk-trigger-more"> or run a command</span></span></button>
-        <!-- The four panels share one slot on the right; each is a quiet
-             toggle — icon, label, and its count in the mono — pressed while
-             its panel is open (syncPanelClass, 03-sync.js). Where the row
-             runs short (below 1250px, #174) the labels leave the screen but
-             not the button: .btn-label is then read to a screen reader and
-             shown as the tooltip, and the icon and the count stay. -->
         <div class="btn-group" role="group" aria-label="Panels">
           <button class="btn panel-toggle" id="btn-production" type="button" aria-pressed="false" title="Production"><svg class="btn-icon" aria-hidden="true"><use href="#i-tag"/></svg><span class="btn-label">Production</span><span class="comments-badge tag-badge" id="production-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-gear" type="button" aria-pressed="false" title="Gear: an equipment list, tagged with <gear> or its own quick-add box"><svg class="btn-icon" aria-hidden="true"><use href="#i-box"/></svg><span class="btn-label">Gear</span><span class="comments-badge tag-badge" id="gear-badge" hidden>0</span></button>
@@ -420,30 +232,15 @@
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
-        <!-- The one primary action, and the one tally-red thing in the
-             header: presenting is going live. -->
         <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
       </div>
     </div>
-    <!-- The rundown (#169): the script as blocks sized by read time on a
-         time ruler, drawn by 05f-rundown.js from state.rows. Clicking a
-         block goes to that scene. #rundown-overlay is the layer a line can
-         be placed on by time — a target length (#170) draws its line and
-         hatching there. -->
     <section class="rundown" id="rundown" aria-label="Rundown" hidden>
       <div class="rundown-ruler" aria-hidden="true"></div>
       <div class="rundown-track">
         <div class="rundown-blocks"></div>
         <div class="rundown-overlay" id="rundown-overlay" aria-hidden="true"></div>
         <div class="rundown-playhead" aria-hidden="true" hidden></div>
-        <!-- The script's length (#207): just after the last block, or at the
-             track's right edge when the script fills the strip — placed by
-             05f-rundown.js (rundownLengthPlace), written by
-             updateScriptStats() (01-scene-status.js). A click opens the
-             reading speed and target length (promptForWpm, 03-sync.js). The
-             slot after the total is empty until a target is set (#170):
-             then " / 2:00" and "0:25 left" (or "0:05 over") go there. It
-             was the program clock in the header (#169) and keeps its ids. -->
         <button type="button" class="rd-length" id="runtime-chip"
                 title="The script's read time, from the Audio column — click to set your reading speed or a target length"><span class="rd-length-total" id="runtime-total">0:00</span><span class="rd-length-slot" id="runtime-slot"></span></button>
       </div>
@@ -469,21 +266,13 @@
     </div>
   </div>
 
-  <!-- Shown only when the launcher reports an update; see 20a-update.js. -->
   <div class="update-bar" id="update-bar" hidden>
     <svg class="update-bar-icon" aria-hidden="true"><use href="#i-import"/></svg>
     <span id="update-bar-text"></span>
-    <!-- 20a-update.js owns this button entirely: whether it shows at all, its
-         label, and what it does. Label and handler both change with the state
-         (Download / Install and restart / Try again / Open release page), so
-         the text here is only what it reads before that runs. -->
     <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
     <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
-  <!-- Browser build only: an always-available, dismissable pointer at the
-       desktop app (20a-update.js renderDesktopAppNotice). Same class shape
-       as #update-bar so it reuses those rules and stacks the same way. -->
   <div class="update-bar" id="desktop-app-bar" hidden>
     <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
     <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
@@ -533,8 +322,6 @@
     </div>
   </div>
 
-  <!-- Column identity is the heading and a lamp, not a tint over the whole
-       column (#169): the page under the words is one calm surface. -->
   <div class="col-head">
     <div class="col-head-cell scene">Scene</div>
     <div class="col-head-cell visual"><span class="col-lamp" aria-hidden="true"></span>Visual</div>
@@ -554,14 +341,6 @@
 <input type="file" id="open-file-input" accept=".md,.splitpage,.html,.htm,.docx,.txt,.csv,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/csv" hidden>
 <input type="file" id="import-app-data-input" accept="application/json,.json" hidden>
 
-<!-- The phone's bottom bar (#169, B-Phone): the modes and panels under the
-     thumb, drawn only at phone width (app.css, the responsive block), where
-     the header keeps File, the title, its status line and Present. Each tab
-     clicks the header button named in data-for and mirrors the badge in
-     data-badge and the panel in data-panel (20k-phone-bar.js); Script
-     closes whichever panel covers the script. Gear is here as well as the
-     four the board draws: it is a panel like the others, and on a phone
-     this is the only place its button can be reached. -->
 <nav class="phone-bar" id="phone-bar" aria-label="Modes and panels">
   <button type="button" class="phone-tab" data-for="script" aria-current="page"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-script"/></svg></span><span class="phone-tab-label">Script</span></button>
   <button type="button" class="phone-tab" data-for="btn-write"><span class="phone-tab-glyph"><svg class="phone-tab-icon" aria-hidden="true"><use href="#i-pen"/></svg></span><span class="phone-tab-label">Write</span></button>
@@ -573,33 +352,14 @@
 <div id="toast-host"></div>
 <div class="tag-ghost-hint" id="tag-ghost" aria-hidden="true"></div>
 
-<!-- offered when a visual cell mentions something already in the breakdown
-     without labelling it; tabindex -1 because Tab is the accept key, not a
-     way to focus this -->
 <button class="tag-suggest" id="tag-suggest" type="button" tabindex="-1"></button>
 
-<!-- The tagging reference (#205): a non-modal card floating over the script,
-     docked bottom right clear of the side panels (a bottom sheet on a
-     phone), so it can be read while you tag. It sits outside #root on
-     purpose: nothing in the script's flow moves it (20i-topbar.js animates
-     every sibling below the header). Opened by showTaggingHelp() and closed
-     by hideTaggingHelp() (10-comments.js); 20c-help.js adds the full-guide
-     link to its foot.
-
-     The example tags are .tag-sample, not .tag-anchor: they share the
-     script's tag rules in app.css (the same --tag-* tokens), so they cannot
-     drift from what a tag looks like, but nothing that reads tags out of the
-     page (the breakdown, find, exports, counts, a click in the script) ever
-     sees them. -->
 <section class="tagging-help" id="tagging-help" role="dialog" aria-labelledby="tagging-help-title" tabindex="-1" hidden>
   <div class="tagging-help-head">
     <h2 class="tagging-help-title" id="tagging-help-title">Tagging reference</h2>
     <button type="button" class="modal-close" id="tagging-help-dismiss" aria-label="Close the tagging reference" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <div class="tagging-help-body">
-    <!-- Every way to type a tag, a category at a time (Adam, 2026-09-28:
-         the word forms, #210, were only named in a sentence, and Cast and
-         Music/SFX looked as if they could only be picked from Tag) -->
     <h3 class="tagging-help-label">Type brackets round the words</h3>
     <ul class="tagging-help-list">
       <li class="tagging-help-row"><code>[gaffer tape]</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
@@ -635,11 +395,6 @@
     <span class="tagging-help-sub">File ▸ Tagging reference brings this back</span>
   </div>
 </section>
-<!-- an open plain-language tag ("VFX:" typed in a visual cell, #210):
-     which category Tab will wrap the words in. A tap (or click) on it
-     closes the tag as Tab would, for a phone with no Tab key; tabindex -1
-     because Tab is the key, not a way to focus this, and it takes neither
-     the focus nor the caret (pointerdown, 21-events.js) -->
 <button class="tag-suggest tag-open-hint" id="tag-open-hint" type="button" tabindex="-1"></button>
 
 <div class="modal-backdrop" id="import-modal" hidden>
@@ -649,10 +404,6 @@
       <button type="button" class="modal-close" id="import-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. One column becomes Audio text; a table with two columns (or VISUAL:/AUDIO: lines) is split into Visual and Audio. This keeps the document you are in — its breakdown, cast, b-roll and comments stay — so use it to bring in a revised draft. File ▸ Open starts a new document instead.</p>
-    <!-- Opened from the New Tab page (issue #144), where there is no
-         document of the user's to keep: the import becomes a new one.
-         11-import.js puts .is-new-document on #import-modal, which swaps
-         this hint in for the one above and hides "Replace existing rows". -->
     <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. One column becomes Audio text; a table with two columns (or VISUAL:/AUDIO: lines) is split into Visual and Audio.</p>
     <textarea id="import-textarea" aria-label="Script to import" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
@@ -665,10 +416,6 @@
       </div>
     </div>
     <div class="modal-preview" id="import-preview">Paste some text to see a preview.</div>
-    <!-- "What should Splitpage look for in this script?" — one checkbox per
-         entry in IMPORT_SCANS (11-import.js), built there rather than written
-         out here, so a second kind of tag to detect on the way in is an entry
-         in that list and nothing else. -->
     <div class="import-scan-group" role="group" aria-labelledby="import-scan-title">
       <div class="import-scan-title" id="import-scan-title">What should Splitpage look for in this script?</div>
       <div id="import-scan-options"></div>
@@ -683,34 +430,19 @@
   </div>
 </div>
 
-<!-- The command menu (issue #147): Ctrl/Cmd+K, or File ▸ Search commands…
-     on a keyboard with no Ctrl. A search box over the script that finds
-     every File-menu command, each export format, the panels, Write and
-     Present by name or by a word for them, and runs the same handler the
-     menu or the button does. 18d-command-menu.js builds the list. -->
 <div class="cmdk-backdrop" id="cmdk" hidden>
   <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Search commands">
     <div class="cmdk-input-row">
       <svg class="cmdk-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
       <input type="text" id="cmdk-input" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Search commands…" aria-label="Search commands">
       <kbd class="cmdk-esc" aria-hidden="true">Esc</kbd>
-      <!-- A touch screen has no Esc and the menu fills it: the close the
-           other dialogs have, drawn only there (app.css). -->
       <button type="button" class="modal-close cmdk-close" id="cmdk-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
     <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Commands"></div>
-    <!-- B-Command's footer (#169): the arrow keys' caps hold the sprite's
-         arrows rather than "↑"/"↓" glyphs -->
     <div class="cmdk-foot" aria-hidden="true"><span><span class="cmdk-foot-keys"><kbd class="cmdk-arrow"><svg aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg></kbd><kbd class="cmdk-arrow"><svg aria-hidden="true" focusable="false"><use href="#i-arrow-down"/></svg></kbd></span>to move</span><span><kbd>Enter</kbd>to run</span><span><kbd>Esc</kbd>to close</span></div>
   </div>
 </div>
 
-<!-- File ▸ Export… (issue #146): one dialog in place of thirteen menu items.
-     The format cards and the options are built by 18c-export-dialog.js from
-     its EXPORT_FORMATS table; what the Export button runs is the matching
-     hidden <button data-file-action="export-…"> in #file-menu, so the
-     dialog, the desktop native menu and the command menu all reach one code
-     path. -->
 <div class="modal-backdrop" id="export-modal" hidden>
   <div class="modal-panel export-panel" role="dialog" aria-modal="true" aria-labelledby="export-title">
     <div class="export-head">
@@ -764,16 +496,7 @@
   </div>
 </div>
 
-<!-- The teleprompter (#169, Direction B, boards/B-Prompter). Nothing in the
-     reading area but the words being read (Adam's decision): no scene
-     numbers, no shot lines, no icons between paragraphs, just a gap where a
-     scene changes. Where the reading is and every control live outside the
-     text, in the top bar and the foot. -->
 <div class="prompter" id="prompter" hidden>
-  <!-- Where the reading is: the scene and where it starts, the time read
-       and the time left (the script's own read time, as the program clock
-       counts it), and what Follow My Voice is doing. Written by
-       updatePrompterStatus() and setVoiceStatus() (20-teleprompter.js). -->
   <div class="prompter-top">
     <div class="pp-where">
       <span class="pp-scene-pos" id="pp-scene-pos" aria-hidden="true"></span><span class="pp-sr" id="pp-scene-pos-sr"></span>
@@ -783,8 +506,6 @@
       <span class="pp-elapsed" id="pp-elapsed">00:00</span>
       <span class="pp-remaining" id="pp-remaining"></span>
     </div>
-    <!-- The tally lamp lights only while it is listening; the name shows
-         only when there is something to say. -->
     <div class="pp-voice-state" id="pp-voice-state">
       <span class="pp-lamp" aria-hidden="true"></span>
       <span class="pp-voice-name">Follow My Voice</span>
@@ -792,12 +513,6 @@
     </div>
   </div>
   <div class="prompter-viewport">
-    <!-- A sibling of the scroller, not a child: #prompter-scroll is what
-         Mirror/Flip transform, and the reading line has to stay put and
-         right-side-up while only the text behind it flips. It comes first
-         so the band paints under the words. The guide itself is the 1px
-         reading line at the middle; the band hangs below it, one line of
-         text tall, because a cued line's top sits on the guide. -->
     <div class="prompter-guide" aria-hidden="true">
       <div class="prompter-band"><svg class="pp-pointer" viewBox="0 0 22 26" aria-hidden="true"><path d="M0 0L22 13L0 26z"/></svg></div>
     </div>
@@ -806,18 +521,12 @@
     </div>
   </div>
   <div class="prompter-foot">
-    <!-- The running order: a block per scene sized by its read time, the
-         part read filled, the playhead where the reading is. -->
     <div class="pp-rundown" id="pp-rundown" role="progressbar" aria-label="Running order" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
       <div class="pp-rd-track" id="pp-rd-track"></div>
     </div>
     <div class="prompter-bar">
       <div class="pp-group pp-transport">
         <button id="pp-play" type="button" class="pp-play" title="Play or pause (Space)"><svg class="pp-icon" aria-hidden="true"><use href="#i-play"/></svg><span class="pp-sr">Play</span></button>
-        <!-- Speed and Size are steppers now (#169). The range inputs stay,
-             hidden, as the value the app and the suites read and set; the
-             steppers and ↑/↓ write them through setPrompterSpeed() and
-             stepPrompterSize(). -->
         <div class="pp-step">
           <span class="pp-step-label" id="pp-speed-label">Speed</span>
           <div class="pp-stepper" role="group" aria-labelledby="pp-speed-label">
@@ -839,17 +548,12 @@
       </div>
       <div class="div-sep" aria-hidden="true"></div>
       <div class="pp-group pp-modes">
-        <!-- Scene mode (issue #26): off by default, remembered per device
-             (20-teleprompter.js). Prev/Next/readout only show once it's on —
-             updatePrompterSceneModeUI() toggles their `hidden`. -->
         <button id="pp-scene-mode" type="button" class="pp-btn" aria-pressed="false" title="Cue and auto-pause one scene at a time"><svg class="pp-icon" aria-hidden="true"><use href="#i-scene-mode"/></svg>Scene mode</button>
         <div class="pp-stepper pp-scene-step" id="pp-scene-step" hidden>
           <button id="pp-scene-prev" type="button" class="pp-step-btn" aria-label="Previous scene" title="Previous scene (←)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
           <span id="pp-scene-readout" class="pp-scene-readout" hidden></span>
           <button id="pp-scene-next" type="button" class="pp-step-btn" aria-label="Next scene" title="Next scene (→)" hidden><svg class="pp-icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
         </div>
-        <!-- The label is its own span: the icon and the lamp stay when
-             updateVoiceButtonUI() changes what it says. -->
         <button id="pp-voice" type="button" class="pp-btn"><svg class="pp-icon" aria-hidden="true"><use href="#i-mic"/></svg><span class="pp-lamp" aria-hidden="true"></span><span class="pp-voice-label">Follow My Voice</span></button>
         <button id="pp-skip-shot" type="button" class="pp-btn" aria-pressed="false" title="Leave out the scenes already marked Shot"><svg class="pp-icon" aria-hidden="true"><use href="#i-eye-off"/></svg>Skip shot</button>
       </div>
@@ -880,8 +584,6 @@
     </span>
     <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
-    <!-- Close beside Save, and the tools under this row (Adam, 2026-09-28:
-         where the script keeps them — its toolbar sits above the text) -->
     <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">
@@ -913,9 +615,6 @@
       <h2 id="comment-title">Add a comment</h2>
       <button type="button" class="modal-close" id="comment-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <!-- The thread card's language (#169): the words in the script face with
-         the comment's amber dotted underline, fields outlined at rest, the
-         format toolbar as the script's icons. -->
     <div class="comment-modal-quote" id="comment-modal-quote"></div>
     <label class="comment-field-label" for="comment-name">Your name</label>
     <div class="comment-name-row">
@@ -969,8 +668,6 @@
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="file-conflict-cancel">Cancel</button>
         <button type="button" class="btn" id="file-conflict-reload">Load the newer file</button>
-        <!-- Shown only once the copy on disk has been read back as a
-             document there is something to merge with (18a-local-merge.js). -->
         <button type="button" class="btn" id="file-conflict-merge" hidden>Merge them</button>
         <button type="button" class="btn" id="file-conflict-copy">Save as a copy</button>
         <button type="button" class="btn btn-accent" id="file-conflict-overwrite">Overwrite it</button>
@@ -979,10 +676,6 @@
   </div>
 </div>
 
-<!-- Every field the two versions disagree about, side by side, BEFORE
-     mergeStates() runs and before anything is written (18a-local-merge.js).
-     Opens over the conflict modal, so Cancel puts its four original choices
-     straight back with nothing changed. -->
 <div class="modal-backdrop" id="merge-review-modal" hidden>
   <div class="modal-panel merge-review-panel" role="dialog" aria-modal="true" aria-labelledby="merge-review-title">
     <div class="modal-header">
@@ -1001,11 +694,6 @@
   </div>
 </div>
 
-<!-- A .md project whose scene table gained or lost rows somewhere else.
-     There is no right answer to guess at, so it is asked (20d-formats.js). -->
-<!-- a scene's gallery, all of it (#135, 05e-gallery-overlay.js fills #gallery-body).
-     Direction B (#169, B-GalleryDialog): the title with its counts beside
-     it on one line and an icon close; the body is the module's. -->
 <div class="modal-backdrop scene-gallery-overlay" id="gallery-modal" hidden>
   <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title" aria-describedby="gallery-summary">
     <div class="scene-gallery-head">
@@ -1024,14 +712,6 @@
   </div>
 </div>
 
-<!-- Drawing on a picture in a scene's gallery (05w-annotate.js), opened by
-     the gallery's Annotate button and laid over the whole window, the
-     gallery still open under it: the tools across the top, the picture's
-     original fitted to the stage with the marks on a canvas over it. The
-     colour swatches are the module's (ANNOTATION_COLORS, 02d-gallery.js),
-     so the six colours a mark may have are written down once. Every
-     button is its own tab stop; the tool, colour and size buttons say
-     which is picked with aria-pressed. -->
 <div class="modal-backdrop annotate-overlay" id="annotate-modal" hidden>
   <div class="modal-panel annotate-panel" role="dialog" aria-modal="true" aria-labelledby="annotate-title">
     <div class="annotate-bar">
@@ -1095,8 +775,6 @@
     <h2>Production breakdown</h2>
     <button type="button" class="modal-close" id="production-close" aria-label="Close Production"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <!-- #169 (B-PanelProduction): the groupings as text tabs, the CSV
-       export as an outlined button, one hairline under both. -->
   <div class="panel-tabbar">
     <div class="panel-tabs" id="production-modes" role="radiogroup" aria-label="Group the breakdown by">
       <button type="button" class="panel-tab" data-group="cat" role="radio" aria-checked="true">Category</button>
@@ -1106,11 +784,7 @@
     </div>
     <button type="button" class="btn-outline is-small" data-action="export-breakdown" title="Export this breakdown as a spreadsheet" aria-label="Export this breakdown as a spreadsheet (CSV)"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>CSV</button>
   </div>
-  <!-- Only rendered while something is selected. Sits outside #production-list
-       so it stays pinned while the list scrolls under it. -->
   <div class="bulk-bar" id="production-bulk" hidden></div>
-  <!-- What each value in a row is (Adam's review). Shown for the two
-       groupings drawn as rows, Category and Person (renderProductionList). -->
   <div class="tag-col-labels" id="production-cols" aria-hidden="true" hidden>
     <span>Item</span><span>Status</span><span>Scenes</span><span>Owner</span>
   </div>
@@ -1120,14 +794,12 @@
 <div class="comments-panel" id="gear-panel" hidden>
   <div class="comments-panel-resize-handle" id="gear-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
   <div class="comments-panel-head">
-    <!-- "Gear · 2 items" (#169, B-PanelGear); the count is renderGearList's -->
     <div class="gear-head-title">
       <h2>Gear</h2>
       <span class="gear-head-count" id="gear-head-count" hidden></span>
     </div>
     <button type="button" class="modal-close" id="gear-close" aria-label="Close Gear"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <!-- #169: the groupings as text tabs and a quiet Packing list button -->
   <div class="panel-tabbar">
     <div class="panel-tabs" id="gear-modes" role="radiogroup" aria-label="Group gear by">
       <button type="button" class="panel-tab" data-group="flat" role="radio" aria-checked="true">List</button>
@@ -1136,10 +808,6 @@
     <button type="button" class="gear-packing-btn" data-action="export-packing-gear" title="Export a printable packing list" aria-label="Packing list: export a printable PDF"><svg aria-hidden="true" focusable="false"><use href="#i-export"/></svg>Packing list</button>
   </div>
   <div class="comments-list" id="gear-list"></div>
-  <!-- Bulk-adds or edits the gear list directly, whether or not any of it is
-       actually typed into the script — see applyGearQuickAdd(). Pre-filled
-       with the current list every time the panel opens. At the panel's foot
-       since #169, under the list it edits. -->
   <div class="gear-quickadd">
     <label for="gear-quickadd-input">Add gear — one item per line</label>
     <textarea id="gear-quickadd-input" rows="3" placeholder="24-70mm lens&#10;Wireless lav&#10;C-stand" aria-describedby="gear-quickadd-hint"></textarea>
@@ -1152,36 +820,24 @@
 
 <div class="comments-panel broll-panel" id="broll-panel" hidden>
   <div class="comments-panel-resize-handle" id="broll-panel-resize-handle" title="Drag to resize, double-click to reset"></div>
-  <!-- B-BrollCalm (#169): the title, "1 of 3 shot" and a small bar on one
-       line, then Open as a full page and Close. -->
   <div class="comments-panel-head">
     <div class="broll-head-main">
       <h2>B-roll</h2>
-      <!-- the count and the bar: drawn by renderBroll() (08d-broll-panel.js) -->
       <div class="broll-summary" id="broll-summary"></div>
     </div>
     <button type="button" class="broll-head-btn" id="broll-open-page" data-action="broll-open-page"
       title="Open as a full page" aria-label="Open as a full page"><svg aria-hidden="true" focusable="false"><use href="#i-expand"/></svg></button>
     <button type="button" class="modal-close" id="broll-close" aria-label="Close B-roll"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <!-- The filter tabs and the group menu: drawn by renderBroll()
-       (08d-broll-panel.js), since every count in them moves. -->
   <div class="panel-tabbar broll-controls" id="broll-controls"></div>
   <div class="comments-list broll-list" id="broll-list"></div>
-  <!-- Only there while shots are selected: pinned under the list. -->
   <div class="broll-bulk" id="broll-bulk" hidden></div>
-  <!-- A shot nobody has written a scene for yet is an ordinary thing to
-       want on the list — see addBrollFromPanel(). The placeholder carries
-       the other way in, so the foot is one line (#169). -->
   <div class="broll-add" id="broll-add">
     <input type="text" id="broll-add-input" maxlength="200" placeholder="Add a shot — or start a Visual line with B-roll:" aria-label="Add a shot">
     <button type="button" class="btn-outline is-small" id="broll-add-save">Add</button>
   </div>
 </div>
 
-<!-- The b-roll shot list as a full page over the script (#150,
-     08d-broll-panel.js): the table, the filter chips and the summary are
-     drawn by renderBrollPage(). -->
 <div class="broll-page" id="broll-page" role="dialog" aria-modal="true" aria-labelledby="broll-page-title" hidden>
   <div class="broll-page-inner">
     <div class="broll-page-top">
@@ -1242,11 +898,6 @@
       computer and upload files to it — separate from opening and saving your script. You sign in once, in
       your own browser; Splitpage keeps the sign-in, never your password.</p>
 
-    <!-- Desktop app only (issue #10): shown when no OAuth client is configured.
-         The desktop app signs in through a loopback redirect, so it needs a
-         Desktop-type client ID from Google Cloud, which only whoever owns the
-         Google Cloud project can create. The path and variable names are
-         filled in from the desktop shell's own answer. -->
     <div id="drive-desktop-setup" hidden>
       <p class="modal-hint">Google Drive needs a Google Cloud <strong>OAuth client ID</strong> of type
         <strong>Desktop app</strong>, with the Google Drive API enabled. Put it in a file at</p>
@@ -1349,7 +1000,6 @@
     <button type="button" class="modal-close" id="history-close" aria-label="Close Version history"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <p class="history-subtitle" id="history-subtitle">Snapshots of this document, kept before anything that could overwrite your work.</p>
-  <!-- One scrolling column under the subtitle (#169): the days, Older, then the usage line. -->
   <div class="history-scroll">
     <div class="history-list" id="history-list"></div>
     <details id="history-older" class="history-older" hidden>
@@ -1367,10 +1017,6 @@
     <h2>Comments</h2>
     <button type="button" class="modal-close" id="comments-panel-close" aria-label="Close Comments"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
-  <!-- Filters (#169): Open / Resolved / All as the panels' text tabs, then
-       who it's assigned to and the sort as outlined menus. Both are real
-       selects; their labels are for screen readers, the chosen option is
-       what shows. -->
   <div class="panel-tabbar comments-filterbar">
     <div class="panel-tabs comment-filter-seg" id="comments-filter-seg" role="radiogroup" aria-label="Filter comments">
       <button type="button" class="panel-tab" data-filter="open" role="radio" aria-checked="true">Open<span class="filter-count" id="comments-filter-count-open">0</span></button>
@@ -1396,10 +1042,6 @@
   <div class="comments-list" id="comments-list"></div>
 </div>
 
-<!-- Rendered from docs/help.md at build time by mdToHtml() in build.mjs — see
-     20c-help.js for openHelp()/startTour(). A modal, not a side panel: it
-     covers the whole screen and owns focus (invariant #19), and opening it
-     closes the side panels (invariant #16) the same way the writer does. -->
 <div class="modal-backdrop" id="help-modal" hidden>
   <div class="modal-panel help-panel" role="dialog" aria-modal="true" aria-labelledby="help-title">
     <div class="modal-header">
@@ -1413,10 +1055,6 @@
   </div>
 </div>
 
-<!-- The 5-step coach-mark tour (20c-help.js). One fixed overlay reused for
-     every step: a cut-out div sits over the current target's own rect, and
-     the card is repositioned beside it. Never edits the document
-     (invariant #17). -->
 <div class="tour-overlay" id="tour-overlay" hidden>
   <div class="tour-cutout" id="tour-cutout"></div>
   <div class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
@@ -1434,10 +1072,6 @@
   </div>
 </div>
 
-<!-- ===== connecting to a server (20e-connect.js) =====
-     Two dialogs: the code a shared session may ask for, and the list of
-     servers this browser knows about. Nothing here is ever part of a
-     document — see the note on browser state at the top of 13-hosted.js. -->
 
 <div class="modal-backdrop" id="about-modal" hidden>
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="about-title">
@@ -1493,17 +1127,7 @@
       key; a join PIN is kept only for as long as this tab is open unless you ask otherwise.</p>
 
     <div class="connect-current" id="connect-current"></div>
-    <!-- Desktop-only: filled in and shown by 20f-desktop.js's
-         renderDesktopShareInfo() whenever this launch is hosting others —
-         the same address/PIN/caution start.mjs used to print to a console
-         window this app doesn't have. Never touches state, localStorage or
-         anything served (invariant #29) — it lives only in this element. -->
     <div class="connect-current" id="desktop-share-info" hidden></div>
-    <!-- The read-and-comment-only address for this session, filled in by
-         20e-connect.js's renderReviewLink() when the launch was given a
-         review credential (--review-pin / --share-readonly) and this browser
-         is an editor here. The key it carries belongs to this launch and is
-         never stored anywhere. -->
     <div class="connect-current" id="connect-review" hidden></div>
     <div class="connect-list" id="connect-list"></div>
 
@@ -1563,29 +1187,9 @@
   </div>
 </div>
 
-<!-- ===== the New Tab page (20j-newtab.js) =====
-     What a new desktop tab (and a fresh copy in the browser) lands on
-     instead of the seeded demo: a start screen (issue #144). Not a modal —
-     an opaque full-page layer under the modals, so the first-run wizard
-     still shows over it. Showing it changes no state; only a card (Blank
-     script or a starter), an open, a drop or a paste replaces the
-     document.
-
-     The starter cards are built from STARTERS (_starters.js) by
-     20j-newtab.js, into #newtab-cards after Blank script, so a fourth
-     starter is a JSON file and a line in that list. Icons are the sprite's
-     (#169), drawn in currentColor, so they follow the theme.
-
-     Direction B's "On air" start page (#169, board B-StartOnAir): the band
-     under the bar is a slate — the programme clock at 00:00, a tally lamp
-     and "New script" — and, when the desktop app has a recent script, its
-     title, when it was last open, and Continue. Recent and Join sit side
-     by side under the starters. -->
 <div class="newtab-page" id="newtab-page" hidden>
   <header class="newtab-bar">
     <span class="newtab-wordmark">
-      <!-- The mark (#169): the sprite's #i-mark, the same copy the
-           header's File button draws. -->
       <svg class="newtab-wordmark-mark" width="22" height="22" aria-hidden="true"><use href="#i-mark"/></svg>
       Splitpage
     </span>
@@ -1602,9 +1206,6 @@
   </header>
 
   <div class="newtab-inner" role="group" aria-labelledby="newtab-title">
-    <!-- The slate. The clock is a picture of a script that hasn't started
-         (nothing here is timed), so it is hidden from a screen reader; the
-         heading is what names the page. -->
     <section class="newtab-band" id="newtab-band">
       <div class="newtab-wrap">
         <div class="newtab-slate">
@@ -1614,16 +1215,9 @@
               <span class="newtab-lamp" aria-hidden="true"></span>
               <h2 class="newtab-title" id="newtab-title">New script</h2>
             </div>
-            <!-- Shown with the Continue row below and only then: with nothing
-                 to carry on, the band is the clock, the lamp and the heading. -->
             <p class="newtab-sub" hidden>Pick a layout, or carry on where you left off.</p>
           </div>
         </div>
-        <!-- The most recent script (desktop only; renderContinue in
-             20j-newtab.js). Its title and when it was last open — not its
-             rundown: a recent entry carries no scenes, and drawing them
-             would mean reading the file before anyone asked to open it.
-             Continue is the same open a Recent row makes. -->
         <div class="newtab-continue" id="newtab-continue" hidden>
           <div class="newtab-continue-text">
             <span class="newtab-continue-title" id="newtab-continue-title"></span>
@@ -1649,10 +1243,6 @@
       </div>
 
       <div class="newtab-main">
-        <!-- Recent documents (issue #15). DESKTOP ONLY: the list lives in the
-             main process (desktop-state.json, contract DESKTOP-RECENTS), and
-             the browser build has no equivalent, so this stays hidden there
-             and Join has the row to itself. -->
         <section class="newtab-recents" id="newtab-recents" aria-labelledby="newtab-recents-label" hidden>
           <div class="newtab-recents-head">
             <h3 class="newtab-label" id="newtab-recents-label">Recent</h3>
@@ -1661,7 +1251,6 @@
           <div class="newtab-recents-list" id="newtab-recents-list"></div>
         </section>
 
-        <!-- The same Servers dialog as the bar's "Join a shared session". -->
         <section class="newtab-join" aria-labelledby="newtab-join-title">
           <div class="newtab-join-copy">
             <h3 class="newtab-join-title" id="newtab-join-title">Join a shared session</h3>
@@ -1671,8 +1260,6 @@
         </section>
       </div>
 
-      <!-- The whole page takes a dropped file (20j-newtab.js); this is where
-           it says so, and it lights up while one is dragged over the page. -->
       <div class="newtab-drop" id="newtab-drop">
         <svg class="nt-icon newtab-drop-icon" aria-hidden="true"><use href="#i-import"/></svg>
         <div class="newtab-drop-text">
@@ -1687,9 +1274,6 @@
         <a href="#" data-newtab-action="dismiss">Look at the example script</a>
         <span class="newtab-foot-sep" aria-hidden="true">·</span>
         <a href="#" data-newtab-action="long-demo">Open the long demo (30 scenes)</a>
-        <!-- Browser build only: hidden by 20j-newtab.js whenever the desktop
-             bridge is there. The link is desktopAppUrl() (20a-update.js), the
-             same page the desktop-app notice points at. -->
         <span class="newtab-desktop" id="newtab-desktop">
           <svg class="nt-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
           <span>Want its own window and unlimited version history?</span>
@@ -1700,12 +1284,6 @@
   </div>
 </div>
 
-<!-- ===== first-run setup wizard (20b-onboarding.js) =====
-     Shown once, only over a pristine copy of the app (invariant #30). File ▸
-     "Set up Splitpage…" reopens it without touching the key that keeps it
-     from auto-showing again. Never edits the document (invariant #17):
-     everything here is browser state or a command to run, same as
-     13-hosted.js / 20e-connect.js. -->
 <div class="modal-backdrop" id="onboarding-modal" hidden>
   <div class="modal-panel onboard-panel" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="modal-header">

@@ -1,19 +1,3 @@
-/* Whole scenes on the clipboard (#204, src/js/05g-scene-clip.js): what a
- * copy or a cut of a scene selection puts on the clipboard, what a paste
- * reads back, and what it does to the document it lands in.
- *
- * Everything in a scene comes along (Adam's decision on #204): both
- * columns, status, a length set by hand, the gallery, the comments on it,
- * the b-roll records for its keys, the breakdown's entries for its tags,
- * the owners those name, and the picture bytes up to a cap. A paste gets
- * fresh ids for everything the document could already have — rows,
- * comments, replies, a b-roll key whose id is taken — except the move a
- * cut and its paste in the same tab and document make. And a paste is one
- * undo entry.
- *
- * The gesture, the highlight, the real ClipboardEvents and the undo stack
- * in a page are browser suite 190-scene-select.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -43,7 +27,6 @@ const tag = (cat, name) => `<span class="tag-anchor" data-tag-cat="${cat}" data-
 const key = (id) => `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
 const img = (ref) => `<img class="comment-img" data-blob="${ref.sha256}" data-w="${ref.width}" data-h="${ref.height}" data-mime="${ref.mime}">`;
 
-/* a source document: four scenes, the middle two copied */
 function source() {
   return migrateRows({
     schema: 2, title: "Harbour film",
@@ -133,8 +116,6 @@ test("the plain text is labelled two-column text File > Paste a script reads bac
   assert.equal(out.text, "Visual: Wide of the Harbour\nB-roll: gulls at dawn\nAudio: Every morning the town wakes.\n\n" +
     "Visual: Mara with the Kettle\nAudio: She has mended nets.");
   assert.equal(detectTwoColumnFormat(out.text), "labels");
-  /* (a "B-roll:" line is a label of its own to the importer, so a scene
-     holding one reads back as two there — its heuristic, not this text's) */
   const plain = buildScenePayload(source(), ["r1", "r3"]).text;
   const back = parseImportRows(plain, "twocolumn");
   assert.equal(back.length, 2);
@@ -182,7 +163,6 @@ test("a payload is untrusted: only ours is read, every cell sanitised, every pic
     comments: [{ id: "k", rowId: "x", body: "<iframe src=//evil></iframe>ok" }],
     blobs: { [P1.sha256]: dataUrlForSync(other.sha256), nothex: dataUrlForSync(P2.sha256) }
   }));
-  /* the sanitiser keeps a script's words as words, never the element */
   assert.ok(!/<script|<img|onerror/.test(evil.rows[0].visualText), evil.rows[0].visualText);
   assert.ok(evil.rows[0].visualText.indexOf("hi") === 0);
   assert.ok(evil.rows[0].audioText.indexOf("javascript:") === -1);
@@ -206,7 +186,6 @@ test("a copy pasted into another document: every id its own, the details that be
   assert.equal(pasted.imageRef.sha256, P1.sha256);
   assert.equal(pasted.moreImages[0].imageRef.sha256, P2.sha256);
   assert.equal(pasted.imageLinks.length, 1);
-  /* comments: fresh ids, the anchors in the words renamed with them */
   const cs = S.state.comments;
   assert.equal(cs.length, 3);
   assert.ok(cs.every((x) => /new/.test(x.id) && x.anchorId === x.id), "fresh ids, anchor = id");
@@ -218,16 +197,13 @@ test("a copy pasted into another document: every id its own, the details that be
   assert.ok(morning.body.indexOf(P3.sha256) !== -1, "a comment's picture comes with it");
   assert.equal(cs.find((x) => x.quotedText === "mended").resolved, true);
   assert.equal(cs.find((x) => x.field === "visualImage").rowId, "rnew2", "a picture comment follows its scene");
-  /* b-roll: the key's id is free here, so it keeps it and brings its record */
   assert.ok(pasted.visualText.indexOf('data-broll-id="bs1"') !== -1);
   assert.deepEqual(res.broll, { kept: ["bs1"], minted: [] });
   const shot = S.state.brollShots.find((b) => b.id === "bs1");
   assert.equal(shot.status, "shot");
   assert.equal(shot.notes, "Got it on day 2");
-  /* owners matched by name, added when missing */
   const ada = S.state.people.find((p) => p.name === "Ada");
   assert.ok(ada && shot.owner === ada.id);
-  /* the breakdown: missing entries added with their details; ours kept */
   const harbour = S.state.productionTags.find((t) => t.name === "Harbour");
   assert.equal(harbour.status, "sourcing");
   assert.equal(harbour.notes, "Ask the harbour master.");
@@ -297,7 +273,6 @@ test("a move whose rows came back meanwhile (the cut undone) is a copy where it 
   assert.equal(new Set(ids).size, ids.length);
   const keys = S.state.rows.map((r) => (r.visualText.match(/data-broll-id="([^"]+)"/) || [])[1]).filter(Boolean);
   assert.equal(new Set(keys).size, keys.length, "never two keys with one id");
-  /* and its comment is a copy of its own, not a second mark of the original */
   const copyCmts = commentIds(fromHtml(S.state.rows[4].audioText));
   assert.equal(copyCmts.length, 1);
   assert.notEqual(copyCmts[0], "c1");
@@ -305,7 +280,6 @@ test("a move whose rows came back meanwhile (the cut undone) is a copy where it 
   setLiveCut(null);
 });
 
-/* which rows mark each comment, over the whole document */
 const markedIn = (state) => {
   const out = {};
   state.rows.forEach((r) => ["visualText", "audioText"].forEach((f) => {
@@ -324,14 +298,12 @@ test("the live cut follows undo: the move's paste undone, the next paste is the 
   history.record(diffStates(base, S.state), Date.now());
   const c = clip(built);
   assert.equal(isMove(c, S.state), true);
-  /* pasted in the wrong place */
   base = JSON.parse(JSON.stringify(S.state));
   n = 0;
   insertScenes(c, { afterRowId: "r4", move: isMove(c, S.state), mint });
   history.record(diffStates(base, S.state), Date.now());
   assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r4", "r2", "r3"]);
   assert.equal(isMove(c, S.state), false, "its scenes are back: another paste is a copy");
-  /* taken back, and pasted in the right place: the move, as before */
   assert.equal(history.undo(S.state).ok, true);
   assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r4"]);
   assert.equal(isMove(c, S.state), true, "the undo put the cut back");

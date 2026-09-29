@@ -1,23 +1,3 @@
-/* The b-roll list on the document model (#85, docs/DOCUMENT-MODEL.md §10
- * steps 3 and 4): reading the "B-roll:" lines out of a visual cell, giving
- * an unanchored line its key, and renaming a shot's line (08c-broll.js).
- *
- * All three used to parse the stored HTML. The old code is kept here
- * verbatim as the reference, and the new one is checked against it over
- * stored-shaped cells (_stored-cells.mjs) and cells written the way b-roll
- * lines come in — typed keys, pasted and imported plain-text markers, keys
- * and markers inside formatting, comments and links. The reader must give
- * exactly what it gave; the edits must leave the cell reading exactly as
- * the old ones left it.
- *
- * And one thing the old pass never did: a key repeating an id an earlier
- * line holds (a copy pasted before a paste gave keys ids of their own) is
- * given one of its own; and the record a paste makes for its keys.
- *
- * And the props a shot needs (#149): the prop tags on its own lines, the
- * ones added to it by hand, a rename in the breakdown carrying through,
- * and the exports that list the shots each prop is needed for.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -38,11 +18,7 @@ import { sceneFacts } from "../js/14b-export-kit.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 brollInit();
-/* the printed shot list says where each scene starts (rowSeconds, which
-   counts words) */
 initStatus();
-
-/* ---- the old code, verbatim but for its imports ---- */
 
 function brollFieldLines(body) {
   hoistNestedBrs(body);
@@ -159,7 +135,6 @@ function brollWrapLineMarker(body, line, id) {
   });
   return true;
 }
-/* anchorBrollInRows for one cell, the id for each unanchored ordinal given */
 function oldAnchor(html, idFor) {
   var body = inertBody(html);
   var ordinal = -1, n = 0;
@@ -195,13 +170,8 @@ function oldRename(html, ordinalWanted, id, newName) {
   return sanitizeHtml(body.innerHTML);
 }
 
-/* ---- cells ---- */
-
 const KEY = (id) => `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
 
-/* Visual cells the way b-roll lines arrive: typed keys, plain-text markers
-   in every spelling (pasted, imported, round-tripped through Markdown),
-   indentation, and any of it inside formatting, comments, links and tags. */
 function brollCell(r) {
   const pieces = ["B-roll:", "b roll -", "  B-Roll — ", "the gulls", " ", "  ", "drone", "B-roll", "x: y", "&nbsp;", "é"];
   let h = "";
@@ -239,8 +209,6 @@ const BROLL_CELLS = (() => {
   return out;
 })();
 
-/* ---- reading ---- */
-
 test("reading: every stored cell and every b-roll cell reads exactly as the HTML reader read it", () => {
   let markers = 0, keyed = 0, plain = 0;
   for (const html of STORED.concat(BROLL_CELLS)) {
@@ -255,18 +223,10 @@ test("reading: every stored cell and every b-roll cell reads exactly as the HTML
 
 test("reading: where the model reads differently, by design", () => {
   const read = (h) => brollInCell(cellOf(sanitizeHtml(h)));
-  /* a line feed inside a text node shows as a space (white-space: normal),
-     and a zero-width space is a caret spot, never content — as for every
-     reader of the model (readers.test.mjs) */
   assert.deepEqual(oldBrollInField("B-roll: a\nb"), [{ id: "", name: "a\nb", desc: "" }]);
   assert.deepEqual(read("B-roll: a\nb"), [{ id: "", name: "a b", desc: "" }]);
   assert.deepEqual(oldBrollInField("​B-roll: a"), []);
   assert.deepEqual(read("​B-roll: a"), [{ id: "", name: "a", desc: "" }]);
-  /* two shapes no version of the app writes (a typed key and an anchored
-     one both start their line bare): a key after an empty formatting
-     element, or inside a tag, is the key it is — the HTML reader took its
-     words for a plain marker, which the anchoring pass then replaced with
-     a key of its own */
   const empty = sanitizeHtml("<strong></strong>" + KEY("b1") + " gulls");
   assert.deepEqual(oldBrollInField(empty), [{ id: "", name: "gulls", desc: "" }]);
   assert.deepEqual(read(empty), [{ id: "b1", name: "gulls", desc: "" }]);
@@ -275,16 +235,6 @@ test("reading: where the model reads differently, by design", () => {
   assert.deepEqual(read(inTag), [{ id: "b1", name: "gulls", desc: "" }]);
 });
 
-/* ---- anchoring and renaming ----
-
-   The old edits split every formatting element, tag and comment round a
-   line break into two before they began (hoistNestedBrs), all over the
-   cell, whichever line they were editing: a comment over two lines came
-   out as two anchors with the line break between them outside both, and a
-   tag with a line break in it as two tags. The model's edits touch only the
-   line they edit. So the cells are compared with every line break's own
-   marks taken off — the one difference, and one no reader can see but the
-   comment's anchor and the tag's mention count, which the old edit broke. */
 function bareBreaks(cell) {
   const runs = [];
   for (const r of cell) {
@@ -304,15 +254,12 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
     if (!before.some((b) => !b.id)) continue;
-    /* a key repeating an earlier key's id is re-keyed too, which the old
-       pass never did: those cells are the next test's */
     if (repeatsAnId(before)) continue;
     const after = withRow(html, (row) => {
       const n = anchorBrollInRows([row]);
       assert.equal(n, before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
-    /* the ids the pass minted, by ordinal, handed to the old pass */
     const read = brollInCell(cellOf(after));
     assert.equal(read.length, before.length, html);
     assert.ok(read.every((b) => b.id), "every line now has a key: " + after);
@@ -330,8 +277,6 @@ function repeatsAnId(read) {
   return new Set(ids).size !== ids.length;
 }
 
-/* The cell with the ids of the keys at these positions blanked, to compare
-   two cells that differ only there. */
 function idsBlanked(cell, at) {
   let pos = 0;
   return cell.map((r) => {
@@ -363,7 +308,6 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
     before.forEach((b, k) => {
       if (b.id && !repeats.includes(k)) assert.equal(read[k].id, b.id, "the first line keeps its id: " + html);
     });
-    /* a cell with only keyed lines changes nowhere but the repeated keys' ids */
     if (before.every((b) => b.id)) {
       const cellBefore = cellOf(html), cellAfter = cellOf(after);
       const at = [];
@@ -380,7 +324,6 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
   }
   assert.ok(healed > 10, "healed " + healed);
 
-  /* across scenes: the first in document order keeps it */
   S.state = {
     rows: [
       { id: "r0", visualText: KEY("bsA") + " the gulls", audioText: "" },
@@ -394,7 +337,6 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
   assert.equal(ids[0], "bsA");
   assert.ok(ids[1] && ids[1] !== "bsA");
   assert.equal(S.state.rows[1].visualText, "intro<br>" + KEY(ids[1]) + " the gulls");
-  /* and in a cell the model does not write (a video card in it) */
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   S.state.rows[1].visualText = sanitizeHtml(card + "<br>" + KEY("bsA") + " the gulls");
   assert.equal(anchorBrollInRows(S.state.rows), 1);
@@ -470,7 +412,6 @@ test("a pasted key's record is a new shot seeded from its scene; a moved one kee
     productionTags: []
   };
   recordPastedBroll("r0", cellOf(S.state.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"]);
-  /* the key mid-line is not a marker the list reads: no record for it */
   assert.deepEqual(S.state.brollShots.map((r) => r.id), ["bsMoved", "bsNew"]);
   assert.equal(S.state.brollShots[0], moved);
   assert.equal(moved.status, "shot");
@@ -485,8 +426,6 @@ test("a pasted key's record is a new shot seeded from its scene; a moved one kee
   assert.equal(rec.location, "Pier");
 });
 
-/* ---- the props a shot needs (#149) ---- */
-
 test("brollPropsInCell: the prop tags on each item's own lines, one array per item, lined up with brollInCell", () => {
   const html = sanitizeHtml(
     "Open on the " + tagSpan("prop", "Kettle", "kettle") + "<br>" +
@@ -497,8 +436,6 @@ test("brollPropsInCell: the prop tags on each item's own lines, one array per it
     KEY("b3") + " nothing needed");
   const cell = cellOf(html);
   assert.deepEqual(brollInCell(cell).map((b) => b.name), ["the red mug on the sill", "steam, kettle", "nothing needed"]);
-  /* the kettle before the first marker belongs to no shot; a location is not
-     a prop; one name once however often it is tagged */
   assert.deepEqual(brollPropsInCell(cell), [["Red mug", "Tea towel"], ["Kettle"], []]);
   assert.deepEqual(brollPropsInCell(cellOf("no markers " + tagSpan("prop", "Kettle", "kettle"))), []);
 });
@@ -548,7 +485,7 @@ test("removeBrollProp takes a hand-added prop off by its key and leaves the brea
 
 test("the shots a prop is needed by: tagged on the line or added by hand, each once", () => {
   propsDoc();
-  addBrollProp("b1", "red mug"); /* also tagged: still one mention of b1 */
+  addBrollProp("b1", "red mug");
   addBrollProp("b2", "Red mug");
   addBrollProp("b2", "Kettle");
   assert.deepEqual(shotsBy(), {
@@ -583,7 +520,6 @@ test("a prop deleted from the breakdown still shows on the shot by its name, wit
 });
 
 test("a pasted copy of a shot's line gets none of its hand-added props", () => {
-  /* the same rule that drops status, notes and owner: the copy is a new shot */
   const s = propsDoc();
   addBrollProp("b1", "Kettle");
   s.rows[1].visualText = KEY("bsPasted") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill";
@@ -598,16 +534,12 @@ test("the breakdown CSV names the b-roll shots each prop is needed for, after th
   propsDoc();
   addBrollProp("b2", "Kettle");
   const lines = buildBreakdownCsv().replace(/^\uFEFF/, "").split("\r\n");
-  /* #169's two columns go after the ones a sheet may have been built on */
   assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group");
   const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
-  /* only a shot's prop, in no scene: no first scene */
   assert.ok(kettle.endsWith(",drone over the pier,,Props & set dressing"), kettle);
   const mug = lines.find((l) => l.startsWith("Prop,Red mug,"));
   assert.ok(mug.endsWith(",the red mug on the sill,00:00,Props & set dressing"), mug);
 });
-
-/* ---- the full-page shot list's files (#150) ---- */
 
 test("the shot list CSV: one row per shot in script order, with a Props column, nothing written", () => {
   const s = propsDoc();
@@ -618,8 +550,6 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   const before = JSON.stringify(s.brollShots);
   const lines = buildBrollCsv().replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
-  /* the scene's start timecode last (#169), after the columns a sheet may
-     already be built on */
   assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
   const at = (i) => sceneFacts()[i].start;
@@ -636,14 +566,10 @@ test("the printed shot list is a PDF of the shots as shown, flagged ones marked"
   assert.ok(text.startsWith("%PDF-1.4"));
   assert.ok(text.includes("(the red mug on the sill) Tj"));
   assert.ok(text.includes("(drone over the pier) Tj"));
-  /* "Flagged" in sentence case and bold red, and under it the reason —
-     the note, which is what raising the flag asks for */
   assert.ok(text.includes("0.769 0.188 0.165 rg BT /F2 8.5 Tf") && text.includes("(Flagged) Tj"), "Flagged, bold and red");
   assert.ok(text.includes("(too dark) Tj"), "the reason under it");
   assert.ok(!text.includes("FLAGGED"));
-  /* a prop a line, its status in words; the PDF string escapes its parentheses */
   assert.ok(text.includes("(Red mug \\(have it\\)) Tj"), "each prop with its status in words");
-  /* one landscape page */
   assert.match(text, /\/Count 1 >>/);
   assert.match(text, /\/MediaBox \[0 0 792 612\]/);
 });

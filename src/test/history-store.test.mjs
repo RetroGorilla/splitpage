@@ -1,17 +1,3 @@
-/* shared/history-store.js — the one version-history store (issue #83), over
- * its memory backend.
- *
- * Every store case runs on a STRICT backend: each tx op settles on a later
- * macrotask and the transaction goes inactive once a macrotask passes with
- * nothing pending, the way an IndexedDB transaction auto-commits. So a store
- * that awaited anything but a tx.* call inside exclusive() would fail here,
- * not first in a real browser. The last cases prove the strict mode itself
- * catches exactly that.
- *
- * No _dom.mjs import, like history-policy.test.mjs: this module runs in the
- * browser bundle, in Electron's main process and in node, so it may not
- * touch a document or depend on an __init().
- */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -31,7 +17,6 @@ const DOC_C = "d" + "c".repeat(32);
 const sha = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 const macrotask = (cb) => setImmediate(cb);
 
-/* A store over a fresh strict memory backend, on a clock the case moves. */
 function fixture(opts = {}) {
   const clock = { t: opts.t ?? 1_000_000 };
   const backend = createMemoryHistoryBackend({ strict: true, macrotask, ...(opts.backend || {}) });
@@ -52,8 +37,6 @@ const body = (tag, pad = 0) => JSON.stringify({ rows: [], tag, pad: "x".repeat(p
 async function ids(store, docId) {
   return (await store.list(docId)).entries.map((m) => m.id);
 }
-
-/* ---- put ---- */
 
 test("put stores a snapshot and answers 03a's HistoryWriteResult shape", async () => {
   const { store, backend } = fixture();
@@ -105,12 +88,10 @@ test("put over maxBodyBytes answers 'too-large' and writes nothing", async () =>
 test("a put stamps strictly after the newest snapshot in its bucket; `at` keeps the wall clock", async () => {
   const { store } = fixture();
   await store.put(DOC_A, meta("s01", 5000, { at: "2026-01-01T00:00:05.000Z" }), body("a"));
-  /* the system clock went backwards: a later capture has an earlier atMs */
   await store.put(DOC_A, meta("s02", 1000, { at: "2026-01-01T00:00:01.000Z" }), body("b"));
   const listed = (await store.list(DOC_A)).entries;
   assert.deepEqual(listed.map((m) => [m.id, m.atMs]), [["s02", 5001], ["s01", 5000]]);
   assert.equal(listed[0].at, "2026-01-01T00:00:01.000Z");
-  /* another bucket is not affected by this one's newest */
   await store.put(DOC_B, meta("s03", 10), body("c"));
   assert.equal((await store.list(DOC_B)).entries[0].atMs, 10);
 });
@@ -130,21 +111,16 @@ test("a document keeps its 50 newest; the trimmed bodies go in the same commit",
   assert.equal(await store.get(DOC_A, "s001"), null);
 });
 
-/* ---- cap eviction ---- */
-
 test("cap eviction: least recently opened document first, its newest snapshot always kept", async () => {
   const size = historyUtf8Length(body("x0", 100));
   let cap = 5 * size;
   const { store, clock, backend } = fixture({ capBytes: () => cap });
-  /* A opened long ago, B recently — three snapshots each, all the same size */
   for (let i = 0; i < 3; i++) { clock.t = 1000 + i; await store.put(DOC_A, meta("a0" + i, 100 + i), body("a" + i, 100)); }
   for (let i = 0; i < 3; i++) { clock.t = 5000 + i; await store.put(DOC_B, meta("b0" + i, 100 + i), body("b" + i, 100)); }
-  /* 6 × size against a cap of 5: A's oldest goes, nothing of B */
   assert.deepEqual(await ids(store, DOC_A), ["a02", "a01"]);
   assert.deepEqual(await ids(store, DOC_B), ["b02", "b01", "b00"]);
   assert.equal(backend.bodyCount(), 5);
 
-  /* squeeze to one snapshot's worth: every document keeps its newest, over cap is reported */
   const ev = await store.evict(size);
   assert.equal(ev.overCap, true);
   assert.equal(ev.evicted, 3);
@@ -153,7 +129,6 @@ test("cap eviction: least recently opened document first, its newest snapshot al
   assert.deepEqual(await ids(store, DOC_A), ["a02"]);
   assert.deepEqual(await ids(store, DOC_B), ["b02"]);
 
-  /* a put past the cap still stores, and reports overCap */
   cap = size;
   clock.t = 9000;
   const r = await store.put(DOC_C, meta("c00", 1), body("c", 100));
@@ -170,8 +145,6 @@ test("evict() with no cap reads capBytes(), which is handed the last total the s
   assert.equal(seen[0], null, "nothing read yet before the first put");
   assert.equal(seen[seen.length - 1], historyUtf8Length(body("a")));
 });
-
-/* ---- the quota retry (the desktop rule) ---- */
 
 async function twoDocs(store, clock) {
   clock.t = 100; await store.put(DOC_A, meta("a01", 1), body("a1", 50));
@@ -203,7 +176,7 @@ test("the same retry for a refusal at commit time (IndexedDB reports quota there
 
 test("nothing evictable → no retry, the stuck flag is set, and nothing more is deleted", async () => {
   const { store, backend, clock } = fixture();
-  await store.put(DOC_A, meta("a01", 1), body("a1"));   /* a document's newest: never evicted */
+  await store.put(DOC_A, meta("a01", 1), body("a1"));
   const putsBefore = backend.counts.put;
   backend.failNext("put", "quota", 1);
   clock.t = 300;
@@ -211,7 +184,6 @@ test("nothing evictable → no retry, the stuck flag is set, and nothing more is
   assert.deepEqual(r, { stored: false, code: "quota", evicted: 0, overCap: true });
   assert.equal(backend.counts.put - putsBefore, 1, "no second attempt when nothing was freed");
 
-  /* stuck: the next refusal answers at once — the attempt, and no eviction job after it */
   const exBefore = backend.counts.exclusive;
   backend.failNext("put", "quota", 1);
   assert.deepEqual(await store.put(DOC_B, meta("b02", 2), body("b2")), { stored: false, code: "quota", evicted: 0, overCap: true });
@@ -228,15 +200,12 @@ test("a retry refused too sets the stuck flag; later refusals evict nothing unti
   assert.deepEqual(r1, { stored: false, code: "quota", evicted: 1, overCap: true });
   assert.deepEqual(await ids(store, DOC_A), ["a02"]);
 
-  /* stuck: refused again, and the one attempt is all — no eviction of B's or A's newest (nothing
-     left to evict anyway), but also no eviction attempt at all */
   const exBefore = backend.counts.exclusive;
   backend.failNext("put", "quota", 1);
   const r2 = await store.put(DOC_B, meta("b03", 3), body("b3", 50));
   assert.deepEqual(r2, { stored: false, code: "quota", evicted: 0, overCap: true });
   assert.equal(backend.counts.exclusive - exBefore, 1, "the attempt only, no eviction job");
 
-  /* a write that lands clears it: the next refusal evicts and retries again */
   clock.t = 400;
   assert.equal((await store.put(DOC_C, meta("c01", 1), body("c1", 50))).stored, true);
   clock.t = 500;
@@ -256,25 +225,21 @@ test("a non-quota failure is 'io', not retried, and leaves no body behind", asyn
   assert.deepEqual(await ids(store, DOC_A), []);
 });
 
-/* ---- holds ---- */
-
 test("holds: a held snapshot survives the trim, the cap and the Older sweep; release lets it go", async () => {
   const { store, clock } = fixture();
   await store.importOlder([{ meta: meta("o01", 1), stateJson: body("o1") }, { meta: meta("o02", 2), stateJson: body("o2") }]);
   const release = store.hold({ older: true, id: "o01" });
-  const again = store.hold({ older: true, id: "o01" });   /* holds nest */
-  /* the cap wants Older first, as a whole */
+  const again = store.hold({ older: true, id: "o01" });
   await store.evict(0);
   assert.deepEqual((await store.list(null)).older.map((m) => m.id), ["o01"]);
   release();
-  release();                                               /* a release runs at most once */
+  release();
   await store.evict(0);
   assert.deepEqual((await store.list(null)).older.map((m) => m.id), ["o01"], "still held once");
   again();
   await store.evict(0);
   assert.deepEqual((await store.list(null)).older, []);
 
-  /* the trim to 50 skips a held snapshot too */
   const hold1 = store.hold({ docId: DOC_A, id: "s001" });
   for (let i = 1; i <= 52; i++) { clock.t += 1; await store.put(DOC_A, meta("s" + String(i).padStart(3, "0"), i), body("n" + i)); }
   const kept = await ids(store, DOC_A);
@@ -299,8 +264,6 @@ test("holds: a call's protect list and the holds() provider are honoured by ever
   assert.deepEqual((await store.list(null)).older.map((m) => m.id), ["o02"], "the provider still holds o02");
 });
 
-/* ---- copy and shared bodies ---- */
-
 test("copy is index-only; a body shared by sha stays until its last entry goes", async () => {
   const { store, backend, clock } = fixture();
   await store.put(DOC_A, meta("s01", 10), body("one"));
@@ -320,13 +283,11 @@ test("copy is index-only; a body shared by sha stays until its last entry goes",
   assert.equal(docs.find((d) => d.docId === DOC_B).lastOpenedAt, 2_000_000);
   assert.equal(docs.find((d) => d.docId === DOC_B).title, "T");
 
-  /* trim A down to its newest: s01's body is still B's */
   const s01 = sha(body("one"));
-  await store.evict(historyUtf8Length(body("one")) * 3);   /* 4 entries' worth over 3 — A (older) loses s01 */
+  await store.evict(historyUtf8Length(body("one")) * 3);
   assert.deepEqual(await ids(store, DOC_A), ["s02"]);
   assert.ok(backend.hasBody(s01), "B still names it");
   assert.equal((await store.get(DOC_B, "s01")).stateJson, body("one"));
-  /* and when B's entry goes too, so does the body */
   await store.evict(0);
   assert.ok(!backend.hasBody(s01));
 });
@@ -353,8 +314,6 @@ test("copy: bad ids are 'invalid', same id is a no-op, an empty source conjures 
   assert.equal(backend.counts.commit, 0);
 });
 
-/* ---- touch ---- */
-
 test("touch updates lastOpenedAt and title, and never creates a record", async () => {
   const { store, clock } = fixture();
   await store.touch(DOC_A, "Nothing here");
@@ -366,8 +325,6 @@ test("touch updates lastOpenedAt and title, and never creates a record", async (
   await store.touch(DOC_A, "");
   assert.equal((await store.listDocs())[0].title, "Renamed", "an empty title keeps the old one");
 });
-
-/* ---- the Older bucket ---- */
 
 test("importOlder: put-if-absent, no stamp, 90 days from creation that a re-import never extends", async () => {
   const { store, clock, backend } = fixture({ t: 50_000 });
@@ -427,13 +384,11 @@ test("Older expiry: past its 90 days it lists empty, gets null, and the sweep de
   assert.deepEqual(listed.older, []);
   assert.equal(listed.olderExpiresAt, null);
   assert.deepEqual(listed.entries.map((m) => m.id), ["s01"]);
-  /* the sweep list() queued runs before the next job */
   const raw = await store.rawIndex();
   assert.equal(raw[HISTORY_OLDER_KEY], undefined);
   assert.ok(!backend.hasBody(sha(body("o1"))));
   assert.ok(backend.hasBody(sha(body("keep"))));
 
-  /* a key that reappears that late starts a fresh bucket with its own 90 days */
   assert.deepEqual(await store.importOlder([{ meta: meta("o09", 1), stateJson: body("o9") }]), { ok: true, count: 1, added: 1 });
   assert.equal((await store.list(null)).olderExpiresAt, clock.t + HISTORY_OLDER_TTL_MS);
 });
@@ -478,8 +433,6 @@ test("Older expiry: expiresAt ≤ 0 (or missing) is NOT STAMPED, never expired �
   assert.deepEqual(r, { ok: true, count: 2, added: 1 }, "an import joins it rather than restarting it");
 });
 
-/* ---- reads ---- */
-
 test("usage and listDocs: 03a's shapes, computed from the index", async () => {
   const { store, clock } = fixture({ capBytes: 1_000_000 });
   clock.t = 111; await store.put(DOC_B, meta("b01", 1, { title: "Bee" }), body("b"));
@@ -521,8 +474,6 @@ test("a body lost behind the store's back: get answers null and the entry drops 
   assert.deepEqual(await ids(store, DOC_B), ["s02"], "every entry naming the lost body goes");
 });
 
-/* ---- read-only ---- */
-
 test("a read-only backend refuses every write and still answers reads", async () => {
   const { store, backend, clock } = fixture();
   await store.put(DOC_A, meta("s01", 1), body("a"));
@@ -537,9 +488,9 @@ test("a read-only backend refuses every write and still answers reads", async ()
   const ev = await store.evict(0);
   assert.equal(ev.evicted, 0);
   assert.equal(ev.totalAfter, ev.totalBefore);
-  clock.t += HISTORY_OLDER_TTL_MS * 2;          /* an expired Older: list must not sweep it */
+  clock.t += HISTORY_OLDER_TTL_MS * 2;
   await store.list(DOC_A);
-  backendDelete(backend, "s01");               /* a lost body: get must not heal */
+  backendDelete(backend, "s01");
   assert.equal(await store.get(DOC_A, "s01"), null);
   assert.equal(backend.counts.commit, commits, "not one commit");
   assert.equal(backend.counts.put, puts, "not one body");
@@ -553,13 +504,11 @@ function backendDelete(backend, id) {
   backend.dropBody(snap.sha);
 }
 
-/* ---- the transaction rule, enforced ---- */
-
 test("strict mode: a stray non-tx await inside exclusive() fails, as IndexedDB would", async () => {
   const backend = createMemoryHistoryBackend({ strict: true, macrotask });
   const clean = await backend.exclusive(async (tx) => {
     await tx.list();
-    await Promise.resolve();                     /* a microtask is fine: the tx is still active */
+    await Promise.resolve();
     await tx.put("abc", "text");
     await tx.commit({ [DOC_A]: { title: "", lastOpenedAt: 1, snapshots: [] } }, []);
     return "ok";
@@ -568,13 +517,13 @@ test("strict mode: a stray non-tx await inside exclusive() fails, as IndexedDB w
 
   await assert.rejects(backend.exclusive(async (tx) => {
     await tx.list();
-    await new Promise((resolve) => setTimeout(resolve, 5));   /* a timer: the tx commits meanwhile */
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await tx.put("def", "text");
   }), { name: "TransactionInactiveError" });
   assert.equal(backend.hasBody("def"), false);
 
   await assert.rejects(backend.exclusive(async (tx) => {
-    await new Promise((resolve) => setImmediate(resolve));    /* even before the first request */
+    await new Promise((resolve) => setImmediate(resolve));
     await tx.list();
   }), { name: "TransactionInactiveError" });
 });

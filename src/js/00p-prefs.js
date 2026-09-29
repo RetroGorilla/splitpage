@@ -1,55 +1,19 @@
-/* ================= per-person preferences (#180, #181, #194) =================
-
-   Three things every other module reaches for, kept here so that none of
-   them has to import a module with a DOM or a document behind it:
-
-   - writePref(): the one way a setting is changed. It writes localStorage
-     and then says so on `document` as a "splitpage:pref" CustomEvent
-     ({detail: {key, value}}), so whatever draws that setting — Settings,
-     the rundown strip, the script zoom — can follow a change made
-     anywhere else. The existing switches (the File menu, the prompter's
-     own buttons) still write their keys themselves; Settings reads the
-     same keys, so there is one source of truth either way.
-
-   - formatClock() and friends: every clock time the app shows (the save
-     status, Version history, comments) goes through here. By default it
-     follows the system's own format — Intl.DateTimeFormat with no hour12
-     forced — and `splitpage-clock` ("system" | "12" | "24") overrides it.
-
-   - a person's colour: the eight PERSON_COLORS, the colour you picked
-     (`splitpage-person-color`), and the pure halves of how a name gets its
-     colour (resolvePersonColor) and how a document's name → colour map is
-     read and merged (normalizePersonColors / mergePersonColors). The
-     live half — who is online, which document is open — is personColor()
-     in 13a-presence.js.
-
-   Nothing here runs at evaluation time; __init() applies the theme. */
-
 export var PREF_EVENT = "splitpage:pref";
 
 export var CLOCK_KEY = "splitpage-clock";
 export var THEME_KEY = "splitpage-theme";
 export var PERSON_COLOR_KEY = "splitpage-person-color";
 export var DEFAULT_WPM_KEY = "splitpage-default-wpm";
-/* Other lanes' preferences, surfaced in Settings (#181): the rundown strip
-   minimised ("1"/"0", #178) and the script's zoom (a number, 1 = 100 %). */
 export var RUNDOWN_MIN_KEY = "splitpage-rundown-min";
 export var SCRIPT_SCALE_KEY = "splitpage-script-scale";
 export var SCRIPT_SCALE_MIN = 0.7, SCRIPT_SCALE_MAX = 2;
-/* Settings ▸ Fetch video thumbnails (#141): "0" off, absent (or "1") on —
-   whether a pasted YouTube or Vimeo link's thumbnail is fetched from the
-   site (05v-video.js). */
 export var VIDEO_THUMBS_KEY = "splitpage-video-thumbs";
-/* Settings ▸ Show icons on tags (#217): "1" on, absent (or "0") off — a
-   category icon before every tag as well as its colour. Shown by the
-   data-tag-icons attribute on <html>, which app.css keys on. */
 export var TAG_ICONS_KEY = "splitpage-tag-icons";
 
 export function readPref(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
 
-/* On unless it was switched off. */
 export function videoThumbsOn() {
   return readPref(VIDEO_THUMBS_KEY) !== "0";
 }
@@ -63,24 +27,16 @@ export function applyTagIcons() {
   else document.documentElement.removeAttribute("data-tag-icons");
 }
 
-/* `value` null removes the key. The event fires whether or not storage
-   took the write, so what is on screen follows the choice for this page
-   at least. */
 export function writePref(key, value) {
   try {
     if (value == null) localStorage.removeItem(key);
     else localStorage.setItem(key, String(value));
-  } catch (e) { /* storage blocked — the event still carries it */ }
+  } catch (e) { }
   try {
     document.dispatchEvent(new CustomEvent(PREF_EVENT, { detail: { key: key, value: value == null ? null : String(value) } }));
-  } catch (e) { /* no document (unit tests) */ }
+  } catch (e) { }
 }
 
-/* The settings File ▸ Export app data… carries (#181) beside the ones it
-   always had (20h-appdata.js), so moving to the desktop app keeps them.
-   Each is imported only where this machine has none, and only in the shape
-   the app itself writes. The names are the bundle's keys, and none of them
-   may look like a credential (invariant #48). */
 function isFlag(v) { return v === "0" || v === "1"; }
 export var SETTINGS_APPDATA_PREFS = [
   { name: "theme", key: "splitpage-theme", valid: function (v) { return THEME_MODES.indexOf(v) !== -1; } },
@@ -99,8 +55,6 @@ export var SETTINGS_APPDATA_PREFS = [
     valid: function (v) { var n = Number(v); return /^\d(\.\d{1,3})?$/.test(v) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX; } }
 ];
 
-/* ---- the clock (#180) ---- */
-
 export var CLOCK_MODES = ["system", "12", "24"];
 
 export function readClockPref() {
@@ -108,9 +62,6 @@ export function readClockPref() {
   return CLOCK_MODES.indexOf(v) === -1 ? "system" : v;
 }
 
-/* The Intl options that say 12 or 24 hours, or none at all for the system's
-   own. hourCycle rather than hour12:false — some engines read hour12:false
-   as "h24", which shows a quarter past midnight as 24:15. */
 export function clockCycle(mode) {
   if (mode === "12") return { hourCycle: "h12" };
   if (mode === "24") return { hourCycle: "h23" };
@@ -130,8 +81,6 @@ function toDate(when) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-/* "2:52 PM" or "14:52" — a time of day, nothing else. `mode` is for tests;
-   the app passes nothing and gets the person's setting. */
 export function formatClock(when, mode) {
   var d = toDate(when);
   if (!d) return "";
@@ -142,7 +91,6 @@ export function formatClock(when, mode) {
   }
 }
 
-/* A date and a time: "Sep 21, 2:52 PM", with the year when asked. */
 export function formatDateClock(when, opts, mode) {
   var d = toDate(when);
   if (!d) return "";
@@ -155,32 +103,17 @@ export function formatDateClock(when, opts, mode) {
   }
 }
 
-/* The header's words once nothing is left to write (12-dirty-toast.js,
-   #208), as a pure function of when this page last wrote the document and
-   what time it is now. "Saved just now" for the first minute after a
-   write, then "All changes saved" for as long as nothing changes.
-
-   It used to count on — "Saved 43 min ago" — which read as "autosave last
-   ran 43 minutes ago", as if it had stalled. Autosave only writes when
-   there is something to write, so an old time only ever meant that nothing
-   had changed since; these words say that, and the time itself is in the
-   tooltip (savedWhenText). `savedAt` 0 is a document this page has not
-   written (just opened, say): it has no "just now". */
 export var SAVED_JUST_NOW_MS = 60000;
 export function savedStatusText(savedAt, now) {
   return savedAt && now - savedAt < SAVED_JUST_NOW_MS ? "Saved just now" : "All changes saved";
 }
 
-/* When that write was, for the tooltip: "2:52 PM" (or "14:52") the same
-   day, "Sep 21, 2:52 PM" once the page has been open past midnight. */
 export function savedWhenText(savedAt, now, mode) {
   if (!savedAt) return "";
   var at = new Date(savedAt);
   return at.toDateString() === new Date(now).toDateString()
     ? formatClock(at, mode) : formatDateClock(at, null, mode);
 }
-
-/* ---- the theme (#181) ---- */
 
 export var THEME_MODES = ["system", "light", "dark"];
 
@@ -189,10 +122,6 @@ export function readThemePref() {
   return THEME_MODES.indexOf(v) === -1 ? "system" : v;
 }
 
-/* data-theme on <html> is what app.css's two dark blocks key on; "system"
-   is no attribute at all, so prefers-color-scheme decides. The desktop
-   shell is told too: its title bar and tab strip are drawn by main, and
-   nativeTheme.themeSource is what they follow (desktop/main.js). */
 export function applyTheme(mode) {
   mode = THEME_MODES.indexOf(mode) === -1 ? readThemePref() : mode;
   var root = document.documentElement;
@@ -200,31 +129,21 @@ export function applyTheme(mode) {
   else root.setAttribute("data-theme", mode);
   var bridge = typeof window !== "undefined" ? window.splitpageDesktop : null;
   if (bridge && typeof bridge.setTheme === "function") {
-    try { bridge.setTheme(mode); } catch (e) { /* an older shell without the call */ }
+    try { bridge.setTheme(mode); } catch (e) { }
   }
 }
-
-/* ---- default reading speed for new scripts (#181) ---- */
 
 export function readDefaultWpm() {
   var n = parseInt(readPref(DEFAULT_WPM_KEY), 10);
   return isFinite(n) && n >= 60 && n <= 400 ? n : 150;
 }
 
-/* ---- a person's colour (#192, #194) ----
-
-   The eight colours (#169): filled circles in B's bright values with dark
-   initials, the same in both themes — preview blue and program amber
-   first, then the tag palette's hues. The names are what a screen reader
-   says for each swatch. */
 export var PERSON_COLORS = [
   "#80BDFB", "#F9B64F", "#CBA1FA", "#73D4AC",
   "#F89DC9", "#C8DE63", "#EF958E", "#64D1D7"
 ];
 export var PERSON_COLOR_NAMES = ["Blue", "Amber", "Violet", "Green", "Pink", "Lime", "Coral", "Teal"];
 
-/* One of the eight, in its canonical spelling, or "". Anything else —
-   another hex, a CSS expression, an object — is no colour. */
 export function paletteColor(value) {
   if (typeof value !== "string") return "";
   var up = value.trim().toUpperCase();
@@ -235,8 +154,6 @@ export function readMyColor() {
   return paletteColor(readPref(PERSON_COLOR_KEY));
 }
 
-/* The colour a name hashes to — what everybody got before #194, and what
-   anyone who never picks still gets. Stable across windows and machines. */
 export function hashedPersonColor(seed) {
   seed = String(seed || "");
   var hash = 0;
@@ -244,7 +161,6 @@ export function hashedPersonColor(seed) {
   return PERSON_COLORS[Math.abs(hash) % PERSON_COLORS.length];
 }
 
-/* Names compare the way people type them: trimmed, case-insensitive. */
 export function personKey(name) {
   return String(name == null ? "" : name).trim().toLowerCase();
 }
@@ -252,11 +168,6 @@ export function personKey(name) {
 var PERSON_NAME_MAX = 80;
 var PERSON_MAP_MAX = 200;
 
-/* A document's `personColors` map as read from anywhere (a file, a merge,
-   a server): {name: colour}, each name trimmed and at most 80 characters,
-   each colour one of the eight, at most 200 entries, and the prototype's
-   own names never used as keys. null when nothing valid is left, so a
-   document without picks never grows the key. */
 export function normalizePersonColors(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   var out = {}, seen = Object.create(null), n = 0;
@@ -288,10 +199,6 @@ function lookupByName(map, name) {
   return hit;
 }
 
-/* Base-aware, per name: the side that moved a name's colour off the base
-   wins; both moved it — mine, since a pick is almost always about the
-   person merging; a name only one side has is kept. Nothing is ever
-   removed (the app never removes one). null when the result is empty. */
 export function mergePersonColors(base, mine, theirs) {
   base = normalizePersonColors(base) || {};
   mine = normalizePersonColors(mine) || {};
@@ -308,19 +215,10 @@ export function mergePersonColors(base, mine, theirs) {
     put(name, t && m === b ? t : m);
   });
   Object.keys(theirs).forEach(function (name) { put(name, theirs[name]); });
-  /* and a name only the base still has: nothing removes one on purpose,
-     so it is an older copy on both sides, not a deletion */
   Object.keys(base).forEach(function (name) { put(name, base[name]); });
   return normalizePersonColors(out);
 }
 
-/* A name's colour, first match wins:
-     1. your own pick, when the name is yours (you are always "live" to
-        yourself, online or not);
-     2. what the people in this document right now say (presence);
-     3. the document's map, written by everyone who picked and edited it;
-     4. the hash of the name — today's colour, for anyone who never picked.
-   ctx = {self, selfColor, live: {personKey: colour}, doc: {name: colour}}. */
 export function resolvePersonColor(name, ctx) {
   ctx = ctx || {};
   var key = personKey(name);
@@ -335,13 +233,9 @@ export function resolvePersonColor(name, ctx) {
   return hashedPersonColor(name);
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — right after 00-prelude captured PAGE_SHELL, so the
-   theme attribute never lands in a saved copy of the page. */
 export function __init() {
   applyTheme();
   applyTagIcons();
-  /* Another tab changed it: follow, so two windows never disagree. */
   window.addEventListener("storage", function (e) {
     if (e.key === THEME_KEY) applyTheme();
     if (e.key === TAG_ICONS_KEY) applyTagIcons();

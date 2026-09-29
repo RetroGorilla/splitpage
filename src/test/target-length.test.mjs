@@ -1,12 +1,3 @@
-/* A target length per script (#170): the document key `targetSeconds`
- * through migrateRows, mergeStates, undo's diff and the two project
- * formats; the script's length's figures against it (targetClock,
- * 01-scene-status.js) and where the strip draws it (targetOverlayParts,
- * 05t-target.js). Setting it from the length's popover and the command
- * menu, the length's text (at the end of the rundown since #207), the
- * strip's line and undo in a page are browser suites 140-target-length and
- * 141-target-length-phone.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -50,8 +41,6 @@ function doc(extra) {
   }, extra || {}));
 }
 
-/* ---- the value ---- */
-
 test("normalizeTargetLength keeps whole seconds from 1 to a day and nothing else", () => {
   assert.equal(normalizeTargetLength(120), 120);
   assert.equal(normalizeTargetLength(1), 1);
@@ -75,8 +64,6 @@ test("the presets are 0:30, 1:00, 2:00, 3:00, 5:00 and 10:00", () => {
   assert.deepEqual(TARGET_PRESETS, [30, 60, 120, 180, 300, 600]);
 });
 
-/* ---- the script's length against it ---- */
-
 test("the length reads the target and the gap as lengths, left or over (#207: not a timecode)", () => {
   assert.deepEqual(targetClock(95, 120), { target: "2:00", delta: "0:25", over: false });
   assert.deepEqual(targetClock(125, 120), { target: "2:00", delta: "0:05", over: true });
@@ -86,15 +73,11 @@ test("the length reads the target and the gap as lengths, left or over (#207: no
 });
 
 test("the gap is worked out on the whole seconds the length prints", () => {
-  /* 95.4s prints 1:35, so 0:25 left — never 0:24 or 0:26 */
   assert.equal(targetClock(95.4, 120).delta, "0:25");
   assert.equal(targetClock(95.6, 120).delta, "0:24");
-  /* 120.4s prints 2:00: on the target, not over it */
   assert.equal(targetClock(120.4, 120).over, false);
   assert.equal(targetClock(120.6, 120).over, true);
 });
-
-/* ---- the strip ---- */
 
 test("under the target: the line at the target, the gap to it hatched with the time left", () => {
   const p = targetOverlayParts(95, 120, 5);
@@ -120,8 +103,6 @@ test("nothing to draw with no target or no scale", () => {
   assert.equal(targetOverlayParts(100, null, 5), null);
   assert.equal(targetOverlayParts(100, 120, 0), null);
 });
-
-/* ---- stored ---- */
 
 test("migrateRows keeps a valid target, rounds it, and drops anything else", () => {
   assert.equal(doc({ targetSeconds: 120 }).targetSeconds, 120);
@@ -161,8 +142,6 @@ test("the .md data block carries it and reads it back; the table does not show i
   const backPlain = await withState(doc(), () => applyMarkdownProject(parseMarkdownProject(plain), { noAsk: true }));
   assert.ok(!("targetSeconds" in (backPlain.state || backPlain)));
 });
-
-/* ---- merged ---- */
 
 function three(target) {
   const base = doc(target ? { targetSeconds: target } : {});
@@ -228,8 +207,6 @@ test("mergeTargetLength reads through garbage as no target", () => {
   assert.equal(mergeTargetLength({ targetSeconds: 120 }, { targetSeconds: "x" }, { targetSeconds: 120 }), null);
   assert.equal(mergeTargetLength(null, { targetSeconds: -4 }, {}), null);
 });
-
-/* ---- undone ---- */
 
 test("undo's diff sees it as one docField step, and the step takes it back and forth", () => {
   const before = doc();

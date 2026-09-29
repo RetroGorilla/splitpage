@@ -1,19 +1,3 @@
-/* Pictures in comments and replies in the Word, Markdown and CSV exports
- * (15-docx.js buildDocx, 14-export.js toMarkdownDoc/toMarkdownTableDoc,
- * 16-csv.js buildCsv).
- *
- * A comment or reply body holds a picture as <img class="comment-img"
- * data-blob="<sha>"> (#82 P6). The writers used to read bodies as plain
- * text only, so every such picture was dropped and a picture-only comment
- * or an image conflict card read "(empty)". The .docx now embeds each one
- * in its place in the thread; the text formats write "[image]" there.
- *
- * None of these writers needs a page: S.state is set directly and the fake
- * pictures are interned into the registry, the way buildFileData's
- * ensureBytes would have left them. The .docx is read back with the app's
- * own zipRead. Browser suite 41-export-polish drives the same through the
- * real export, .txt included.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -27,8 +11,6 @@ import { toMarkdownDoc, toMarkdownTableDoc, zipRead } from "../js/14-export.js";
 import { __init as initDocx, buildDocx } from "../js/15-docx.js";
 import { buildCsv } from "../js/16-csv.js";
 
-/* the table style (docx), the word count behind the CSV's time column and
-   the tag memo both of those read */
 initTags();
 initStatus();
 initDocx();
@@ -36,7 +18,6 @@ initDocx();
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
-/* Just enough of a JPEG / PNG for the registry to sniff and measure. */
 const jpegBytes = (w, h) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xFF, 0xD9]);
 const pngBytes = (w, h) => {
   const b = new Uint8Array(33);
@@ -54,8 +35,6 @@ const pic = (bytes) => {
 };
 const MISSING = "f".repeat(64);
 
-/* Two scenes, so the comments below sort into a known order: script order,
-   then visual before audio within a scene. */
 const ROW1 = { id: "r0", visualText: "A scene.", audioText: "Some audio.", status: "todo" };
 const ROW2 = { id: "r1", visualText: "Another.", audioText: "More audio.", status: "todo" };
 
@@ -83,8 +62,6 @@ async function readDocx(bytes) {
   Array.from(parse(await text("word/_rels/document.xml.rels")).getElementsByTagName("Relationship"))
     .forEach((r) => { rels[r.getAttribute("Id")] = r.getAttribute("Target"); });
   const types = await text("[Content_Types].xml");
-  /* the Comments section, paragraph by paragraph: its text, or IMG:<target>
-     for an inline picture, with its extent and indent */
   const paras = Array.from(doc.getElementsByTagNameNS(W, "body")[0].childNodes).filter((n) => n.localName === "p");
   const start = paras.findIndex((p) => p.textContent === "Comments");
   assert.ok(start >= 0, "no Comments heading");
@@ -114,7 +91,6 @@ test("the .docx embeds a comment's and a reply's pictures in order, each part on
   ]);
   const { zip, rels, types, section, docPrIds } = await readDocx(buildDocx());
 
-  /* media: the row's picture, then each comment picture once, by type */
   assert.deepEqual(Object.values(rels).filter((t) => t.startsWith("media/")),
     ["media/image1.jpeg", "media/image2.png", "media/image3.jpeg", "media/image4.png"]);
   for (const [name, p] of [["image1.jpeg", rowPic], ["image2.png", png], ["image3.jpeg", jpg], ["image4.png", conflictPic]]) {
@@ -122,7 +98,6 @@ test("the .docx embeds a comment's and a reply's pictures in order, each part on
   }
   assert.ok(types.includes('<Default Extension="png" ContentType="image/png"/>'));
   assert.ok(types.includes('<Default Extension="jpeg" ContentType="image/jpeg"/>'));
-  /* every drawing its own id */
   assert.equal(new Set(docPrIds).size, docPrIds.length, "duplicate drawing ids: " + docPrIds);
 
   const seq = section.map((p) => p.img ? "IMG:" + p.img : p.text);
@@ -132,15 +107,12 @@ test("the .docx embeds a comment's and a reply's pictures in order, each part on
   const reply = at("Reply text");
   const rorder = [reply, at("IMG:media/image2.png", reply), at("reply after", reply), at("IMG:media/image1.jpeg", reply)];
   assert.ok(rorder.every((v, i) => v >= 0 && (i === 0 || v > rorder[i - 1])), "reply out of order: " + seq.join(" | "));
-  /* at the comment's indent, and the reply's */
   assert.equal(section[order[1]].indent, 360);
   assert.equal(section[rorder[1]].indent, 720);
 
-  /* the conflict card prints its picture, not "(empty)" */
   assert.ok(at("IMG:media/image4.png") > rorder[3]);
   assert.equal(at("(empty)"), -1);
 
-  /* the missing one: an italic note in its place */
   const look = at("Look:");
   assert.ok(look > 0 && seq[look + 1] === "[image unavailable]" && seq[look + 2] === "there.", seq.join(" | "));
   assert.ok(section[look + 1].italic);
@@ -158,16 +130,12 @@ test("a .docx comment picture is at most 60% of the column, keeps its aspect and
   const imgs = section.filter((p) => p.img);
   assert.equal(imgs.length, 4);
   const [b, br, s, t] = imgs;
-  /* 60% of what is left of the 10080-twip column beside the indent, 3:2 */
   assert.equal(b.cx, Math.round((10080 - 360) * 635 * 0.6));
   assert.equal(br.cx, Math.round((10080 - 720) * 635 * 0.6));
   assert.ok(Math.abs(b.cx / b.cy - 1.5) < 0.001);
-  /* the same picture twice is one part */
   assert.equal(b.img, br.img);
-  /* 40 x 30 px at 96 dpi (9525 EMU a pixel), not blown up */
   assert.equal(s.cx, 40 * 9525);
   assert.equal(s.cy, 30 * 9525);
-  /* a tall one capped at 260pt, aspect kept */
   assert.equal(t.cy, 260 * 12700);
   assert.ok(Math.abs(t.cy / t.cx - 8) < 0.001);
   assert.equal(section.filter((p) => p.text === "(empty)").length, 0);
@@ -180,8 +148,6 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
     { kind: "conflict", rowId: "r1", field: "visualImage", conflictField: "Visual image", imageValue: c.rec, body: "" },
     { rowId: "r1", body: "Missing <img class=\"comment-img\" data-blob=\"" + MISSING + "\">" }
   ]);
-  /* both export shapes (#169: "Scene 01 · Audio") and the saved project's
-     table, whose tail is what it always was ("Row 01 · Audio") */
   for (const md of [toMarkdownDoc(), toMarkdownTableDoc(null, { export: true }), toMarkdownTableDoc()]) {
     const tail = md.slice(md.indexOf("## Comments"));
     assert.ok(tail.includes("Before  \n[image]  \nafter"), tail);
@@ -196,7 +162,6 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
   assert.ok(csv.includes(',"Before\n[image]\nafter"'), csv);
   assert.ok(/,↳ Bob,[^\n]*,,\[image\]/.test(csv), csv);
   assert.equal(csv.split("\r\n").filter((l) => /,\[image\]$/.test(l)).length, 2, "the reply and the conflict card");
-  /* no words marked for these threads, so no numbers: the No. column is empty */
   assert.ok(csv.includes("\r\n,Scene 01 · Audio,Open,,Ann,"), csv);
 
   const [one, conflict, missing] = commentEntries({ pieces: true });
@@ -212,7 +177,6 @@ test("a text-only comment reads exactly as its plain body", () => {
   assert.equal(commentBodyText(c), c.body);
   assert.equal(commentBodyText(c.replies[0]), "");
   assert.equal(commentBodyText(empty), "");
-  /* the plain entries, with no pieces, too */
   const [plain] = commentEntries();
   assert.equal(commentBodyText(plain), plain.body);
 });

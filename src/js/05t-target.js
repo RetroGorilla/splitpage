@@ -5,49 +5,10 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 
-/* ================= a target length per script (#170) =================
-
-   A script can be aimed at a length — "this is a two-minute piece" — and
-   then everything that shows its length shows it against that:
-
-   - the script's length at the end of the rundown (#207; the header's
-     status line on a phone) reads "1:35 / 2:00 · 0:25 left" (dim) or
-     "· 0:05 over" (tally red) — updateScriptStats(), 01-scene-status.js,
-     which also has the pure halves (normalizeTargetLength,
-     targetLengthOf, targetClock). While it shows the delta, the hatching
-     below does not repeat it (.has-length-delta, app.css);
-   - the rundown strip spans the target as well as the script
-     (setRundownExtraSeconds, 05f-rundown.js) and, on its overlay, this
-     file draws a dashed line at the target labelled "Target 2:00", and
-     hatches the gap to it (labelled with the time left) — or, once the
-     script runs over, the part of the blocks past it;
-   - it is set in the length's popover, under the reading speed (03-sync.js
-     promptForWpm / promptForTarget), and from the command menu's "Set
-     target length…".
-
-   It is the document key `targetSeconds` (whole seconds, absent for none),
-   set only through setTargetLength() below, which is one markDirty() — so
-   it is one undo step, saved, synced and merged like the title with no
-   code of its own here. A review session sees it and cannot change it.
-
-   The overlay is drawn on the layout AT REST (rundownLayout().x, not
-   rundownX()): while the hover lens is on the overlay fades out, since the
-   blocks under it have moved then, and it has to be right the moment the
-   lens comes to rest. Minimized, the thin bar keeps the line as a small tick; the label
-   and the hatching need the full strip. */
-
-/* The presets the popover offers: 0:30, 1:00, 2:00, 3:00, 5:00, 10:00. */
 export var TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
 
 function tenth(v) { return Math.round(v * 10) / 10; }
 
-/* Where the target goes on a strip at `scale`, for a script `total`
-   seconds long: the line's x, its label, and the hatched stretch between
-   the end of the script and the target — {left, width, over, delta} — or
-   null when the two meet. `scale` is px per second, or where a time falls
-   (the rest layout's x, rundownLayout().x: with the rest floor the blocks
-   are not quite to scale, and a target inside the script has to land where
-   its time is on them). Pure; px to one decimal, as the blocks are. */
 export function targetOverlayParts(total, target, scale) {
   var at = typeof scale === "function" ? scale : scale > 0 ? function (s) { return s * scale; } : null;
   if (!(target > 0) || !at) return null;
@@ -69,8 +30,6 @@ export function targetOverlayParts(total, target, scale) {
   };
 }
 
-/* The overlay's markup for those parts. Digits, colons and fixed words —
-   nothing needs escaping. */
 function overlayHtml(p) {
   var html = "";
   if (p.hatch) {
@@ -86,10 +45,6 @@ function overlayHtml(p) {
 var lastOverlayHtml = "";
 var LABEL_GAP_PX = 4;
 
-/* Draw (or clear) the target on #rundown-overlay for the strip's last
-   paint. Called after every paint from updateScriptStats(), and by the
-   strip itself when its scale moves (a panel opening, the window
-   resizing). Rewritten only when the markup changes. */
 export function paintTargetOverlay() {
   var layer = document.getElementById("rundown-overlay");
   if (!layer) return;
@@ -101,14 +56,10 @@ export function paintTargetOverlay() {
   layer.innerHTML = html;
   lastOverlayHtml = html;
   if (!parts) return;
-  /* "Target 2:00" sits just left of its line, under the hatching — or
-     right of it when the line is too near the strip's start for that */
   var label = layer.querySelector(".rd-target-label");
   if (label) label.classList.toggle("is-right", parts.lineX < (label.offsetWidth || 0) + LABEL_GAP_PX);
 }
 
-/* Set (seconds) or clear (null, or 0) the script's target, as one edit.
-   Returns whether anything changed. Refused in a review session. */
 export function setTargetLength(seconds) {
   if (!S.state || reviewMode()) return false;
   var before = targetLengthOf(S.state);
@@ -116,12 +67,10 @@ export function setTargetLength(seconds) {
   if (before === after) return false;
   if (after === null) delete S.state.targetSeconds; else S.state.targetSeconds = after;
   markDirty();
-  updateScriptStats();   /* the script's length and the strip */
+  updateScriptStats();
   queueAutoSave();
   return true;
 }
-
-/* ---- the popover's section (03-sync.js puts it under the reading speed) ---- */
 
 export function targetSectionHtml() {
   var current = targetLengthOf(S.state);
@@ -146,10 +95,6 @@ export function targetSectionHtml() {
   '</div>';
 }
 
-/* Wire the section inside popover `wrap`; `close()` shuts the popover.
-   Enter or Set takes what is typed (parseSceneLength's forms, #179: 1:30,
-   90, 90s, 1m30); empty is no target; a preset or "No target" is set at
-   once. Each closes the popover. */
 export function wireTargetSection(wrap, close) {
   var input = wrap.querySelector("#target-input");
   if (!input || reviewMode()) return;

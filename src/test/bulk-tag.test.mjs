@@ -1,9 +1,3 @@
-/* Tagging every mention at once (#218, 07-production-tags.js bulkTagCell /
- * bulkTagRows): the find bar's "Tag all as…". Whole words only, across
- * formatting as one tag, never inside a tag, a link or across a b-roll key
- * (each counted), Aa narrowing to the exact case, the Visual column only,
- * and the markup always what the sanitiser would write.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -90,6 +84,5 @@ test("bulkTagRows: the Visual column only, changed rows stamped, the rest untouc
   assert.ok(rows[0].updatedAt);
   assert.deepEqual(rows[1], before[1]);
   assert.ok(rows[2].updatedAt);
-  /* a second run finds nothing left to tag */
   assert.deepEqual(bulkTagRows(rows, "drone", "gear", "drone", false, true), { hits: 0, inTags: 3, skipped: 0 });
 });

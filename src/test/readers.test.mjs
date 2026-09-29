@@ -1,21 +1,3 @@
-/* Readers on the document model (#85, step 3 of docs/DOCUMENT-MODEL.md §10).
- *
- * doc-model.test.mjs proves the model's readers agree with the HTML readers
- * on CANONICAL HTML — toHtml's own output. The app's stored cells are not
- * canonical: they keep whatever nesting the browser and the sanitiser gave
- * them (<em><strong> as often as <strong><em>, a comment split around a
- * bold word, two <strong>s side by side). A reader only moves onto the
- * model if it gives what it gave before for THOSE cells, so every check
- * here runs over stored-shaped HTML (_stored-cells.mjs): the demo document,
- * hand-written non-canonical cells, and seeded random cells built the
- * way editing builds them — each run wrapped on its own, its marks in a
- * random order — then sanitised, as every cell is on blur and on load.
- *
- * Two readers give something else on purpose, and are checked for exactly
- * that: the plain Markdown export writes Markdown that renders the cell's
- * formatting where the HTML walker's did not, and the production index
- * counts a tag's stretches in the model rather than its spans.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -31,19 +13,14 @@ test("plain text: the model reads every stored cell as htmlToPlainText does", ()
 });
 
 test("plain text: where the model reads differently, by design (D7, §3)", () => {
-  /* a video card has no place in a script cell: its label is not script */
   const card = sanitizeHtml('see <a class="video-embed-card" href="https://youtu.be/x">x</a>');
   assert.match(htmlToPlainText(card), /Watch video/);
   assert.equal(toPlainText(cellOf(card)), "see");
-  /* a line feed inside a text node shows as a space (white-space: normal) */
   assert.equal(htmlToPlainText("a\nb"), "a\nb");
   assert.equal(toPlainText(cellOf("a\nb")), "a b");
-  /* a zero-width space is a caret spot, never content */
   assert.equal(toPlainText(cellOf("a\u200Bb")), "ab");
 });
 
-/* Word and the PDF writer draw a run's text in its format; two neighbouring
-   runs in the same format draw exactly as one. */
 function coalesce(runs) {
   const out = [];
   for (const r of runs) {
@@ -60,9 +37,6 @@ test("docx/pdf runs: the same text in the same formats as htmlToRuns, for every 
   for (const html of STORED) {
     const before = htmlToRuns(html);
     const after = toDocxRuns(cellOf(html));
-    /* the only difference: neighbours in one format that the stored HTML
-       kept in separate elements (<strong>a</strong><strong>b</strong>)
-       can come out as one run */
     assert.deepEqual(coalesce(after), coalesce(before), html);
     assert.ok(after.length <= before.length, html);
     if (after.length !== before.length) merged++;
@@ -70,12 +44,6 @@ test("docx/pdf runs: the same text in the same formats as htmlToRuns, for every 
   assert.ok(merged > 0, "the random cells do exercise neighbouring same-format elements");
 });
 
-/* ---- the teleprompter ----
-
-   What the prompter drew before it read the model: the stored HTML with
-   its blank ends cut off by a regex, sanitised, and every text node split
-   into <span class="w"> words. Kept here verbatim as the reference the
-   model's rendering is compared with. */
 function oldPrompterScene(html) {
   const trimmed = (html || "").replace(/^(\s|<br\s*\/?>)+|(\s|<br\s*\/?>)+$/g, "");
   if (!trimmed.trim()) return null;
@@ -106,13 +74,6 @@ function newPrompterScene(html) {
   return cell.length ? prompterSceneHtml(cell).html : null;
 }
 
-/* What a scene LOOKS like, independent of how its elements nest: each word
-   with everything that styles it (the elements around it, by what they
-   are, sorted), the space and line breaks between words, in order. Two
-   words in a row with no space between and the same styling read as one
-   ("a" "b" from <strong>a</strong><strong>b</strong>). Leading and trailing
-   space and line breaks are left out: CSS collapses the space, and the
-   breaks are the trim, compared on its own below. */
 function looks(html) {
   if (html === null) return [];
   const body = inertBody(html);
@@ -142,7 +103,6 @@ function looks(html) {
       walk(n);
     });
   })(body);
-  /* neighbouring gaps are one gap; blank ends go */
   const merged = [];
   for (const t of out) {
     const last = merged[merged.length - 1];
@@ -163,35 +123,21 @@ test("teleprompter: every stored scene looks as it did, word for word and style 
     assert.deepEqual(looks(after), looks(before), html);
     assert.ok(wordCount(after) <= wordCount(before), html);
     if (wordCount(after) < wordCount(before)) joined++;
-    /* the count scene mode steps by is the spans on screen */
     if (after !== null) assert.equal(prompterSceneHtml(trimPrompterCell(cellOf(html))).words, wordCount(after));
   }
   assert.ok(joined > 0, "the random cells do exercise a word split between two same-format elements");
 });
 
 test("teleprompter: where the model draws differently", () => {
-  /* a word the markup kept in two bold elements is one word to follow */
   assert.equal(newPrompterScene("<strong>bo</strong><strong>ld</strong>"),
     '<strong><span class="w">bold</span></strong>');
-  /* a word half in bold is still two, as it always was */
   assert.equal(wordCount(newPrompterScene("<strong>bo</strong>ld")), 2);
-  /* a line break at the very start is trimmed wherever it sits, not only
-     outside the formatting */
   assert.equal(newPrompterScene("<strong><br>x</strong>"), '<strong><span class="w">x</span></strong>');
   assert.equal(oldPrompterScene("<strong><br>x</strong>"), '<strong><br><span class="w">x</span></strong>');
-  /* markup with no words in it is no paragraph at all */
   assert.equal(newPrompterScene("<strong></strong>"), null);
-  /* a no-break space is kept, as the regex over "&nbsp;" kept it */
   assert.equal(newPrompterScene("&nbsp;x"), '&nbsp;<span class="w">x</span>');
 });
 
-/* ---- the plain Markdown export ----
-
-   toMarkdown is not htmlToMarkdown's output (doc-model.test.mjs pins where
-   and why they differ, each case checked against two CommonMark readers
-   when it was written). What must hold on every stored cell is that it
-   says the same words, and that its markup is only the notation the HTML
-   walker wrote plus the three elements it falls back to. */
 const MD_MARKUP = /<\/?(?:strong|em|s|u|mark)>|\]\((?:https?|mailto):[^)\s]*\)|\*|~~|\[/g;
 const words = (s) => s.replace(/\\([[\]()])/g, "\uE000$1").replace(MD_MARKUP, "").replace(/\uE000/g, "").replace(/[\s\u00a0]/g, "");
 
@@ -207,8 +153,6 @@ test("markdown: every stored cell says the same words as the HTML reader wrote",
 });
 
 test("markdown: a cell htmlToMarkdown wrote without a flaw is written the same", () => {
-  /* formatting on whole words, no two marks crossing, nothing side by
-     side: the Markdown anyone writes by hand */
   for (const html of [
     "plain words", "<strong>bold</strong> and <em>italic</em>", "a <strong><em>both</em></strong> b",
     "<em>x <strong>y</strong></em> z", "line one<br>line two", '<a href="https://e.x/">a <strong>link</strong></a>',
@@ -219,12 +163,6 @@ test("markdown: a cell htmlToMarkdown wrote without a flaw is written the same",
   }
 });
 
-/* ---- the production index ----
-
-   tagsInField reads the model (07-production-tags.js): one mention per
-   stretch of one tag. On every stored cell that is one per tag span, as
-   the HTML reader counted, with the same names; the shapes where the two
-   differ are tag-panel-model.test.mjs's. */
 function oldTagsInField(html) {
   return [...inertBody(html).querySelectorAll(".tag-anchor")].map((el) => ({
     catId: el.getAttribute("data-tag-cat"),
@@ -238,7 +176,6 @@ test("production index: every stored cell has the mentions the span reader found
   for (const html of STORED) {
     const before = oldTagsInField(html), after = tagsInField(html);
     assert.deepEqual(after.map((t) => [t.catId, t.name]), before.map((t) => [t.catId, t.name]), html);
-    /* a line break inside a tag is "\n" in the model; textContent had none */
     assert.deepEqual(after.map((t) => t.text.replace(/\s+/g, "")), before.map((t) => t.text.replace(/\s+/g, "")), html);
     if (after.length) tagged++;
   }

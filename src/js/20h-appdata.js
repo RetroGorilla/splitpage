@@ -38,55 +38,8 @@ import {
   updateConnectMenu
 } from "./20e-connect.js";
 
-/* ================= export/import: the whole app's data =================
-
-   File ▸ Export app data… (X1, this file) lets someone take their version
-   history, server bookmarks and preferences to another machine or between
-   the browser build and the desktop app — none of which live in a
-   document, so opening a file never carries them. File ▸ Import app
-   data… (X2, the second half of this file) is the merge on the receiving
-   side: parse and refuse what did not come from this app, then MERGE,
-   NEVER REPLACE — history only through importHistoryBundle
-   (03a-history-store.js, invariant #49), bookmarks as a union where the
-   existing entry wins, preferences only where this machine has none.
-
-   Both directions run in every build. exportHistoryAll()
-   (03a-history-store.js) reads through whichever history backend this
-   page resolved to — IndexedDB/memory in the browser, or the desktop
-   bridge's DESKTOP.historyListDocs() enumerating main's on-disk store —
-   and buildAppDataBundle() below lets that one section fail on its own
-   (a backend that cannot answer, say) without failing the whole export.
-
-   WHAT NEVER LEAVES: a server sign-in token, a Drive API key or client id,
-   the last-used Drive folder, a launch token, a conflict stash, or the
-   server base URL a session happened to be pointed at. None of those keys
-   are ever read by buildAppDataBundle(); assertNoSecrets() is the
-   independent second check (invariant #48) that catches it anyway if one
-   of them — or anything that merely LOOKS like a credential — ever gets
-   added into this bundle by a future edit.
-
-   IMAGES (#82). History snapshots name their images by sha; the bytes live
-   in the blob store. The bundle carries them beside the history:
-
-     blobs:        {"<sha256 hex>": {mime, b64}} — every image an exported
-                   snapshot names whose bytes this page could get, once
-     missingBlobs: ["<sha256 hex>"] — the ones it could not; the export
-                   says so in a warning rather than dropping them quietly
-
-   Both come from exportHistoryAll() and count toward its 200 MB cap. The
-   keys are 64 lowercase hex characters and the values {mime, b64}: hex has
-   no t, o, k, s, p or l, so neither can ever match APPDATA_SECRET_RE
-   (which reads keys, not values). On import, importHistoryBundle verifies
-   and stores every blob BEFORE the snapshots that name it (#49). A bundle
-   with no `blobs` key — every file written before #82 — imports as it
-   always did. */
-
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
-/* Same shape as 03a-history-store.js's own key-danger regex (invariant
-   #48) — deliberately broad. A bookmark's "ssh":{"userHost":...} does not
-   match any of these; if a future field ever does, that is exactly the bug
-   this check exists to catch before the file is written. */
 var APPDATA_SECRET_RE = /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i;
 
 function appDataReadRaw(key) {
@@ -102,20 +55,12 @@ function appDataReadJson(key, fallback) {
   } catch (e) { return fallback; }
 }
 
-/* The version this page itself was built as (readEmbeddedVersion, from
-   20a-update.js) when there is no desktop bridge to ask. */
 function appDataVersionString() {
   if (S.DESKTOP && typeof S.DESKTOP.appVersion === "string" && S.DESKTOP.appVersion) return S.DESKTOP.appVersion;
   var embedded = typeof readEmbeddedVersion === "function" ? readEmbeddedVersion() : null;
   return embedded || "";
 }
 
-/* → the AppDataBundle (X1). Every section is read in its own try/catch:
-   one bad localStorage key (corrupt JSON, storage blocked) must not lose
-   every other section, and a desktop backend's history rejection must not
-   stop bookmarks or prefs from exporting. A section that failed comes back
-   null/empty rather than throwing past this function — assertNoSecrets and
-   any caller only ever see a complete, if partial, bundle. */
 async function buildAppDataBundle() {
   var bundle = {
     format: APPDATA_FORMAT,
@@ -160,7 +105,6 @@ async function buildAppDataBundle() {
       taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY),
       autosave: appDataReadRaw(AUTOSAVE_KEY)
     };
-    /* and the rest of Settings (#181, 00p-prefs.js) */
     SETTINGS_APPDATA_PREFS.forEach(function (spec) {
       bundle.prefs[spec.name] = appDataReadRaw(spec.key);
     });
@@ -171,12 +115,6 @@ async function buildAppDataBundle() {
   return bundle;
 }
 
-/* Invariant #48: walks every OWN key at every depth of the bundle (never
-   the string VALUES — a document's own text or a snapshot's stateJson is
-   free to contain the word "password" without tripping this) and throws
-   the moment one looks like a credential. Called before a single byte is
-   written; a throw here means nothing is saved and the caller shows the
-   error toast instead. */
 function assertNoSecrets(value) {
   (function walk(v) {
     if (!v || typeof v !== "object") return;
@@ -205,18 +143,11 @@ function appDataFilename() {
   return "splitpage-app-data-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".json";
 }
 
-/* File ▸ Export app data… (X1 — visible in both the browser and the
-   desktop app; 20f-desktop.js's initDesktop no longer hides this entry).
-   Gathers, asserts, then hands off to deliverFile() the same way every
-   export in 18-local-files.js already does: a browser download, or the
-   desktop native Save dialog. */
 var appDataLastExport = null;
 
 export async function exportAppData() {
   appDataLastExport = null;
   showToast("Gathering your Splitpage data…");
-  /* Let the toast actually paint before the (possibly large) history read
-     below runs on this same thread. */
   await new Promise(function (resolve) { setTimeout(resolve, 0); });
 
   var bundle;
@@ -254,10 +185,6 @@ export async function exportAppData() {
   }
 }
 
-/* ================= import (X2) ================= */
-
-/* A bundle is JSON text we hold whole in memory, and V8 cannot build a
-   string much past this anyway; a bigger file is not ours. */
 var APPDATA_MAX_TEXT = 512 * 1024 * 1024;
 
 function appDataError(code, message) {
@@ -272,9 +199,6 @@ function appDataIsPlainObject(v) {
 
 function appDataNormalizeHistory(h) {
   if (!appDataIsPlainObject(h)) return null;
-  /* Shape only. Every id and body is validated again by
-     importHistoryBundle, which counts what it refuses — dropping a bad
-     document here would hide it from that count. */
   return {
     docs: (Array.isArray(h.docs) ? h.docs : []).filter(appDataIsPlainObject).map(function (d) {
       return {
@@ -289,9 +213,6 @@ function appDataNormalizeHistory(h) {
   };
 }
 
-/* Shape only, like the history: a plain object of plain objects, passed on
-   whole for importHistoryBundle to verify blob by blob — dropping a bad
-   entry here would hide it from what that import reports. */
 function appDataNormalizeBlobs(b) {
   if (!appDataIsPlainObject(b)) return null;
   var out = {};
@@ -318,16 +239,6 @@ function appDataNormalizePrefs(p) {
   return out;
 }
 
-/* text → a normalised AppDataBundle, or throws an Error whose code is
-   "not-json" | "too-large" | "wrong-format" | "newer-version" | "secret"
-   and whose message is fit for a toast. Whole-file refusals only: a
-   malformed SECTION (history not an object, bookmarks not an array) is
-   dropped and the rest still imports.
-
-   A key that looks like a credential anywhere in the file (invariant #48,
-   the same walk export runs) refuses the whole file: this app never
-   writes one, so a file carrying one was not made by this app and nothing
-   else in it can be trusted to be what it claims. */
 function parseAppDataBundle(text) {
   if (typeof text !== "string") {
     throw appDataError("not-json", "That file isn't Splitpage app data (it isn't readable text).");
@@ -371,11 +282,6 @@ function parseAppDataBundle(text) {
   };
 }
 
-/* Union by normalised URL. An existing bookmark always wins (its name,
-   its ssh settings, its id); an imported one whose id is already taken
-   gets a fresh one. Only the known fields are carried — {id, name, url,
-   ssh:{userHost, remotePort, localPort}} — so nothing else in the file
-   can ride into localStorage on a bookmark's back. */
 function appDataMergeBookmarks(list) {
   var out = { added: 0, skipped: 0, failed: 0 };
   if (!list || !list.length) return out;
@@ -414,15 +320,11 @@ function appDataMergeBookmarks(list) {
       var modal = document.getElementById("connect-modal");
       if (modal && !modal.hidden) renderConnect();
       updateConnectMenu();
-    } catch (e) { /* a re-render is a courtesy; the list is saved */ }
+    } catch (e) { }
   }
   return out;
 }
 
-/* Each simple preference is written ONLY when this machine has no value
-   for it at all — a local choice is never overwritten by an imported one.
-   Values are checked against the shape the app itself writes; one that
-   does not fit is ignored rather than stored for the app to choke on. */
 function appDataPrefSpecs() {
   return [
     { name: "tourDone", key: TOUR_DONE_KEY,
@@ -453,13 +355,9 @@ function appDataMergePrefs(prefs) {
     try {
       localStorage.setItem(spec.key, incoming);
       written.push(spec.name);
-    } catch (e) { /* storage blocked — nothing to merge into */ }
+    } catch (e) { }
   });
 
-  /* Onboarding is an object, merged key by key with the LOCAL value
-     winning. Only flat values travel (the app writes v/done/skipped/at).
-     A local value that exists but is not a JSON object is left alone: it
-     is this machine's value even if the wizard reads it as absent. */
   var inc = prefs.onboarding;
   if (appDataIsPlainObject(inc)) {
     var clean = {}, n = 0;
@@ -492,7 +390,6 @@ function appDataMergePrefs(prefs) {
     }
   }
 
-  /* The two preferences this page holds in memory as well. */
   try {
     if (written.indexOf("commentsSort") !== -1) S.commentSortMode = readCommentSortMode();
     if (written.indexOf("writerSize") !== -1) applyWriterSize(readWriterSize(), false);
@@ -506,9 +403,6 @@ function appDataPlural(n, one, many) {
 
 var appDataLastSummary = null;
 
-/* text → the import's summary (also kept for __appDataTest.summary()).
-   Never rejects. One toast says what arrived; a warn toast and a
-   console.warn say what did not. */
 async function importAppData(text) {
   var bundle;
   try {
@@ -523,17 +417,12 @@ async function importAppData(text) {
 
   var summary = { ok: true, history: null, blobs: null, bookmarks: null, prefs: [], legacy: null, toast: "", warning: null };
 
-  /* The legacy shared list goes to Older, never back into localStorage
-     ('splitpage-snapshots' is left exactly as this machine had it). Same
-     content-derived ids as the one-time migration, so a list this machine
-     already migrated dedupes instead of doubling. */
   var legacy = [];
   if (bundle.snapshots) {
     try { legacy = normalizeLegacySnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
     summary.legacy = legacy.length;
   }
   var hist = bundle.history || { docs: [], older: [] };
-  /* blobs ride in with the history: importHistoryBundle stores them first */
   summary.history = await importHistoryBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
   summary.blobs = summary.history.blobs;
 
@@ -579,7 +468,6 @@ async function importAppData(text) {
     showToast(summary.warning, "warn", true);
   }
   if (badImages) {
-    /* The snapshots still imported; only their pictures are missing. */
     var imgWarning = appDataPlural(badImages, "image", "images") + " in that file could not be imported" +
       " — the snapshots that use " + (badImages === 1 ? "it" : "them") + " will show a placeholder." +
       " Details are in the console.";
@@ -591,10 +479,6 @@ async function importAppData(text) {
   return summary;
 }
 
-/* File ▸ Import app data… (desktop — initDesktop unhides it). The page's
-   own file input, deliberately not DESKTOP.openFileDialog(): main's filter
-   lists script extensions only, and widening it would mean touching
-   main.js. Wired on first use, so nothing here runs at boot. */
 var appDataInputWired = false;
 
 export function openImportAppData() {
@@ -624,13 +508,10 @@ async function onImportAppDataChosen(e) {
     }
     await importAppData(text);
   } finally {
-    /* so picking the same file again still fires 'change' */
     input.value = "";
   }
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   window.__appDataTest = {
     build: buildAppDataBundle,
@@ -638,13 +519,8 @@ export function __init() {
     parse: parseAppDataBundle,
     importText: importAppData,
     summary: function () { return appDataLastSummary; },
-    /* File ▸ Export app data… end to end (deliverFile included), and what
-       it last reported: {ok, images, missingBlobs, truncated, warning} */
     exportFile: exportAppData,
     exportSummary: function () { return appDataLastExport; },
-    /* Points the image registry (02c-blobs.js) at a backend — e.g.
-       __desktopTest.makeBlobBackend(fake) — or, with null, back to its own
-       choice; either way it forgets which blobs it knew to be durable. */
     useBlobBackend: function (backend) { setBlobBackend(backend || null); return true; }
   };
 }
