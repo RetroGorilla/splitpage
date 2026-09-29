@@ -9,6 +9,7 @@ import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
+import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection } from "./05b-cell-edit.js";
 import { nowIso } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
@@ -220,6 +221,16 @@ export function moveRow(id, dir) {
 }
 
 export function armDelete(btn, id) {
+  // Empty scene: nothing to lose, so one click deletes it (Adam, 2026-09-28)
+  var idx = findRowIndex(id);
+  var rowEl = document.querySelector('#rows .row[data-id="' + safeId(id) + '"]');
+  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(syncFieldFromDom);
+  if (idx !== -1 && isBlankScene(S.state, S.state.rows[idx])) {
+    clearTimeout(S.deleteArmTimer);
+    S.deleteArmId = null;
+    deleteRow(id);
+    return;
+  }
   if (S.deleteArmId === id) {
     clearTimeout(S.deleteArmTimer);
     S.deleteArmId = null;
