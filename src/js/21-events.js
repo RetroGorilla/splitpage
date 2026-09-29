@@ -42,6 +42,7 @@ import {
   render,
   renderRow,
   syncFieldFromDom,
+  syncPageTitle,
   toggleCellFormat,
   typeAtDirectionEdge,
   typePendingMarks,
@@ -907,7 +908,7 @@ function afterUndoApplied(steps) {
 }
 
 function onUndoRefused(reason, dir) {
-  showToast("Couldn't " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
+  showToast("Could not " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
 }
 
 function onRootInput(e) {
@@ -2069,6 +2070,7 @@ function init() {
   document.getElementById("doc-title").addEventListener("input", function (e) {
     if (!S.state) return;
     S.state.title = e.target.value;
+    syncPageTitle();
     markDirty();
   });
 
@@ -2316,8 +2318,10 @@ function init() {
     if (fmt) { onWriterFormat(fmt); return; }
     if (e.target.closest("#wr-gutter-mode")) { cycleWriterGutter(); return; }
     if (e.target.closest("#wr-export")) { exportNarration("narration-docx"); return; }
-    if (e.target.closest("#wr-close")) closeWriter();
   });
+  /* Close sits beside Save in the title row now (2026-09-28), not on the
+     tools' bar */
+  document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
 
   /* The writer covers the whole screen, but Tab does not know that: from
      the last control on its bar, focus walks on into the header and the

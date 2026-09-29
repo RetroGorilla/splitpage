@@ -6,7 +6,9 @@ import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { exportMetaLine, tagPrintColor, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
-import { brollSummaryText, commentNumbers, exportBrollScenes, exportFacts, exportRuns, sceneFacts } from "./14b-export-kit.js";
+import {
+  brollSummaryText, commentNumbers, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
+} from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
@@ -49,8 +51,18 @@ export var EXPORT_FORMATS = [
       { value: "stacked", label: "Stacked", action: "export-md" },
       { value: "table", label: "Two columns", action: "export-md-table" }
     ] },
-  { id: "csv", group: "whole", name: "Spreadsheet", ext: ".csv", icon: "i-file",
-    purpose: "A row per scene, for Excel or Sheets", action: "export-csv" },
+  /* Excel or CSV, the second click under the one card (Adam, 2026-09-28:
+     "a submenu/second click under the spreadsheet option"). Excel first,
+     so it is what a first visit gets: a workbook that opens laid out —
+     sized columns, wrapped text, a frozen header, room for notes. The CSV
+     stays, for the tools that want plain values. The card keeps its id,
+     "csv", so a device that last exported the CSV still opens on it. */
+  { id: "csv", group: "whole", name: "Spreadsheet", ext: ".xlsx / .csv", icon: "i-file",
+    purpose: "A row per scene, for Excel, Sheets or Numbers",
+    option: "Format", choices: [
+      { value: "xlsx", label: "Excel (.xlsx)", action: "export-xlsx" },
+      { value: "csv", label: "CSV (.csv)", action: "export-csv" }
+    ] },
   /* SplitShare (Adam's name for it, 2026-09-26): the script with the whole
      app built in, one file — what the card has to get across in a line */
   { id: "html", group: "whole", name: "SplitShare", ext: ".html", icon: "i-globe",
@@ -67,8 +79,12 @@ export var EXPORT_FORMATS = [
        happen to be evaluated. */
     toggle: { id: "directions", label: "Include stage directions",
               on: narrationIncludesDirections, set: setNarrationIncludesDirections } },
-  { id: "breakdown", group: "part", name: "Breakdown", ext: ".csv", icon: "i-tag",
-    purpose: "Every tagged item, its status and owner", action: "export-breakdown" },
+  { id: "breakdown", group: "part", name: "Breakdown", ext: ".xlsx / .csv", icon: "i-tag",
+    purpose: "Every tagged item, its status and owner",
+    option: "Format", choices: [
+      { value: "xlsx", label: "Excel (.xlsx)", action: "export-breakdown-xlsx" },
+      { value: "csv", label: "CSV (.csv)", action: "export-breakdown" }
+    ] },
   { id: "packing", group: "part", name: "Packing list", ext: ".pdf", icon: "i-box",
     purpose: "A checklist for the shoot: out, back, and signed off",
     option: "List", choices: [
@@ -77,39 +93,45 @@ export var EXPORT_FORMATS = [
     ] },
   /* the b-roll page's own two files (#150), every shot by scene (Adam,
      2026-09-26: the shot list as an export of its own) */
-  { id: "broll", group: "part", name: "B-roll shot list", ext: ".pdf / .csv", icon: "i-camera",
+  { id: "broll", group: "part", name: "B-roll shot list", ext: ".pdf / .xlsx / .csv", icon: "i-camera",
     purpose: "Every shot, with props, flags and room for notes",
     option: "Format", choices: [
       { value: "pdf", label: "PDF, landscape", action: "export-broll-pdf" },
-      { value: "csv", label: "Spreadsheet (.csv)", action: "export-broll-csv" }
+      { value: "xlsx", label: "Excel (.xlsx)", action: "export-broll-xlsx" },
+      { value: "csv", label: "CSV (.csv)", action: "export-broll-csv" }
     ] }
 ];
 
 /* What each action is called on a button or in a list — "Export <this>",
-   "Export again as <this>", and the command menu's rows. */
+   "Export again as <this>", and the command menu's rows. With two
+   spreadsheets a card, each says which it is: "Export again as Excel" is
+   the workbook, "… as CSV" the plain one. */
 export var EXPORT_ACTION_NAMES = {
   "export-pdf": "PDF",
   "export-docx": "Word",
   "export-md": "Markdown",
   "export-md-table": "Markdown, two columns",
-  "export-csv": "Spreadsheet",
+  "export-xlsx": "Excel",
+  "export-csv": "CSV",
   "export-html": "SplitShare",
   "export-narration-docx": "Narration (.docx)",
   "export-narration-txt": "Narration (.txt)",
-  "export-breakdown": "Breakdown",
+  "export-breakdown-xlsx": "Breakdown (Excel)",
+  "export-breakdown": "Breakdown (.csv)",
   "export-packing-gear": "Gear packing list",
   "export-packing-prop": "Props packing list",
   "export-broll-pdf": "B-roll shot list",
+  "export-broll-xlsx": "B-roll shot list (Excel)",
   "export-broll-csv": "B-roll shot list (.csv)"
 };
 
 /* buildFileData's kind for each action (18-local-files.js). */
 var ACTION_KINDS = {
   "export-pdf": "pdf", "export-docx": "docx", "export-md": "md", "export-md-table": "md-table",
-  "export-csv": "csv", "export-html": "html", "export-narration-docx": "narration-docx",
-  "export-narration-txt": "narration-txt", "export-breakdown": "breakdown",
+  "export-xlsx": "xlsx", "export-csv": "csv", "export-html": "html", "export-narration-docx": "narration-docx",
+  "export-narration-txt": "narration-txt", "export-breakdown-xlsx": "breakdown xlsx", "export-breakdown": "breakdown",
   "export-packing-gear": "packing-gear", "export-packing-prop": "packing-prop",
-  "export-broll-pdf": "b-roll pdf", "export-broll-csv": "b-roll csv"
+  "export-broll-pdf": "b-roll pdf", "export-broll-xlsx": "b-roll xlsx", "export-broll-csv": "b-roll csv"
 };
 
 export function isExportAction(action) {
@@ -142,8 +164,8 @@ export function exportActionReason(action) {
     var cat = tagCategory(catId);
     return has ? "" : "Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack";
   }
-  if (action === "export-broll-pdf" || action === "export-broll-csv") {
-    return exportBrollScenes().length ? "" : "No b-roll yet — start a Visual line with B-roll:";
+  if (action === "export-broll-pdf" || action === "export-broll-xlsx" || action === "export-broll-csv") {
+    return exportBrollScenes().length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
   }
   return "";
 }
@@ -370,11 +392,36 @@ function pvShotList(title) {
     pvFooter(title, "B-roll shot list");
 }
 
+/* The sheets the whole-script workbook will have (buildScriptXlsx,
+   16b-xlsx.js): the script always, and a sheet for each part only when
+   the script has anything for it — asked of the same lists the builder
+   reads (exportComments, breakdownRows, and the shots brollTable lists,
+   which exportBrollScenes groups), so the tabs cannot promise a sheet the
+   file leaves out. */
+function xlsxSheetNames() {
+  var names = ["Script"];
+  if (exportComments().length) names.push("Comments");
+  if (breakdownRows().length) names.push("Breakdown");
+  if (exportBrollScenes().length) names.push("B-roll");
+  return names;
+}
+
+/* An Excel file is the same grid as its CSV, dressed as the workbook it
+   opens as: the header row filled and ruled off (it is frozen, and filters
+   hang from it) and the sheet tabs along the bottom, the first one open —
+   only the sheets the file will really have. */
+function pvWorkbook(grid, sheets) {
+  return '<div class="pv-xl">' + grid + '</div>' +
+    '<div class="pv-sheets">' + sheets.map(function (s, i) {
+      return '<span class="pv-sheet' + (i ? '' : ' is-on') + '">' + escapeHtml(s) + '</span>';
+    }).join("") + '</div>';
+}
+
 function previewHtml(action) {
   var title = escapeHtml(S.state.title || "Untitled Script");
   var rows = S.state.rows.slice(0, 7);
   if (action === "export-broll-pdf") return pvShotList(title);
-  if (action === "export-broll-csv") {
+  if (action === "export-broll-csv" || action === "export-broll-xlsx") {
     var shots = [];
     exportBrollScenes().forEach(function (g) {
       g.items.forEach(function (r) {
@@ -382,16 +429,18 @@ function previewHtml(action) {
                              r.flagged ? "yes" : "", escapeHtml(trunc(r.location, 12)), escapeHtml(g.start)] });
       });
     });
-    return pvGrid(["Scene", "Shot", "Status", "Flagged", "Location", "Scene start"], shots.slice(0, 14), [11, 33, 15, 13, 16, 12]);
+    var shotGrid = pvGrid(["Scene", "Shot", "Status", "Flagged", "Location", "Scene start"], shots.slice(0, 14), [11, 33, 15, 13, 16, 12]);
+    return action === "export-broll-xlsx" ? pvWorkbook(shotGrid, ["B-roll"]) : shotGrid;
   }
   if (action === "export-pdf") return pvScript(title, { rundown: true }) + pvFooter(title);
   if (action === "export-docx") return pvScript(title, { word: true }) + pvFooter(title);
   if (action === "export-md") return pvTextLines(toMarkdownDoc({ scenes: 3 }), 40);
   if (action === "export-md-table") return pvTextLines(toMarkdownTableDoc(null, { export: true, scenes: 7 }), 20);
-  if (action === "export-csv") {
+  if (action === "export-csv" || action === "export-xlsx") {
     var scenes = sceneFacts();
+    var sheetHead = ["Scene", "Start", "Status", "Read", "Visual", "Audio"];
     /* a few scenes, so the totals under them stay in sight */
-    return pvGrid(["Scene", "Start", "Status", "Read", "Visual", "Audio"], rows.slice(0, 5).map(function (r, i) {
+    var sheetRows = rows.slice(0, 5).map(function (r, i) {
       var f = scenes[i];
       return { cells: [f.number, f.start, escapeHtml(f.status.label), f.read,
                        cellText(r.visualText, 34), cellText(r.audioText, 44)] };
@@ -399,7 +448,13 @@ function previewHtml(action) {
       { cls: "pv-gap", cells: ["…", "", "", "", "", ""] },
       { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts().status.shot + " of " + S.state.rows.length + " shot"),
                                  escapeHtml(exportFacts().runtime), "", ""] }
-    ] : []), [12, 12, 14, 10, 25, 27]);
+    ] : []);
+    if (action === "export-csv") return pvGrid(sheetHead, sheetRows, [12, 12, 14, 10, 25, 27]);
+    /* the workbook's script sheet ends in a blank, ruled Notes column to
+       write in (scriptSheet, 16b-xlsx.js) — the room Adam asked for */
+    return pvWorkbook(pvGrid(sheetHead.concat(["Notes"]), sheetRows.map(function (r) {
+      return { cls: r.cls, cells: r.cells.concat([""]) };
+    }), [12, 12, 14, 10, 18, 20, 14]), xlsxSheetNames());
   }
   if (action === "export-html") {
     /* the page is the app, named for the script in the browser's tab */
@@ -426,14 +481,15 @@ function previewHtml(action) {
         return '<p class="pv-para">' + n + cellText(r.audioText, 180, said) + '</p>';
       }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
-  if (action === "export-breakdown") {
+  if (action === "export-breakdown" || action === "export-breakdown-xlsx") {
     var starts = sceneFacts().map(function (f) { return f.start; });
     var items = breakdownRows().slice(0, 14);
-    return pvGrid(["Category", "Item", "Status", "Scenes", "First at"], items.map(function (b) {
+    var itemGrid = pvGrid(["Category", "Item", "Status", "Scenes", "First at"], items.map(function (b) {
       var first = b.inScript === "no" ? "" : (starts[Number(b.scenes[0]) - 1] || "");
       return { cells: [escapeHtml(b.categoryLabel), escapeHtml(trunc(b.name, 24)), escapeHtml(b.statusLabel),
                        escapeHtml(trunc(b.scenes.join(" "), 14)), first] };
     }), [17, 29, 17, 21, 16]) + (items.length ? "" : '<p class="pv-para pv-faint">(nothing tagged yet)</p>');
+    return action === "export-breakdown-xlsx" ? pvWorkbook(itemGrid, ["Breakdown"]) : itemGrid;
   }
   if (action === "export-packing-gear" || action === "export-packing-prop") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
@@ -515,6 +571,14 @@ export function exportSummary(action) {
     if (action === "export-csv") {
       bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
       if ((S.state.comments || []).length) bits.push("comments below");
+    } else if (action === "export-xlsx") {
+      bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
+      /* where the CSV puts its comments below the scenes, the workbook
+         gives each part a sheet of its own */
+      var more = xlsxSheetNames().slice(1).map(function (s) { return s.toLowerCase(); });
+      if (more.length) bits.push((more.length === 1 ? "a sheet for " : "sheets for ") + listed(more));
+      bits.push("a Notes column to write in");
+      bits.push("columns sized, header frozen, filters on");
     } else if (action === "export-html") {
       bits.push(plural(rows.length, "scene"));
     } else {
@@ -537,6 +601,7 @@ export function exportSummary(action) {
   } else if (f.format.id === "breakdown") {
     bits.push(plural(breakdownRows().length, "tagged item"));
     bits.push("category, status, owner, scenes and where each first appears");
+    if (action === "export-breakdown-xlsx") bits.push("columns sized, header frozen, filters on");
   } else if (f.format.id === "packing") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
     var items = breakdownRows().filter(function (b) { return b.catId === catId; });
@@ -551,6 +616,7 @@ export function exportSummary(action) {
     if (shotCount) bits.push(brollSummaryText(shotGroups));
     bits.push(action === "export-broll-pdf" ? "props, flags and their reasons, and room for notes"
       : "a row a shot: status, flag, location, props, who, notes");
+    if (action === "export-broll-xlsx") bits.push("columns sized, header frozen, filters on");
   }
   return bits.join(" · ");
 }

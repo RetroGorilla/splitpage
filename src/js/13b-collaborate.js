@@ -684,7 +684,7 @@ function collabErrorText(e, url) {
   return host + " said: " + ((e && e.message) || "something went wrong") + ".";
 }
 
-/* Under "Couldn't reach <host>.", which already names it. */
+/* Under "Could not reach <host>.", which already names it. */
 function unreachableText(c) {
   var code = c.error && c.error.code;
   if (code === "offline") {
@@ -755,7 +755,7 @@ function bodyHtml(c, host) {
       return statusHtml("Checking " + host + "…");
     case "unreachable":
       return '<div class="connect-error collab-problem">' +
-          '<strong>Couldn’t reach ' + escapeHtml(host) + '.</strong> ' + escapeHtml(unreachableText(c)) +
+          '<strong>Could not reach ' + escapeHtml(host) + '.</strong> ' + escapeHtml(unreachableText(c)) +
         '</div>' +
         (settingsServer(c)
           ? '<p class="modal-hint collab-after">Collaborate stores scripts on the server in Settings ▸ Collaboration. ' +
@@ -792,7 +792,7 @@ function bodyHtml(c, host) {
         plainLinkRow(c, plainLink(c));
     case "error":
       return '<div class="connect-error collab-problem"><strong>' +
-          escapeHtml(onServerDoc() ? "That didn’t work." : "Couldn’t store the script.") + '</strong> ' +
+          escapeHtml(onServerDoc() ? "That didn’t work." : "Could not store the script.") + '</strong> ' +
           escapeHtml(collabErrorText(c.error, c.target.url)) + '</div>' +
         (onServerDoc() ? '' : '<p class="modal-hint collab-after">Nothing changed: the script is still only on this device.</p>');
   }

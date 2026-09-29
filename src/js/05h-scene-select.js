@@ -330,7 +330,7 @@ function runClipboardCommand(cut) {
   /* Refused (no user gesture reached it): the asynchronous clipboard, which
      takes text and HTML — the table's marker still carries the scenes. */
   var ids = selectedSceneIds();
-  if (!ids.length || !navigator.clipboard) { showToast("Couldn't reach the clipboard.", "warn"); return; }
+  if (!ids.length || !navigator.clipboard) { showToast("Could not reach the clipboard.", "warn"); return; }
   if (cut && refused("cut")) cut = false;
   var nonce = cut ? randomHexBytes(16) : null;
   var out = buildScenePayload(S.state, ids, { cut: nonce });
@@ -343,7 +343,7 @@ function runClipboardCommand(cut) {
   write.then(function () {
     if (cut) afterCut({ ids: ids, nonce: nonce, out: out });
     else announceLeftOut(count(ids.length) + " copied", out.leftOut);
-  }, function () { showToast("Couldn't reach the clipboard.", "warn"); });
+  }, function () { showToast("Could not reach the clipboard.", "warn"); });
 }
 
 function afterCut(w) {

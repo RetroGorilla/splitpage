@@ -225,7 +225,13 @@ function applyMarkdownVisualCell(s, row, md) {
      written) is not in the cell, and that is not the cell deleting it. */
   var uncarried = !m && row.imageRef && !rowImageDataUrl(row);
   delete row.visualImage;
-  if (!uncarried) row.imageRef = rec || null;
+  if (!uncarried) {
+    /* another picture put in the cell by hand is not the annotated one
+       (02d-gallery.js): its original and marks are not this picture's */
+    var was = row.imageRef && row.imageRef.sha256;
+    row.imageRef = rec || null;
+    if (!rec || rec.sha256 !== was) delete row.imageAnnotation;
+  }
   if (m) text = text.slice(m[0].length);
   row.visualText = markdownCellToHtml(s, text);
 }

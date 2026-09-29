@@ -73,6 +73,7 @@ import {
   narrationRows
 } from "./15-docx.js";
 import { buildCsv, csvToRows } from "./16-csv.js";
+import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.js";
 import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
@@ -205,6 +206,11 @@ export function exportFileName(kind, baseName, opts) {
   opts = opts || {};
   if (kind === "breakdown") return baseName + " - breakdown.csv";
   if (kind === "b-roll csv") return baseName + " - b-roll shot list.csv";
+  /* the Excel twins of the three spreadsheets (2026-09-28): the same names,
+     the workbook's own extension — the whole script's is "<base>.xlsx",
+     which the fall-through at the bottom already gives "xlsx" */
+  if (kind === "breakdown xlsx") return baseName + " - breakdown.xlsx";
+  if (kind === "b-roll xlsx") return baseName + " - b-roll shot list.xlsx";
   if (kind === "b-roll pdf") return baseName + " - b-roll shot list.pdf";
   if (kind === "narration-docx") return baseName + " - narration.docx";
   if (kind === "narration-txt") return baseName + " - narration.txt";
@@ -239,6 +245,13 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
   /* the b-roll shot list's own two (#150, 08d-broll-panel.js) */
   if (kind === "b-roll csv") return { data: buildBrollCsv(), filename: filename };
+  /* The same three as Excel workbooks (16b-xlsx.js, 2026-09-28): sized
+     columns, wrapped text, a frozen header and a sheet for each part, where
+     the CSVs above stay plain values for other tools to read. Synchronous
+     and reading S.state, like the CSV builders beside them. */
+  if (kind === "xlsx") return { data: buildScriptXlsx(), filename: filename };
+  if (kind === "breakdown xlsx") return { data: buildBreakdownXlsx(), filename: filename };
+  if (kind === "b-roll xlsx") return { data: buildBrollXlsx(), filename: filename };
   /* opts.brollView: every shot by scene from the Export dialog; without
      it, the list as the b-roll page shows it, which is what its Print is */
   if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint(opts.brollView)), filename: filename };
@@ -621,7 +634,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     endBusy(readBusy);
   }
 
-  if (!newRows || !newRows.length) { showToast("No script rows found in that file.", "warn"); return; }
+  if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
   /* opening a document replaces the whole script — keep a way back */
   if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);
@@ -763,6 +776,7 @@ export function mimeForFilename(filename) {
   var ext = (/\.([a-z0-9]+)$/i.exec(filename || "") || ["", ""])[1].toLowerCase();
   if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (ext === "csv") return "text/csv";
+  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   if (ext === "md" || ext === "markdown") return "text/markdown";
   if (ext === "pdf") return "application/pdf";
   if (ext === "html") return "text/html";
@@ -995,8 +1009,8 @@ export async function reloadProjectFromDisk() {
 }
 
 /* Every export in the File menu funnels through here — .docx, both
-   Markdowns, .csv, the breakdown, .pdf, standalone HTML, both narration
-   exports and both packing lists — so this is the one place that has to
+   Markdowns, .csv and .xlsx, the breakdown, .pdf, standalone HTML, both
+   narration exports and both packing lists — so this is the one place that has to
    know a long script takes a noticeable moment to build. withBusy raises
    the top bar (04b-busy.js) only if the build actually takes long enough
    to need it, which on a short script means nothing appears at all. */
@@ -1038,16 +1052,18 @@ export async function exportPackingList(catId) {
   await exportAs("packing-" + catId);
 }
 
-/* File ▸ Export… ▸ B-roll shot list: the landscape sheet, or the
-   spreadsheet, of every shot, by scene, however the b-roll page was last
-   left filtered or grouped — printing the list as it is on screen is that
-   page's own Print. With no shots at all it says so, as the page does. */
+/* File ▸ Export… ▸ B-roll shot list: the landscape sheet, or either
+   spreadsheet (Excel or CSV), of every shot, by scene, however the b-roll
+   page was last left filtered or grouped — printing the list as it is on
+   screen is that page's own Print. With no shots at all it says so, as the
+   page does, whichever of the three was asked for. */
 export async function exportBrollList(action) {
   if (!brollEntries(true).length) {
     showToast("There is no b-roll to export yet — start a Visual line with B-roll:", "warn");
     return;
   }
   if (action === "export-broll-csv") await exportAs("b-roll csv");
+  else if (action === "export-broll-xlsx") await exportAs("b-roll xlsx");
   else await exportAs("b-roll pdf", { brollView: { filter: "all", group: "scene" } });
 }
 
@@ -1079,14 +1095,19 @@ export function handleFileMenuAction(action) {
   else if (action === "export-md") exportAs("md");
   else if (action === "export-md-table") exportAs("md-table");
   else if (action === "export-csv") exportAs("csv");
+  else if (action === "export-xlsx") exportAs("xlsx");
+  /* Nothing tagged is still a file, in either: its header row and nothing
+     under it. The Excel one asks no more than the CSV always has — no toast,
+     no reason on the dialog's card. */
   else if (action === "export-breakdown") exportAs("breakdown");
+  else if (action === "export-breakdown-xlsx") exportAs("breakdown xlsx");
   else if (action === "export-pdf") exportAs("pdf");
   else if (action === "export-html") exportAs("html");
   else if (action === "export-narration-docx") exportNarration("narration-docx");
   else if (action === "export-narration-txt") exportNarration("narration-txt");
   else if (action === "export-packing-gear") exportPackingList("gear");
   else if (action === "export-packing-prop") exportPackingList("prop");
-  else if (action === "export-broll-pdf" || action === "export-broll-csv") exportBrollList(action);
+  else if (action === "export-broll-pdf" || action === "export-broll-csv" || action === "export-broll-xlsx") exportBrollList(action);
   else if (action === "drive-open") openDriveModal();
   else if (action === "server-open") openServerPicker();
   else if (action === "server-publish") publishToServer();

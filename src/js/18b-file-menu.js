@@ -180,7 +180,7 @@ export function fileCardView() {
     var srv = serverSessionExpired ? { text: "Signed out — reload to sign in", unsaved: true }
       : linkTurnedOff ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
-    return { name: S.state.title || "Untitled script", bits: [srv, { text: "On the server · v" + home.rev }] };
+    return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + home.rev }] };
   }
   if (home.kind === "file") {
     return {

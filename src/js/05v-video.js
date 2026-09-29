@@ -157,7 +157,7 @@ export function fetchThumbnailRecord(href) {
 
 /* The scene's gallery keys, and the steps that are about them: what a
    thumbnail folded into a paste may not be folded past. */
-var GALLERY_KEYS = { imageRef: true, imageLinks: true, moreImages: true, imageName: true };
+var GALLERY_KEYS = { imageRef: true, imageLinks: true, moreImages: true, imageName: true, imageAnnotation: true };
 
 function touchesGallery(rowId) {
   return function (s) {

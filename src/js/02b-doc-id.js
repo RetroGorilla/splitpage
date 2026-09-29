@@ -308,7 +308,7 @@ export function copyDocHistorySafe(from, to) {
     if (docIdCopyWarned) return;
     docIdCopyWarned = true;
     try {
-      showToast("Couldn't copy this document's version history to its new identity. " +
+      showToast("Could not copy this document's version history to its new identity. " +
         "Earlier versions are still kept under the old one.", "warn");
     } catch (e) { /* a toast is a courtesy */ }
   }

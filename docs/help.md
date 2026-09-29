@@ -12,6 +12,25 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 whoever opens it works on the same script, with nothing to install. On your
 own network you can also [host a shared session](#hosting-a-shared-session).
 
+## What's new since 3.0
+
+- **Draw on your pictures.** In a scene's gallery, press **Annotate** to
+  mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
+  and E pick them). Your marks stay editable, and **Remove annotations**
+  gives you the original back. See [Annotating a picture](#annotating-a-picture).
+- **Search commands** (Ctrl+K) puts the tagging reference first, and
+  searching *tags* finds it.
+- **Export to Excel.** File ▸ Export… ▸ **Spreadsheet** now makes an Excel
+  workbook: sized columns, wrapped text, a frozen header with filters, a
+  Notes column to write in, and a sheet for each part. **CSV** is the
+  second choice on the same card, and the Breakdown and the B-roll shot
+  list offer both. See [Exporting](#exporting).
+- **The writer's tools are at the top**, under the title, where the
+  script's formatting bar is, and **Close** is beside **Save**.
+- **The tagging reference lists every word form**: `Prop:`, `Location:` or
+  `Loc:`, `Cast:`, `VFX:`, `Gear:`, and `SFX:` or `Music:`, each with its
+  tag colour, beside the bracket shortcuts.
+
 ## What's new in 3.0
 
 - **A new look.** Calmer dark and light themes, a running order of the whole
@@ -128,7 +147,7 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
 - **The rundown**: the strip under the header shows every scene as a block.
   Hover it to magnify the scenes round the pointer, click a block to jump
   to that scene, or drop a
-  dragged scene on it to move the scene. **File ▸ Minimize the rundown**
+  dragged scene on it to move the scene. **File ▸ Minimise the rundown**
   shrinks it to a line; click the line to bring it back.
 - **The header's buttons**: **Production**, **Gear**, **B-roll** and
   **Comments** open their panels; **Collab** invites people to the script
@@ -200,7 +219,9 @@ count.
 ### The writer
 
 **Write** in the header opens the Audio column as one flowing document, for
-when the job is writing narration. One paragraph is one scene.
+when the job is writing narration. One paragraph is one scene. Its tools
+sit along the top, under the title, and **Close** (or <kbd>Esc</kbd>) is
+beside **Save**.
 
 - <kbd>Enter</kbd> starts a new scene, <kbd>Shift</kbd>+<kbd>Enter</kbd> is
   a line break, and <kbd>Backspace</kbd> at the start of a paragraph joins it
@@ -273,6 +294,8 @@ status.
   window; click it or scroll to see it at 100 %, and drag to look around.
   <kbd>←</kbd> <kbd>→</kbd> go through the scene's pictures, and
   <kbd>Esc</kbd>, **×** or a click outside goes back to the gallery.
+- **Draw on a picture**: pick it in the gallery and press **Annotate**.
+  See [Annotating a picture](#annotating-a-picture).
 - **Watch a video**: press **▶** in the gallery. YouTube and Vimeo links
   play there, and so does a video file dropped since you opened the script.
   Anything else opens with **Open link** / **Open file**.
@@ -283,6 +306,35 @@ status.
 
 A saved file carries all its pictures. One that can't be found shows as
 **Image unavailable**; the rest of the script is fine.
+
+### Annotating a picture
+
+Circle the thing that matters, highlight a corner, or write a note right on
+a picture. Open the scene's gallery, pick the picture and press
+**Annotate**. It opens over the whole window with the tools along the top:
+
+- **Pen** and **Highlighter** draw where you drag, with a mouse, a pen or
+  a finger. The highlighter is wide and see-through.
+- **Text**: click the picture and type. Click away or press
+  <kbd>Esc</kbd> to put it down. With Text picked, click a text to change
+  it or drag it to move it.
+- **Eraser**: drag over a mark to take the whole mark away.
+- <kbd>P</kbd>, <kbd>H</kbd>, <kbd>T</kbd> and <kbd>E</kbd> pick the pen,
+  highlighter, text and eraser (not while you're typing a text).
+- Six **colours** and three **sizes** (S, M, L). Changing them while you
+  type changes the text you're typing.
+- **Undo** and **Redo** (<kbd>Ctrl</kbd>+<kbd>Z</kbd>,
+  <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>) step through your marks,
+  and **Clear all** takes them all away.
+- **Done** saves. **Cancel** or <kbd>Esc</kbd> leaves without saving; if
+  you've drawn something it asks first, so press it again to throw the
+  marks away.
+
+The scene shows the picture with your marks everywhere: the script, the
+exports and the teleprompter. The original is kept, so **Edit annotations**
+opens your marks again to change them, and **Remove annotations** puts the
+picture back as it was. Saving is one step of the script's undo, so
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> afterwards takes it back too.
 
 ### Presenting
 
@@ -315,10 +367,12 @@ every scene they're in. While you type a tag you've used before,
 
 **The tagging reference**: **File ▸ Tagging reference** (or search commands
 for it) opens a card at the bottom right of the script (a sheet at the
-bottom on a phone). It shows every category's shortcut in its tag colour,
-and stays while you scroll and type, fading while the caret is under it.
-<kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no shortcut:
-select the words and press **Tag**.
+bottom on a phone). It shows every way to type a tag, each in its tag
+colour: the brackets, and a category's name and a colon for all six
+categories. It stays while you scroll and type, fading while the caret is
+under it. <kbd>Esc</kbd> or **×** closes it. Cast and Music/SFX have no
+brackets: type `Cast:`, `SFX:` or `Music:`, or select the words and press
+**Tag**.
 
 **Icons on tags**: turn on **Settings ▸ Show icons on tags** to put a small
 icon before each tag as well as its colour: a box for a prop, a pin for a
@@ -481,8 +535,8 @@ under **Older history** for 90 days.
 format, with a preview and the file name.
 
 - **The whole script**: **PDF**, **Word**, **Markdown**, **Spreadsheet**
-  (a row per scene), or **SplitShare** (the script with the whole app built
-  in, for any device).
+  (a row per scene, as Excel or CSV), or **SplitShare** (the script with the
+  whole app built in, for any device).
 - **Part of it**: **Narration only**, the **Breakdown** as a spreadsheet, a
   **Packing list** of gear or props, or the **B-roll shot list**: a
   landscape table of every shot with its scene, props, flags and their
@@ -502,6 +556,17 @@ Visual beside Audio, that **Paste a script…** can read back in. The
 **Spreadsheet** has a column each for start time, status, read time, tags,
 b-roll and open comments.
 
+Every spreadsheet — the script, the Breakdown and the B-roll shot list —
+comes two ways. Pick one under **Format**:
+
+- **Excel (.xlsx)** opens laid out and ready to read or print: columns sized
+  to fit, long lines wrapped, the header row frozen with filters on it, a
+  blank **Notes** column beside the scenes to write in, and a sheet each for
+  the script, the comments, the breakdown and the b-roll (only the ones your
+  script has). It opens in Excel, Google Sheets and Numbers.
+- **CSV (.csv)** is the plain values and nothing else, for another tool to
+  read. Splitpage can open a CSV of the script again.
+
 Exports are copies to read, print or send. Opening one again brings back
 its scenes only, not the tags, comment anchors or statuses a saved file
 keeps. **Export again** in the File menu repeats the last format.
@@ -519,7 +584,7 @@ copy…**. Below:
   script on the server too).
 - **Export**: Export…, and Export again.
 - **This document**: Version history, Find & replace, Hide shot scenes,
-  Minimize the rundown, and in the desktop app Present in browser and Use
+  Minimise the rundown, and in the desktop app Present in browser and Use
   Chromium Speech Recognition.
 
 Settings, Help, Tour, Set up, About, Tagging reference and Export app data
@@ -543,13 +608,15 @@ are along the bottom. An item that can't work right now says why.
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | Present in browser (desktop app) |
 | <kbd>F1</kbd> | Help (desktop app) |
 | <kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>W</kbd> | New tab / close tab (desktop app) |
+| <kbd>P</kbd> / <kbd>H</kbd> / <kbd>T</kbd> / <kbd>E</kbd> | Pen / highlighter / text / eraser (while annotating a picture) |
 
 ### Search commands
 
 Press <kbd>Ctrl</kbd>+<kbd>K</kbd>, or click the search box in the header,
 and type part of what you want: *pdf*, *gear*, *history*, *teleprompter*.
 <kbd>↑</kbd> / <kbd>↓</kbd> choose, <kbd>Enter</kbd> runs, <kbd>Esc</kbd>
-closes. With nothing typed, your recent commands come first.
+closes. With nothing typed, your recent commands come first, then the
+tagging reference.
 
 ### Settings
 
@@ -582,7 +649,7 @@ The whole app works on a phone, with the script first and scenes stacked
 - **Accept a tag completion**: tap it (there's no <kbd>Tab</kbd>).
 - **Find & replace** and **Search commands** are in the File menu.
 - **Select several breakdown items**: long-press one, then tap others.
-- **Move or add scenes** from a scene's **⋯** menu, or **+ Add row** at the
+- **Move or add scenes** from a scene's **⋯** menu, or **+ Add scene** at the
   bottom.
 
 ## Desktop app

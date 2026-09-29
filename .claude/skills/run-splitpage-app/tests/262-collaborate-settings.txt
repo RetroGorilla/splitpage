@@ -53,7 +53,7 @@ jsclick #btn-file
 jsclick #menu-collaborate
 wait K.step() === 'unreachable'
 expect __srv.calls[0].origin == https://collab.example.test/
-expect document.querySelector('#collab-body .collab-problem').textContent.indexOf('Couldn’t reach collab.example.test.') === 0
+expect document.querySelector('#collab-body .collab-problem').textContent.indexOf('Could not reach collab.example.test.') === 0
 expect document.querySelector('#collab-body .collab-problem').textContent.indexOf("Check you're online and that the address is right") !== -1
 expect document.getElementById('collab-body').textContent.indexOf('Settings ▸ Collaboration') !== -1
 expect document.querySelector('#collab-foot [data-collab-action="settings"]').textContent == Change the address…
