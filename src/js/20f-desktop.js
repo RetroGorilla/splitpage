@@ -247,13 +247,13 @@ var PROMPTER_BROWSER_MESSAGES = {
   SAVE_FAILED: "The save didn't go through, so the browser would show an older version. Save, then try again.",
   UNSAVED_CHANGES: "The save didn't go through, so the browser would show an older version. Save, then try again.",
   NOT_A_PROJECT: "Only a Splitpage script (.md or .splitpage) can be opened in the browser. Save it as one first.",
-  READ_FAILED: "Couldn't read the saved file — it may have moved. Save it again, then try again.",
+  READ_FAILED: "Could not read the saved file — it may have moved. Save it again, then try again.",
   TOO_LARGE: "This script is too large to hand to the browser.",
   NO_SERVER: "The server this script lives on isn't running here any more.",
   REMOTE_SERVER: "This script is on another server — use Share to get its link, then open that in Chrome or Edge.",
-  SERVE_FAILED: "Couldn't open the script in your browser.",
-  OPEN_FAILED: "Couldn't open your browser.",
-  NO_TAB: "Couldn't open the script in your browser.",
+  SERVE_FAILED: "Could not open the script in your browser.",
+  OPEN_FAILED: "Could not open your browser.",
+  NO_TAB: "Could not open the script in your browser.",
   NO_CHROMIUM: "No Chromium browser (Edge, Chrome, Brave…) was found on this computer. Use Present in browser instead."
 };
 

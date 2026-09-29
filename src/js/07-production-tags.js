@@ -1884,7 +1884,7 @@ export function applyTag() {
   /* single mention: re-select the range we captured and wrap it */
   var cellEl = document.querySelector('#rows .row[data-id="' + safeId(ctx.rowId, "r") +
     '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
-  if (!cellEl) { showToast("That row is no longer here.", "warn"); return; }
+  if (!cellEl) { showToast("That scene is no longer here.", "warn"); return; }
 
   /* Wrap exactly the occurrence the user selected (captured when the
      composer opened — see the "tag" command in 05-render.js), not

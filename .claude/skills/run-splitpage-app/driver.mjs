@@ -604,8 +604,11 @@ const KEY_MAP = {
   keyc:      { key: "c",         code: "KeyC",      vk: 67 },
   keyx:      { key: "x",         code: "KeyX",      vk: 88 },
   keyv:      { key: "v",         code: "KeyV",      vk: 86 },
+  // the annotation editor's tool keys (P, H, T, E; 2026-09-27)
+  keyp:      { key: "p",         code: "KeyP",      vk: 80 },
+  keyt:      { key: "t",         code: "KeyT",      vk: 84 },
 };
-const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV";
+const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV, KeyP, KeyT";
 
 // mouse down|move|up|right <js expression giving {x, y}> — one real CDP mouse
 // event at a viewport point the page works out (#204: a drag out of a text

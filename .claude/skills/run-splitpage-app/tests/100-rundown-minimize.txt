@@ -23,7 +23,7 @@ wait document.querySelectorAll('#rundown .rd-block').length === document.querySe
 expect localStorage.getItem('splitpage-rundown-min') === null
 expect !document.getElementById('rundown').classList.contains('is-min')
 expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-expanded') == true
-expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-label') == Minimize the rundown
+expect document.querySelector('#rundown .rundown-toggle').getAttribute('aria-label') == Minimise the rundown
 expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
 expect document.getElementById('menu-rundown-min').getAttribute('role') == menuitemcheckbox
 
@@ -113,7 +113,7 @@ eval window.__desktopTest.runMenuCommand('toggle-rundown-min')
 wait !document.getElementById('rundown').classList.contains('is-min')
 
 # --- the command menu offers it too -------------------------------------------
-expect window.__commandTest.results('rundown').some(function(g){ return g.items.some(function(it){ return it.id === 'toggle-rundown-min' && it.label === 'Minimize the rundown'; }); })
+expect window.__commandTest.results('rundown').some(function(g){ return g.items.some(function(it){ return it.id === 'toggle-rundown-min' && it.label === 'Minimise the rundown'; }); })
 
 # --- the Settings dialog's event (lane C writes the key, then says so) -------
 eval (function(){ localStorage.setItem('splitpage-rundown-min', '1'); document.dispatchEvent(new CustomEvent('splitpage:pref', { detail: { key: 'splitpage-rundown-min', value: '1' } })); return true; })()

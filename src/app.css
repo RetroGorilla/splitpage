@@ -2073,6 +2073,137 @@
     .scene-gallery-divider { height: 54px; }
   }
 
+  /* ---- drawing on a picture (05w-annotate.js) ----
+     Over the whole window, above the gallery it was opened from: one bar
+     of tools on the raised layer, and under it the stage — the same dark
+     monitor in both themes that the full-size view (#216) uses, so a
+     photograph and the colours drawn on it read the same whatever the
+     app's theme. The bar's controls are 36px (40px on a phone), each its
+     own tab stop; a picked tool, colour or size is filled. */
+  .modal-backdrop.annotate-overlay { z-index: 160; padding: 0; background: rgba(8, 8, 7, 0.62); }
+  /* it fills the window, so it only fades in: the dialogs' 8px rise would
+     open a gap along the top */
+  @starting-style {
+    .modal-backdrop.annotate-overlay:not([hidden]) .modal-panel.annotate-panel { transform: none; }
+  }
+  .modal-panel.annotate-panel {
+    display: flex; flex-direction: column;
+    width: 100%; height: 100%; max-width: none; max-height: none;
+    padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden;
+  }
+  .annotate-bar {
+    flex: none; display: flex; align-items: center; gap: 8px 16px;
+    min-height: 56px; padding: 8px 16px;
+    border-bottom: 1px solid var(--border-strong);
+    background: var(--surface-2);
+  }
+  .annotate-title {
+    flex: none; margin: 0;
+    font-family: var(--font-body); font-size: 16px; line-height: 24px; font-weight: 700; color: var(--text);
+  }
+  .annotate-tools {
+    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px 18px;
+    flex-wrap: wrap;
+  }
+  .annotate-group { display: flex; align-items: center; gap: 4px; flex: none; }
+  .annotate-btn {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    min-width: 36px; height: 36px; padding: 0 8px;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-dim); cursor: pointer;
+    font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 500;
+  }
+  .annotate-btn svg {
+    width: 20px; height: 20px; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .annotate-btn:hover:not(:disabled) { background: var(--layer-hover, var(--hover)); color: var(--text); }
+  .annotate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .annotate-btn:disabled { opacity: .4; cursor: default; }
+  .annotate-btn[aria-pressed="true"] {
+    background: var(--visual-soft); border-color: var(--visual); color: var(--text);
+  }
+  .annotate-size { font-family: var(--font-display); font-size: 13px; min-width: 32px; padding: 0; }
+  .annotate-clear { color: var(--text-dim); }
+  /* a colour: a dot in it, ringed so white shows on the light bar and black
+     on the dark one; the picked one gets the focus colour's ring round it */
+  .annotate-swatch {
+    position: relative; flex: none; width: 32px; height: 32px; padding: 0;
+    border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+  }
+  .annotate-swatch::before {
+    content: ""; position: absolute; inset: 6px; border-radius: 50%;
+    background: var(--swatch);
+    /* strong enough that black reads on the dark toolbar, white on the light */
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--text) 55%, transparent);
+  }
+  .annotate-swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--visual); }
+  .annotate-swatch:hover:not(:disabled) { background: var(--layer-hover, var(--hover)); }
+  .annotate-swatch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .annotate-swatch:disabled { opacity: .3; cursor: default; }
+  .annotate-end { flex: none; display: flex; align-items: center; gap: 8px; }
+  .annotate-end .btn.armed,
+  .annotate-end .btn.armed:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+  .annotate-stage {
+    position: relative; flex: 1 1 auto; min-height: 0;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    background: #1A1917;
+  }
+  .annotate-frame {
+    position: relative; flex: none; touch-action: none; user-select: none; -webkit-user-select: none;
+    box-shadow: 0 0 0 1px rgba(236, 235, 231, .18);
+    cursor: crosshair;
+  }
+  .annotate-frame[data-tool="text"] { cursor: text; }
+  .annotate-frame[data-tool="text"].is-over-text { cursor: move; }
+  .annotate-frame.is-moving { cursor: grabbing; }
+  .annotate-img, .annotate-canvas {
+    position: absolute; inset: 0; display: block; width: 100%; height: 100%;
+    -webkit-user-drag: none; pointer-events: none;
+  }
+  /* the text being typed: the face, weight, line height and outline it is
+     drawn with (drawText), sized and coloured by the module; its own box
+     only a dashed line round what is typed */
+  .annotate-textbox {
+    position: absolute; z-index: 1; margin: 0; padding: 0; min-width: 1ch;
+    border: 0; outline: 1px dashed rgba(236, 235, 231, .8); outline-offset: 2px; border-radius: 0;
+    background: transparent; resize: none; overflow: hidden; white-space: pre;
+    font-family: var(--font-body); font-weight: 700; line-height: 1.25;
+    -webkit-text-stroke: var(--annotate-outline-width, 2px) var(--annotate-outline, #fff);
+    paint-order: stroke fill;
+    caret-color: currentColor;
+    cursor: text;
+  }
+  /* what the picked tool does, at the foot of the stage */
+  .annotate-status {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    max-width: calc(100% - 24px); margin: 0; padding: 4px 12px; border-radius: 14px;
+    background: rgba(15, 14, 12, .78); color: #ECEBE7; pointer-events: none;
+    font-family: var(--font-body); font-size: 13px; line-height: 20px; text-align: center;
+  }
+  .annotate-status[hidden] { display: none; }
+  /* A phone: the title and Cancel / Done on the first line, the tools on a
+     line of their own that scrolls sideways rather than widening the page;
+     the controls a finger's 40px. */
+  @media (max-width: 600px) {
+    .annotate-bar { flex-wrap: wrap; padding: 6px 8px; gap: 6px 8px; }
+    .annotate-title { flex: 1 1 auto; min-width: 0; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .annotate-end { order: 1; }
+    .annotate-tools {
+      order: 2; flex: 1 0 100%; flex-wrap: nowrap; justify-content: flex-start; gap: 12px;
+      overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+      padding: 2px; margin: 0 -2px;
+    }
+    .annotate-tools::-webkit-scrollbar { display: none; }
+    .annotate-btn { min-width: 40px; height: 40px; }
+    .annotate-swatch { width: 36px; height: 36px; }
+    .annotate-swatch::before { inset: 7px; }
+  }
+  /* the toasts over the editor rise clear of its hint */
+  body:has(.annotate-overlay:not([hidden])) #toast-host {
+    bottom: calc(52px + env(safe-area-inset-bottom));
+  }
+
   /* ---------- footer / add row ---------- */
   .add-row-bar { padding: 18px 0 4px; display: flex; justify-content: center; }
   .add-row-btn {
@@ -3001,6 +3132,26 @@
   .pv-grid .pv-gap td { color: #64635E; text-align: center; }
   .pv-grid .pv-gap td:not(:first-child) { color: transparent; }
   .pv-grid .pv-total td { font-weight: 700; border-top: 0.8px solid #4E4D48; }
+  /* an Excel workbook (2026-09-28): the same grid, its header row the
+     frozen one the filters hang from — filled a shade darker and ruled off
+     — and the sheet tabs along the page's foot, the first one open. The
+     fade that says the sheet goes on ends above the tabs. */
+  .pv-xl .pv-gh td { background: #E4E2DC; border-bottom: 0.9px solid #4E4D48; }
+  .export-preview:has(.pv-sheets)::after { bottom: 14px; height: 34px; }
+  .pv-sheets {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 1;
+    display: flex;
+    padding: 0 8px 4px;
+    background: #F1F0ED;
+    border-top: 0.5px solid #C9C7C1;
+    font-size: 4.8px;
+    color: #4E4D48;
+    overflow: hidden;
+  }
+  .pv-sheet { padding: 2px 5px 2.5px; white-space: nowrap; border-right: 0.5px solid #DCDAD4; }
+  .pv-sheet.is-on { background: #FFFFFF; color: #171613; font-weight: 600; box-shadow: inset 0 -0.9px 0 #171613; }
   /* the Standalone page is the app itself, named for the script in the
      browser's tab, and wears the app's light colours */
   .pv-app { margin: -16px -14px; }
@@ -3082,6 +3233,10 @@
     border-radius: 4px;
     cursor: pointer;
   }
+  /* Three choices (the b-roll list's PDF, Excel and CSV, 2026-09-28) do
+     not fit a third each without breaking a label over two lines, so each
+     takes the room its words need, on one line. */
+  .export-seg:has(label:nth-child(3)) label { flex: 1 1 auto; padding: 5px 5px; white-space: nowrap; }
   .export-seg label:hover { color: var(--text); }
   .export-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
   .export-seg label:has(input:checked) { background: var(--hover); color: var(--text); }
@@ -4008,11 +4163,19 @@
   /* what you do | → | the tag it makes | its category */
   .tagging-help-row {
     display: grid;
-    grid-template-columns: 108px 14px auto minmax(0, 1fr);
+    /* 124px: room for "Location: Loc:" (2026-09-28); the same in every
+       list, so the arrows line up down the card */
+    grid-template-columns: 124px 14px auto minmax(0, 1fr);
     align-items: baseline;
     column-gap: 6px;
   }
   .tagging-help-keys .tagging-help-row { grid-template-columns: 100px minmax(0, 1fr); column-gap: 8px; }
+  /* a name and its short form side by side: "Location: Loc:" */
+  .tagging-help-words .tagging-help-row > span:first-child { display: inline-flex; gap: 4px; }
+  /* Select + Tag's row names no one category: its words take the rest */
+  .tagging-help-row > .tagging-help-cat:nth-child(3) { grid-column: 3 / -1; }
+  .tagging-help-example { margin: 0 0 6px; }
+  .tagging-help-label kbd { font-weight: 500; }
   .tagging-help-arrow { color: var(--text-faint); text-align: center; }
   .tagging-help-cat { font-size: 12.5px; color: var(--text-dim); }
   .tagging-help-how { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
@@ -6478,14 +6641,17 @@
     padding: 60px 0;
   }
 
+  /* The tools sit under the title row, at the top (Adam, 2026-09-28), as
+     the script's own toolbar sits above the text it formats — they used
+     to be a bar along the bottom, with Close at its far end (Close is in
+     the title row now, beside Save). */
   .writer-bar {
     display: flex; align-items: center; gap: 10px;
     flex-wrap: wrap;
-    padding: 10px 20px;
+    padding: 8px 20px;
     background: var(--surface);
-    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
   }
-  .writer-bar .spacer { flex: 1; }
   .writer-bar button {
     font-family: var(--font-body);
     font-size: 13px;
@@ -6999,17 +7165,26 @@
 
     /* the writer — the gutter has already stopped hanging by this width
        (see the 1000px block); what is left is phone-sized type and chrome */
-    .writer-top { padding: 8px 12px; gap: 10px; flex-wrap: wrap; }
+    .writer-top { padding: 8px 12px; gap: 4px 10px; flex-wrap: wrap; }
     .writer-kicker { display: none; }
-    .writer-stats { gap: 10px; font-size: 12px; }
+    /* the title keeps the first row with Save and Close; the counts go
+       under it as a line of their own (with Close there too, the title
+       was squeezed to a letter) */
+    .writer-stats { gap: 10px; font-size: 12px; order: 5; flex: 1 1 100%; padding-left: 9px; }
     .writer-scroll { padding: 18px 12px 60vh; }
     /* the writer's phone default, 17px, is a touch device's (#162) — in the
        touch block after this one */
     .writer .wr-para.cell-editable { padding: 6px 10px 10px; }
-    .writer-bar { gap: 6px 8px; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
+    /* at the top on a phone too: one row that scrolls sideways rather than
+       wrapping to three, so the words keep the screen */
+    .writer-bar {
+      gap: 8px; padding: 8px 10px;
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    }
+    .writer-bar::-webkit-scrollbar { display: none; }
+    .writer-bar > * { flex: none; }
     .writer-bar button { padding: 9px 10px; }
-    .writer-bar .grp { flex: 1 1 100%; }
-    .writer-bar input[type="range"] { flex: 1; width: auto; }
+    .writer-bar input[type="range"] { width: 80px; }
     .writer-bar .div-sep, .writer-hint { display: none; }
   }
 
@@ -7104,16 +7279,21 @@
 .update-bar-action:hover { background: var(--hover); }
 .update-bar-dismiss {
   margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
   border: 0;
   background: none;
   cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-  padding: 0 4px;
-  color: inherit;
-  opacity: .55;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
 }
-.update-bar-dismiss:hover { opacity: 1; }
+.update-bar-dismiss:hover { color: var(--text); background: var(--hover); }
+.update-bar-dismiss:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.update-bar-dismiss svg {
+  width: 16px; height: 16px;
+  fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+}
 
 /* ---- Help page (docs/help.md rendered at build time — see mdToHtml in
    build.mjs and 20c-help.js) ---- */

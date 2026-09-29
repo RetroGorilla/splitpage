@@ -4416,7 +4416,9 @@ function buildMenu() {
     { label: "Word (.docx)", click: () => sendMenuCommand("export-docx") },
     { label: "Markdown (.md)", click: () => sendMenuCommand("export-md") },
     { label: "Markdown, two columns (.md)", click: () => sendMenuCommand("export-md-table") },
+    { label: "Spreadsheet (.xlsx)", click: () => sendMenuCommand("export-xlsx") },
     { label: "Spreadsheet (.csv)", click: () => sendMenuCommand("export-csv") },
+    { label: "Breakdown only (.xlsx)", click: () => sendMenuCommand("export-breakdown-xlsx") },
     { label: "Breakdown only (.csv)", click: () => sendMenuCommand("export-breakdown") },
     { label: "PDF (.pdf)", click: () => sendMenuCommand("export-pdf") },
     { type: "separator" },
@@ -4429,6 +4431,7 @@ function buildMenu() {
     { label: "Props (.pdf)", click: () => sendMenuCommand("export-packing-prop") },
     { type: "separator" },
     { label: "B-roll shot list (.pdf)", click: () => sendMenuCommand("export-broll-pdf") },
+    { label: "B-roll shot list (.xlsx)", click: () => sendMenuCommand("export-broll-xlsx") },
     { label: "B-roll shot list (.csv)", click: () => sendMenuCommand("export-broll-csv") }
   ];
 
@@ -4566,7 +4569,7 @@ function buildMenu() {
          shape as the item above — the page owns the setting (per-device
          localStorage) and its switch in File ▸ This document, which
          sendMenuCommand clicks. No accelerator: Adam picks keys. */
-      { label: "Minimize the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
+      { label: "Minimise the rundown", click: () => sendMenuCommand("toggle-rundown-min") },
       { type: "separator" },
       ...(app.isPackaged ? [] : [
         { role: "reload" },

@@ -1338,7 +1338,7 @@ export function restoreConflictValue(commentId) {
     return;
   }
   var ri = findRowIndex(c.rowId);
-  if (ri === -1) { showToast("That row no longer exists.", "warn"); return; }
+  if (ri === -1) { showToast("That scene no longer exists.", "warn"); return; }
 
   pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
   if (c.field === "visualImage") {

@@ -1189,7 +1189,7 @@ function updateRundownMinControls() {
   var toggle = strip.querySelector(".rundown-toggle");
   if (toggle) {
     toggle.setAttribute("aria-expanded", minimized ? "false" : "true");
-    var words = minimized ? "Show the rundown" : "Minimize the rundown";
+    var words = minimized ? "Show the rundown" : "Minimise the rundown";
     toggle.setAttribute("aria-label", words);
     toggle.title = words;
   }

@@ -1072,7 +1072,26 @@ function handleApiError(err, whatFailed) {
       "Remove it and try again.", "warn", true);
     return;
   }
-  showToast(whatFailed + " — " + ((err && err.message) || "please try again") + ".", "error");
+  showToast(whatFailed + " — " + plainReason(err) + ".", "error");
+}
+
+/* A failure's reason as a person would say it. The browser's own words for a
+   dropped connection ("Failed to fetch", "Load failed", a bare TypeError)
+   mean nothing to someone editing a script, so they become a sentence that
+   says what to check. Anything else is already written for a person (the
+   server's reasons, this file's own ApiError text) and passes through.
+   No trailing full stop: callers add their own. */
+export function plainReason(err) {
+  var message = err && err.message ? String(err.message) : "";
+  if (err && err.code === "offline") {
+    return "there was no answer — check that you are online and that the server is running";
+  }
+  if (err && err.name === "AbortError") return "it took too long — try again";
+  if ((err && err.name === "TypeError") ||
+      /failed to fetch|load failed|networkerror|network request failed/i.test(message)) {
+    return "the connection failed — check that you are online, then try again";
+  }
+  return message.replace(/[.\s]+$/, "") || "please try again";
 }
 
 export async function detectServer() {
@@ -2856,10 +2875,10 @@ async function driveSignInDesktop() {
     : code === "TIMEOUT" ? "Sign-in timed out — nothing came back from your browser within 5 minutes. Try again."
     : code === "STATE_MISMATCH" ? "The reply from Google didn't match this sign-in, so it was refused. Try again."
     : code === "NO_REFRESH_TOKEN" ? "Google didn't grant lasting access. Try again, and allow access when Google asks."
-    : code === "NO_BROWSER" ? "Couldn't open your browser for Google sign-in."
+    : code === "NO_BROWSER" ? "Could not open your browser for Google sign-in."
     : code === "CANCELLED" ? "Sign-in was cancelled."
     : code === "NOT_CONFIGURED" ? "No Google client is set up on this computer yet."
-    : "Couldn't finish signing in to Google Drive" + (code ? " (" + code + ")" : "") + ".";
+    : "Could not finish signing in to Google Drive" + (code ? " (" + code + ")" : "") + ".";
   showToast(msg, code === "DENIED" || code === "CANCELLED" ? "warn" : "error");
   await refreshDriveDesktop();
 }
@@ -3030,7 +3049,11 @@ async function driveFetch(url, opts) {
   }
   var res = await fetch(url, { method: opts.method || "GET", headers: headers, body: opts.body });
   if (!res.ok) {
-    var msg = "request failed (" + res.status + ")";
+    var msg = res.status === 401 || res.status === 403
+      ? "Google refused access — sign in to Google Drive again"
+      : res.status === 404 ? "Google Drive could not find it"
+      : res.status === 429 ? "Google Drive is busy — wait a moment, then try again"
+      : "Google Drive answered with an error (" + res.status + ")";
     try {
       var body = await res.json();
       if (body && body.error && body.error.message) msg = body.error.message;
@@ -3063,7 +3086,7 @@ export async function driveConnect(rawInput) {
     document.getElementById("drive-browser").hidden = false;
     await driveListCurrent();
   } catch (err) {
-    showToast("Could not open that folder — " + err.message, "error");
+    showToast("Could not open that folder — " + plainReason(err), "error");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Open folder"; }
   }
@@ -3086,7 +3109,7 @@ export async function driveListCurrent() {
     renderDriveBreadcrumb();
     renderDriveList();
   } catch (err) {
-    list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(err.message) + '</div>';
+    list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(plainReason(err)) + '</div>';
   }
 }
 
@@ -3217,7 +3240,7 @@ async function driveDownloadFile(it) {
     var blob = await res.blob();
     await deliverFile(filename, blob);
   } catch (err) {
-    showToast("Could not download " + it.name + " — " + err.message, "error");
+    showToast("Could not download " + it.name + " — " + plainReason(err), "error");
   }
 }
 
@@ -3247,7 +3270,7 @@ export async function driveSaveRename(id) {
     });
     showToast("Renamed to “" + name + "”", "ok");
   } catch (err) {
-    showToast("Could not rename — " + err.message, "error");
+    showToast("Could not rename — " + plainReason(err), "error");
   }
   await driveListCurrent();
 }
@@ -3257,7 +3280,7 @@ export async function armDriveDelete(btn, item) {
     try {
       await driveFetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(item.id), { method: "DELETE" });
     } catch (err) {
-      showToast("Could not delete “" + item.name + "” — " + err.message, "error");
+      showToast("Could not delete “" + item.name + "” — " + plainReason(err), "error");
       return;
     }
     showToast("Deleted “" + item.name + "”", "ok");
@@ -3305,7 +3328,7 @@ export async function driveCreateFolder() {
     });
     showToast("Created “" + name + "”", "ok");
   } catch (err) {
-    showToast("Could not create the folder — " + err.message, "error");
+    showToast("Could not create the folder — " + plainReason(err), "error");
   }
   toggleDriveNewFolder(false);
   await driveListCurrent();
@@ -3346,7 +3369,7 @@ export async function driveUploadFiles(fileList) {
     } catch (err) {
       failed++;
       if (desktop && await driveDesktopSignedOut(err.driveResult)) return;
-      showToast("Could not upload " + files[i].name + " — " + err.message, "error");
+      showToast("Could not upload " + files[i].name + " — " + plainReason(err), "error");
     }
   }
   var created = files.length - failed - updated;
@@ -3403,7 +3426,7 @@ export async function driveSignIn() {
     showToast("Sign-in needs this page served over http/https, not opened from disk.", "warn");
     return;
   }
-  try { await loadGisScript(); } catch (err) { showToast(err.message, "error"); return; }
+  try { await loadGisScript(); } catch (err) { showToast("Could not start Google sign-in — " + plainReason(err) + ".", "error"); return; }
   if (!driveState.tokenClient) {
     driveState.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: driveCreds.clientId,

@@ -423,6 +423,14 @@ export function inlineStateImages(s, only) {
     if (!url && missing.indexOf(ref.sha256) === -1) missing.push(ref.sha256);
     return url;
   }
+  /* an annotated picture's original (02d-gallery.js) goes inline the same
+     way, as `visualImage` on its annotation; migrateGallery reads it back.
+     An older client ignores it and shows the drawn-on picture. */
+  function inlineOriginal(a) {
+    if (!a || typeof a !== "object" || !a.imageRef) return;
+    var u = pick(a.imageRef);
+    if (u) { a.visualImage = u; delete a.imageRef; }
+  }
   if (!s || typeof s !== "object") return missing;
   (Array.isArray(s.rows) ? s.rows : []).forEach(function (r) {
     if (!r || typeof r !== "object") return;
@@ -431,9 +439,11 @@ export function inlineStateImages(s, only) {
        them back */
     (Array.isArray(r.moreImages) ? r.moreImages : []).forEach(function (it) {
       if (!it || typeof it !== "object" || !it.imageRef) return;
+      inlineOriginal(it.annotation);
       var u = pick(it.imageRef);
       if (u) { it.visualImage = u; delete it.imageRef; }
     });
+    inlineOriginal(r.imageAnnotation);
     if (!r.imageRef) {
       /* no picture: the file says so the way it always did */
       if (!only && "imageRef" in r) { delete r.imageRef; r.visualImage = null; }

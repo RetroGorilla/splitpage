@@ -23,6 +23,7 @@
  *
  * Run: node desktop/test/tabstrip-width.mjs
  *   SPLITPAGE_CHROME=<path>   override browser discovery
+ *   SPLITPAGE_CHROME_ARGS="--a --b"   extra browser switches (CI: --no-sandbox)
  *
  * Wired into `npm test` (desktop/package.json) alongside smoke.mjs.
  */
@@ -181,6 +182,13 @@ function startBrowser() {
   ];
   if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
+  }
+  /* Same switch driver.mjs reads. CI is not root, and its runner's AppArmor
+     stops Chromium's sandbox starting, so it says so here (ci.yml sets it);
+     without this the browser dies before it listens and the failure is a bare
+     "no CDP page target". */
+  if (process.env.SPLITPAGE_CHROME_ARGS) {
+    args.push(...process.env.SPLITPAGE_CHROME_ARGS.split(/\s+/).filter(Boolean));
   }
   args.push("about:blank");
   browserProc = spawn(exe, args, { stdio: ["ignore", "ignore", "ignore"], detached: false });

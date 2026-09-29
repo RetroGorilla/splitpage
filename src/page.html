@@ -117,6 +117,12 @@
     <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5a1 1 0 0 0 1 .9h7a1 1 0 0 0 1-.9l1-12.5"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.75"/><path d="M20.5 16l-5-5-8 8"/></symbol>
     <symbol id="i-highlight" viewBox="0 0 24 24"><path d="M13.5 5l5.5 5.5-7.5 7.5H6v-5.5z"/><path d="M4 21h16"/></symbol>
+    <!-- the annotation editor's (05w-annotate.js): the eraser, a text box,
+         and undo / redo as a hooked arrow either way -->
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M9 19.5L4.5 15a1.5 1.5 0 0 1 0-2.1L13 4.4a1.5 1.5 0 0 1 2.1 0l4.5 4.5a1.5 1.5 0 0 1 0 2.1L11.1 19.5z"/><path d="M8.5 9l6.5 6.5M9 19.5h11"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M5.5 7.5V5h13v2.5M12 5v14M9 19h6"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 13.5L4.5 9 9 4.5"/><path d="M4.5 9h10a5 5 0 0 1 0 10H11"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 13.5L19.5 9 15 4.5"/><path d="M19.5 9h-10a5 5 0 0 0 0 10H13"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.75"/></symbol>
     <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
     <!-- The side panels', the start page's, the prompter's and the phone's
@@ -276,12 +282,15 @@
                 <button type="button" data-file-action="export-docx">Word (.docx)</button>
                 <button type="button" data-file-action="export-md">Markdown (.md)</button>
                 <button type="button" data-file-action="export-md-table">Markdown, two columns (.md)</button>
+                <button type="button" data-file-action="export-xlsx">Spreadsheet (.xlsx)</button>
                 <button type="button" data-file-action="export-csv">Spreadsheet (.csv)</button>
                 <button type="button" data-file-action="export-html">SplitShare (.html)</button>
                 <button type="button" data-file-action="export-broll-pdf">B-roll shot list (.pdf)</button>
+                <button type="button" data-file-action="export-broll-xlsx">B-roll shot list (.xlsx)</button>
                 <button type="button" data-file-action="export-broll-csv">B-roll shot list (.csv)</button>
                 <button type="button" data-file-action="export-narration-docx">Narration only (.docx)</button>
                 <button type="button" data-file-action="export-narration-txt">Narration only (.txt)</button>
+                <button type="button" data-file-action="export-breakdown-xlsx">Breakdown (.xlsx)</button>
                 <button type="button" data-file-action="export-breakdown">Breakdown (.csv)</button>
                 <button type="button" data-file-action="export-packing-gear">Gear packing list (.pdf)</button>
                 <button type="button" data-file-action="export-packing-prop">Props packing list (.pdf)</button>
@@ -304,7 +313,7 @@
                    (localStorage "splitpage-rundown-min"), the same switch as
                    the chevron on the strip itself; 05f-rundown.js keeps
                    aria-checked. Mirrored in the desktop View menu. -->
-              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimize the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
+              <button type="button" role="menuitemcheckbox" aria-checked="false" class="mi mi-switch" data-file-action="toggle-rundown-min" id="menu-rundown-min" title="Shrink the rundown strip under the header to a thin line — click the line to bring it back"><svg class="mi-icon" aria-hidden="true"><use href="#i-rundown-min"/></svg><span class="mi-text"><span class="mi-label">Minimise the rundown</span><span class="mi-why" hidden></span></span><span class="mi-switch-track" aria-hidden="true"><span class="mi-switch-thumb"></span></span></button>
               <!-- Desktop app only (issue #86): the in-page twin of View ▸
                    Present in Browser, which a Windows user cannot reach —
                    the window's title bar is the tab strip, so there is no
@@ -485,7 +494,7 @@
          (Download / Install and restart / Try again / Open release page), so
          the text here is only what it reads before that runs. -->
     <button type="button" class="update-bar-action" id="update-bar-action" hidden>Download</button>
-    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss">×</button>
+    <button type="button" class="update-bar-dismiss" id="update-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
   <!-- Browser build only: an always-available, dismissable pointer at the
@@ -495,7 +504,7 @@
     <svg class="update-bar-icon" aria-hidden="true"><use href="#i-monitor"/></svg>
     <span id="desktop-app-bar-text" title="Moving over: File ▸ Export app data… here, install the desktop app, then File ▸ Import app data… there."></span>
     <button type="button" class="update-bar-action" id="desktop-app-bar-action">Get it</button>
-    <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss">×</button>
+    <button type="button" class="update-bar-dismiss" id="desktop-app-bar-dismiss" title="Dismiss" aria-label="Dismiss"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
 
   <div class="notice" id="resume-banner" hidden>
@@ -552,7 +561,7 @@
   <div id="rows"></div>
 
   <div class="add-row-bar">
-    <button class="add-row-btn" type="button" data-action="add-row">+ Add row</button>
+    <button class="add-row-btn" type="button" data-action="add-row">+ Add scene</button>
   </div>
 </div>
 
@@ -604,19 +613,31 @@
     <button type="button" class="modal-close" id="tagging-help-dismiss" aria-label="Close the tagging reference" title="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <div class="tagging-help-body">
-    <h3 class="tagging-help-label">Type it</h3>
+    <!-- Every way to type a tag, a category at a time (Adam, 2026-09-28:
+         the word forms, #210, were only named in a sentence, and Cast and
+         Music/SFX looked as if they could only be picked from Tag) -->
+    <h3 class="tagging-help-label">Type brackets round the words</h3>
     <ul class="tagging-help-list">
       <li class="tagging-help-row"><code>[gaffer tape]</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
       <li class="tagging-help-row"><code>{kitchen}</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
       <li class="tagging-help-row"><code>~lens flare~</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">lens flare</span><span class="tagging-help-cat">VFX</span></li>
       <li class="tagging-help-row"><code>&lt;tripod&gt;</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
-      <li class="tagging-help-row"><span><code>VFX: glow</code> <kbd>Tab</kbd></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
     </ul>
-    <p class="tagging-help-note">Brackets tag the moment you type the closing one. In the Visual column, a name and a colon (Prop, Location or Loc, Cast, VFX, Gear, SFX, Music) starts a tag, and <kbd>Tab</kbd> closes it; <kbd>Esc</kbd> cancels. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes just the tag and leaves the plain text.</p>
-    <h3 class="tagging-help-label">Select the words, then press Tag</h3>
+    <p class="tagging-help-note">The tag is made the moment you type the closing bracket.</p>
+    <h3 class="tagging-help-label">Or type its name and a colon, then <kbd>Tab</kbd></h3>
+    <p class="tagging-help-note tagging-help-example">In the Visual column: <code>VFX: glow</code> <kbd>Tab</kbd> tags <em>glow</em> as VFX.</p>
+    <ul class="tagging-help-list tagging-help-words">
+      <li class="tagging-help-row"><code>Prop:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="prop">gaffer tape</span><span class="tagging-help-cat">Prop</span></li>
+      <li class="tagging-help-row"><span><code>Location:</code> <code>Loc:</code></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="location">kitchen</span><span class="tagging-help-cat">Location</span></li>
+      <li class="tagging-help-row"><code>Cast:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
+      <li class="tagging-help-row"><code>VFX:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="vfx">glow</span><span class="tagging-help-cat">VFX</span></li>
+      <li class="tagging-help-row"><code>Gear:</code><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="gear">tripod</span><span class="tagging-help-cat">Gear</span></li>
+      <li class="tagging-help-row"><span><code>SFX:</code> <code>Music:</code></span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+    </ul>
+    <p class="tagging-help-note">Any capitals work. <kbd>Esc</kbd> cancels, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> after <kbd>Tab</kbd> undoes just the tag and leaves the plain text.</p>
+    <h3 class="tagging-help-label">Or select the words and press Tag</h3>
     <ul class="tagging-help-list">
-      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="cast">Maya</span><span class="tagging-help-cat">Cast</span></li>
-      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tag-sample" data-tag-cat="sound">rain ambience</span><span class="tagging-help-cat">Music/SFX</span></li>
+      <li class="tagging-help-row"><span class="tagging-help-how">Select + Tag</span><span class="tagging-help-arrow" aria-hidden="true">→</span><span class="tagging-help-cat">any category, in either column</span></li>
     </ul>
     <h3 class="tagging-help-label">Keys</h3>
     <ul class="tagging-help-list tagging-help-keys">
@@ -643,13 +664,13 @@
       <h2 id="import-title">Import a script</h2>
       <button type="button" class="modal-close" id="import-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns. Unlike File ▸ Open — which starts a new document — this keeps the document you are in: its breakdown, cast list, b-roll and comments all stay, so it is the way to bring in a revised draft of the same script.</p>
+    <p class="modal-hint import-hint-keep">Paste a script below, or choose a .docx, .md, .txt or .csv file. One column becomes Audio text; a table with two columns (or VISUAL:/AUDIO: lines) is split into Visual and Audio. This keeps the document you are in — its breakdown, cast, b-roll and comments stay — so use it to bring in a revised draft. File ▸ Open starts a new document instead.</p>
     <!-- Opened from the New Tab page (issue #144), where there is no
          document of the user's to keep: the import becomes a new one.
          11-import.js puts .is-new-document on #import-modal, which swaps
          this hint in for the one above and hides "Replace existing rows". -->
-    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. A single-column script becomes Audio text, ready for Visual notes; a two-column script (a table, tab-separated, or VISUAL:/AUDIO: labeled lines) is detected automatically and split into both columns.</p>
-    <textarea id="import-textarea" placeholder="Paste your script here…" rows="10"></textarea>
+    <p class="modal-hint import-hint-new">Paste a script below, or choose a .docx, .md, .txt or .csv file. It becomes a new script. One column becomes Audio text; a table with two columns (or VISUAL:/AUDIO: lines) is split into Visual and Audio.</p>
+    <textarea id="import-textarea" aria-label="Script to import" placeholder="Paste your script here…" rows="10"></textarea>
     <div class="modal-row">
       <button type="button" class="btn" id="import-choose-file">Choose a file…</button>
       <div class="import-split-group" role="radiogroup" aria-label="Split by">
@@ -748,7 +769,7 @@
       opens Google's own Word (.docx) export of the doc in a new tab, which downloads it to your computer. Once
       it lands, bring it in the same way as any other Word file: File ▸ Open…. If the doc isn't
       shared "Anyone with the link", make sure you're signed in to the right Google account in that tab first.</p>
-    <input type="text" id="gdoc-url-input" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
+    <input type="text" id="gdoc-url-input" aria-label="Google Doc link" placeholder="https://docs.google.com/document/d/…/edit" autocomplete="off" spellcheck="false">
     <div class="modal-footer">
       <span></span>
       <div class="modal-footer-actions">
@@ -875,9 +896,9 @@
     </span>
     <span class="save-status" id="wr-save-status" role="status" aria-live="polite" hidden></span>
     <button class="btn btn-primary" id="wr-save" type="button">Save</button>
-  </div>
-  <div class="writer-scroll" id="writer-scroll">
-    <div class="writer-doc" id="writer-doc"></div>
+    <!-- Close beside Save, and the tools under this row (Adam, 2026-09-28:
+         where the script keeps them — its toolbar sits above the text) -->
+    <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">
     <button type="button" class="wr-fmt" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
@@ -894,8 +915,9 @@
     <button type="button" id="wr-gutter-mode" title="What sits beside each paragraph — the scene's visual, just its number, or nothing at all">Visuals</button>
     <button type="button" id="wr-export">Export narration</button>
     <span class="writer-hint">Enter starts a new scene · Shift+Enter is a line break</span>
-    <div class="spacer"></div>
-    <button type="button" id="wr-close">Close (Esc)</button>
+  </div>
+  <div class="writer-scroll" id="writer-scroll">
+    <div class="writer-doc" id="writer-doc"></div>
   </div>
 </div>
 
@@ -931,12 +953,12 @@
       </div>
       <div class="cell-editable" id="comment-body-editable" contenteditable="true" data-id="comment-draft" data-field="body" data-placeholder="Type your comment…" aria-labelledby="comment-body-label"></div>
       <div class="link-popover" hidden>
-        <input type="url" placeholder="https://example.com" data-role="link-input">
+        <input type="url" aria-label="Link address" placeholder="https://example.com" data-role="link-input">
         <button type="button" data-action="link-confirm">Add</button>
         <button type="button" data-action="link-cancel">Cancel</button>
       </div>
       <div class="video-popover" hidden>
-        <input type="url" placeholder="https://youtube.com/watch?v=…" data-role="video-input">
+        <input type="url" aria-label="Video link" placeholder="https://youtube.com/watch?v=…" data-role="video-input">
         <button type="button" data-action="video-confirm">Add</button>
         <button type="button" data-action="video-cancel">Cancel</button>
       </div>
@@ -1015,6 +1037,52 @@
     <div class="scene-gallery-zoom-stage" id="gallery-zoom-stage"></div>
     <p class="scene-gallery-zoom-info" id="gallery-zoom-info"></p>
     <button type="button" class="scene-gallery-zoom-close" id="gallery-zoom-close" aria-label="Close full size"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+  </div>
+</div>
+
+<!-- Drawing on a picture in a scene's gallery (05w-annotate.js), opened by
+     the gallery's Annotate button and laid over the whole window, the
+     gallery still open under it: the tools across the top, the picture's
+     original fitted to the stage with the marks on a canvas over it. The
+     colour swatches are the module's (ANNOTATION_COLORS, 02d-gallery.js),
+     so the six colours a mark may have are written down once. Every
+     button is its own tab stop; the tool, colour and size buttons say
+     which is picked with aria-pressed. -->
+<div class="modal-backdrop annotate-overlay" id="annotate-modal" hidden>
+  <div class="modal-panel annotate-panel" role="dialog" aria-modal="true" aria-labelledby="annotate-title">
+    <div class="annotate-bar">
+      <h2 class="annotate-title" id="annotate-title">Annotate picture</h2>
+      <div class="annotate-tools">
+        <div class="annotate-group" role="group" aria-label="Tool">
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="pen" aria-pressed="true" aria-label="Pen" aria-keyshortcuts="P" title="Pen (P)"><svg aria-hidden="true"><use href="#i-pen"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="highlight" aria-pressed="false" aria-label="Highlighter" aria-keyshortcuts="H" title="Highlighter (H)"><svg aria-hidden="true"><use href="#i-highlight"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="text" aria-pressed="false" aria-label="Text" aria-keyshortcuts="T" title="Text (T): click the picture to type, drag a text to move it"><svg aria-hidden="true"><use href="#i-text"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="tool" data-tool="eraser" aria-pressed="false" aria-label="Eraser" aria-keyshortcuts="E" title="Eraser (E): drag over a mark to take it away"><svg aria-hidden="true"><use href="#i-eraser"/></svg></button>
+        </div>
+        <div class="annotate-group annotate-swatches" id="annotate-colors" role="group" aria-label="Colour"></div>
+        <div class="annotate-group" id="annotate-sizes" role="group" aria-label="Size">
+          <button type="button" class="annotate-btn annotate-size" data-aact="size" data-size="0" aria-pressed="false" aria-label="Small" title="Small">S</button>
+          <button type="button" class="annotate-btn annotate-size" data-aact="size" data-size="1" aria-pressed="true" aria-label="Medium" title="Medium">M</button>
+          <button type="button" class="annotate-btn annotate-size" data-aact="size" data-size="2" aria-pressed="false" aria-label="Large" title="Large">L</button>
+        </div>
+        <div class="annotate-group" role="group" aria-label="History">
+          <button type="button" class="annotate-btn" data-aact="undo" id="annotate-undo" aria-label="Undo" title="Undo (Ctrl+Z)"><svg aria-hidden="true"><use href="#i-undo"/></svg></button>
+          <button type="button" class="annotate-btn" data-aact="redo" id="annotate-redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><svg aria-hidden="true"><use href="#i-redo"/></svg></button>
+          <button type="button" class="annotate-btn annotate-clear" data-aact="clear" id="annotate-clear" title="Take every mark away">Clear all</button>
+        </div>
+      </div>
+      <div class="annotate-end">
+        <button type="button" class="btn" data-aact="cancel" id="annotate-cancel">Cancel</button>
+        <button type="button" class="btn btn-accent" data-aact="done" id="annotate-done">Done</button>
+      </div>
+    </div>
+    <div class="annotate-stage" id="annotate-stage">
+      <div class="annotate-frame" id="annotate-frame" data-tool="pen">
+        <img class="annotate-img" id="annotate-img" alt="" draggable="false">
+        <canvas class="annotate-canvas" id="annotate-canvas"></canvas>
+      </div>
+      <p class="annotate-status" id="annotate-status" role="status"></p>
+    </div>
   </div>
 </div>
 
@@ -1231,7 +1299,7 @@
     <div id="drive-main" hidden>
       <div class="modal-row drive-account" id="drive-account"></div>
       <div class="drive-connect-row">
-        <input type="text" id="drive-folder-input" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
+        <input type="text" id="drive-folder-input" aria-label="Google Drive folder link or ID" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
         <button type="button" class="btn btn-accent" id="drive-connect-btn" data-action="drive-connect">Open folder</button>
       </div>
       <button type="button" class="drive-edit-creds" data-action="drive-edit-creds">Change API key / Client ID…</button>
@@ -1276,7 +1344,7 @@
     <div class="tag-cats" id="tag-cats" role="radiogroup" aria-label="Category"></div>
 
     <div class="comment-field-label">Name</div>
-    <input type="text" id="tag-name" list="tag-name-list" autocomplete="off" placeholder="e.g. Halo Mount">
+    <input type="text" id="tag-name" aria-label="Tag name" list="tag-name-list" autocomplete="off" placeholder="e.g. Halo Mount">
     <datalist id="tag-name-list"></datalist>
     <div class="tag-hint" id="tag-hint"></div>
 
@@ -1386,6 +1454,24 @@
      Two dialogs: the code a shared session may ask for, and the list of
      servers this browser knows about. Nothing here is ever part of a
      document — see the note on browser state at the top of 13-hosted.js. -->
+
+<div class="modal-backdrop" id="about-modal" hidden>
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="about-title">
+    <div class="modal-header">
+      <h2 id="about-title">About Splitpage</h2>
+      <button type="button" class="modal-close" data-about-close aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+    </div>
+    <p id="about-version"></p>
+    <div id="about-body"></div>
+    <p class="modal-hint"><a id="about-link" href="#" target="_blank" rel="noopener" hidden>Open the releases page</a></p>
+    <div class="modal-footer">
+      <span></span>
+      <div class="modal-footer-actions">
+        <button type="button" class="btn" data-about-close>Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal-backdrop" id="pin-modal" hidden>
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
@@ -1657,10 +1743,10 @@
       <section class="onboard-step" data-onboard-step="1">
         <p class="modal-hint">Splitpage is a two-column visual/audio script editor with a
           built-in teleprompter. Scripts save as readable <strong>Markdown (.md)</strong>
-          files by default — a table you can read and edit anywhere, with everything
-          Splitpage needs kept alongside it — or as Splitpage's own native
-          <strong>.splitpage</strong> format, which is exactly what it looks like
-          internally, if you would rather have zero translation.</p>
+          files by default — a table you can read and edit in any editor, with what
+          Splitpage needs kept alongside it. You can also save as
+          <strong>.splitpage</strong>, Splitpage's own format, if you would rather keep
+          everything in one file.</p>
       </section>
 
       <section class="onboard-step" data-onboard-step="2">

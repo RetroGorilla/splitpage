@@ -814,7 +814,7 @@ function historyMarkPending(entry) {
   if (!historyWarnedDocs[entry.docId]) {
     historyWarnedDocs[entry.docId] = true;
     try {
-      showToast("Couldn't store a version history snapshot. It is kept in this window and will be " +
+      showToast("Could not store a version history snapshot. It is kept in this window and will be " +
         "tried again — closing the window before then loses it.", "warn");
     } catch (e) { /* a toast is a courtesy */ }
   }

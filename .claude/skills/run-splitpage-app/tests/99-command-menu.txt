@@ -32,7 +32,12 @@ expect Math.round(document.querySelector('#cmdk .cmdk-input-row').getBoundingCli
 expect Math.abs((document.querySelector('#cmdk .cmdk-panel').getBoundingClientRect().left + 320) - innerWidth / 2) < 12
 expect document.getElementById('cmdk-input').getAttribute('role') == combobox
 # nothing typed and nothing run yet: every command, in the menu's groups
-expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-group'), function(g){return g.textContent;}).join('|') === 'File|Share|Export|View|This document|Help'
+expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-group'), function(g){return g.textContent;}).join('|') === 'Tags|File|Share|Export|View|This document|Help'
+# Tags first (2026-09-27): the tagging reference leads the list, and "tags"
+# finds it first by name rather than tying with the breakdown and panel
+expect document.querySelector('#cmdk-list .cmdk-item').getAttribute('data-cmd') == tagging-help
+expect C.results('tags')[0].items[0].id == tagging-help
+expect C.results('tag')[0].items[0].id == tagging-help
 expect document.querySelectorAll('#cmdk-list .cmdk-item').length > 30
 expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="export-pdf"]') !== null
 expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="export-narration-txt"]') !== null
@@ -42,7 +47,7 @@ expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="find"]') !== null
 expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="prompter-open-in-browser"]') === null
 # shortcut chips, and the first command active
 expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item[data-cmd="find"] .cmdk-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+F'
-expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') == save
+expect document.querySelector('#cmdk-list .cmdk-item.is-active').getAttribute('data-cmd') == tagging-help
 expect document.getElementById('cmdk-input').getAttribute('aria-activedescendant') === document.querySelector('#cmdk-list .cmdk-item.is-active').id
 shot 99-command-menu
 
@@ -57,7 +62,9 @@ expect document.querySelector('#cmdk-list [data-cmd="export-packing-gear"] .cmdk
 expect document.querySelector('#cmdk-list [data-cmd="export-packing-gear"] .cmdk-why').textContent === window.__exportTest.reason('export-packing-gear')
 expect C.results('teleprompter')[0].items[0].id == present
 expect C.results('voice over')[0].items[0].id == export-narration-docx
-expect C.results('excel')[0].items[0].id == export-csv
+# the workbook by name (2026-09-28), the CSV still found by the word
+expect C.results('excel')[0].items[0].id == export-xlsx
+expect C.results('excel')[0].items.some(function(i){return i.id === 'export-csv';})
 expect C.results('invite').some(function(g){return g.items.some(function(i){return i.id === 'collaborate' && !i.disabled && i.why === '';});})
 expect C.results('publish').some(function(g){return g.items.some(function(i){return i.id === 'collaborate';});})
 expect C.results('zzzzqq').length === 0

@@ -12,7 +12,7 @@ import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
 import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
-import { desktopAppUrl } from "./20a-update.js";
+import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 import { startTour } from "./20c-help.js";
 import { openServersDialog } from "./20e-connect.js";
@@ -315,9 +315,9 @@ function renderStarterCards() {
 function updateDesktopPitch() {
   var pitch = document.getElementById("newtab-desktop");
   if (!pitch) return;
-  pitch.hidden = !!S.DESKTOP;
+  pitch.hidden = !desktopAppOffered();
   var link = document.getElementById("newtab-desktop-link");
-  if (link && !S.DESKTOP) link.href = desktopAppUrl();
+  if (link && desktopAppOffered()) link.href = desktopAppUrl();
 }
 
 /* ---- the recent-documents column (DESKTOP-RECENTS) ---- */
