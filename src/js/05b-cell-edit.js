@@ -82,7 +82,6 @@ export function domToPos(cellEl, node, offset) {
   return posAfterNode(cellEl, node);
 }
 
-// Never inside contenteditable=false tag or b-roll key
 export function posToDom(cellEl, pos) {
   var p = 0, result = null, last = null;
   walkCell(cellEl, function (kind, n, len) {
@@ -153,7 +152,6 @@ export function editCell(cellEl, fn) {
   var html = row[field] || "";
   if (/<img|video-embed-card/.test(html)) return null;
   var sel = cellSelection(cellEl);
-  // Close prior entry first; fn's registry changes join this one
   breakUndoCoalescing();
   var out = fn(fromHtml(html), sel);
   if (!out || !out.cell) return null;
@@ -167,7 +165,6 @@ export function editCell(cellEl, fn) {
     out.also();
     markDirty();
   }
-  // In place; replacing element steals focus and fires stale focusout
   cellEl.innerHTML = next;
   ensureTrailingCaretSpot(cellEl);
   syncFieldFromDom(cellEl);

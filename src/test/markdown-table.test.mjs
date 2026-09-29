@@ -42,7 +42,6 @@ test("the header names the columns, wherever they sit", () => {
 });
 
 test("a header naming only one column never points both fields at it", () => {
-  // Unresolved column once defaulted to 0, duplicating a column
   const audioFirst = parseMarkdownTable("| Audio | Notes |\n| --- | --- |\n| Hello. | wide shot |");
   assert.deepEqual(cells(audioFirst), [["wide shot", "Hello."]]);
 
@@ -54,7 +53,6 @@ test("a header naming only one column never points both fields at it", () => {
 });
 
 test("an escaped pipe stays inside its cell", () => {
-  // Escaped pipes: plain split cuts the cell and shifts columns
   const out = parseMarkdownTable([
     "| Visual | Audio | Status |",
     "| --- | --- | --- |",
@@ -101,7 +99,6 @@ test("a scene with nothing typed in it is dropped by default and kept with keepE
 });
 
 test("a row with nothing in ANY column reads as a separator, keepEmpty or not", () => {
-  // All-blank row is dropped even with keepEmpty, by design
   const md = "| Visual | Audio |\n| --- | --- |\n| a | b |\n|  |  |\n| c | d |";
   assert.deepEqual(cells(parseMarkdownTable(md, { keepEmpty: true })), [["a", "b"], ["c", "d"]]);
 });

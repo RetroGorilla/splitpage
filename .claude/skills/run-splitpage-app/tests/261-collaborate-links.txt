@@ -1,0 +1,147 @@
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.K = window.__collabTest; window.__toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('.toast'), function(t){ return t.textContent; }); }; window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: function(t){ window.__copied.push(t); return Promise.resolve(); } } }); if (F.autosave.enabled()) F.autosave.toggle(); return !!(F && H && K); })()
+expect true
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+expect typeof window.__srv === 'object'
+eval (function(){ window.__links = function(){ return __srv.calls.filter(function(c){ return c.path.indexOf('/links') !== -1; }); }; return true; })()
+
+eval (function(){ localStorage.setItem('splitpage-server-tokens', JSON.stringify({ 'https://script.bigmanonline.uk/': 'tok-owner-1' })); __mkDoc('doc-7', 'Pilot episode'); return H.pointTabAt(K.DEFAULT); })()
+eval (async function(){ await H.detect(); return H.conn().role; })()
+wait H.conn().role === 'edit' && H.conn().hasToken
+jsclick #btn-file
+jsclick #menu-server-open
+wait document.querySelector('#server-doc-list [data-action="server-open"][data-id="doc-7"]') !== null
+jsclick #server-doc-list [data-action="server-open"][data-id="doc-7"]
+wait H.home().id === 'doc-7'
+expect document.getElementById('doc-title').value == Pilot episode
+
+eval (function(){ __srv.calls = []; return true; })()
+jsclick #btn-file
+jsclick #menu-collaborate
+wait K.step() === 'links'
+expect __srv.calls.filter(function(c){ return c.path === 'api/docs' && c.m === 'POST'; }).length == 0
+expect __srv.calls.filter(function(c){ return c.path.indexOf('api/docs/doc-7/links') === 0; }).map(function(c){ return c.m + (c.body ? ' ' + c.body.role : ''); }).join(',') == GET,POST edit,POST review
+expect document.getElementById('collab-doc-title').textContent == Pilot episode
+expect document.getElementById('collab-doc-where').textContent == On script.bigmanonline.uk
+eval (function(){ window.__L1 = K.links(); return JSON.stringify(__L1); })()
+expect __L1.edit.indexOf('https://script.bigmanonline.uk/?doc=doc-7#invite=') === 0
+expect __L1.review.indexOf('https://script.bigmanonline.uk/?doc=doc-7#invite=') === 0
+
+eval (function(){ __srv.calls = []; return true; })()
+jsclick [data-link-role="edit"] [data-collab-action="new"]
+sleep 100
+expect document.querySelector('[data-link-role="edit"] [data-collab-action="new"]').textContent == Replace link
+expect document.querySelector('[data-link-role="edit"] [data-collab-action="new"]').classList.contains('armed')
+expect document.querySelector('[data-link-role="edit"] .collab-link-warn').textContent.indexOf('the link above stops working for everyone who has it') !== -1
+expect __links().length === 0
+shot 261-collab-armed
+jsclick [data-link-role="edit"] [data-collab-action="new"]
+wait K.links().edit !== __L1.edit
+expect __links().map(function(c){ return c.m + ' ' + c.path + ' ' + JSON.stringify(c.body); }).join(' | ') == POST api/docs/doc-7/links {"role":"edit","replace":true}
+expect K.links().edit.indexOf('https://script.bigmanonline.uk/?doc=doc-7#invite=') === 0
+expect __srv.links.filter(function(l){ return l.key === __L1.edit.split('#invite=')[1]; })[0].off === true
+expect K.links().review === __L1.review
+expect document.querySelector('[data-link-role="edit"] .collab-link-warn') === null
+wait __toasts().some(function(t){ return t.indexOf('New link to edit — the old one no longer works.') === 0; })
+
+eval (function(){ __srv.calls = []; return true; })()
+jsclick [data-link-role="review"] [data-collab-action="new"]
+sleep 100
+expect document.querySelector('[data-link-role="review"] [data-collab-action="new"]').textContent == Replace link
+sleep 4400
+expect document.querySelector('[data-link-role="review"] [data-collab-action="new"]').textContent == New link
+expect document.querySelector('[data-link-role="review"] .collab-link-warn') === null
+expect __links().length === 0
+
+jsclick [data-link-role="review"] [data-collab-action="off"]
+sleep 100
+expect document.querySelector('[data-link-role="review"] [data-collab-action="off"]').textContent == Turn it off
+expect document.querySelector('[data-link-role="review"] .collab-link-warn').textContent.indexOf('Press Turn it off to confirm') === 0
+jsclick [data-link-role="review"] [data-collab-action="off"]
+wait document.querySelector('[data-link-role="review"] [data-collab-action="make"]') !== null
+expect __srv.calls.filter(function(c){ return c.m === 'DELETE'; }).length == 1
+expect __active('doc-7').map(function(l){ return l.role; }).join(',') == edit
+expect document.querySelector('[data-link-role="review"] .collab-link-state').textContent == Off
+expect document.querySelector('[data-link-role="review"] .collab-link-offtext').textContent.indexOf('nobody can open the script this way') !== -1
+expect document.querySelector('[data-link-role="review"] .collab-link-url') === null
+expect K.links().review === ''
+wait __toasts().some(function(t){ return t.indexOf('The link to comment is off') === 0; })
+shot 261-collab-one-off
+
+jsclick #collab-foot [data-collab-action="close"]
+sleep 200
+eval (function(){ __srv.calls = []; return true; })()
+jsclick #btn-file
+jsclick #menu-collaborate
+wait K.step() === 'links'
+expect __srv.calls.filter(function(c){ return c.path.indexOf('/links') !== -1 && c.m === 'POST'; }).length == 0
+expect document.querySelector('[data-link-role="review"] [data-collab-action="make"]') !== null
+expect K.links().edit.indexOf('#invite=') !== -1
+
+jsclick [data-link-role="review"] [data-collab-action="make"]
+wait K.links().review !== ''
+expect __links().filter(function(c){ return c.m === 'POST'; }).map(function(c){ return JSON.stringify(c.body); }).join('|') == {"role":"review","replace":false}
+expect K.links().review !== __L1.review
+expect __active('doc-7').length == 2
+
+eval (function(){ __srv.links.forEach(function(l){ if (l.docId === 'doc-7' && l.role === 'edit') l.off = true; }); window.__toastCount = __toasts().length; return true; })()
+jsclick [data-link-role="edit"] [data-collab-action="off"]
+jsclick [data-link-role="edit"] [data-collab-action="off"]
+wait document.querySelector('[data-link-role="edit"] [data-collab-action="make"]') !== null
+expect __srv.calls.filter(function(c){ return c.m === 'DELETE'; }).length >= 1
+expect document.querySelectorAll('.toast.warn').length === 0
+
+eval (function(){ __srv.links.forEach(function(l){ l.off = true; }); return true; })()
+jsclick #collab-foot [data-collab-action="close"]
+jsclick #btn-file
+jsclick #menu-collaborate
+wait K.step() === 'links' && K.links().edit !== '' && K.links().review !== ''
+expect __active('doc-7').length == 2
+jsclick #collab-foot [data-collab-action="close"]
+sleep 200
+
+eval (function(){ delete __srv.health.links; delete __srv.health.linksPersist; __srv.calls = []; return true; })()
+jsclick #btn-file
+jsclick #menu-collaborate
+wait K.step() === 'legacy'
+expect __srv.calls.filter(function(c){ return c.path.indexOf('/links') !== -1; }).length == 0
+expect document.querySelectorAll('#collab-body .collab-link').length == 1
+expect document.querySelector('#collab-body .collab-link-url').textContent == https://script.bigmanonline.uk/?doc=doc-7
+expect document.getElementById('collab-body').textContent.indexOf('join PIN') !== -1
+jsclick [data-link-role="plain"] [data-collab-action="copy"]
+wait window.__copied.length > 0
+expect window.__copied[window.__copied.length - 1] == https://script.bigmanonline.uk/?doc=doc-7
+jsclick #collab-foot [data-collab-action="close"]
+sleep 200
+
+eval (function(){ __srv.health.links = 1; __srv.health.linksPersist = false; __srv.noPinLinks = true; return true; })()
+jsclick #btn-file
+jsclick #menu-collaborate
+wait K.step() === 'open-server'
+expect document.getElementById('collab-body').textContent.indexOf('has no owner key, so anyone who can reach it can already open and edit every script on it') !== -1
+expect document.querySelector('#collab-body .collab-link-url').textContent == https://script.bigmanonline.uk/?doc=doc-7
+jsclick #collab-foot [data-collab-action="close"]
+sleep 200
+
+eval (function(){ __srv.noPinLinks = false; __srv.health.linksPersist = false; return true; })()
+jsclick #btn-file
+jsclick #menu-collaborate
+wait K.step() === 'links'
+expect document.querySelector('#collab-body .collab-warn').textContent == These links stop working when this sharing session ends.
+shot 261-collab-session-links
+jsclick #collab-foot [data-collab-action="close"]
+sleep 200
+
+eval (async function(){ __srv.health.readOnly = true; await H.detect(); return true; })()
+jsclick #btn-file
+expect document.getElementById('menu-collaborate').disabled === true
+expect document.querySelector('#menu-collaborate .mi-why').textContent == This server is read-only
+jsclick #file-menu-close
+eval (async function(){ __srv.health.readOnly = false; await H.detect(); return true; })()
+jsclick #btn-file
+expect document.getElementById('menu-collaborate').disabled === false
+jsclick #file-menu-close
+
+expect JSON.stringify(F.state()).indexOf('#invite=') === -1
+expect JSON.stringify(F.state()).indexOf('tok-owner-1') === -1

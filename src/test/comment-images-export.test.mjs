@@ -130,12 +130,10 @@ test("a .docx comment picture is at most 60% of the column, keeps its aspect and
   const imgs = section.filter((p) => p.img);
   assert.equal(imgs.length, 4);
   const [b, br, s, t] = imgs;
-  // 60% of column beside indent, 3:2; 635 EMU per twip
   assert.equal(b.cx, Math.round((10080 - 360) * 635 * 0.6));
   assert.equal(br.cx, Math.round((10080 - 720) * 635 * 0.6));
   assert.ok(Math.abs(b.cx / b.cy - 1.5) < 0.001);
   assert.equal(b.img, br.img);
-  // Small pictures keep native size at 96 dpi
   assert.equal(s.cx, 40 * 9525);
   assert.equal(s.cy, 30 * 9525);
   assert.equal(t.cy, 260 * 12700);

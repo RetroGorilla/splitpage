@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
-import { onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
+import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
 import { recordMyColor } from "./13a-presence.js";
 import {
   autoSaveEnabled,
@@ -27,10 +27,9 @@ export function setSaveButtons(text, disabled) {
     if (disabled !== undefined) btn.disabled = disabled;
     btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
   });
-  // Runs before desktop notify so main never sees stale identity
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
-  if (S.DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
+  if (typeof noteDraftChange === "function") noteDraftChange();
   updateSaveStatus();
 }
 
@@ -39,12 +38,10 @@ export function markDirty() {
   S.editSeq++;
   if (!reviewMode()) recordMyColor(S.state);
   noteEdit();
-  // Unconditional: setSaveButtons is skipped during in-flight save
-  if (S.DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
+  if (typeof noteDraftChange === "function") noteDraftChange();
   if (!S.saveButtonBusy) setSaveButtons("Save •");
   scheduleAutoSave();
   if (home.kind === "import") { home.dirty = true; updateFileChip(); }
-  // Hosted docs skip the import branch; chip must refresh
   else if (onServerDoc()) { updateFileChip(); }
 }
 
@@ -52,7 +49,6 @@ export function clearDirty() {
   S.dirty = false;
   clearAutoSaveTimers();
   resumeAutoSave();
-  // Reset so old save time never shows under another doc
   savedAt = 0;
   setSaveButtons("Save");
 }
@@ -77,6 +73,10 @@ function saveStatusView() {
   if (typeof onServerDoc === "function" && onServerDoc() && serverSessionExpired) {
     return { text: "Not saving", cls: "warn",
              title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
+  }
+  if (typeof onServerDoc === "function" && onServerDoc() && linkTurnedOff) {
+    return { text: "Not saving", cls: "warn",
+             title: "The owner turned off the link you opened this with — File ▸ Save a copy… keeps what's on screen." };
   }
   if (S.saveButtonBusy) {
     return { text: "Saving…", cls: "busy",
@@ -156,10 +156,12 @@ export function showToast(msg, kind, sticky) {
   return el;
 }
 
-export function showActionToast(msg, kind, label, onAction) {
+export function showActionToast(msg, kind, label, onAction, sticky) {
   var el = showToast(msg, kind, true);
-  el.classList.remove("is-sticky");
-  el.removeAttribute("title");
+  if (!sticky) {
+    el.classList.remove("is-sticky");
+    el.removeAttribute("title");
+  }
   el.classList.add("has-action");
   var btn = document.createElement("button");
   btn.type = "button";
@@ -171,7 +173,7 @@ export function showActionToast(msg, kind, label, onAction) {
     onAction();
   });
   el.appendChild(btn);
-  setTimeout(el.dismiss, 6000);
+  if (!sticky) setTimeout(el.dismiss, 6000);
   return el;
 }
 

@@ -1,0 +1,68 @@
+open
+viewport 390 844 mobile
+goto /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 400
+eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.K = window.__collabTest; window.__inside = function(sel){ var r = document.querySelector(sel).getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 0.5 && r.width > 0; }; window.__noOverflow = function(){ return document.documentElement.scrollWidth <= innerWidth + 1 && Array.prototype.every.call(document.querySelectorAll('#collab-modal *, #guest-modal *'), function(el){ var r = el.getBoundingClientRect(); return r.width === 0 || (r.right <= innerWidth + 1 && r.left >= -1); }); }; window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: function(t){ window.__copied.push(t); return Promise.resolve(); } } }); return !!(F && H && K); })()
+expect true
+eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
+expect typeof window.__srv === 'object'
+
+eval K.open()
+wait K.step() === 'sign-in'
+sleep 350
+expect __inside('#collab-modal .modal-panel')
+expect __noOverflow()
+expect parseFloat(getComputedStyle(document.getElementById('collab-key')).fontSize) >= 16
+expect document.getElementById('collab-key').getBoundingClientRect().height >= 44
+expect __inside('#collab-foot [data-collab-action="sign-in"]')
+shot 264-phone-sign-in
+eval (function(){ document.documentElement.setAttribute('data-theme', 'dark'); return true; })()
+sleep 250
+shot 264-phone-sign-in-dark
+eval (function(){ document.documentElement.removeAttribute('data-theme'); document.getElementById('collab-key').value = __srv.ownerKey; return true; })()
+jsclick #collab-foot [data-collab-action="sign-in"]
+wait K.step() === 'confirm'
+sleep 200
+
+expect __inside('#collab-modal .modal-panel')
+expect __noOverflow()
+expect __inside('#collab-foot [data-collab-action="publish"]')
+shot 264-phone-confirm
+jsclick #collab-foot [data-collab-action="publish"]
+wait K.step() === 'links'
+sleep 250
+
+expect __inside('#collab-modal .modal-panel')
+expect __noOverflow()
+expect Array.prototype.every.call(document.querySelectorAll('#collab-body .collab-link'), function(c){ var u = c.querySelector('.collab-link-url').getBoundingClientRect(); var b = c.querySelector('.collab-copy').getBoundingClientRect(); return b.top >= u.bottom - 1 && Math.abs(b.width - u.width) < 2 && b.height >= 40; })
+expect Array.prototype.every.call(document.querySelectorAll('#collab-body .collab-link-url'), function(u){ return u.scrollWidth <= u.clientWidth + 1; })
+expect document.querySelector('[data-link-role="edit"] .collab-link-url').textContent.indexOf('#invite=') !== -1
+expect Array.prototype.every.call(document.querySelectorAll('#collab-body .collab-link-actions .btn-outline'), function(b){ return b.getBoundingClientRect().height >= 36; })
+shot 264-phone-links
+jsclick [data-link-role="review"] [data-collab-action="off"]
+sleep 150
+expect __noOverflow()
+expect document.querySelector('[data-link-role="review"] .collab-link-warn') !== null
+eval (function(){ document.documentElement.setAttribute('data-theme', 'dark'); return true; })()
+sleep 250
+expect getComputedStyle(document.querySelector('[data-link-role="review"] [data-collab-action="off"]')).color !== getComputedStyle(document.querySelector('[data-link-role="review"] [data-collab-action="new"]')).color
+shot 264-phone-links-dark
+eval (function(){ document.documentElement.removeAttribute('data-theme'); return true; })()
+jsclick #collab-foot [data-collab-action="close"]
+sleep 250
+expect !K.isOpen()
+
+eval (function(){ localStorage.removeItem('splitpage-comment-author'); sessionStorage.removeItem('splitpage-guest-asked'); return K.askGuestName(); })()
+wait !document.getElementById('guest-modal').hidden
+sleep 300
+expect __inside('#guest-modal .modal-panel')
+expect __noOverflow()
+expect parseFloat(getComputedStyle(document.getElementById('guest-name')).fontSize) >= 16
+shot 264-phone-guest-name
+eval (function(){ document.documentElement.setAttribute('data-theme', 'dark'); return true; })()
+sleep 250
+shot 264-phone-guest-name-dark
+eval (function(){ document.documentElement.removeAttribute('data-theme'); return true; })()
+jsclick #guest-modal [data-guest-action="skip"]
+wait document.getElementById('guest-modal').hidden

@@ -8,11 +8,19 @@ the script.
 Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows. To work with other people,
-[host a shared session](#hosting-a-shared-session) or
-[connect to a server](#connecting-to-a-server).
+[collaborate](#collaborating): one click gives you a link to send, and
+whoever opens it works on the same script, with nothing to install. On your
+own network you can also [host a shared session](#hosting-a-shared-session).
 
-## What's new since 3.0
+## What's new in 3.1
 
+- **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
+  puts the script on your server and gives you two links to send: one to
+  edit, one to comment. A link opens that one script, needs no account, and
+  can be renewed or turned off. See [Collaborating](#collaborating).
+- **Unsaved changes to a server script survive a closed tab.** The browser
+  keeps them as you type and merges them back in the next time you open
+  the script, with **Undo merge**.
 - **Draw on your pictures.** In a scene's gallery, press **Annotate** to
   mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
   and E pick them). Your marks stay editable, and **Remove annotations**
@@ -29,6 +37,17 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **The tagging reference lists every word form**: `Prop:`, `Location:` or
   `Loc:`, `Cast:`, `VFX:`, `Gear:`, and `SFX:` or `Music:`, each with its
   tag colour, beside the bracket shortcuts.
+- **Saving you can trust.** Text typed while a publish or a save is still
+  going stays marked unsaved until it is saved, instead of being called
+  saved. Opening another script during a publish leaves that script alone;
+  the published copy waits on the server. **Save As** on a shared script
+  now makes a copy without calling the shared one saved. And a malformed
+  request can no longer stop a shared-script server.
+- **An empty scene deletes in one click**: its **⋯ ▸ Delete** no longer
+  asks twice when there is nothing in it to lose.
+- **Version history from 2.x** is no longer converted. If you are updating
+  straight from 2.x, install 3.0 first to keep it. Nothing changes if you
+  already have 3.0.
 
 ## What's new in 3.0
 
@@ -142,12 +161,21 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   the caret into a new scene below, in the same column.
 - **Move a scene**: <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>Alt</kbd>+<kbd>↓</kbd>,
   or drag it by its number. The scene's **⋯** menu also has **Move up**,
-  **Move down**, **Insert scene** and **Delete**.
+  **Move down**, **Insert scene** and **Delete**. **Delete** asks for a
+  second click, unless the scene is empty (no words, pictures, set length
+  or comments): then one click does it. <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings
+  a deleted scene back.
 - **The rundown**: the strip under the header shows every scene as a block.
   Hover it to magnify the scenes round the pointer, click a block to jump
   to that scene, or drop a
   dragged scene on it to move the scene. **File ▸ Minimise the rundown**
   shrinks it to a line; click the line to bring it back.
+- **The header's buttons**: **Production**, **Gear**, **B-roll** and
+  **Comments** open their panels; **Collab** invites people to the script
+  (see [Collaborating](#collaborating)); **Write** and **Present** are the
+  two other ways to see it. In a narrower window the panel buttons shrink to
+  their icons and counts, and Collab and Write to their icons. Point at one,
+  or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
 - **Scene status**: click the lamp in the scene's gutter to cycle **To do →
   Ready → Shot**.
 - **Hide shot scenes**: File ▸ Hide shot scenes
@@ -491,9 +519,10 @@ yours is kept as an **Unmerged edit** comment.
   file with the script and the whole app in it. It opens in any browser, on
   any device, with nothing to install, and they can read, edit and present
   it. It's a copy: their edits stay in their file.
-- **Want their edits back?** **File ▸ Publish & copy a link** puts the script
-  on the server you're connected to and copies a link. Everyone who opens it
-  edits the same document.
+- **Want their edits back?** **File ▸ Collaborate…** stores the script on
+  your collaboration server and gives you two links: one to edit it, one to
+  comment on it. Everyone who opens a link works on the same script, in
+  their browser, phone included. See [Collaborating](#collaborating).
 
 ## Reopening a saved project
 
@@ -519,7 +548,8 @@ you'll see **Continue where you left off?**
 **File ▸ Version history…** lists snapshots of the script as you worked.
 Pick one to restore it. Each script has its own history, kept on this
 computer (not in the file). History from older versions of Splitpage appears
-under **Older history** for 90 days.
+under **Older history** for 90 days. Only 3.0 carries history over from 2.x,
+so coming straight from 2.x, install 3.0 first to keep it.
 
 ## Exporting
 
@@ -572,7 +602,8 @@ copy…**. Below:
 
 - **New & open**: New script, Open…, Open recent (desktop app), and Import
   (Paste a script, Google Doc link, Google Drive).
-- **Share**: Publish & copy a link, and Servers….
+- **Share**: Collaborate…, and Servers… (with a server connected, Put this
+  script on the server too).
 - **Export**: Export…, and Export again.
 - **This document**: Version history, Find & replace, Hide shot scenes,
   Minimise the rundown, and in the desktop app Present in browser and Use
@@ -622,6 +653,8 @@ change the script.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.
 - **You**: your name and colour, as collaborators see them. Clicking your
   name in the header opens these too.
+- **Collaboration**: the server Collaborate stores scripts on, whether this
+  device is signed in there, and **Sign out**.
 - **Help & tips**: bring back the tagging reference, the tour and the
   desktop-app notice.
 - **Data**: Export app data, Servers and Google Drive.
@@ -683,6 +716,74 @@ preferences as a `.json` file. In the desktop app, **File ▸ Import app
 data…** merges one in; nothing is overwritten. Scripts themselves aren't
 included (they're your files), and neither are sign-ins, PINs or API keys.
 
+## Collaborating
+
+**Collab** in the header, beside Write and Present (or **File ▸
+Collaborate…**, or <kbd>Ctrl</kbd>+<kbd>K</kbd>, *collaborate*) shares the
+script you have open. You get two links to send:
+
+- **Can edit**: whoever opens it can change the script, comment and resolve
+  comments.
+- **Can comment**: whoever opens it can read the script, present it, export
+  it and leave comments, but not change it.
+
+A link opens that one script and nothing else on the server. The people you
+send it to need no account, no code and nothing installed: the link opens
+Splitpage in their browser, on a phone too.
+
+**The first time**, on a script that's only on your computer:
+
+1. Collaborate asks for your server's **owner key** (the long code the
+   server was set up with, its join PIN). It's asked once per device and
+   remembered there; untick **Remember on this device** on a computer that
+   isn't yours.
+2. It tells you what happens next: the script is stored on the server, and
+   everyone edits that copy. **Save a copy…** still gives you a file any
+   time.
+3. **Collaborate** stores it and shows the two links. **Copy** puts one on
+   the clipboard.
+
+On a script that's already on the server, Collaborate goes straight to its
+links.
+
+**Managing the links.** Each link has **New link**, which makes a fresh
+one and stops the old one working, and **Turn off**, which stops it
+altogether. Both ask you to press again to confirm, because whoever is using
+the old link loses it. A link that's off stays off until you press **Make a
+link**. On a shared session hosted from the desktop app, the links stop
+working when the session ends, and the dialog says so.
+
+**Which server.** Collaborate uses the server in **Settings ▸
+Collaboration** (built in: `https://script.bigmanonline.uk/`). If it can't
+be reached, the dialog says so, with **Change the address…**. A script
+already on a server stays with that server, and in the browser app opened
+from a server, Collaborate uses that server. **Settings ▸ Collaboration ▸
+Sign out** makes this device ask for the owner key again.
+
+**What the people you invite see.** The script opens straight away. The
+first time, a small box asks their name and colour (the same ones as
+**Settings ▸ You**); **Skip** is fine. Their changes save as yours do, and
+they show up in the header and on the rundown. Their browser remembers the
+link, so a reload, a new tab or coming back next week gets them back in.
+Things that aren't theirs to do say so in the File menu: *Your link opens
+this one script* and *Only the script's owner can invite people* (which
+is also what the dimmed **Collab** button says when they point at it).
+
+If you turn their link off, they see **The owner turned off this link**.
+Nothing more is saved to the server, their changes stay on their screen,
+and **Save a copy…** still works.
+
+**If the connection drops, or the tab closes.** Changes that haven't reached
+the server yet are kept in the browser as they type, for any script on a
+server (yours or one you were invited to). The next time that browser opens
+the script (a reload, the link again, a new tab), the kept changes are merged
+into whatever the server has now, both sides' edits kept, with **Undo merge**
+if it's not what they wanted. Nothing is saved until they press Save. If the
+link has been turned off by then, the changes open as an unsaved copy
+instead, to keep with **Save a copy…**. Saving removes the kept copy; one
+left unsaved is forgotten after 30 days. A private window may not keep
+anything.
+
 ## Hosting a shared session
 
 Let people on your network open and edit the same scripts. In the desktop
@@ -715,8 +816,10 @@ Restarting the session cancels every code and link you handed out.
 A reviewer can read the script, use the teleprompter and exports, and add
 comments, but not change anything. The server enforces it.
 
-- **One script**: open it from the server, then press **Copy review link**
-  in **File ▸ Servers…**. The link opens only that script.
+- **One script**: open it from the server, then **File ▸ Collaborate…** and
+  send the **Can comment** link. It opens only that script, and you can
+  replace it or turn it off there. (A session from an older copy of
+  Splitpage has **Copy review link** in **File ▸ Servers…** instead.)
 - **The whole session**: start it with `--review-pin`. The launcher shows a
   second address and code that open every script for review.
 
@@ -733,12 +836,15 @@ minute.
 
 ### Working on a server
 
-On a server, three things appear in the File menu:
+On a server, two things appear in the File menu:
 
 - **Put this script on the server** publishes the one you have open. Save
   then saves there.
 - **Open from the server…** lists every published script.
-- **Publish & copy a link** copies a link to it.
+
+**Collaborate…** gives you links to the script you have open (see
+[Collaborating](#collaborating)). Someone who came in on a link sees these
+items greyed, with *Your link opens this one script*.
 
 If someone saved while you were typing, their version and yours are merged.
 Where you both changed the same words, theirs stays and yours is kept as an
@@ -747,11 +853,13 @@ for the server, Splitpage keeps your unsaved edits and asks you to reload.
 
 ## Connecting to a server
 
-**File ▸ Servers…** connects this copy to a different server: someone else's
-shared session, or your own machine from a laptop.
+**File ▸ Servers…** connects this tab to a different server: someone else's
+shared session, or your own machine from a laptop. You don't need it to
+[collaborate](#collaborating) — Collaborate has its server built in.
 
 - **Add a server**: a name, the address you were given, and the join PIN if
-  there is one.
+  there is one. The **PIN** button takes a server's long owner key as well
+  as a six-digit PIN.
 - **Use this server** switches to it; **Back to this copy** switches back.
 - The host must allow your copy in with `--allow-origin` and your copy's
   address. A copy opened straight from disk can't connect: serve it first

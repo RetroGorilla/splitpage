@@ -4,17 +4,36 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
-## Unreleased
+## 3.1.0 — 2026-09-29
 
 ### Added
+- **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
+  puts the script on your server and gives you a Can edit and a Can comment
+  link. Each opens that one script only, needs no account, and can be
+  renewed or turned off.
+- Unsaved changes to a script on a server are kept in the browser and
+  merged back in when it is next opened, so a closed tab or dropped
+  connection no longer loses them.
 - **Draw on your pictures.** In a scene's gallery, **Annotate** marks up a
   picture with a pen, a highlighter, text and an eraser (P, H, T and E pick
   them). The marks stay editable, and **Remove annotations** gives you the
   original back.
+- **Export to Excel.** File ▸ Export… ▸ **Spreadsheet** makes an Excel
+  workbook: sized columns, wrapped text, a frozen header with filters, a
+  Notes column to write in, and a sheet for each part. **CSV** is the second
+  choice on the same card, and the Breakdown and the B-roll shot list offer
+  both.
 
 ### Changed
+- An empty scene (no words, pictures, set length or comments) deletes with
+  one click on **⋯ ▸ Delete**; any other scene still asks for a second click.
 - Search commands (Ctrl+K) puts the tagging reference first, and searching
   *tags* finds it.
+- The writer's tools are at the top, under the title, where the script's
+  formatting bar is, and **Close** is beside **Save**.
+- The tagging reference lists every word form (`Prop:`, `Location:` or
+  `Loc:`, `Cast:`, `VFX:`, `Gear:`, `SFX:` or `Music:`), each in its tag
+  colour, beside the bracket shortcuts.
 - **About Splitpage** is a dialog in the app's own look, and no longer shows
   command-line instructions in a browser alert.
 - The "get the desktop app" notice and start-screen line show only in a
@@ -26,7 +45,20 @@ appear in the app under **Help**. The format follows
 - Messages read "Could not …" throughout, and menu text uses one spelling
   ("Minimise the rundown").
 
+### Removed
+- Version history from 2.x is no longer converted. Coming straight from
+  2.x, install 3.0 first to keep it.
+
 ### Fixed
+- Text typed while a script is publishing is no longer marked saved before
+  it reaches the server; it is saved right after.
+- Opening another script while one is publishing no longer attaches it to
+  the published server copy.
+- **Save As** on a shared script makes a copy without marking the shared
+  script saved.
+- **Save to** an opened CSV, Word or text file no longer says "up to date"
+  when you typed more while it was saving.
+- A malformed request can no longer stop a shared-script server.
 - The Help contents list no longer shows raw backticks around code in a
   heading.
 - The browser tab shows the script's name ("Keepwarm Mug — Splitpage"), so

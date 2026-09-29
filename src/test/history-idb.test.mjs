@@ -228,7 +228,6 @@ test("strict tx: a non-tx await inside exclusive() fails the job, as the rule sa
   await backend.open();
   const r = backend.exclusive(async (tx) => {
     await tx.list();
-    // Timer lets the auto-committing transaction commit
     await new Promise((resolve) => setTimeout(resolve, 5));
     await tx.commit({ [DOC_A]: { title: "", lastOpenedAt: 1, snapshots: [] } }, []);
   });
@@ -290,7 +289,6 @@ function patchBodiesPut(how, times = 1) {
       throw new DOMException("Injected quota", "QuotaExceededError");
     }
     const r = orig.apply(this, args);
-    // Chromium-like: transaction aborts, request only sees AbortError
     this.transaction._abort("QuotaExceededError");
     return r;
   };
@@ -512,7 +510,6 @@ test("an old connection that will NOT close: this open fails at once with 'io', 
   const backend = createIdbHistoryBackend({ indexedDB: spy });
   await assert.rejects(backend.open(), (e) => e.code === "io" && /blocked/.test(e.message));
   assert.equal(old.seen.versionchange, 1);
-  // Upgrade completes behind our back
   old.db.close();
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(opened.length, 1);

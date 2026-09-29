@@ -2,13 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Must precede scripts; meta CSP only governs later content. -->
 <meta http-equiv="Content-Security-Policy" content="{{CSP}}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage</title>
 <meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">
 <meta name="splitpage-version" content="{{VERSION}}">
-<!-- Wizard shows only if #state-data still matches this checksum. -->
 <meta name="splitpage-seed-check" content="{{SEED_CHECK}}">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#F1F0ED" media="(prefers-color-scheme: light)">
@@ -17,7 +15,6 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Print media avoids render-blocking; 00-prelude promotes it (CSP forbids onload). -->
 <link id="font-css"
       href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,100..900;1,100..900&family=Chivo+Mono:wght@100..900&family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap"
       rel="stylesheet" media="print">
@@ -99,7 +96,6 @@
     <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
     <symbol id="i-scene-mode" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="6" rx="1.5"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.5"/></symbol>
     <symbol id="i-script" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></symbol>
-    <!-- Logo: fixed colours in both themes; sized by box only. -->
     <symbol id="i-mark" viewBox="0 0 512 512"><rect x="12" y="12" width="488" height="488" rx="100" fill="#0F0E0C" stroke="#43423F" stroke-width="24"/><rect x="92" y="112" width="156" height="296" rx="36" fill="#80BDFB"/><rect x="264" y="112" width="156" height="296" rx="36" fill="#F9B64F"/><circle cx="404" cy="116" r="50" fill="#0F0E0C"/><circle cx="404" cy="116" r="38" fill="#D7352D"/><circle cx="404" cy="116" r="26" fill="#F45246"/></symbol>
     <symbol id="i-rundown-min" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="6" height="6" rx="1"/><rect x="11" y="5.5" width="3.5" height="6" rx="1"/><rect x="16" y="5.5" width="4.5" height="6" rx="1"/><path d="M3.5 17.5h17"/></symbol>
   </defs>
@@ -148,7 +144,7 @@
 
             <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
               <div class="menu-group-head" id="fm-g-share">Share</div>
-              <button type="button" role="menuitem" class="mi" data-file-action="share-link" id="menu-share-link" title="Puts this script on the connected server and copies a link to it. Unlike the standalone HTML export, everyone who opens the link edits the same document."><svg class="mi-icon" aria-hidden="true"><use href="#i-share"/></svg><span class="mi-text"><span class="mi-label">Publish &amp; copy a link</span><span class="mi-why" hidden></span></span></button>
+              <button type="button" role="menuitem" class="mi" data-file-action="collaborate" id="menu-collaborate" title="Stores this script on your collaboration server and gives you two links to send: one to edit it, one to comment on it."><svg class="mi-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="mi-text"><span class="mi-label">Collaborate…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="server-publish" id="menu-server-new" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud-up"/></svg><span class="mi-text"><span class="mi-label">Put this script on the server</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
@@ -235,6 +231,7 @@
           <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="btn-label">B-roll</span><span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
+        <button class="btn btn-mode btn-collab" id="btn-collab" type="button" aria-label="Collaborate — invite people to this script" title="Collaborate — invite people to this script"><svg class="btn-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="btn-label">Collab</span></button>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
         <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
       </div>
@@ -358,7 +355,6 @@
 
 <button class="tag-suggest" id="tag-suggest" type="button" tabindex="-1"></button>
 
-<!-- Outside #root; tag-sample not tag-anchor so tag scanners ignore it. -->
 <section class="tagging-help" id="tagging-help" role="dialog" aria-labelledby="tagging-help-title" tabindex="-1" hidden>
   <div class="tagging-help-head">
     <h2 class="tagging-help-title" id="tagging-help-title">Tagging reference</h2>
@@ -470,8 +466,8 @@
       </div>
     </div>
     <div class="export-foot">
-      <p class="export-note">Exports are copies. To share one live document, use
-        <button type="button" class="export-note-link" id="export-share-link">Publish &amp; copy a link</button>.</p>
+      <p class="export-note">Exports are copies. To work on one live script together, use
+        <button type="button" class="export-note-link" id="export-share-link">Collaborate…</button></p>
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="export-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="export-go">Export</button>
@@ -518,7 +514,6 @@
     </div>
   </div>
   <div class="prompter-viewport">
-    <!-- Sibling of scroller: Mirror/Flip must not transform the guide. -->
     <div class="prompter-guide" aria-hidden="true">
       <div class="prompter-band"><svg class="pp-pointer" viewBox="0 0 22 26" aria-hidden="true"><path d="M0 0L22 13L0 26z"/></svg></div>
     </div>
@@ -1100,12 +1095,12 @@
 <div class="modal-backdrop" id="pin-modal" hidden>
   <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
     <div class="modal-header">
-      <h2 id="pin-title">Join PIN</h2>
+      <h2 id="pin-title">Join PIN or key</h2>
       <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
     </div>
-    <p class="modal-hint" id="pin-reason">This server asks for a join PIN.</p>
-    <input type="text" id="pin-input" inputmode="numeric" autocomplete="off"
-           spellcheck="false" placeholder="e.g. 481923" aria-labelledby="pin-title">
+    <p class="modal-hint" id="pin-reason">This server asks for its join PIN or key.</p>
+    <input type="text" id="pin-input" autocomplete="off" autocapitalize="off"
+           spellcheck="false" placeholder="Join PIN or key" aria-labelledby="pin-title">
     <div class="connect-error" id="pin-error" hidden></div>
     <label class="connect-check"><input type="checkbox" id="pin-remember">
       Remember this code on this device</label>
@@ -1395,7 +1390,6 @@
   </div>
 </div>
 
-<!-- Saves splice document here; page must stay one self-contained file. -->
 <script id="state-data" type="application/json">
 {{SEED_STATE}}
 </script>

@@ -1,10 +1,8 @@
 "use strict";
 
 var HISTORY_PER_DOC = 50;
-// Never a valid docId; only reachable via older flag.
 var HISTORY_OLDER_KEY = "_older";
 var HISTORY_SNAP_ID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/;
-// Older bucket expires as a whole, counted from migration.
 var HISTORY_OLDER_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 function historyClip(v, n) {
@@ -24,7 +22,6 @@ function historyUtf8Length(str) {
   return n;
 }
 
-// expiresAt <= 0 means unstamped, not expired.
 function historyOlderExpired(rec, nowMs) {
   if (!rec || rec.expiresAt == null) return false;
   var expiresAt = Number(rec.expiresAt);
@@ -55,14 +52,12 @@ function sanitizeHistoryMeta(m) {
   return out;
 }
 
-// Re-stamp keeps newest monotonic after backward clock corrections.
 function historyStampAfter(m, newestAtMs) {
   var n = Number(newestAtMs);
   if (newestAtMs != null && Number.isFinite(n) && !(m.atMs > n)) m.atMs = n + 1;
   return m;
 }
 
-// Pure: newest snapshot per doc never deleted; protect entries skipped.
 function planHistoryEviction(docs, capBytes, nowMs, opts) {
   opts = opts || {};
   var perDoc = Number(opts.perDoc) > 0 ? Math.floor(Number(opts.perDoc)) : HISTORY_PER_DOC;

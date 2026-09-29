@@ -65,7 +65,8 @@ expect C.results('voice over')[0].items[0].id == export-narration-docx
 # the workbook by name (2026-09-28), the CSV still found by the word
 expect C.results('excel')[0].items[0].id == export-xlsx
 expect C.results('excel')[0].items.some(function(i){return i.id === 'export-csv';})
-expect C.results('publish').some(function(g){return g.items.some(function(i){return i.id === 'share-link' && !i.disabled && i.why === 'No server connected — set one up first';});})
+expect C.results('invite').some(function(g){return g.items.some(function(i){return i.id === 'collaborate' && !i.disabled && i.why === '';});})
+expect C.results('publish').some(function(g){return g.items.some(function(i){return i.id === 'collaborate';});})
 expect C.results('zzzzqq').length === 0
 eval (function(){var i=document.getElementById('cmdk-input');i.value='zzzzqq';i.dispatchEvent(new Event('input'));return true;})()
 sleep 100

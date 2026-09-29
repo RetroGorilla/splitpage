@@ -4,7 +4,7 @@ import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { launcherFetch } from "./13-hosted.js";
+import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile } from "./18-local-files.js";
 import { toggleFileMenu } from "./18b-file-menu.js";
 import { openHelp, startTour } from "./20c-help.js";
@@ -282,7 +282,7 @@ async function submitOnboardJoin() {
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
-  // Restoring crash draft looks pristine; never welcome over it
+  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   if (S.DESKTOP && draftRestorePending) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   if (S.DESKTOP) {
@@ -294,7 +294,6 @@ async function onboardEligibleForAutoShow() {
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
-  // Re-check: Skip/Finish may have run during the await
   if (readOnboardKey()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   return true;
@@ -341,7 +340,6 @@ export function __init() {
       }
     });
 
-    // Bubble phase, no stopPropagation: capture would swallow Escape
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); onboardSkip(); }
     });

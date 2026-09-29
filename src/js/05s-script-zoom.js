@@ -39,7 +39,6 @@ function paintScale(v) {
   if (root) root.style.setProperty("--script-scale", String(Math.round(v * 1000) / 1000));
 }
 
-// Anchor by fraction of height; words reflow, pixels would drift
 function noteAnchor(y, el) {
   var hold = el && el.closest && (el.closest("#rows .cell-editable") || el.closest("#rows .row"));
   if (!hold) {
@@ -72,7 +71,6 @@ function step() {
   else { store(scale); settleAnchor(); }
 }
 
-// Header condensing a frame later shifts content; hold place again
 function settleAnchor() {
   requestAnimationFrame(function () {
     requestAnimationFrame(function () { if (!frame) holdAnchor(); });
@@ -175,7 +173,6 @@ function scriptViewActive() {
 
 function onWheel(e) {
   if (!e.ctrlKey || !scriptViewActive()) return;
-  // Wheel listener must be non-passive or this is ignored
   e.preventDefault();
   var dy = e.deltaY;
   if (e.deltaMode === 1) dy *= 33;
@@ -185,7 +182,6 @@ function onWheel(e) {
   setScriptScale(target * Math.exp(-dy * 0.001));
 }
 
-// Ctrl +/-/0 zoom the script, not the page
 function zoomKey(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return 0;
   var k = e.key, c = e.code;

@@ -45,7 +45,6 @@ var SHA256_K = [
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 ];
 
-// Must match TextEncoder byte-for-byte, lone surrogates included
 function utf8BytesManual(str) {
   var out = [], i, c, n;
   for (i = 0; i < str.length; i++) {
@@ -121,7 +120,6 @@ export function sha256Hex(str) {
   return sha256Bytes(utf8Bytes(String(str)));
 }
 
-// FROZEN; changing it re-ids every existing document
 export function deriveDocId(domain, text) {
   return "d" + sha256Hex(String(domain) + "\n" + String(text)).slice(0, 32);
 }
@@ -130,7 +128,6 @@ export function docIdEmbeddedIn(raw) {
   return !!normalizeDocId(raw && typeof raw === "object" ? raw.docId : null);
 }
 
-// Legacy files need deterministic ids, else history resets each open
 export function migrateDocument(raw, origin) {
   origin = origin || { kind: "fresh" };
   var embedded = docIdEmbeddedIn(raw);
@@ -166,7 +163,6 @@ export function noteMergedDocId(prevId) {
   syncDocIdentity();
 }
 
-// Restore keeps current id; never adopt snapshot's id
 export function adoptRestoredState(snap) {
   var keep = normalizeDocId(S.state && S.state.docId);
   S.state = migrateRows(cloneState(snap));
@@ -180,7 +176,6 @@ var lastIdentityKey = "";
 var docIdEventLog = [];
 var docIdCopyWarned = false;
 
-// Must never throw or block the save it rides on
 export function copyDocHistorySafe(from, to) {
   from = normalizeDocId(from);
   to = normalizeDocId(to);
@@ -212,7 +207,6 @@ function docHomeKey() {
   return "none:" + PAGE_NONCE;
 }
 
-// Runs on every markDirty; must stay cheap and idempotent
 export function syncDocIdentity() {
   if (!S.state) return;
   var key = normalizeDocId(S.state.docId) + "|" + docHomeKey();
@@ -225,13 +219,11 @@ export function syncDocIdentity() {
   if (!S.DESKTOP) announceDocIdentity();
 }
 
-// Never writes user's file: no markDirty, no autosave
 export function reassignDocId(toId, opts) {
   opts = opts || {};
   toId = normalizeDocId(toId);
   var fromId = normalizeDocId(opts.fromId);
   if (!toId || !fromId || toId === fromId || !S.state || S.state.docId !== fromId) return false;
-  // Server doc ids are shared by design
   if (onServerDoc()) return false;
   S.state.docId = toId;
   S.docIdWrittenOut = false;
@@ -313,7 +305,6 @@ export function docIdEvents() {
   return docIdEventLog.slice();
 }
 
-// Exported copy must not carry the original's id
 export function standaloneHtmlFor(s, head) {
   var copy = migrateRows(cloneState(s || S.state));
   inlineStateImages(copy);
@@ -322,7 +313,6 @@ export function standaloneHtmlFor(s, head) {
   return head ? withPageHead(html, head) : html;
 }
 
-// Function replacer needed; titles may contain $& or $1
 export function withPageHead(html, head) {
   function oneLine(v) { return escapeHtml(String(v).replace(/\s+/g, " ").trim()); }
   var headEnd = html.search(/<\/head>/i);

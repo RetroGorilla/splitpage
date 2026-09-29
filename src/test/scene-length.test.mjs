@@ -24,7 +24,6 @@ import {
   parseSplitpageFile
 } from "../js/20d-formats.js";
 
-// wordCount needs __init(); Markdown writer needs the tag reader
 initTags();
 initSceneStatus();
 

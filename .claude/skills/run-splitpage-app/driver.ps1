@@ -459,7 +459,7 @@ $KeyMap = @{
 # box, which only a held button moving across the page can make). `move`
 # carries the held left button; `right` is a right-click (press + release).
 function Mouse-Event([string]$Rest) {
-  if ($Rest -notmatch '^\s*(down|move|up|right)\s+(.+)$') { throw 'mouse needs: down|move|up|right <js giving {x,y}>' }
+  if ($Rest -notmatch '^\s*(down|move|up|right|hover)\s+(.+)$') { throw 'mouse needs: down|move|up|right|hover <js giving {x,y}>' }
   $what = $Matches[1]; $expr = $Matches[2]
   $pt = Invoke-Js $expr
   if (-not $pt) { throw "mouse ${what}: no point from $expr" }
@@ -467,6 +467,7 @@ function Mouse-Event([string]$Rest) {
   switch ($what) {
     'down'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mousePressed'; x = $x; y = $y; button = 'left'; buttons = 1; clickCount = 1 } }
     'move'  { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = $x; y = $y; button = 'left'; buttons = 1 } }
+    'hover' { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = $x; y = $y; button = 'none'; buttons = 0 } }
     'up'    { $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseReleased'; x = $x; y = $y; button = 'left'; buttons = 0; clickCount = 1 } }
     'right' { foreach ($t in @('mousePressed','mouseReleased')) {
                 $null = Send-Cdp 'Input.dispatchMouseEvent' @{ type = $t; x = $x; y = $y; button = 'right'; buttons = $(if ($t -eq 'mousePressed') { 2 } else { 0 }); clickCount = 1 } } }

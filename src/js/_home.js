@@ -6,18 +6,17 @@ var FIELDS = {
   server: { id: null, rev: 0, conn: null }
 };
 
-// {id: null} drift is "none"; missing fields are a bug
 var REQUIRED = { none: [], file: ["format"], import: ["name"], server: ["id", "conn"] };
 
 export var HOME_KINDS = Object.keys(FIELDS);
 
 export var home = { kind: "none" };
 
-var CONN_FIELDS = { serverUrl: "", token: "", role: "", tunnel: null };
+var CONN_FIELDS = { serverUrl: "", token: "", role: "", scope: "", tunnel: null };
 var CONN_ROLES = ["", "edit", "review"];
+var SCOPE_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 var TUNNEL_FIELDS = ["userHost", "remotePort", "localPort"];
 
-// Always trailing slash and scheme; "" is same-origin server
 export function normalizeServerUrl(input) {
   var url = String(input || "").trim();
   if (!url) return "";
@@ -33,7 +32,6 @@ function checkTunnel(t) {
   Object.keys(t).forEach(function (k) {
     if (TUNNEL_FIELDS.indexOf(k) === -1) throw new Error("setConnection: a tunnel has no field " + JSON.stringify(k));
   });
-  // Shell-safe charset only: no space, quote, or leading dash
   if (typeof t.userHost !== "string" || !/^[A-Za-z0-9._@:[\]-]{1,255}$/.test(t.userHost) || t.userHost[0] === "-") {
     throw new Error("setConnection: a tunnel needs a userHost");
   }
@@ -58,6 +56,9 @@ function buildConn(fields, base) {
   }
   if (typeof rec.token !== "string") throw new Error("setConnection: a token is a string");
   if (CONN_ROLES.indexOf(rec.role) === -1) throw new Error("setConnection: unknown role " + JSON.stringify(rec.role));
+  if (typeof rec.scope !== "string" || (rec.scope !== "" && !SCOPE_RE.test(rec.scope))) {
+    throw new Error("setConnection: a scope is \"\" or a document id, not " + JSON.stringify(rec.scope));
+  }
   rec.tunnel = checkTunnel(rec.tunnel);
   return rec;
 }
@@ -73,7 +74,6 @@ export function setConnection(fields) {
   return conn;
 }
 
-// Mutated in place; changing server is setConnection() instead
 export function updateConnection(fields) {
   fields = fields || {};
   if (fields.serverUrl !== undefined && fields.serverUrl !== conn.serverUrl) {
@@ -85,6 +85,7 @@ export function updateConnection(fields) {
   var next = buildConn(fields, conn);
   conn.token = next.token;
   conn.role = next.role;
+  conn.scope = next.scope;
   return conn;
 }
 
@@ -119,7 +120,6 @@ export function setHome(kind, fields) {
   return home;
 }
 
-// Server home only uses this tab's connection; others refused
 function withConn(fields) {
   fields = fields || {};
   if (fields.conn !== undefined && fields.conn !== conn) {
@@ -136,7 +136,6 @@ export function homeConn() {
   return home.kind === "server" ? home.conn : null;
 }
 
-// Same object, not copy: callers compare by identity
 export function restoreHome(record) {
   if (!record || !FIELDS[record.kind]) throw new Error("restoreHome: not a home record");
   if (record.kind === "server" && record.conn !== conn) {

@@ -92,7 +92,6 @@ function findBrowser() {
   const pw = process.env.PLAYWRIGHT_BROWSERS_PATH || "/opt/pw-browsers";
   if (fs.existsSync(pw)) {
     for (const d of fs.readdirSync(pw)) {
-      // headless_shell can't screenshot; Playwright layout varies by version.
       if (!/^chromium-/.test(d)) continue;
       cands.push(path.join(pw, d, "chrome-linux", "chrome"));
       cands.push(path.join(pw, d, "chrome-linux64", "chrome"));
@@ -113,7 +112,6 @@ function findBrowser() {
     cands.push(`${process.env["ProgramFiles(x86)"]}\\Microsoft\\Edge\\Application\\msedge.exe`);
     cands.push(`${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`);
   }
-  // PATH chromium may be a snap wrapper with no CDP.
   cands.push("/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser");
   for (const c of cands) { if (c && fs.existsSync(c)) return c; }
   try {
@@ -239,7 +237,6 @@ async function connectCdp() {
   log("cdp connected");
   await send("Page.enable");
   await send("Runtime.enable");
-  // Suites assume light theme; headless follows OS scheme.
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
   await send("Page.addScriptToEvaluateOnNewDocument", {
     source: `
@@ -281,7 +278,6 @@ async function js(expr, timeoutMs = 30000) {
   return r.result.value;
 }
 
-// Suites expect PowerShell output; undefined prints "null".
 function formatVal(v) {
   if (v === null || v === undefined) return "null";
   if (typeof v === "string") return v;
@@ -289,7 +285,6 @@ function formatVal(v) {
   return JSON.stringify(v);
 }
 
-// PowerShell truthiness; empty array is false.
 function truthy(v) {
   if (Array.isArray(v)) {
     if (v.length === 0) return false;
@@ -305,7 +300,6 @@ let failures = 0;
 async function expectThat(rest) {
   checks++;
   let expr = rest, want = null, hasWant = false;
-  // Split on last so "===" stays in expression.
   const i = rest.lastIndexOf("==");
   if (i > 0 && !"=!<>".includes(rest[i - 1])) {
     expr = rest.slice(0, i).trim();
@@ -315,7 +309,6 @@ async function expectThat(rest) {
   const got = await js(expr);
   if (hasWant) {
     const g = formatVal(got);
-    // Suites depend on PowerShell's case-insensitive -eq.
     if (g.toLowerCase() === want.toLowerCase()) { out1(`PASS ${expr} == ${want}`); return; }
     failures++;
     out1(`FAIL ${expr}`);
@@ -470,13 +463,14 @@ const KEY_MAP = {
 const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV, KeyP, KeyT";
 
 async function mouseEvent(rest) {
-  const m = /^\s*(down|move|up|right)\s+(.+)$/.exec(rest);
-  if (!m) throw new Error("mouse needs: down|move|up|right <js giving {x,y}>");
+  const m = /^\s*(down|move|up|right|hover)\s+(.+)$/.exec(rest);
+  if (!m) throw new Error("mouse needs: down|move|up|right|hover <js giving {x,y}>");
   const pt = await js(m[2]);
   if (!pt) throw new Error(`mouse ${m[1]}: no point from ${m[2]}`);
   const x = Math.trunc(pt.x), y = Math.trunc(pt.y);
   if (m[1] === "down") await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
   else if (m[1] === "move") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 });
+  else if (m[1] === "hover") await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
   else if (m[1] === "up") await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
   else {
     await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "right", buttons: 2, clickCount: 1 });
@@ -503,7 +497,6 @@ async function pressKey(name, mods = "") {
 async function setViewport(rest) {
   if (/^\s*reset\s*$/.test(rest)) {
     await send("Emulation.clearDeviceMetricsOverride");
-    // CDP rejects 0 even when disabling.
     await send("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
     out1("viewport reset");
     return;
@@ -527,7 +520,6 @@ async function shot(name = "shot") {
 async function invokeLine(line) {
   line = line.trim();
   if (!line || line.startsWith("#")) return true;
-  // First space only; leading spaces in args matter.
   const i = line.indexOf(" ");
   const cmd = i < 0 ? line : line.slice(0, i);
   const rest = i < 0 ? "" : line.slice(i + 1);

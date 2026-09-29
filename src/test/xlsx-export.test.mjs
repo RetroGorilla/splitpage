@@ -179,7 +179,6 @@ test("awkward text survives: markup characters, line breaks, spaces at the ends,
   const row = book.sheets[0].rows[1];
   assert.equal(row[5], "A <b> & C\nsecond line");
   assert.equal(row[2], "Ready");
-  // Title comes back escaped and whole, whatever migrateRows left
   assert.ok(S.state.title.indexOf("Tom & Jerry's") === 0);
   assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, S.state.title);
 });
