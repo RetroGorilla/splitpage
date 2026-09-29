@@ -134,11 +134,22 @@ full regression run — that is still `run-tests.ps1` on Windows, or
 `driver.mjs` one suite at a time here, plus the packaged targets.
 
 Since #80 CI also **produces** the app. It builds `index.html` and uploads
-it, with `sw.js`, `manifest.webmanifest`, `icon.svg`, the server and the
-`Dockerfile`, as the `splitpage-app` artifact — the set of files DEPLOY.md §2
-copies onto the server, arranged so the download is itself a working `docker
-build` context. The upload is the last step, so an artifact only exists for a
+it, with `sw.js`, `manifest.webmanifest`, the icons, `VERSION`, `server/`
+and `Dockerfile.prebuilt`, as the `splitpage-app` artifact, arranged so the
+download is itself a working `docker build -f Dockerfile.prebuilt` context
+(DEPLOY.md §8). The upload is the last step, so an artifact only exists for a
 run whose checks all passed.
+
+The owner's server does not use the artifact. `deploy.sh` pulls `main` and
+builds the root `Dockerfile`, which is two-stage: `npm ci` + `node build.mjs`
+in a `node:22-alpine` build stage, then only the built `index.html`/`sw.js`,
+the static files, `VERSION` and `server/` in the runtime stage. Docker is not
+on the Windows machine, so `.github/workflows/docker.yml` is where that image
+is really built: `bash -n` and shellcheck over `deploy.sh`, a legacy-builder
+`docker build`, then the container started as `99:100` with the settings
+`deploy.sh` insists on, checked through `/api/health` (VERSION, `links`,
+`linksPersist`), its own HEALTHCHECK and an owner sign-in that must survive a
+restart. It runs only when a deploy-relevant file changes (its `paths:`).
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not
@@ -356,13 +367,40 @@ stash when `splitpage-server-resume` is present.
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, one file (~2,300 lines). One JSON file
+`server/server.js` — plain Node, no dependencies, one file (~2,850 lines). One JSON file
 per document in `DATA_DIR`.
 
-- No identity of its own — Cloudflare Access decides who anybody is; the
-  server only reads `Cf-Access-Authenticated-User-Email` for display.
-- `JOIN_PIN` is a door lock: sha256 + `timingSafeEqual`, 10 wrong
-  guesses/minute cap, refusal is `401 {error:"pin-required"}` JSON.
+- No identity of its own — `Cf-Access-Authenticated-User-Email` is read for
+  display and attribution only. Without Access in front it is whatever the
+  caller wrote (as trustworthy as the `by` in every write body), so nothing
+  that decides what a token may do ever reads it.
+- **Two shapes, one file.** No `JOIN_PIN`: open, everyone the owner, meant
+  for behind Cloudflare Access or a VPN. `JOIN_PIN` set: a short code on a
+  LAN (the desktop app's `--host`, `start.mjs`), or — with a long random key,
+  `PERSIST_LINKS=1` and TLS in front (Adam's Unraid box behind a Cloudflare
+  tunnel, NO Access) — the owner's key to a server that faces the internet on
+  its own, with guests on per-document invite links. The gate at the top of
+  `handleApi()` is the one place that decides what a token reaches.
+- `JOIN_PIN` → the **owner token**: sha256 + `timingSafeEqual`, refusal is
+  `401 {error:"pin-required"}` JSON. 10 wrong guesses/minute per address;
+  only the join PIN itself clears an address's count — a link key or the
+  review code used to as well, and every guest holds one, so a reviewer could
+  walk six digits to the editor's PIN at 90% speed (9 wrong, 1 good join,
+  repeat). Without `PERSIST_LINKS` the owner token is random per process (a
+  restart signs everyone out, as always). With it, it is
+  `HMAC-SHA256(secret, "owner\0" + JOIN_PIN)`, the secret in
+  `DATA_DIR/links/secret`: a redeploy keeps the owner signed in, changing
+  `JOIN_PIN` signs every owner device out. `PERSIST_LINKS=1` with a
+  `JOIN_PIN` under 20 characters prints a loud startup WARNING (an
+  internet-facing server with a guessable key); a LAN PIN does not.
+- **Who the limiter counts** (#74): the socket; `TRUST_PROXY=1` → the first
+  `X-Forwarded-For` entry (for a proxy that REPLACES the header);
+  `TRUST_PROXY=cloudflare` → `Cf-Connecting-Ip`, which Cloudflare overwrites.
+  Behind Cloudflare `=1` is spoofable: Cloudflare APPENDS to a client-sent
+  X-Forwarded-For, so its first entry is the guesser's to choose — a fresh
+  bucket per guess. Junk (or a comma list) in either header falls back to
+  the socket. Any other `TRUST_PROXY` value is ignored with a warning (`0`
+  silently).
 - CORS opt-in per origin, never carries credentials; `OPTIONS /api/*`
   answered 204 before any route runs.
 - `/api/launcher/info` is loopback-only and launch-token-gated — launch
@@ -377,10 +415,12 @@ per document in `DATA_DIR`.
   no longer starts another process at all. The gating rules above stay as
   written: they are why a route here could exist, and anything that ever
   joins `info` inherits them.
-- `REVIEW_PIN`/`REVIEW_KEY` are a second credential minting a second token
-  with the role `review` (#30). Both are ignored without a `JOIN_PIN`. The
-  role is read from the token on every request (`roleOf`), so it survives a
-  reconnect and cannot be asserted by a client. **A review session never
+- `REVIEW_PIN`/`REVIEW_KEY` are a second, LIBRARY-wide credential minting a
+  second token with the role `review` (#30), unscoped, random per process
+  even under `PERSIST_LINKS` (it belongs to the launcher's LAN session, the
+  only thing that sets it). Both are ignored without a `JOIN_PIN`. Role and
+  scope are read from the token on every request (`sessionOfToken`), so they
+  survive a reconnect and cannot be asserted by a client. **A review session never
   PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply
   from either role. **Reviewers never resolve or unresolve** (owner's
   decision): `PATCH /api/docs/:id/comments/:cid` is editor-only, and a
@@ -405,16 +445,90 @@ per document in `DATA_DIR`.
   The client adopts `home.rev` from a comments response only when it is the
   exact successor, so a collaborator's save in between is still pulled by
   the next heartbeat. Edit-role users keep PUT for everything, comments
-  included. `GET /api/share` hands an editor the review LINK's key, never
-  the PIN.
+  included. `GET /api/share?doc=<id>` (owner only) is kept for older clients:
+  it is get-or-create that document's REVIEW link from the store below,
+  answered `{reviewAvailable:true, reviewKey, docId}` — never the PIN.
+- **Invite links: the link store** (replaced #63's in-memory
+  `reviewGrantFor`/`reviewGrantsBy*`/`reviewScopeByToken`). A link is
+  `{id (12 hex), key (24 random bytes hex — what the URL carries), token (32
+  bytes hex — what join hands back), docId, role "edit"|"review", createdAt,
+  createdBy}`, at most ONE active per (docId, role), looked up through Maps
+  (`linkByKey`, `linkByToken`, `linkByDocRole`) so the gate is O(1). Revoking
+  leaves a tombstone of `sha256(key)` and `sha256(token)` — never either
+  itself — capped at 2000, oldest dropped. Links need only a `JOIN_PIN`
+  (not a review code), which is why `/api/health`'s `reviewAvailable` is now
+  `!!JOIN_PIN`; health also says `links: 1` and `linksPersist`.
+  - **Where it lives.** Without `PERSIST_LINKS`: memory only, a restart
+    cancels every link and token (the LAN sessions, unchanged in lifetime).
+    With `PERSIST_LINKS=1`: `DATA_DIR/links/` (0700) holding `secret` and
+    `links.json` (both 0600, the mode set when the temp file is CREATED via
+    `writeFileDurable(…, mode)`), rewritten whole on every change through a
+    one-at-a-time chain that writes the store as it is when the write RUNS.
+    On disk BEFORE a new key is handed out (a failed write drops the new
+    link) or a revoke is confirmed. An unreadable `secret` or `links.json`
+    stops the server at startup rather than being silently replaced (that
+    would sign the owner out / drop every link). `links/` does not end in
+    `.json`, so the list skips it; the static handler refuses all of
+    `DATA_DIR`. The file holds keys and tokens in the clear: it must hold
+    keys (the owner copies a link again) and a key mints its token on
+    request, so hashing tokens there would protect nothing.
+  - **Join** (`POST /api/join`): `{pin}` = JOIN_PIN → `{token, role:"edit"}`;
+    `{key}` of an active link → `{token, role, docId, scope: docId}`; a
+    tombstoned key → **410 `link-off`**, NOT counted as a guess (a dead
+    link re-opened is not an attack, and must not lock out the house);
+    library review code/key unchanged; else 401 `bad-pin`, counted.
+  - **The gate.** `sessionOfToken` → `{role, scope, token}` (scope "" for
+    the owner and the library review token), `{revoked:true}` for a
+    tombstoned token → **401 `link-off`** (header or beacon body; the page
+    tells a guest "this link was switched off" instead of asking for a PIN
+    they never had), or null → 401 `pin-required`. A SCOPED token (either
+    role): `GET /api/docs` lists only its document; any `/api/docs/:id…` on
+    another id → 403 `wrong-document`, before the body; `POST /api/docs`
+    → 403 `owner-only` for a scoped edit (review keeps `review-only`);
+    `DELETE /api/docs/:id` (any id, its own included), the links API and
+    `/api/share` → 403 `owner-only`; `POST /api/presence` on another docId
+    → 403 `wrong-document` (it used to check no scope at all — a link could
+    read who was in any document and its rev). A scoped EDIT token PUTs
+    its own document through the ordinary compare-and-set/409/426/422 path
+    and may PATCH-resolve its comments. `GET /api/me` →
+    `{role, scope, email, name}`.
+  - **Links API** (`handleLinks`, owner only = unscoped edit; else 403
+    `owner-only`; no JOIN_PIN → 409 `no-pin`): `GET /api/docs/:id/links` →
+    `{links:[{id, role, key, createdAt}]}` (active only; answers even for a
+    document removed by hand, so its links can still be revoked);
+    `POST {role, replace?}` (8 KB cap) → the active link (200) or a new one
+    (201), `replace:true` revokes first and always mints; 400 `bad-role`,
+    404 `not-found` (no such document), 403 `read-only` for an EDIT link
+    under READ_ONLY (review links and revokes still work); runs under the
+    document's lock so it cannot race a DELETE. `DELETE …/links/:linkId` →
+    `{ok:true}`, off from the token's next request; 404 **`no-such-link`**
+    (not `not-found`, which the client reads as "the script is gone").
+    Deleting a document revokes its links first, persisted before the
+    unlink. The token is never in any answer here. Placed above the
+    comment/read/save routes, and any OTHER sub-path under a document is now
+    404 — it used to be answered as the document itself, so a `DELETE` one
+    letter off `/links/…` deleted the script.
 - `POST /api/presence` (#28) is a heartbeat and a listing in one round trip,
   in memory only, capped and swept per request, TTL 15s. It is behind the
   same gate but carries its own copy of it, because a closing tab's
-  `sendBeacon` cannot set the token header. Presence is never part of a
-  document and never touches one.
+  `sendBeacon` cannot set the token header — including `link-off` and a
+  link's scope (403 `wrong-document` for another docId). Presence is never
+  part of a document and never touches one.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
   `Cache-Control: no-store` on every response except a blob's.
+- **What an internet-facing server must not do** (found reviewing for the
+  Unraid deployment). A request line of `GET //` threw in `new URL()`
+  outside every handler — an uncaught exception, one request from anyone
+  took the process down; now 400. A token or launch header with a non-ASCII
+  byte reached `timingSafeEqual` with mismatched BYTE lengths (the string
+  lengths matched) and threw — a 500 plus a stack trace per request;
+  `sameToken` compares bytes now. The static handler refuses anything under
+  `DATA_DIR` by real path, case-folded on Windows/macOS (`insideDataDir`):
+  `start.mjs` serves its whole folder with the library in `data/` beneath
+  it, so `GET /data/<id>.json` handed any document to anyone on the LAN,
+  PIN or no PIN. And nothing whose path has a segment starting with `.`
+  (`.git/config`, `.env` in a checkout).
 - **Images are content-addressed blobs** (#82). Bytes live at
   `DATA_DIR/blobs/<first 2 hex>/<sha256>`, written like a document (temp in
   the same dir, fsync, rename, fsync the dir — `writeFileDurable`), global
@@ -428,27 +542,35 @@ per document in `DATA_DIR`.
     `If-None-Match`), `nosniff`, `CSP: default-src 'none'; sandbox`. A file
     whose bytes do not hash to its name is 404 and logged, not served.
   - `PUT /api/blobs/<sha>`, raw body: READ_ONLY 403, bad sha 400, declared
-    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a reviewer over budget 429
-    `review-budget` — all four before the body is read (#74); then
+    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a metered guest over budget
+    429 `review-budget` — all four before the body is read (#74); then
     `hash-mismatch` 400, not png/jpeg/gif/webp (SVG included) 415
     `unsupported-type`, already stored 200 `{stored:false}`, else 201
     `{stored:true}`.
   - `POST /api/blobs/missing {shas:[≤2000]}` (256 KB body cap) →
     `{missing:[…]}`, both roles, READ_ONLY too.
-  - **Who sees what.** Editors and the library-wide review token: every
-    blob. A per-document review link: the shas its document's stored state
-    names (`refsIn`, cached by doc id + rev) plus the shas it uploaded
-    itself; anything else is 404 on GET and "missing" on `/missing` whether
-    or not it exists, a PUT of such bytes is answered 201 `{stored:true}`
-    (and charged) even when they were already here, and a comment naming
-    one is 422. None of the four answers tells a link what the rest of the
-    library holds.
-  - **Reviewer budget.** Review tokens may PUT (screenshots in comments,
-    D6) up to `REVIEW_BLOB_BUDGET_BYTES` (20 MiB) per token per rolling
-    hour, each upload charged at least 4 KiB. The declared length is
+  - **Who sees what** (`blobVisibility(session)`). The owner and the
+    library-wide review token: every blob. A per-document link of EITHER
+    role: the shas its document's stored state names (`refsIn`, cached by
+    doc id + rev) plus the shas it uploaded itself; anything else is 404 on
+    GET and "missing" on `/missing` whether or not it exists, a PUT of such
+    bytes is answered 201 `{stored:true}` (and charged) even when they were
+    already here, and a comment naming one is 422 — and so, for an edit
+    link, is a document PUT naming one (`refusedRefs(…, visible)`); the
+    client uploads it, after which it is the link's own. None of these
+    answers tells a link what the rest of the library holds. Residual: an
+    edit link that already KNOWS a sha can put it in `acceptMissing`, save,
+    and then learn from a GET whether the library holds those bytes — which
+    needs the image's hash, i.e. effectively the image.
+  - **Guest budgets** (`blobLedgers`, per token per rolling hour, each
+    upload charged at least 4 KiB): review tokens `REVIEW_BLOB_BUDGET_BYTES`
+    (20 MiB; screenshots in comments, D6), scoped edit tokens
+    `LINK_EDIT_BLOB_BUDGET_BYTES` (100 MiB; stills in its one script). Over
+    either is 429 `review-budget` — the code the client already words as
+    "this link's image allowance is used up". The declared length is
     reserved before the body and settled to what was stored; a re-send of
     bytes the token could already see is free. The library-wide review
-    token is one budget shared by everyone holding it. Editors are
+    token is one budget shared by everyone holding it. The owner is
     unmetered.
   - `refsIn(state)` counts `imageRef.sha256` / `imageValue.sha256` anywhere
     in the state and `data-blob="<sha>"` on any TAG in any string (comment
@@ -647,6 +769,39 @@ tabs**.
   `splitpage:draft-restore-done` or an explicit user decision — never
   crash/kill/session-end/quit. `buildDraftHeader` (`main.js:807`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
+- **The browser keeps drafts too, for server documents only** (PR #233 —
+  a Collaborate guest has no desktop app). `20g-drafts.js` is one writer
+  and one restore over a pluggable backend: `S.DESKTOP` → the bridge
+  above; otherwise `03d-drafts-idb.js` (IndexedDB `splitpage-drafts` v1:
+  `meta` + `bodies`, keyPath `key`), live only while the page's document
+  is on a server and not in review mode (`browserDraftTarget`). Same
+  triggers, throttle, dedup, NEED_BASE handshake, blobs-first and backoff
+  as the desktop. ONE DRAFT PER DOCUMENT, not per tab: key
+  `browserDraftKey(draftBaseOf(serverUrl), serverDocId)` — the base is
+  origin + folder only (no query, fragment or user), so no token or link
+  key can ride in; the record is the document, its ancestor and scalars
+  (`rev`, `title`, `writerId`, …), never a credential (#29, #62). Each page
+  has a random `writerId` and holds the Web Lock
+  `splitpage-draft-writer-<id>` while showing (let go on `pagehide` — a page
+  in the back-forward cache would otherwise look alive); a page removes only
+  its own draft, and a draft whose writer is live is never "recovered". No
+  launch hands a draft back, so it is looked for when a server document is
+  about to open: `finishServerDetect()` for `conn.scope || ?doc= || the
+  join's doc`, before `resumeServerDoc()` (so it beats an older
+  sessionStorage stash, as the desktop's does), and `openServerDoc(id)` for
+  the picker. Found → `armServerDraftResume()` + `applyTakenDraft()`, i.e.
+  the desktop's `restoreServerDraft` path: merged with the draft's own base,
+  "Undo merge" armed, `noAutoSave` (the chip says "not saved yet"). A link
+  found off on a later load (`flagLinkOff`, nothing of the reader's on
+  screen) opens the kept draft as an unsaved copy
+  (`offerBrowserDraftAfterLinkOff`), which keeps writing that same draft
+  (`browserCopyOf`, `keepBase`) until it is saved somewhere. Bounds: 30
+  days, 20 drafts, 64 MiB, oldest first, inside each put. No IndexedDB →
+  `UNAVAILABLE`, the writer stops with nothing on screen; a full quota says
+  "this browser's storage is full". An unreachable server at load does NOT
+  open the draft as a copy (unlike the desktop): the harness and a flaky
+  start look alike, so it waits for the next load that reaches the server.
+  Untitled scripts and local files are still desktop-only.
 - **Desktop version history** (#83, `main.js` §8b): one
   `shared/history-store.js` (the store the browser runs too; policy from
   `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
@@ -1259,9 +1414,13 @@ history. A database a newer build wrote is served read-only: every write
 answers `read-only`, and captures stay pending in the page with ONE toast
 and one panel line.
 
-**Crash-safe drafts** (desktop only, §3.13): a `stateJson` full `state`
+**Crash-safe drafts** (§3.13): a `stateJson` full `state`
 object plus a separate `DraftHeader` (never document fields) — not document
-schema. **`desktop-state.json` v2**: no document content and no docId, just
+schema. On the desktop per tab, for every kind of document; in the browser
+(PR #233) per server document only, in IndexedDB `splitpage-drafts`:
+`meta` `{key, base, docId, rev, title, writtenAt, writerId, editSeq, schema,
+docIdWrittenOut, bytes}` and `bodies` `{key, stateJson, baseJson}`, `key` =
+`JSON.stringify([base, serverDocId])`. **`desktop-state.json` v2**: no document content and no docId, just
 windows/bounds/tabs/each tab's *source*/`lastKnownTitle` — a launch recipe,
 not a backup (§3.13).
 
@@ -1522,7 +1681,9 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     or passphrase. Since #11 the same holds for `desktop-state.json` and a
     draft header: a server tab's persisted source is `{kind, serverDocId,
     serverUrl, tunnel}` and nothing else, and a token only ever sits in
-    main's memory between a route-open and the new tab's boot.
+    main's memory between a route-open and the new tab's boot. Collaborate's
+    owner token and link keys follow the same rule — where each may live is
+    #62.
 30. **The first-run setup wizard may only appear over a genuinely pristine
     copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
     `build.mjs`, checked by `seedCheckPasses()`) plus
@@ -1571,7 +1732,13 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 40. **A crash draft is deleted only when its tab becomes clean, or on an
     explicit user decision** — never on crash, kill, renderer loss,
     session-end, quit, or restore. A discard writes a tombstone before
-    anything is unlinked.
+    anything is unlinked. The browser's (PR #233) keeps the same rule per
+    page: removed only by the page that wrote it (or took it over after a
+    restore) when that page is clean or has moved to another server
+    document, never by another tab's save, never by a restore that failed —
+    plus the store's own bounds (30 days, 20 drafts, 64 MiB). A link turned
+    off, a lapsed sign-in or a page too old never stops the writer; they
+    stop saves, and a restore never saves.
 41. **Restoring a draft never writes the user's file by itself.**
     "Unchanged on disk" is decided by content, never mtime. The draft
     header is built only by main from allowlisted scalar fields; draft
@@ -1761,17 +1928,43 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     /Type /Pagination /Subtype /Footer >> BDC … EMC`, `pdfFooterOps`):
     text extraction skips it, and a test that reads the content streams
     must too — its hairline is the same operator as a scene's rule.
+62. **Collaborate's credentials live in this browser's storage, per server,
+    and nowhere else** (13-hosted.js, 13b-collaborate.js). The OWNER KEY
+    (the server's JOIN_PIN) is never stored at all: it is typed, posted to
+    `/api/join` and dropped; what is kept is the token it buys, in this tab
+    (`splitpage-server-token`, sessionStorage) and — "Remember on this
+    device", ticked by default in the Collaborate dialog — in the
+    per-server map `splitpage-server-tokens` (localStorage), the same place
+    the PIN dialog's "Remember" has used since #11. A LINK'S KEY (`#invite=`
+    / `#review=`) is in the link, then in the tab (`splitpage-review-key`,
+    sessionStorage) and, only for a server whose `/api/health` says
+    `linksPersist: true`, on the device (`splitpage-invites`, `{serverUrl:
+    {key, doc}}`) — so a LAN session's review key never reaches localStorage
+    (suite 43). A link's TOKEN is the tab's only (`setLinkToken`): it never
+    goes into, and a guest's join never clears, the owner's remembered map,
+    and a link clicked on the owner's own device never replaces the owner's
+    remembered sign-in (`holdsOwnerSignIn`). None of the three ever enters
+    `state`, a file, an export, the app-data bundle (#48 — and no key name
+    here may match its regex, nor suite 18's
+    `/pass|secret|key|cred|ssh|pin/`), `desktop-state.json`, a draft header,
+    the browser's draft store (PR #233: keyed by origin + folder and the
+    server's document id, holding the document and scalars only — suite
+    265 looks for the token and the key in it) or a URL other than the link
+    itself; the key leaves the address bar the
+    moment it is read. `link-off` forgets the key in the tab and on the
+    device; Settings ▸ Collaboration ▸ Sign out forgets the owner's token
+    for that server only.
 ---
 
 ## 6. Map of the source
 
-`src/js/` (46 modules; filenames say where things live, and still set
+`src/js/` (47 modules; filenames say where things live, and still set
 evaluation order via `_entry.js`):
 
 | Fragment | What is in it |
 | --- | --- |
 | `_state.js` | the 54 cross-module mutable vars, as one exported object `S` |
-| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11) |
+| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `scope`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11); `scope` (Collaborate) is the one document id a link's token opens, `""` for the owner's, as the server said and never stored |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
 | `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`; the save status's words `savedStatusText` and tooltip time `savedWhenText`, #208), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
@@ -1782,6 +1975,7 @@ evaluation order via `_entry.js`):
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
 | `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v3: `index` + `bodies`, one strict transaction per job; the v3 upgrade drops 2.1's v1 stores only when they hold no snapshot), `hashText` |
+| `03d-drafts-idb.js` | the browser's store for crash-safe drafts of server documents (PR #233): `createIdbDraftStore` (`splitpage-drafts` v1: `meta` + `bodies`; `put` with the NEED_BASE rule and `keepBase`, `get`, `list`, `remove(key, writerId)`, `claim`; every call resolves, `UNAVAILABLE` with no IndexedDB), pure `browserDraftKey`, `draftBaseOf` (origin + folder), `planDraftEviction` (30 days, 20, 64 MiB); `src/test/browser-drafts.test.mjs` |
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
@@ -1808,8 +2002,9 @@ evaluation order via `_entry.js`):
 | `09-find-replace.js` | find & replace |
 | `10-comments.js` | comments: composer, panel, cards |
 | `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import; the Markdown exports reopened (`parseStackedMarkdownExport`, `markdownExportScript`), old shapes and new (invariant 58) |
-| `12-dirty-toast.js` | dirty flag, toasts, draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `13-hosted.js` | server detection, picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82) |
+| `12-dirty-toast.js` | dirty flag, toasts (`showActionToast`'s `sticky` for a state that lasts — a link turned off), draft-change hook, save-state indicator (`updateSaveStatus`) |
+| `13-hosted.js` | server detection (`applyHealth`: `links`, `linksPersist`), picker, compare-and-set save, the review role (#30), Google Drive files, "Publish & copy a link" + `?doc=` (issue #19; out of the menu since Collaborate, its `serverDocShareUrl`/`shareAccessNote` still Collaborate's for an older server), image blobs on the wire (`x-splitpage-client`, `sendWithBlobs`, `fetchBlob`; #82). Collaborate's guest half: the link's key read out of `#invite=`/`#review=` (`readLinkKey`) and kept per tab, or per device for a server whose links persist (`splitpage-invites`); `joinWithLinkKey` at boot, over a stale token and after a restart; `conn.scope` and the File menu's "Your link opens this one script"; `openSharedDocFromLink` opening the link's script (its scope wins over `?doc=`); `flagLinkOff` — the latched `linkTurnedOff`: one sticky toast with Save a copy…, no saves, no presence, the key forgotten, and (nothing of the reader's on screen) this browser's kept draft opened as an unsaved copy (PR #233); a browser draft armed in `finishServerDetect` before `resumeServerDoc`, and in `openServerDoc`; `apiFetch`'s `link-off`/`owner-only`/`wrong-document` codes and `opts.base`/`opts.token` (ask a server the tab is not pointed at); the owner's remembered sign-in per server (`rememberTokenForServer`) never touched by a link's token (`setLinkToken`); `arrivingOnLink()` for the wizard, the start screen and the desktop pitch |
+| `13b-collaborate.js` | File ▸ Collaborate… (and Ctrl K, the Export dialog's note, the desktop native menu): which server (`collabTarget` — the script's own server, else the one that served the page, else Settings' `splitpage-collab-server`, else the built-in `DEFAULT_COLLAB_SERVER`), the dialog's steps (checking → sign-in → confirm → publishing → links; unreachable / error / legacy / open-server) asked with apiFetch's `base` override so Cancel leaves the tab where it was, publishing through `pointTabAt` + `publishToServer({quiet, onError})`, the links API (list, make one of each the first time, New link = `replace:true`, Turn off = DELETE, both armed), the links' base (the desktop app hosting a session hands out its LAN address); the menu item's state (`collaborateBlockedReason`), which `updateCollaborateMenu` also puts on the header's **Collab** button (`#btn-collab`, PR #233: aria-disabled rather than disabled, so it stays tabbable and its tooltip is the reason; refreshed on pointerenter/focus, its click `openCollaborate`); Settings' view of it (`collabServerView`, `signOutCollab`); a guest's first-time name box (`maybeAskGuestName`, the header's and Settings ▸ You's own name and colour); pure `normalizeCollabServer`, `parseLinkFragment`, `inviteLink` (src/test/collaborate.test.mjs); `window.__collabTest` |
 | `13a-presence.js` | who else is in a hosted document (#28) — heartbeat, header initials, gutter/field marks; `personColor(name)` (#192, #194: your pick, presence's colours, the document's `personColors`, the hash) and `recordMyColor` |
 | `05p-rundown-presence.js` | other people's dots on the rundown strip (#202): one per person on the block of the scene presence says they are in, in their colour, an empty ring after `RUNDOWN_IDLE_MS` (60 s, worked out here: nothing sent says "idle") with nothing about them changing; its own layer in the track (`.rundown-presence`, never #rundown-overlay or the blocks), placed from the blocks' inline left/width and kept there by a MutationObserver on `.rundown-blocks`, so it follows the lens with no hook in 05f-rundown.js beyond `goToScene` and `rundownEdge()` (a dot whose block the sliding lens has carried off the track is hidden) being exported; `paintRundownPresence()` is called from `paintPresence()` |
 | `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171). The Markdown exports: `exportMetaLine()` (also the standalone page's description), timed scene headings with a status/read line, open threads' `<sup>N</sup>` markers (`markdownWithMarkers`), hard breaks (`mdHardBreaks`), and `appendExportTail` — the breakdown by category, the b-roll shot list as task lists, numbered comments — all behind `opts.export` (invariant 59); `opts.scenes` for the dialog's sketch |
@@ -1828,13 +2023,14 @@ evaluation order via `_entry.js`):
 | `20b-onboarding.js` | first-run wizard, pristine-seed gate (invariant #30) |
 | `20c-help.js` | in-app Help modal, coach-mark tour |
 | `20d-formats.js` | the two document formats, hand-edit reconcile |
-| `20e-connect.js` | join-PIN dialog, server bookmarks, SSH helper |
+| `20e-connect.js` | join-PIN dialog (a six-digit PIN or a server's long owner key, since Collaborate), server bookmarks, SSH helper; `joinServer` carrying a link's `docId`/`scope` and its `link-off`; on a server with Collaborate's links the Servers dialog points a script's owner at Collaborate instead of its old review link |
 | `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
 | `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
-| `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop, `applyTakenDraft`, `sameDocContent` |
+| `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop over a pluggable backend (the desktop bridge, or the browser's `03d-drafts-idb.js` for a server document, PR #233), `applyTakenDraft`, `sameDocContent`; the browser's restore — `armBrowserServerDraft` (finishServerDetect, openServerDoc), `offerBrowserDraftAfterLinkOff` (flagLinkOff), the writer's Web Lock; `__desktopTest.drafts.browser` |
+| `20i-topbar.js` | the header on scroll (`.is-condensed`: the rundown's ruler shed, played as FLIP, two thresholds and the scroll offset put back); the title's full text as its tooltip; and the toolbar's labels (PR #233): each panel toggle's, Collab's and Write's label width measured with a Range into `--label-w` (the CSS animates the label closing below 1300 / 1000 and a closed one opening on hover or focus, over its neighbours, with a negative margin of the same width — app.css "the toolbar's labels"), `--label-x` to carry an opening pill to a neighbour's edge, and `.is-label-open` for a pointer that isn't a touch |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
-| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
+| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
 | `21-events.js` | all event wiring, `init()` |
 
@@ -1952,9 +2148,20 @@ itself at any width (#174): its right column is never narrower than its
 buttons (`minmax(max-content, 1fr)`), and "the header's widths" in
 `app.css` drop what they can as the window narrows — Search to its word
 and then its magnifier (#175), the panel toggles to icon + count below
-1250, the File button to its mark below 1180, Write to its icon below
-1000, the save status to a dot below 880 — each label staying the
-button's name and tooltip. The mark and name are the File button (#166,
+1300 (1250 until Collab joined the row, PR #233), the File button to its mark below 1180, Write and Collab to their
+icons below 1000, the save status to a dot below 880 — each label staying
+the button's name and tooltip. Since PR #233 the panel toggles', Collab's
+and Write's labels close and open as an animation on the motion tokens
+rather than leaving the layout in one frame, and a closed toggle or Collab
+opens its name on hover (not touch) or keyboard focus over its
+neighbours: a negative margin equal to the growth keeps every layout slot
+still, the open button is `pointer-events: none` but for a `::before` over
+its closed box so the neighbours it covers stay reachable, and the pill is
+carried to a neighbour's edge (`--label-x`). Keep the margin, the label's
+max-width, the padding and the `::before` edge on one duration, curve and
+delay, or the row shivers while it opens (suite 266 reads every frame).
+**Collab** (`#btn-collab`, File ▸ Collaborate… in the header, between the
+panels and Write) is Adam's ask. The mark and name are the File button (#166,
 still `#btn-file`); the mark is ONE symbol, `#i-mark` in the sprite, which
 the header and the New Tab page both `<use>` — a new logo changes that
 symbol and nothing else. The title gives way before the facts and your
@@ -2027,6 +2234,26 @@ no server it refuses and opens **Servers…** instead. The other end is
 bar, and opens that document after the server has answered — but only if
 `resumeServerDoc()` did not already claim the page, since a crash draft or a
 lapsed sign-in is unsaved work that must not be replaced.
+
+**Collaborate replaced it in the menu** (`src/js/13b-collaborate.js`, File
+▸ Share's first item). Adam: "The end user shouldn't have to know that this
+URL exists — they just go Collaborate and then it gets stored on my
+server." The server is built in (`DEFAULT_COLLAB_SERVER`,
+`https://script.bigmanonline.uk/`, changeable in Settings ▸ Collaboration);
+the owner signs in once per device with the owner key, inside the dialog;
+a script not on the server yet is stored there after one confirmation, with
+this tab pointed at it; the dialog ends on two links, Can edit and Can
+comment (`<server>?doc=<id>#invite=<key>`), each with Copy, New link and
+Turn off, from the server's links API (`/api/docs/:id/links`, owner-only).
+A guest's page reads the key (13-hosted.js, `readLinkKey`), joins with it,
+learns the one script it opens (`conn.scope`), opens it, asks their name
+once, and remembers the key for that server (invariant #62); every
+library-wide File-menu item says why it will not work for them. A link the
+owner turns off is `flagLinkOff`: latched like a lapsed sign-in, but no
+reload and no PIN dialog, since neither fixes it. `publishAndCopyShareLink`
+stays for `window.__shareTest` and SKILL.md's by-hand run; its address and
+access note are Collaborate's for a server too old to make links. Suites
+260–264; the server half is `tools/test-server.mjs`.
 
 ---
 

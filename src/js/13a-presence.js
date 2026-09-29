@@ -15,6 +15,7 @@ import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiFetch,
   apiUrl,
+  linkTurnedOff,
   notePresenceRev,
   onServerDoc,
   serverSessionExpired
@@ -107,7 +108,7 @@ function presenceInitials(name) {
 }
 
 function presenceWanted() {
-  if (!onServerDoc() || !S.serverMode.available || serverSessionExpired) return false;
+  if (!onServerDoc() || !S.serverMode.available || serverSessionExpired || linkTurnedOff) return false;
   if (document.hidden) return false;
   return (Date.now() - presenceLastActive) <= PRESENCE_IDLE_MS;
 }

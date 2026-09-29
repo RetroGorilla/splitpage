@@ -12,8 +12,9 @@ export var HOME_KINDS = Object.keys(FIELDS);
 
 export var home = { kind: "none" };
 
-var CONN_FIELDS = { serverUrl: "", token: "", role: "", tunnel: null };
+var CONN_FIELDS = { serverUrl: "", token: "", role: "", scope: "", tunnel: null };
 var CONN_ROLES = ["", "edit", "review"];
+var SCOPE_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 var TUNNEL_FIELDS = ["userHost", "remotePort", "localPort"];
 
 export function normalizeServerUrl(input) {
@@ -55,6 +56,9 @@ function buildConn(fields, base) {
   }
   if (typeof rec.token !== "string") throw new Error("setConnection: a token is a string");
   if (CONN_ROLES.indexOf(rec.role) === -1) throw new Error("setConnection: unknown role " + JSON.stringify(rec.role));
+  if (typeof rec.scope !== "string" || (rec.scope !== "" && !SCOPE_RE.test(rec.scope))) {
+    throw new Error("setConnection: a scope is \"\" or a document id, not " + JSON.stringify(rec.scope));
+  }
   rec.tunnel = checkTunnel(rec.tunnel);
   return rec;
 }
@@ -81,6 +85,7 @@ export function updateConnection(fields) {
   var next = buildConn(fields, conn);
   conn.token = next.token;
   conn.role = next.role;
+  conn.scope = next.scope;
   return conn;
 }
 

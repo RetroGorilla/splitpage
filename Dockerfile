@@ -1,15 +1,17 @@
 # Splitpage — app + document server in one small image.
-#
-# No build step and no dependencies: the app is static files and the server is
-# a single Node file, so there is nothing to compile and nothing to audit
-# beyond what you can read in server/server.js.
-#
-# That means the build context must ALREADY contain a built index.html. It is
-# generated and not in the repository (#80), so either unzip CI's
-# `splitpage-app` artifact — which is exactly this context, this Dockerfile
-# included — or run `node build.mjs` in a checkout first. Building from a
-# fresh clone without doing so fails on the COPY below, which is the right
-# answer: the alternative is an image serving an app nobody built.
+
+FROM node:22-alpine AS build
+
+WORKDIR /build
+
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY build.mjs VERSION sw.js ./
+COPY src/ ./src/
+COPY shared/ ./shared/
+COPY docs/help.md ./docs/help.md
+RUN node build.mjs
 
 FROM node:22-alpine
 
@@ -26,14 +28,16 @@ WORKDIR /app
 
 # The app the browser downloads. Kept in its own directory so STATIC_DIR can
 # never accidentally expose the server source or the data volume.
-COPY index.html manifest.webmanifest icon.svg icon-maskable.svg sw.js ./public/
+COPY --from=build /build/index.html /build/sw.js ./public/
+COPY manifest.webmanifest icon.svg icon-maskable.svg ./public/
+COPY VERSION ./
 # server.js is CommonJS, and package.json beside it says so out loud — a
 # "type": "module" anywhere above it in a tree would otherwise stop it running.
-COPY server/server.js server/package.json ./server/
+COPY server/ ./server/
 
 # Created here so the path exists even when no volume is mounted — that way a
 # quick `docker run` with no -v still works for a smoke test.
-RUN mkdir -p /data && chown -R node:node /data /app
+RUN mkdir -p /data && chown node:node /data
 
 USER node
 EXPOSE 8791

@@ -653,7 +653,7 @@ export function __init() {
   el("export-go").addEventListener("click", exportChosen);
   el("export-share-link").addEventListener("click", function () {
     closeExportDialog();
-    runExportAction("share-link");
+    runExportAction("collaborate");
   });
   onFileMenuRefresh(refreshExportAgainItem);
 
