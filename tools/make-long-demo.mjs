@@ -8,6 +8,7 @@ import { migrateRows } from "../src/js/02-state.js";
 import { __init as initTags } from "../src/js/07-production-tags.js";
 import { brollEntries } from "../src/js/08c-broll.js";
 
+// Before 02-state; matches unit test import order.
 initSceneStatus();
 initTags();
 

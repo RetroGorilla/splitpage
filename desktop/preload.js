@@ -74,6 +74,7 @@ if (location.origin === "splitpage://app") {
 
   const appVersion = sendSync("splitpage:get-app-version-sync");
 
+  // Sync boot values: page needs them before scripts
   const boot = sendSync("splitpage:tab-boot-sync") || {};
   const tabId = typeof boot.tabId === "string" ? boot.tabId : null;
   const windowId = typeof boot.windowId === "string" ? boot.windowId : null;
@@ -82,6 +83,7 @@ if (location.origin === "splitpage://app") {
     : { type: "blank" };
   const bootConn = boot.connection && typeof boot.connection === "object" ? boot.connection : null;
   const bootTunnel = bootConn && bootConn.tunnel && typeof bootConn.tunnel === "object" ? bootConn.tunnel : null;
+  // Page holds only its own token, never others
   const connection = bootConn ? Object.freeze({
     serverUrl: typeof bootConn.serverUrl === "string" ? bootConn.serverUrl : "",
     token: typeof bootConn.token === "string" ? bootConn.token : "",

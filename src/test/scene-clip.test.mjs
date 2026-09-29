@@ -116,6 +116,7 @@ test("the plain text is labelled two-column text File > Paste a script reads bac
   assert.equal(out.text, "Visual: Wide of the Harbour\nB-roll: gulls at dawn\nAudio: Every morning the town wakes.\n\n" +
     "Visual: Mara with the Kettle\nAudio: She has mended nets.");
   assert.equal(detectTwoColumnFormat(out.text), "labels");
+  // Importer reads a B-roll line as its own scene
   const plain = buildScenePayload(source(), ["r1", "r3"]).text;
   const back = parseImportRows(plain, "twocolumn");
   assert.equal(back.length, 2);

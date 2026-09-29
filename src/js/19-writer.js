@@ -125,6 +125,7 @@ export function placeCaretAtTextOffset(el, offset) {
   var range = document.createRange();
   var atomic = target && target.parentNode.closest && target.parentNode.closest(".tag-anchor");
   if (atomic) {
+    // Offset 0 before a leading tag means scene start
     if (targetOffset <= 0 && target === atomic.firstChild) {
       range.setStartBefore(atomic);
     } else {
@@ -165,6 +166,7 @@ function caretAtEdge(cellEl, range, edge) {
   if (edge === "start") probe.setEnd(range.startContainer, range.startOffset);
   else probe.setStart(range.endContainer, range.endOffset);
   var frag = probe.cloneContents();
+  // Not querySelector("*"): cloneContents adds empty ancestor clones
   return !frag.textContent && !frag.querySelector("br, img");
 }
 
@@ -217,6 +219,7 @@ export function onWriterKeydown(e) {
   var cellEl = e.target.classList && e.target.classList.contains("wr-para") ? e.target : null;
   if (!cellEl) return;
 
+  // Ctrl+Enter must not reach addRowAndFocus behind overlay
   if (e.key === "Enter") {
     if (e.shiftKey && !(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
@@ -335,6 +338,7 @@ export function openWriter() {
 export function closeWriter() {
   var el = document.getElementById("writer");
   if (el.hidden) return;
+  // Commit last keystrokes to state before split view repaints
   var active = document.activeElement;
   if (active && active.classList && active.classList.contains("wr-para")) {
     var clean = sanitizeHtml(active.innerHTML);

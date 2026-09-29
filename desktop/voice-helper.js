@@ -56,6 +56,7 @@ function createVoiceHelper(opts) {
     const child = entry.child;
     try { child.stdin.end(); } catch { }
     if (child.exitCode === null && child.signalCode === null) {
+      // Grace period after stdin closes, then force kill
       entry.killTimer = setTimeout(() => { try { child.kill(); } catch { } }, killAfterMs);
       if (entry.killTimer.unref) entry.killTimer.unref();
     }
@@ -99,6 +100,7 @@ function createVoiceHelper(opts) {
         const event = parseHelperLine(line);
         if (event) emit(entry, event);
       }
+      // Drop runaway partial line from a misbehaving helper
       if (buffer.length > MAX_LINE) buffer = "";
     });
     child.stderr.on("data", () => { });

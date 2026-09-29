@@ -16,9 +16,11 @@ export function __init() {
     const LEAVE_AT = 24;
     let condensed = false;
     let queued = false;
+    // Overlapping Element.animate() on one property both keep running
     let playing = [];
     let sheddingTimer = 0;
 
+    // Hidden tab: unseen motion would leave stuck transforms
     function motionOK() {
       try {
         if (typeof Element === "undefined" || !Element.prototype.animate) return false;
@@ -42,6 +44,7 @@ export function __init() {
       return out;
     }
 
+    // Viewport space, unlike 04a-row-motion.js's document space
     function measure(parts) {
       return parts.map(function (el) {
         const r = el.getBoundingClientRect();
@@ -74,6 +77,7 @@ export function __init() {
         const dx = b.left - a.left;
         const dy = b.top - a.top;
         const scale = (el.id === "doc-title" && a.height) ? b.height / a.height : 1;
+        // Animation outranks transition; 1-to-1 keyframes would block fade
         const fades = Math.abs(b.opacity - a.opacity) >= 0.01;
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(scale - 1) < 0.01 && !fades) continue;
         const from = {
@@ -105,6 +109,7 @@ export function __init() {
       topbar.classList.toggle("is-condensing", next && !!animate);
 
       topbar.getBoundingClientRect();
+      // Chromium scroll anchoring flips condensed state endlessly; restore offset
       if (scrollTop() !== yBefore) window.scrollTo(window.scrollX || 0, yBefore);
 
       if (!animate) return;
@@ -136,6 +141,7 @@ export function __init() {
     }
 
     window.addEventListener("scroll", onScroll, { passive: true });
+    // Reload restores scroll; settle once without animating
     applyCondensedState(false);
   })();
 }

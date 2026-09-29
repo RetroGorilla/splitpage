@@ -37,6 +37,7 @@ import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
 
+// View prefs are per device, never in the document
 var VIEW_KEY = "splitpage-broll-view";
 
 var FILTERS = [
@@ -46,6 +47,7 @@ var FILTERS = [
   { id: "shot",    label: "Shot" }
 ];
 
+// Ids are persisted; "flat" means no groups
 var GROUPS = [
   { id: "scene",    label: "Scene",    button: "By scene" },
   { id: "location", label: "Location", button: "By location" },
@@ -109,6 +111,7 @@ var selection = Object.create(null);
 var selectionAnchor = null;
 var bulkInput = null;
 
+// Reviewers may use only these; every other action is refused
 var BROLL_REVIEW_SAFE_ACTIONS = {
   "broll-expand": 1, "broll-jump": 1, "broll-filter": 1, "broll-group-menu": 1, "broll-group": 1,
   "broll-bulk-clear": 1, "broll-open-page": 1, "broll-page-close": 1, "broll-page-jump": 1,
@@ -153,6 +156,7 @@ function icon(name, cls) {
     name + '"/></svg>';
 }
 
+// Read from TAG_CATEGORIES; no second copy of the hex values
 function catColor(id) {
   var cat = tagCategory(id);
   return cat ? cat.color : "var(--text-dim)";
@@ -179,6 +183,7 @@ function plural(n, one, many) {
   return n + " " + (n === 1 ? one : many);
 }
 
+// Same running sum as paintRowTimes (05-render.js); must agree
 function sceneStarts() {
   var t = 0, out = Object.create(null);
   S.state.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row); });
@@ -306,6 +311,7 @@ function summaryHtml(entries) {
     progressBarHtml(entries);
 }
 
+// Keep .broll-chip and data-filter; suites and focusKey rely on them
 function filterTabsHtml(entries) {
   var n = filterCounts(entries);
   return '<div class="panel-tabs broll-tabs" role="radiogroup" aria-label="Show shots">' +
@@ -349,6 +355,7 @@ function groupMenuHtml() {
     '</div>';
 }
 
+// Shared by panel and full page so grouping never disagrees
 export function brollGroups(entries, by) {
   var sorted = brollSortedForList(entries);
   if (by === "flat") return [{ key: "all", kind: "flat", label: "", items: sorted }];
@@ -649,6 +656,7 @@ function bulkBarHtml(entries) {
       : '');
 }
 
+// Re-render replaces markup; restore focus, typed text and caret
 function focusKey(el) {
   if (!el || el === document.body) return null;
   if (el.id) return "#" + cssAttr(el.id);
@@ -746,6 +754,7 @@ function entryById(id) {
   return null;
 }
 
+// Rename must reach the script first (renameBrollInScript)
 function updateRecord(id, fields) {
   var rec = brollRecord(id);
   if (!rec) return null;
@@ -766,6 +775,7 @@ function bulkUpdate(apply, describe) {
   var entries = brollEntries();
   var ids = selectedIds(entries);
   if (!ids.length) return;
+  // One markDirty after this gives one undo entry
   breakUndoCoalescing();
   var n = 0;
   ids.forEach(function (id) {
@@ -879,6 +889,7 @@ function addBrollFromPanel() {
   if (!input) return;
   var name = plainText(input.value).trim().slice(0, BROLL_NAME_MAX);
   if (!name) return;
+  // origin "list": no script line, never flagged orphaned
   var rec = newBrollRecord({ name: name, origin: "list" });
   input.value = "";
   openId = rec.id;
@@ -936,6 +947,7 @@ function renameShot(id, box) {
 function deleteShot(id) {
   var e = entryById(id);
   if (!e) return;
+  // Forgets the record only; script words untouched
   deleteBrollRecord(id);
   if (openId === id) openId = null;
   menuFor = null;
@@ -1102,6 +1114,7 @@ function focusBulkInput() {
   if (box) box.focus();
 }
 
+// Commit on exit; redrawing per keystroke would take the caret
 function onBrollFocusOut(e) {
   if (reviewMode()) return;
   var el = e.target;
@@ -1229,6 +1242,7 @@ export function wireBrollPanel() {
     menuFor = null;
     renderBrollViews();
   });
+  // Ctrl+click leaves focus elsewhere; catch Escape on window
   window.addEventListener("keydown", function (e) {
     if (e.key !== "Escape" || !Object.keys(selection).length) return;
     var p = document.getElementById("broll-panel");
@@ -1399,6 +1413,7 @@ export function shotRecordForFile(e) {
   };
 }
 
+// Read-only (brollEntries(true)): exports must not write records
 export function brollTable() {
   var out = {
     head: ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
@@ -1487,6 +1502,7 @@ function wireBrollPage() {
     e.preventDefault();
     closeBrollPage();
   });
+  // Page owns focus, except dialogs or toasts above it
   document.addEventListener("focusin", function (e) {
     if (!brollPageOpen()) return;
     var el = e.target;

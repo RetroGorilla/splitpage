@@ -174,6 +174,7 @@ test("the PDF breakdown draws a note at the size it was wrapped at, a space betw
     if (["Borrow", "from", "the", "prop", "house."].includes(m[4])) words.push({ size: +m[1], x: +m[2], y: +m[3], w: m[4] });
   }
   assert.deepEqual(words.map((w) => w.w), ["Borrow", "from", "the", "prop", "house."]);
+  // Notes wrapped at 8.5pt were once drawn at 9.5pt
   for (const w of words) assert.equal(w.size, 8.5, w.w + " drawn at " + w.size);
   assert.ok(Math.abs(words[1].x - words[0].x - 29.28) < 0.05, "from at +" + (words[1].x - words[0].x).toFixed(2));
 });

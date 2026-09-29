@@ -113,6 +113,7 @@ function commands() {
     fromExport("export-docx", "word docx document google docs"),
     fromExport("export-md", "markdown md text stacked"),
     fromExport("export-md-table", "markdown md table two columns side by side"),
+    // Listed before CSV so "excel" finds workbook first
     fromExport("export-xlsx", "excel xlsx spreadsheet workbook sheets numbers table"),
     fromExport("export-csv", "spreadsheet csv excel sheets table"),
     fromExport("export-html", "splitshare share standalone page html web browser send any device app"),
@@ -403,6 +404,7 @@ export function __init() {
     var row = e.target.closest(".cmdk-item");
     if (row && +row.getAttribute("data-index") !== active) setActive(+row.getAttribute("data-index"));
   });
+  // mousedown would steal focus before click lands
   list.addEventListener("mousedown", function (e) { e.preventDefault(); });
   list.addEventListener("click", function (e) {
     var row = e.target.closest(".cmdk-item");
@@ -424,6 +426,7 @@ export function __init() {
     trigger.addEventListener("click", function () { openCommandMenu(); });
   }
 
+  // Ctrl/Cmd+K is not registered by desktop main
   window.addEventListener("keydown", function (e) {
     if (e.defaultPrevented || e.isComposing) return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;

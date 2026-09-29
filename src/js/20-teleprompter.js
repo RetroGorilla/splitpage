@@ -65,11 +65,13 @@ export function trimPrompterCell(cell) {
 var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent() {
+  // Filter before indexing so voice-follow word index matches screen
   var skippingShot = S.prompterSkipShot || hideShotScenes;
   var source = skippingShot
     ? S.state.rows.filter(function (row) { return row.status !== "shot"; })
     : S.state.rows;
   var sceneEntries = source.map(function (row) {
+    // Cues stay out of the word list voice follow uses
     var cell = trimPrompterCell(withoutCues(cellOf(row.audioText)));
     return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
   });
@@ -250,6 +252,7 @@ export function updatePrompterStatus() {
 }
 
 var prompterWakeLock = null;
+// Stale request resolutions must not orphan a wake lock
 var wakeLockGen = 0;
 
 export function acquireWakeLock() {
@@ -296,6 +299,7 @@ function setToggle(btn, on) {
   btn.setAttribute("aria-pressed", on ? "true" : "false");
 }
 
+// Not markDirty: rig preference, not document change
 export function setPrompterMirror(on) {
   prompterMirror = on;
   writePrompterOrientationFlag(PROMPTER_MIRROR_KEY, on);
@@ -663,6 +667,7 @@ function onSpeechTranscript() {
   var searchEnd = Math.min(S.speakNorms.length - 1, S.speakCursor + 80);
   var best = findBestMatch(recent, S.speakNorms, searchStart, searchEnd);
 
+  // Backward jumps need longer match than forward
   if (best.index !== -1 && best.index !== S.speakCursor &&
       best.score >= (best.index > S.speakCursor ? 2 : 3)) {
     S.speakCursor = best.index;
@@ -724,6 +729,7 @@ export async function startVoiceFollow() {
   }
   var relayed = !desktop && hasVoiceRelay();
   if (!desktop && !relayed && !SpeechRecognitionCtor) return;
+  // start() is async; second click would orphan a live mic
   if (S.voiceFollowActive || S.voiceStarting) return;
   if (!S.speakNorms.length) {
     setVoiceStatus("Nothing to read yet.", "error");

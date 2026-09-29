@@ -13,6 +13,7 @@ var THUMB_MIMES = ["image/jpeg", "image/png", "image/webp"];
 var OEMBED_MAX_BYTES = 64 * 1024;
 var FETCH_TIMEOUT_MS = 8000;
 
+// Tests override via bases; player URLs rebuilt, never pasted link.
 var VIDEO_HOSTS = {
   youtubePlayer: "https://www.youtube-nocookie.com",
   youtubeThumbs: "https://i.ytimg.com",
@@ -138,6 +139,7 @@ function oembedThumbnailUrl(json, bases) {
   return u.href;
 }
 
+// Sniff bytes, never trust Content-Type.
 function thumbnailRefusal(bytes) {
   if (!bytes || typeof bytes.length !== "number") return "NOT_AN_IMAGE";
   if (!bytes.length) return "EMPTY";
@@ -183,6 +185,7 @@ function request(fetchImpl, url, timeoutMs) {
   var ctl = typeof AbortController === "function" ? new AbortController() : null;
   var timedOut = false;
   var timer = setTimeout(function () { timedOut = true; if (ctl) ctl.abort(); }, timeoutMs);
+  // No redirects: off-host hop would be unchecked.
   var init = { method: "GET", redirect: "error", credentials: "omit", referrerPolicy: "no-referrer" };
   if (ctl) init.signal = ctl.signal;
   var p;

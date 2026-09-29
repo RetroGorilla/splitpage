@@ -11,9 +11,11 @@ import { contentMemo } from "./07-production-tags.js";
 import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
 
+// Last block must never touch the strip edge
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;
 var BLOCK_MIN_PX = 2;
+// Mirrors app.css container queries; unit tests pin these
 var LABEL_NUMBER_PX = 28;
 var LABEL_LENGTH_PX = 66;
 var LABEL_LENGTH_SHOT_PX = 80;
@@ -48,6 +50,7 @@ export function rundownBlocks(scenes, pxPerSecond) {
   });
 }
 
+// Floor at rest: to-scale short scenes are unhoverable slivers
 export var REST_MIN_PX = 5;
 var REST_FLOOR_SHARE = 0.8;
 
@@ -65,6 +68,7 @@ export function rundownRestLayout(scenes, totalSeconds, extraSeconds, widthPx, f
   var raw = secs.map(function (s) { return s * pps; });
   var w = raw.slice();
   if (slotFloor > 0) {
+    // Iterate: holding one scene can push another under floor
     var held = raw.map(function () { return false; });
     for (var it = 0; it <= n; it++) {
       var heldW = 0, freeRaw = 0, i;
@@ -163,6 +167,7 @@ export function rundownLengthPlace(totalSeconds, extraSeconds, widthPx, widths) 
   return none;
 }
 
+// Lens constants tuned by feel (Adam, 2026-09-24)
 export var LENS_MIN_PX = 96;
 export var LENS_REACH_SCENES = 3;
 export var LENS_RECENTER_MS = 400;
@@ -203,6 +208,7 @@ export function rundownLens(slots, focus, anchor, opts) {
 }
 
 function anchorFor(slots, focus, u, x, opts) {
+  // Bisection needs monotonic lens map; range covers sliding
   var W = slots[slots.length - 1];
   var lo = -W, hi = 2 * W;
   for (var i = 0; i < 24; i++) {
@@ -212,6 +218,7 @@ function anchorFor(slots, focus, u, x, opts) {
   return knotMap(slots, rundownLens(slots, focus, (lo + hi) / 2, opts), focus);
 }
 
+// Speed thresholds scale with magnification, or long scripts race
 export var LENS_SPEED_MAG_MAX = 64;
 
 function lensSpeedScale(slots, focus, opts) {
@@ -241,6 +248,7 @@ export function rundownLensRecenter(slots, shown, focus, anchor, x, dtMs, opts) 
   var u = knotMap(shown, slots, x);
   var tau = opts && opts.recenterMs > 0 ? opts.recenterMs : LENS_RECENTER_MS;
   var f = focus + (u - focus) * (1 - Math.exp(-dtMs / tau));
+  // Holding focus at ends left lens stuck behind
   return { focus: f, anchor: anchorFor(slots, f, u, x, opts) };
 }
 
@@ -258,6 +266,7 @@ export function knotMap(from, to, x) {
   return w > 0 ? to[lo] + (x - from[lo]) / w * (to[lo + 1] - to[lo]) : to[lo];
 }
 
+// Mirrors .keep-num/.keep-len padding in app.css
 var KEEP_NUMBER_PX = 18;
 var KEEP_NUMBER_3_PX = 25;
 var KEEP_LENGTH_PX = 56;
@@ -341,6 +350,7 @@ export function rundownEdge() {
 
 var CHECK_SVG = '<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
+// Built lazily and memoised; runs on every paint
 var snippetOf = null;
 
 function sceneSnippet(row) {
@@ -866,6 +876,7 @@ function endDragOver() {
   lensOff("drag");
 }
 
+// Row is mid-FLIP: read layout box, not transformed rect
 function followMovedScene(rowId) {
   revealRow(rowId);
   var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
@@ -940,6 +951,7 @@ function noteCurrentRow(el) {
   renderRundown();
 }
 
+// Built here so page.html header markup stays untouched
 function ensureToggle(strip) {
   var toggle = strip.querySelector(".rundown-toggle");
   if (toggle) return toggle;

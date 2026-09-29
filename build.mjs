@@ -21,6 +21,7 @@ function appJs() {
   const result = esbuild.buildSync({
     entryPoints: [join(ROOT, "src", "js", "_entry.js")],
     bundle: true,
+    // Not module: 00-prelude must run while parser is paused.
     format: "iife",
     minify: true,
     charset: "utf8",
@@ -33,6 +34,7 @@ function appJs() {
     throw new Error("esbuild produced " + result.outputFiles.length + " files, expected 1");
   }
   const code = result.outputFiles[0].text;
+  // Bundle is inlined in a script tag; guards early close.
   if (/<\/script/i.test(code)) throw new Error("the bundle contains a literal </script");
   return code;
 }
@@ -48,6 +50,7 @@ function slugify(text) {
     .replace(/^-+|-+$/g, "");
 }
 
+// Must match 20b-onboarding.js checksum exactly; keep in sync.
 function checksumText(str) {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {

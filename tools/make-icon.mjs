@@ -90,6 +90,7 @@ function render(doc, size) {
         for (let sx = 0; sx < SUPERSAMPLE; sx++) {
           const ux = doc.minX + (x * SUPERSAMPLE + sx) * step + half;
           let hit = null;
+          // Later shapes paint over earlier ones.
           for (const shape of doc.shapes) if (covers(shape, ux, uy)) hit = shape;
           if (!hit) continue;
           r += hit.color[0];
@@ -133,6 +134,7 @@ function encodePng(pixels, size) {
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8;
+  // RGBA required; RGB left opaque white corners.
   ihdr[9] = 6;
 
   const stride = size * 4;
@@ -163,6 +165,7 @@ function buildIco(frames) {
   let offset = header.length + dir.length;
   frames.forEach((frame, i) => {
     const o = i * 16;
+    // ICO encodes 256 as 0.
     dir[o] = frame.size === 256 ? 0 : frame.size;
     dir[o + 1] = frame.size === 256 ? 0 : frame.size;
     dir[o + 2] = 0;

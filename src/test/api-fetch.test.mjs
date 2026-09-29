@@ -26,6 +26,7 @@ test("the server's 404 not-found is code \"not-found\"", async () => {
   assert.equal(err.message, "not-found");
 });
 
+// Review client reads comment-route 404s as code "404" (#71)
 test("any other 404 keeps its number, with the reason as the message", async () => {
   answering(404, { error: "no-such-comment" });
   const err = await failureOf(apiFetch("api/docs/d/comments/c1", { method: "PATCH", body: { resolved: true } }));

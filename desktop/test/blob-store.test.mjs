@@ -27,6 +27,7 @@ function makeStore(dir, extra) {
 
 const sha = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
 
+// Real magic numbers plus random tail: unique sha per fixture.
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 function png(n = 64) {
   return Buffer.concat([Buffer.from(PNG_MAGIC), crypto.randomBytes(n)]);

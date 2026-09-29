@@ -193,6 +193,7 @@ function ensureModal() {
   return m;
 }
 
+// Uncommitted typing survives redraws caused by other settings
 var TYPED_FIELDS = { "settings-name": COMMENT_NAME_KEY, "settings-default-wpm": DEFAULT_WPM_KEY };
 
 function renderSettings(changedKey) {
@@ -257,6 +258,7 @@ function applyChange(target) {
   if (name === "settings-clock") { writePref(CLOCK_KEY, target.value === "system" ? null : target.value); return; }
   if (name === "settings-person-color") { setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { writePref(RUNDOWN_MIN_KEY, target.checked ? "1" : "0"); return; }
+  // Default value is stored as no key at all
   if (id === "settings-tag-icons") { writePref(TAG_ICONS_KEY, target.checked ? "1" : null); return; }
   if (id === "settings-video-thumbs") { writePref(VIDEO_THUMBS_KEY, target.checked ? null : "0"); return; }
   if (id === "settings-hide-shot") { setHideShotScenes(target.checked); return; }

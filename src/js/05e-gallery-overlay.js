@@ -74,6 +74,7 @@ export function closeGalleryOverlay() {
   returnFocus = null;
 }
 
+// Closes dialog when its scene or last picture is gone
 export function refreshGalleryOverlay() {
   refreshAnnotator();
   if (!view) return;
@@ -215,6 +216,7 @@ function paint() {
   var scrolled = before ? before.scrollTop : 0;
   var body = document.getElementById("gallery-body");
   var rest = '<div class="scene-gallery-preview-caption">' + caption + '</div>' + actions + grid;
+  // Reinserted playing frames restart; keep it in place
   var livePic = playing ? body.querySelector(".scene-gallery-preview-pic.is-playing") : null;
   var livePreview = livePic && livePic.getAttribute("data-play") === playKey ? livePic.parentNode : null;
   if (livePreview && livePreview.parentNode === body) {
@@ -269,6 +271,7 @@ function playButtonHtml(poster, play) {
     '" title="' + escapeHtml(title) + '"><span aria-hidden="true"></span></button>';
 }
 
+// Iframe sandbox: scripts and popups only, no navigation or forms
 function playerHtml(poster, play) {
   if (play.file) {
     var url = sessionVideoUrl(poster);
@@ -316,6 +319,7 @@ function retryThumbnail() {
   });
 }
 
+// focus() uses preventScroll; scroll only the grid manually
 function revealPicked(grid) {
   var tile = grid && grid.querySelector(".scene-gallery-grid-tile.is-selected");
   if (!tile) return;
@@ -326,6 +330,7 @@ function revealPicked(grid) {
   else if (t.bottom + room > g.bottom) grid.scrollTop += t.bottom - g.bottom + room;
 }
 
+// fn(row) must return whether it changed anything
 export function galleryEdit(rowId, msg, fn) {
   var got = rowOf(rowId);
   if (!got) return false;
@@ -443,6 +448,7 @@ function onKeydown(e) {
   }
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGalleryOverlay(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
+  // Playing video keeps arrow keys for seeking
   if (e.target && e.target.classList && e.target.classList.contains("scene-gallery-player")) return;
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     e.preventDefault();
@@ -661,6 +667,7 @@ function onZoomPointerMove(e) {
   var dx = e.clientX - zoom.pan.sx, dy = e.clientY - zoom.pan.sy;
   if (!zoom.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
   if (!zoom.moved) {
+    // Capture only once dragging, so clicks reach picture
     try { zoomStage().setPointerCapture(e.pointerId); } catch (err) {}
   }
   zoom.moved = true;
@@ -696,6 +703,7 @@ export function __init() {
     z.addEventListener("pointercancel", onZoomPointerUp);
     window.addEventListener("resize", function () { if (zoom) layoutZoom(true); });
   }
+  // CSP-blocked player leaves empty frame; offer link
   document.addEventListener("securitypolicyviolation", function (e) {
     if (!view || !view.playing) return;
     if (!/^(frame-src|child-src|default-src)/.test(e.effectiveDirective || e.violatedDirective || "")) return;

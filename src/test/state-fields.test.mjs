@@ -9,6 +9,7 @@ import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
 const SEED = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));
 
 test("every registry field has a strategy mergeStates knows", () => {
+  // Field missing from the merge is the failure caught
   const known = {
     "title": 1, "doc-id": 1, "rows": 1, "comments": 1, "list-union-with-base": 1,
     "changed-side-wins": 1, "max-plus-one": 1, "theirs-wins": 1, "constant": 1,

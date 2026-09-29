@@ -27,6 +27,7 @@ export function setSaveButtons(text, disabled) {
     if (disabled !== undefined) btn.disabled = disabled;
     btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
   });
+  // Runs before desktop notify so main never sees stale identity
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   if (S.DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
@@ -38,10 +39,12 @@ export function markDirty() {
   S.editSeq++;
   if (!reviewMode()) recordMyColor(S.state);
   noteEdit();
+  // Unconditional: setSaveButtons is skipped during in-flight save
   if (S.DESKTOP && typeof noteDraftChange === "function") noteDraftChange();
   if (!S.saveButtonBusy) setSaveButtons("Save •");
   scheduleAutoSave();
   if (home.kind === "import") { home.dirty = true; updateFileChip(); }
+  // Hosted docs skip the import branch; chip must refresh
   else if (onServerDoc()) { updateFileChip(); }
 }
 
@@ -49,6 +52,7 @@ export function clearDirty() {
   S.dirty = false;
   clearAutoSaveTimers();
   resumeAutoSave();
+  // Reset so old save time never shows under another doc
   savedAt = 0;
   setSaveButtons("Save");
 }

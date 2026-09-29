@@ -141,6 +141,7 @@ function startBrowser() {
     "--disable-gpu",
     "--window-size=1440,960",
   ];
+  // Chromium refuses to run as root without these.
   if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
   }

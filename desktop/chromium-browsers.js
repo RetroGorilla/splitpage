@@ -127,6 +127,7 @@ function launchChromiumBrowser(browser, url, spawnFn) {
   return new Promise((resolve, reject) => {
     let child;
     try {
+      // URL from main, never the page
       child = spawn(browser.path, [url], { detached: true, stdio: "ignore", windowsHide: false });
     } catch (err) { reject(err); return; }
     child.once("error", reject);

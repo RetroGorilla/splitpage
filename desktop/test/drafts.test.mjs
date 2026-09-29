@@ -47,6 +47,7 @@ function wait(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Flips one body byte, length unchanged.
 function damageBody(file) {
   const buf = fs.readFileSync(file);
   const nl = buf.indexOf(0x0a);

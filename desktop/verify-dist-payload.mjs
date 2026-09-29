@@ -18,6 +18,7 @@ function existsSyncSafe(p) {
   }
 }
 
+// Only electron-winstaller bundles a 7z that reads NSIS
 function resolveNsisCapable7z() {
   let pkgJson;
   try {

@@ -111,6 +111,7 @@ test("only the export's own headings, in its own style, after its own table end 
     para("Comments", "Heading1") + para("dropped too")), [{ v: "Shot", a: "Line." }]);
   assert.deepEqual(await read(para("B-roll shot list", "Heading1") + para("Scene 01") + para("a shot")),
     [{ v: "Shot", a: "Line." }]);
+  // Same heading before the table is the user's
   const before = await docxToRows(asFile(foreignDocx(para("T", "Title") + para("Comments", "Heading1") + script)));
   assert.deepEqual(plainRows(before.rows), [{ v: "Comments", a: "" }, { v: "Shot", a: "Line." }]);
 });
@@ -169,6 +170,7 @@ const loadRoundTrip = () => { S.state = migrateRows(roundTripState(PIC)); };
 
 const MANUAL = '<a href="https://example.com/k1000" target="_blank" rel="noopener">the manual</a>';
 const R0_AUDIO = 'Forty dollars. <span class="stage-dir">beat</span> The meter\'s <em>dead</em>, the seals are <u>gone</u>, <s>sadly</s> and the <mark>shutter</mark> sticks. See ' + MANUAL + ".";
+// Reader output for pre-#169 fixtures; must never change
 const OLD_READ = {
   script: {
     title: "Round trip, then and now",

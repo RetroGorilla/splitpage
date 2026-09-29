@@ -27,6 +27,7 @@ export function applyTagIcons() {
   else document.documentElement.removeAttribute("data-tag-icons");
 }
 
+// Event fires even when storage write fails
 export function writePref(key, value) {
   try {
     if (value == null) localStorage.removeItem(key);
@@ -37,6 +38,7 @@ export function writePref(key, value) {
   } catch (e) { }
 }
 
+// Export bundle keys must never look like credentials
 function isFlag(v) { return v === "0" || v === "1"; }
 export var SETTINGS_APPDATA_PREFS = [
   { name: "theme", key: "splitpage-theme", valid: function (v) { return THEME_MODES.indexOf(v) !== -1; } },
@@ -154,6 +156,7 @@ export function readMyColor() {
   return paletteColor(readPref(PERSON_COLOR_KEY));
 }
 
+// Must stay stable; pre-#194 colours and unpicked names use it
 export function hashedPersonColor(seed) {
   seed = String(seed || "");
   var hash = 0;
@@ -215,10 +218,12 @@ export function mergePersonColors(base, mine, theirs) {
     put(name, t && m === b ? t : m);
   });
   Object.keys(theirs).forEach(function (name) { put(name, theirs[name]); });
+  // Base-only names are older copies, not deletions
   Object.keys(base).forEach(function (name) { put(name, base[name]); });
   return normalizePersonColors(out);
 }
 
+// Order: own pick, live presence, doc map, hash
 export function resolvePersonColor(name, ctx) {
   ctx = ctx || {};
   var key = personKey(name);

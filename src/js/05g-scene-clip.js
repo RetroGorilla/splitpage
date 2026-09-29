@@ -14,6 +14,7 @@ export var SCENES_ATTR = "data-splitpage-scenes";
 var FORMAT = "splitpage-scenes";
 var VERSION = 1;
 
+// Matches largest single picture a store takes (blob-store.js)
 export var SCENE_BLOB_CAP = 16 * 1024 * 1024;
 
 var liveCut = null;
@@ -21,6 +22,7 @@ var liveCut = null;
 export function setLiveCut(nonce, docId) { liveCut = nonce ? { nonce: String(nonce), docId: docId || null } : null; }
 export function liveCutNonce() { return liveCut ? liveCut.nonce : null; }
 
+// Read from document each time so undo/redo follow the move
 export function isMove(clip, state) {
   return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId) &&
     scenesAway(clip, state);
@@ -50,6 +52,7 @@ export function buildScenePayload(state, rowIds, opts) {
   var rowSet = Object.create(null);
   rows.forEach(function (r) { rowSet[r.id] = true; });
 
+  // Also finds comments split across scenes, by marks
   var marked = cellIdsOf(rows, function (cell, out) {
     commentIds(cell).forEach(function (id) { out[id] = true; });
   });
@@ -119,6 +122,7 @@ function escAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Payload rides on table HTML for custom-type-less pastes
 export function scenesTableHtml(rows, payload) {
   var marker = "";
   if (payload) {
@@ -213,6 +217,7 @@ export function insertScenes(clip, opts) {
   opts = opts || {};
   var state = S.state;
   var mint = opts.mint || makeId;
+  // All or nothing: partial return would mark copies
   var move = !!opts.move && scenesAway(clip, state);
   var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
 
@@ -357,9 +362,11 @@ export function insertScenes(clip, opts) {
   };
 }
 
+// Cut/delete leave comments in the document, detached
 export function removeScenes(rowIds) {
   var gone = Object.create(null);
   (rowIds || []).forEach(function (id) { gone[id] = true; });
+  // Mutate in place: app holds references into S.state.rows
   var n = 0;
   for (var i = S.state.rows.length - 1; i >= 0; i--) {
     if (gone[S.state.rows[i].id]) { S.state.rows.splice(i, 1); n++; }

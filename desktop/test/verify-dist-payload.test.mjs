@@ -23,6 +23,7 @@ function put(dir, name, size) {
   fs.writeFileSync(p, Buffer.alloc(size, 0x41));
 }
 
+// The seven top-level PE files fbd1db2 lost in NSIS extraction.
 const REAL_BINARIES = [
   ["Splitpage.exe", 4096],
   ["d3dcompiler_47.dll", 1024],

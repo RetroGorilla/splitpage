@@ -488,6 +488,7 @@ test("exclusive: jobs never interleave; a read job cannot write; a tx dies with 
   await assert.rejects(backend.exclusive(async (tx) => { await tx.commit({}, []); await tx.commit({}, []); }), /twice/);
 });
 
+// #100: v1 migrator removed; v1 folders must stay untouched.
 test("a raw v1 tree: opened as an empty history; docs/ and older/ never touched", async () => {
   const dir = freshDir();
   const v1 = {

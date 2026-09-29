@@ -48,6 +48,7 @@ try {
 
 await fs.mkdir(STAGE_DIR, { recursive: true });
 
+// Must match electron-builder.yml files and verify-dist expectations
 const files = [
   ["index.html", "index.html"],
   ["manifest.webmanifest", "manifest.webmanifest"],

@@ -11,6 +11,7 @@ import {
 } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
 
+// Convention approved by Adam 2026-09-24; changes need his sign-off
 export var PLAIN_TAG_KEYWORDS = {
   prop: "prop",
   location: "location",
@@ -24,6 +25,7 @@ export var PLAIN_TAG_KEYWORDS = {
 
 var KEYWORD_AT_END_RE = /(prop|location|loc|cast|vfx|gear|sfx|music):$/i;
 var WORD_CHAR_RE = /[\p{L}\p{N}]/u;
+// Caret-spot char, never stored; code points keep it visible
 var ZWSP = String.fromCharCode(0x200B);
 var ZWSP_RE = new RegExp(ZWSP, "g");
 var NBSP = String.fromCharCode(0xA0);
@@ -61,6 +63,7 @@ export function applyPlainTag(cell, from, to, cat, name) {
   var tagName = name || p.name;
   var r = replaceWithTag(cell, from, to - p.trail, p.text, namedTagId(cat, tagName));
   var out = r.cell;
+  // Trailing plain space collapses on repaint; use no-break
   var after = projection(out).slice(r.end);
   if (p.trail && after.length === p.trail && after.indexOf(" ") !== -1) {
     out = replaceText(out, r.end, r.end + p.trail, after.replace(/ /g, NBSP));
@@ -139,6 +142,7 @@ function paint(o, offset) {
   el.style.top = top + "px";
 }
 
+// Stores and records nothing; selection kept by model positions
 function unwrap(o) {
   if (!o.span.isConnected) return;
   var sel = o.cellEl.isConnected ? cellSelection(o.cellEl) : null;
@@ -175,6 +179,7 @@ export function plainTagEmptyAtCaret() {
   return at !== null && !o.tail.data.slice(0, at).replace(ZWSP_RE, "");
 }
 
+// Live typing only; paste, import, merge never open
 export function maybeOpenPlainTag(e, cellEl) {
   if (e.inputType !== "insertText" || !e.data || e.data.charAt(e.data.length - 1) !== ":") return;
   if (cellEl.getAttribute("data-field") !== "visualText" || !cellEl.closest("#rows")) return;
@@ -204,6 +209,7 @@ export function maybeOpenPlainTag(e, cellEl) {
   span.setAttribute("contenteditable", "false");
   kwNode.parentNode.insertBefore(span, kwNode);
   span.appendChild(kwNode);
+  // Typing must land after the hidden keyword
   rest.insertData(0, ZWSP);
   var r = document.createRange();
   r.setStart(rest, 1);
@@ -241,6 +247,7 @@ export function closePlainTag() {
     registerProductionTag(o.cat, res.name);
     return { cell: res.cell, sel: { from: res.caret, to: res.caret } };
   });
+  // Model disagreed: words stay plain, keyword included
   if (!done) { unwrap(o); return true; }
   updateTagBadges();
   renderProduction();

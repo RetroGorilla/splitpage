@@ -116,6 +116,7 @@ test("the ruler ticks every 5s with a label every 15s for a two-minute piece", (
   assert.deepEqual(ticks.slice(0, 4).map((t) => t.seconds), [0, 5, 10, 15]);
   assert.deepEqual(ticks.filter((t) => t.major).map((t) => t.seconds), [0, 15, 30, 45, 60, 75, 90, 105]);
   assert.deepEqual(ticks.filter((t) => t.label).map((t) => t.label), ["0:00", "0:15", "0:30", "0:45", "1:00", "1:15", "1:30"]);
+  // 1:45 is the strip's last pixel: no room for label
   assert.equal(ticks.find((t) => t.seconds === 105).label, "");
 });
 

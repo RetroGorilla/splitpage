@@ -88,6 +88,7 @@ test("a field from another kind, or the old globals, throws where it is written"
 });
 
 test("a home that would mean nothing is refused rather than stored", () => {
+  // {id: null} once meant "not on server"; now "none"
   assert.throws(() => setHome("server", { id: null }), /needs "id"/);
   assert.throws(() => setHome("server", {}), /needs "id"/);
   assert.throws(() => setHome("file", { name: "a.md" }), /needs "format"/);

@@ -23,6 +23,7 @@ const RENAME_RETRY_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
 const RENAME_ATTEMPTS = 5;
 const RENAME_RETRY_MS = 20;
 
+// Sync sleep: renames must stay in one synchronous tick
 function sleepSync(ms) {
   try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -390,6 +391,7 @@ function createDraftStore(opts) {
     const currentPath = path.join(folder, "current.draft");
     const previousPath = path.join(folder, "previous.draft");
 
+    // Held tab refuses writes until its on-disk draft is gone
     if (holdAtCall !== null && rec.held && rec.holdGen === holdAtCall) {
       if (fs.existsSync(currentPath) || fs.existsSync(previousPath)) return fail("HELD");
       rec.held = false;
@@ -433,6 +435,7 @@ function createDraftStore(opts) {
       return fail("BAD_PAYLOAD");
     }
 
+    // Temps live in drafts root, not tab folder (Windows)
     const rand = crypto.randomBytes(6).toString("hex");
     const stateTmp = path.join(dir, `.tmp-${tabId}-state-${rand}`);
     const baseTmp = baseBuf ? path.join(dir, `.tmp-${tabId}-base-${rand}`) : null;
@@ -463,6 +466,7 @@ function createDraftStore(opts) {
         cleanupTmps();
         return fail("DISCARDED");
       }
+      // Re-check after awaits: tab may have navigated or been discarded
       if (rec.epoch !== epoch || !(seq > rec.floor)) {
         cleanupTmps();
         return fail("STALE_SEQ");
@@ -473,6 +477,7 @@ function createDraftStore(opts) {
         renameSyncRetry(fs, baseTmp, path.join(folder, baseRef.file));
         pendingTmps.splice(pendingTmps.indexOf(baseTmp), 1);
       }
+      // Order matters: base, then current->previous, then new current
       const currentExisted = fs.existsSync(currentPath);
       const headerThatBecamePrevious = currentExisted ? rec.lastHeader : null;
       forgetDiskState(rec);
@@ -521,6 +526,7 @@ function createDraftStore(opts) {
     });
   }
 
+  // Only explicit user choice deletes drafts; tombstone survives restart
   function discardForUserDecision(tabIds, reason) {
     const ids = (Array.isArray(tabIds) ? tabIds : [tabIds]).filter(validTabId);
     for (const id of ids) {
@@ -543,6 +549,7 @@ function createDraftStore(opts) {
     return { ok: failed.length === 0, persisted, failed, reason: typeof reason === "string" ? reason : null };
   }
 
+  // take never deletes or releases the hold
   function take(tabId) {
     if (!validTabId(tabId)) return Promise.resolve(null);
     return enqueue(tabId, async () => {
