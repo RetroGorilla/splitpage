@@ -30,7 +30,7 @@ import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js"
 export var draftRestorePending;
 var draftOnDisk;
 
-/* ================= crash-safe drafts =================
+/* ================= crash-safe drafts (desktop only) =================
 
    Everything typed since the last save lives in one place: this page. Close
    it the ordinary way and the app asks first; lose it to a crash, a kill, a
@@ -64,25 +64,9 @@ var draftOnDisk;
    'server-resumed', 'unreadable', or 'failed' — the one outcome that makes
    main KEEP the draft, so an unrestorable draft is never thrown away.
 
-   THE BROWSER (PR #233). Collaborate's guests co-edit through an invite
-   link in a browser, and until this their unsaved edits lived only in the
-   open tab: a closed tab, a browser crash or a flat phone battery took
-   them, and a link turned off mid-session left them nowhere but the
-   screen. So the same writer and the same restore run in the browser build
-   too, for a SERVER document only (an owner's or a link guest's), with
-   this browser's IndexedDB as the store (03d-drafts-idb.js) in place of
-   the desktop bridge — the "backend" below. One draft per server document,
-   keyed by the server's base and the document's id, never per tab: a
-   browser has no main process to hand a tab its draft back, so the draft
-   is found again by the document it belongs to, the next time that
-   document is opened in this browser (a reload, the invite link again, a
-   new tab, Open from the server…). Then it goes through exactly the
-   desktop's server path: armServerDraftResume() arms S.draftServerResume,
-   resumeServerDoc() (13-hosted.js) three-way merges it into what the
-   server holds now, and never saves the result on its own. Everything
-   else — an untitled script, a local file — is still desktop-only here: a
-   browser page has no handle it could restore a file draft into after a
-   crash, and a never-saved script has no document to be found again by. */
+   The whole file is inert in the browser build: every entry point returns
+   at once when DESKTOP is null, and nothing outside this file calls one
+   without that gate. */
 
 /* DRAFT-IPC-AND-SHAPES, "Renderer timing". Quiet enough that typing never
    waits on the disk, short enough that a crash costs seconds of work. The
@@ -135,20 +119,6 @@ var draftPendingFor = null;
    went (13-hosted.js). */
 var draftServerSettle = null;
 
-/* ---- the backend: the desktop bridge, or this browser's IndexedDB ----
-
-   Both answer the same two calls with the same shapes — write(payload) →
-   {ok} | {ok:false, code} (NEED_BASE included), discard(seq) → {ok} — so
-   everything below them (the timers, the dedup, the NEED_BASE handshake,
-   the backoff, the pictures stored first) is one code path (PR #233). The
-   desktop's is main's store behind IPC and needs nothing here. The
-   browser's is 03d-drafts-idb.js, and it needs what main would otherwise
-   know: which document a draft is OF (the key), which page wrote it, and
-   whether the page on screen has moved on to another document. */
-
-/* One id per page load: the draft this page writes carries it, a page
-   removes only drafts carrying its own, and a draft whose writer is still
-   open somewhere is not "recovered" by another tab (browserWriterIsLive). */
 var browserWriterId = (function () {
   var bytes = new Uint8Array(16);
   try { crypto.getRandomValues(bytes); } catch (e) {
@@ -158,19 +128,8 @@ var browserWriterId = (function () {
 })();
 var BROWSER_DRAFT_LOCK = "splitpage-draft-writer-";
 var browserStore = null;
-/* No IndexedDB in this browser (a private window in some, storage turned
-   off): the writer stops, quietly and for good — nothing is on screen, as
-   nothing can be done about it. */
 var browserDraftsOff = false;
-/* The key of the draft this page last wrote (or took over from a restore):
-   the one a clean document asks to have removed, and the one removed when
-   this page moves on to another server document. */
 var browserKeyOnDisk = null;
-/* A recovered draft opened as an unsaved copy (the link is off, the
-   document is gone, the server did not answer): {key, docId, server}. The
-   copy keeps writing to that same draft while it is the document on screen
-   — identified by the docId the copy was given — so it is still there
-   after a crash until the copy is saved somewhere, the desktop's rule. */
 var browserCopyOf = null;
 
 function browserDraftStore() {
@@ -178,10 +137,6 @@ function browserDraftStore() {
   return browserStore;
 }
 
-/* What the browser's draft would be a draft OF right now: the server
-   document on screen, or the recovered copy of one — else null, and there
-   is nothing for this page to write. A reviewer's copy never goes back to
-   the server (#71), so it has nothing to recover either. */
 function browserDraftTarget() {
   if (S.DESKTOP || browserDraftsOff) return null;
   if (onServerDoc()) {
@@ -201,8 +156,6 @@ function browserWriteDraft(payload) {
   if (!server || !base || !server.docId) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
   var key = browserDraftKey(base, server.docId);
   var before = browserKeyOnDisk;
-  /* Only what the store needs, by name: the payload's scalars and the two
-     documents. Nothing about the connection but the base address. */
   return browserDraftStore().put({
     key: key,
     base: base,
@@ -214,14 +167,10 @@ function browserWriteDraft(payload) {
     schema: payload.schema,
     docIdWrittenOut: payload.docIdWrittenOut,
     stateJson: payload.stateJson,
-    /* a copy has no ancestor of its own: the one stored is the draft's */
     baseJson: server.copy ? null : payload.baseJson
   }, { keepBase: !!server.copy }).then(function (r) {
     if (r && r.ok) {
       browserKeyOnDisk = key;
-      /* The page moved from one server document to another without ever
-         being clean (a recovered draft merged over unsaved work): the
-         first one's draft is this page's, and this page has left it. */
       if (before && before !== key) browserDraftStore().remove(before, browserWriterId);
     }
     return r;
@@ -232,8 +181,6 @@ function browserDiscardDraft() {
   var key = browserKeyOnDisk;
   browserKeyOnDisk = null;
   if (!key) return Promise.resolve({ ok: true });
-  /* Only this page's own: another tab still editing the same script keeps
-     the draft it wrote over ours. */
   return browserDraftStore().remove(key, browserWriterId).then(function () { return { ok: true }; });
 }
 
@@ -255,15 +202,9 @@ function draftBackendDiscard(seq) {
 function draftWriterLive() {
   if (draftStopped) return false;
   if (S.DESKTOP) return typeof S.DESKTOP.writeDraft === "function";
-  /* A draft on disk with no target left still has to be removed once the
-     document is clean, so the writer stays live for that. */
   return !browserDraftsOff && (!!browserKeyOnDisk || !!browserDraftTarget());
 }
 
-/* This page is alive for as long as it holds this lock — how another tab
-   tells a draft somebody is still writing from one left behind
-   (browserWriterIsLive). Taken at boot, let go on pagehide (__init). A
-   browser without Web Locks simply has no answer to give. */
 var browserLockRelease = null;
 var browserLockWanted = false;
 
@@ -273,11 +214,10 @@ function holdBrowserWriterLock() {
   try {
     if (!navigator.locks || typeof navigator.locks.request !== "function") return;
     navigator.locks.request(BROWSER_DRAFT_LOCK + browserWriterId, function () {
-      /* let go at once if the page went while the lock was being granted */
       if (!browserLockWanted) return null;
       return new Promise(function (resolve) { browserLockRelease = resolve; });
     }).then(null, function () {});
-  } catch (e) { /* no answer, then */ }
+  } catch (e) {}
 }
 
 function releaseBrowserWriterLock() {
@@ -287,11 +227,6 @@ function releaseBrowserWriterLock() {
   if (release) release();
 }
 
-/* Is the page that wrote this draft still open? Its Web Lock says so (the
-   page holds one named for its writer id for as long as it is showing). A
-   browser without Web Locks — a plain-http LAN address is not a secure
-   context — cannot tell, and says no: offering a live tab's unsaved work
-   to a second tab merges it there, which loses nothing. */
 function browserWriterIsLive(writerId) {
   if (!writerId) return Promise.resolve(false);
   if (writerId === browserWriterId) return Promise.resolve(true);
@@ -346,9 +281,6 @@ function draftOriginOf() {
     kind: "untitled", fileId: null, fileKind: null, importName: null,
     baseLastModified: null, baseSize: null, server: null
   };
-  /* The browser keeps a draft of a server document only (PR #233); an
-     origin that stays "untitled" is one it does not write. `copy` is the
-     browser's alone, for the store: this draft is a recovered copy's. */
   if (!S.DESKTOP) {
     var target = browserDraftTarget();
     if (target) {
@@ -436,9 +368,6 @@ function captureAndSendDraft() {
   }
 
   var origin = draftOriginOf();
-  /* Dirty, but not a document the browser keeps a draft of (a local file,
-     a new script): nothing to write, and whatever draft this page left on
-     disk for a server document stays until this page is clean again. */
   if (!S.DESKTOP && origin.kind !== "server") {
     draftChangePending = false;
     return Promise.resolve(null);
@@ -593,7 +522,6 @@ function draftReasonFor(code) {
     case "EBUSY": return "another program is using the file";
     case "EIO": return "the disk reported an error";
     case "TOO_LARGE": return "this document is too large to copy";
-    /* the browser's store (PR #233) */
     case "QUOTA": return "this browser's storage is full";
     case "offline": return "the app did not answer";
     default: return "the copy was refused";
@@ -634,9 +562,6 @@ function noteDraftWriteRefused(code) {
      either forever would be noise, and a toast about a discard the user
      just asked for would be worse than noise. */
   if (code === "DISCARDED" || code === "NO_TAB") { draftStopped = true; return; }
-  /* The browser has no IndexedDB to keep a draft in (PR #233): stop, and
-     say nothing — there is nothing the reader could do about it, and the
-     editor works exactly as it did before drafts existed. */
   if (code === "UNAVAILABLE" && !S.DESKTOP) { browserDraftsOff = true; draftChangePending = false; return; }
 
   /* A stale seq means a newer page of this tab already wrote. Ours is the
@@ -659,8 +584,6 @@ function noteDraftWriteRefused(code) {
    moving to another window. Main waits for the answer rather than assuming
    the last timer fired in time. */
 export function flushDraftNow() {
-  /* The browser's too (PR #233): hiding the tab is the last thing a phone
-     does before it kills it. Nothing to write is an answer of its own. */
   if (!draftWriterLive()) return Promise.resolve({ ok: true });
   clearDraftTimers();
   if (draftBackoffTimer) { clearTimeout(draftBackoffTimer); draftBackoffTimer = null; }
@@ -793,8 +716,6 @@ function showDraftPendingBanner(t, title) {
    across, because it IS this script's history; docIdWrittenOut goes false,
    since this new id has never been anywhere. */
 function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
-  /* The browser's server drafts come here too (PR #233): a TakenDraft
-     built from its store (takenFromBrowserDraft) has the same shape. */
   if (!t || !t.header) return false;
   mine = mine || draftMigrate(t.stateJson);
   if (!mine) return false;
@@ -831,7 +752,6 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
    way round is the only way the merge can be certain to happen after the
    boot state has been assigned: resumeServerDoc assigns `state` itself. */
 export function armServerDraftResume(t) {
-  /* Desktop at boot, and the browser's armBrowserServerDraft() (PR #233) */
   if (!t || !t.header) return;
   var origin = t.header.origin;
   if (!origin || origin.kind !== "server" || !origin.server || !origin.server.docId) return;
@@ -1120,23 +1040,6 @@ async function runDraftRestore(t) {
   return adoptUntitledDraft(t, mine, base);
 }
 
-/* ---- the browser's restore (PR #233) ----
-
-   No launch hands this page a draft: the draft is looked for when a server
-   document is about to be opened — by finishServerDetect() for the script
-   a link or a reload is about to open, and by openServerDoc() for one
-   picked from the server (13-hosted.js) — under that document's key, and
-   only if the page that wrote it is gone. Found, it is armed and restored
-   exactly as the desktop restores a server draft (restoreServerDraft):
-   resumeServerDoc() merges it into what the server holds now, with the
-   draft's own ancestor as the base, "Undo merge" armed, and no save — the
-   reader's next Save sends it. The latches need nothing of their own: a
-   link turned off, a lapsed sign-in or a page too old all stop saveToServer
-   while the writer goes on keeping the draft, and a restore never saves. */
-
-/* A stored draft as the TakenDraft the restore reads — the same shape
-   main's takeDraft() hands the desktop page. The base is this tab's own
-   serverUrl: the key matched on that same server. */
 function takenFromBrowserDraft(rec, key) {
   var at = Number(rec.writtenAt) || 0;
   return {
@@ -1153,10 +1056,6 @@ function takenFromBrowserDraft(rec, key) {
   };
 }
 
-/* What main does with an outcome, for the browser's store: a draft that
-   was merged, or opened as a copy, is this page's from now on (the next
-   write replaces it, the next clean removes it). Anything else — 'failed'
-   above all — leaves it where it is, for a later load to try again. */
 function browserDraftRestoreDone(t, outcome) {
   if (outcome !== "server-resumed" && outcome !== "server-copy") return;
   var key = t.browserKey;
@@ -1166,10 +1065,6 @@ function browserDraftRestoreDone(t, outcome) {
       ? { key: key, docId: S.state.docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
       : null;
   }
-  /* A draft this page was keeping for the script it had open before (a
-     recovered one opened from the server picker over unsaved work): that
-     script is not on screen any more, so its draft goes, as a clean page's
-     would. The "Before opening" snapshot has its words. */
   var left = browserKeyOnDisk;
   if (left && left !== key) browserDraftStore().remove(left, browserWriterId);
   browserKeyOnDisk = key;
@@ -1177,12 +1072,8 @@ function browserDraftRestoreDone(t, outcome) {
   browserDraftStore().claim(key, browserWriterId);
 }
 
-/* → Promise<true> when a draft of server document `docId` (on this tab's
-   server) was found and armed, with its restore under way; the caller then
-   runs resumeServerDoc(), which merges it. Never rejects. */
 export function armBrowserServerDraft(docId) {
   if (S.DESKTOP || browserDraftsOff || !docId || draftRestorePending || S.draftServerResume) return Promise.resolve(false);
-  /* a reviewer's copy is never written back, so it never kept a draft */
   if (conn.role === "review") return Promise.resolve(false);
   var base = draftBaseOf(conn.serverUrl, location.href);
   if (!base) return Promise.resolve(false);
@@ -1191,12 +1082,10 @@ export function armBrowserServerDraft(docId) {
   return browserDraftStore().get(key).then(function (rec) {
     if (!rec) return false;
     return browserWriterIsLive(rec.writerId).then(function (live) {
-      /* Still being written by an open tab (or by this page): not
-         recovered work, somebody's current work. */
       if (live || via !== conn || draftRestorePending || S.draftServerResume) return false;
       var t = takenFromBrowserDraft(rec, key);
       armServerDraftResume(t);
-      if (!S.draftServerResume) return false; /* unreadable: kept, untouched */
+      if (!S.draftServerResume) return false;
       draftRestorePending = true;
       applyTakenDraft(t);
       return true;
@@ -1204,14 +1093,6 @@ export function armBrowserServerDraft(docId) {
   }).then(null, function () { return false; });
 }
 
-/* The link this tab opened is off (13-hosted.js flagLinkOff), and nothing
-   of the reader's is on screen — a reload after the owner turned it off,
-   or coming back to it later. That is exactly when a draft matters: the
-   script can never be opened through this link again, so the work comes
-   back as an unsaved copy they can save anywhere (the desktop's answer
-   for a server it cannot reach, restoreServerDraft). Which draft: the
-   one for `docId` if the link named one, else the newest on this server
-   that no open tab is still writing. → Promise<boolean>, never rejects. */
 export function offerBrowserDraftAfterLinkOff(docId) {
   if (S.DESKTOP || browserDraftsOff || draftRestorePending || onServerDoc() || S.dirty) return Promise.resolve(false);
   var base = draftBaseOf(conn.serverUrl, location.href);
@@ -1265,7 +1146,6 @@ export async function applyTakenDraft(t) {
   if (S.DESKTOP && typeof S.DESKTOP.draftRestoreDone === "function") {
     try { S.DESKTOP.draftRestoreDone(outcome); } catch (e2) {}
   }
-  /* The browser's half of what main does with the outcome (PR #233). */
   if (!S.DESKTOP && t && t.browserKey) browserDraftRestoreDone(t, outcome);
   /* The tab has been counting as unsaved and as not pristine for the whole
      restore; now that it is over, main needs the truth for its window title,
@@ -1313,14 +1193,6 @@ export function __init() {
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") flushDraftNow();
   });
-  /* A browser tab being closed or navigated away (PR #233): the write may
-     not finish before the page goes, but the one before it already landed.
-     And the page lets go of its writer lock (below) here, not when it is
-     destroyed: a page navigated away from can sit in the back-forward
-     cache for minutes still holding it, and the very next page — the same
-     invite link opened again in the same tab — would take its draft for
-     somebody's live work and not offer it. Back from that cache, it takes
-     the lock again. */
   window.addEventListener("pagehide", function () {
     flushDraftNow();
     releaseBrowserWriterLock();
@@ -1372,10 +1244,6 @@ export function __init() {
       },
       noteChange: function () { noteDraftChange(); },
       sameDocContent: sameDocContent,
-      /* The browser's store (PR #233), for tests/265-browser-drafts.txt:
-         what is in it (whole records, so a suite can look for anything
-         credential-shaped in them), whose they are, and a store over
-         another IndexedDB — or none — to prove the writer stays quiet. */
       browser: {
         list: function () { return browserDraftStore().list(); },
         get: function (docId, serverUrl) {

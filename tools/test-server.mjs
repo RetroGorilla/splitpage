@@ -37,8 +37,6 @@ function check(name, ok, detail) {
   console.log("  FAIL " + name + (detail ? " — " + detail : ""));
 }
 
-/* Never silent: a check this platform cannot make is printed, counted and
-   named again in the summary. */
 function skip(name, why) {
   skipped.push(name + " (" + why + ")");
   console.log("  SKIP " + name + " — " + why);
@@ -59,9 +57,6 @@ function freePort() {
   });
 }
 
-/* `opts.dataDir` starts the server on a folder that already exists — the
-   PERSIST_LINKS tests stop one server and start the next on the same
-   DATA_DIR, which is what a redeploy is. */
 async function startServer(env, opts) {
   const port = await freePort();
   const dataDir = (opts && opts.dataDir) || mkdtempSync(join(tmpdir(), "splitpage-test-"));
@@ -101,13 +96,10 @@ async function startServer(env, opts) {
       child.kill();
       rmSync(dataDir, { recursive: true, force: true });
     },
-    /* Stop it and wait until it has gone, leaving DATA_DIR where it is for
-       the next server to start on. */
     async halt() {
       if (exitCode === null) child.kill();
       await exited;
     },
-    /* null while it runs; the code it exited with once it has */
     get exitCode() { return exitCode; },
     get log() { return log; }
   };
@@ -862,9 +854,6 @@ const s5 = await startServer({ JOIN_PIN: PIN, REVIEW_PIN: PIN, HOST: "127.0.0.1"
 try {
   check("a review PIN equal to the join PIN is not a review credential",
     s5.log.includes("review credential was IGNORED — it is the same as the join PIN"), s5.log);
-  /* reviewAvailable no longer means "the launcher set a review code": it is
-     whether a per-document review link can be had, and those need only a
-     join PIN (the link store). */
   const res = await fetch(s5.base + "api/health");
   eq("...though per-document review links are on offer, which need only the join PIN",
     (await json(res)).reviewAvailable, true);
@@ -2156,20 +2145,6 @@ try {
   sBlobRO.stop();
 }
 
-/* ---------- invite links: the link store ----------
- *
- * Per-document links of two roles, "edit" and "review", minted by the owner
- * through /api/docs/:id/links and joined by key. A link's token is held to
- * its one document by every route; the routes that are about the library
- * (create, delete, the links, /api/share) are the owner's alone; revoking a
- * link — or replacing it, or deleting its document — turns its token off on
- * its very next request. This store replaced #63's in-memory review grants,
- * so the #63 review-link tests above run through it too.
- */
-
-/* A request written byte for byte onto a socket, for the ones fetch() will
-   not send: a path of "//", a header byte outside ASCII. Answers the status
-   code, or 0 when the connection dropped without one. */
 function rawRequest(base, head) {
   return new Promise((resolve) => {
     const url = new URL(base);
@@ -2195,7 +2170,7 @@ function rawRequest(base, head) {
   });
 }
 
-const LINK_EDIT_BUDGET = 13000;   /* three uploads charged 4096 each, and no fourth */
+const LINK_EDIT_BUDGET = 13000;
 const sLinks = await startServer({
   JOIN_PIN: PIN,
   REVIEW_PIN,
@@ -2204,7 +2179,6 @@ const sLinks = await startServer({
   LINK_EDIT_BLOB_BUDGET_BYTES: String(LINK_EDIT_BUDGET)
 });
 const linksDataDir = sLinks.dataDir;
-/* Carried out of the block below to the restart that follows it. */
 let linksOwnerToken, linksEditToken, linksEditKey, linksDocId;
 
 try {
@@ -2243,7 +2217,6 @@ try {
   const docB = (await call("POST", "api/docs", owner, { state: Object.assign(fixtureState(), { title: "Not shared" }) })).body;
   linksDocId = docA.id;
 
-  /* ---- the owner mints, lists and re-reads links ---- */
   let editLink = null, reviewLink = null;
   {
     const none = await call("GET", linksUrl(docA.id), owner);
@@ -2288,7 +2261,6 @@ try {
     eq("a method the links route does not have is 405", (await call("PUT", linksUrl(docA.id), owner, {})).status, 405);
   }
 
-  /* ---- joining by key ---- */
   let editToken = null, reviewToken = null;
   {
     const e = await joinAs({ key: editLink.key });
@@ -2312,7 +2284,6 @@ try {
     eq("...while the library-wide review credential has no scope", meL.role + "/" + meL.scope, "review/");
   }
 
-  /* ---- what an edit link may do: its one document, as the owner could ---- */
   {
     const list = (await call("GET", "api/docs", editToken)).body;
     eq("an edit link lists its one document", ((list && list.docs) || []).map((d) => d.id).join(","), docA.id);
@@ -2334,7 +2305,6 @@ try {
     eq("...and is present in it", (await call("POST", "api/presence", editToken, { docId: docA.id, id: "guest1", name: "Guest" })).status, 200);
   }
 
-  /* ---- and nothing else ---- */
   {
     eq("an edit link cannot read another document", said(await call("GET", "api/docs/" + docB.id, editToken)), "403/wrong-document");
     const other = (await call("GET", "api/docs/" + docB.id, owner)).body;
@@ -2368,7 +2338,6 @@ try {
     eq("...and its document is still there", (await call("GET", "api/docs/" + docA.id, owner)).status, 200);
   }
 
-  /* ---- a review link: #63's rules, now from the store ---- */
   {
     eq("a review link reads its document", (await call("GET", "api/docs/" + docA.id, reviewToken)).status, 200);
     eq("...and no other", said(await call("GET", "api/docs/" + docB.id, reviewToken)), "403/wrong-document");
@@ -2393,7 +2362,6 @@ try {
       said(await call("GET", "api/share?doc=" + docA.id, libraryReview)), "403/review-only");
   }
 
-  /* ---- the sub-routes that exist, and no others ---- */
   {
     const typo = await call("DELETE", "api/docs/" + docA.id + "/link/" + editLink.id, owner);
     eq("a DELETE one letter off the links route is 404", typo.status, 404);
@@ -2402,7 +2370,6 @@ try {
       (await call("GET", "api/docs/" + docA.id + "/anything", owner)).status, 404);
   }
 
-  /* ---- images: an edit link sees what a review link sees, and is metered ---- */
   {
     const putBlob = (token, buf) => fetch(base + "api/blobs/" + shaOf(buf), {
       method: "PUT",
@@ -2445,8 +2412,6 @@ try {
     });
     eq("an edit link's comment naming an image it cannot see is 422 too", cmt.status, 422);
 
-    /* The upload above was charged 4096 against LINK_EDIT_BLOB_BUDGET_BYTES
-       (13000), so two more small ones fit and a third does not. */
     eq("an edit link's upload within its allowance is 201", (await putBlob(editToken, pngOf(3000))).status, 201);
     eq("...and a second", (await putBlob(editToken, pngOf(3000))).status, 201);
     const over = await putBlob(editToken, pngOf(3000));
@@ -2458,7 +2423,6 @@ try {
     eq("...while the owner is not metered", (await putBlob(owner, pngOf(3000))).status, 201);
   }
 
-  /* ---- replace, and revoke ---- */
   const deadEditKey = editLink.key;
   {
     const fresh = await call("POST", linksUrl(docA.id), owner, { role: "edit", replace: true });
@@ -2501,7 +2465,6 @@ try {
     check("...not the dead one", !!again.body && again.body.key !== reviewLink.key);
   }
 
-  /* ---- deleting a document revokes its links ---- */
   {
     const docC = (await call("POST", "api/docs", owner, { state: Object.assign(fixtureState(), { title: "To be deleted" }) })).body;
     const e = (await call("POST", linksUrl(docC.id), owner, { role: "edit" })).body;
@@ -2516,8 +2479,6 @@ try {
     eq("...and it has no links left", (await call("GET", linksUrl(docC.id), owner)).body.links.length, 0);
   }
 
-  /* ---- the limiter: a dead link is not a guess, a live one is not an amnesty ----
-     Last in this block: it locks this address out of /api/join for a minute. */
   {
     const dead = [];
     for (let i = 0; i < 12; i++) dead.push((await joinAs({ key: deadEditKey })).status);
@@ -2536,8 +2497,6 @@ try {
   await sLinks.halt();
 }
 
-/* Without PERSIST_LINKS a restart cancels every token and every link, exactly
-   as it always has: the store was in memory and nowhere else. */
 check("without PERSIST_LINKS nothing about links is written to DATA_DIR", !existsSync(join(linksDataDir, "links")));
 const sLinks2 = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" }, { dataDir: linksDataDir });
 try {
@@ -2564,8 +2523,6 @@ try {
   sLinks2.stop();
 }
 
-/* A published library mints no edit links (an edit link would be a key to
-   nothing), and still mints review links. */
 const sLinksRO = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1", READ_ONLY: "1" });
 try {
   writeFileSync(join(sLinksRO.dataDir, "frozen-links.json"), JSON.stringify({
@@ -2592,7 +2549,6 @@ try {
   sLinksRO.stop();
 }
 
-/* An open server (no PIN) has nothing for a link to be a lesser key to. */
 const sLinksOpen = await startServer({ HOST: "127.0.0.1" });
 try {
   const health = await json(await fetch(sLinksOpen.base + "api/health"));
@@ -2615,13 +2571,6 @@ try {
   sLinksOpen.stop();
 }
 
-/* ---------- PERSIST_LINKS=1: a server meant to stay up on the internet ----------
- *
- * The owner token is HMAC(secret, "owner\0" + JOIN_PIN), the secret made once
- * in DATA_DIR/links; links and tombstones are in DATA_DIR/links/links.json.
- * Both survive a restart on the same DATA_DIR — what a redeploy is — and
- * changing JOIN_PIN signs the owner out while leaving the links alone.
- */
 const OWNER_KEY = "owner-" + randomBytes(24).toString("hex");
 const OWNER_KEY_2 = "owner-" + randomBytes(24).toString("hex");
 const persistEnv = { JOIN_PIN: OWNER_KEY, PERSIST_LINKS: "1", HOST: "127.0.0.1" };
@@ -2690,7 +2639,6 @@ try {
   await sP1.halt();
 }
 
-/* The same DATA_DIR, the same JOIN_PIN: a redeploy. */
 const sP2 = await startServer(persistEnv, { dataDir: persistDir });
 try {
   eq("after a restart the owner's token still works, with no sign-in", (await callOn(sP2, "GET", "api/docs", p.owner)).status, 200);
@@ -2711,7 +2659,6 @@ try {
   await sP2.halt();
 }
 
-/* The same DATA_DIR, a NEW JOIN_PIN: how the owner signs every device out. */
 const sP3 = await startServer(Object.assign({}, persistEnv, { JOIN_PIN: OWNER_KEY_2 }), { dataDir: persistDir });
 try {
   eq("a changed JOIN_PIN signs the old owner token out", said2(await callOn(sP3, "GET", "api/docs", p.owner)), "401/pin-required");
@@ -2728,8 +2675,6 @@ function said2(out) {
   return out.status + "/" + (out.body && out.body.error);
 }
 
-/* A short key on a server that keeps its sessions is one meant for the
-   internet, and it says so. The LAN's six digits say nothing of the kind. */
 const sShort = await startServer({ JOIN_PIN: PIN, PERSIST_LINKS: "1", HOST: "127.0.0.1" });
 try {
   check("PERSIST_LINKS with a JOIN_PIN under 20 characters warns at startup",
@@ -2739,8 +2684,6 @@ try {
   sShort.stop();
 }
 
-/* A links.json that is there but unreadable stops the server rather than
-   being quietly replaced by an empty one. */
 {
   const badDir = mkdtempSync(join(tmpdir(), "splitpage-test-"));
   mkdirSync(join(badDir, "links"));
@@ -2753,12 +2696,6 @@ try {
   rmSync(badDir, { recursive: true, force: true });
 }
 
-/* ---------- TRUST_PROXY=cloudflare ----------
- *
- * Cloudflare APPENDS to an X-Forwarded-For the client sent, so the first
- * entry — what TRUST_PROXY=1 reads — is the caller's to choose behind it.
- * Cf-Connecting-Ip is set by Cloudflare and overwrites a client's own.
- */
 const sCf = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1", TRUST_PROXY: "cloudflare" });
 try {
   check("the server says it counts Cf-Connecting-Ip", sCf.log.includes("TRUST_PROXY=cloudflare"), sCf.log);
@@ -2784,12 +2721,6 @@ try {
   sCf.stop();
 }
 
-/* ---------- what an internet-facing server must not do ----------
- *
- * The launcher serves its whole folder and keeps the library in data/
- * beneath it; a request line of `//` used to crash the process; a token
- * header with a non-ASCII byte in it used to be a 500 and a stack trace.
- */
 const staticRoot = mkdtempSync(join(tmpdir(), "splitpage-static-"));
 writeFileSync(join(staticRoot, "index.html"), "<!doctype html><title>t</title>");
 mkdirSync(join(staticRoot, ".git"));

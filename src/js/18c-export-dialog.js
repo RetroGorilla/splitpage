@@ -783,7 +783,6 @@ export function __init() {
   el("export-close").addEventListener("click", closeExportDialog);
   el("export-cancel").addEventListener("click", closeExportDialog);
   el("export-go").addEventListener("click", exportChosen);
-  /* the live alternative to a copy: File ▸ Collaborate… (13b-collaborate.js) */
   el("export-share-link").addEventListener("click", function () {
     closeExportDialog();
     runExportAction("collaborate");

@@ -62,9 +62,7 @@ export function setSaveButtons(text, disabled) {
   /* Last of the three, and in this order deliberately: the crash draft is
      written with the document's identity and its dirty state in the header,
      so both have to be settled before it is told anything changed
-     (20g-drafts.js). It only sets a timer. Not desktop-only since PR #233:
-     the browser keeps a draft of a server document, and noteDraftChange()
-     decides for itself whether this page has one to keep. */
+     (20g-drafts.js). It only sets a timer. */
   if (typeof noteDraftChange === "function") noteDraftChange();
   /* Last of all, and derived from everything above rather than set
      alongside it: the save-state indicator (below) is the one place that
@@ -301,10 +299,7 @@ export function showToast(msg, kind, sticky) {
 
 /* A toast with one action button beside its words ("Undo"), up a little
    longer than a plain one so there is time to reach it. The button runs
-   onAction once and takes the toast away. `sticky` keeps it up until it is
-   clicked away or its button is used — for a state that lasts, such as a
-   link its owner turned off (13-hosted.js's flagLinkOff), where the action
-   ("Save a copy…") is still the thing to do an hour later. */
+   onAction once and takes the toast away. */
 export function showActionToast(msg, kind, label, onAction, sticky) {
   var el = showToast(msg, kind, true);
   if (!sticky) {

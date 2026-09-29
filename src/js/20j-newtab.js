@@ -480,7 +480,6 @@ async function clearRecents() {
 async function newTabEligibleForAutoShow() {
   if (newTabSuppressed()) return false;
   if (!seedCheckPasses()) return false;
-  /* arrived on a link to one script (13-hosted.js): that script is coming */
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   if (S.DESKTOP && typeof draftRestorePending !== "undefined" && draftRestorePending) return false;
   if (home.kind === "server" || home.kind === "file") return false;

@@ -85,15 +85,6 @@
  *                   (invariant #29).
  *     role          "edit" | "review" | "" — what the SERVER said this
  *                   token is (/api/me). Never stored, never inferred.
- *     scope         "" for a token that opens every document on the server
- *                   (the owner's key, a join PIN), or the ONE document id a
- *                   link's token is held to (a Collaborate link, a review
- *                   link). Also what the server said (/api/me, or the join
- *                   that minted the token) and never stored: the server
- *                   refuses every other document to that token whatever
- *                   this says, and the page only uses it to open the right
- *                   document and to say why the rest of the File menu will
- *                   not work (13-hosted.js, 13b-collaborate.js).
  *     tunnel        null, or {userHost, remotePort, localPort} when the
  *                   server is reached through an SSH forward the reader
  *                   runs themselves (the Servers dialog's SSH bookmark).
@@ -134,8 +125,6 @@ export var home = { kind: "none" };
 
 var CONN_FIELDS = { serverUrl: "", token: "", role: "", scope: "", tunnel: null };
 var CONN_ROLES = ["", "edit", "review"];
-/* The server's own document-id whitelist (server.js), so a scope can only
-   ever be something the server could have named. */
 var SCOPE_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 var TUNNEL_FIELDS = ["userHost", "remotePort", "localPort"];
 
@@ -212,10 +201,9 @@ export function setConnection(fields) {
 }
 
 /* The same server, a fact about it moved: a token after a PIN, the role
-   and scope /api/me answered, a token cleared because the server stopped
-   taking it. Mutated in place so a server home holding this record sees
-   it. The server itself is not a fact that moves — that is
-   setConnection(). */
+   /api/me answered, a token cleared because the server stopped taking it.
+   Mutated in place so a server home holding this record sees it. The
+   server itself is not a fact that moves — that is setConnection(). */
 export function updateConnection(fields) {
   fields = fields || {};
   if (fields.serverUrl !== undefined && fields.serverUrl !== conn.serverUrl) {

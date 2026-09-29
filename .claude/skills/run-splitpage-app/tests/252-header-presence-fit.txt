@@ -30,9 +30,6 @@ sleep 800
 
 eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__frames=function(n){ return new Promise(function(res){ var w=W.__w(); var k=function(){ if(--n<=0) res(true); else w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); }); }; W.__at=async function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); await W.__frames(3); return true; }; W.__boxes=function(){ var d=W.__d(); var sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',presence:'#presence-bar',search:'#btn-command',panels:'.btn-group',collab:'#btn-collab',write:'#btn-write',present:'#btn-present',length:'#length-status'}; var out=[]; Object.keys(sel).forEach(function(k){ var e=d.querySelector(sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__check=function(w){ var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['title','search','present','presence'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(w>760 && !bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); var left=d.querySelector('.topbar-left'); if(left.scrollWidth>left.clientWidth+1) bad.push('left half overflows by '+(left.scrollWidth-left.clientWidth)); return bad.length? w+': '+bad.join(', ') : ''; }; W.__chips=function(){ return W.__d().querySelectorAll('#presence-bar .presence-chip').length; }; W.__more=function(){ var m=W.__d().querySelector('#presence-bar .presence-more'); return m? m.textContent : ''; }; W.__sweep=async function(ws){ var bad=[]; for(var i=0;i<ws.length;i++){ await W.__at(ws[i]); var c=W.__check(ws[i]); if(c) bad.push(c+' ['+W.__chips()+W.__more()+']'); } W.__bad=bad.join('; '); return W.__bad || 'ok'; }; return true; })()
 expect true
-# the toolbar's labels close and open as an animation since PR #233 (suite
-# 266); read settled here, the iframe's motion tokens collapsed as reduced
-# motion collapses them
 eval (function(){ var s=window.__d().documentElement.style; ['--dur-press','--dur-fast','--dur-enter','--dur-exit','--dur-move'].forEach(function(t){ s.setProperty(t,'0.01ms'); }); return true; })()
 
 # a long title, b-roll and tags (so the panel toggles carry counts), the
@@ -52,9 +49,7 @@ expect window.__check(1920) === ''
 
 # =============================================================================
 # the widths the hunt named, and a sweep across the rest (every 10px from
-# 761 to 1920, every px in 761-790, 881-910 and 1250-1299 — 1300 is where
-# the panel toggles' labels open since Collab joined the row, PR #233, so
-# the sweep also takes each px to 1320)
+# 761 to 1920, every px in 761-790, 881-910 and 1250-1299)
 # =============================================================================
 eval (function(){ var ws=[]; for(var w=761; w<=1920; w+=10) ws.push(w); for(var a=761;a<=790;a++) ws.push(a); for(var b=881;b<=910;b++) ws.push(b); for(var c=1250;c<=1320;c++) ws.push(c); window.__ws=ws; return ws.length; })()
 eval window.__sweep(window.__ws)

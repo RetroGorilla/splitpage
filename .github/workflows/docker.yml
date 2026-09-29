@@ -1,27 +1,3 @@
-# Docker: build the server image from a plain checkout, start it the way
-# deploy.sh does, and check it answers.
-#
-# ci.yml never touches Docker, and nothing else here can: the Windows machine
-# this is developed on has no Docker, so this is the one place the image is
-# really built before it reaches the unRAID server. It runs only when a file
-# that ends up in the image or in the deploy changes (the paths below), so an
-# ordinary src/ change costs no extra Actions minutes — ci.yml already proves
-# `node build.mjs` works, which is all the Dockerfile's first stage runs.
-#
-# What it proves, in the order deploy.sh relies on it:
-#   - deploy.sh parses, passes shellcheck, is executable in git and is LF;
-#   - `docker build .` works from a checkout with nothing built beforehand,
-#     with the LEGACY builder, which is what unRAID's docker falls back to
-#     without buildx (if a future Docker drops the legacy builder, delete the
-#     DOCKER_BUILDKIT line — the build itself does not depend on it);
-#   - the image holds the built app, the server and VERSION, and none of the
-#     source, node_modules or build stage;
-#   - it starts as 99:100 on an empty data folder with the settings deploy.sh
-#     insists on, answers /api/health with the built VERSION, `links: 1` and
-#     `linksPersist: true`, serves the app with its stamped sw.js, and its
-#     own HEALTHCHECK passes (Unraid's Docker tab shows that);
-#   - a sign-in with the owner key survives a restart (PERSIST_LINKS), and
-#     everything the server wrote belongs to 99:100.
 name: Docker
 
 on:
@@ -51,7 +27,6 @@ on:
       - package-lock.json
       - .github/workflows/docker.yml
 
-# A second push to the same branch makes the first run's answer worthless.
 concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
@@ -62,7 +37,6 @@ permissions:
 jobs:
   image:
     runs-on: ubuntu-latest
-    # Normally about three minutes: a small image, one npm ci, one container.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -70,13 +44,9 @@ jobs:
       - name: deploy.sh parses
         run: bash -n deploy.sh
 
-      # shellcheck is on the ubuntu runner image already; nothing to install.
       - name: shellcheck deploy.sh
         run: shellcheck deploy.sh
 
-      # The server runs `./deploy.sh` from a fresh clone, so the executable
-      # bit has to be in git itself, and a CRLF in it would fail there with
-      # "$'\r': command not found".
       - name: deploy.sh is executable in git and has LF line endings
         run: |
           mode="$(git ls-files -s deploy.sh | cut -d' ' -f1)"
@@ -84,8 +54,6 @@ jobs:
             echo "::error file=deploy.sh::deploy.sh is mode $mode in git, not 100755 — run: git update-index --chmod=+x deploy.sh"
             exit 1
           fi
-          # Counted with tr rather than grep: some greps hide a CR before
-          # the newline, which is exactly the byte being looked for.
           if [ "$(tr -cd '\r' < deploy.sh | wc -c)" -ne 0 ]; then
             echo "::error file=deploy.sh::deploy.sh has CRLF line endings"
             exit 1
@@ -126,9 +94,6 @@ jobs:
           }
           version="$(tr -d '[:space:]' < VERSION)"
 
-          # deploy.sh: --user 99:100 on a data folder that 99:100 owns, and a
-          # .env with the three settings it refuses to run without. A
-          # throwaway owner key, masked anyway so no log ever shows one.
           data="$RUNNER_TEMP/splitpage-data"
           mkdir -p "$data"
           sudo chown 99:100 "$data"
@@ -136,8 +101,6 @@ jobs:
           echo "::add-mask::$pin"
           printf 'JOIN_PIN=%s\nPERSIST_LINKS=1\nTRUST_PROXY=cloudflare\nALLOW_ORIGINS=splitpage://app\n' "$pin" > "$RUNNER_TEMP/ci.env"
 
-          # --health-interval only shortens the wait for the image's own
-          # HEALTHCHECK; the command it runs is the one in the Dockerfile.
           docker run -d --name splitpage-ci \
             --user 99:100 \
             -p 127.0.0.1:8791:8791 \
@@ -171,7 +134,6 @@ jobs:
           [ "$status" = healthy ] \
             || fail "the image's HEALTHCHECK says '$status': $(docker inspect -f '{{json .State.Health}}' splitpage-ci)"
 
-          # The owner signs in once per device, and a deploy must not undo it.
           token="$(curl -fsS -X POST -H 'content-type: application/json' \
                      --data "{\"pin\":\"$pin\"}" http://127.0.0.1:8791/api/join | jq -r '.token // empty')"
           [ -n "$token" ] || fail "POST /api/join with the owner key returned no token"

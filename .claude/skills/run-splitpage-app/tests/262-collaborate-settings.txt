@@ -1,18 +1,3 @@
-# Where Collaborate goes, and whose it is (13b-collaborate.js, 20s-settings
-# .js, 20e-connect.js): Settings ▸ Collaboration — the server address (the
-# built-in one until changed; typed without a scheme it is https), whether
-# this device is signed in there, and Sign out. A server that cannot be
-# reached says so in the dialog, plainly, with Change the address… taking
-# the owner straight to that field; a remembered sign-in the server no
-# longer takes is asked for again in the dialog, never by the PIN dialog or
-# the Servers dialog. A page the server itself served uses that server
-# whatever the setting says. Someone who is on a link, or joined to
-# comment, is told the item is the owner's. And the join-PIN dialog takes a
-# long key as well as six digits.
-#
-# `fetch` is replaced for every `api/` URL by the emulator 260 describes —
-# it answers for any server address. Every `eval` is one physical line.
-
 open /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 eval (function(){ window.F = window.__splitpageFormats; window.H = window.__hostedTest; window.K = window.__collabTest; window.ST = window.__settingsTest; window.__toasts = function(){ return Array.prototype.map.call(document.querySelectorAll('.toast'), function(t){ return t.textContent; }); }; return !!(F && H && K && ST); })()
@@ -20,7 +5,6 @@ expect true
 eval (function(){ var real = window.__realFetch || window.fetch.bind(window); window.__realFetch = real; window.__srv = { calls: [], down: false, health: { ok: true, version: 'test', authRequired: true, reviewAvailable: true, links: 1, linksPersist: true, blobs: 1 }, ownerKey: 'owner-key-7f3a9c1e5b2d8f4a6c0e1b3d5f7a9c2e', ownerToken: 'tok-owner-1', docs: {}, links: [], n: 0, meName: '', noPinLinks: false }; var ans = function(s, b){ return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var linkByKey = function(k){ return __srv.links.filter(function(l){ return l.key === k; })[0] || null; }; var who = function(t){ if (!t) return null; if (t === __srv.ownerToken) return { role: 'edit', scope: '' }; var l = __srv.links.filter(function(x){ return 'tok-' + x.key === t; })[0]; if (!l) return null; if (l.off) return 'off'; return { role: l.role, scope: l.docId }; }; window.__mkDoc = function(id, title){ __srv.docs[id] = { id: id, rev: 1, state: { title: title, rows: [{ id: 'r1', visualText: 'A wide shot', audioText: 'Hello from the server', imageRef: null }], comments: [] } }; return id; }; window.__mkLink = function(docId, role, key){ var l = { id: 'l' + (++__srv.n), role: role, key: key || ('k' + (++__srv.n) + 'x' + Math.random().toString(36).slice(2, 10)), docId: docId, createdAt: new Date().toISOString(), off: false }; __srv.links.push(l); return l; }; window.__active = function(docId){ return __srv.links.filter(function(l){ return l.docId === docId && !l.off; }).map(function(l){ return { id: l.id, role: l.role, key: l.key, createdAt: l.createdAt }; }); }; window.fetch = async function(url, opts){ var u = String(url); var i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var h = opts.headers || {}; var m = opts.method || 'GET'; var full = u.slice(i); var path = full.split('?')[0]; var body = null; try { body = opts.body && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; } var call = { m: m, path: path, origin: u.slice(0, i), token: h['x-splitpage-token'] || '', body: body, status: 0 }; __srv.calls.push(call); if (__srv.down) { call.status = 'offline'; throw new TypeError('Failed to fetch'); } var r = route(call, m, path, body); call.status = r.status; return r; }; function route(call, m, path, body){ var S2 = __srv; if (path === 'api/health') return ans(200, S2.health); if (path === 'api/join' && m === 'POST') { if (body && body.pin !== undefined) return body.pin === S2.ownerKey ? ans(200, { token: S2.ownerToken, role: 'edit' }) : ans(401, { error: 'bad-pin' }); var l = linkByKey(body && body.key); if (!l) return ans(401, { error: 'bad-pin' }); if (l.off) return ans(410, { error: 'link-off' }); return ans(200, { token: 'tok-' + l.key, role: l.role, docId: l.docId, scope: l.docId }); } var w = who(call.token); if (w === 'off') return ans(401, { error: 'link-off' }); if (!w && S2.health.authRequired) return ans(401, { error: 'pin-required' }); w = w || { role: 'edit', scope: '' }; if (path === 'api/me') return ans(200, { role: w.role, scope: w.scope, email: '', name: S2.meName }); if (path === 'api/presence') return ans(200, { docId: body && body.docId, rev: (S2.docs[body && body.docId] || {}).rev || 0, here: [] }); if (path === 'api/blobs/missing') return ans(200, { missing: [] }); if (path === 'api/docs' && m === 'POST') { if (w.scope) return ans(403, { error: 'owner-only' }); if (w.role === 'review') return ans(403, { error: 'review-only' }); var id = 'doc-' + (++S2.n); S2.docs[id] = { id: id, rev: 1, state: body.state }; return ans(201, { id: id, rev: 1 }); } if (path === 'api/docs' && m === 'GET') { if (w.scope) return ans(403, { error: 'owner-only' }); return ans(200, { docs: Object.keys(S2.docs).map(function(k){ return { id: k, title: S2.docs[k].state.title, rows: 1, rev: S2.docs[k].rev }; }) }); } var lm = /^api\/docs\/([^/]+)\/links(?:\/([^/]+))?$/.exec(path); if (lm) { if (w.scope || w.role === 'review') return ans(403, { error: 'owner-only' }); if (S2.noPinLinks) return ans(409, { error: 'no-pin' }); var did = decodeURIComponent(lm[1]); if (m === 'GET') return ans(200, { links: __active(did) }); if (m === 'POST') { var cur = S2.links.filter(function(l){ return l.docId === did && l.role === body.role && !l.off; })[0]; if (cur && !body.replace) return ans(200, { id: cur.id, role: cur.role, key: cur.key, createdAt: cur.createdAt }); if (cur) cur.off = true; var nl = __mkLink(did, body.role); return ans(201, { id: nl.id, role: nl.role, key: nl.key, createdAt: nl.createdAt }); } if (m === 'DELETE') { var dl = S2.links.filter(function(l){ return l.id === lm[2] && !l.off; })[0]; if (!dl) return ans(404, { error: 'no-such-link' }); dl.off = true; return ans(200, { ok: true }); } } var dm = /^api\/docs\/([^/]+)$/.exec(path); if (dm) { var d = decodeURIComponent(dm[1]); if (w.scope && w.scope !== d) return ans(403, { error: 'wrong-document' }); var doc = S2.docs[d]; if (!doc) return ans(404, { error: 'not-found' }); if (m === 'GET') return ans(200, { id: d, rev: doc.rev, state: doc.state }); if (m === 'PUT') { if (w.role === 'review') return ans(403, { error: 'review-only' }); doc.rev = doc.rev + 1; doc.state = body.state; return ans(200, { id: d, rev: doc.rev }); } } return ans(404, { error: 'not-found' }); } return true; })()
 expect typeof window.__srv === 'object'
 
-# --- Settings ▸ Collaboration: the built-in server, not signed in --------
 eval ST.open()
 wait ST.isOpen()
 expect Array.prototype.map.call(document.querySelectorAll('#settings-body .settings-section-title'), function(h){ return h.textContent; }).indexOf('Collaboration') !== -1
@@ -31,7 +15,6 @@ expect document.querySelector('[data-settings-action="collab-signout"]').disable
 eval (function(){ document.getElementById('settings-collab-server').scrollIntoView({ block: 'center' }); return true; })()
 shot 262-settings-collaboration
 
-# --- another address, typed the way people type one -----------------------
 eval (function(){ var i = document.getElementById('settings-collab-server'); i.value = 'collab.example.test'; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
 sleep 150
 expect localStorage.getItem('splitpage-collab-server') == https://collab.example.test/
@@ -39,7 +22,6 @@ expect K.readServer() == https://collab.example.test/
 expect document.getElementById('settings-collab-server').value == https://collab.example.test/
 expect document.querySelector('[data-settings-action="collab-default"]') !== null
 expect document.getElementById('menu-collaborate').title.indexOf('collab.example.test') !== -1
-# ...and something that is not a web address is refused, with the reason
 eval (function(){ var i = document.getElementById('settings-collab-server'); i.value = 'ftp://files.example.test'; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()
 sleep 150
 expect localStorage.getItem('splitpage-collab-server') == https://collab.example.test/
@@ -47,7 +29,6 @@ expect document.getElementById('settings-collab-server').value == https://collab
 wait __toasts().some(function(t){ return t.indexOf("That isn't a web address") === 0; })
 eval ST.close()
 
-# --- that server does not answer: said plainly, with the way to fix it ----
 eval (function(){ __srv.down = true; __srv.calls = []; return true; })()
 jsclick #btn-file
 jsclick #menu-collaborate
@@ -58,32 +39,27 @@ expect document.querySelector('#collab-body .collab-problem').textContent.indexO
 expect document.getElementById('collab-body').textContent.indexOf('Settings ▸ Collaboration') !== -1
 expect document.querySelector('#collab-foot [data-collab-action="settings"]').textContent == Change the address…
 expect document.querySelector('#collab-foot [data-collab-action="retry"]') !== null
-# nothing about the tab moved, and no PIN dialog, no Servers dialog
 expect H.conn().serverUrl === ''
 expect document.getElementById('pin-modal').hidden
 expect document.getElementById('connect-modal').hidden
 shot 262-collab-unreachable
 
-# Try again, once it answers: that server's own sign-in
 eval (function(){ __srv.down = false; __srv.calls = []; return true; })()
 jsclick #collab-foot [data-collab-action="retry"]
 wait K.step() === 'sign-in'
 expect __srv.calls.every(function(c){ return c.origin === 'https://collab.example.test/'; })
 expect document.querySelector('#collab-body .modal-hint').textContent.indexOf('collab.example.test') !== -1
 
-# Change the address… goes to the field itself
 jsclick #collab-foot [data-collab-action="settings"]
 wait ST.isOpen()
 expect !K.isOpen()
 expect document.activeElement.id == settings-collab-server
-# Use the default puts the built-in address back
 jsclick [data-settings-action="collab-default"]
 sleep 150
 expect localStorage.getItem('splitpage-collab-server') === null
 expect document.getElementById('settings-collab-server').value == https://script.bigmanonline.uk/
 eval ST.close()
 
-# --- signed in on this device: Settings says so, and Sign out forgets it --
 eval (function(){ localStorage.setItem('splitpage-server-tokens', JSON.stringify({ 'https://script.bigmanonline.uk/': 'tok-owner-1', 'http://other.example.test/': 'tok-other' })); return true; })()
 eval ST.open()
 wait ST.isOpen()
@@ -92,14 +68,12 @@ expect document.querySelector('[data-settings-action="collab-signout"]').disable
 jsclick [data-settings-action="collab-signout"]
 sleep 150
 expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))['https://script.bigmanonline.uk/'] === undefined
-# only that server's
 expect JSON.parse(localStorage.getItem('splitpage-server-tokens'))['http://other.example.test/'] == tok-other
 expect document.getElementById('settings-collab-signin').textContent == Not signed in on this device
 expect document.querySelector('[data-settings-action="collab-signout"]').disabled === true
 wait __toasts().some(function(t){ return t.indexOf('Signed out of script.bigmanonline.uk on this device.') === 0; })
 eval ST.close()
 
-# --- a sign-in the server no longer takes is asked for again, here -------
 eval (function(){ localStorage.setItem('splitpage-server-tokens', JSON.stringify({ 'https://script.bigmanonline.uk/': 'tok-stale' })); __srv.calls = []; return true; })()
 jsclick #btn-file
 jsclick #menu-collaborate
@@ -108,12 +82,10 @@ expect __srv.calls.map(function(c){ return c.path + ' ' + c.status; }).join(',')
 expect document.querySelector('#collab-body .collab-note').textContent.indexOf('has expired') !== -1
 expect (JSON.parse(localStorage.getItem('splitpage-server-tokens') || '{}'))['https://script.bigmanonline.uk/'] === undefined
 expect document.getElementById('pin-modal').hidden
-# a code that only lets you comment is not the owner key
 eval (function(){ __mkDoc('doc-r', 'Review me'); __mkLink('doc-r', 'review', 'justAReviewKey'); var i = document.getElementById('collab-key'); i.value = __srv.ownerKey + 'x'; return true; })()
 jsclick #collab-foot [data-collab-action="sign-in"]
 wait !document.getElementById('collab-error').hidden
 expect document.getElementById('collab-error').textContent == That isn't the owner key for script.bigmanonline.uk.
-# Remember off: signed in for this dialog, nothing kept on the device
 eval (function(){ document.getElementById('collab-key').value = __srv.ownerKey; document.getElementById('collab-remember').checked = false; return true; })()
 jsclick #collab-foot [data-collab-action="sign-in"]
 wait K.step() === 'confirm'
@@ -121,7 +93,6 @@ expect (JSON.parse(localStorage.getItem('splitpage-server-tokens') || '{}'))['ht
 jsclick #collab-foot [data-collab-action="close"]
 sleep 200
 
-# --- a page the server itself served collaborates there -------------------
 eval (async function(){ __srv.health.authRequired = false; await H.detect(); return H.serverMode().available; })()
 wait H.serverMode().available === true
 expect H.conn().serverUrl === ''
@@ -142,7 +113,6 @@ expect document.querySelector('#collab-body .collab-lead').textContent.indexOf(l
 jsclick #collab-foot [data-collab-action="close"]
 sleep 200
 
-# --- the join-PIN dialog takes a key as well as six digits -----------------
 eval (function(){ __srv.health.authRequired = true; return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="servers"]
@@ -167,7 +137,6 @@ expect __srv.calls[0].body.pin === __srv.ownerKey
 wait H.conn().serverUrl === 'https://pin.example.test/' && H.conn().hasToken
 eval (function(){ var m = document.getElementById('connect-modal'); if (!m.hidden) document.querySelector('#connect-modal [data-connect-action="close"]').click(); return true; })()
 
-# --- someone who joined to comment is told the item is the owner's -------
 eval H.setSession({ role: 'review', docId: 'doc-r' })
 jsclick #btn-file
 expect document.getElementById('menu-collaborate').disabled === true
@@ -179,7 +148,6 @@ eval (function(){ window.__before = __toasts().length; K.open(); return K.isOpen
 expect !K.isOpen()
 wait __toasts().some(function(t){ return t.indexOf("Only the script's owner can invite people.") === 0; })
 
-# --- and so is a guest on a link, with the library's items saying why -----
 eval H.setSession({ role: 'edit', docId: 'doc-r', scope: 'doc-r' })
 jsclick #btn-file
 expect document.getElementById('menu-collaborate').disabled === true
@@ -190,7 +158,6 @@ expect document.getElementById('menu-server-new').disabled === true
 expect document.querySelector('#menu-server-new .mi-why').textContent == Your link opens this one script
 shot 262-guest-menu
 jsclick #file-menu-close
-# the owner again: everything back
 eval H.setSession({ role: 'edit', docId: 'doc-r', scope: '' })
 jsclick #btn-file
 expect document.getElementById('menu-collaborate').disabled === false

@@ -1,24 +1,5 @@
-# Splitpage — the same image as ./Dockerfile, from files that are ALREADY
-# built.
-#
-#   docker build -f Dockerfile.prebuilt -t splitpage .
-#
-# This is the Dockerfile CI's `splitpage-app` artifact carries: unzip it and
-# that folder is the whole build context — index.html, sw.js, the manifest
-# and icons, VERSION, server/ and this file. No Node build step and no
-# dependencies: the app is static files and the server is plain Node.
-#
-# From a checkout of the repository use ./Dockerfile instead, which builds
-# index.html itself (DEPLOY.md). A checkout has no index.html until
-# `node build.mjs` runs (#80), so this file fails there on the COPY below —
-# the right answer: the alternative is an image serving an app nobody built.
-
 FROM node:22-alpine
 
-# Run as the image's built-in non-root user. If the container cannot write to
-# your data folder, that is almost always this: fix it by passing --user with
-# the folder's uid/gid (unRAID: --user 99:100) rather than by running as root
-# (see DEPLOY.md).
 ENV NODE_ENV=production \
     PORT=8791 \
     HOST=0.0.0.0 \
@@ -27,25 +8,15 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# The app the browser downloads. Kept in its own directory so STATIC_DIR can
-# never accidentally expose the server source or the data volume.
 COPY index.html manifest.webmanifest icon.svg icon-maskable.svg sw.js ./public/
-# server.js reads VERSION for /api/health, and finds it in STATIC_DIR/.. —
-# here, where it is not served as a file.
 COPY VERSION ./
-# server.js is CommonJS, and package.json beside it says so out loud — a
-# "type": "module" anywhere above it in a tree would otherwise stop it running.
 COPY server/ ./server/
 
-# /app stays root's: the server only reads it. /data is created so a quick
-# `docker run` with no -v still works for a smoke test.
 RUN mkdir -p /data && chown node:node /data
 
 USER node
 EXPOSE 8791
 
-# Plain HTTP check against the API. Uses node itself, so the image needs no
-# curl or wget.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD node -e "require('node:http').get({host:'127.0.0.1',port:process.env.PORT,path:'/api/health',timeout:4000},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 

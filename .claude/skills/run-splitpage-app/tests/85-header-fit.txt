@@ -48,10 +48,6 @@ sleep 800
 
 eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__atNow=function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); return true; }; W.__frames=function(n){ return new Promise(function(res){ var w=W.__w(); var k=function(){ if(--n<=0) res(true); else w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); }); }; W.__at=async function(w){ W.__atNow(w); await W.__frames(3); return true; }; W.__boxes=function(){ var d=W.__d(); var sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',search:'#btn-command',panels:'.btn-group',collab:'#btn-collab',write:'#btn-write',present:'#btn-present'}; var out=[]; Object.keys(sel).forEach(function(k){ var e=d.querySelector(sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__check=async function(w){ await W.__at(w); var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['file','title','save','search','panels','collab','write','present'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(!bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); W.__last=bad.length? w+': '+bad.join(', ') : ''; return W.__last; }; W.__title=function(t){ var i=W.__d().getElementById('doc-title'); i.value=t; i.dispatchEvent(new Event('input',{bubbles:true})); i.blur(); return true; }; W.__panel=function(id){ W.__d().getElementById(id).click(); return true; }; W.__hdr=function(){ var r=W.__d().querySelector('.topbar-row').getBoundingClientRect(); var f=W.__d().getElementById('btn-file').getBoundingClientRect(); return [Math.round(r.left),Math.round(r.height),Math.round(f.left)].join(','); }; return true; })()
 expect true
-# The labels close and open as an animation since PR #233 (266 measures
-# it); the widths here are read settled, so the iframe's motion tokens are
-# collapsed as reduced motion collapses them, and each width is read three
-# frames after the resize.
 eval (function(){ var s=window.__d().documentElement.style; ['--dur-press','--dur-fast','--dur-enter','--dur-exit','--dur-move'].forEach(function(t){ s.setProperty(t,'0.01ms'); }); return true; })()
 
 # =============================================================================
@@ -268,8 +264,7 @@ eval window.__at(761)
 expect Math.round(window.__d().getElementById('btn-command').getBoundingClientRect().width) == 32
 # its name is the whole phrase at every width
 expect window.__d().getElementById('btn-command').textContent.indexOf('Search or run a command') === 0
-# the panel toggles below 1300 (1250 until Collab joined the row, PR #233):
-# an icon and a count, the label still the name
+# the panel toggles below 1250: an icon and a count, the label still the name
 eval window.__at(1290)
 expect window.__d().querySelector('#btn-production .btn-label').getBoundingClientRect().width <= 1
 expect window.__d().getElementById('btn-production').textContent.indexOf('Production') === 0

@@ -62,10 +62,6 @@ test("a 409 is still \"conflict\" with the body as its payload, and a 200 is the
   assert.deepEqual(await apiFetch("api/docs/d"), { id: "d", rev: 5 });
 });
 
-/* Collaborate: a link's refusals each have a name of their own, because
-   each means something different from a lapsed sign-in ("auth", which
-   stashes and asks for a reload) and from a PIN to type ("pin"). Before
-   they were named, all three fell through to "auth". */
 test("a link's refusals: link-off, owner-only, wrong-document", async () => {
   answering(401, { error: "link-off" });
   assert.equal((await failureOf(apiFetch("api/docs/d", { method: "PUT", body: {} }))).code, "link-off");
@@ -77,14 +73,12 @@ test("a link's refusals: link-off, owner-only, wrong-document", async () => {
   assert.equal((await failureOf(apiFetch("api/docs", { method: "POST", body: {} }))).code, "owner-only");
   answering(403, { error: "wrong-document" });
   assert.equal((await failureOf(apiFetch("api/docs/other"))).code, "wrong-document");
-  /* the old names are untouched */
   answering(401, { error: "pin-required" });
   assert.equal((await failureOf(apiFetch("api/me"))).code, "pin");
   answering(403, { error: "review-only" });
   assert.equal((await failureOf(apiFetch("api/docs/d", { method: "PUT", body: {} }))).code, "review-only");
   answering(403, { error: "something-else" });
   assert.equal((await failureOf(apiFetch("api/me"))).code, "auth");
-  /* a 410 that is not about a link keeps its number */
   answering(410, { error: "gone" });
   assert.equal((await failureOf(apiFetch("api/docs/d"))).code, "410");
 });
@@ -103,7 +97,6 @@ test("asking another server: opts.base and opts.token, the tab's connection unto
   assert.equal(seen[0].credentials, "omit");
   assert.equal(seen[1].url, "https://script.example.com/api/me");
   assert.equal(seen[1].token, "owner-token");
-  /* and without them, this tab's own (same-origin, no token) as before */
   assert.equal(seen[2].url, "api/me");
   assert.equal(seen[2].token, "");
   assert.equal(seen[2].credentials, "same-origin");
