@@ -1,26 +1,4 @@
-/* publishToServer() (13-hosted.js) while the upload is in the air (#247, #248).
-
- * The POST carries a clone of the document taken BEFORE the await, and the
- * page is not locked while it travels: the progress bar does not stop
- * typing, and File ▸ Open, the server picker and New script all still work.
- * So what comes back is an answer about the document that was sent, and two
- * things it used to do regardless of what was on screen now:
- *
- *   #247  re-home the page onto the new server document, rebase it and mark
- *         it clean when the user had already opened ANOTHER document in this
- *         tab — B stayed on screen with A's server id as its home and its
- *         unsaved work marked saved, and its next save went to A's document.
- *   #248  mark the page clean when the user had typed more during the
- *         upload — the server holds the earlier snapshot, the editor said
- *         the newer text was saved, and clearDirty() had also cancelled the
- *         autosave that would have uploaded it.
- *
- * The network is a `fetch` this file replaces, whose POST answer is a
- * promise the test resolves by hand, so "during the upload" is a line of
- * the test rather than a race. No server, no page (there is no #rows here):
- * the document is a small state set on S directly, and the "other document"
- * is the same thing swapped in.
- */
+// publishToServer mid-upload (#247, #248): fetch's POST is resolved by hand
 import { dom } from "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -33,9 +11,7 @@ const { setBaseState, cloneState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
 const { setAutoSaveEnabled, autoSaveTiming } = await import("../js/14-export.js");
 
-/* The few elements the calls under test reach for by id: showToast()'s host
-   (nothing reads it back) and the header's file chip, which
-   updateFileChip() rewrites whenever a home changes. */
+// Elements showToast() and updateFileChip() reach for by id
 dom.window.document.body.innerHTML =
   '<div id="toast-host"></div>' +
   '<button id="menu-save-back"><span class="menu-item-label"></span></button>' +
@@ -52,8 +28,7 @@ function doc(docId, title, audio) {
   };
 }
 
-/* Every call the page makes, and a POST that stays in the air until the
-   test lets go of it. */
+// Records every call; the POST waits for postGate()
 let calls;
 let postGate;
 function stubServer() {
@@ -71,12 +46,9 @@ function stubServer() {
     return Promise.resolve(answer({}));
   };
 }
-/* Lets the awaits between publishToServer() and its POST run. */
 const flush = () => new Promise((r) => setImmediate(r));
 
-/* Timers the page sets (autosave, toasts) are recorded, never run: nothing
-   here may fire on its own later, and "an autosave was scheduled" is worth
-   asserting. */
+// Timers are recorded, never run, so "an autosave was scheduled" can be asserted
 let timers;
 function stubTimers() {
   timers = [];
@@ -126,8 +98,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   await flush();
   assert.equal(calls.filter((c) => c.method === "POST").length, 1);
 
-  /* The user opens document B in this tab — a local file — while A's POST
-     is still on its way. B has unsaved work of its own. */
+  // B (a local file with unsaved work) opened while A's POST is in flight
   const b = doc("doc-b", "B", "bee");
   S.state = b;
   const bHome = setHome("file", { handle: { name: "b.md" }, format: "md", name: "b.md" });
@@ -194,9 +165,7 @@ test("#247: a share link is not made for the document that replaced the one publ
   const p = publishAndCopyShareLink();
   await flush();
 
-  /* B is a server document, so onServerDoc() is true — the caller's own
-     "did it end up hosted" test cannot tell it from the one just published,
-     and home.id would be B's. */
+  // B is hosted, so the caller's onServerDoc() can't tell it from the published one
   const b = doc("doc-b", "B", "bee");
   S.state = b;
   setHome("server", { id: "server-b", rev: 3 });

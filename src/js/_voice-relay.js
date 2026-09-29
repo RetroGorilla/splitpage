@@ -1,34 +1,7 @@
-/* Follow My Voice relayed from the desktop app (issue #122).
- *
- * The browser half of Present in Browser's voice relay. When the desktop app
- * opens the teleprompter in a browser and has a listener of its own
- * (Windows' recogniser, desktop/voice-helper.js), it adds
- * `voice=<port>-<64 hex>` to the fragment it opens. 20-teleprompter.js reads
- * it with the rest of the launch and hands it here; from then on this tab's
- * Follow My Voice listens through the desktop app instead of the browser's
- * Web Speech API — so it works in any browser, Firefox included, and never
- * asks the browser for the microphone (the desktop app has it).
- *
- * The relay is an EventSource on the desktop's loopback listener
- * (desktop/prompter-share.js): opening it starts the listener, closing it
- * stops it. createRelayRecognition() wraps that in the shape of a Web Speech
- * recognizer — start(), stop(), onstart/onresult/onerror/onend, plus
- * onwarning — the same shape createDesktopRecognition() (20f-desktop.js)
- * gives the desktop tab, so the teleprompter's following code runs
- * unchanged on top of it. Events are the desktop helper's own
- * ({type, session, text|code|lang|…}); a type this file does not know is
- * handed on as `on<type>` with the event, so a new one the helper learns
- * reaches the teleprompter without a change here.
- *
- * The token is a secret like the script's: it came in the fragment, which
- * no server sees, and 20-teleprompter.js takes it out of the address bar.
- * Kept in sessionStorage for a reload, like the script token.
- */
-
 var RELAY_KEY = "splitpage-prompter-voice";
 var RELAY_RE = /^(\d{1,5})-([0-9a-f]{64})$/;
 
-var relay = null; /* {port, token} */
+var relay = null;
 
 function parseRelay(value) {
   var m = RELAY_RE.exec(String(value || ""));
@@ -38,8 +11,6 @@ function parseRelay(value) {
   return { port: port, token: m[2] };
 }
 
-/* The `voice=…` value from a launch's fragment (null to recall the one this
-   tab was given before a reload). */
 export function setVoiceRelay(value) {
   if (value == null) {
     var kept;
@@ -51,7 +22,7 @@ export function setVoiceRelay(value) {
   try {
     if (relay) sessionStorage.setItem(RELAY_KEY, value);
     else sessionStorage.removeItem(RELAY_KEY);
-  } catch (e) { /* no reload, that's all */ }
+  } catch (e) { }
   return !!relay;
 }
 
@@ -102,10 +73,7 @@ export function createRelayRecognition() {
       } else if (event.type === "error") {
         rec._fire("onerror", { error: event.code });
       } else if (event.type === "end") {
-        /* The desktop tab, or another browser tab, started listening: this
-           one is not coming back, and restarting would only take the
-           microphone back from it. "revoked": the desktop shared a newer
-           copy (or closed the tab) and this one's relay went with it. */
+        // Restarting would steal microphone back from the other tab
         if (event.reason === "taken" || event.reason === "restarted") rec._fire("onerror", { error: "taken" });
         else if (event.reason === "revoked" || event.reason === "quit") rec._fire("onerror", { error: "relay-lost" });
         rec._finish();
@@ -126,9 +94,7 @@ export function createRelayRecognition() {
       };
       source.onerror = function () {
         if (rec._source !== source) return;
-        /* An EventSource retries on its own; this one never should — the
-           desktop app closing, or refusing an expired link, is not
-           something a retry fixes, and a retry would restart a listener. */
+        // EventSource auto-retry must not restart a listener
         rec._fire("onerror", { error: "relay-lost" });
         rec._finish();
       };

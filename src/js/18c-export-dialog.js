@@ -14,32 +14,8 @@ import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
 import { writerOpen } from "./19-writer.js";
 
-/* ================= File ▸ Export… (issue #146) =================
-
-   One dialog in place of thirteen menu items. Formats are radio cards in
-   two groups — the whole script, or part of it — each with its name, what
-   it is for and its extension; the right-hand side shows what the chosen
-   one will make: a sketch of its first page, one line of what is in it, the
-   options the exporter already has (and only those), and the file name.
-
-   ONE CODE PATH. The dialog builds nothing. Every format's own action is
-   still a <button data-file-action="export-…"> in #file-menu (hidden, in
-   .menu-hidden-actions), and Export clicks that button — so what the dialog
-   makes is byte for byte what the old menu item made, the desktop native
-   menu's Export submenu still reaches the same buttons, and the command
-   menu (#147) lists each of them.
-
-   REMEMBERED PER DEVICE. The last format exported (by any route) is kept
-   under LAST_EXPORT_KEY in localStorage — never in the document, which
-   would make a preference about this machine travel with the script — and
-   the dialog opens on it; the File menu offers "Export again as …". */
-
 var LAST_EXPORT_KEY = "splitpage-last-export";
 
-/* The table the cards and options are built from. A format with `choices`
-   is one card whose options pick between actions; `action` is the
-   data-file-action its Export runs. `pictures` says whether the format
-   carries the scenes' pictures, for the summary line. */
 export var EXPORT_FORMATS = [
   { id: "pdf", group: "whole", name: "PDF", ext: ".pdf", icon: "i-file",
     purpose: "To print, or to send someone to read", action: "export-pdf", pictures: true, extras: true },
@@ -51,20 +27,12 @@ export var EXPORT_FORMATS = [
       { value: "stacked", label: "Stacked", action: "export-md" },
       { value: "table", label: "Two columns", action: "export-md-table" }
     ] },
-  /* Excel or CSV, the second click under the one card (Adam, 2026-09-28:
-     "a submenu/second click under the spreadsheet option"). Excel first,
-     so it is what a first visit gets: a workbook that opens laid out —
-     sized columns, wrapped text, a frozen header, room for notes. The CSV
-     stays, for the tools that want plain values. The card keeps its id,
-     "csv", so a device that last exported the CSV still opens on it. */
   { id: "csv", group: "whole", name: "Spreadsheet", ext: ".xlsx / .csv", icon: "i-file",
     purpose: "A row per scene, for Excel, Sheets or Numbers",
     option: "Format", choices: [
       { value: "xlsx", label: "Excel (.xlsx)", action: "export-xlsx" },
       { value: "csv", label: "CSV (.csv)", action: "export-csv" }
     ] },
-  /* SplitShare (Adam's name for it, 2026-09-26): the script with the whole
-     app built in, one file — what the card has to get across in a line */
   { id: "html", group: "whole", name: "SplitShare", ext: ".html", icon: "i-globe",
     purpose: "The script and the whole app in one file. Any device, nothing to install", action: "export-html", pictures: true },
   { id: "narration", group: "part", name: "Narration only", ext: ".docx / .txt", icon: "i-mic",
@@ -73,10 +41,6 @@ export var EXPORT_FORMATS = [
       { value: "docx", label: "Word (.docx)", action: "export-narration-docx" },
       { value: "txt", label: "Plain text (.txt)", action: "export-narration-txt" }
     ],
-    /* #167: a checkbox under the choices, kept per device — the exporter
-       reads the same preference, so the dialog still builds nothing
-       itself. Functions, not the key: they are there however the modules
-       happen to be evaluated. */
     toggle: { id: "directions", label: "Include stage directions",
               on: narrationIncludesDirections, set: setNarrationIncludesDirections } },
   { id: "breakdown", group: "part", name: "Breakdown", ext: ".xlsx / .csv", icon: "i-tag",
@@ -91,8 +55,6 @@ export var EXPORT_FORMATS = [
       { value: "gear", label: "Gear", action: "export-packing-gear" },
       { value: "prop", label: "Props", action: "export-packing-prop" }
     ] },
-  /* the b-roll page's own two files (#150), every shot by scene (Adam,
-     2026-09-26: the shot list as an export of its own) */
   { id: "broll", group: "part", name: "B-roll shot list", ext: ".pdf / .xlsx / .csv", icon: "i-camera",
     purpose: "Every shot, with props, flags and room for notes",
     option: "Format", choices: [
@@ -102,10 +64,6 @@ export var EXPORT_FORMATS = [
     ] }
 ];
 
-/* What each action is called on a button or in a list — "Export <this>",
-   "Export again as <this>", and the command menu's rows. With two
-   spreadsheets a card, each says which it is: "Export again as Excel" is
-   the workbook, "… as CSV" the plain one. */
 export var EXPORT_ACTION_NAMES = {
   "export-pdf": "PDF",
   "export-docx": "Word",
@@ -125,7 +83,6 @@ export var EXPORT_ACTION_NAMES = {
   "export-broll-csv": "B-roll shot list (.csv)"
 };
 
-/* buildFileData's kind for each action (18-local-files.js). */
 var ACTION_KINDS = {
   "export-pdf": "pdf", "export-docx": "docx", "export-md": "md", "export-md-table": "md-table",
   "export-xlsx": "xlsx", "export-csv": "csv", "export-html": "html", "export-narration-docx": "narration-docx",
@@ -146,13 +103,9 @@ export function lastExportAction() {
 
 export function rememberExport(action) {
   if (!isExportAction(action)) return;
-  try { localStorage.setItem(LAST_EXPORT_KEY, action); } catch (e) { /* storage full or blocked — the dialog still works, it just won't remember */ }
+  try { localStorage.setItem(LAST_EXPORT_KEY, action); } catch (e) { }
 }
 
-/* Why an export would not produce anything worth having, or "" when it
-   would. The same checks exportNarration()/exportPackingList() make before
-   they toast (18-local-files.js), asked before the click instead, so the
-   dialog and the command menu can say so on the item. */
 export function exportActionReason(action) {
   if (!S.state) return "Still loading…";
   if (action === "export-narration-docx" || action === "export-narration-txt") {
@@ -183,10 +136,8 @@ function formatForAction(action) {
   return null;
 }
 
-/* ---- the dialog's state ---- */
-
-var chosenFormat = null;          /* an EXPORT_FORMATS entry */
-var chosenChoice = {};            /* format id -> choice value */
+var chosenFormat = null;
+var chosenChoice = {};
 var returnFocusTo = null;
 
 function el(id) { return document.getElementById(id); }
@@ -244,25 +195,8 @@ function trunc(s, n) {
   return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
 }
 
-/* a stage direction as the file prints it, "(beat)" (#167) — or, for the
-   narration with them switched off, not at all */
 function cellText(html, n, opts) { return escapeHtml(trunc(toPlainText(cellOf(html), opts), n)); }
 
-/* ---- the page sketches ----
-
-   Each is the first page of what the format now makes (#169's look in
-   every export, DESIGN.md), small: the title block (the title and the
-   export's own meta line, exportMetaLine), the scene gutter — number,
-   start timecode, status lamp and word — the Read column (boxed when set
-   by hand), the tags in their category colours, the b-roll key as its
-   teal chip, and the open threads' numbers after their words, all read
-   off the same kit the writers read (14b-export-kit.js). The text formats
-   show their own first lines (toMarkdownDoc and toMarkdownTableDoc with a
-   scene limit), so the sketch cannot say one thing and the file another.
-   Escaped all the way — it is the document's text going into markup; a
-   colour is only ever a kit hex. */
-
-/* A cell's first `n` characters, drawn the way the script draws them. */
 function pvRuns(html, n, nums) {
   var out = "", left = n;
   var runs = exportRuns(html, nums);
@@ -290,9 +224,6 @@ function pvTitleBlock(title) {
 
 function pvLamp(id) { return '<i class="pv-lamp pv-lamp-' + escapeHtml(id) + '" aria-hidden="true"></i>'; }
 
-/* the packing list's status pill (packingPillOp, 17-pdf.js): four
-   segments, filled up to the item's level, the rest left to fill in; a
-   null id is the key's, all empty */
 function pvPill(id) {
   var ids = ["needed", "sourcing", "have", "returned"];
   var level = id === null ? -1 : Math.max(0, ids.indexOf(id));
@@ -300,9 +231,6 @@ function pvPill(id) {
     ids.map(function (x, i) { return '<i' + (i <= level ? ' class="is-on"' : '') + '></i>'; }).join("") + '</span>';
 }
 
-/* the script's length as the rundown strip draws it: a block a scene,
-   as wide as its read time, lit by its status, the target where it falls,
-   and under it how many scenes are at each status */
 function pvRundown(scenes, legend) {
   if (!scenes.length) return "";
   var facts = exportFacts();
@@ -317,9 +245,6 @@ function pvRundown(scenes, legend) {
     }).join("") + '</div>' : '<div class="pv-legend"></div>');
 }
 
-/* The script as the PDF and the Word file lay it out, and as the app
-   itself does (opts.app: no title block — the page's header has it): the
-   gutter, Visual and Audio under their coloured dots, the Read column. */
 function pvScript(title, opts) {
   var scenes = sceneFacts();
   var nums = commentNumbers();
@@ -341,13 +266,10 @@ function pvScript(title, opts) {
   return html;
 }
 
-/* the page's running footer, as the paged formats print it */
 function pvFooter(title, what) {
   return '<div class="pv-foot"><span>' + title + (what ? " — " + escapeHtml(what) : "") + '</span><span>Page 1</span></div>';
 }
 
-/* A text file's first lines, as they are: long ones cut short, Markdown's
-   own headings and quiet lines told apart the way an editor would. */
 function pvTextLines(text, n) {
   return '<div class="pv-mono">' + String(text).split("\n").slice(0, n).map(function (l) {
     var h = escapeHtml(trunc(l, 150)) || " ";
@@ -357,8 +279,6 @@ function pvTextLines(text, n) {
   }).join("\n") + '</div>';
 }
 
-/* `widths`: each column's share, as a sheet's narrow number columns and
-   wide text ones would be */
 function pvGrid(head, rows, widths) {
   return '<table class="pv-table pv-grid"><colgroup>' + widths.map(function (w) { return '<col style="width:' + w + '%">'; }).join("") +
     '</colgroup><tr class="pv-gh">' + head.map(function (c) { return '<td>' + escapeHtml(c) + '</td>'; }).join("") + '</tr>' +
@@ -367,9 +287,6 @@ function pvGrid(head, rows, widths) {
     }).join("") + '</table>';
 }
 
-/* the b-roll shot list (drawShotTable, 17-pdf.js), on its landscape page:
-   a row a shot, its box ticked once it is shot, the scene on a scene's
-   first shot, props, the flag and its reason, and room for notes */
 function pvShotList(title) {
   var groups = exportBrollScenes();
   var rows = [];
@@ -392,12 +309,6 @@ function pvShotList(title) {
     pvFooter(title, "B-roll shot list");
 }
 
-/* The sheets the whole-script workbook will have (buildScriptXlsx,
-   16b-xlsx.js): the script always, and a sheet for each part only when
-   the script has anything for it — asked of the same lists the builder
-   reads (exportComments, breakdownRows, and the shots brollTable lists,
-   which exportBrollScenes groups), so the tabs cannot promise a sheet the
-   file leaves out. */
 function xlsxSheetNames() {
   var names = ["Script"];
   if (exportComments().length) names.push("Comments");
@@ -406,10 +317,6 @@ function xlsxSheetNames() {
   return names;
 }
 
-/* An Excel file is the same grid as its CSV, dressed as the workbook it
-   opens as: the header row filled and ruled off (it is frozen, and filters
-   hang from it) and the sheet tabs along the bottom, the first one open —
-   only the sheets the file will really have. */
 function pvWorkbook(grid, sheets) {
   return '<div class="pv-xl">' + grid + '</div>' +
     '<div class="pv-sheets">' + sheets.map(function (s, i) {
@@ -439,7 +346,6 @@ function previewHtml(action) {
   if (action === "export-csv" || action === "export-xlsx") {
     var scenes = sceneFacts();
     var sheetHead = ["Scene", "Start", "Status", "Read", "Visual", "Audio"];
-    /* a few scenes, so the totals under them stay in sight */
     var sheetRows = rows.slice(0, 5).map(function (r, i) {
       var f = scenes[i];
       return { cells: [f.number, f.start, escapeHtml(f.status.label), f.read,
@@ -450,14 +356,11 @@ function previewHtml(action) {
                                  escapeHtml(exportFacts().runtime), "", ""] }
     ] : []);
     if (action === "export-csv") return pvGrid(sheetHead, sheetRows, [12, 12, 14, 10, 25, 27]);
-    /* the workbook's script sheet ends in a blank, ruled Notes column to
-       write in (scriptSheet, 16b-xlsx.js) — the room Adam asked for */
     return pvWorkbook(pvGrid(sheetHead.concat(["Notes"]), sheetRows.map(function (r) {
       return { cls: r.cls, cells: r.cells.concat([""]) };
     }), [12, 12, 14, 10, 18, 20, 14]), xlsxSheetNames());
   }
   if (action === "export-html") {
-    /* the page is the app, named for the script in the browser's tab */
     return '<div class="pv-app"><div class="pv-tabbar"><span class="pv-tab">' + title + ' — SplitShare</span></div>' +
       '<div class="pv-app-bar">Splitpage <span>' + title + '</span></div>' +
       '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }) + '</div></div>';
@@ -465,18 +368,14 @@ function previewHtml(action) {
   if (action === "export-narration-docx" || action === "export-narration-txt") {
     var paras = narrationRows().slice(0, 8);
     var txt = action === "export-narration-txt";
-    /* a sound cue (#219) is never in the narration */
     var said = narrationIncludesDirections() ? { cues: "omit" } : { directions: "omit", cues: "omit" };
     var numbers = sceneFacts();
     var words = String(exportFacts().words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    /* a text file's title is its first line, in the file's one font; the
-       .docx says what it is under its title */
     return (txt ? '<div class="pv-mono pv-md-h">' + title + '</div><br>'
       : '<div class="pv-title">' + title + '</div><div class="pv-meta">Narration · ' +
         escapeHtml(plural(narrationRows().length, "scene") + " · " + words + " words") + '</div>') +
       '<div class="' + (txt ? 'pv-mono' : 'pv-narr') + '">' +
       (paras.length ? paras.map(function (r) {
-        /* the .docx sets each paragraph's scene number in the margin */
         var n = txt ? "" : '<span class="pv-margin">' + numbers[S.state.rows.indexOf(r)].number + '</span>';
         return '<p class="pv-para">' + n + cellText(r.audioText, 180, said) + '</p>';
       }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
@@ -496,7 +395,6 @@ function previewHtml(action) {
     var cat = tagCategory(catId);
     var color = tagPrintColor(catId);
     var heading = cat ? cat.plural : catId;
-    /* the sheet lists them by name, and says what is in hand */
     var all = breakdownRows().filter(function (b) { return b.catId === catId; })
       .sort(function (a, b) { return a.name.localeCompare(b.name); });
     var list = all.slice(0, 12);
@@ -525,9 +423,6 @@ function previewHtml(action) {
   return "";
 }
 
-/* "6 items · 5 have it · 1 sourcing" — the packing list's own line under
-   its heading (buildPackingListPdf, 17-pdf.js): what is in hand, on its
-   way, still needed, gone back, the ones there are. */
 function packingSummary(items) {
   var n = {}, label = {};
   items.forEach(function (e) {
@@ -543,14 +438,10 @@ function packingSummary(items) {
 
 function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
-/* "a, b and c" */
 function listed(parts) {
   return parts.length < 2 ? parts.join("") : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
 }
 
-/* What the whole-script documents carry after the script (#169): only the
-   sections this script has anything for, as the files leave the others
-   out. */
 function tailSummary() {
   var parts = [];
   if (breakdownRows().length) parts.push("breakdown");
@@ -560,7 +451,6 @@ function tailSummary() {
   return parts.length ? listed(parts) + " at the end" : "";
 }
 
-/* One line of what the chosen export will hold. */
 export function exportSummary(action) {
   var f = formatForAction(action);
   if (!f || !S.state) return "";
@@ -573,8 +463,6 @@ export function exportSummary(action) {
       if ((S.state.comments || []).length) bits.push("comments below");
     } else if (action === "export-xlsx") {
       bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
-      /* where the CSV puts its comments below the scenes, the workbook
-         gives each part a sheet of its own */
       var more = xlsxSheetNames().slice(1).map(function (s) { return s.toLowerCase(); });
       if (more.length) bits.push((more.length === 1 ? "a sheet for " : "sheets for ") + listed(more));
       bits.push("a Notes column to write in");
@@ -593,8 +481,6 @@ export function exportSummary(action) {
     if (action === "export-html") bits.push("the whole app built in — read, edit and present it in any browser, on any device");
   } else if (f.format.id === "narration") {
     bits.push(plural(narrationRows().length, "scene") + " of narration");
-    /* the .docx sets each scene's number in the margin; the .txt stays
-       plain paragraphs, as the paragraph import reads it back */
     if (action === "export-narration-docx") bits.push("scene numbers in the margin");
     bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
       : "no visuals, stage directions, breakdown or comments");
@@ -606,7 +492,6 @@ export function exportSummary(action) {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
     var items = breakdownRows().filter(function (b) { return b.catId === catId; });
     bits.push(plural(items.length, "item") + " to pack");
-    /* what still has to be found before anything can go in the box */
     var missing = items.filter(function (b) { return b.status === "needed" || b.status === "sourcing"; }).length;
     if (missing) bits.push(missing + " not in hand yet");
   } else if (f.format.id === "broll") {
@@ -621,9 +506,6 @@ export function exportSummary(action) {
   return bits.join(" · ");
 }
 
-/* The name the export will get: exportFileName() is what buildFileData()
-   names it with, so this cannot say one thing and save another. A Markdown
-   export with pictures ships as a zip. */
 export function exportFileNameFor(action) {
   var kind = ACTION_KINDS[action];
   if (!kind || !S.state) return "";
@@ -635,7 +517,6 @@ function renderSide() {
   var action = chosenAction();
   if (!action) return;
   el("export-preview").innerHTML = previewHtml(action);
-  /* the shot list's sheet is landscape, so its sketch is too */
   el("export-preview").classList.toggle("is-landscape", action === "export-broll-pdf");
   el("export-summary").textContent = exportSummary(action);
   el("export-filename").textContent = exportFileNameFor(action);
@@ -647,7 +528,6 @@ function renderSide() {
   go.textContent = "Export " + EXPORT_ACTION_NAMES[action];
   go.disabled = !!why;
   go.setAttribute("data-export-action", action);
-  /* A card whose every option cannot work says so in place of its purpose. */
   EXPORT_FORMATS.forEach(function (f) {
     var card = document.querySelector('.export-card[data-format="' + f.id + '"]');
     if (!card) return;
@@ -671,8 +551,6 @@ function choose(formatId, focus) {
   renderSide();
 }
 
-/* ---- opening, closing, exporting ---- */
-
 export function exportDialogOpen() {
   var m = el("export-modal");
   return !!m && !m.hidden;
@@ -685,8 +563,6 @@ export function openExportDialog(opts) {
   if (!modal || !modal.hidden) return false;
   buildCards();
   returnFocusTo = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
-  /* Start on the format exported last on this device, with the option it
-     was exported with; a first visit starts on PDF. */
   var pick = formatForAction(opts.action || lastExportAction() || "export-pdf");
   if (pick && pick.choice) chosenChoice[pick.format.id] = pick.choice.value;
   modal.hidden = false;
@@ -703,8 +579,6 @@ export function closeExportDialog() {
   if (back && document.contains(back) && typeof back.focus === "function") back.focus();
 }
 
-/* Runs the action through its own File-menu button — the one code path
-   every route shares — after the dialog is out of the way. */
 export function runExportAction(action) {
   var btn = document.querySelector('#file-menu [data-file-action="' + action + '"]');
   if (!btn || btn.disabled) return false;
@@ -719,7 +593,6 @@ function exportChosen() {
   runExportAction(action);
 }
 
-/* File ▸ Export again as … — the remembered action, straight away. */
 export function exportAgain() {
   var action = lastExportAction();
   if (!action) { openExportDialog(); return; }
@@ -740,7 +613,6 @@ function refreshExportAgainItem() {
   setMenuItemReason(item, why);
 }
 
-/* Tab stays inside the dialog while it is open. */
 function trapTab(e) {
   var modal = el("export-modal");
   var focusables = Array.prototype.filter.call(
@@ -753,8 +625,6 @@ function trapTab(e) {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   var modal = el("export-modal");
   if (!modal) return;
@@ -772,13 +642,11 @@ export function __init() {
   modal.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeExportDialog(); }
     else if (e.key === "Tab") trapTab(e);
-    /* Enter on a card or an option is the same as pressing Export */
     else if (e.key === "Enter" && e.target.matches && e.target.matches('input[type="radio"]')) {
       e.preventDefault();
       exportChosen();
     }
   });
-  /* a click on the scrim, not the panel, closes it like the other dialogs */
   modal.addEventListener("click", function (e) { if (e.target === modal) closeExportDialog(); });
   el("export-close").addEventListener("click", closeExportDialog);
   el("export-cancel").addEventListener("click", closeExportDialog);
@@ -789,11 +657,6 @@ export function __init() {
   });
   onFileMenuRefresh(refreshExportAgainItem);
 
-  /* Ctrl/Cmd+E, in both builds: the desktop app's File ▸ Export… shows the
-     accelerator but does not register it (desktop/main.js), so the
-     keystroke reaches this listener there too and nothing fires twice. Not
-     over a dialog, the teleprompter or the writer — the same places Find's
-     Ctrl+F stays out of. */
   window.addEventListener("keydown", function (e) {
     if (e.defaultPrevented || e.isComposing) return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
@@ -805,10 +668,6 @@ export function __init() {
     else openExportDialog();
   });
 
-  /* ---- test hook ----
-     What the suites need that clicking cannot give them: the table the
-     cards are built from, and the remembered choice. Nothing in the app
-     reads this. */
   window.__exportTest = {
     formats: EXPORT_FORMATS,
     names: EXPORT_ACTION_NAMES,

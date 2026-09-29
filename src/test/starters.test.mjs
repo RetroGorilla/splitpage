@@ -1,18 +1,3 @@
-/* The New Tab page's starter scripts (src/starters/, _starters.js, #144).
- *
- * A starter opens as a new document built by migrateRows from a copy of
- * the file, so the file has to be what migrateRows would make of it
- * already: otherwise the first thing a starter does is change itself —
- * a tag re-registered, an id re-minted, a cell re-serialised — and every
- * one of those is an edit nobody made, on a document the desktop shell
- * treats as pristine. The b-roll list is the other reader that heals what
- * it finds (08c-broll.js): a "B-roll:" line with no record gets one on
- * the list's first read, so every record has to be there, carrying the
- * name and description that read would give it.
- *
- * And like seed-state.json, no starter may carry a docId: every document
- * opened from one has to be a document of its own (invariant #35).
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -40,16 +25,12 @@ for (const starter of STARTERS) {
 
   test(`${starter.id}: passes through migrateRows unchanged`, () => {
     const migrated = migrateRows(copy(doc));
-    /* The one thing migration adds: an identity of its own. */
     assert.match(migrated.docId, /^d[0-9a-f]{32}$/);
     delete migrated.docId;
     assert.deepEqual(migrated, doc);
   });
 
   test(`${starter.id}: has no missing STATE_FIELDS and no docId`, () => {
-    /* On the file itself, not on a migrated copy — a field the file lacks
-       would be one migrateRows adds, which the test above also catches,
-       but this names it. */
     assert.deepEqual(missingStateFields(doc), []);
     assert.equal("docId" in doc, false);
     const known = new Set(STATE_FIELDS.map((f) => f.key));
@@ -60,7 +41,6 @@ for (const starter of STARTERS) {
     const a = migrateRows(copy(doc));
     const b = migrateRows(copy(doc));
     assert.notEqual(a.docId, b.docId);
-    /* ...and neither reached back into the bundled original. */
     assert.equal("docId" in doc, false);
   });
 

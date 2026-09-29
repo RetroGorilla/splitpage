@@ -1,28 +1,3 @@
-/* desktop/test/voice-grace.test.mjs: the grace period on Follow My Voice's
- * no-signal and too-quiet warnings (issue #117), desktop/voice/listen.ps1's
- * SplitpageVoiceGrace, and (issue #134) SplitpageVoiceConsent's read of the
- * microphone consent store.
- *
- * The classes are C# inside listen.ps1's Add-Type block. This takes that
- * block out of the script, compiles it with Windows PowerShell's Add-Type
- * exactly as the listener does, and drives them directly: it never calls
- * SplitpageVoice.Start(), so no recogniser starts and no microphone is
- * opened (invariant #33). It also reads the default microphone's name the
- * way the listener does (issue #118), which asks Core Audio for a property
- * and does not open the device either. SplitpageVoiceConsent.Check() is
- * driven with a fake reader (a scriptblock cast to Func<string,string>)
- * built from each scenario's map of registry key to value, so it never
- * touches Microsoft.Win32.Registry either. What the real recogniser raises,
- * and what a real Privacy & security switch does, is
- * docs/WINDOWS-CHECKS.md §3, by hand.
- *
- * Windows only (System.Speech, powershell.exe): elsewhere it prints SKIP and
- * exits 0.
- *
- * Prints ALL PASS and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/voice-grace.test.mjs
- */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -40,9 +15,6 @@ if (process.platform !== "win32") {
   process.exit(0);
 }
 
-/* Each scenario is a list of [method, time, arg?] steps against a fresh
-   SplitpageVoiceGrace(0); one PowerShell run answers them all, one line of
-   results per scenario (null as "-"). */
 const scenarios = {
   silentStart: [
     ["Problem", 0, "no-signal"], ["Tick", 250], ["Tick", 1000], ["Tick", 2000],
@@ -75,10 +47,6 @@ const scenarios = {
   ]
 };
 
-/* SplitpageVoiceConsent.Check (issue #134): each scenario is a map of the
-   three registry keys it reads to "Allow"/"Deny"/missing, driven through a
-   fake reader (a PowerShell scriptblock cast to Func<string,string>) so
-   this never touches the real registry. */
 const consentScenarios = {
   allAllowed: { "hklm-all": "Allow", "hkcu-all": "Allow", "hkcu-desktop": "Allow" },
   neverSet: {},
@@ -123,8 +91,6 @@ fs.writeFileSync(psFile, [
   "}",
   "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false",
   "[Console]::Out.WriteLine('device:' + [SplitpageVoiceDevice]::DefaultCaptureName())",
-  // SplitpageVoiceConsent.Check(Func<string,string>) driven by a fake
-  // reader built from each scenario's map — never Microsoft.Win32.Registry.
   `$consentAll = [IO.File]::ReadAllText('${consentFile}') | ConvertFrom-Json`,
   "foreach ($map in $consentAll) {",
   "  $values = @{}",
@@ -156,7 +122,6 @@ const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
 
 test("staying silent after starting shows nothing for the whole grace period", () => {
-  /* the recogniser's NoSignal at once, then 2s, then to just short of 5s */
   assert.deepEqual(got.silentStart.slice(0, 5), ["-", "-", "-", "-", "-"]);
 });
 
@@ -194,7 +159,6 @@ test("the helper passes clear through to the page", () => {
 });
 
 test("the default microphone's name is read without starting anything (#118)", () => {
-  /* empty on a machine with no capture device; otherwise a name, trimmed */
   assert.ok(deviceLine.startsWith("device:"), deviceLine);
   const name = deviceLine.slice("device:".length);
   assert.equal(name, name.trim());

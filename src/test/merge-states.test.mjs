@@ -1,22 +1,3 @@
-/* mergeStates (03-sync.js) — the three-way merge every hosted save, every
- * crash-stash and every local-file merge goes through.
- *
- * Ported from tests/51-merge-fields.txt and the mergedDocId half of
- * tests/22-doc-id.txt, both of which drove this through
- * window.__splitpageFormats.mergeStates in a real browser for no reason
- * other than that there was no other way in (issue #67). It is a pure
- * function of three documents: nothing here needs a page, a file picker or
- * a server.
- *
- * The two issues this file exists to keep closed:
- *   #60  a top-level field left out of the merge is destroyed by it, on
- *        every merge, forever — see state-fields.test.mjs for the registry
- *        that makes that impossible and this file for the merge honouring
- *        it.
- *   #61  mergePeople/mergeProductionTags/mergeBrollShots used to union both
- *        sides without ever seeing `base`, so anything either side deleted
- *        was resurrected by the next merge, and the one after that.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -28,9 +9,6 @@ import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../js/0
 import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
 
-/* The fixture 51-merge-fields.txt used: one person, one prop, one b-roll
-   shot, one row, a non-default reading speed. Rebuilt per call — mergeStates
-   mutates nothing, but the cases below edit their own copies. */
 function mk() {
   return migrateRows({
     title: "M",
@@ -50,6 +28,7 @@ test("the fixture is what the delete cases assume", () => {
 });
 
 test("a person I deleted stays deleted", () => {
+  // Concurrent mark-sourced beats delete: the work survives
   const base = mk(), mine = mk(), theirs = mk();
   mine.people = [];
   assert.equal(mergeStates(base, mine, theirs).merged.people.length, 0);
@@ -74,8 +53,6 @@ test("a b-roll shot I deleted stays deleted", () => {
 });
 
 test("a delete never beats a real edit on the other side — tag", () => {
-  /* They marked the kettle sourced while I deleted it: the work survives,
-     the way the plain union always did. */
   const base = mk(), mine = mk(), theirs = mk();
   mine.productionTags = [];
   theirs.productionTags[0].status = "have";
@@ -103,7 +80,6 @@ test("additions still union", () => {
 });
 
 test("with no ancestor, nothing is a delete", () => {
-  /* A two-way merge cannot tell "removed" from "never had", so it unions. */
   const mine = mk(), theirs = mk();
   mine.people = [];
   assert.equal(mergeStates(null, mine, theirs).merged.people.length, 1);
@@ -118,25 +94,18 @@ test("wordsPerMinute follows whoever changed it", () => {
   theirs.wordsPerMinute = 200;
   assert.equal(mergeStates(base, mine, theirs).merged.wordsPerMinute, 200);
 
-  /* Both changed it — theirs is the published truth, the same rule a row
-     field follows. */
   base = mk(); mine = mk(); theirs = mk();
   mine.wordsPerMinute = 180;
   theirs.wordsPerMinute = 200;
   assert.equal(mergeStates(base, mine, theirs).merged.wordsPerMinute, 200);
 });
 
-/* ---- docId (the truth table 22-doc-id.txt asserted twice: once on
-   mergedDocId directly, once through the merge that calls it) ---------- */
-
 const ID_A = "d" + "1".repeat(32);
 const ID_B = "d" + "2".repeat(32);
 const ID_D = "d" + "4".repeat(32);
 
 test("a merge keeps the document's id rather than minting a fresh one", () => {
-  /* Without this the document came out of every server and stash merge with
-     a new random id, orphaning its whole history. Rows are identical on both
-     sides so only docId is in play. */
+  // docId must survive merges or history is orphaned
   const s = mk();
   const mine = cloneState(s), theirs = cloneState(s);
   mine.docId = ID_A;
@@ -147,9 +116,6 @@ test("a merge keeps the document's id rather than minting a fresh one", () => {
   base2.docId = ID_A; mine2.docId = ID_A; theirs2.docId = ID_D;
   assert.equal(mergeStates(base2, mine2, theirs2).merged.docId, ID_D);
 });
-
-/* ---- rows: what the browser suite never reached, and where the data
-   actually goes missing -------------------------------------------------- */
 
 function rowDoc(rows) {
   return migrateRows({ title: "R", rows: rows, schema: 2 });
@@ -182,14 +148,12 @@ test("both sides changed the same cell: theirs goes live, mine becomes a conflic
 });
 
 test("an edit outranks a delete, in both directions", () => {
-  /* They edited a row I deleted — their edit survives my delete. */
   const base = rowDoc([{ id: "r1", audioText: "one" }, { id: "r2", audioText: "two" }]);
   const mine = rowDoc([{ id: "r1", audioText: "one" }]);
   const theirs = rowDoc([{ id: "r1", audioText: "one" }, { id: "r2", audioText: "two, edited" }]);
   const kept = mergeStates(base, mine, theirs).merged.rows.map((r) => r.id);
   assert.deepEqual(kept, ["r1", "r2"]);
 
-  /* And a row I deleted that they never touched really goes. */
   const theirs2 = rowDoc([{ id: "r1", audioText: "one" }, { id: "r2", audioText: "two" }]);
   const gone = mergeStates(base, mine, theirs2).merged.rows.map((r) => r.id);
   assert.deepEqual(gone, ["r1"]);
@@ -209,7 +173,6 @@ test("a row I added lands back beside the neighbour it was added after", () => {
 });
 
 test("status is progress, not text: the furthest-along value wins", () => {
-  /* A merge can never un-shoot something somebody filmed. */
   const base = rowDoc([{ id: "r1", audioText: "one", status: "todo" }]);
   const mine = rowDoc([{ id: "r1", audioText: "one", status: "shot" }]);
   const theirs = rowDoc([{ id: "r1", audioText: "one", status: "ready" }]);
@@ -226,8 +189,6 @@ test("a title both sides changed is a conflict, not a silent overwrite", () => {
   const card = res.merged.comments.find((c) => c.conflictField === "Title");
   assert.ok(card, "my title survives as a conflict card");
   assert.equal(card.titleValue, "Mine");
-  /* A document-level card is anchored to no row at all (migrateRows leaves
-     rowId null for it rather than fabricating one). */
   assert.equal(card.rowId, null);
 });
 
@@ -237,8 +198,6 @@ test("a title only I changed is kept", () => {
   const theirs = rowDoc([]); theirs.title = "Base";
   assert.equal(mergeStates(base, mine, theirs).merged.title, "Mine");
 });
-
-/* ---- comments ---------------------------------------------------------- */
 
 function commentDoc(comments) {
   return migrateRows({
@@ -257,8 +216,7 @@ function cmt(extra) {
 }
 
 test("resolved is forward progress, whichever side is newer", () => {
-  /* An unrelated reply bumping updatedAt on one side used to silently
-     revert a resolve made earlier on the other. */
+  // Unrelated reply bumping updatedAt once reverted a resolve
   const base = commentDoc([cmt()]);
   const mine = commentDoc([cmt({ resolved: true, resolvedBy: "Sam", resolvedAt: "2026-01-02T00:00:00.000Z" })]);
   const theirs = commentDoc([cmt({ updatedAt: "2026-01-03T00:00:00.000Z", body: "look, edited" })]);
@@ -294,18 +252,13 @@ test("a comment I deleted and they replied to comes back; one nobody touched doe
   assert.equal(mergeStates(base, mine, untouched).merged.comments.filter((c) => c.id === "c1").length, 0);
 });
 
-/* ---- rev -------------------------------------------------------------- */
-
 test("rev is max of both sides plus one", () => {
   const base = mk(), mine = mk(), theirs = mk();
   mine.rev = 4; theirs.rev = 7;
   assert.equal(mergeStates(base, mine, theirs).merged.rev, 8);
 });
 
-/* ---- pictures (#82): merged by the sha their imageRef names ---- */
-
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
-/* a PNG header the registry accepts, one per (w, h) */
 function pic(w, h) {
   return intern(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
     ...be32(w), ...be32(h), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44]));
@@ -334,7 +287,6 @@ test("a picture only one side changed: that side wins, with no conflict", () => 
   assert.equal(theirsChanged.conflicts.length, 0);
   const removedByMe = mergeStates(imgDoc(a), imgDoc(null), imgDoc(a));
   assert.equal(removedByMe.merged.rows[0].imageRef, null);
-  /* the merged row's record is its own copy, not mine */
   const mine = imgDoc(b);
   assert.notEqual(mergeStates(imgDoc(a), mine, imgDoc(a)).merged.rows[0].imageRef, mine.rows[0].imageRef);
 });
@@ -348,13 +300,10 @@ test("both sides changed the picture: theirs is live, mine is a card holding it 
   assert.equal(card.field, "visualImage", "the comment's field keeps its old name");
   assert.equal(card.conflictField, "Visual image");
   assert.deepEqual(card.imageValue, b);
-  /* the body shows the same picture in the stored HTML form (#82 P6) */
   assert.equal(card.body, '<img class="comment-img" data-blob="' + b.sha256 + '" data-w="31" data-h="10" data-mime="image/png">');
   assert.equal(card.emptyValue, false);
-  /* and it survives the one door, and a second merge, as it is */
   const again = migrateRows(cloneState(res.merged));
   assert.deepEqual(again.comments.find((k) => k.id === card.id).imageValue, b);
-  /* I removed it while they replaced it: the card says so */
   const cleared = mergeStates(imgDoc(a), imgDoc(null), imgDoc(c)).merged.comments.find((k) => k.kind === "conflict");
   assert.equal(cleared.imageValue, null);
   assert.equal(cleared.body, "");
@@ -367,12 +316,11 @@ test("a stash carries the pictures the store does not hold, and they come back",
     ...be32(41), ...be32(10), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44])).toString("base64");
   const stash = { mine: imgDoc(b), blobs: { ["0".repeat(64)]: url } };
   acceptStash(stash, imgDoc(null));
-  /* interned under its REAL sha — the key it came under is not believed */
   assert.equal(stash.mine.rows[0].imageRef.sha256, b.sha256);
 });
 
 test("stashLocalWork writes refs, plus the bytes of every picture not durably stored", () => {
-  setBackend(createMemoryBackend()); /* memory is never durable */
+  setBackend(createMemoryBackend());
   const b = pic(60, 10), c = pic(61, 10);
   const was = { state: S.state, base: S.baseState };
   S.state = imgDoc(b);
@@ -411,12 +359,6 @@ test("one release: an older stash's \"__IMAGE__\" sentinels take theirs' picture
   void a;
 });
 
-/* ---- a script cell, a word at a time (#85, docs/DOCUMENT-MODEL.md §8) ----
-   Each side's cell is read into the document model through its own
-   registry and merged there: only the same words changed differently on
-   both sides are a conflict, and that conflict is exactly the old one —
-   theirs live, my whole cell on a card (design D3). */
-
 const span = (cat, name, text) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${text || name}</span>`;
 function cellDoc(audioText, productionTags) {
@@ -435,7 +377,6 @@ test("a word changed on each side of one cell: both words are kept, no conflict"
   assert.equal(res.merged.rows[0].audioText, "the dog sat on the rug");
   assert.equal(res.conflicts.length, 0);
   assert.equal(res.merged.comments.length, 0, "no Unmerged edit card");
-  /* my edit is in the row: it counts as mine, and the row is stamped */
   assert.equal(res.stats.rowsFromMe, 1);
   assert.equal(res.stats.rowsFromThem, 0);
 });
@@ -470,9 +411,6 @@ test("the same words changed differently on both sides: the conflict card, exact
 });
 
 test("a tag renamed on one side and the cell edited on the other: both, under the new name", () => {
-  /* A rename changes the registry entry's name and rewrites its spans'
-     data-tag-name (renameTag); the id stays. Read through each side's own
-     registry, the renamed cell is the same cell as base. */
   const base = cellDoc("Pour the " + span("prop", "Mug", "mug") + " out now");
   const id = base.productionTags[0].id;
   const renamed = cellDoc("Pour the " + span("prop", "Cup", "mug") + " out now",
@@ -498,12 +436,6 @@ test("a formatting change on one side and a text change on the other: both", () 
   assert.equal(res.stats.rowsFromMe, 1);
 });
 
-/* ---- a link or a tag both sides set differently ----
-   mergeCells keeps theirs on those characters and counts it in
-   markConflicts; that used to go nowhere, so my link or tag vanished
-   without a card. Now it is a conflict like any other: the merged cell
-   stays live (their link or tag, everything else combined), my whole cell
-   goes on the card (design D3). */
 const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
 
 test("both set a different link on the same word: the merged cell is live, a card holds mine", () => {
@@ -532,9 +464,7 @@ test("different links on one word and different words edited elsewhere: both wor
     "everything else merged; their link on the word both linked");
   assert.equal(res.conflicts.length, 1);
   assert.equal(res.merged.comments.find((c) => c.kind === "conflict").body, mine2.rows[0].audioText);
-  /* my words are in the live cell: the row counts as one I edited */
   assert.equal(res.stats.rowsFromMe, 1);
-  /* the cell-level answer the on-disk review reads */
   const ctx = textMergeContext(base, mine, theirs);
   const r = mergeTextField(base.rows[0].audioText, mine.rows[0].audioText, theirs.rows[0].audioText, ctx);
   assert.equal(r.outcome, "conflict");
@@ -549,8 +479,6 @@ test("both set a different tag on the same word: theirs is live, a card holds mi
   assert.equal(res.merged.rows[0].audioText, theirs.rows[0].audioText);
   assert.equal(res.conflicts.length, 1);
   assert.equal(res.merged.comments.find((c) => c.kind === "conflict").body, mine.rows[0].audioText);
-  /* both registry entries survive the merge, so "Use my version" can
-     restore my span and still find its item */
   assert.deepEqual(res.merged.productionTags.map((x) => x.name).sort(), ["Cup", "Mug"]);
 });
 
@@ -572,7 +500,6 @@ test("both set the same link on a word: no card, whatever else changed", () => {
   let res = mergeStates(base, mine, cloneState(mine));
   assert.equal(res.merged.rows[0].audioText, mine.rows[0].audioText);
   assert.equal(res.conflicts.length, 0);
-  /* the same link, and a word edited on their side too: still merges */
   const theirs = cellDoc("see the " + link("https://same.example/", "docs") + " for less");
   res = mergeStates(base, mine, theirs);
   assert.equal(res.merged.rows[0].audioText, theirs.rows[0].audioText);
@@ -608,33 +535,26 @@ test("formatting both sides toggled on the same word is never a conflict", () =>
 });
 
 test("a re-serialisation is not a change: the same content, nested differently", () => {
-  /* toHtml writes one nesting; the sanitiser keeps whatever it is given.
-     The first save of an old cell through the model changes its string,
-     not its content, and must never read as an edit. */
+  // Re-serialised nesting alone must never read as an edit
   const old = "<em><strong>x</strong></em> y";
   const canon = "<strong><em>x</em></strong> y";
   assert.notEqual(cellDoc(old).rows[0].audioText, cellDoc(canon).rows[0].audioText, "the fixture really differs as a string");
 
-  /* only re-serialised on my side, edited on theirs: theirs, not a conflict */
   let res = mergeStates(cellDoc(old), cellDoc(canon), cellDoc("<em><strong>x</strong></em> z"));
   assert.equal(res.merged.rows[0].audioText, "<em><strong>x</strong></em> z");
   assert.equal(res.conflicts.length, 0);
   assert.equal(res.stats.rowsFromMe, 0);
 
-  /* only re-serialised on my side, untouched on theirs: nothing of mine
-     to keep, and their string stays as it was */
   res = mergeStates(cellDoc(old), cellDoc(canon), cellDoc(old));
   assert.equal(res.merged.rows[0].audioText, old);
   assert.equal(res.stats.rowsFromMe, 0);
   assert.equal(res.stats.rowsFromThem, 0);
 
-  /* re-serialised on theirs, edited on mine: mine */
   res = mergeStates(cellDoc(old), cellDoc("<em><strong>x</strong></em> w"), cellDoc(canon));
   assert.equal(res.merged.rows[0].audioText, "<em><strong>x</strong></em> w");
   assert.equal(res.conflicts.length, 0);
   assert.equal(res.stats.rowsFromMe, 1);
 
-  /* with no ancestor at all, equal content is still no conflict */
   res = mergeStates(null, cellDoc(canon), cellDoc(old));
   assert.equal(res.conflicts.length, 0);
   assert.equal(res.merged.rows[0].audioText, old, "theirs' string is preferred");
@@ -648,16 +568,11 @@ test("mergeTextField names each outcome the way mergeRow acts on it", () => {
   assert.deepEqual(f("one two three", "one two three", "one two 3"), { html: "one two 3", outcome: "theirs" });
   assert.deepEqual(f("one two three", "1 two three", "one two 3"), { html: "1 two 3", outcome: "merged" });
   assert.deepEqual(f("one two three", "one 2 three", "one II three"), { html: "one II three", outcome: "conflict" });
-  /* both made the same edit: the same */
   assert.deepEqual(f("one two three", "one 2 three", "one 2 three"), { html: "one 2 three", outcome: "same" });
-  /* no ancestor: any real difference is a conflict */
   assert.equal(f(undefined, "one 2 three", "one two three").outcome, "conflict");
 });
 
 test("a cell holding a picture is compared whole, as a string — the model has no place for one", () => {
-  /* fromHtml leaves pictures out (design D7), so a merge through the model
-     would drop one; until they move to comments, such a cell merges the
-     old way. */
   const img = '<img class="comment-img" data-blob="' + "a".repeat(64) + '" data-w="1" data-h="1" data-mime="image/png">';
   const b = cellDoc("one two"), ctx = textMergeContext(b, b, b);
   assert.deepEqual(mergeTextField("one two", "one two " + img, "one two", ctx), { html: "one two " + img, outcome: "mine" });
@@ -665,11 +580,6 @@ test("a cell holding a picture is compared whole, as a string — the model has 
 });
 
 
-/* ---- a shot's hand-added props (#149) ----
-
-   A set, merged against the base: both sides' additions kept, a removal
-   kept unless the other side still had it untouched, and a side that never
-   saw the prop cannot bring back one the other took off. */
 function withProps(names) {
   const s = mk();
   s.productionTags.push({ cat: "prop", name: "Ladder", owner: "", notes: "", status: "needed" });

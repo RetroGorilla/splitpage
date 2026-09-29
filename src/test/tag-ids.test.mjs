@@ -1,8 +1,3 @@
-/* Registry ids (#85 step 2, docs/DOCUMENT-MODEL.md §3.1): every production
- * registry entry has an id, minted from its key, kept through a rename, and
- * the registry merges by it. The stored HTML still names a tag by category
- * and name (design D2); registryTagHooks() is how the document model turns
- * one into the other. */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -70,7 +65,6 @@ test("merge: a rename on one side and an assignment on the other are one item wi
   const mine = [entry("prop", "Coffee mug", { id })];
   const theirs = [entry("prop", "Mug", { id, owner: "p1", status: "have" })];
   assert.deepEqual(mergeProductionTags(base, mine, theirs), [{ id, cat: "prop", name: "Coffee mug", owner: "p1", notes: "", status: "have" }]);
-  /* both renamed, differently: theirs */
   assert.equal(mergeProductionTags(base, [entry("prop", "A", { id })], [entry("prop", "B", { id })])[0].name, "B");
 });
 
@@ -102,12 +96,9 @@ test("registryTagHooks: the document model names a tag by its registry id", () =
   const hooks = registryTagHooks(reg);
   const cell = fromHtml("the " + span("prop", "red MUG", "red mug"), hooks);
   assert.equal(cell[1].marks.tag, reg[0].id);
-  /* written back with the registry's name */
   assert.equal(toHtml(cell, hooks), "the " + span("prop", "Red mug", "red mug"));
-  /* a rename is the registry's alone: the same cell writes the new name */
   reg[0].name = "Coffee mug";
   assert.equal(toHtml(cell, registryTagHooks(reg)), "the " + span("prop", "Coffee mug", "red mug"));
-  /* a span with no entry keeps the model's own name for it */
   const loose = fromHtml(span("prop", "Lamp"), hooks);
   assert.equal(loose[0].marks.tag, "t:prop:Lamp");
   assert.equal(toHtml(loose, hooks), span("prop", "Lamp"));

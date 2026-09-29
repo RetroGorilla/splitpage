@@ -1,18 +1,3 @@
-/* The spreadsheet exports and the standalone page's head, in #169's look
- * (16-csv.js buildCsv and csvToRows, 08-production-panels.js
- * buildBreakdownCsv, 08d-broll-panel.js buildBrollCsv, 02b-doc-id.js
- * withPageHead), over the long demo (#215), which has a target, set read
- * times, every status, tags in every category, b-roll shot and not, and
- * open, resolved and assigned threads.
- *
- * The script's sheet says what the app shows round each scene — its start,
- * status, read time (and whether it was set by hand), its tags, its b-roll
- * and its open threads' numbers — and still reopens as exactly its scenes;
- * the breakdown and b-roll sheets only grow columns at their ends, so a
- * sheet built on the old positions still lines up. The Markdown exports
- * are markdown-table.test.mjs's; the saved .md project staying the same
- * bytes is formats.test.mjs's.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -33,7 +18,6 @@ initStatus();
 
 const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))); return S.state; };
 
-/* A sheet's rows, quoted fields and all, the way a spreadsheet reads them. */
 function sheet(text) {
   assert.equal(text.charCodeAt(0), 0xFEFF, "a BOM, so Excel reads UTF-8");
   const src = text.slice(1);
@@ -63,18 +47,14 @@ test("the script's sheet: a row per scene with its start, status, read time, tag
   assert.equal(scene(1)[5], toPlainText(cellOf(s.rows[0].visualText)));
   assert.equal(scene(1)[6], toPlainText(cellOf(s.rows[0].audioText)));
   assert.equal(scene(1)[7], "Prop: Pentax K1000; Location: workbench; Music/SFX: shutter click");
-  /* set by hand, as the app boxes it */
   assert.deepEqual(scene(2).slice(0, 5), ["02", "00:10", "Shot", "0:06", "yes"]);
   assert.deepEqual(scene(25).slice(0, 5), ["25", "08:14", "To do", "0:12", "yes"]);
   assert.equal(rows.slice(1, 31).filter((r) => r[4] === "yes").length, 2);
-  /* a category's items together, in the panel's order */
   assert.equal(scene(5)[7], "Prop: toothpick, light seal kit, naphtha; Gear: overhead rig");
   assert.equal(scene(21)[7], "", "nothing tagged in scene 21");
-  /* the b-roll shots and how far along each is */
   assert.equal(scene(4)[8], "fingertip pushing on the sticky old foam (shot)");
   assert.equal(scene(6)[8], "the toothpick lifting a long strand of goo (shot, flagged)");
   assert.equal(scene(22)[8], "feet on the gravel path, low angle (to shoot)");
-  /* the open threads' numbers, as the script's markers; the resolved one none */
   assert.deepEqual([3, 9, 18, 24].map((n) => scene(n)[9]), ["1", "", "2", "3"]);
   assert.deepEqual(scene(10).slice(0, 4), ["10", "02:48", "Ready", "0:38"]);
   assert.deepEqual(scene(13).slice(0, 4), ["13", "03:43", "To do", "0:45"]);
@@ -109,9 +89,6 @@ test("the new sheet reopens as exactly its scenes: no totals, no comments", () =
 });
 
 test("a sheet exported before #169's columns reopens as its scenes, its comments left out", () => {
-  /* the old shape exactly: Scene, Status, Est. time, Visual, Audio; an
-     unlabelled total; the comments block whose Author and Date columns sat
-     under Visual and Audio and used to come back as two more scenes */
   const old = "﻿" + [
     "Scene,Status,Est. time,Visual,Audio",
     '01,Shot,0:10,"Wide on the kettle.\nB-roll: steam",Hello there.',
@@ -173,8 +150,6 @@ test("the b-roll sheet: the scene's start after the columns it had", () => {
   assert.deepEqual(rows.slice(1).map((r) => r[10]), ["01:03", "01:50", "02:48", "04:28", "05:11", "05:56", "06:43", "07:25", "08:28"]);
 });
 
-/* ---- the standalone page's head ---- */
-
 const SHELL = '<!doctype html><html lang="en"><head>\n<meta charset="utf-8">\n<!-- an injected <script> is not a script -->\n' +
   "<title>Splitpage</title>\n" +
   '<meta name="description" content="A two-column visual/audio script editor with a built-in teleprompter reader.">\n' +
@@ -194,6 +169,5 @@ test("the page's head escapes the title, keeps a $& in it, and adds a descriptio
   const html = withPageHead(SHELL.replace(/<meta name="description"[^>]*>\n/, ""),
     { title: 'Ben & "Jerry" <3 $& $1', description: "a\nb" });
   assert.ok(html.includes("<title>Ben &amp; &quot;Jerry&quot; &lt;3 $&amp; $1</title>\n<meta name=\"description\" content=\"a b\">"), html);
-  /* no head options: exactly the page as it was */
   assert.equal(withPageHead(SHELL, {}), SHELL);
 });

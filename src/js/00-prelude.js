@@ -1,38 +1,18 @@
 import { S } from "./_state.js";
 
-/* Declared here, assigned in __init() below: these initialisers read the
-   DOM, read storage, or depend on another module's value, so they have to
-   run in fragment order rather than in whatever order the bundle lands in. */
 export var PAGE_SHELL;
 export var SpeechRecognitionCtor;
 
 S.state = null;
-/* Resolves once the boot state load in init() (21-events.js) has settled
-   `state` for the first time — the desktop-only race this exists for:
-   DESKTOP.onOpenFile() (20f-desktop.js) can fire as soon as it's
-   registered, which is well before loadInitialState()'s fetch resolves
-   when the app was launched by double-clicking a project file, and
-   without this, adoptProjectState() setting `state` to that file would
-   just get clobbered a moment later when the boot load finally resolves
-   and assigns the default/seed state over it. Stays null in the browser
-   build, where nothing reads it. */
+// Resolves after boot load; desktop onOpenFile can race it
 S.initialStateReady = null;
 export var SCHEMA_VERSION = 2;
 S.editSeq = 0;
 S.dirty = false;
 export var suppressUnloadWarning = false;
-/* Where the document lives — its project file, the foreign file it was
-   opened from, or the server — is `home` in _home.js (#73), which starts
-   out "none" without any module's __init() having to run. */
 S.deleteArmId = null;
 S.deleteArmTimer = null;
 
-/* ---- remembering the last project across launches ----
-   A FileSystemFileHandle can be structured-cloned straight into IndexedDB
-   (localStorage can't hold one) — that's what lets the app reopen the same
-   file on its own next time, not just re-show whatever was typed. Purely a
-   nicety: every call here is wrapped so a browser without IndexedDB, or one
-   that refuses it (some file:// contexts), just silently gets none of this. */
 var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
 
 function openHandleDb() {
@@ -47,14 +27,7 @@ function openHandleDb() {
 
 export async function rememberLastFileHandle(handle) {
   if (!handle) return;
-  /* Desktop persists what's open itself — the main process writes each
-     tab's document source into desktop-state.json on every source change
-     (splitpage:set-document-state) and restores whole sessions from it at
-     launch (TAB-BOOT-SYNC/DESKTOP-STATE-V2). There is nothing left for
-     this per-page, per-origin IndexedDB store to remember on desktop, and
-     (unlike splitpage://app, which is stable) it would be remembering the
-     wrong thing anyway: this file's real identity there is a path in
-     main's own registry, which this page is never handed (invariant #34). */
+  // Desktop main process persists open docs; skip page store
   if (S.DESKTOP) return;
   try {
     var db = await openHandleDb();
@@ -64,7 +37,7 @@ export async function rememberLastFileHandle(handle) {
       tx.oncomplete = resolve;
       tx.onerror = function () { reject(tx.error); };
     });
-  } catch (e) { /* not fatal — remembering is a nicety, not a requirement */ }
+  } catch (e) { }
 }
 
 export async function loadLastFileHandle() {
@@ -92,77 +65,31 @@ S.voiceFollowActive = false;
 S.voiceStarting = false;
 S.promptWords = [];
 S.wordCursor = -1;
-/* Matching runs over the *speakable* words only. promptWords holds every
-   token on screen, including ones that normalise to nothing — an em-dash
-   between two clauses, a lone ellipsis. Those are never said out loud, so
-   leaving them in the sequence being matched breaks the run of consecutive
-   hits right where a speaker crosses one, and the prompter stalls. These
-   two arrays are the same list with those tokens dropped: speakable[i] is
-   the promptWords index of the i-th speakable word. */
+// Speakable words only; unspoken tokens break match runs
 S.speakable = [];
 S.speakNorms = [];
 S.speakCursor = -1;
 S.voiceRestarts = 0;
-/* Bumped every time a listening session starts or stops. A queued restart
-   from a session that has since been stopped must not fire against the
-   recognizer belonging to the next one — that call would throw
-   InvalidStateError (it is already running) and kill a session the user
-   had only just restarted. */
+// Stale queued restarts must not fire on next session
 S.voiceSession = 0;
-/* One microphone stream, held open for as long as Follow My Voice is on.
-   Chrome ends a continuous recognition session by itself about once a
-   minute, and every restart after that is a fresh request for the
-   microphone — which re-prompts unless the page is already holding it.
-   Keeping this stream alive is what makes those restarts invisible. */
+// Held open so Chrome's auto-restarts don't re-prompt mic
 S.voiceStream = null;
 S.finalTranscript = "";
 S.interimTranscript = "";
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
-  /* The pristine served page, captured as literally the first thing this
-     script does — before any render() call or state mutation touches the
-     DOM. An inline classic <script> pauses the HTML parser while it runs,
-     so at this exact moment document.documentElement.outerHTML reflects
-     exactly what the server sent (everything up to and including this
-     script tag has been parsed; nothing after it has run yet to change
-     anything). This is what a save republishes from — see
-     buildPublishHtml() — so saving never needs to fetch this page's own
-     URL back (which even fails outright under file:// during testing) and
-     never risks the "serialize the live DOM" trap the platform warns
-     about, because this copy is taken before the DOM is live at all. */
+  // Must run before any render; captures pristine served HTML
   PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
-  /* The Google Fonts stylesheet ships as media="print" so a slow or
-     unreachable fonts.googleapis.com cannot stop this script from running
-     (see the comment on the <link> in page.html). Promoting it to the real
-     stylesheet once it has arrived used to be an inline onload= attribute;
-     the CSP (#65) blocks inline event handlers, so it happens here, from
-     the one script that policy trusts. Immediately after PAGE_SHELL is
-     captured, so the promotion never lands in a saved copy of the page —
-     the shell has to be the page as it was served. */
+  // CSP blocks inline onload; media=print keeps fonts non-blocking
   (function promoteFontCss() {
     var link = document.getElementById("font-css");
     if (!link) return;
-    /* `sheet` is set once the stylesheet has parsed, whatever its media. A
-       cached font stylesheet can be there already by the time this runs. */
     if (link.sheet) { link.media = "all"; return; }
     link.addEventListener("load", function () { link.media = "all"; });
   })();
 
-  /* The Electron bridge, when this page is running inside the desktop shell.
-     desktop/preload.js (a sibling project, not part of this build) defines
-     window.splitpageDesktop ONLY on documents loaded from the privileged
-     splitpage://app origin — never on a tunnelled remote page — so its mere
-     presence here is already the security check, not just a feature test.
-     Captured once, into a plain var rather than read from window each time,
-     so every gate in src/js reads the same snapshot and a test hook
-     (20f-desktop.js's window.__desktopTest) can swap it for a fake backend
-     without touching window.splitpageDesktop itself. Everything gated on
-     DESKTOP falls through to the exact same code the browser build always
-     ran when it is null — that is the whole contract this branch exists to
-     keep (see desktop/main.js and desktop/preload.js for the other half). */
+  // Bridge only exists on privileged origin; presence is the check
   S.DESKTOP = window.splitpageDesktop || null;
 
   SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;

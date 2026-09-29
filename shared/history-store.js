@@ -1,101 +1,4 @@
 "use strict";
-/* ---------------------------------------------------------------------
- * shared/history-store.js: the ONE version-history store (issue #83).
- *
- * Until #83 there were three: the browser's IndexedDB and memory backends
- * in src/js/03a-history-store.js, the desktop's folder tree in
- * desktop/main.js §8b, and a fake of the desktop bridge in
- * src/js/20f-desktop.js. shared/history-policy.js (#76) had already made
- * WHAT is kept one decision; this file makes HOW it is kept one piece of
- * code — put-if-absent, the stamp, the trim to 50, cap eviction, the quota
- * retry, the Older bucket's creation and expiry, holds, copy, and which
- * bodies may be deleted — over a small storage interface that each place
- * implements for itself (a memory backend is at the bottom of this file).
- *
- * CommonJS and PURE for the same reasons as history-policy.js (read its
- * header): the browser bundle, desktop/main.js and node --test all load
- * this file, so there is no clock, no hash, no timer, no global here. The
- * clock, the hash and the backend are handed in.
- *
- *   createHistoryStore({backend, now, hashText, capBytes, maxBodyBytes,
- *                       holds})
- *     backend       the storage interface below
- *     now()         → ms. The only clock this store reads.
- *     hashText(s)   → sha string of s's UTF-8 (or a promise of one). Run
- *                     BEFORE a transaction opens, never inside one.
- *     capBytes      a number, or (lastKnownTotalBytes|null) → number |
- *                   promise. Also read before a transaction opens; the
- *                   argument is the index total the store last saw (null
- *                   before its first read), which is what the browser's
- *                   storage.estimate() arithmetic needs. Not a finite
- *                   number ≥ 0 → no cap.
- *     maxBodyBytes  a put larger than this answers 'too-large' (default:
- *                   none; the desktop passes 256 MiB)
- *     holds()       optional → [{docId, id}] held from outside the store
- *                   (main's per-tab register). Unioned into EVERY eviction
- *                   with the store's own hold()s and the call's `protect`.
- *
- * ---- THE BACKEND INTERFACE ----
- *
- *   backend.name, backend.persistent, backend.readOnly (read at every call,
- *     so a backend may flip readOnly once it has read a newer FORMAT)
- *   backend.exclusive(fn, {write}) → promise of fn(tx)'s result, resolved
- *     only once the transaction's writes are durable/committed. Jobs never
- *     interleave. {write:false} is a hint that fn will not write.
- *   tx.list()            → {bucket: DocRecord}. The store NEVER mutates it
- *                          (a backend may hand out its cache).
- *   tx.get(sha)          → string | null (null = no such body)
- *   tx.put(sha, text)    idempotent; throws err.code 'quota' | 'enospc' |
- *                          'io' (or 'read-only')
- *   tx.commit(changes, droppedShas)
- *                        ONE atomic index write: changes = {bucket:
- *                        DocRecord | null}; droppedShas are bodies no index
- *                        entry names any more — the backend deletes them
- *                        once the new index is durable. At most once per tx.
- *
- *   DocRecord = {title, lastOpenedAt, migratedAt?, expiresAt?,
- *                snapshots: [SnapshotMeta + {sha}] oldest first}
- *
- *   THE RULE EVERY BACKEND AND EVERY LINE BELOW RELIES ON: inside
- *   exclusive(fn), fn awaits ONLY tx.* calls. That is IndexedDB's
- *   auto-commit rule — a transaction commits as soon as a task ends with no
- *   request pending, so awaiting a timer, a fetch, storage.estimate() or an
- *   async hash in the middle would commit half a job and fail the rest.
- *   That is why hashing and the cap are computed before exclusive() and
- *   passed in. The memory backend's strict mode enforces the rule in tests.
- *
- * ---- WHAT IT PROMISES ----
- *
- *   * Body before index (#52's ordering): a put writes its body (tx.put)
- *     before the commit that names it, and a body is dropped only in the
- *     commit that stops naming it. A crash between the two leaves an
- *     unnamed body (harmless), never a name with no body.
- *   * Bodies are content-addressed and SHARED: one body per sha, however
- *     many entries (in however many buckets) name it. Every capture still
- *     gets its own entry. A body is deletable only when no entry in any
- *     bucket names it — computed from the index, never counted.
- *   * copy() is index-only: it adds entries naming the same shas.
- *   * Totals are computed from the index (the sum of each entry's
- *     sizeBytes, the same sum the planner uses), never stored.
- *   * Writes (put, copy, touch, importOlder, evict) never reject; they
- *     answer a code. Reads (list, get, usage, listDocs) reject when the
- *     backend does, so a caller can tell "empty" from "could not read".
- *
- * The result shapes are the ones src/js/03a-history-store.js's backends
- * return, so its callers (03-sync.js, 20h-appdata.js, 02b-doc-id.js, the
- * history panel) do not change:
- *   put        {stored:true, evicted, overCap, duplicate?}
- *              | {stored:false, code, evicted?, overCap?}
- *   get        {meta, stateJson} | null
- *   list       {entries, older, olderExpiresAt}   (metas newest first,
- *                                                  each with its docId)
- *   copy       {ok, copied, code?}
- *   touch      undefined
- *   importOlder {ok, count, added, code?}
- *   usage      {totalBytes, capBytes, overCap, docCount, readOnly}
- *   listDocs   [{docId, title, lastOpenedAt}]      (Older excluded)
- *   evict      {evicted, overCap, totalBefore, totalAfter}
- * --------------------------------------------------------------------- */
 
 var policy = require("./history-policy.js");
 var DOC_ID_RE = require("./doc-id-policy.js").DOC_ID_RE;
@@ -123,7 +26,6 @@ function byAtDescending(a, b) {
   return (b.atMs - a.atMs) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 }
 
-/* A stored entry: the sanitized meta plus the sha of its body. */
 function entryOf(meta, sha) {
   var m = sanitizeHistoryMeta(meta);
   if (!m) return null;
@@ -131,8 +33,6 @@ function entryOf(meta, sha) {
   return m;
 }
 
-/* A fresh record the store may change: scalars copied, a NEW snapshots
-   array (the entries themselves are never mutated, only replaced). */
 function cloneRecord(rec) {
   var out = {};
   Object.keys(rec).forEach(function (k) { if (k !== "snapshots") out[k] = rec[k]; });
@@ -167,17 +67,12 @@ function totalOf(index) {
   return total;
 }
 
-/* A meta as the callers see it: sanitized (so the sha never leaves the
-   store) and carrying its bucket as docId, like 03a's backends did. */
 function publicMeta(entry, bucket) {
   var m = sanitizeHistoryMeta(entry);
   if (m) m.docId = bucket;
   return m;
 }
 
-/* The backend's error → one of the codes a caller understands. 'quota'
-   (a browser) and 'enospc' (a full disk) both mean "no room" and both take
-   the quota retry below. */
 function errorCode(e) {
   var c = e && e.code;
   if (c === "quota" || c === "enospc" || c === "io" || c === "read-only") return c;
@@ -187,8 +82,6 @@ function errorCode(e) {
 }
 function isNoRoom(code) { return code === "quota" || code === "enospc"; }
 
-/* [{docId, id}] from anywhere → the valid ones. docId is a BUCKET here
-   (a document, or HISTORY_OLDER_KEY), as the planner keys it. */
 function protectList(list, out, seen) {
   (Array.isArray(list) ? list : []).forEach(function (p) {
     if (!p || typeof p !== "object") return;
@@ -201,7 +94,6 @@ function protectList(list, out, seen) {
   return out;
 }
 
-/* Every sha an index names. `changes` overlays it when given. */
 function namedShas(index, changes) {
   var named = Object.create(null);
   var buckets = Object.keys(index || {});
@@ -213,12 +105,7 @@ function namedShas(index, changes) {
   return named;
 }
 
-/* The planner run over `index` with `changes` already applied, and its
-   deletes folded into those changes. → {changes, dropped, evicted,
-   overCap, totalBefore, totalAfter}. dropped = every sha the old index (or
-   this job's own puts) named that the new one does not: the unreferenced
-   bodies, and nothing else. Pure; mutates only records in `changes`, which
-   are the caller's own clones. */
+// Newest snapshot never dropped; shas dropped only if unreferenced anywhere.
 function planChanges(index, changes, capBytes, nowMs, protect, putShas) {
   var out = {};
   Object.keys(changes).forEach(function (b) { out[b] = changes[b]; });
@@ -247,8 +134,6 @@ function planChanges(index, changes, capBytes, nowMs, protect, putShas) {
     rec.snapshots = rec.snapshots.filter(function (s) { return !gone[b][s.id]; });
     out[b] = rec;
   });
-  /* A bucket left with nothing goes as a whole — an expired Older bucket in
-     particular, so a later migration starts a fresh 90 days. */
   Object.keys(out).forEach(function (b) {
     if (out[b] && !snapshotsOf(out[b]).length) out[b] = null;
   });
@@ -280,29 +165,21 @@ function createHistoryStore(opts) {
   var maxBodyBytes = Number(opts.maxBodyBytes) > 0 ? Number(opts.maxBodyBytes) : Infinity;
   var holdsProvider = typeof opts.holds === "function" ? opts.holds : null;
 
-  /* WHY quotaStuck (the desktop rule, #83). An eviction is committed before
-     the retry runs and cannot be undone. When the retry is refused too —
-     the disk or the origin's quota is genuinely full, not merely over OUR
-     cap — evicting again on the next capture would delete roughly one more
-     snapshot per capture while storing nothing. So after one failed
-     evict-and-retry, and ALSO when the eviction freed nothing (a retry then
-     cannot gain anything: the browser store used to retry anyway), later
-     no-room refusals answer at once until some write is stored again. Every
-     put still makes its first attempt, so space freed elsewhere is picked
-     up. */
+  // After failed evict-retry, stop evicting per capture.
   var quotaStuck = false;
   var lastTotal = null;
-  var ownHolds = Object.create(null);   /* bucket + "\n" + id → count */
+  // Keys are bucket + newline + id; holds nest.
+  var ownHolds = Object.create(null);
 
   function readOnly() { return !!backend.readOnly; }
 
+  // Inside fn await only tx.*; IndexedDB auto-commits otherwise.
   function run(write, fn) {
     return Promise.resolve().then(function () {
       return backend.exclusive(fn, { write: !!write });
     });
   }
 
-  /* tx.list(), remembering the total for the next capBytes() call. */
   function listIndex(tx) {
     return tx.list().then(function (index) {
       index = index || {};
@@ -311,7 +188,7 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* tx.commit(), then remember the total the committed index adds up to. */
+  // Body-before-index ordering: names never outlive their bodies.
   function commitAndNote(tx, index, changes, dropped) {
     return tx.commit(changes, dropped).then(function () {
       var next = {};
@@ -351,11 +228,6 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* ---- holds ----
-     ({docId?, older?, id}) → release(). A restore holds the snapshot it is
-     reading while its "Before restoring" backup is written; no eviction —
-     the quota retry, the over-cap pass, the trim, the expired-Older sweep —
-     deletes a held snapshot. Holds nest; a release runs at most once. */
   function hold(q) {
     q = q || {};
     var id = typeof q.id === "string" ? q.id : "";
@@ -371,9 +243,7 @@ function createHistoryStore(opts) {
     };
   }
 
-  /* ---- eviction ----
-     capFor(total) is evaluated INSIDE the transaction, from the index it
-     read, so it must be synchronous. */
+  // capFor runs inside tx; must stay synchronous.
   function evictWith(capFor, protect) {
     var held = allHolds(protect);
     if (readOnly()) {
@@ -394,7 +264,6 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* evict(cap?, {protect}) — cap omitted or null reads capBytes(). */
   function evict(cap, o) {
     var protect = o && o.protect;
     var capP = cap == null ? readCap(lastTotal) : Promise.resolve(typeof cap === "number" && cap >= 0 ? cap : Infinity);
@@ -405,14 +274,10 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* ---- put ---- */
-
   function putOnce(bucket, clean, stateJson, sha, size, cap, held) {
     return run(true, function (tx) {
       return listIndex(tx).then(function (index) {
         var rec = index[bucket] || null;
-        /* Idempotent: the same snapshot id twice is the retry of a write
-           whose answer was lost, never a second snapshot. */
         if (findEntry(rec, clean.id)) return { duplicate: true };
         var m = historyStampAfter(entryOf(clean, sha), newestAtMs(rec));
         m.sizeBytes = size;
@@ -425,10 +290,6 @@ function createHistoryStore(opts) {
           next.lastOpenedAt = t;
           var changes = {};
           changes[bucket] = next;
-          /* The trim to 50, the expired-Older sweep and the cap in the SAME
-             commit as the new entry: the planner never deletes a
-             document's newest snapshot, and the stamp above made this one
-             the newest. */
           var plan = planChanges(index, changes, cap, t, held, [sha]);
           return commitAndNote(tx, index, plan.changes, plan.dropped).then(function () {
             return { duplicate: false, evicted: plan.evicted, overCap: plan.overCap };
@@ -438,11 +299,6 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* put(docId, meta, stateJson, {protect, older})
-     {older:true} writes into the Older bucket instead (docId must then be
-     null or HISTORY_OLDER_KEY) with importOlder's rules: no stamp, the
-     bucket's 90 days set only when it is created. Without it, the Older
-     bucket cannot be named (invariant #38). */
   function put(docId, meta, stateJson, o) {
     o = o || {};
     var clean = sanitizeHistoryMeta(meta);
@@ -482,15 +338,11 @@ function createHistoryStore(opts) {
         var code = errorCode(e);
         if (!isNoRoom(code)) return { stored: false, code: code === "read-only" ? code : "io" };
         if (quotaStuck) return { stored: false, code: code, evicted: 0, overCap: true };
-        /* The retry's budget is the normal cap lowered by this snapshot's
-           size: evicting under the normal cap alone frees nothing when the
-           real disk or quota, not our cap, is what refused the write. */
         return evictWith(function (total) { return Math.min(cap, Math.max(0, total - size)); }, o.protect)
           .then(null, function () { return { evicted: 0 }; })
           .then(function (ev) {
             var evicted = ev.evicted || 0;
             if (!evicted) {
-              /* Nothing could be freed, so a retry cannot gain anything. */
               quotaStuck = true;
               return { stored: false, code: code, evicted: 0, overCap: true };
             }
@@ -506,12 +358,6 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* ---- reads ---- */
-
-  /* A missing body (a desktop file someone deleted) answers null and drops
-     every entry that names it — self-healing, no fsck. Re-checked inside
-     its own write job, because a put of the same content may have restored
-     the body since. */
   function healMissing(sha) {
     if (readOnly()) return Promise.resolve();
     return run(true, function (tx) {
@@ -533,10 +379,6 @@ function createHistoryStore(opts) {
     }).then(noop, noop);
   }
 
-  /* get(bucket, id) → {meta, stateJson} | null. bucket is a docId or
-     HISTORY_OLDER_KEY (the caller resolved {older:true}). An expired Older
-     bucket answers null: a restore must not reach a snapshot the panel has
-     already stopped showing. */
   function get(bucket, id) {
     if (!isBucket(bucket) || typeof id !== "string" || !HISTORY_SNAP_ID_RE.test(id)) return Promise.resolve(null);
     return run(false, function (tx) {
@@ -559,9 +401,6 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* list(docId|null) → {entries, older, olderExpiresAt}. An expired Older
-     bucket is reported empty and its delete queued behind this read (a read
-     does not write in its own transaction). */
   function list(docId) {
     var id = isDocId(docId) ? docId : null;
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
@@ -597,19 +436,12 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* The whole index as plain data — test hooks and export. */
   function rawIndex() {
     return run(false, function (tx) { return listIndex(tx); }).then(function (index) {
       return JSON.parse(JSON.stringify(index));
     });
   }
 
-  /* ---- copy, touch ---- */
-
-  /* copy(from, to, {protect}): idempotent union of from's entries into to,
-     ids kept (a second copy is a no-op), atMs kept (not new work). INDEX-
-     ONLY: the new entries name the same bodies. Sets to's lastOpenedAt, then
-     the same planner pass a put runs. */
   function copy(from, to, o) {
     if (!isDocId(from) || !isDocId(to)) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
     if (from === to) return Promise.resolve({ ok: true, copied: 0 });
@@ -619,8 +451,6 @@ function createHistoryStore(opts) {
       return run(true, function (tx) {
         return listIndex(tx).then(function (index) {
           var src = index[from] || null, dst = index[to] || null;
-          /* Nothing to copy and nothing already there: a copy of an empty
-             history must not conjure a record. */
           if (!snapshotsOf(src).length && !dst) return { ok: true, copied: 0 };
           var t = now();
           var next = dst ? cloneRecord(dst) : { title: "", lastOpenedAt: t, snapshots: [] };
@@ -649,8 +479,6 @@ function createHistoryStore(opts) {
     });
   }
 
-  /* Never creates a record: opening a document that has no history yet
-     must not leave an empty one behind for every file ever opened. */
   function touch(docId, title) {
     if (!isDocId(docId) || readOnly()) return Promise.resolve();
     return run(true, function (tx) {
@@ -668,16 +496,6 @@ function createHistoryStore(opts) {
     }).then(noop, noop);
   }
 
-  /* ---- the Older bucket ----
-     importOlder([{meta, stateJson}]) → {ok, count, added, code?}.
-     Put-if-absent by id; atMs kept (these are old already); no eviction of
-     its own (the next put's planner pass drains Older first when over the
-     cap). migratedAt/expiresAt are set only when the bucket is CREATED, so
-     re-running an interrupted migration never extends the 90 days. A bucket
-     that has already expired is treated as gone — its unheld entries are
-     dropped and a fresh 90 days starts — or the imported entries would be
-     hidden the moment they landed and a migration could never confirm
-     them. All or nothing: one commit. */
   function importOlder(entries) {
     if (!Array.isArray(entries)) return Promise.resolve({ ok: false, count: 0, added: 0, code: "invalid" });
     if (readOnly()) return Promise.resolve({ ok: false, count: 0, added: 0, code: "read-only" });
@@ -700,7 +518,6 @@ function createHistoryStore(opts) {
           var t = now();
           var rec = index[HISTORY_OLDER_KEY] || null;
           var expired = !!rec && historyOlderExpired(rec, t);
-          /* Nothing to add: no write at all (a dead bucket is the sweep's). */
           if (!clean.length) return { ok: true, count: rec && !expired ? snapshotsOf(rec).length : 0, added: 0 };
           var next = (rec && !expired) ? cloneRecord(rec) : {
             title: "", lastOpenedAt: 0, migratedAt: t, expiresAt: t + HISTORY_OLDER_TTL_MS,
@@ -715,7 +532,6 @@ function createHistoryStore(opts) {
             fresh.push({ entry: entryOf(e.meta, shas[i]), stateJson: e.stateJson });
           });
           if (!fresh.length && rec && !expired) return { ok: true, count: next.snapshots.length, added: 0 };
-          /* Bodies first, one tx.put after another, then the one commit. */
           var chain = Promise.resolve();
           fresh.forEach(function (f) {
             chain = chain.then(function () { return tx.put(f.entry.sha, f.stateJson); });
@@ -759,35 +575,6 @@ function createHistoryStore(opts) {
   };
 }
 
-/* ---------------------------------------------------------------------
- * The memory backend: the browser's fallback when IndexedDB cannot open,
- * the node test backend, and (step 3b) the body of 20f's fake desktop
- * bridge. Everything lives in this object and dies with it.
- *
- *   createMemoryHistoryBackend({name, persistent, readOnly, strict,
- *                               macrotask})
- *
- * Transactions are all-or-nothing, like IndexedDB's: tx.put and tx.commit
- * are staged and applied together only when fn resolves; a job that throws
- * leaves nothing behind.
- *
- * STRICT MODE (tests): {strict: true, macrotask: (cb) => setTimeout(cb, 0)}
- * makes a transaction behave like an IndexedDB one about going INACTIVE.
- * Each tx op settles on a later macrotask, and once a macrotask passes with
- * no op pending the transaction is finished — so a stray non-tx await
- * inside exclusive() (a timer, an async hash, storage.estimate) makes the
- * next tx op throw a TransactionInactiveError instead of passing a test the
- * real browser would fail. Strict mode also refuses writes in a
- * {write:false} job, freezes what tx.list() hands out (a store that mutated
- * the backend's records would throw), and throws rather than drop a body the
- * committed index still names. The macrotask is injected because this file
- * may name no global.
- *
- * Test helpers on the returned object: failNext(op, code, times),
- * clearFaults(), bodyCount(), hasBody(sha), inspect(), seed(index,
- * bodies), dropBody(sha), counts.
- * --------------------------------------------------------------------- */
-
 function deepFreeze(v) {
   if (v && typeof v === "object" && !Object.isFrozen(v)) {
     Object.freeze(v);
@@ -812,8 +599,8 @@ function createMemoryHistoryBackend(o) {
   if (strict && typeof macrotask !== "function") {
     throw new TypeError("createMemoryHistoryBackend: strict mode needs a macrotask(cb) scheduler");
   }
-  var index = Object.create(null);    /* bucket → frozen DocRecord */
-  var bodies = Object.create(null);   /* sha → text */
+  var index = Object.create(null);
+  var bodies = Object.create(null);
   var chain = Promise.resolve();
   var faults = { put: [], commit: [] };
   var counts = { exclusive: 0, put: 0, commit: 0 };
@@ -898,8 +685,6 @@ function createMemoryHistoryBackend(o) {
     return Promise.resolve().then(function () { return fn(tx); }).then(function (result) {
       done = true;
       active = false;
-      /* All or nothing: the staged bodies, the new index and the dropped
-         bodies land together. */
       var nextIndex = Object.create(null);
       Object.keys(index).forEach(function (b) { nextIndex[b] = index[b]; });
       if (staged) {
@@ -938,8 +723,6 @@ function createMemoryHistoryBackend(o) {
       return job;
     },
 
-    /* op: 'put' | 'commit'; code: 'quota' | 'enospc' | 'io' | …;
-       times: how many calls fail (Infinity for always). */
     failNext: function (op, code, times) {
       if (!faults[op]) throw new TypeError("failNext: unknown op " + op);
       faults[op].push({ code: code, times: times == null ? 1 : times });
@@ -947,15 +730,12 @@ function createMemoryHistoryBackend(o) {
     clearFaults: function () { faults.put = []; faults.commit = []; },
     bodyCount: function () { return Object.keys(bodies).length; },
     hasBody: function (sha) { return sha in bodies; },
-    /* a test's way to lose a body behind the store's back */
     dropBody: function (sha) { delete bodies[sha]; },
     inspect: function () {
       var b = {};
       Object.keys(bodies).forEach(function (sha) { b[sha] = bodies[sha]; });
       return { index: plainCopy(Object.assign({}, index)), bodies: b };
     },
-    /* Replace everything (a fixture: a legacy record with expiresAt 0, a
-       body gone missing, …). */
     seed: function (idx, bods) {
       index = Object.create(null);
       Object.keys(idx || {}).forEach(function (bucket) { index[bucket] = deepFreeze(plainCopy(idx[bucket])); });
