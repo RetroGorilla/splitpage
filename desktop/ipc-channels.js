@@ -22,6 +22,7 @@ const TYPES = {
   object: (v) => v !== null && typeof v === "object" && !Array.isArray(v),
   array: (v) => Array.isArray(v),
   null: (v) => v === null,
+  // Strings allowed here; handlers reject them where bytes are required
   bytes: (v) => typeof v === "string" || v instanceof ArrayBuffer || ArrayBuffer.isView(v),
   tabId: (v) => typeof v === "string" && TAB_OR_WINDOW_ID_RE.test(v),
   docId: (v) => typeof v === "string" && DOC_ID_RE.test(v),
@@ -33,6 +34,7 @@ const TYPES = {
 
 const NONE = [];
 
+// Single source: main validates, preload builds bridge
 const CHANNELS = [
   { name: "splitpage:ipc-table-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: BOTH, refusal: null },
 

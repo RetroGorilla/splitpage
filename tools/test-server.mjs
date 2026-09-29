@@ -81,6 +81,7 @@ async function json(res) {
   try { return await res.json(); } catch { return null; }
 }
 
+// Stalled body: any answer proves token checked before read.
 function refuseBeforeBody(base, pathname, method, headers) {
   return new Promise((resolve) => {
     const url = new URL(pathname, base);
@@ -178,6 +179,7 @@ try {
 
 const s2 = await startServer({
   JOIN_PIN: PIN,
+  // Deliberate: "null" must still be ignored.
   ALLOW_ORIGINS: ORIGIN + ",null",
   LAUNCH_TOKEN: LAUNCH,
   HOST: "127.0.0.1"
@@ -759,6 +761,7 @@ const s7 = await startServer({
 });
 
 try {
+  // Not named join: shadows node:path join imported above.
   const joinAs = async (payload) => json(await fetch(s7.base + "api/join", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -1575,6 +1578,7 @@ try {
   sCmtRO.stop();
 }
 
+// Fits two uploads charged 4096 minimum each, not three.
 const BLOB_BUDGET = 10000;
 const sBlob = await startServer({
   JOIN_PIN: PIN,

@@ -102,6 +102,7 @@ function placeRundownPresence() {
   var kids = blocksEl ? blocksEl.children : [];
   var min = strip.classList.contains("is-min");
   var trackW = layer.clientWidth || (blocksEl ? blocksEl.clientWidth : 0);
+  // Dot hides when lens slides its block off-track
   var edge = rundownEdge() || trackW;
   var dots = layer.children;
   var k = 0;

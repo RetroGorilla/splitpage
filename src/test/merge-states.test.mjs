@@ -28,6 +28,7 @@ test("the fixture is what the delete cases assume", () => {
 });
 
 test("a person I deleted stays deleted", () => {
+  // Concurrent mark-sourced beats delete: the work survives
   const base = mk(), mine = mk(), theirs = mk();
   mine.people = [];
   assert.equal(mergeStates(base, mine, theirs).merged.people.length, 0);
@@ -104,6 +105,7 @@ const ID_B = "d" + "2".repeat(32);
 const ID_D = "d" + "4".repeat(32);
 
 test("a merge keeps the document's id rather than minting a fresh one", () => {
+  // docId must survive merges or history is orphaned
   const s = mk();
   const mine = cloneState(s), theirs = cloneState(s);
   mine.docId = ID_A;
@@ -214,6 +216,7 @@ function cmt(extra) {
 }
 
 test("resolved is forward progress, whichever side is newer", () => {
+  // Unrelated reply bumping updatedAt once reverted a resolve
   const base = commentDoc([cmt()]);
   const mine = commentDoc([cmt({ resolved: true, resolvedBy: "Sam", resolvedAt: "2026-01-02T00:00:00.000Z" })]);
   const theirs = commentDoc([cmt({ updatedAt: "2026-01-03T00:00:00.000Z", body: "look, edited" })]);
@@ -532,6 +535,7 @@ test("formatting both sides toggled on the same word is never a conflict", () =>
 });
 
 test("a re-serialisation is not a change: the same content, nested differently", () => {
+  // Re-serialised nesting alone must never read as an edit
   const old = "<em><strong>x</strong></em> y";
   const canon = "<strong><em>x</em></strong> y";
   assert.notEqual(cellDoc(old).rows[0].audioText, cellDoc(canon).rows[0].audioText, "the fixture really differs as a string");

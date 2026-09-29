@@ -97,6 +97,7 @@ test("imageDims: JPEG from the first start-of-frame, orientation applied", () =>
   assert.deepEqual(imageDims(jpeg(JFIF, sof(0xc0, 800, 600))), { width: 800, height: 600 }, "baseline SOF0");
   assert.deepEqual(imageDims(jpeg(JFIF, sof(0xc1, 801, 601))), { width: 801, height: 601 }, "extended SOF1");
   assert.deepEqual(imageDims(jpeg(JFIF, sof(0xc2, 802, 602))), { width: 802, height: 602 }, "progressive SOF2");
+  // DHT (C4) is in the SOF range, not a frame
   const dht = [0xff, 0xc4, ...be16(4), 0, 0];
   assert.deepEqual(imageDims(jpeg(dht, sof(0xc0, 10, 20))), { width: 10, height: 20 });
   assert.deepEqual(imageDims(jpeg([0xff, 0xff], sof(0xc0, 10, 20))), { width: 10, height: 20 });
@@ -108,6 +109,7 @@ test("imageDims: JPEG from the first start-of-frame, orientation applied", () =>
   assert.equal(imageDims(jpeg(JFIF)), null);
   assert.equal(imageDims(jpeg(sof(0xc0, 0, 10))), null, "zero width");
   assert.equal(imageDims(jpeg(JFIF, sof(0xc0, 800, 600)).slice(0, 26)), null, "truncated frame header");
+  // Broken Exif is ignored, not fatal
   const badExif = [0xff, 0xe1, ...be16(10), ..."Exif\0\0".split("").map((c) => c.charCodeAt(0)), 0x4d, 0x4d];
   assert.deepEqual(imageDims(jpeg(badExif, sof(0xc0, 5, 7))), { width: 5, height: 7 });
 });

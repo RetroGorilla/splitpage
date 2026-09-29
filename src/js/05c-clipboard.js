@@ -45,6 +45,7 @@ export function clipboardOfCell(cell, opts) {
   return { html: html, text: text.replace(/\u00a0/g, " ") };
 }
 
+// Read from raw HTML; sanitiser drops the attribute
 export function cutNonceIn(html) {
   var m = new RegExp(CUT_ATTR + "\\s*=\\s*[\"']?([A-Za-z0-9]+)").exec(String(html == null ? "" : html));
   return m ? m[1] : null;
@@ -95,6 +96,7 @@ export function videoLinksInText(text) {
   return { text: /\S/.test(rest) ? t : "", links: links };
 }
 
+// Media extracted before fromHtml; model has no place for them
 function prepareHtml(html, opts) {
   opts = opts || {};
   var body = inertBody(html);
@@ -134,6 +136,7 @@ function prepareHtml(html, opts) {
   Array.prototype.forEach.call(body.querySelectorAll("style, script, template, noscript, title, meta, link"), function (el) {
     if (el.parentNode) el.parentNode.removeChild(el);
   });
+  // Trailing paragraph break dropped; pasted sentence gets no extra line
   var last = body.lastChild;
   while (last && (last.nodeType === 8 || (last.nodeType === 3 && !/\S/.test(last.nodeValue)))) {
     body.removeChild(last);
@@ -166,6 +169,7 @@ export function cellFromClipboard(html, text, opts) {
   return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
 }
 
+// Items added after existing ones, never over them
 export function attachToGallery(row, attach) {
   var out = { pictures: 0, videos: 0, links: [] };
   attach.forEach(function (item) {
@@ -296,6 +300,7 @@ export function pasteIntoCell(cellEl, html, text, extra) {
     var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
     var piece = got.text !== null ? got.cell
       : freshBrollIds(got.cell, brollIdsTaken(S.state, rowId, field, rest, got.fromCut)).cell;
+    // Visual column has no directions
     if (field === "visualText") piece = flattenDirections(piece);
     if (field === "visualText") piece = flattenCues(piece);
     var next = got.text !== null
@@ -303,6 +308,7 @@ export function pasteIntoCell(cellEl, html, text, extra) {
       : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));
     if (field === "visualText") recordPastedBroll(rowId, next, brollKeyIds(piece));
     var at = from + cellLength(next) - cellLength(rest);
+    // Comment move joins paste's undo entry
     var also = null;
     if (got.fromCut || attach.length) {
       also = function () {

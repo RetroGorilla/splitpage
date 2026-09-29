@@ -43,6 +43,7 @@ function localVersion() {
 }
 
 export function updateApiUrl() {
+  // Never read the API URL from the release manifest (#64).
   if (process.env.SPLITPAGE_UPDATE_API) return process.env.SPLITPAGE_UPDATE_API;
   return DEFAULT_API;
 }

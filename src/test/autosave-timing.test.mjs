@@ -8,10 +8,12 @@ test("a hosted document waits longer before autosaving than a local file", () =>
 });
 
 test("the local file path is unchanged at 2s", () => {
+  // Local and draft timing must not change (#70)
   assert.equal(autoSaveIdleFor("file"), 2000);
 });
 
 test("anything that is not the server gets the local timing", () => {
+  // Future targets must not inherit hosted wait by default
   assert.equal(autoSaveIdleFor(null), autoSaveTiming.idle);
   assert.equal(autoSaveIdleFor("draft"), autoSaveTiming.idle);
 });

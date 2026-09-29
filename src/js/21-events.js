@@ -297,6 +297,7 @@ import {
   draftRestorePending
 } from "./20g-drafts.js";
 
+// Allow-list: new actions must be vetted before reviewers reach them
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
   "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
@@ -373,6 +374,7 @@ export function onRootClick(e) {
     return;
   }
 
+  // Checked first: modifier-click wins over controls inside card
   var selCard = (e.ctrlKey || e.metaKey || e.shiftKey)
     ? e.target.closest("#production-list .tag-entity") : null;
   if (selCard && handleSelectionClick(e, selCard)) { e.preventDefault(); return; }
@@ -410,6 +412,7 @@ export function onRootClick(e) {
   var bulkPersonCancel = e.target.closest('[data-action="bulk-person-cancel"]');
   if (bulkPersonCancel) { S.tagAddingPersonFor = null; renderProduction(); return; }
 
+  // Before tag-expand: pill sits inside the expander head
   var tagStatusCycle = e.target.closest('[data-action="tag-status-cycle"]');
   if (tagStatusCycle) { setTagStatus(tagStatusCycle.getAttribute("data-key"), null); return; }
 
@@ -451,6 +454,7 @@ export function onRootClick(e) {
   var groupBtn = e.target.closest("#production-modes [data-group]");
   if (groupBtn) {
     S.productionGroupBy = groupBtn.getAttribute("data-group");
+    // Views without cards must not keep an invisible selection
     if (S.productionGroupBy !== "cat" && S.productionGroupBy !== "person") clearProductionSelection();
     renderProduction();
     return;
@@ -569,12 +573,14 @@ function refocusRowMenu(rowId) {
 
 function onRootMouseDown(e) {
   hideTagGhost();
+  // Draggable only while grip held; see dragRowId note
   var grip = e.target.closest('[data-action="drag-grip"]');
   if (grip) {
     var gripRow = grip.closest(".row");
     if (gripRow) gripRow.setAttribute("draggable", "true");
   }
   if (e.target.closest(".mini-toolbar button")) e.preventDefault();
+  // mousedown not click: focus shifts layout, retargeting the click
   var anchor = e.target.closest(".cmt-anchor");
   if (anchor) jumpToComment(anchor.getAttribute("data-cmt"));
 
@@ -606,6 +612,7 @@ function nearestScrollAncestor(el) {
   return document.scrollingElement || document.documentElement;
 }
 
+// Only for big paste/delete; native scroll handles typing
 function keepCaretInView(cellEl) {
   var sel = window.getSelection();
   if (!sel.rangeCount) return;
@@ -613,6 +620,7 @@ function keepCaretInView(cellEl) {
   if (!rect || (!rect.width && !rect.height)) rect = cellEl.getBoundingClientRect();
   var margin = 32;
   if (rect.top >= margin && rect.bottom <= window.innerHeight - margin) return;
+  // Scroll to caret, not element; scrollIntoView centres the cell
   var delta = (rect.top + rect.bottom) / 2 - window.innerHeight / 2;
   nearestScrollAncestor(cellEl).scrollBy({ top: delta, behavior: "smooth" });
 }
@@ -625,6 +633,7 @@ function isRedoKey(e) {
     (((e.key === "z" || e.key === "Z") && e.shiftKey) || ((e.key === "y" || e.key === "Y") && !e.shiftKey));
 }
 
+// Own text boxes keep the browser's undo
 function ownsItsUndo(el) {
   if (!el || el === document.body) return false;
   if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
@@ -646,6 +655,7 @@ function onUndoKey(e) {
   return true;
 }
 
+// Model edits are invisible to browser undo; key always taken
 function onDraftUndoKey(e, box) {
   if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return false;
   var redoing = isRedoKey(e);
@@ -717,6 +727,7 @@ function onUndoBeforeInput(e) {
   if (e.inputType === "historyRedo") redo(); else undo();
 }
 
+// Pending B/I/U typed via model; leave IME composition alone
 function onFormatBeforeInput(e) {
   if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
@@ -779,6 +790,7 @@ function onRootInput(e) {
   afterScriptCellChange(cellEl);
 }
 
+// Paste, drop, cut change cells without an input event
 function afterScriptCellChange(cellEl) {
   keepCaretInView(cellEl);
   scheduleProductionRefresh();
@@ -798,11 +810,13 @@ function onRootFocusOut(e) {
   S.untaggedMutedFor = null;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
+  // Cell about to be repainted; blur work would be lost
   if (S.undoApplying) return;
   var wrap = cellEl.closest(".field-wrap");
   var related = e.relatedTarget;
   if (wrap && related && wrap.contains(related)) return;
   var clean = sanitizeHtml(cellEl.innerHTML);
+  // Compare without hydrated src, or every blur re-decodes pictures
   if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
   syncFieldFromDom(cellEl);
   if (!S.undoApplying) anchorBrollInLeftCell(cellEl);
@@ -903,9 +917,11 @@ function onRootKeydown(e) {
   }
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
+  // Review cells are focusable but not editable; skip shortcuts
   if (reviewMode() && isScriptCell(cellEl)) return;
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   if (onUndoKey(e)) return;
+  // Tab priority (#210): open plain tag, then ghost, then prompt
   if (plainTagOpen(cellEl)) {
     if (e.key === "Tab") { e.preventDefault(); closePlainTag(); return; }
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); cancelPlainTag(); return; }
@@ -985,6 +1001,7 @@ function onRootDragEnd() {
   clearDropMarkers();
 }
 
+// types may be DOMStringList; iterate by index
 function isFileDrag(e) {
   var types = e.dataTransfer && e.dataTransfer.types;
   if (!types) return false;
@@ -1017,6 +1034,7 @@ function onRootDragOver(e) {
     setDropMarkerForRow(row, e.clientY);
     return;
   }
+  // preventDefault so drop fires; Chromium would insert raw HTML
   if (e.target.closest && e.target.closest(".cell-editable")) {
     e.preventDefault();
     try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
@@ -1066,6 +1084,7 @@ function onRootDrop(e) {
     var files = dt ? dt.files : null;
     if (!html && !text && !hasMediaFiles(files)) return;
     if (isScriptCell(cellEl) && reviewMode()) return;
+    // Drag never focused the cell; insertion needs a selection
     cellEl.focus();
     try {
       var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
@@ -1093,6 +1112,7 @@ function init() {
   var updateDismiss = document.getElementById("update-bar-dismiss");
   if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
 
+  // Outside loadUpdateStatus() chain: file:// and 404 never call back
   renderDesktopAppNotice();
   var desktopAppDismiss = document.getElementById("desktop-app-bar-dismiss");
   if (desktopAppDismiss) desktopAppDismiss.addEventListener("click", dismissDesktopAppNotice);
@@ -1115,6 +1135,7 @@ function init() {
 
   S.state = null;
   S.initialStateReady = loadInitialState().then(function (loaded) {
+    // applyMerge is sole baseState writer here (#96); base is loaded
     var applied = applyStashedWork(loaded, null, {
       newBase: function () { return cloneState(loaded); },
       report: false
@@ -1125,6 +1146,7 @@ function init() {
       render();
     }
     updateIdentityChip();
+    // Fresh load skips setSaveButtons(); seed first values here
     updateAutoSaveMenu();
     updateHideShotMenu();
     updateSaveStatus();
@@ -1135,14 +1157,17 @@ function init() {
       showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
     }
 
+    // Only untouched never-saved copy may resume remembered project
     if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
       if (!S.DESKTOP) tryResumeLastProject();
     }
     if (typeof syncDocIdentity === "function") syncDocIdentity();
     if (!S.DESKTOP) initDocIdentityChannel();
     if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+    // Not awaited: never rejects; key removed after confirmed copy
     startHistoryMigration();
   }).then(function () {
+    // Arm, detect, then restore: server drafts merge in resumeServerDoc
     if (!draftTaken) return;
     return draftTaken.then(function (t) {
       armServerDraftResume(t);
@@ -1178,6 +1203,7 @@ function init() {
   document.addEventListener("mouseup", function () {
     if (!S.dragRowId) clearDropMarkers();
   });
+  // On window: sticky header sits above #rows; gate on dragRowId
   window.addEventListener("dragover", function (e) {
     if (!S.dragRowId) return;
     if (e.target && e.target.closest && e.target.closest("#rundown:not(.is-min)")) { stopDragScroll(); return; }
@@ -1236,6 +1262,7 @@ function init() {
     if (!(e.ctrlKey || e.metaKey) || (e.key !== "f" && e.key !== "F")) return;
     if (!S.state) return;
     if (writerOpen) return;
+    // Ctrl+F under a modal would swallow keystrokes into hidden input
     if (document.querySelector(".modal-backdrop:not([hidden])")) return;
     e.preventDefault();
     if (findOpen) { document.getElementById("find-input").select(); }
@@ -1608,6 +1635,7 @@ function init() {
     finishMarkdownRowChoice("table");
   });
   window.addEventListener("keydown", function (e) {
+    // Esc means keep; never silently rebuild script from table
     if (e.key === "Escape" && !document.getElementById("md-rows-modal").hidden) {
       finishMarkdownRowChoice("keep");
     }
@@ -1676,6 +1704,7 @@ function init() {
   document.getElementById("pp-skip-shot").addEventListener("click", function (e) {
     S.prompterSkipShot = !S.prompterSkipShot;
     e.currentTarget.classList.toggle("is-active", S.prompterSkipShot);
+    // Rebuild resets read position; never mid-follow
     stopVoiceFollow();
     setPrompterPlaying(false);
     buildPrompterContent();
@@ -1728,6 +1757,7 @@ function init() {
   writerDocEl.addEventListener("keydown", onRootKeydown);
   writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
   writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
+  // Capture: Enter must become new scene before onRootKeydown
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);
   writerDocEl.addEventListener("focusin", function (e) {
     if (e.target.classList && e.target.classList.contains("wr-para")) {
@@ -1782,6 +1812,7 @@ function init() {
     closeWriter();
   });
 
+  // Old builds may write legacy shared key anytime
   window.addEventListener("storage", function (e) {
     if (e.key === SNAPSHOT_KEY && e.newValue) startHistoryMigration();
   });
@@ -1790,6 +1821,7 @@ function init() {
     if (S.dirty && !suppressUnloadWarning) { e.preventDefault(); e.returnValue = ""; }
   });
 
+  // splitpage://app is local; service worker would be dead weight
   if (!S.DESKTOP && "serviceWorker" in navigator && location.protocol !== "file:") {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("sw.js").catch(function () {});

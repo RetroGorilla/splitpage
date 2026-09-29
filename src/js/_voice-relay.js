@@ -73,6 +73,7 @@ export function createRelayRecognition() {
       } else if (event.type === "error") {
         rec._fire("onerror", { error: event.code });
       } else if (event.type === "end") {
+        // Restarting would steal microphone back from the other tab
         if (event.reason === "taken" || event.reason === "restarted") rec._fire("onerror", { error: "taken" });
         else if (event.reason === "revoked" || event.reason === "quit") rec._fire("onerror", { error: "relay-lost" });
         rec._finish();
@@ -93,6 +94,7 @@ export function createRelayRecognition() {
       };
       source.onerror = function () {
         if (rec._source !== source) return;
+        // EventSource auto-retry must not restart a listener
         rec._fire("onerror", { error: "relay-lost" });
         rec._finish();
       };

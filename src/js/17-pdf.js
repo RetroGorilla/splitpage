@@ -25,6 +25,7 @@ import { sniffImageMime } from "../../shared/blob-policy.js";
 var HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 var HELVB_W = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
 
+// Base-14 fonts are WinAnsi only
 var WINANSI_MAP = { "—": 151, "–": 150, "‘": 145, "’": 146, "“": 147, "”": 148, "…": 133, "•": 149, " ": 32 };
 
 function pdfEncodeChar(ch) {
@@ -353,6 +354,7 @@ var PDF_IMAGE_MAX_PX = 2000;
 
 function pdfJpegOf(pic) {
   if (!pic) return Promise.resolve(null);
+  // Use coded size; EXIF-rotated width/height would lie
   if (pic.mime === "image/jpeg") return Promise.resolve({ bytes: pic.bytes, size: jpegSize(pic.bytes) });
   return new Promise(function (resolve) {
     var url;
@@ -755,6 +757,7 @@ export function buildPdf(jpegs, commentJpegs) {
         var name = "Im" + (images.length + 1);
         images.push({ bytes: bytes, w: dim.w, h: dim.h, name: name });
         var natW = VW, natH = VW * dim.ratio;
+        // Cap so tall images fit a fresh page
         var maxH = PAGE_ROOM;
         if (!vLines.length && colHeight(aLines.length, AL) <= PAGE_ROOM) maxH = PAGE_ROOM - PIC_GAP - EMPTY;
         if (natH > maxH) { natW = natW * (maxH / natH); natH = maxH; }
@@ -826,6 +829,7 @@ export function buildPdf(jpegs, commentJpegs) {
 
     if (!vLines.length && !aLines.length) y = Math.min(vy - EMPTY, top - g.h);
 
+    // Tall scenes split across pages; overflow would vanish
     var vRest = vLines, aRest = aLines;
     var vCursor = vy, aCursor = top;
     var drewPic = vy !== top;
@@ -850,6 +854,7 @@ export function buildPdf(jpegs, commentJpegs) {
         if (onFirst) y = Math.min(y, top - g.h);
         break;
       }
+      // Picture-filled page may leave no room for text
       if (!vTake.length && !aTake.length && !drewPic) break;
       drewPic = false;
       onFirst = false;
@@ -1067,6 +1072,7 @@ export function buildPdf(jpegs, commentJpegs) {
         return false;
       }
 
+      // First line of a block sits SIZE lower than wraps
       var prevBlock = 0;
       ensureCommentRoom();
       threadLines.forEach(function (b) {
@@ -1138,6 +1144,7 @@ function listSheet(size) {
   return sheet;
 }
 
+// LF is not WinAnsi and would print as ?
 function listClean(s) {
   return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
 }

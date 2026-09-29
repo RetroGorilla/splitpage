@@ -32,6 +32,7 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
 
+// Assigned in __init(): initialisers need fragment order
 var TAG_SHORTCUT_CHARS;
 
 var TAG_ICON_PATHS = {
@@ -96,6 +97,7 @@ export function nextTagStatus(id) {
   return TAG_STATUSES[(tagStatusRank(id) + 1) % TAG_STATUSES.length].id;
 }
 
+// Cast and Music/SFX have no shortcut; no prose-safe characters remain
 var TAG_SHORTCUTS = [
   { open: "[", close: "]", cat: "prop" },
   { open: "{", close: "}", cat: "location" },
@@ -103,6 +105,7 @@ var TAG_SHORTCUTS = [
   { open: "<", close: ">", cat: "gear" }
 ];
 
+// Hand-rolled: brackets would need escaping in a regex
 function hasShortcutChar(s) {
   for (var i = 0; i < s.length; i++) {
     if (TAG_SHORTCUT_CHARS.indexOf(s.charAt(i)) !== -1) return true;
@@ -129,6 +132,7 @@ export function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
+// Keyed on content, not a version counter; never stale
 var MEMO_CHAR_BUDGET = 2000000;
 
 export function contentMemo(compute) {
@@ -146,6 +150,7 @@ export function contentMemo(compute) {
   };
 }
 
+// Assigned at eval on purpose: migrateRows runs without init
 export var tagsInField = contentMemo(function (html) {
   var out = [];
   var last = null;
@@ -241,6 +246,7 @@ export function mintTagId(cat, name, taken) {
   for (var n = 2; ; n++) if (!used[base + "-" + n]) return base + "-" + n;
 }
 
+// First holder of an id keeps it; duplicates reminted
 export function ensureTagIds(registry) {
   var seen = Object.create(null);
   var need = [];
@@ -307,6 +313,7 @@ export function findOrAddPerson(name) {
 
 export function deletePerson(id) {
   S.state.people = S.state.people.filter(function (p) { return p.id !== id; });
+  // Owned items go unassigned, not deleted
   S.state.productionTags.forEach(function (t) { if (t.owner === id) t.owner = ""; });
 }
 
@@ -338,6 +345,7 @@ function sameFieldTags(a, b) {
   return true;
 }
 
+// Slots per row: id, two texts, two tag lists
 var ROW_SIG_SLOTS = 5;
 
 function prodIndexFresh(ix) {
@@ -432,10 +440,12 @@ function productionIndex() {
   return prodIndex;
 }
 
+// Returns a copy; the entry objects inside are shared, read-only
 export function productionEntries() {
   return productionIndex().entries.slice();
 }
 
+// Must not mark the document dirty; the user changed nothing
 export function healTagRegistry() {
   if (!S.state) return 0;
   var ix = productionIndex();
@@ -455,6 +465,7 @@ export function healTagRegistry() {
   return n;
 }
 
+// A cue has no id; edits found by diffing names
 var cueSnapshot = null;
 
 var cueNamesInField = contentMemo(function (html) {
@@ -595,6 +606,7 @@ export function updateTagBadges() {
 var AUTO_TAG_MAX_LEN = 60;
 
 export function maybeAutoTagShortcut(e, cellEl) {
+  // Live typing only: never paste, undo or programmatic
   if (e.inputType !== "insertText" || !e.data) return;
   var typed = e.data.charAt(e.data.length - 1);
   var rule = null;
@@ -612,6 +624,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
 
   var openAt = node.data.lastIndexOf(rule.open, offset - 2);
   if (openAt === -1) return;
+  // Doubled opener is markdown emphasis, not a tag
   if (rule.open === rule.close && node.data.charAt(openAt - 1) === rule.open) return;
   var phrase = node.data.slice(openAt + 1, offset - 1);
   var trimmed = phrase.trim();
@@ -622,6 +635,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
   renderProduction();
 }
 
+// Does nothing when the model reads different words there
 function tagTextRange(cellEl, node, a, b, text, cat, name) {
   editCell(cellEl, function (cell) {
     var from = domToPos(cellEl, node, a), to = domToPos(cellEl, node, b);
@@ -725,7 +739,9 @@ function highlightApiOk() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
 
+// Longest name first so "gaffer tape" beats "tape"
 function buildUntaggedIndex(entries) {
+  // Null-prototype: tag names are document data, like "__proto__"
   var names = [], byName = Object.create(null);
   entries.forEach(function (e) {
     var n = (e.name || "").trim();
@@ -773,6 +789,7 @@ function collectUntaggedInCell(cellEl, index, out) {
     var m;
     while ((m = index.re.exec(text))) {
       var start = m.index, len = m[0].length;
+      // ASCII word test would undo the pattern's unicode boundaries
       if (!index.boundedInPattern) {
         var before = start === 0 ? "" : text.charAt(start - 1);
         var after = text.charAt(start + len);
@@ -801,6 +818,7 @@ function paintUntagged() {
 function scanUntaggedMentions(entries) {
   if (!S.state) return;
   untaggedList = [];
+  // #rows is stale behind the writer; scan paints unseen
   var index = writerOpen ? null : buildUntaggedIndex(entries || productionEntries());
   if (index) {
     var cells = document.querySelectorAll('#rows .visual-cell .cell-editable');
@@ -853,6 +871,7 @@ export function updateUntaggedPrompt() {
     '<kbd>Tab</kbd>';
   el.classList.add("is-visible");
   var w = el.offsetWidth, h = el.offsetHeight;
+  // Prompt sits below whole cell, not over next line
   var cellRect = cellEl.getBoundingClientRect();
   var top = cellRect.bottom + 6;
   if (top + h > window.innerHeight - 8) top = Math.max(8, cellRect.top - h - 6);
@@ -864,6 +883,7 @@ export function updateUntaggedPrompt() {
 export function acceptUntaggedMention() {
   var s = untaggedSuggestion;
   if (!s || !s.cellEl.isConnected) { hideUntaggedPrompt(); return false; }
+  // Live Range grows as typed; verify text before wrapping
   if (String(s.range) !== s.text) {
     hideUntaggedPrompt();
     scheduleUntaggedScan();
@@ -882,6 +902,7 @@ export function acceptUntaggedMention() {
 
 var TAG_WORD_CHAR_RE = /[\p{L}\p{N}]/u;
 
+// toLowerCase can lengthen strings and misalign offsets
 function foldCaseKeepLength(s) {
   var lower = s.toLowerCase();
   if (lower.length === s.length) return lower;
@@ -925,6 +946,7 @@ export function tagOccurrences(cell, phrase) {
   return out;
 }
 
+// Legacy media cells skip the model; use DOM path
 function holdsMedia(html) {
   return /<img[\s>]|video-embed-card/i.test(html || "");
 }

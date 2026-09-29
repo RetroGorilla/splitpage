@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { planHistoryEviction } from "../../shared/history-policy.js";
 
+// Canonical 32-hex doc id from a tag
 const did = (tag) => "d" + tag.repeat(16).slice(0, 32);
 const snap = (id, atMs, sizeBytes) => ({ id, atMs, sizeBytes });
 
@@ -23,6 +24,7 @@ test("(b) an expired Older bucket goes as a whole; an unexpired one is untouched
   }];
   assert.equal(planHistoryEviction(bucket(500), Infinity, 1000, {}).deletes.length, 2);
   assert.equal(planHistoryEviction(bucket(5000), Infinity, 1000, {}).deletes.length, 0);
+  // expiresAt 0 means no expiry, not expired
   assert.equal(planHistoryEviction(bucket(0), Infinity, 1000, {}).deletes.length, 0);
 });
 

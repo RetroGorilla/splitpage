@@ -274,6 +274,7 @@ export function normalizeImportedRows(rows) {
     }
     return {
       id: makeId(),
+      // Every write into state.rows must be sanitized
       visualText: sanitizeHtml(legacyMdToHtml(visual)),
       imageRef: importedImageRef(image),
       audioText: audioDirectionsHtml(sanitizeHtml(legacyMdToHtml(r.audioText || "")))
@@ -492,6 +493,7 @@ export function confirmImport() {
     if (replace && S.state.rows.length) pushSnapshot("Before replacing rows on import");
     S.state.rows = replace ? newRows : S.state.rows.concat(newRows);
   }
+  // Scans rewrite rows; must precede render
   var found = runImportScans(newRows);
   markDirty();
   render();
@@ -529,6 +531,7 @@ export function confirmGdocImport() {
       "folder, use File ▸ Open… to bring it in.", "ok", true);
     return;
   }
+  // Sever opener by hand; noopener makes open() return null
   var win = window.open(url, "_blank");
   if (!win) { showToast("Your browser blocked the download — allow popups for this page and try again.", "warn"); return; }
   win.opener = null;

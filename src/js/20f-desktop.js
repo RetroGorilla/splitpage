@@ -36,6 +36,7 @@ export function makeDesktopHandle(entry) {
         return new File([bytes], name, { lastModified: fresh.lastModified, type: mimeForFilename(name) });
       });
     },
+    // Buffer chunks; single atomic writeFile() on close()
     createWritable: function () {
       var chunks = [];
       return Promise.resolve({
@@ -349,6 +350,7 @@ export async function renderDesktopShareInfo() {
       '<p class="modal-hint">This code travels in the clear over plain HTTP — fine on your own ' +
       "network, not on a public one.</p>";
   } else {
+    // No PIN means authRequired:false: full access, say so
     pinHtml = '<p class="modal-hint connect-share-nopin">No PIN — anyone who can reach one of ' +
       "these addresses can open and edit this document.</p>";
   }
@@ -374,6 +376,7 @@ function wireReassignDocId() {
   if (!S.DESKTOP || typeof S.DESKTOP.onReassignDocId !== "function") return;
   S.DESKTOP.onReassignDocId(function (msg) {
     if (!msg) return;
+    // Report new id: reassignDocId doesn't dirty; main's claim stale
     if (reassignDocId(msg.toId, msg)) notifyDesktopDocumentState();
   });
 }
@@ -403,6 +406,7 @@ export function initDesktop() {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
       }).then(handedDocumentSettled);
     }
+    // Open event may arrive before boot load assigns state
     if (S.state) proceed();
     else if (S.initialStateReady) S.initialStateReady.then(proceed);
     else proceed();
@@ -443,6 +447,7 @@ export function initDesktop() {
   }).catch(function () {});
 }
 
+// Payload's server wins over tab's; wrong server misopens
 function adoptPayloadServer(payload) {
   if (typeof payload.serverUrl !== "string") return;
   var url = normalizeServerBase(payload.serverUrl);
@@ -472,6 +477,7 @@ function openPendingServerDocForTab(serverDocId) {
   function openIt() {
     if (typeof openServerDoc !== "function") { handedDocumentSettled(); return; }
     Promise.resolve(openServerDoc(serverDocId)).then(function (ok) {
+      // Stale remembered token only surfaces on this request
       if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); return; }
       handedDocumentSettled();
     }, handedDocumentSettled);
@@ -567,6 +573,7 @@ function makeFakeDesktopBackend(opts) {
   var flushHandler = null;
   var draftFailNext = null;
   function draftFail(code) {
+    // HELD is not a disk failure
     if (code !== "HELD" && code !== "NEED_BASE" && code !== "STALE_SEQ" && code !== "DISCARDED") draftStore.failures++;
     draftStore.base = null;
     return Promise.resolve({ ok: false, code: code });
@@ -633,6 +640,7 @@ function makeFakeDesktopBackend(opts) {
     onRestoreNotice: function (cb) { restoreNoticeHandler = cb; },
     onReassignDocId: function (cb) { reassignDocIdHandler = cb; },
     onMenuCommand: function (cb) { menuHandler = cb; },
+    // Stored so tests can read back what was reported
     setDocumentState: function (s) { this._lastDocState = s; },
     getSessionInfo: function () {
       return Promise.resolve({ library: false, hosting: false, port: null, lanUrls: [], pin: "" });
@@ -714,6 +722,7 @@ function makeFakeDesktopBackend(opts) {
     },
     _text: function (id) { return new TextDecoder().decode(files[id].bytes); },
     _touch: function (id) { if (files[id]) files[id].lastModified = Date.now() + (nextId++); },
+    // Simulates sync client rewriting bytes, mtime unchanged
     _setBytesKeepMtime: function (id, text) { if (files[id]) files[id].bytes = strBytes(text); },
     _fireOpenFile: function (id) {
       var f = files[id];

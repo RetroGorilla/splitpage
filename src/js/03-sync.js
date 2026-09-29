@@ -78,6 +78,7 @@ export function readLegacySnapshotsRaw() {
   } catch (e) { return null; }
 }
 
+// Must capture synchronously; callers mutate state on next line
 export function pushSnapshot(label, snapshotState) {
   return captureSnapshot(label, snapshotState || S.state, { allowSeedSkip: !snapshotState });
 }
@@ -85,6 +86,7 @@ export function pushSnapshot(label, snapshotState) {
 var restoreInFlight = false;
 var RESTORE_BACKUP_ATTEMPTS = 3;
 
+// Order: store "Before restoring" backup first; autosave overwrites file
 async function restoreSnapshot(id, opts) {
   opts = opts || {};
   if (restoreInFlight) return "busy";
@@ -117,6 +119,7 @@ async function restoreSnapshot(id, opts) {
     }
     if (!stored && !opts.force) return "no-backup";
 
+    // Not migrateRows: restore must keep the document's identity
     adoptRestoredState(parsed);
     resetProductionPanelState();
     markDirty();
@@ -131,6 +134,7 @@ async function restoreSnapshot(id, opts) {
   }
 }
 
+// Armed key remembered, not element; history writes rebuild buttons
 var RESTORE_ARM_MS = 4000;
 var RESTORE_LABEL = "Restore this version";
 var RESTORE_OLDER_LABEL = "Restore";
@@ -204,8 +208,10 @@ export function byId(list) {
 
 export var ROW_FIELDS = ["visualText", "imageRef", "audioText", "imageLinks", "moreImages"];
 
+// Merged as sets, never a conflict
 export var GALLERY_FIELDS = { imageLinks: true, moreImages: true };
 
+// Compare pictures by sha; records are never ===
 export function rowFieldKey(row, f) {
   if (!row) return null;
   if (GALLERY_FIELDS[f]) return galleryFieldKey(row, f);
@@ -226,6 +232,7 @@ function setLengthOf(row) {
   return hasSetLength(row) ? row.lengthSeconds : null;
 }
 
+// Distinguishes untouched-since-base from changed; edits outrank deletes
 function commentContentEqual(a, b) {
   if (!a || !b) return false;
   if ((a.body || "") !== (b.body || "")) return false;
@@ -324,6 +331,7 @@ export function mergeStates(base, mine, theirs) {
   var merged = [];
   var placed = {};
 
+  // Merge registry first; cells are written with merged names
   var tagField = STATE_FIELDS.filter(function (f) { return f.key === "productionTags"; })[0];
   var mergedTags = tagField.mergeList(base && base.productionTags, mine.productionTags, theirs.productionTags);
   var textCtx = textMergeContext(base, mine, theirs, mergedTags);
@@ -367,6 +375,7 @@ export function mergeStates(base, mine, theirs) {
       tookTheirs = true;
       conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
     });
+    // Furthest status wins; a merge never un-shoots
     var rank = { todo: 0, ready: 1, shot: 2 };
     out.status = (rank[m.status] || 0) >= (rank[t.status] || 0) ? m.status : t.status;
     var ml = setLengthOf(m), tl = setLengthOf(t), bl = b ? setLengthOf(b) : null;
@@ -432,6 +441,7 @@ export function mergeStates(base, mine, theirs) {
     var pick;
     if (m && t) {
       pick = JSON.parse(JSON.stringify(newer(m, t)));
+      // Forward-progress rule; resolved merges independently of newer side
       pick.resolved = !!(m.resolved || t.resolved);
       if (m.resolved && t.resolved) {
         if ((t.resolvedAt || "") >= (m.resolvedAt || "")) {
@@ -459,6 +469,7 @@ export function mergeStates(base, mine, theirs) {
     mergedComments.push(pick);
   });
 
+  // Title conflicts go through conflicts array, not silently theirs
   var mergedTitle = theirs.title;
   if (base && mine.title !== base.title && theirs.title === base.title) {
     mergedTitle = mine.title;
@@ -494,13 +505,16 @@ export function mergeStates(base, mine, theirs) {
     });
   });
 
+  // Built from STATE_FIELDS so merge never drops a field
   var out = {};
   STATE_FIELDS.forEach(function (f) {
     switch (f.merge) {
       case "title":    out[f.key] = mergedTitle; break;
+      // Without this every merge mints a random id, orphaning history
       case "doc-id":   out[f.key] = mergedDocId(base, mine, theirs); break;
       case "rows":     out[f.key] = merged; break;
       case "comments": out[f.key] = mergedComments; break;
+      // Union without base resurrects deletions (#61)
       case "list-union-with-base":
         out[f.key] = f === tagField ? mergedTags : f.mergeList(base && base[f.key], mine[f.key], theirs[f.key]); break;
       case "changed-side-wins":
@@ -531,6 +545,7 @@ export function mergeStates(base, mine, theirs) {
 
 function droppedListKeys(baseList, mineList, theirList, keyOf, fingerprint) {
   var dropped = {};
+  // No ancestor: nothing can be called a delete
   if (!baseList || !baseList.length) return dropped;
   var mineBy = {}, theirBy = {};
   (mineList || []).forEach(function (e) { var k = e && keyOf(e); if (k) mineBy[k] = e; });
@@ -547,6 +562,7 @@ function droppedListKeys(baseList, mineList, theirList, keyOf, fingerprint) {
 }
 
 export function mergePeople(basePeople, minePeople, theirPeople) {
+  // Keyed by name; each side mints its own ids
   var personKey = function (p) { return p.name ? normalizeTagName(p.name) : ""; };
   var dropped = droppedListKeys(basePeople, minePeople, theirPeople, personKey, personKey);
   var out = [], seenId = {}, seenName = {};
@@ -563,6 +579,7 @@ export function mergePeople(basePeople, minePeople, theirPeople) {
 }
 
 export function mergeProductionTags(baseTags, mineTags, theirTags) {
+  // Id first so renames merge; key fallback for pre-id entries
   var idOf = function (t) { return t.id || (t.name ? "key:" + registryKey(t.cat, t.name) : ""); };
   var tagPrint = function (t) {
     return JSON.stringify([t.cat || "", t.name || "", t.owner || "", t.notes || "",
@@ -616,6 +633,7 @@ export function mergeProductionTags(baseTags, mineTags, theirTags) {
   });
 }
 
+// By id not name; same-named shots are distinct
 export function mergeBrollShots(baseShots, mineShots, theirShots) {
   var shotKey = function (b) { return b.id || ""; };
   var shotPrint = function (b) {
@@ -702,6 +720,7 @@ function stashBlobsFor(docs) {
   return any ? blobs : null;
 }
 
+// Callers must not force reload on false
 export function stashLocalWork() {
   if (!S.state) return false;
   var payload = { at: nowIso(), by: getEditorName(), base: S.baseState, mine: S.state };
@@ -975,6 +994,7 @@ export function syncPanelClass() {
   });
 }
 
+// Stale async results dropped; wrong document must not paint
 var historyRenderToken = 0;
 
 var HISTORY_SUBTITLES = {
@@ -1062,6 +1082,7 @@ function historyPersonHtml(name) {
     '<span class="history-person">' + escapeHtml(name) + '</span>';
 }
 
+// Suites 21 and 24 click restore on closed rows
 function historyCardHtml(m, bucket) {
   var status = m.status === "writing" || m.status === "pending" ? m.status : "stored";
   var rows = Math.max(0, Math.floor(Number(m.rows) || 0));
@@ -1114,6 +1135,7 @@ function historyCardHtml(m, bucket) {
   '</li>';
 }
 
+// Group by day, not adjacency; clock corrections reorder entries
 function historyDaysHtml(entries) {
   var days = [];
   var byDay = Object.create(null);
@@ -1231,6 +1253,7 @@ var undoArmed = false;
 var undoArmTimer = null;
 var undoMergeForceFor = null;
 
+// Hosted merge already saved; marking dirty causes 409 loops
 var UNDO_SAVED_NOTE = "Undo merge puts your version back here; the next save replaces the merged copy on the server.";
 var UNDO_SAVED_TITLE = "Go back to the version you were saving, before someone else's changes were merged into it. " +
   "It stays unsaved until the next save, which replaces the merged copy on the server. Recoverable from Version history.";
@@ -1277,6 +1300,7 @@ export function reportMerge(result, opts) {
   if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
 }
 
+// markDirty would arm autosave and write unreviewed merge
 function noteMergeAutoSave(opts) {
   if (!opts.noAutoSave) { queueAutoSave(); return; }
   haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
@@ -1295,6 +1319,7 @@ export function applyMerge(opts) {
   var snap = null;
 
   if (!opts.unchanged) {
+    // Synchronous; undo point must exist before state is replaced
     if (opts.undoPoint) snap = pushSnapshot(UNDO_LABELS[opts.source], opts.undoPoint);
     if (opts.keepLabel) pushSnapshot(opts.keepLabel, opts.mine);
     result = mergeStates(
@@ -1316,8 +1341,10 @@ export function applyMerge(opts) {
   }
 
   function adopt() {
+    // Undo stack must not revert their words
     noteRemoteChange(next);
     S.state = next;
+    // Before arming undo point; undoMerge compares state.docId
     if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
     armUndoPoint(S.state.docId);
     if (opts.newBase !== undefined) {
@@ -1339,6 +1366,7 @@ export function applyMerge(opts) {
   }
 
   if (!opts.awaitUndoPoint) return adopt();
+  // Failed history write must never fail the merge
   var written = snap && snap.done ? snap.done : null;
   return Promise.resolve(written).then(null, function () {}).then(adopt);
 }

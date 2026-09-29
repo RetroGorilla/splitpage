@@ -52,6 +52,7 @@ export function normalizeMarks(list) {
   return out;
 }
 
+// Original is never the flattened picture itself
 function normalizeAnnotation(a, flat) {
   if (!a || typeof a !== "object" || Array.isArray(a) || !flat) return null;
   var legacy = safeImageSrc(a.visualImage);
@@ -223,6 +224,7 @@ export function rowVideoLinks(row) {
 
 function copy(v) { return JSON.parse(JSON.stringify(v)); }
 
+// Trailing slots with no picture or video are dropped
 export function setRowSlots(row, slots) {
   delete row.visualImage;
   var first = slots[0] || null;
@@ -284,6 +286,7 @@ export function addGalleryVideo(row, link, poster) {
   return slots.length - 1;
 }
 
+// Skip if another item has those bytes; migrateGallery would merge
 export function setVideoThumbnail(row, key, ref) {
   var slots = slotsOf(row);
   if (!ref || slots.some(function (s) { return s.ref && s.ref.sha256 === ref.sha256; })) return false;
@@ -311,6 +314,7 @@ export function replaceGalleryPicture(row, i, ref, name) {
   return true;
 }
 
+// No marks reverts slot to its original
 export function annotateGallerySlot(row, i, flat, original, marks) {
   var slots = slotsOf(row);
   var s = slots[i];

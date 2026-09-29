@@ -158,6 +158,7 @@ test("a file carries HTML images inline, and reading it back gives the stored fo
   assert.equal(some.comments[1].body, doc.comments[1].body);
   assert.equal(some.comments[0].body, '<img src="' + dataUrlForSync(sha(b)) + '" class="comment-img">');
   assert.equal(some.comments[0].replies[0].body, doc.comments[0].replies[0].body);
+  // Older app copies wrote pictures inline into row cells
   const raw = { rows: [{ id: "r9", visualText: "v " + stored(sha(a), 91, 13, "image/png"), audioText: "" }], comments: [] };
   assert.deepEqual(inlineStateImages(raw), []);
   assert.equal(raw.rows[0].visualText, 'v <img src="' + dataUrlForSync(sha(a)) + '" class="comment-img">');

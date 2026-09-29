@@ -53,6 +53,7 @@ test("every category names its own colour token, defined in every theme, and has
     }
     const rule = new RegExp('\\.tag-anchor\\[data-tag-cat="' + cat.id + '"\\]\\s*\\{[^}]*--tag-color:\\s*var\\(--tag-' + cat.id + '\\)');
     assert.match(css, rule, cat.id + ": no .tag-anchor rule drawing it in the script (HANDOFF invariant 14)");
+    // Tagging reference examples share the rule, so colours cannot drift
     const shared = new RegExp('\\.tag-sample\\[data-tag-cat="' + cat.id + '"\\],\\s*\\.tag-anchor\\[data-tag-cat="' + cat.id + '"\\]\\s*\\{');
     assert.match(css, shared, cat.id + ": the tagging reference's .tag-sample should share the script's .tag-anchor rule");
   }

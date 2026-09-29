@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const VERSION = readFileSync(join(ROOT, "VERSION"), "utf8").trim();
 
+// Child process: build.mjs calls process.exit at top level.
 const built = spawnSync(process.execPath, [join(ROOT, "build.mjs")], { cwd: ROOT, stdio: "inherit" });
 if (built.status !== 0) {
   console.error("Build failed — not packaging.");
@@ -23,6 +24,7 @@ const FILES = [
   ["icon-maskable.svg", 0o644],
   ["sw.js", 0o644],
   ["server/server.js", 0o644],
+  // Needed so server.js loads as CommonJS under root "type":"module".
   ["server/package.json", 0o644],
   ["start.mjs", 0o644],
   ["start.bat", 0o644],
@@ -81,6 +83,7 @@ function crc32(buf) {
   return (c ^ -1) >>> 0;
 }
 
+// Fixed timestamp keeps releases reproducible.
 const DOS_TIME = 0;
 const DOS_DATE = ((2026 - 1980) << 9) | (1 << 5) | 1;
 

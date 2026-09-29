@@ -11,6 +11,7 @@ import {
   savedWhenText
 } from "../js/00p-prefs.js";
 
+// Local-time dates keep checks independent of machine timezone
 const AFTERNOON = new Date(2026, 8, 24, 14, 52);
 const MORNING = new Date(2026, 8, 24, 9, 5);
 const MIDNIGHT = new Date(2026, 8, 24, 0, 15);

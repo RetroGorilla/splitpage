@@ -106,7 +106,9 @@ test("internDataUrl: the same picture is the same sha however its base64 is wrap
     "data:image/png;base64," + body.replace(/(.{4})/g, "$1 \t"),
     "data:image/png;base64,\f" + body + "\f",
     "data:image/png;base64," + body.replace(/=+$/, ""),
+    // Trailing C0: URL parser trims it
     "data:image/png;base64," + body + "\u000b",
+    // Label is not the type; jpg rejected
     "data:image/jpg;base64," + body,
     "data:image/gif;base64," + body
   ];
@@ -148,6 +150,7 @@ test("dataUrlForSync is canonical: sniffed type, unwrapped base64, the same sha 
 
 test("urlForSync makes one object URL per blob and revokeObjectUrls lets it go", () => {
   const made = [], revoked = [];
+  // jsdom has no object URLs
   const orig = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   URL.createObjectURL = (blob) => { made.push(blob); return "blob:test/" + made.length; };
   URL.revokeObjectURL = (u) => { revoked.push(u); };

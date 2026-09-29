@@ -4,6 +4,7 @@ import globals from "globals";
 const issueRules = {
   "no-redeclare": "error",
   "no-undef": "error",
+  // Unused catch bindings are punctuation; src/js uses var style.
   "no-unused-vars": ["error", { caughtErrors: "none" }],
   "prefer-const": "error",
   "no-empty": ["error", { allowEmptyCatch: true }]
@@ -48,6 +49,7 @@ export default [
   },
 
   {
+    // Loaded by browser, Electron and node; no globals allowed.
     files: ["shared/**/*.js"],
     languageOptions: {
       sourceType: "commonjs"
@@ -80,6 +82,7 @@ export default [
   },
 
   {
+    // ES5 on purpose.
     files: ["sw.js"],
     languageOptions: {
       sourceType: "script",

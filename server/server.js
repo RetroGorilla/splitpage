@@ -25,6 +25,7 @@ const REVIEW_KEY = String(process.env.REVIEW_KEY || "");
 const REVIEW_ACTIVE = !!(JOIN_PIN && (REVIEW_PIN || REVIEW_KEY) && REVIEW_PIN !== JOIN_PIN);
 const REVIEW_TOKEN = crypto.randomBytes(32).toString("hex");
 
+// In-memory; restart invalidates every review link.
 const reviewGrantsByDoc = new Map();
 const reviewGrantsByKey = new Map();
 const reviewScopeByToken = new Map();
@@ -57,6 +58,7 @@ function reviewScopeOf(req) {
   return reviewScopeOfToken(req.headers["x-splitpage-token"] || "");
 }
 
+// Literal "null" origin deliberately unsupported; sandboxed iframes send it (#63).
 const ALLOW_ORIGINS = String(process.env.ALLOW_ORIGINS || "")
   .split(",").map((s) => s.trim()).filter(Boolean)
   .filter((o) => {
@@ -91,6 +93,7 @@ function identityOf(req) {
   return { email, name: name || null };
 }
 
+// Hash both sides so timingSafeEqual never sees length mismatch.
 function sameSecret(given, expected) {
   const a = crypto.createHash("sha256").update(String(given == null ? "" : given)).digest();
   const b = crypto.createHash("sha256").update(String(expected == null ? "" : expected)).digest();
@@ -104,6 +107,7 @@ const pinFailures = new Map();
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const IP_RE = /^[0-9a-fA-F:.]{3,45}$/;
 
+// Trust X-Forwarded-For only under TRUST_PROXY; first entry wins.
 function forwardedIp(req) {
   const header = req.headers["x-forwarded-for"];
   const raw = Array.isArray(header) ? header.join(",") : String(header || "");
@@ -161,6 +165,7 @@ function corsHeaders(req) {
     "Access-Control-Allow-Origin": origin,
     "Vary": "Origin",
     "Access-Control-Allow-Headers": "content-type, x-splitpage-token, x-splitpage-launch, x-splitpage-client",
+    // New method routes must be added here or preflight fails.
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
   };
 }
@@ -198,12 +203,14 @@ function docPath(id) {
 
 const writeChains = new Map();
 
+// Serialises read-modify-write per id; makes compare-and-set atomic.
 function withDocLock(id, fn) {
   const prev = writeChains.get(id) || Promise.resolve();
   const next = prev.then(fn, fn);
   const settled = next.then(() => {}, () => {});
   writeChains.set(id, settled);
   settled.then(() => {
+    // Identity check: prune only if no newer write queued.
     if (writeChains.get(id) === settled) writeChains.delete(id);
   });
   return next;
@@ -236,6 +243,7 @@ function headOf(doc) {
   return head;
 }
 
+// Head line then state on line two.
 function encodeDoc(doc) {
   const head = JSON.stringify(headOf(doc));
   return head.slice(0, -1) + ",\n\"state\":" + JSON.stringify(doc.state) + "}";
@@ -273,6 +281,7 @@ async function readDocMeta(id) {
   return doc ? headOf(doc) : null;
 }
 
+// Best effort; Windows cannot open directories.
 async function syncDir(dir) {
   let handle;
   try {
@@ -303,6 +312,7 @@ async function writeFileDurable(target, data) {
   await syncDir(path.dirname(target));
 }
 
+// Order: write, fsync temp, rename, fsync dir (#74).
 async function writeDoc(doc, refs) {
   await writeFileDurable(docPath(doc.id), encodeDoc(doc));
   noteRefs(doc.id, doc.rev || 0, refs || refsIn(doc.state));
@@ -319,14 +329,17 @@ function sendJson(res, status, body, opts) {
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(payload),
+    // Stale rev would make clients clobber newer saves.
     "Cache-Control": "no-store"
   };
+  // Close connection when unread body remains; keeps sockets clean.
   if (stillUploading(res.req) || (opts && opts.close)) headers["Connection"] = "close";
   if (res.corsHeaders) Object.assign(headers, res.corsHeaders);
   res.writeHead(status, headers);
   res.end(payload);
 }
 
+// Pre-auth routes only; document-sized bodies are for authed callers.
 const SMALL_BODY = 8 * 1024;
 
 function readBody(req, limit) {
@@ -352,6 +365,7 @@ function readRawBody(req, limit) {
       if (size > max) {
         aborted = true;
         chunks.length = 0;
+        // Pause not destroy: destroy would reset before 413 arrives.
         req.pause();
         reject(Object.assign(new Error("too-large"), { code: "TOO_LARGE" }));
         return;
@@ -377,6 +391,7 @@ function summarise(head) {
   };
 }
 
+// Once per doc; unfixable heads would be rewritten every listing.
 const headUpgraded = new Set();
 
 async function summaryOf(id) {
@@ -419,6 +434,7 @@ function handleLauncher(req, res, parts) {
 const PRESENCE_TTL_MS = Number(process.env.PRESENCE_TTL_MS || 15000);
 const PRESENCE_MAX_PER_DOC = 50;
 const PRESENCE_MAX_DOCS = 200;
+// Presence is memory-only; must never reach writeDoc.
 const presenceByDoc = new Map();
 
 function sweepPresence(now) {
@@ -445,6 +461,7 @@ function presenceHandle(value) {
   return /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : "";
 }
 
+// Head-line read only; never parse the script per heartbeat.
 async function presenceRev(docId) {
   try {
     const head = await readDocHead(docId);
@@ -454,6 +471,7 @@ async function presenceRev(docId) {
   }
 }
 
+// Own cap; neither MAX_BODY nor SMALL_BODY fits a comment.
 const COMMENT_BODY = 512 * 1024;
 const COMMENT_HTML_MAX = 256 * 1024;
 const COMMENT_NAME_MAX = 80;
@@ -476,6 +494,7 @@ function commentIdOf(value) {
   return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : "";
 }
 
+// Built key by key; resolved and timestamps are server-owned.
 function cleanComment(input, now, fallbackAuthor) {
   if (!input || typeof input !== "object") return null;
   const id = commentIdOf(input.id);
@@ -579,6 +598,7 @@ function anchorIdOf(attrs) {
   return attrValue(attrs, "data-cmt");
 }
 
+// Tolerates inline elements split at anchor boundaries.
 function fieldSignature(html, dropId) {
   const path = [];
   const out = [];
@@ -610,6 +630,7 @@ function fieldSignature(html, dropId) {
     .join("");
 }
 
+// Stale anchor is not refusal; comment still lands.
 function placeAnchor(state, anchor, cmtId, author, now) {
   if (anchor === undefined || anchor === null) return "none";
   if (typeof anchor !== "object") return "bad";
@@ -673,6 +694,7 @@ function commentAnswer(id, doc, comment, extra) {
 
 const BLOBS_DIR = path.join(DATA_DIR, "blobs");
 const SHA_RE = /^[0-9a-f]{64}$/;
+// Clients below this cannot see imageRef; saves refused with 426.
 const CLIENT_BLOBS = 2;
 const MISSING_BODY = 256 * 1024;
 const MISSING_MAX = 2000;
@@ -769,6 +791,7 @@ function touchBlobs(shas) {
   for (const sha of shas) fsp.utimes(blobPath(sha), now, now).catch(() => {});
 }
 
+// Sync new parent directory too, or the name isn't durable.
 async function writeBlob(sha, buf) {
   const dir = path.dirname(blobPath(sha));
   const created = await fsp.mkdir(dir, { recursive: true });
@@ -809,6 +832,7 @@ function clientKnowsBlobs(req) {
   return isFinite(v) && v >= CLIENT_BLOBS;
 }
 
+// Budget is reserved before body read, settled after upload.
 const reviewLedgers = new Map();
 
 function reviewLedger(token, now) {
@@ -1117,6 +1141,7 @@ async function handleApi(req, res, url) {
     }
     let newId, doc;
     for (let attempt = 0; attempt < 5; attempt++) {
+      // Random suffix can collide; retry, never overwrite.
       const candidate = slugify(body.state.title || body.title);
       const wrote = await withDocLock(candidate, async () => {
         if (await readDoc(candidate)) return null;
@@ -1256,8 +1281,10 @@ async function handleApi(req, res, url) {
   if (req.method === "PUT") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
+    // Reviewers save via comment routes only (#71); refuse pre-body.
     if (!clientKnowsBlobs(req)) {
       const held = await storedRefsOf(id);
+      // Old client would drop image refs on save.
       if (held && held.size) return sendJson(res, 426, { error: "client-too-old" });
     }
     const body = await readBody(req);
@@ -1359,10 +1386,12 @@ async function handleStatic(req, res, url) {
     "Content-Length": stat.size,
     "Cache-Control": cache
   };
+  // Meta CSP can't express frame-ancestors.
   if (ext === ".html") headers["Content-Security-Policy"] = "frame-ancestors 'self'";
   res.writeHead(200, headers);
   if (req.method === "HEAD") { res.end(); return; }
   const stream = fs.createReadStream(full);
+  // Headers already sent; unhandled stream error would crash process.
   stream.on("error", (err) => {
     console.error("[splitpage] static read error for " + full + ": " + (err && err.message));
     res.destroy();
@@ -1398,6 +1427,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// start.mjs port probe is racy; fail with clean message.
 server.on("error", (err) => {
   console.error("[splitpage] could not start on " + HOST + ":" + PORT + " — " +
     (err && err.message ? err.message : err));

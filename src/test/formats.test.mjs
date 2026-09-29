@@ -22,6 +22,7 @@ import {
 } from "../js/20d-formats.js";
 import { STORED } from "./_stored-cells.mjs";
 
+// __init only builds memoised tag reader; breakdown needs it
 initTags();
 initStatus();
 
@@ -44,6 +45,7 @@ function fixture() {
         audioText: ANCHOR + " Bring the " + TAG + " to the kitchen.",
         status: "shot"
       },
+      // Script holds tilde runs that could close a fence
       { id: "r2", visualText: "a ~~~~ b | c `d` ~~~~~ and <u>underlined</u>", audioText: "Second scene." }
     ],
     comments: [{
@@ -182,6 +184,7 @@ test("Markdown that is not one of ours parses as null, not as an error", () => {
 test("the LAST opening fence wins", () => {
   const s = fixture();
   const real = withState(s, buildMarkdownProject);
+  // Earlier quoted block must not shadow the real one
   const decoy = "# Decoy\n\n~~~~splitpage\n" + JSON.stringify({ title: "Decoy", rows: [], docId: "d" + "0".repeat(32) }) + "\n~~~~\n\n";
   const proj = parseMarkdownProject(decoy + real);
   assert.ok(proj);
@@ -235,6 +238,7 @@ test(".splitpage carries its pictures inline; the page names them by imageRef", 
   assert.ok(text.includes('"visualImage": "' + PNG + '"'), "the file holds the picture itself");
   assert.ok(!text.includes('"imageRef"'), "and no ref an older client would not understand");
   const parsed = parseSplitpageFile(text);
+  // Parse never migrates; entry points migrate on adoption
   assert.equal(parsed.rows[0].visualImage, PNG, "parse does not migrate");
   assert.deepEqual(migrateRows(parsed).rows[0].imageRef, PNG_REF, "opening it gives the ref back");
 });

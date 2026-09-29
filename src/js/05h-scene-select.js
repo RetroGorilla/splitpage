@@ -51,6 +51,7 @@ export function selectedSceneIds() {
   if (a === -1) a = b;
   if (b === -1) b = a;
   var ids = rows.slice(Math.min(a, b), Math.max(a, b) + 1).map(function (r) { return r.id; });
+  // Folded shot scenes stay unselected; nothing unseen acted on
   if (document.querySelector("#rows .hidden-shot-strip")) {
     ids = ids.filter(function (id) { return !!document.querySelector('#rows .row[data-id="' + cssAttr(id) + '"]'); });
   }
@@ -219,6 +220,7 @@ function writeScenes(cd, cut) {
 }
 
 function onBeforeCopy(e) {
+  // Without this, browser disables Copy/Cut for scene selection
   if (hasSceneSelection() && !inEditable()) e.preventDefault();
 }
 
@@ -255,7 +257,9 @@ function announceLeftOut(msg, leftOut, kind) {
   }
 }
 
+// Only the browser's own copy writes the custom clipboard type
 function execCopy() {
+  // Not an edit; HANDOFF invariant #2 covers edits
   try { return document.execCommand("copy"); } catch (e) { return false; }
 }
 
@@ -337,6 +341,7 @@ function pasteClip(clip, afterRowId, opts) {
   var before = lastUndoEntry();
   var row = S.state.rows.filter(function (r) { return r.id === afterRowId; })[0];
   var move = isMove(clip, S.state);
+  // Server comments are sent on add, never undone (D5)
   var hold = onServerDoc();
   var res = insertScenes(clip, {
     afterRowId: afterRowId,
@@ -494,6 +499,7 @@ export function closeSceneMenu() {
 function onContextMenu(e) {
   if (!hasSceneSelection()) return;
   var row = e.target.closest && e.target.closest("#rows .row[data-id]");
+  // Right-click on selection must not place a caret
   if (row && selectedSceneIds().indexOf(row.getAttribute("data-id")) !== -1) {
     e.preventDefault();
     openSceneMenu(e.clientX, e.clientY);
@@ -502,6 +508,7 @@ function onContextMenu(e) {
   clearSceneSelection();
 }
 
+// Capture phase: clears before a new selection can start
 function onDocMouseDown(e) {
   if (menuEl && menuEl.contains(e.target)) return;
   if (e.button === 2 && hasSceneSelection()) {
@@ -513,6 +520,7 @@ function onDocMouseDown(e) {
 }
 
 export function __init() {
+  // Runs before 21-events.js init(); handlers check #rows
   document.addEventListener("mousedown", onDocMouseDown, true);
   document.addEventListener("mousedown", onRowsMouseDown);
   document.addEventListener("mousemove", onMouseMove);

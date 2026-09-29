@@ -14,6 +14,7 @@ import {
 } from "./04c-doc-model.js";
 import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
 
+// Private-use chars stand in for pictures and video cards
 var PUA_FIRST = 0xE000;
 var PUA_LAST = 0xF8FF;
 var PUA_RE = /[\uE000-\uF8FF]/g;
@@ -26,6 +27,7 @@ function isMediaEl(node) {
   return node.tagName === "A" && !!node.classList && node.classList.contains("video-embed-card");
 }
 
+// texts must list every string used, so placeholders never collide
 export function mediaTable(texts) {
   var reserved = {};
   (texts || []).forEach(function (t) {
@@ -74,6 +76,7 @@ function dropMedia(html, table) {
   return html.replace(PUA_RE, function (ch) { return table.isMedia(ch) ? table.media[ch] : ch; });
 }
 
+// Cards are <a>; a link inside one would not reparse
 export function stripMediaMarks(cell, isMedia) {
   var out = [];
   normalizeCell(cell).forEach(function (r) {
@@ -134,6 +137,7 @@ export function historyPush(h, snap) {
   h.kind = null;
 }
 
+// Stores selection from where the next change began
 export function historyNoteSelection(h, sel) {
   if (!h.pending && sel) h.stack[h.index].sel = sel;
 }
@@ -156,6 +160,7 @@ var histories = new WeakMap();
 var timers = new WeakMap();
 var composing = new WeakSet();
 
+// Draft history is separate from document undo (12a-undo.js)
 export function isDraftBox(el) {
   return !!(el && el.classList && el.classList.contains("cell-editable") &&
     el.getAttribute("contenteditable") === "true" && !el.closest("#rows, #writer-doc"));
@@ -252,6 +257,7 @@ export function draftRedo(box) {
   return !!snap;
 }
 
+// Undo/redo are answered by 21-events.js, never the browser
 export function noteDraftBeforeInput(box, e) {
   if (!isDraftBox(box)) return;
   var h = historyFor(box);

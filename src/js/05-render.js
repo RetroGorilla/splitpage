@@ -396,6 +396,7 @@ function rowHtmlFromParts(row, p) {
   );
 }
 
+// Expando, not attribute; keeps signature out of row markup
 var ROW_SIG = "__splitpageRowSig";
 var PATCHED_PARTS = ["gutter", "media", "visualText", "audioText"];
 
@@ -442,6 +443,7 @@ function resetRowShell(rowEl, cls) {
   if (ac && ac.className !== "cell audio-cell") ac.className = "cell audio-cell";
 }
 
+// Null return means unpatchable; caller rebuilds the row
 function paintRow(rowEl, row, index) {
   var sig = rowEl[ROW_SIG];
   if (!sig) return null;
@@ -474,6 +476,7 @@ function paintRow(rowEl, row, index) {
   return parts.length > 0;
 }
 
+// False when row not on screen; caller must render()
 export function renderRow(rowId) {
   if (!S.state) return false;
   var idx = findRowIndex(rowId);
@@ -493,6 +496,7 @@ export function renderRow(rowId) {
   return true;
 }
 
+// Only #rows cells count; writer paragraphs edit same row
 function noteFieldPainted(cellEl, field, row) {
   var rowEl = cellEl.closest(".row");
   if (!rowEl || !rowEl[ROW_SIG] || !rowEl.parentNode || rowEl.parentNode.id !== "rows") return;
@@ -524,6 +528,7 @@ var EMPTY_ROWS_HTML =
     '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
   '</div>';
 
+// Pinned focus row never moves; moved nodes lose focus
 function reconcileRows(rowsEl, pinned) {
   if (!S.state.rows.length) {
     rowsEl.innerHTML = EMPTY_ROWS_HTML;
@@ -570,6 +575,7 @@ function reconcileRows(rowsEl, pinned) {
     next = nodes[i];
   }
 
+  // Belt and braces against arithmetic errors above
   var inOrder = rowsEl.children.length === nodes.length;
   for (var j = 0; inOrder && j < nodes.length; j++) inOrder = rowsEl.children[j] === nodes[j];
   if (!inOrder) nodes.forEach(function (n) { rowsEl.appendChild(n); });
@@ -577,6 +583,7 @@ function reconcileRows(rowsEl, pinned) {
   rowsEl.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
 }
 
+// Node/offset values survive moves; live Range would not
 function captureRenderFocus(rowsEl) {
   var active = document.activeElement;
   if (!active || !active.classList) return null;
@@ -617,6 +624,7 @@ function restoreRenderFocus(rowsEl, f) {
     }
     return;
   }
+  // render() can fire mid-typing from async completion; restore focus
   var cellEl = rowsEl.querySelector(
     '.cell-editable[data-id="' + cssAttr(f.id) + '"][data-field="' + cssAttr(f.field) + '"]');
   if (cellEl) {
@@ -632,6 +640,7 @@ function restoreRenderFocus(rowsEl, f) {
   }
 }
 
+// Stale targets: armed delete would fire without confirm
 function resetTransientUiState() {
   clearTimeout(S.deleteArmTimer);
   S.deleteArmId = null;
@@ -660,6 +669,7 @@ export function render() {
   var rowsEl = document.getElementById("rows");
   var focus = captureRenderFocus(rowsEl);
 
+  // Callback runs synchronously, exactly once
   withRowMotion(rowsEl, function () {
     reconcileRows(rowsEl, focus && focus.rowEl);
   });
@@ -673,10 +683,12 @@ export function render() {
   updateCommentsCount();
   healTagRegistry();
   updateTagBadges();
+  // Imports, restores, merges bypass typing path and lack markers
   scheduleBrollRefresh();
   renderProduction();
   captureReplyDrafts();
   renderComments();
+  // Writer not on typing path; safe to rebuild here
   if (writerOpen) renderWriter();
   scheduleUntaggedScan();
   paintPresence();
@@ -694,7 +706,9 @@ export function syncFieldFromDom(cellEl) {
   var idx = findRowIndex(id);
   if (idx !== -1) {
     var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
+    // Hydrator's src must not reach state; only sha
     html = storedHtmlFromDom(html);
+    // Re-serialisation must not register as an undo change
     html = /<img|video-embed-card/.test(html) ? sanitizeHtml(html) : toHtml(fromHtml(html));
     if (S.state.rows[idx][field] !== html) {
       S.state.rows[idx][field] = html;
@@ -748,11 +762,13 @@ export function forgetStalePendingMarks() {
   if (!sel || sel.from !== sel.to || sel.from !== pendingMarks.pos) pendingMarks = null;
 }
 
+// Null lets the browser type normally
 export function typePendingMarks(cellEl, text) {
   if (!pendingMarks || pendingMarks.cell !== cellEl || !text) return null;
   var typed = false;
   var fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || !pendingAt(cellEl, sel.from)) return null;
+    // Trailing space becomes nbsp; plain one isn't drawn
     var after = projection(cell).charAt(sel.from);
     var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
     var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
@@ -1018,6 +1034,7 @@ export function handleToolbarCmd(btn) {
   }
 }
 
+// extractContents across rows loses content; refuse
 function rangeInside(range, el) {
   if (!range || !el) return false;
   return el.contains(range.startContainer) && el.contains(range.endContainer) &&

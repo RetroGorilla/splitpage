@@ -216,6 +216,7 @@ test("Settings ▸ Fetch video thumbnails: on unless switched off, and carried b
   assert.equal(row.valid("0"), true);
   assert.equal(row.valid("1"), true);
   assert.equal(row.valid("off"), false);
+  // Invariant #48: no bundle key may look like a credential
   assert.doesNotMatch(row.name, /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i);
 });
 

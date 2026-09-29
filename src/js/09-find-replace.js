@@ -28,6 +28,7 @@ function escapeRegExpLiteral(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// Never index the original through a lowercased copy; offsets shift
 function findAllMatches(text, needle, matchCase) {
   if (!needle) return [];
   var re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
@@ -104,6 +105,7 @@ export function noMatchLabel(inTags) {
   return "No matches · " + (inTags === 1 ? "1 in a tag" : inTags + " in tags");
 }
 
+// Must walk the DOM as fromHtml does, or offsets drift
 export function domProjection(root) {
   var out = [];
   function at(node, index) { return { sc: node, so: index, ec: node, eo: index + 1 }; }
@@ -155,6 +157,7 @@ var DROPPED_CHAR_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/;
 var DROPPED_CHARS_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g;
 var OBJ = "\uFFFC";
 
+// Null when the DOM text differs from the stored cell
 export function domRangeFor(root, from, to, expect) {
   var chars = domProjection(root);
   var text = chars.map(function (c) { return c.text; }).join("");
@@ -171,6 +174,7 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
   if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
   if (!matches.length) return { html: html, changed: 0 };
   var text = replacement == null ? "" : String(replacement);
+  // Last first so earlier offsets stay valid
   var todo = matches.slice().reverse();
   if (/<img[\s>]|video-embed-card/i.test(html || "")) {
     var body = inertBody(html);
@@ -238,6 +242,7 @@ function highlightsSupported() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
 
+// Must not focus or select; Enter would type there
 function revealFindMatch() {
   var m = findMatches[findIndex];
   if (m) revealRow(m.rowId);
@@ -423,6 +428,7 @@ export function runBulkTag() {
   var plan = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, true);
   var why = bulkTagRefusal(needle, plan);
   if (why) { showToast(why, "warn"); return; }
+  // Record prior typing first, then close the entry
   breakUndoCoalescing();
   var done = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, false);
   if (!done.hits) { showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn"); return; }
@@ -447,6 +453,7 @@ export function openFindBar() {
   var sel = window.getSelection();
   var picked = sel && !sel.isCollapsed ? String(sel).trim() : "";
   if (picked && picked.length <= 200 && picked.indexOf("\n") === -1) input.value = picked;
+  // Read before find box takes focus and moves selection
   var from = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
   input.focus();
   input.select();

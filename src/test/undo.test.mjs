@@ -135,6 +135,7 @@ test("forget (design D4): a merge that changed a cell drops the entries for it, 
 });
 
 test("caretAfterStep: the end of what differs, in the DOM's text", () => {
+  // step() inverts steps first, so before is pre-operation cell
   const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "one<br>two", after: "one<br>two three" };
   assert.equal(caretAfterStep(typed), "onetwo three".length, "redo: end of the retyped text");
   assert.equal(caretAfterStep(invertSteps([typed])[0]), "onetwo".length, "undo: where the typing began");

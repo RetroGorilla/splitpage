@@ -174,6 +174,7 @@ test("tagging: every occurrence the old walk tagged is tagged, but for a neighbo
       const newRanges = found.map((m) => m.from + ":" + m.to);
       for (const r of oldRanges) {
         if (newRanges.includes(r)) continue;
+        // Old walk stopped at text node ends
         const [a, b] = r.split(":").map(Number);
         assert.ok(WORD.test(text.charAt(a - 1)) || WORD.test(text.charAt(b)), JSON.stringify({ html, phrase, r, newRanges }));
         neighbour++;

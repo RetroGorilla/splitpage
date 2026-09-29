@@ -1,3 +1,4 @@
+  /* Component display rules would otherwise beat UA [hidden]. */
   [hidden] { display: none !important; }
 
   :root {
@@ -59,6 +60,7 @@
     --dur-enter: 180ms;
     --dur-exit: 120ms;
     --dur-move: 180ms;
+    /* Colour-only; reduced-motion must not collapse it. */
     --dur-flash: 1100ms;
     --dur-highlight: 2200ms;
     --dur-pulse: 1100ms;
@@ -185,6 +187,7 @@
   }
   ::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
   @supports not selector(::-webkit-scrollbar) {
+    /* Only Firefox gets standard props; Chromium ignores -webkit- then. */
     :root { scrollbar-color: var(--scrollbar-thumb) transparent; }
     * { scrollbar-width: thin; }
   }
@@ -1764,6 +1767,7 @@
     border: 1px solid var(--visual); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); }
   .drive-account-status .row-icon-svg { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; color: var(--ok); }
 
+  /* z ladder: topbar120 panels140 full-screen145 modal150 tour160 toast200. */
   .modal-backdrop {
     position: fixed; inset: 0; z-index: 150;
     background: rgba(8, 8, 7, 0.62);
@@ -1789,6 +1793,7 @@
     transition: opacity var(--dur-enter) var(--ease-enter),
                 display var(--dur-enter) allow-discrete;
   }
+  /* Transition beats !important; exit needs allow-discrete. */
   .modal-backdrop[hidden] {
     opacity: 0;
     transition: opacity var(--dur-exit) var(--ease-exit),
@@ -2606,6 +2611,7 @@
     0%, 100% { box-shadow: none; }
     30% { box-shadow: inset 0 0 0 2px var(--accent); }
   }
+  /* Above writer (145): writer cells get ghosts too. */
   .tag-ghost-hint {
     position: fixed;
     display: none;
@@ -2623,6 +2629,7 @@
     text-underline-offset: 3px;
   }
 
+  /* Tab is the accept key; element never takes focus. */
   .tag-suggest {
     position: fixed;
     display: none;
@@ -3030,6 +3037,7 @@
     .shoot-need .tag-owner.is-none { display: none; }
   }
 
+  /* z125: under panels, above topbar. */
   .tagging-help {
     --layer-hover: color-mix(in srgb, var(--text) 7%, var(--surface-2));
     position: fixed;
@@ -4607,6 +4615,7 @@
     .reply-composer .mini-toolbar button { padding: 0 10px; }
   }
 
+  /* Above topbar(120) and writer rung; below modals and toasts. */
   .prompter {
     --pp-ground: #0A0A09;
     --pp-band: #161614;
@@ -6844,6 +6853,7 @@
     body.is-panel-resizing .topbar-row { transition: none; }
   }
 
+  /* Opaque on purpose; z130 sits under panels and modals. */
   .newtab-page {
     position: fixed; inset: 0; z-index: 130;
     background: var(--bg); color: var(--text);

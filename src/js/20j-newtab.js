@@ -23,6 +23,7 @@ var newTabPageShown = false;
 
 function newTabPageEl() { return document.getElementById("newtab-page"); }
 
+// Suites boot on pristine demo; full-page layer would break them
 function newTabSuppressed() {
   return window.__splitpageNoNewTab === true;
 }
@@ -37,6 +38,7 @@ function openNewTabPage() {
   document.addEventListener("keydown", onNewTabKeydown, true);
   var first = el.querySelector('[data-newtab-action="new"]');
   if (first) first.focus();
+  // Not awaited: cards must not wait on IPC
   refreshRecents();
 }
 
@@ -50,6 +52,7 @@ export function closeNewTabPage() {
   document.removeEventListener("keydown", onNewTabKeydown, true);
 }
 
+// Capture on document; must not swallow Esc from modals above
 function onNewTabKeydown(e) {
   if (e.key !== "Escape") return;
   if (document.querySelector(".modal-backdrop:not([hidden]), #tour-overlay:not([hidden])")) return;
@@ -66,6 +69,7 @@ function blankDocumentState() {
   });
 }
 
+// Deep copy: migrateRows mutates; bundled original must stay pristine
 function starterDocumentState(id) {
   var starter = starterById(id);
   return starter ? migrateRows(JSON.parse(JSON.stringify(starter.state))) : null;
@@ -74,6 +78,7 @@ function starterDocumentState(id) {
 function adoptNewDocument(next, reason) {
   S.state = next;
   setBaseState(cloneState(S.state), reason);
+  // Id never left this page; first Save keeps it
   S.docIdWrittenOut = false;
   if (home.kind === "file" || home.kind === "import") setHome("none");
   clearDirty();
@@ -88,6 +93,7 @@ function adoptNewDocument(next, reason) {
 }
 
 function startNewDocument(makeState, reason) {
+  // Boot load would overwrite state assigned now
   if (!S.state && S.initialStateReady) {
     return S.initialStateReady.then(function () { return startNewDocument(makeState, reason); });
   }
@@ -226,6 +232,7 @@ function renderRecents(entries) {
   var list = document.getElementById("newtab-recents-list");
   var main = document.querySelector("#newtab-page .newtab-main");
   if (!col || !list) return;
+  // Column stays once up, even empty; Continue row doesn't
   col.hidden = false;
   if (main) main.classList.add("has-recents");
   renderContinue(entries[0] || null);

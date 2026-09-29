@@ -49,6 +49,7 @@ function resolveTargets(exeOverride) {
   if (IS_WINDOWS) {
     const x64Exe = path.join(DESKTOP_DIR, "dist", "win-unpacked", "Splitpage.exe");
     if (fs.existsSync(x64Exe)) targets.push({ name: "packaged-x64", kind: "packaged", exe: x64Exe });
+    // Packaged discovery is Windows-only; dist unpacked dirs are Windows layouts.
     const arm64Exe = path.join(DESKTOP_DIR, "dist", "win-arm64-unpacked", "Splitpage.exe");
     if (fs.existsSync(arm64Exe)) {
       if (process.arch === "arm64") targets.push({ name: "packaged-arm64", kind: "packaged", exe: arm64Exe });
@@ -137,6 +138,7 @@ class CDPConn {
     const onGone = (why) => {
       this.closed = true;
       const err = new Error("CDP connection closed: " + why);
+      // Dead target otherwise leaves in-flight sends hanging forever.
       for (const [, entry] of this.pending) entry.reject(err);
       this.pending.clear();
     };
@@ -183,6 +185,7 @@ async function evalPage(cdp, expression, opts) {
     returnByValue: true,
     allowUnsafeEvalBlockedByCSP: true
   };
+  // beforeunload/will-prevent-unload only fire after user activation.
   if (opts.userGesture) params.userGesture = true;
   const res = await cdp.send("Runtime.evaluate", params);
   if (res.exceptionDetails) {
@@ -309,6 +312,7 @@ function readSession(userDataDir) {
 }
 
 async function addMarkerRow(cdp, marker) {
+  // Count cells, not children: empty-state placeholder is replaced by addRow.
   const countExpr = "document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]').length";
   let before = await evalPage(cdp, countExpr);
   for (let settle = Date.now() + 10000; Date.now() < settle;) {

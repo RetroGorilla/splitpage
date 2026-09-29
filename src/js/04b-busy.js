@@ -7,6 +7,7 @@ function busyBar() {
   if (busyBarEl && busyBarEl.isConnected) return busyBarEl;
   busyBarEl = document.createElement("div");
   busyBarEl.className = "busy-bar";
+  // Not progressbar; no determinate value to report
   busyBarEl.setAttribute("role", "status");
   busyBarEl.setAttribute("aria-live", "polite");
   busyBarEl.innerHTML = '<div class="busy-bar-sweep"></div><span class="busy-bar-label"></span>';
@@ -50,6 +51,7 @@ export function endBusy(token) {
   }
 }
 
+// Must be invisible: result and errors pass straight through
 export async function withBusyBar(label, fn) {
   var token = beginBusy(label);
   try {

@@ -18,10 +18,12 @@ import { applyStashedWork, htmlToPlainText } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 
 var mergeCandidate = null;
+// Only the newest conflict may reveal the button
 var mergeProbeToken = 0;
 
 function fileMergeBase(home) {
   if (home && home.diskBase) return home.diskBase;
+  // Fallback ancestor for routes predating diskBase
   if (home && home === fileHome() && S.baseState && S.state &&
       normalizeDocId(S.baseState.docId) === normalizeDocId(S.state.docId)) return S.baseState;
   return null;
@@ -49,6 +51,7 @@ export async function offerFileMerge(currentFile, home) {
 
   var theirs = parsed.state;
   var base = fileMergeBase(home);
+  // Differing embedded ids mean different scripts; never merge
   var refId = normalizeDocId((base && base.docId) || S.state.docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
@@ -160,6 +163,7 @@ function mergeDiffModel(base, mine, theirs) {
     var entries = [];
     ROW_FIELDS.forEach(function (f) {
       if (GALLERY_FIELDS[f]) {
+        // Galleries merge as sets; outcome always both
         if (rowFieldKey(m, f) === rowFieldKey(t, f)) return;
         var gm = mergeGallerySummary(m, f), gt = mergeGallerySummary(t, f);
         var gPair = mergeDiffPairHtml(gm, gt);
@@ -349,6 +353,7 @@ export function cancelMergeReview() {
   if (mergeCandidate) document.getElementById("file-conflict-modal").hidden = false;
 }
 
+// Nothing written here; autosave halted, user's Save persists
 export function confirmFileMerge() {
   var cand = mergeCandidate;
   if (!cand || !S.state) { cancelMergeReview(); return; }
@@ -362,6 +367,7 @@ export function confirmFileMerge() {
     cand.home.diskBase = diskCopy;
     if (cand.lastModified) cand.home.lastModified = cand.lastModified;
   }
+  // Shared merge entry; do not duplicate the sequence (#72)
   applyStashedWork(migrateRows(cloneState(cand.theirs)), {
     base: cand.base, mine: cloneState(S.state)
   }, {

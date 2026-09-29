@@ -105,6 +105,7 @@ function namedShas(index, changes) {
   return named;
 }
 
+// Newest snapshot never dropped; shas dropped only if unreferenced anywhere.
 function planChanges(index, changes, capBytes, nowMs, protect, putShas) {
   var out = {};
   Object.keys(changes).forEach(function (b) { out[b] = changes[b]; });
@@ -164,12 +165,15 @@ function createHistoryStore(opts) {
   var maxBodyBytes = Number(opts.maxBodyBytes) > 0 ? Number(opts.maxBodyBytes) : Infinity;
   var holdsProvider = typeof opts.holds === "function" ? opts.holds : null;
 
+  // After failed evict-retry, stop evicting per capture.
   var quotaStuck = false;
   var lastTotal = null;
+  // Keys are bucket + newline + id; holds nest.
   var ownHolds = Object.create(null);
 
   function readOnly() { return !!backend.readOnly; }
 
+  // Inside fn await only tx.*; IndexedDB auto-commits otherwise.
   function run(write, fn) {
     return Promise.resolve().then(function () {
       return backend.exclusive(fn, { write: !!write });
@@ -184,6 +188,7 @@ function createHistoryStore(opts) {
     });
   }
 
+  // Body-before-index ordering: names never outlive their bodies.
   function commitAndNote(tx, index, changes, dropped) {
     return tx.commit(changes, dropped).then(function () {
       var next = {};
@@ -238,6 +243,7 @@ function createHistoryStore(opts) {
     };
   }
 
+  // capFor runs inside tx; must stay synchronous.
   function evictWith(capFor, protect) {
     var held = allHolds(protect);
     if (readOnly()) {

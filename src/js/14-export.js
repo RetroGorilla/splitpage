@@ -82,8 +82,10 @@ export async function saveDoc(opts) {
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
   if (!auto) resumeAutoSave();
+  // Decided on opts.saveAs, not local saveAs (legacy html convert)
   var forkDocId = (opts.saveAs && S.docIdWrittenOut) ? mintDocId() : null;
   var docIdAtSave = S.state.docId;
+  // Retarget Save only if write lands (invariant #36)
   var prevHome = null;
   var retarget = null;
   var pickedFor = null;
@@ -121,6 +123,7 @@ export async function saveDoc(opts) {
     return;
   }
 
+  // Legacy .html is never written back as HTML
   var converting = !saveAs && home.kind === "file" && home.format === "html";
   if (converting) {
     saveAs = true;
@@ -131,6 +134,7 @@ export async function saveDoc(opts) {
   S.state.lastEditedBy = getEditorName();
   S.state.lastEditedAt = nowIso();
   var published = cloneState(S.state);
+  // State adopts fork id only after write succeeds
   if (forkDocId) published.docId = forkDocId;
   var seqAtSave = S.editSeq;
   var slug = slugify(published.title);
@@ -140,6 +144,7 @@ export async function saveDoc(opts) {
   var reusingHandle = !!targetHandle;
 
   try {
+    // Checked before browser picker; cancel resolves null
     if (!targetHandle && S.DESKTOP) {
       var pickedDesktop = await S.DESKTOP.saveFileDialog({
         suggestedName: slug + ".md",
@@ -172,6 +177,7 @@ export async function saveDoc(opts) {
     if (reusingHandle && !opts.force) {
       var check = await checkFileConflict(targetHandle, home.lastModified);
       if (!check.ok) {
+        // Auto writes must not throw modals mid-typing
         if (auto) haltAutoSave("Autosave is paused — " + targetHandle.name +
                                " changed on disk since it was opened. Press Save to sort it out.");
         else showFileConflict(targetHandle.name, check.current, { kind: "project" });
@@ -192,6 +198,7 @@ export async function saveDoc(opts) {
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
       S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+      // Before setSaveButtons, whose identity sync would adopt it
       undoRetarget();
       S.saveButtonBusy = false;
       setSaveButtons(S.dirty ? "Save •" : "Save", false);
@@ -209,6 +216,7 @@ export async function saveDoc(opts) {
       if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
       adoptSavedCopyDocId(forkDocId, docIdAtSave);
       var docIdAfterSave = S.state.docId;
+      // Ancestor for later Merge; paired with lastModified
       if (homeAtWrite && stillOurs) homeAtWrite.diskBase = published;
       try {
         var afterFile = await targetHandle.getFile();
@@ -275,6 +283,7 @@ export function applyStashedWork(loaded, override, apply) {
       if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null, snapshot: null };
     } catch (e) {}
 
+    // Keep stash id, else equality check never holds
     var stashId = normalizeDocId(stash.mine.docId);
     if (stashId) { loaded.docId = stashId; S.docIdWrittenOut = true; }
 
@@ -300,6 +309,7 @@ export function applyStashedWork(loaded, override, apply) {
 export var AUTOSAVE_KEY = "splitpage-autosave";
 export var autoSaveTiming = { idle: 2000, hostedIdle: 5000, max: 15000 };
 
+// Hosted waits longer: short idle conflicts on nearly every save
 export function autoSaveIdleFor(target) {
   return target === "server" ? autoSaveTiming.hostedIdle : autoSaveTiming.idle;
 }
@@ -363,6 +373,7 @@ function runAutoSaveTimer() {
   queueAutoSave();
 }
 
+// Silent when autosave off; never writes unrequested
 export function flushAutoSave() {
   if (!autoSaveIdleTimer && !autoSaveMaxTimer) return;
   clearAutoSaveTimers();
@@ -381,6 +392,7 @@ export function resumeAutoSave() {
   updateSaveStatus();
 }
 
+// Distinct from saveButtonBusy; sharing one flag broke serialization
 var saveInFlight = false;
 var saveQueued = false;
 export function queueAutoSave() {
@@ -391,6 +403,7 @@ export function queueAutoSave() {
   if (saveInFlight) { saveQueued = true; return; }
   if (S.saveButtonBusy) { scheduleAutoSave(); return; }
   saveInFlight = true;
+  // Catch required or one failure drops all later autosaves
   Promise.resolve()
     .then(function () { return saveDoc({ auto: true }); })
     .catch(function () {})
@@ -507,6 +520,7 @@ function markdownWithMarkers(html, nums) {
   return toMarkdown(out);
 }
 
+// Single newline renders as space; reader reverses this
 function mdHardBreaks(md) {
   return md.replace(/([^\n])\n(?=[^\n])/g, "$1  \n");
 }
