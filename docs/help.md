@@ -12,8 +12,15 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 whoever opens it works on the same script, with nothing to install. On your
 own network you can also [host a shared session](#hosting-a-shared-session).
 
-## What's new since 3.0
+## What's new in 3.1
 
+- **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
+  puts the script on your server and gives you two links to send: one to
+  edit, one to comment. A link opens that one script, needs no account, and
+  can be renewed or turned off. See [Collaborating](#collaborating).
+- **Unsaved changes to a server script survive a closed tab.** The browser
+  keeps them as you type and merges them back in the next time you open
+  the script, with **Undo merge**.
 - **Draw on your pictures.** In a scene's gallery, press **Annotate** to
   mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
   and E pick them). Your marks stay editable, and **Remove annotations**
@@ -38,6 +45,9 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   request can no longer stop a shared-script server.
 - **An empty scene deletes in one click**: its **⋯ ▸ Delete** no longer
   asks twice when there is nothing in it to lose.
+- **Version history from 2.x** is no longer converted. If you are updating
+  straight from 2.x, install 3.0 first to keep it. Nothing changes if you
+  already have 3.0.
 
 ## What's new in 3.0
 
@@ -538,7 +548,8 @@ you'll see **Continue where you left off?**
 **File ▸ Version history…** lists snapshots of the script as you worked.
 Pick one to restore it. Each script has its own history, kept on this
 computer (not in the file). History from older versions of Splitpage appears
-under **Older history** for 90 days.
+under **Older history** for 90 days. Only 3.0 carries history over from 2.x,
+so coming straight from 2.x, install 3.0 first to keep it.
 
 ## Exporting
 
