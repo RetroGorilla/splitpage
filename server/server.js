@@ -1400,7 +1400,16 @@ async function handleStatic(req, res, url) {
 }
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, "http://localhost");
+  let url;
+  try {
+    url = new URL(req.url, "http://localhost");
+  } catch (e) {
+    // Node accepts targets URL rejects ("GET http://[ HTTP/1.1"); thrown here,
+    // outside the promise chain, it would kill the process before the PIN check (#250).
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Connection": "close" });
+    res.end("Bad request");
+    return;
+  }
   const isLauncher = url.pathname.startsWith("/api/launcher/");
   const isApi = (!NO_API || isLauncher) && url.pathname.startsWith("/api/");
 

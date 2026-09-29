@@ -617,6 +617,12 @@ export async function saveBackToFile(opts) {
     showToast("Could not build the file.", "error");
     return;
   }
+  // What the bytes are a copy of, taken before the awaits below that typing can run through (#251)
+  var docIdAtBuild = S.state.docId;
+  var seqAtBuild = S.editSeq;
+  function bytesStillCurrent() {
+    return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
+  }
 
   if (imported.handle && imported.handle.createWritable) {
     if (!opts || !opts.force) {
@@ -630,7 +636,8 @@ export async function saveBackToFile(opts) {
       var writable = await imported.handle.createWritable();
       await writable.write(built.data);
       await writable.close();
-      imported.dirty = false;
+      // Edits typed during the write aren't in the file; the timestamp moves either way
+      if (bytesStillCurrent()) imported.dirty = false;
       try {
         var after = await imported.handle.getFile();
         imported.lastModified = after.lastModified;
@@ -649,7 +656,8 @@ export async function saveBackToFile(opts) {
   var ok = await deliverFile(imported.name, built.data, {
     savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
-  if (ok) { imported.dirty = false; updateFileChip(); }
+  // Same rule for the download
+  if (ok) { if (bytesStillCurrent()) imported.dirty = false; updateFileChip(); }
 }
 
 export function showFileConflict(fileName, currentFile, ctx) {
