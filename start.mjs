@@ -1,29 +1,3 @@
-#!/usr/bin/env node
-/* Splitpage launcher — one command, any OS.
- *
- *   node start.mjs              serve the app and open it in your browser
- *   node start.mjs --library    also run the document server (see below)
- *   node start.mjs --port 9000  use a different port
- *   node start.mjs --no-open    don't launch a browser
- *   node start.mjs --data DIR   where --library keeps documents
- *   node start.mjs --pin        require a join PIN (generated and printed)
- *   node start.mjs --review-pin a second code that can only read and comment
- *   node start.mjs --tunnel me@host   reach someone else's server over SSH
- *   node start.mjs --no-update-check   skip the background update check
- *
- * WHY SERVE IT AT ALL, rather than just opening index.html?
- * Browsers only give a page installed-app status, a service worker (offline
- * use) and a microphone when it arrives over http(s). Opened off disk as a
- * file:// URL, Splitpage still edits and exports fine, but "Install app" and
- * Follow My Voice are both unavailable. That is the whole reason this exists.
- *
- * DEFAULT MODE IS DELIBERATELY DUMB. It serves files and nothing else, so the
- * app stays in local mode: a document is an .html file you save to disk, which
- * is the workflow this tool has always had. --library additionally runs the
- * document API and keeps documents on the server in ./data — the same thing
- * the Docker image does, minus the sharing.
- */
-
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createServer, connect } from "node:net";
@@ -35,8 +9,6 @@ import { networkInterfaces } from "node:os";
 import { writeFileSync, readFileSync } from "node:fs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-
-/* ---------- arguments ---------- */
 
 const argv = process.argv.slice(2);
 const has = (flag) => argv.includes(flag);
@@ -90,12 +62,8 @@ newer release over this copy, or use the desktop app, which updates itself.
   process.exit(0);
 }
 
-/* Hosting is sharing, and sharing means the documents have to live somewhere
-   both people can reach — so it implies the library. */
 const HOSTING = has("--host");
 const LIBRARY = HOSTING || has("--library");
-/* An installed copy lives somewhere the user does not browse, so documents
-   should be able to live somewhere they do. */
 const DATA_DIR = valueOf("--data", join(ROOT, "data"));
 const WANTED_PORT = Number(valueOf("--port", 8791));
 if (!Number.isInteger(WANTED_PORT) || WANTED_PORT < 1 || WANTED_PORT > 65535) {
@@ -105,15 +73,6 @@ if (!Number.isInteger(WANTED_PORT) || WANTED_PORT < 1 || WANTED_PORT > 65535) {
 
 function isPort(n) { return Number.isInteger(n) && n > 0 && n < 65536; }
 
-/* ---------- the join PIN ----------
- *
- * `--pin` on its own generates one; `--pin 4821` uses what you chose. Either
- * way it goes to the server as an environment variable and is printed once,
- * here, for you to read out to whoever is joining. It is never written to
- * update-status.json or anywhere else on disk (invariant #29) — that file is
- * served to anyone who can reach the port, which is exactly the audience the
- * PIN exists to keep out.
- */
 function generatePin() {
   return String(randomInt(0, 1000000)).padStart(6, "0");
 }
@@ -124,20 +83,6 @@ if (has("--pin")) {
   joinPin = (given && !given.startsWith("--")) ? given.trim() : generatePin();
 }
 
-/* ---------- the review credential ----------
- *
- * A second code for people who should read the script and leave notes on it
- * and nothing else — the server enforces that, not the page (see
- * server.js's "what a review session may write"). Plus a key, minted per
- * launch, that a review LINK carries in its fragment so the address can
- * simply be sent: the fragment never reaches a server and no proxy logs it,
- * and passing the link on does not pass the spoken code on. Both are gone
- * the moment this window closes, exactly like the join PIN.
- *
- * A review code without a join PIN would lock nothing (with no PIN, everyone
- * who can reach the address is already an editor), so asking for one asks
- * for both.
- */
 let reviewPin = "";
 if (has("--review-pin") || has("--share-readonly")) {
   const given = valueOf("--review-pin", "");
@@ -148,11 +93,9 @@ if (has("--review-pin") || has("--share-readonly")) {
     process.exit(1);
   }
 }
+// Fragment key: link carries it without leaking review PIN.
 const reviewKey = reviewPin ? randomBytes(16).toString("hex") : "";
 
-/* Repeatable, unlike everything else here: a portable copy on disk and a
-   colleague's hosted copy are two different origins and both may need to
-   reach one server. */
 function valuesOf(flag) {
   const out = [];
   for (let i = 0; i < argv.length - 1; i++) {
@@ -162,15 +105,6 @@ function valuesOf(flag) {
 }
 const ALLOW_ORIGINS = valuesOf("--allow-origin").filter(Boolean);
 
-/* ---------- --tunnel: join someone else's server over SSH ----------
- *
- * A mode of its own, handled before anything else: it serves nothing, builds
- * nothing and installs nothing. All it does is forward a local port to the
- * remote machine's Splitpage and open a browser at it, so the connection is
- * encrypted and authenticated by SSH and the remote port never has to face
- * the internet. Splitpage stores no credentials for this and never will —
- * ssh's own keys and agent do that job.
- */
 if (has("--tunnel")) {
   const target = valueOf("--tunnel", "");
   if (!target || target.startsWith("--")) {
@@ -193,10 +127,6 @@ if (has("--tunnel")) {
   Close this window to close the tunnel.
 `);
 
-  /* An argument array, never a shell: a destination with a space or a
-     semicolon in it is then just a destination ssh will reject, not
-     something a shell would run. -N means "no remote command" — this
-     forwards a port and does nothing else. */
   const ssh = spawn("ssh", ["-N", "-L", forward, target], { stdio: ["inherit", "inherit", "inherit"] });
 
   ssh.on("error", (err) => {
@@ -235,23 +165,9 @@ if (has("--tunnel")) {
 
   console.log(`  Connected. Splitpage is at ${tunnelUrl}\n`);
   if (!has("--no-open")) openBrowser(tunnelUrl);
-  /* ssh keeps this process alive; there is nothing else to do here. */
   await new Promise(() => {});
 }
 
-/* This launcher used to install a staged update here, before the server
- * started and before a browser had the app open — the one moment when
- * replacing index.html was safe. The whole staging-and-swap path is gone
- * (#75): a portable copy is updated by unzipping a newer one over it, and
- * the desktop app has its own updater. Nothing this process does now writes
- * to the app's own files, which is one fewer way for a launch to fail.
- */
-
-/* ---------- build, if this is a source checkout ---------- */
-
-/* A downloaded release is just the built files, with no src/ and nothing to
-   build. In a checkout, building first means you never debug a change you
-   forgot to compile. */
 if (existsSync(join(ROOT, "build.mjs")) && existsSync(join(ROOT, "src"))) {
   const built = spawn(process.execPath, [join(ROOT, "build.mjs")], { cwd: ROOT, stdio: "inherit" });
   const code = await new Promise((r) => built.on("exit", r));
@@ -266,19 +182,12 @@ if (!existsSync(join(ROOT, "index.html"))) {
   process.exit(1);
 }
 
-/* ---------- find a port ---------- */
-
-/* Probes whatever address the real server will actually bind — always
-   127.0.0.1 before, regardless of --host, while server.js binds 0.0.0.0
-   whenever HOSTING is set. A wildcard bind can conflict with something
-   already listening on a specific interface (or vice versa) in ways a
-   loopback-only probe can never see, so a "free" port here could still
-   fail in the real server. */
 function isFree(port) {
   return new Promise((resolve) => {
     const probe = createServer();
     probe.once("error", () => resolve(false));
     probe.once("listening", () => probe.close(() => resolve(true)));
+    // Probe the address the real server binds, not loopback.
     probe.listen(port, HOSTING ? "0.0.0.0" : "127.0.0.1");
   });
 }
@@ -293,18 +202,10 @@ if (port !== WANTED_PORT) {
   console.log(`Port ${WANTED_PORT} was busy — using ${port} instead.`);
 }
 
-/* ---------- tell the app where it stands ----------
- *
- * A plain file the page fetches. The app can then show "an update is ready"
- * without this process growing an HTTP route that installs things — which,
- * on an unauthenticated localhost server, would be reachable from any other
- * page in the browser.
- */
-
 const STATUS_FILE = join(ROOT, "update-status.json");
 
 let updater = null;
-try { updater = await import("./update.mjs"); } catch { /* a release without it */ }
+try { updater = await import("./update.mjs"); } catch { }
 
 function readVersion() {
   try { return readFileSync(join(ROOT, "VERSION"), "utf8").trim(); } catch { return null; }
@@ -317,24 +218,11 @@ function readStatus() {
 function writeStatus(extra) {
   const previous = readStatus();
   const version = readVersion();
-  /* Carry forward what the last run learned. Starting from a blank slate
-     every launch would hide a known update whenever the check is skipped
-     (--no-update-check) or fails (offline) — which is exactly when the file
-     is the only thing that still knows. updateAvailable is recomputed rather
-     than carried, so it goes false by itself once the update is installed. */
   const latest = extra.latest !== undefined ? extra.latest : (previous.latest ?? null);
   const status = {
-    /* Carry the whole previous status forward, not just `latest`: a field
-       any one writeStatus() call does not itself re-supply used to be
-       silently dropped, and the background update-check makes such a call
-       moments after boot. Fields below override this as intended; `extra`
-       (the caller's actual update) always wins last. */
+    // Carry all prior fields; callers only supply some.
     ...previous,
-    /* ...except these two, which are the staging path's and are always null
-       now that it is gone (#75). Carrying them forward would leave a
-       `pending` written by an older launcher in the file for good, and the
-       page would go on saying "restart to finish installing it" about an
-       update that can no longer be installed that way. */
+    // Staging path removed (#75); always null.
     pending: null,
     justUpdated: null,
     version,
@@ -344,27 +232,18 @@ function writeStatus(extra) {
       ? updater.compareVersions(latest, version) > 0
       : false,
     ...extra,
-    /* ...but never let a stale updateAvailable from `extra` win over the
-       recomputation above when the versions say otherwise. */
     ...(extra.updateAvailable === undefined ? {} : { updateAvailable: extra.updateAvailable })
   };
   if (status.latest && version && updater && updater.compareVersions(status.latest, version) <= 0) {
     status.updateAvailable = false;
   }
-  try { writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2) + "\n"); } catch { /* read-only dir */ }
+  try { writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2) + "\n"); } catch { }
 }
 
-/* `checking` is what tells the page that the answer below is still coming.
-   Without it the page could not tell "no update" from "not looked yet": the
-   boot check is a network round trip and the page routinely finishes loading
-   first, so a fresh launch showed a stale (or blank) verdict and only picked
-   the real one up on the NEXT launch. The page polls while this is true. */
 const willCheck = !has("--no-update-check") && !!updater;
+// Lets page distinguish "no update" from "not checked yet".
 writeStatus({ checking: willCheck });
 
-/* Deliberately not awaited: a slow or unreachable update server must never
-   delay the app opening. Whatever it finds lands in the file, and the page
-   picks it up on this load — it polls while `checking` — or the next one. */
 if (willCheck) {
   (async () => {
     try {
@@ -386,15 +265,6 @@ if (willCheck) {
   })();
 }
 
-/* ---------- run the server ---------- */
-
-/* One secret per launch, for the wizard's "add this copy to the Start Menu"
-   step and nothing else. It goes to the server as an environment variable and
-   to the page in the URL fragment (which browsers never send to a server and
-   no proxy log records), and the page moves it straight into sessionStorage
-   and strips it out of the address bar. Never under --host: server.js refuses
-   those routes off loopback anyway, and not minting a key you cannot use is
-   one less thing to get wrong. */
 const launchToken = HOSTING ? "" : randomBytes(16).toString("hex");
 
 const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
@@ -403,22 +273,12 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
   env: {
     ...process.env,
     PORT: String(port),
-    /* Loopback unless the user asked to host. There is no authentication in
-       that process by design, so reaching the network is never the default
-       and never silent — see the warning printed below. Putting it on the
-       INTERNET is a different job again: the Docker image behind Cloudflare
-       Access, in DEPLOY.md. */
     HOST: HOSTING ? "0.0.0.0" : "127.0.0.1",
     STATIC_DIR: ROOT,
     DATA_DIR,
     NO_API: LIBRARY ? "0" : "1",
-    /* Empty means "no PIN" and "same-origin only" respectively, which is what
-       server.js has always done — passing them unconditionally keeps the two
-       processes' idea of the rules in one place. */
+    // PIN only via env; never written to update-status.json.
     JOIN_PIN: joinPin,
-    /* Both empty unless asked for, and both ignored by server.js without a
-       JOIN_PIN — same "the two processes agree about the rules" reasoning
-       as passing JOIN_PIN unconditionally. */
     REVIEW_PIN: reviewPin,
     REVIEW_KEY: reviewKey,
     ALLOW_ORIGINS: ALLOW_ORIGINS.join(","),
@@ -428,10 +288,7 @@ const server = spawn(process.execPath, [join(ROOT, "server", "server.js")], {
 
 server.on("exit", (code) => process.exit(code == null ? 0 : code));
 
-/* ---------- wait for it, then open a browser ---------- */
-
 const url = `http://localhost:${port}/`;
-/* The fragment is the launch token's whole delivery mechanism — see above. */
 const openUrl = launchToken ? `${url}#launch=${launchToken}` : url;
 
 async function waitForServer() {
@@ -439,7 +296,7 @@ async function waitForServer() {
     try {
       const res = await fetch(url + "index.html", { method: "HEAD" });
       if (res.ok) return true;
-    } catch { /* not up yet */ }
+    } catch { }
     await new Promise((r) => setTimeout(r, 250));
   }
   return false;
@@ -451,7 +308,6 @@ if (!(await waitForServer())) {
   process.exit(1);
 }
 
-/* Every address someone else could actually type. */
 function lanAddresses() {
   const out = [];
   for (const list of Object.values(networkInterfaces())) {
@@ -475,14 +331,7 @@ if (HOSTING) {
   } else {
     console.log("      (no network address found — are you connected?)");
   }
-  /* Said plainly, every time, because it cannot be inferred from the URL:
-     what does and does not stand between a stranger and these scripts. On a
-     home or office network an open session is the point; on a cafe's wifi it
-     is a mistake, and nobody should have to read the source to find that out. */
   if (joinPin) {
-    /* ASCII, deliberately: this window is cmd.exe on most machines and a box
-       drawn in anything else comes out as mojibake around the one number the
-       user has to read out loud. */
     const line = "  " + "+" + "-".repeat(30) + "+";
     console.log(`
   They will be asked for this code:
@@ -498,10 +347,6 @@ ${line}
   the internet, put Splitpage behind Cloudflare Access (see DEPLOY.md).
   Close this window to stop sharing.`);
     if (reviewPin) {
-      /* The review address is the ordinary one with the link key in its
-         fragment — the part of a URL a browser keeps to itself. Whoever
-         opens it joins as a reviewer with nothing to type; whoever was read
-         the code instead types it into the same dialog the join PIN uses. */
       console.log(`
   To let someone READ and COMMENT but not edit, send them one of these
   instead:
@@ -553,8 +398,6 @@ else if (launchToken) console.log(`  Open it yourself at ${openUrl}
   Menu; it is valid for this run only)
 `);
 
-/* Handed to the OS opener as a single argument and never through a shell, so
-   the URL cannot be reinterpreted as anything else. */
 function openBrowser(target) {
   const opener =
     platform === "win32" ? { cmd: "cmd", args: ["/c", "start", "", target] }
@@ -565,10 +408,6 @@ function openBrowser(target) {
   child.unref();
 }
 
-/* Something is listening and accepting connections on this local port. Used
-   by --tunnel, where "up" is ssh having bound the forward — there is no HTTP
-   to probe until it has, and the far end may want a passphrase first, so the
-   wait is generous. */
 async function waitForPort(port, tries = 120) {
   for (let i = 0; i < tries; i++) {
     const ok = await new Promise((resolve) => {
@@ -584,7 +423,6 @@ async function waitForPort(port, tries = 120) {
   return false;
 }
 
-/* Ctrl+C should stop the server too, not orphan it. */
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => { server.kill(); process.exit(0); });
 }

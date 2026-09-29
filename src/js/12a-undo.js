@@ -2,48 +2,6 @@ import { S } from "./_state.js";
 import { STATE_FIELDS } from "./02-state.js";
 import { applySteps, fromHtml, invertSteps, mergeCells, normalizeCell, toHtml } from "./04c-doc-model.js";
 
-/* ================= undo and redo (issue #85, docs/DOCUMENT-MODEL.md §7) =================
-
-   One stack per tab, for everything a person does to the document: typing,
-   formatting, tags, b-roll, comments, rows (add, delete, move, split,
-   join), scene status and picture, the production panel, the title,
-   Replace All, an import into the document. It replaces the browser's own
-   contenteditable undo (which every repaint destroyed) and the one-level
-   split/move undo 06-rows.js used to keep.
-
-   HOW A CHANGE IS RECORDED. Not by every edit path building its own undo
-   record — there are dozens, and a path that forgot would be a hole — but
-   by comparing. `base` is a private copy of the document as of the last
-   recorded change. Every edit already ends in markDirty(); markDirty calls
-   noteEdit(), which (once per task, in a microtask) diffs the live document
-   against `base` (diffStates), records the difference as one entry of steps
-   (04c-doc-model.js), and moves `base` on by those steps. So an edit path
-   is covered by being an edit path, and a new one needs nothing.
-
-   WHAT IS NOT RECORDED (design §7): opening a document, restoring a
-   version, and someone else's changes arriving. Those change what the
-   document is rather than edit it, and version history covers them. Each
-   replaces S.state with a new object; a diff that finds S.state is not the
-   object `base` was copied from starts again from it, with an empty stack.
-   A merge that folds someone else's changes into this document tells this
-   file first (noteRemoteChange), and only the entries touching what it
-   changed are forgotten (design D4): Ctrl+Z never reverts their words.
-
-   Comments on a server document (design D5) are recorded only until sent,
-   and a comment is sent the moment it is posted — so on a server document
-   a change to the comments list is not recorded at all, and neither is the
-   cell change that anchored it.
-
-   Undo never overwrites what it does not own. A cell is put back by a
-   three-way merge (base: what the entry left, mine: what is there now,
-   theirs: what the entry found), so a change made since — a registry heal,
-   an idle b-roll anchoring — survives the undo; a list (the registry, the
-   crew, the b-roll list) by its own merge. Where that cannot be done
-   cleanly the undo refuses whole and says so, and the entry is dropped. */
-
-/* Fields that are the document's bookkeeping, not its content. */
-/* personColors (#194) is who picked which colour, written by markDirty() on
-   the way through an edit — Ctrl+Z must not take somebody's colour back. */
 var SKIP_DOC_KEYS = { docId: true, rev: true, lastEditedBy: true, lastEditedAt: true, schema: true, rows: true, personColors: true };
 var SKIP_ROW_KEYS = { id: true, updatedAt: true, updatedBy: true };
 var TEXT_KEYS = { visualText: true, audioText: true };
@@ -71,12 +29,6 @@ function rowsEqualIgnoringStamps(a, b) {
   });
 }
 
-/* ---- the diff ----
-
-   Steps that take `before` to `after` (04c-doc-model.js step shapes):
-   rows deleted, then every field of the rows both hold, then rows
-   inserted and moved into `after`'s order. opts.skip names top-level keys
-   left out. Pure. */
 export function diffStates(before, after, opts) {
   var skip = (opts && opts.skip) || {};
   var steps = [];
@@ -85,7 +37,6 @@ export function diffStates(before, after, opts) {
   aRows.forEach(function (r) { if (r && r.id) aById[r.id] = r; });
   bRows.forEach(function (r) { if (r && r.id) bById[r.id] = r; });
 
-  /* rows gone */
   var work = bRows.map(function (r) { return r.id; });
   for (var i = work.length - 1; i >= 0; i--) {
     if (!aById[work[i]]) {
@@ -93,7 +44,6 @@ export function diffStates(before, after, opts) {
       work.splice(i, 1);
     }
   }
-  /* fields of the rows both hold */
   work.forEach(function (id) {
     var b = bById[id], a = aById[id];
     var keys = {};
@@ -104,7 +54,6 @@ export function diffStates(before, after, opts) {
       steps.push({ op: "rowField", rowId: id, key: k, before: clone(b[k]), after: clone(a[k]) });
     });
   });
-  /* rows new, and rows in a new place */
   for (i = 0; i < aRows.length; i++) {
     var want = aRows[i].id;
     if (work[i] === want) continue;
@@ -118,7 +67,6 @@ export function diffStates(before, after, opts) {
       work.splice(i, 0, want);
     }
   }
-  /* everything else about the document */
   docKeys(before, after).forEach(function (k) {
     if (skip[k] || same(before[k], after[k])) return;
     steps.push({ op: "docField", key: k, before: clone(before[k]), after: clone(after[k]) });
@@ -126,15 +74,7 @@ export function diffStates(before, after, opts) {
   return steps;
 }
 
-/* ---- applying steps to the live document, in place ----
-
-   The live document is mutated where it stands (the app holds references
-   into S.state.rows), and only after every step has been checked, so a
-   refusal changes nothing. A step's `before` must be what is there — or,
-   for a cell or a list, what is there must merge cleanly with it (see the
-   top of this file). Returns {ok:true} or {ok:false, reason}. */
-/* Looked up when first needed, never at evaluation time: STATE_FIELDS is
-   another module's, and the import graph has cycles (_entry.js). */
+// Lazy: STATE_FIELDS lives in a module with import cycles
 var listMerges = null;
 function listMergeFor(key) {
   if (!listMerges) {
@@ -154,8 +94,7 @@ function resolveCell(live, step) {
 }
 
 export function applyStepsLive(state, steps) {
-  /* Plan on a scratch copy of the row order, so indexes are checked in
-     sequence without touching the document. */
+  // Plan on scratch order; document untouched until validated
   var order = state.rows.map(function (r) { return r.id; });
   var byId = {};
   state.rows.forEach(function (r) { byId[r.id] = r; });
@@ -219,21 +158,12 @@ export function applyStepsLive(state, steps) {
   return { ok: true };
 }
 
-/* ---- the history ----
-
-   Pure over whatever state it is handed, so it is unit-tested directly.
-   An entry is {steps, at, cell, textOnly, endsInSpace}: `cell` is
-   "rowId\u0000field" when every step is that one cell's text, which is
-   what lets typing coalesce. */
-
 function onlyCell(steps) {
   if (steps.length !== 1) return null;
   var s = steps[0];
   return s.op === "rowField" && TEXT_KEYS[s.key] ? s.rowId + "\u0000" + s.key : null;
 }
 
-/* The text a step inserted, by common prefix and suffix of the two cells'
-   words. Enough to tell "a space was typed" from "a letter was". */
 function insertedText(step) {
   var a = projectionOf(step.before), b = projectionOf(step.after);
   var p = 0;
@@ -259,10 +189,7 @@ export function createUndoHistory() {
     var last = done[done.length - 1];
     if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
       var ins = insertedText(steps[0]);
-      /* A letter typed after a space starts the next word's entry. The
-         browser often rewrites the space before it as it goes (a no-break
-         space becomes a plain one), so the inserted text can begin with
-         whitespace: what counts is that it holds something that is not. */
+      // Browser may rewrite preceding space; test for any non-space
       var startsWord = /\S/.test(ins) && last.endsInSpace;
       if (!startsWord) {
         last.steps[0].after = steps[0].after;
@@ -285,9 +212,6 @@ export function createUndoHistory() {
     return { ok: true, steps: steps };
   }
 
-  /* Forget every entry that touches what `touched` says changed:
-     {cells: {"rowId\u0000field": true}, rowFields: {"rowId\u0000key": true},
-      structure: bool, doc: {key: true}}. */
   function forget(touched) {
     function hits(entry) {
       return entry.steps.some(function (s) {
@@ -305,9 +229,6 @@ export function createUndoHistory() {
     keep(undone);
   }
 
-  /* Where `entry` stands for foldIntoEdit: whether it is on the undo stack
-     (done), and whether any entry at all — or any entry after it, or on
-     the redo stack (later) — satisfies `hits`. */
   function standing(entry, hits) {
     var at = entry ? done.indexOf(entry) : -1;
     return {
@@ -318,9 +239,6 @@ export function createUndoHistory() {
     };
   }
 
-  /* Folds `steps` into `entry`: a field it already changes now ends where
-     the new step does; anything else is added to it. It is no longer a
-     typing entry that more typing could join. */
   function amend(entry, steps) {
     steps.forEach(function (s) {
       var mine = s.op === "rowField" && entry.steps.filter(function (e) {
@@ -346,9 +264,6 @@ export function createUndoHistory() {
   };
 }
 
-/* What changed between two versions of the document, as forget() takes
-   it: which rows' fields, whether the scene list's membership or order,
-   which document fields. */
 export function changedBetween(prev, next) {
   var out = { rowFields: {}, structure: false, doc: {} };
   var p = (prev && prev.rows) || [], n = (next && next.rows) || [];
@@ -371,15 +286,11 @@ export function changedBetween(prev, next) {
   return out;
 }
 
-/* ================= the app's one history ================= */
-
 var history = createUndoHistory();
-var base = null;          /* a private copy of the document as last recorded */
-var tracked = null;       /* the S.state object `base` was copied from */
+var base = null;
+var tracked = null;
 var flushQueued = false;
 var applying = false;
-/* Set by the page (21-events.js): is this a document whose comments are
-   sent the moment they are posted? (design D5) */
 var commentsAreSent = function () { return false; };
 var hooks = { afterApply: null, onRefused: null };
 
@@ -395,24 +306,14 @@ function restart() {
   base = tracked ? clone(tracked) : null;
 }
 
-/* The document on screen is not the one the stack is about (it was opened,
-   restored, replaced): start again from it. render() calls this first, so
-   the copy is taken before anyone can type into what it drew. */
 export function trackDocument() {
   if (applying || S.state === tracked) return;
   flushQueued = false;
   restart();
 }
 
-/* Record whatever changed since the last time. Called in a microtask after
-   markDirty (noteEdit), and first thing before an undo, a redo or a remote
-   change, so nothing typed a moment ago is left out of the stack. */
 export function flushEdits() {
-  /* Was an edit reported (markDirty -> noteEdit) since the last flush? If
-     not, whatever differs is something the app did by itself — the b-roll
-     list's idle refresh making a record for a line it found, the registry
-     heal — and it is taken in without an entry, so it can neither be
-     undone as if someone had done it nor empty the redo stack. */
+  // Unreported diffs are app-made: absorbed without undo entry
   var reported = flushQueued;
   flushQueued = false;
   if (applying) return;
@@ -421,18 +322,11 @@ export function flushEdits() {
   var skip = {};
   if (commentsAreSent()) skip.comments = true;
   var steps = diffStates(base, S.state);
-  /* A change to a server document's comments is not recorded (D5), and
-     nor is anything that came with it — the anchor wrapped round the
-     words it is about. */
+  // Server-doc comment changes, and their anchors, are unrecorded
   var sent = skip.comments && steps.some(function (s) { return s.op === "docField" && s.key === "comments"; });
-  /* A cell written out again in a different form with the same content
-     (the sanitiser's nesting, then the model's) is not something anyone
-     did: `base` follows it, and no entry is made for it. */
+  // Re-serialised equal content is not a user action
   var content = steps.filter(function (s) { return !cosmetic(s); });
   if (reported && !sent && content.length) history.record(content, Date.now());
-  /* `base` moves on by the same steps rather than by a fresh copy of the
-     whole document: this runs after every keystroke, and applySteps shares
-     every row the steps did not touch. */
   try { base = applySteps(base, steps); } catch (e) { base = clone(S.state); }
 }
 
@@ -447,9 +341,6 @@ export function noteEdit() {
   Promise.resolve().then(flushEdits);
 }
 
-/* Someone else's changes are about to replace the document (a merge on
-   save, a pull, a reload from disk): record what this tab did first, then
-   forget what the change touches (design D4) and carry on from `next`. */
 export function noteRemoteChange(next) {
   flushEdits();
   if (!next) { restart(); return; }
@@ -458,16 +349,12 @@ export function noteRemoteChange(next) {
   base = clone(next);
 }
 
-/* The same, for a change already made in place (a reload from disk that
-   swapped the rows in the same document object): the caller flushed first,
-   so everything between `base` and now is theirs. */
 export function absorbRemoteChange() {
   if (!S.state || S.state !== tracked || !base) { restart(); return; }
   history.forget(changedBetween(base, S.state));
   base = clone(S.state);
 }
 
-/* Forget the history outright — a new document, a restored version. */
 export function resetUndo() {
   tracked = null;
   restart();
@@ -494,30 +381,11 @@ function run(dir) {
   return r;
 }
 
-/* What putting an undo or a redo on screen changed by itself — a reader
-   healing what it finds (the b-roll list making a record for a "B-roll:"
-   line the undo brought back, the registry heal) — is not an edit anyone
-   made: the stack's copy takes it in without an entry, so it neither lands
-   on the undo stack nor empties the redo stack. Called once the repaint is
-   done (21-events.js afterUndoApplied). */
 export function settleAfterApply() {
   if (!S.state || S.state !== tracked) return;
   base = clone(S.state);
 }
 
-/* Something the app finishes by itself a moment after an edit — a pasted
-   video's thumbnail arriving from YouTube or Vimeo (#141) — made part of
-   THAT edit rather than an edit of its own: apply(S.state) changes the
-   document and says whether it did, and the difference is folded into
-   `entry` (the edit's own undo entry), so one Ctrl+Z takes back the paste
-   and its picture together and a redo brings both back. When no entry on
-   either stack touches what it changes (touches(step) says which steps
-   do: the stack was cleared, a merge forgot the entry), it is taken in
-   with no entry at all. When anything since touches it — another edit of
-   the same thing, or `entry` already undone — nothing is changed and the
-   answer is false: folding it in then would leave a later entry's undo
-   finding something it did not leave. The caller still calls markDirty()
-   to have it saved; that records nothing, since `base` has it already. */
 export function foldIntoEdit(entry, touches, apply) {
   flushEdits();
   if (!S.state || S.state !== tracked || !base) return false;
@@ -534,8 +402,6 @@ export function foldIntoEdit(entry, touches, apply) {
 export function undo() { return run("undo"); }
 export function redo() { return run("redo"); }
 
-/* An action that is its own unit (a toolbar format, a paste) ends the
-   typing entry before it, so Ctrl+Z does not take both at once. */
 export function breakUndoCoalescing() {
   flushEdits();
   history.breakCoalescing();
@@ -543,42 +409,8 @@ export function breakUndoCoalescing() {
 
 export function undoSizes() { return history.sizes(); }
 
-/* The entry Ctrl+Z would take back next, or null: a toast offering to undo
-   one edit (a paste attaching a picture, 21-events.js) asks whether it is
-   still that edit before it undoes anything. */
 export function lastUndoEntry() { flushEdits(); return history.top(); }
 
-/* Where a text step leaves the caret: the start of what differs, in the
-   target cell's text as the DOM counts it (no line breaks; a b-roll key by
-   its letters) — 19-writer.js placeCaretAtTextOffset's coordinates.
-
-   `step` is already the step for this direction (12a-undo.js `step()`
-   inverts it for undo before handing it here, so `before` is always what
-   the cell held before this operation and `after` what it holds once
-   applied) — no `dir` swap needed.
-
-   Found by the common SUFFIX alone, matched outward from the end of both
-   strings with no bound from a prefix search: a prefix search run first
-   (the previous approach) can run past the true edit point when the
-   inserted or deleted text happens to share characters with what follows
-   it (typing " mid" into "Alpha beta" makes "Alpha mid beta" — the space
-   right after "Alpha" equals the space the prefix search meets next,
-   so it swallows one extra character and lands the caret a letter too
-   late). The suffix search has no such ambiguity here because these are
-   single, contiguous edits: matching from the end finds the exact point
-   past which the two strings agree, which is where the caret belongs
-   whichever direction produced it — the end of newly (re)typed text on
-   redo, and the start of what typing undid on undo.
-
-   Each character is compared with its marks, not as bare text: an edit
-   that changes formatting (Ctrl+B, the Direction button, a typed "SFX:"
-   making a line a cue) or turns words into a tag (Tab closing a
-   plain-language tag, #210, which also takes the keyword out) changes
-   what the characters are without changing, or while changing less of,
-   the text. Text alone put the caret at 0 for the first (the two texts
-   agree throughout) and short of the tag for the second (the match ran
-   on through the tag's words). With the marks, the match stops at the
-   last character the edit touched, so the caret lands at the end of it. */
 export function caretAfterStep(step) {
   function domChars(h) {
     var text = "", keys = [];
@@ -594,9 +426,7 @@ export function caretAfterStep(step) {
   var s = 0;
   while (s < a.length && s < bk.length && a[a.length - 1 - s] === bk[bk.length - 1 - s]) s++;
   var offset = b.length - s;
-  /* Never land between the two halves of a surrogate pair (an emoji): if
-     the match stopped one code unit short of a whole pair, count that
-     pair as matched too rather than split it. */
+  // Never split a surrogate pair
   if (offset > 0 && offset < b.length) {
     var hi = b.charCodeAt(offset - 1), lo = b.charCodeAt(offset);
     if (hi >= 0xD800 && hi <= 0xDBFF && lo >= 0xDC00 && lo <= 0xDFFF) offset--;
@@ -604,9 +434,6 @@ export function caretAfterStep(step) {
   return offset;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
-  /* For the browser suites (tests/73-undo.txt): how deep the stacks are. */
   window.__undoTest = { sizes: undoSizes, flush: flushEdits };
 }

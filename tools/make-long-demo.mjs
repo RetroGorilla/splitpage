@@ -1,36 +1,14 @@
-#!/usr/bin/env node
-/* Writes src/starters/long-demo.json, the 30-scene demo script (#215).
- *
- * The demo is a document stored exactly as migrateRows() leaves it (see
- * src/js/_starters.js for why), and 30 scenes of hand-written tag spans,
- * b-roll keys and records is not something to keep in step by hand. So it
- * is written here in a small shorthand and run through the app's own
- * migrateRows and b-roll list, and what they leave is the file. Edit the
- * scenes below and run `node tools/make-long-demo.mjs`; the unit test
- * (src/test/long-demo.test.mjs) checks the result.
- *
- * Shorthand, in both columns:
- *   [p:name] [l:name] [c:name] [v:name] [s:name] [g:name]
- *                       a tag: Prop, Location, Cast, VFX, Music/SFX, Gear
- *   ((words))           a stage direction (#167)
- *   <<c1:words>>        the words comment c1 is anchored to
- *   **words**           bold
- * and in the Visual column, a line starting
- *   B-roll: …           a b-roll shot still to shoot
- *   B-roll*: …          one already shot
- */
 import "../src/test/_dom.mjs";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { S } from "../src/js/_state.js";
-/* Before 02-state.js: the modules import each other, and this order is
-   the one the unit tests use. */
 import { __init as initSceneStatus, rowSeconds } from "../src/js/01-scene-status.js";
 import { migrateRows } from "../src/js/02-state.js";
 import { __init as initTags } from "../src/js/07-production-tags.js";
 import { brollEntries } from "../src/js/08c-broll.js";
 
+// Before 02-state; matches unit test import order.
 initSceneStatus();
 initTags();
 
@@ -38,8 +16,6 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const TITLE = "I Fixed a $40 Film Camera (and Shot a Roll With It)";
 
-/* Scenes: status ("todo" | "ready" | "shot"), the two columns, and
-   optionally a set length (#179) and video links for the gallery. */
 const SCENES = [
   { s: "shot",
     v: "Cold open, macro: a dusty [p:Pentax K1000] on the [l:workbench]. A finger wipes a line through the dust.\n[s:shutter click] as the lever is wound.",
@@ -133,9 +109,6 @@ const SCENES = [
     a: "((long pause)) Oh no." }
 ];
 
-/* The breakdown's own record for some of the tags: statuses in realistic
-   proportions, a few owners and notes. Everything tagged but not listed
-   here is back-filled by migrateRows as Needed. */
 const PEOPLE = [
   { id: "p_ld_sam", name: "Sam" },
   { id: "p_ld_jo", name: "Jo (editor)" }
@@ -183,9 +156,6 @@ const COMMENTS = [
     at: "2026-09-22T08:15:00.000Z" }
 ];
 
-/* Two video links in scene galleries, as a pasted link leaves them (a
-   poster with no picture: the gallery draws a placeholder tile). Links,
-   not files, so the build stays small. */
 const LINKS = {
   2: [{ href: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", poster: true }],
   28: [{ href: "https://www.youtube.com/watch?v=eRsGyueVLvQ", poster: true }]
@@ -278,20 +248,14 @@ S.state = migrateRows({
   wordsPerMinute: 150
 });
 
-/* The b-roll list's own first read makes each record, with the name,
-   description, audio line and location it would give them. Then the ones
-   marked shot are ticked, as someone on the shoot would have. */
 brollEntries(false);
 S.state.brollShots.forEach((r) => { if (shotBroll.includes(r.id)) r.status = "shot"; });
 const flagged = S.state.brollShots.find((r) => r.id === "bs_ld_02");
 if (flagged) { flagged.reshoot = true; flagged.notes = "Soft focus — grab it again on the macro day."; }
 
-/* A target a little under the script's length (#170), so the strip shows
-   the run over it. */
 const total = S.state.rows.reduce((n, r) => n + rowSeconds(r), 0);
 S.state.targetSeconds = Math.floor(total / 60) * 60;
 
-/* Settle: what migrateRows makes of it now is the file. */
 const doc = migrateRows(JSON.parse(JSON.stringify(S.state)));
 delete doc.docId;
 

@@ -1,5 +1,3 @@
-/* The mechanical part of docs/STYLE.md: wording that was standardised once
- * and should not drift back. Reads the source, not a running page. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";

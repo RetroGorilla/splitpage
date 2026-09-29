@@ -1,9 +1,3 @@
-/* Editing a cell through the model (#85, design §5): src/js/05b-cell-edit.js
- * translates between a point in a rendered cell and a model position
- * (04c-doc-model.js projection offsets). Every position of every fixture
- * must survive posToDom -> domToPos, and a text point must count what the
- * model counts. editCell itself (a repaint, a selection, an undo entry) is
- * browser suite 74-cell-edit. */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -43,7 +37,6 @@ test("every model position survives the round trip through the DOM", () => {
     for (let pos = 0; pos <= n; pos++) {
       const pt = posToDom(el, pos);
       const back = domToPos(el, pt.node, pt.offset);
-      /* inside a tag the caret goes to its nearer edge; everywhere else it is exact */
       const inTag = fromHtml(html).length && (() => {
         let p = 0;
         for (const r of fromHtml(html)) {
@@ -67,7 +60,6 @@ test("a text point counts what the model counts", () => {
   assert.equal(domToPos(el, el.lastChild, 2), 7);
   assert.equal(domToPos(el, el, 0), 0);
   assert.equal(domToPos(el, el, el.childNodes.length), 7);
-  /* the <br> is position 4 -> 5 */
   const br = el.querySelector("br");
   assert.equal(domToPos(el, el, Array.prototype.indexOf.call(el.childNodes, br)), 4);
   el.remove();

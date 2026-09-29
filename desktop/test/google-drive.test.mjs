@@ -1,17 +1,3 @@
-/* desktop/test/google-drive.test.mjs: unit tests for desktop/google-drive.js,
- * the loopback OAuth + Drive client behind the desktop Drive modal (#10).
- *
- * Node built-ins only, no Electron: google-drive.js is plain CommonJS, so it
- * is loaded for real and pointed at desktop/test/fake-google.mjs over real
- * HTTP on 127.0.0.1. safeStorage is a stand-in that really transforms the
- * bytes (so "the token is not on disk in plain text" is a real check), and
- * openExternal is a recorder — the test plays the browser by fetching the
- * callback URL the fake's approve() hands back.
- *
- * Prints ALL PASS and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/google-drive.test.mjs
- */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -25,9 +11,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const gd = require(path.join(here, "..", "google-drive.js"));
 const { createGoogleDrive, readClientConfig, isDriveId, isFileName, TOKEN_FILE, CLIENT_FILE, GOOGLE } = gd;
 
-/* A stand-in for Electron's safeStorage: XOR with a fixed key, then base64.
-   Not encryption — but the token's bytes are not in the blob verbatim, so
-   grepping the profile for the token is a meaningful check. */
 function fakeSafeStorage(available) {
   const key = 0x5a;
   return {
@@ -153,9 +136,7 @@ test("sign-in round trip: PKCE S256, loopback redirect, token stored only as the
       for (const s of secrets) assert.ok(!text.includes(s), "secret in plain text in " + f);
     }
     assert.ok(blob.length > 0);
-    /* The listener is gone: a second request to the redirect URI fails. */
     await assert.rejects(fetch(p.get("redirect_uri") + "/?code=x&state=" + p.get("state")));
-    /* A fresh instance (next launch) reads the blob back and can use Drive. */
     const again = createGoogleDrive({ testMode: true, testEndpointsBase: t.fake.base, userDataDir: t.dir,
       env: { SPLITPAGE_GOOGLE_CLIENT_ID: t.fake.clientId, SPLITPAGE_GOOGLE_CLIENT_SECRET: t.fake.clientSecret },
       safeStorage: fakeSafeStorage(true), openExternal: async () => {} });
@@ -276,7 +257,6 @@ test("list, download (file and Google Doc export), upload new, update existing",
     const big = new Uint8Array(gd.MAX_FILE_BYTES + 1);
     assert.equal((await t.drive.upload({ parentId: "scriptsFolder01", name: "big", bytes: big })).code, "TOO_LARGE");
 
-    /* No request ever left for a host other than the fake. */
     assert.ok(t.fake.log.length > 0);
   } finally { await t.done(); }
 });
@@ -285,8 +265,6 @@ test("an expired access token is refreshed with the stored refresh token", async
   const t = await setup();
   try {
     assert.equal((await signInThroughFake(t)).result.ok, true);
-    /* Invalidate every access token the fake issued (through its revoke
-       endpoint): the next call gets 401, refreshes once, and succeeds. */
     const before = t.fake.log.filter((l) => l === "POST /token").length;
     const fakeAt = t.fake.secrets().filter((s) => s.startsWith("ya29."));
     assert.ok(fakeAt.length >= 1);
@@ -311,7 +289,6 @@ test("sign-out deletes the blob and revokes; a revoked refresh token signs out l
     assert.ok(t.fake.isRevoked(rt));
     assert.equal((await t.drive.listFolder("root")).code, "SIGNED_OUT");
 
-    /* Revoked from the Google account side while signed in. */
     const again = await signInThroughFake(t);
     assert.equal(again.result.ok, true);
     const rt2 = t.fake.secrets().find((s) => s.startsWith("1//") && s !== rt);
@@ -337,10 +314,6 @@ test("safeStorage unavailable: signed in for the session only, nothing written",
   } finally { await t.done(); }
 });
 
-/* A module main.js requires but electron-builder.yml does not list works in
-   dev and crashes the installed app at startup — nothing else in the tree
-   notices until a packaged smoke run. Held for every sibling module, not
-   just this one. */
 test("packaging: every ./module main.js requires is in electron-builder.yml's files", () => {
   const main = fs.readFileSync(path.join(here, "..", "main.js"), "utf8");
   const yml = fs.readFileSync(path.join(here, "..", "electron-builder.yml"), "utf8");

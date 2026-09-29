@@ -1,12 +1,3 @@
-/* The exports' kit (14b-export-kit.js): what every document export says
- * about the script besides its words — the document's facts, each scene's
- * gutter, the open threads' numbers, a cell's annotated runs, the
- * breakdown by category and the b-roll by scene — read off the long demo
- * (#215), which has every one of them in it. And the PDF plumbing the
- * exports share (17-pdf.js): the wrap carrying a run's annotations and
- * making room for its markers, and assemblePdf's title, links and
- * bookmarks.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -106,8 +97,6 @@ test("nested and overlapping spans count the way the script's counter does", () 
       author: "Ann", body: id, resolved: id === "c"
     }))
   });
-  /* b ends inside a, so its marker comes first; c is resolved; the Visual
-     column of a scene reads before its Audio */
   assert.deepEqual({ ...commentNumbers() }, { b: 1, a: 2, d: 3, e: 4 });
   const runs = exportRuns(S.state.rows[0].audioText);
   const marked = runs.filter((r) => r.markers);
@@ -134,7 +123,6 @@ test("a cell's runs carry their tag and its colour, the b-roll key, and the mark
   assert.equal(m.length, 1);
   assert.deepEqual(m[0].markers, [1]);
   assert.match(m[0].text, /don't\.$/);
-  /* the plain runs are what they always were */
   assert.ok(a3.filter((r) => !r.cmt).every((r) => !("markers" in r) && !("tag" in r)));
 });
 
@@ -161,8 +149,6 @@ test("the b-roll by scene, with each scene's start and count", () => {
   assert.equal(S.state.brollShots.length, s, "reading the list adds nothing to it");
 });
 
-/* ---- the PDF plumbing ---- */
-
 test("the PDF wrap keeps a run's annotations and makes room for its markers", () => {
   const runs = [
     { text: "Some words then ", b: false },
@@ -177,7 +163,6 @@ test("the PDF wrap keeps a run's annotations and makes room for its markers", ()
   assert.equal(last.length, 1);
   assert.equal(last[0].text, "thing");
   assert.equal(last[0].markerWidth, 12);
-  /* where the marker would not fit, its word goes over with it */
   const w = pdfTextWidth("Some words then a tagged thing", false, 10);
   const tight = pdfWrapRuns(runs, w + 2, 10, { markerWidth: () => 12 });
   assert.equal(tight[0][tight[0].length - 1].text, "tagged");
@@ -201,7 +186,6 @@ test("assemblePdf: a title the viewer shows, links, bookmarks, every stream stil
   assert.match(t, /\/DisplayDocTitle true/);
   assert.match(t, /\/Title <FEFF00430061006600E9/);
   assert.match(t, /\/Creator \(Splitpage\)/);
-  /* the day only: the same script exported twice in a day is the same bytes */
   assert.match(t, /\/CreationDate \(D:\d{8}\)/);
   assert.match(t, /\/Subtype \/Link \/Rect \[54\.00 690\.00 94\.00 702\.00\]/);
   assert.match(t, /\/URI \(https:\/\/example\.com\/a\?b=\\\(c\\\)\)/);
@@ -210,7 +194,6 @@ test("assemblePdf: a title the viewer shows, links, bookmarks, every stream stil
   assert.match(t, /\/Info 7 0 R/);
   const streams = [...t.matchAll(/obj\n<< \/Length (\d+) >>\nstream\n/g)];
   assert.equal(streams.length, 2);
-  /* every offset in the xref table points at its object */
   const xref = t.slice(t.lastIndexOf("xref\n"));
   const offsets = xref.split("\n").slice(3).filter((l) => / 00000 n $/.test(l)).map((l) => +l.slice(0, 10));
   offsets.forEach((off, i) => assert.equal(t.slice(off, off + String(i + 1).length + 6), (i + 1) + " 0 obj"));
