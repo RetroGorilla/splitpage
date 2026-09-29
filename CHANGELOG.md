@@ -18,6 +18,8 @@ appear in the app under **Help**. The format follows
   both.
 
 ### Changed
+- An empty scene (no words, pictures, set length or comments) deletes with
+  one click on **⋯ ▸ Delete**; any other scene still asks for a second click.
 - Search commands (Ctrl+K) puts the tagging reference first, and searching
   *tags* finds it.
 - The writer's tools are at the top, under the title, where the script's
