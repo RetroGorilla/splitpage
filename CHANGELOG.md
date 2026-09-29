@@ -4,9 +4,16 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
-## Unreleased
+## 3.1.0 — 2026-09-29
 
 ### Added
+- **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
+  puts the script on your server and gives you a Can edit and a Can comment
+  link. Each opens that one script only, needs no account, and can be
+  renewed or turned off.
+- Unsaved changes to a script on a server are kept in the browser and
+  merged back in when it is next opened, so a closed tab or dropped
+  connection no longer loses them.
 - **Draw on your pictures.** In a scene's gallery, **Annotate** marks up a
   picture with a pen, a highlighter, text and an eraser (P, H, T and E pick
   them). The marks stay editable, and **Remove annotations** gives you the
@@ -37,6 +44,10 @@ appear in the app under **Help**. The format follows
   errors say what to do.
 - Messages read "Could not …" throughout, and menu text uses one spelling
   ("Minimise the rundown").
+
+### Removed
+- Version history from 2.x is no longer converted. Coming straight from
+  2.x, install 3.0 first to keep it.
 
 ### Fixed
 - Text typed while a script is publishing is no longer marked saved before
