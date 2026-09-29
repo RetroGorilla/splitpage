@@ -1,0 +1,49 @@
+# An empty scene is deleted by one click on its Delete (Adam, 2026-09-28);
+# anything else still arms first and deletes on the second click
+# (06-rows.js armDelete, "empty" as 05g-scene-clip.js isBlankScene says:
+# no words in either column, no pictures or videos, no set length, no
+# comments on it). Text typed but not yet synced counts as words. The
+# one-click delete is one undo step like any other.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = { schema: 2, title: 'Empties', rows: [ { id: 's1', visualText: 'Wide', audioText: 'Hello.', status: 'todo' }, { id: 'e1', visualText: '', audioText: '', status: 'todo' }, { id: 'e2', visualText: '   ', audioText: '<br>', status: 'ready' }, { id: 'l1', visualText: '', audioText: '', status: 'todo', lengthSeconds: 12 }, { id: 'c1', visualText: '', audioText: '', status: 'todo' }, { id: 'u1', visualText: '', audioText: '', status: 'todo' }, { id: 's2', visualText: 'Close', audioText: 'Bye.', status: 'todo' } ], comments: [ { id: 'k1', rowId: 'c1', field: 'audioText', quotedText: '', author: 'Ann', body: 'Something goes here', createdAt: '2026-09-01T10:00:00Z', kind: 'scene', replies: [] } ] }; window.__loaded = F.state(); F.openFile(new File([JSON.stringify(doc)], 'empties.splitpage')); return true; })()
+wait F.state() !== __loaded && F.state().title === 'Empties' && !!document.querySelector('#rows .row[data-id="s2"]')
+eval (function(){ window.del = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] [data-action="delete-row"]'); }; window.has = function(id){ return F.state().rows.some(function(r){ return r.id === id; }); }; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; return ids(); })()
+
+# ---- an empty scene: one click --------------------------------------------------
+eval (function(){ document.activeElement && document.activeElement.blur(); U.flush(); window.__u = U.sizes().undo; del('e1').click(); return true; })()
+expect !has('e1') && !document.querySelector('#rows .row[data-id="e1"]')
+expect ids() === 's1,e2,l1,c1,u1,s2'
+eval U.flush()
+expect U.sizes().undo === __u + 1
+# only spaces and a line break is empty too
+eval del('e2').click()
+expect !has('e2')
+
+# ---- undo brings it back ---------------------------------------------------------
+eval document.activeElement && document.activeElement.blur()
+key ctrl KeyZ
+wait has('e2')
+expect ids() === 's1,e2,l1,c1,u1,s2'
+
+# ---- a scene with words still arms first -----------------------------------------
+eval del('s1').click()
+expect has('s1') && del('s1').classList.contains('armed')
+eval del('s1').click()
+expect !has('s1')
+
+# ---- a set length, or a comment, is something to lose: arms first -------------------
+eval del('l1').click()
+expect has('l1') && del('l1').classList.contains('armed')
+eval del('c1').click()
+expect has('c1') && del('c1').classList.contains('armed')
+# arming another disarms the first, as before
+expect !del('l1').classList.contains('armed')
+
+# ---- words typed but not yet synced count ------------------------------------------------
+eval (function(){ var c = document.querySelector('#rows .row[data-id="u1"] .audio-cell .cell-editable'); c.textContent = 'Just typed'; return F.state().rows.filter(function(r){ return r.id === 'u1'; })[0].audioText; })()
+eval del('u1').click()
+expect has('u1') && del('u1').classList.contains('armed')
+expect F.state().rows.filter(function(r){ return r.id === 'u1'; })[0].audioText.indexOf('Just typed') !== -1
