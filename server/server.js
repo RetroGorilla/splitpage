@@ -1658,8 +1658,11 @@ const server = http.createServer((req, res) => {
   let url;
   try {
     url = new URL(req.url, "http://localhost");
-  } catch (err) {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Connection": "close" }).end("Bad request");
+  } catch (e) {
+    // Node accepts targets URL rejects ("GET http://[ HTTP/1.1"); thrown here,
+    // outside the promise chain, it would kill the process before the PIN check (#250).
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8", "Connection": "close" });
+    res.end("Bad request");
     return;
   }
   const isLauncher = url.pathname.startsWith("/api/launcher/");
