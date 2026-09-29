@@ -1,10 +1,3 @@
-/* The long demo (#215, src/starters/long-demo.json, _starters.js).
- *
- * Opened the way a starter is (a migrateRows copy with an identity of its
- * own), so it is held to the same rules as the starters in
- * starters.test.mjs — and, since it doubles as a manual test script, to
- * having every feature it is meant to show actually in it.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -59,8 +52,7 @@ test("tags in every category, repeated across scenes", () => {
   const tags = collectTagsFromRows(doc.rows);
   const cats = new Set(tags.map((t) => t.cat.id));
   TAG_CATEGORIES.forEach((c) => assert.ok(cats.has(c.id), "a " + c.id + " tag"));
-  /* Grouping the breakdown by location means something: each location
-     is in more than one scene. */
+  // Location grouping only means something with several locations
   const scenesAt = {};
   doc.rows.forEach((r) => {
     collectTagsFromRows([r]).filter((t) => t.cat.id === "location")
@@ -68,7 +60,6 @@ test("tags in every category, repeated across scenes", () => {
   });
   assert.ok(Object.keys(scenesAt).length >= 3);
   Object.keys(scenesAt).forEach((l) => assert.ok(scenesAt[l].size >= 2, l + " in one scene only"));
-  /* ...and the breakdown tracks them with more than one status */
   assert.ok(new Set(doc.productionTags.map((t) => t.status)).size >= 3);
   assert.ok(doc.productionTags.some((t) => t.owner) && doc.people.length >= 2);
 });
@@ -102,7 +93,6 @@ test("stage directions, set read times, a target it runs over, and scenes of ver
   const total = secs.reduce((a, b) => a + b, 0);
   assert.ok(total >= 8 * 60 && total <= 10 * 60, "8–10 minutes: " + total);
   assert.ok(doc.targetSeconds > 0 && Math.abs(doc.targetSeconds - total) <= 90 && doc.targetSeconds !== Math.round(total));
-  /* slivers for the rundown's lens, and long scenes beside them */
   assert.ok(secs.filter((s) => s < 3).length >= 2, "very short scenes");
   assert.ok(Math.max(...secs) >= 30);
 });

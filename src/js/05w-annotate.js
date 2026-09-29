@@ -7,93 +7,28 @@ import { galleryEdit } from "./05e-gallery-overlay.js";
 import { showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 
-/* ================= drawing on a picture in a scene's gallery (2026-09-27) =================
-
-   Adam's "basic drawing tools for pictures in the gallery": the gallery
-   dialog's Annotate button (05e-gallery-overlay.js) opens this over the
-   whole window, the dialog still open underneath. The picture's ORIGINAL
-   (slotOriginal, 02d-gallery.js) is fitted to the stage with a <canvas>
-   the same size over it, and the canvas draws the marks — so opening an
-   annotated picture again edits its marks over the untouched original;
-   nothing drawn before is baked in or drawn twice.
-
-   Four tools, and only one of them at a time:
-
-     Pen          a stroke in one of six colours, three widths
-     Highlighter  a wide stroke at 35 % — drawn as ONE path, so where a
-                  stroke crosses itself it does not darken twice
-     Text         a click puts a text box there with the caret in it;
-                  typing grows it; a click elsewhere, Esc or another tool
-                  puts it on the picture (an empty one is nothing). A
-                  click on a text already there edits it, and a drag
-                  moves it — only with this tool, so the pen can still
-                  draw over a text
-     Eraser       dragging over a mark takes the whole mark away, stroke
-                  or text (a hit is the stroke's own path at its width)
-
-   then the colours, S / M / L, Undo / Redo (this editor's own history —
-   Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y here never reach the script's), Clear
-   all, and Cancel / Done. Nothing is written to the document until Done,
-   and Done is ONE step of the document's undo (galleryEdit): Ctrl+Z in
-   the script afterwards puts back the picture and the marks it had.
-
-   Every mark is stored as fractions of the picture (02d-gallery.js has
-   the shapes): a stroke's width and a text's size are fractions of its
-   WIDTH, its points and the text box's top left fractions of its width
-   and height. So what is drawn at one size of window is the same drawing
-   at any other, and on the picture's own pixels at Done.
-
-   Done FLATTENS: the original is drawn at its natural size, the marks
-   over it at that size, and the result — a JPEG at 0.9 when the original
-   was one, else a PNG — becomes the slot's picture (intern and persist,
-   02c-blobs.js), with the original and the marks beside it. Every other
-   reader of a picture (the cell, the exports, the teleprompter, an older
-   copy of the app) therefore shows the marks without knowing they exist.
-   No marks at Done is "Annotations removed": the slot goes back to its
-   original.
-
-   Pointer Events throughout, with touch-action off on the frame, so a
-   mouse, a pen and a finger all draw; a stroke keeps a point every 1.5
-   CSS pixels of travel and is smoothed through the midpoints of its
-   points when drawn. A second finger while one is drawing is ignored.
-
-   Cancel with changes asks first, the way the app's other throwaways do:
-   the button turns into "Discard changes?" for a few seconds and a second
-   press (or a second Esc) is the answer. The scene or the picture going
-   while this is open (a collaborator deleted it, a merge moved it away)
-   closes it with a word and saves nothing — refreshAnnotator, from the
-   gallery's own repaint.
-
-   There are no single-letter shortcuts for the tools: Adam signs off on
-   keyboard conventions himself. The markup is page.html's #annotate-modal,
-   the styles app.css's .annotate-*. */
-
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
-/* S / M / L, as fractions of the picture's width */
+// Fractions of picture width; marks are resolution-independent
 var SIZES = {
   pen: [0.004, 0.008, 0.016],
   highlight: [0.02, 0.035, 0.06],
   text: [0.03, 0.045, 0.07]
 };
 var HIGHLIGHT_ALPHA = 0.35;
-var TEXT_LINE = 1.25;         /* a text's line height, in ems — the text box's too (app.css) */
-var TEXT_OUTLINE = 0.12;      /* its outline's width, in ems: half of it shows outside the letters */
+var TEXT_LINE = 1.25;
+var TEXT_OUTLINE = 0.12;
 var MAX_TEXT = 500;
 var MAX_POINTS = 2000;
 var MAX_HISTORY = 200;
-var STEP_PX = 1.5;            /* a stroke keeps a point this far from the last one */
-var ERASER_PX = 8;            /* how near the eraser has to come to a mark */
-var MOVE_PX = 4;              /* a press on a text that moves this far is a drag */
-var ARM_MS = 2800;            /* "Discard changes?" waits this long for its second press */
+var STEP_PX = 1.5;
+var ERASER_PX = 8;
+var MOVE_PX = 4;
+var ARM_MS = 2800;
 
-/* The tool, colour and size last used, kept while the page is open: the
-   next picture opens with the same pen. Each tool has its own colour and
-   size — the highlighter starts yellow, the pen and text red. Filled in
-   by __init: at evaluation time another module's value may not be there
-   yet (_entry.js). */
+// Filled in __init; other modules' values absent at eval
 var memory = { tool: "pen", color: {}, size: { pen: 1, highlight: 1, text: 1 } };
 
-var ed = null;          /* the open editor (openAnnotator), or null */
+var ed = null;
 var drawQueued = false;
 var measureCtx = null;
 var fontFamily = "";
@@ -109,11 +44,6 @@ function round4(v) { return Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10
 
 export function annotatorOpen() { return !!ed; }
 
-/* ---- opening and closing ---- */
-
-/* Opens the editor on slot `at` of the scene `rowId`'s gallery. Nothing
-   for a video's tile, a slot with no picture, or a review session.
-   Returns whether it opened. */
 export function openAnnotator(rowId, at) {
   if (ed || reviewMode() || !S.state) return false;
   var idx = findRowIndex(rowId);
@@ -125,21 +55,21 @@ export function openAnnotator(rowId, at) {
   ed = {
     rowId: rowId,
     at: at,
-    sha: slot.ref.sha256,         /* the picture the slot shows: how it is found again */
+    sha: slot.ref.sha256,
     original: original,
     name: slot.name || "",
     start: JSON.stringify(marks),
     marks: copy(marks),
     undo: [],
     redo: [],
-    gesture: null,                /* a press in progress on the picture */
-    text: null,                   /* {index, mark} while a text box is open */
-    ready: false,                 /* the original has loaded and been laid out */
+    gesture: null,
+    text: null,
+    ready: false,
     saving: false,
     committing: false,
     armed: false,
     armTimer: null,
-    w: 0, h: 0,                   /* the picture on screen, CSS pixels */
+    w: 0, h: 0,
     returnFocus: document.activeElement
   };
   var m = modal();
@@ -157,9 +87,7 @@ export function openAnnotator(rowId, at) {
   return true;
 }
 
-/* The original's bytes may not be in this page yet (a document reopened
-   shows its flattened pictures and asks for nothing else): fetched the
-   way every picture is, then shown. */
+// Reopened docs hold only flattened pictures; original fetched lazily
 function loadOriginal() {
   var sha = ed.original.sha256;
   var mine = ed;
@@ -180,7 +108,6 @@ function loadOriginal() {
       setStatus("");
       layout();
       paintTools();
-      /* the text face may still be arriving: draw again once it has */
       fontsReady().then(function () { if (ed === mine) redraw(); });
     };
     img.onerror = function () {
@@ -193,9 +120,6 @@ function loadOriginal() {
   });
 }
 
-/* Closes the editor, saving nothing. The focus goes back to the gallery's
-   Annotate button (repainted by then when Done saved), else to wherever
-   it was. */
 export function closeAnnotator() {
   if (!ed) return;
   clearTimeout(ed.armTimer);
@@ -215,9 +139,7 @@ export function closeAnnotator() {
   if (to) to.focus({ preventScroll: true });
 }
 
-/* Where the picture being annotated is now: its slot, found by the
-   picture it showed when the editor opened (a merge may have moved it),
-   or -1 when it is gone. */
+// Match by original picture, not index; merges may move slots
 function locate() {
   var idx = findRowIndex(ed.rowId);
   if (idx === -1) return -1;
@@ -230,9 +152,6 @@ function locate() {
   return -1;
 }
 
-/* Called whenever the gallery repaints from state (refreshGalleryOverlay,
-   i.e. after every render): the picture gone or replaced while it was
-   being drawn on closes the editor, with a word, and nothing saved. */
 export function refreshAnnotator() {
   if (!ed || ed.committing) return;
   if (locate() === -1) lost();
@@ -243,10 +162,6 @@ function lost() {
   showToast("This picture was changed or removed while you were drawing on it, so your marks weren’t saved.", "warn");
 }
 
-/* ---- the stage ---- */
-
-/* Fits the picture into the stage (a small picture is enlarged: it is
-   easier to draw on) and sizes the canvas to it in device pixels. */
 function layout() {
   if (!ed || !ed.ready) return;
   var img = imgEl();
@@ -287,8 +202,6 @@ function queueRedraw() {
   requestAnimationFrame(redraw);
 }
 
-/* ---- drawing marks: the screen and the flattened picture share this ---- */
-
 function uiFont() {
   if (!fontFamily) {
     fontFamily = getComputedStyle(document.documentElement).getPropertyValue("--font-body").trim() || "sans-serif";
@@ -298,15 +211,11 @@ function uiFont() {
 
 function textFont(px) { return "700 " + px + "px " + uiFont(); }
 
-/* The text face loaded, or a moment passed: a canvas draws with whatever
-   face it has at the time, and would not redraw by itself. */
 function fontsReady() {
   var loaded = document.fonts && document.fonts.load ? document.fonts.load(textFont(32)).then(null, function () {}) : Promise.resolve();
   return Promise.race([loaded, new Promise(function (r) { setTimeout(r, 1500); })]);
 }
 
-/* A text's outline: light round dark letters, dark round light ones, so it
-   reads on any photograph. */
 function outlineFor(hex) {
   var n = parseInt(hex.slice(1), 16);
   var lin = function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -314,7 +223,6 @@ function outlineFor(hex) {
   return lum > 0.4 ? "#111111" : "#ffffff";
 }
 
-/* Every mark in paint order onto a W by H drawing (canvas pixels). */
 function drawMarks(ctx, marks, W, H) {
   marks.forEach(function (m) {
     if (m.kind === "text") drawText(ctx, m, W, H);
@@ -322,10 +230,7 @@ function drawMarks(ctx, marks, W, H) {
   });
 }
 
-/* A stroke as one path through the midpoints of its points (the points
-   themselves the curves' control points), so it is smooth however few
-   there are; one point is a dot. One stroke() for the whole path is what
-   keeps a highlight from darkening where it crosses itself. */
+// One stroke() call keeps highlights from darkening at self-crossings
 function drawStroke(ctx, m, W, H) {
   var p = m.points;
   var n = p.length / 2;
@@ -355,10 +260,7 @@ function drawStroke(ctx, m, W, H) {
   ctx.restore();
 }
 
-/* A text in the app's own face, bold, with its outline: every line's
-   outline first, then every line's letters, so no line's outline lies
-   over the one above it. Each line is centred in a line box of
-   TEXT_LINE ems, which is where the text box (app.css) puts it too. */
+// TEXT_LINE must match the app.css text box line height
 function drawText(ctx, m, W, H) {
   var px = m.size * W;
   var lh = px * TEXT_LINE;
@@ -377,7 +279,6 @@ function drawText(ctx, m, W, H) {
   ctx.restore();
 }
 
-/* A text's box on a W by H drawing: where the eraser and a press find it. */
 function textBounds(m, W, H) {
   if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
   var px = m.size * W;
@@ -396,9 +297,6 @@ function segmentDistance(px, py, ax, ay, bx, by) {
   return Math.sqrt(cx * cx + cy * cy);
 }
 
-/* Whether (x, y) — CSS pixels on the picture — is within `reach` of mark
-   m: a stroke's path at its width (its straight segments; the smoothed
-   curve never strays far from them), or a text's box. */
 function hits(m, x, y, reach) {
   var W = ed.w, H = ed.h;
   if (m.kind === "text") {
@@ -414,15 +312,12 @@ function hits(m, x, y, reach) {
   return false;
 }
 
-/* The topmost text under (x, y), or -1. */
 function textAt(x, y) {
   for (var i = ed.marks.length - 1; i >= 0; i--) {
     if (ed.marks[i].kind === "text" && hits(ed.marks[i], x, y, 4)) return i;
   }
   return -1;
 }
-
-/* ---- the editor's own history ---- */
 
 function remember() {
   ed.undo.push(JSON.stringify(ed.marks));
@@ -461,10 +356,6 @@ function changed() {
   return JSON.stringify(normalizeMarks(ed.marks)) !== ed.start;
 }
 
-/* ---- pressing on the picture ---- */
-
-/* A press, as CSS pixels on the picture and as fractions of it, kept on
-   the picture. */
 function pointOf(e) {
   var r = frameEl().getBoundingClientRect();
   var fx = r.width ? (e.clientX - r.left) / r.width : 0;
@@ -476,21 +367,18 @@ function pointOf(e) {
 
 function onPointerDown(e) {
   if (!ed || !ed.ready || ed.saving) return;
-  /* a press in the open text box is the text box's own */
   if (e.target && e.target.classList && e.target.classList.contains("annotate-textbox")) return;
   if (e.pointerType === "mouse" && e.button !== 0) return;
-  if (ed.gesture) return;           /* a second finger */
+  if (ed.gesture) return;
   e.preventDefault();
   var p = pointOf(e);
   var tool = memory.tool;
   if (ed.text) {
-    /* a click away from the text being typed puts it down — and does
-       nothing else, so the click that ends one text never starts another */
     commitText();
     focusTool();
     if (tool === "text") return;
   }
-  try { frameEl().setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+  try { frameEl().setPointerCapture(e.pointerId); } catch (err) { }
   if (tool === "pen" || tool === "highlight") {
     ed.gesture = { kind: "draw", id: e.pointerId, last: p,
       mark: { kind: tool, color: memory.color[tool], width: SIZES[tool][memory.size[tool]], points: [round4(p.fx), round4(p.fy)] } };
@@ -510,7 +398,6 @@ function onPointerMove(e) {
   if (!ed || !ed.ready) return;
   var g = ed.gesture;
   if (!g) {
-    /* the Text tool says a text can be moved */
     if (memory.tool === "text" && !ed.text) {
       var p0 = pointOf(e);
       frameEl().classList.toggle("is-over-text", textAt(p0.x, p0.y) !== -1);
@@ -531,7 +418,6 @@ function onPointerMove(e) {
   } else if (g.kind === "erase") {
     events.forEach(function (ev) {
       var p = pointOf(ev);
-      /* along the way, not only where the move events landed */
       var steps = Math.max(1, Math.ceil(Math.hypot(p.x - g.last.x, p.y - g.last.y) / 3));
       for (var k = 1; k <= steps; k++) {
         eraseAt(g.last.x + (p.x - g.last.x) * k / steps, g.last.y + (p.y - g.last.y) * k / steps);
@@ -557,7 +443,6 @@ function onPointerUp(e) {
   ed.gesture = null;
   frameEl().classList.remove("is-moving");
   if (g.kind === "draw") {
-    /* where it was let go, when that is further on than the last point */
     if (e.type === "pointerup") {
       var p = pointOf(e);
       if (Math.hypot(p.x - g.last.x, p.y - g.last.y) >= STEP_PX && g.mark.points.length < MAX_POINTS * 2) {
@@ -575,8 +460,6 @@ function onPointerUp(e) {
   paintTools();
 }
 
-/* The press was taken away (a gesture the system claimed, a pen lifted
-   out of range): a stroke in progress is dropped, a moved text goes back. */
 function onPointerCancel(e) {
   if (!ed) return;
   var g = ed.gesture;
@@ -590,8 +473,6 @@ function onPointerCancel(e) {
   paintTools();
 }
 
-/* Takes away every mark within the eraser's reach of (x, y). The first
-   one a drag takes is where its undo step starts, so a drag is one step. */
 function eraseAt(x, y) {
   var g = ed.gesture;
   var gone = false;
@@ -604,11 +485,7 @@ function eraseAt(x, y) {
   if (gone) { redraw(); paintTools(); }
 }
 
-/* ---- text ---- */
-
-/* Opens a text box: the text at `index` to edit, or (index -1) a new one
-   whose first line is centred on the press `at`. The text is left off the
-   canvas while its box is open, so it is never on the screen twice. */
+// Edited text stays off canvas while its box is open
 function startText(index, at) {
   var m;
   if (index >= 0) {
@@ -637,8 +514,6 @@ function startText(index, at) {
   box.setSelectionRange(box.value.length, box.value.length);
 }
 
-/* The open text box over the picture, the size and colour it will be
-   drawn in, and as wide and tall as what is typed in it. */
 function placeTextBox() {
   var box = textBoxEl();
   if (!ed || !ed.text || !box) return;
@@ -656,9 +531,6 @@ function placeTextBox() {
   box.style.height = box.scrollHeight + "px";
 }
 
-/* Puts the open text on the picture: an edit of the one it was, a new
-   mark, or — emptied — none. One undo step, and none when nothing about
-   it changed. */
 function commitText() {
   if (!ed || !ed.text) return;
   var t = ed.text;
@@ -681,8 +553,6 @@ function commitText() {
   paintTools();
 }
 
-/* ---- the toolbar ---- */
-
 function setTool(tool) {
   commitText();
   memory.tool = tool;
@@ -690,8 +560,6 @@ function setTool(tool) {
   paintTools();
 }
 
-/* A colour or a size picked: the current tool's from now on — and the
-   open text box's, which stays open with the caret in it. */
 function setColor(color) {
   if (memory.tool === "eraser") return;
   memory.color[memory.tool] = color;
@@ -731,8 +599,6 @@ var HINTS = {
   eraser: "Drag over a mark to erase it."
 };
 
-/* Every control's state from the editor's: the picked tool, its colour
-   and size (none for the eraser), what undo and redo can do. */
 function paintTools() {
   if (!ed) return;
   var m = modal();
@@ -765,11 +631,6 @@ function setStatus(text) {
   s.hidden = !text;
 }
 
-/* ---- Cancel and Done ---- */
-
-/* Cancel: straight out when nothing changed; otherwise its first press
-   (or Esc) turns it into "Discard changes?" and the second one within a
-   few seconds throws the marks away. */
 function cancel(fromKey) {
   commitText();
   if (!changed() || ed.armed) { closeAnnotator(); return; }
@@ -791,13 +652,10 @@ function disarmCancel() {
   btn.classList.remove("armed");
 }
 
-/* Done: nothing changed closes; no marks puts the original back; marks
-   are flattened into a new picture and saved as one gallery edit. */
 function done() {
   commitText();
   if (!ed.ready || ed.saving) return;
   if (reviewMode()) {
-    /* the session became a review one while this was open */
     closeAnnotator();
     showToast("This script can only be commented on now, so the annotations weren’t saved.", "warn");
     return;
@@ -836,10 +694,7 @@ function save(rec, marks) {
   closeAnnotator();
 }
 
-/* The original at its own size with the marks drawn over it at that size,
-   as the bytes of a new picture: a JPEG at 0.9 when the original was one
-   (a photograph stays a photograph's size), else a PNG. Resolves with its
-   record — interned, and on its way to the store — or null. */
+// JPEG at 0.9 if original was JPEG, else PNG
 function flatten(marks) {
   var img = imgEl();
   return fontsReady().then(function () {
@@ -864,8 +719,6 @@ function flatten(marks) {
   }).then(null, function () { return null; });
 }
 
-/* ---- the keyboard ---- */
-
 function isUndoKey(e) {
   return (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "z" || e.key === "Z");
 }
@@ -874,10 +727,7 @@ function isRedoKey(e) {
     (((e.key === "z" || e.key === "Z") && e.shiftKey) || ((e.key === "y" || e.key === "Y") && !e.shiftKey));
 }
 
-/* On the window, first (capture), while the editor is open: its keys are
-   its own wherever the focus is, and never the script's — Ctrl+Z here must
-   not undo something in the document behind it. In the open text box
-   Ctrl+Z is the box's own typing undo, and Esc puts the text down. */
+// Capture phase: editor keys must never reach document undo
 function onWindowKeydown(e) {
   if (!ed) return;
   var inText = !!(e.target && e.target.classList && e.target.classList.contains("annotate-textbox"));
@@ -904,10 +754,6 @@ function onWindowKeydown(e) {
   }
 }
 
-/* P, H, T and E pick the tools (Adam, 2026-09-27: offered, and taken —
-   single letters, no modifier). Only while the editor is open and not
-   typing in a text box (onWindowKeydown returns before this there), and
-   never mid-stroke. The buttons' tooltips name them. */
 var TOOL_KEYS = { p: "pen", h: "highlight", t: "text", e: "eraser" };
 
 function toolForKey(e) {
@@ -915,7 +761,6 @@ function toolForKey(e) {
   return TOOL_KEYS[String(e.key || "").toLowerCase()] || "";
 }
 
-/* Tab and Shift+Tab go round the editor's own controls and no further. */
 function keepFocusIn(e) {
   var list = Array.prototype.filter.call(modal().querySelectorAll("button, textarea"), function (el) {
     return !el.disabled && el.offsetParent !== null;
@@ -946,7 +791,6 @@ function onClick(e) {
   else if (act === "done") done();
 }
 
-/* The six swatches, from the one list of colours a mark may have. */
 function buildSwatches() {
   var host = document.getElementById("annotate-colors");
   ANNOTATION_COLORS.forEach(function (c, i) {
@@ -963,8 +807,6 @@ function buildSwatches() {
   });
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order. */
 export function __init() {
   memory.color = { pen: ANNOTATION_COLORS[0], highlight: ANNOTATION_COLORS[1], text: ANNOTATION_COLORS[0] };
   var m = modal();
@@ -978,15 +820,11 @@ export function __init() {
   f.addEventListener("pointercancel", onPointerCancel);
   f.addEventListener("lostpointercapture", onPointerUp);
   window.addEventListener("keydown", onWindowKeydown, true);
-  /* the stage changes size with the window, and when the bar above it
-     wraps differently (a phone turned, the text face arriving) */
   if (typeof ResizeObserver === "function") {
     new ResizeObserver(function () { if (ed) layout(); }).observe(document.getElementById("annotate-stage"));
   } else {
     window.addEventListener("resize", function () { if (ed) layout(); });
   }
-  /* For the browser suites: what the editor holds. Nothing in the app
-     reads it. */
   window.__annotateTest = {
     state: function () {
       return ed ? { tool: memory.tool, marks: copy(ed.marks), undo: ed.undo.length, redo: ed.redo.length,

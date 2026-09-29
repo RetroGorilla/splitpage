@@ -27,57 +27,7 @@ import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
 
-/* ================= a scene's gallery, all of it (#135) =================
-
-   The dialog a click on any tile of a scene's Image section opens (or the
-   "+N" tile, or "+N more videos", which shows only the videos): "Scene N
-   · Visual", how many pictures and videos, a large preview of the picked
-   item with ‹ › and "3 / 10", its caption (its file name, or its video
-   links) and Open / Annotate / Make cover / Remove (a picture drawn on
-   says "Edit annotations" and offers "Remove annotations" — the editor is
-   05w-annotate.js); then every item as a numbered
-   grid, a dashed "behind +N" line after item 3 when the cell shows only
-   three, and a "+" tile to add a picture.
-
-   Drawn as Direction B's B-GalleryDialog (#169). The preview is a still —
-   a picture, a video file's first frame, a web video's fetched thumbnail
-   (#141) — on a dark monitor. A small pill says what the still is ("▶
-   Video · first frame", "▶ Video · thumbnail"), and the length sits
-   opposite.
-
-   Some videos PLAY there (#168), and only there — never in the script's
-   own tiles, so scrolling a script never contacts anyone: a YouTube or
-   Vimeo link (05v-video.js: YouTube's no-cookie embed, Vimeo's player
-   with dnt=1), and a video file dropped or pasted in since this page
-   opened (a blob: URL made from the File this page still holds,
-   06-rows.js). Click to play: the still carries a play button, and
-   nothing is asked of YouTube or Vimeo until it is pressed. The player
-   then takes the still's place; picking another item, closing the
-   dialog, or anything that repaints it for another item removes it, and
-   with it the playback. A repaint for the same item (an undo, a merge,
-   the grid) leaves a playing player where it is. What cannot play here
-   says so on the still and offers the way it opens instead: a file this
-   page no longer holds (only its name is in the document), YouTube in a
-   copy opened from disk, a player the page's policy refused.
-
-   The button that opens a video says how ("Open file" plays it in the
-   computer's own player, through the desktop app; "Open link" opens the
-   address in the browser), and its title says where. A web video with no
-   picture offers "Retry thumbnail" while Settings lets thumbnails be
-   fetched.
-
-   Reordering: drag a tile onto another, or Shift+← / Shift+→ on the picked
-   one. ← / → pick, Delete removes, Esc closes. Make cover, Remove, a move
-   and an add are each one undo step (the document's own undo, 12a-undo.js)
-   with a toast that offers it. The dialog always draws from state, so an
-   undo from anywhere repaints it (refreshGalleryOverlay, called by
-   render/renderRow). All of it is .scene-gallery*; the markup lives in
-   page.html as #gallery-modal. */
-
-var view = null;          /* {rowId, sel, videos, playing, refused} while open:
-                             playing is the videoLinkKey of the video whose
-                             player is up, refused the one whose player the
-                             page's policy turned away */
+var view = null;
 var returnFocus = null;
 var dragFrom = -1;
 
@@ -88,7 +38,6 @@ function rowOf(rowId) {
   return idx === -1 ? null : { row: S.state.rows[idx], index: idx };
 }
 
-/* The items the dialog shows, as slot indexes: all, or those with videos. */
 function shownSlots(slots) {
   var out = [];
   slots.forEach(function (s, i) { if (!view.videos || s.links.length) out.push(i); });
@@ -105,7 +54,6 @@ export function openGalleryOverlay(rowId, slot, videosOnly) {
   var slots = rowSlots(got.row);
   var shown = shownSlots(slots);
   if (shown.indexOf(view.sel) === -1) view.sel = shown.length ? shown[0] : 0;
-  /* the last scene's grid goes, so its scroll is not carried over (paint) */
   document.getElementById("gallery-body").innerHTML = "";
   modal().hidden = false;
   paint();
@@ -119,21 +67,15 @@ export function closeGalleryOverlay() {
   var rowId = view.rowId;
   view = null;
   modal().hidden = true;
-  /* a player goes with the dialog, and its playback with it */
   document.getElementById("gallery-body").innerHTML = "";
-  /* back where it was opened from — or, when an edit repainted that tile,
-     the scene's cover */
   var back = returnFocus && returnFocus.isConnected && returnFocus !== document.body ? returnFocus
     : document.querySelector('#rows .scene-gallery[data-id="' + cssAttr(rowId) + '"] .scene-gallery-tile');
   if (back) back.focus({ preventScroll: true });
   returnFocus = null;
 }
 
-/* Repaints the open dialog from state — after an undo, a merge, anything
-   render() or renderRow() ran for. Closes it when its scene or its last
-   picture is gone. */
+// Closes dialog when its scene or last picture is gone
 export function refreshGalleryOverlay() {
-  /* the picture being drawn on, if any, gone with whatever changed */
   refreshAnnotator();
   if (!view) return;
   var got = rowOf(view.rowId);
@@ -141,7 +83,6 @@ export function refreshGalleryOverlay() {
   var hadFocus = modal().contains(document.activeElement);
   paint();
   if (zoom) {
-    /* the picture it shows went (an undo, a merge): back to the dialog */
     if (zoomSlots().indexOf(view.sel) === -1) closeZoom();
     else paintZoom();
     return;
@@ -185,12 +126,7 @@ function paint() {
   var playKey = play && play.can ? videoLinkKey(poster) : null;
   if (view.playing && view.playing !== playKey) view.playing = null;
   var playing = !!(playKey && view.playing === playKey);
-  /* A web video's still is its fetched thumbnail (#141); a file's, its
-     first frame. */
   var stillKind = poster && poster.href ? "thumbnail" : "first frame";
-  /* What the still is, for a screen reader: the monitor is one image, its
-     pills part of it — or, when it holds a play button or a note, a group
-     named the same way. */
   var about = (poster ? "Video " : "Picture ") + (sel + 1) + " of " + n +
     (poster ? ": " + videoLinkLabel(poster) + (length ? ", " + length : "") +
       (still ? ". " + stillKind.charAt(0).toUpperCase() + stillKind.slice(1) + " shown; " : ". No picture of it; ") +
@@ -211,7 +147,6 @@ function paint() {
       (play && play.note ? noteHtml(poster, play.note) : '');
   }
   var group = playing || (play && (play.can || play.note));
-  /* a picture (never a video's still) opens at full size (#216) */
   var zoomable = !poster && still;
   var picHtml =
       '<div class="scene-gallery-preview-pic' + (poster ? ' is-video' : '') + (playing ? ' is-playing' : '') +
@@ -239,13 +174,10 @@ function paint() {
           escapeHtml(videoLinkKey(l)) + '" title="' + escapeHtml(l.href || l.name) + '">' + escapeHtml(videoLinkLabel(l)) + '</button></div>';
       }).join("")
     : '<div class="scene-gallery-line is-name">' + escapeHtml(slot.name || (poster ? "" : "Picture " + (sel + 1))) + '</div>';
-  /* a YouTube or Vimeo link with no picture: ask the site again (#141) */
   var retry = !review && poster && !still && embeddableVideo(poster) && thumbnailsAllowed()
     ? '<button type="button" class="btn-outline" data-gact="retry-thumb" data-key="' + escapeHtml(videoLinkKey(poster)) + '"' +
       (view.fetching === videoLinkKey(poster) ? ' disabled aria-busy="true"' : '') + '>Retry thumbnail</button>'
     : '';
-  /* A picture — never a video's still — can be drawn on (05w-annotate.js);
-     one already drawn on says so, and offers its original back. */
   var annotate = review || poster || !slot.ref ? '' :
     '<button type="button" class="btn-outline" data-gact="annotate">' + PEN_ICON +
       (slot.annotation ? 'Edit annotations' : 'Annotate') + '</button>' +
@@ -255,8 +187,6 @@ function paint() {
     (review ? '' :
       '<button type="button" class="btn-outline" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>' + COVER_ICON + 'Make cover</button>' +
       '<button type="button" class="scene-gallery-remove" data-gact="remove">Remove</button>');
-  /* the hint only where a drag does something: not in review, and not
-     when the grid holds one tile */
   var hint = review || shown.length < 2 ? '' :
     '<p class="scene-gallery-hint"><svg aria-hidden="true"><use href="#i-grip"/></svg>Drag to reorder</p>';
   var actions = hint || buttons
@@ -273,7 +203,6 @@ function paint() {
       (i === sel ? ' aria-current="true"' : '') + '>' +
       gallerySlotPictureHtml(s) + (p ? galleryBadgeHtml(false) : '') + '<span class="scene-gallery-num">' + (i + 1) + '</span></button></li>';
     if (!view.videos && n > 4 && k === 2) {
-      /* the word over the count, a dashed rule above and below (app.css) */
       grid += '<li class="scene-gallery-divider" aria-hidden="true"><span>behind</span> ' +
         '<span class="scene-gallery-divider-count">+' + (n - 3) + '</span></li>';
     }
@@ -283,15 +212,11 @@ function paint() {
       '<svg aria-hidden="true"><use href="#i-plus"/></svg></button></li>';
   }
   grid += '</ol>';
-  /* the grid scrolls past two rows (app.css): keep where it was across a
-     repaint, and bring the picked tile into it */
   var before = modal().querySelector(".scene-gallery-grid");
   var scrolled = before ? before.scrollTop : 0;
   var body = document.getElementById("gallery-body");
   var rest = '<div class="scene-gallery-preview-caption">' + caption + '</div>' + actions + grid;
-  /* A player already up for this same video stays exactly where it is —
-     a frame taken out of the page and put back would start again — and
-     everything round it is drawn afresh. */
+  // Reinserted playing frames restart; keep it in place
   var livePic = playing ? body.querySelector(".scene-gallery-preview-pic.is-playing") : null;
   var livePreview = livePic && livePic.getAttribute("data-play") === playKey ? livePic.parentNode : null;
   if (livePreview && livePreview.parentNode === body) {
@@ -308,18 +233,11 @@ function paint() {
   revealPicked(after);
 }
 
-/* B-GalleryDialog's two glyphs that are not in the sprite (#169): "open
-   elsewhere" (a box with an arrow leaving it) and "make cover" (a large
-   frame beside two small ones, the cell's mosaic). */
 var OPEN_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5L11 13M17.5 14v4.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5V8.5A1.5 1.5 0 0 1 6 7h4.5"/></svg>';
 var COVER_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3.5" y="5" width="10" height="14" rx="1.5"/>' +
   '<rect x="16" y="5" width="4.5" height="6" rx="1"/><rect x="16" y="13" width="4.5" height="6" rx="1"/></svg>';
 var PEN_ICON = '<svg aria-hidden="true"><use href="#i-pen"/></svg>';
 
-/* The button that opens a video, saying how: a file plays in the
-   computer's own player (the desktop app hands it over — openVideoFile,
-   06-rows.js — and says so in a toast anywhere else); an address opens in
-   the browser. Its title says where. */
 function openButtonHtml(l) {
   var title = l.href
     ? "Opens " + videoLinkLabel(l) + (S.DESKTOP ? " in your web browser" : " in a new tab")
@@ -328,13 +246,6 @@ function openButtonHtml(l) {
     '" title="' + escapeHtml(title) + '">' + OPEN_ICON + (l.href ? "Open link" : "Open file") + '</button>';
 }
 
-/* ---- playing it here (#168) ----
-
-   What the preview can do with the picked item's video: {can: true,
-   embed} for a YouTube or Vimeo link, {can: true, file: true} for a file
-   this page still holds, {note} for one it cannot play — and why, in
-   words — or null for a picture or another site's link, which stay as
-   they were. */
 function playState(poster) {
   if (!poster) return null;
   var key = videoLinkKey(poster);
@@ -352,8 +263,6 @@ function hostName(play) {
   return play.embed && play.embed.host === "vimeo" ? "Vimeo" : "YouTube";
 }
 
-/* The big ▶ over the still. For a web video its title says what pressing
-   it does: it is the first time the site is asked for anything. */
 function playButtonHtml(poster, play) {
   var label = videoLinkLabel(poster);
   var title = play.file ? "Play it here"
@@ -362,10 +271,7 @@ function playButtonHtml(poster, play) {
     '" title="' + escapeHtml(title) + '"><span aria-hidden="true"></span></button>';
 }
 
-/* The player in the still's place: a <video> over the file's blob: URL, or
-   the site's player in a frame that may run the player's own scripts and
-   open its own links in a new window, and nothing else — no navigating
-   this page, no forms. */
+// Iframe sandbox: scripts and popups only, no navigation or forms
 function playerHtml(poster, play) {
   if (play.file) {
     var url = sessionVideoUrl(poster);
@@ -380,7 +286,6 @@ function playerHtml(poster, play) {
     ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"></iframe>';
 }
 
-/* Why it cannot play here, on the still, with the way it does open. */
 function noteHtml(poster, text) {
   return '<div class="scene-gallery-note"><p>' + escapeHtml(text) + '</p>' +
     '<button type="button" class="btn-outline is-small" data-gact="open" data-key="' + escapeHtml(videoLinkKey(poster)) + '">' +
@@ -395,11 +300,9 @@ function startPlaying() {
   view.playing = videoLinkKey(poster);
   paint();
   var player = modal().querySelector(".scene-gallery-player");
-  if (player) { try { player.focus({ preventScroll: true }); } catch (e) { /* not focusable yet */ } }
+  if (player) { try { player.focus({ preventScroll: true }); } catch (e) { } }
 }
 
-/* "Retry thumbnail": the picked web video's thumbnail, asked for again —
-   one gallery edit when it comes, a word when it does not. */
 function retryThumbnail() {
   var rowId = view.rowId;
   var slot = rowSlots(rowOf(rowId).row)[view.sel];
@@ -416,22 +319,18 @@ function retryThumbnail() {
   });
 }
 
-/* Scrolls the grid, and only the grid, so the picked tile and its outline
-   are in view — focus() is called with preventScroll, which would
-   otherwise leave it hidden below the second row. */
+// focus() uses preventScroll; scroll only the grid manually
 function revealPicked(grid) {
   var tile = grid && grid.querySelector(".scene-gallery-grid-tile.is-selected");
   if (!tile) return;
   var g = grid.getBoundingClientRect();
   var t = tile.getBoundingClientRect();
-  var room = 4;   /* the selected outline: 2px, 2px out */
+  var room = 4;
   if (t.top - room < g.top) grid.scrollTop -= g.top - t.top + room;
   else if (t.bottom + room > g.bottom) grid.scrollTop += t.bottom - g.bottom + room;
 }
 
-/* One edit of the scene's gallery: its own undo entry, the cell and the
-   dialog repainted, and a toast whose Undo takes it back while it is still
-   the last thing done. fn(row) changes the row and says whether it did. */
+// fn(row) must return whether it changed anything
 export function galleryEdit(rowId, msg, fn) {
   var got = rowOf(rowId);
   if (!got) return false;
@@ -445,8 +344,6 @@ export function galleryEdit(rowId, msg, fn) {
   return true;
 }
 
-/* The toast after a gallery edit (here, and a picture added through the
-   file picker, 06-rows.js): Undo, while that edit is still the last. */
 export function announceGalleryEdit(msg, before) {
   var entry = lastUndoEntry();
   breakUndoCoalescing();
@@ -503,8 +400,6 @@ function removeSelected() {
   }
 }
 
-/* "Remove annotations": the picked picture back as it was before anything
-   was drawn on it — one undo step, like Make cover. */
 function removeAnnotations() {
   if (reviewMode()) return;
   var at = view.sel;
@@ -553,7 +448,7 @@ function onKeydown(e) {
   }
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGalleryOverlay(); return; }
   if (e.altKey || e.ctrlKey || e.metaKey) return;
-  /* a playing <video>'s own keys: ← → seek it, rather than pick */
+  // Playing video keeps arrow keys for seeking
   if (e.target && e.target.classList && e.target.classList.contains("scene-gallery-player")) return;
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
     e.preventDefault();
@@ -573,7 +468,6 @@ function onKeydown(e) {
   }
 }
 
-/* Drag a grid tile onto another to put it there. */
 function onDragStart(e) {
   var tile = e.target.closest && e.target.closest('.scene-gallery-grid-tile[data-gact="pick"]');
   if (!tile || !view || reviewMode()) return;
@@ -600,27 +494,12 @@ function onDrop(e) {
   if (tile && view) moveTo(from, Number(tile.getAttribute("data-slot")));
 }
 
-/* ---- a picture at full size (#216) ----
-
-   A click on the picked picture in the preview (or Enter on it) lays it
-   over the whole window on a dark backdrop at its real size: fitted to the
-   window first when it is bigger, where a click or the wheel takes it to
-   100 % round the point under the pointer and a drag pans it; left at
-   100 % when it is smaller, never blown up. Under it, its real dimensions
-   and its name. ← / → step through the scene's pictures (the dialog
-   picking along with it); Esc, the ×, or a click on the backdrop go back
-   to the dialog with the same item picked. Only pictures: a video's still
-   keeps its play or open. It shows the bytes already here (the same
-   <img data-blob> the preview draws, 02c-blobs.js), so it asks nothing of
-   any server. */
-
-var zoom = null;          /* {w, h, s, x, y, full, pan, moved} while open */
+var zoom = null;
 var ZOOM_PAD = 48;
 
 function zoomEl() { return document.getElementById("gallery-zoom"); }
 function zoomStage() { return document.getElementById("gallery-zoom-stage"); }
 
-/* The slots it steps through: the shown ones that are pictures. */
 function zoomSlots() {
   if (!view) return [];
   var got = rowOf(view.rowId);
@@ -650,7 +529,6 @@ function closeZoom(quiet) {
   if (pic) pic.focus({ preventScroll: true });
 }
 
-/* Draws the picked picture into the stage, fitted, and its readout. */
 function paintZoom() {
   var slots = rowSlots(rowOf(view.rowId).row);
   var slot = slots[view.sel];
@@ -676,15 +554,12 @@ function clampAxis(pos, size, room) {
   return size <= room ? (room - size) / 2 : Math.min(0, Math.max(room - size, pos));
 }
 
-/* The scale that fits the window, never above 100 %. */
 function fitScale() {
   var W = window.innerWidth, H = window.innerHeight;
   var pad = W < 600 ? 16 : ZOOM_PAD;
   return Math.min(1, (W - 2 * pad) / zoom.w, (H - 2 * pad) / zoom.h);
 }
 
-/* Places the picture: 100 % or fitted, centred on an axis it fits, kept
-   covering the window on one it does not. */
 function layoutZoom(keep) {
   if (!zoom || !zoom.w || !zoom.h) return;
   var fit = fitScale();
@@ -719,8 +594,6 @@ function zoomInfo() {
   document.getElementById("gallery-zoom-info").innerHTML = parts.join('<span aria-hidden="true">·</span>');
 }
 
-/* 100 % round the point (px, py), or back to fitted; animated unless the
-   system asks for reduced motion (app.css). */
 function zoomTo(full, px, py) {
   if (!zoom || !zoom.w || fitScale() >= 1 || zoom.full === full) return;
   var s1 = full ? 1 : fitScale();
@@ -755,12 +628,10 @@ function onZoomKeydown(e) {
     e.preventDefault();
     zoomTo(!zoom.full, window.innerWidth / 2, window.innerHeight / 2);
   } else if (k === "Tab") {
-    /* the × is the one thing to tab to; keep the focus in here */
     e.preventDefault();
     var close = document.getElementById("gallery-zoom-close");
     (document.activeElement === close ? zoomEl() : close).focus({ preventScroll: true });
   }
-  /* nothing else: Delete does not remove a picture from here */
 }
 
 function onZoomClick(e) {
@@ -783,7 +654,6 @@ function onZoomWheel(e) {
   else if (e.deltaY > 0) zoomTo(false, e.clientX, e.clientY);
 }
 
-/* Drag to pan at 100 %. A press that moves is a pan, not a click. */
 function onZoomPointerDown(e) {
   if (!zoom || !zoom.full || e.button !== 0 || !e.target.classList.contains("scene-gallery-zoom-img")) return;
   e.preventDefault();
@@ -797,8 +667,7 @@ function onZoomPointerMove(e) {
   var dx = e.clientX - zoom.pan.sx, dy = e.clientY - zoom.pan.sy;
   if (!zoom.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
   if (!zoom.moved) {
-    /* captured only once it is a drag, so a plain click still lands on
-       the picture rather than the stage */
+    // Capture only once dragging, so clicks reach picture
     try { zoomStage().setPointerCapture(e.pointerId); } catch (err) {}
   }
   zoom.moved = true;
@@ -814,8 +683,6 @@ function onZoomPointerUp(e) {
   zoomStage().classList.remove("is-dragging");
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   var m = modal();
   if (!m) return;
@@ -836,8 +703,7 @@ export function __init() {
     z.addEventListener("pointercancel", onZoomPointerUp);
     window.addEventListener("resize", function () { if (zoom) layoutZoom(true); });
   }
-  /* A player the page's policy turned away would be an empty frame: say
-     so instead, and offer the link (#168). */
+  // CSP-blocked player leaves empty frame; offer link
   document.addEventListener("securitypolicyviolation", function (e) {
     if (!view || !view.playing) return;
     if (!/^(frame-src|child-src|default-src)/.test(e.effectiveDirective || e.violatedDirective || "")) return;
@@ -845,7 +711,6 @@ export function __init() {
     view.playing = null;
     paint();
   });
-  /* Settings ▸ Fetch video thumbnails decides whether Retry is offered */
   document.addEventListener(PREF_EVENT, function (e) {
     if (e.detail && e.detail.key === VIDEO_THUMBS_KEY) refreshGalleryOverlay();
   });

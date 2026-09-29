@@ -1,9 +1,3 @@
-/* Undo and redo (#85, docs/DOCUMENT-MODEL.md §7): src/js/12a-undo.js's pure
- * core. The app records a change by diffing the document against its last
- * copy (diffStates), applies an entry to the live document in place
- * (applyStepsLive), keeps the stacks (createUndoHistory) and forgets what a
- * collaborator's merge changed (changedBetween + forget, design D4). The
- * keys, the caret and the repaint are browser suite 73-undo. */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +8,6 @@ const row = (id, audio, extra) => Object.assign({ id, status: "todo", visualText
 const doc = (rows, extra) => Object.assign({ title: "T", docId: "d1", rev: 3, rows, comments: [], productionTags: [], people: [], brollShots: [] }, extra);
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
-/* The property everything rests on: the steps take before to after. */
 function roundTrip(before, after) {
   const steps = diffStates(before, after);
   const live = clone(before);
@@ -25,7 +18,6 @@ function roundTrip(before, after) {
     for (const k of Object.keys(r)) if (k !== "updatedAt" && k !== "updatedBy") assert.deepEqual(got[k], r[k], r.id + "." + k);
   }
   for (const k of ["title", "comments", "productionTags"]) assert.deepEqual(live[k], after[k], k);
-  /* and the inverse takes it back */
   assert.deepEqual(applyStepsLive(live, invertSteps(steps)), { ok: true });
   assert.deepEqual(live.rows.map((r) => r.id), before.rows.map((r) => r.id));
   for (const r of before.rows) assert.equal(live.rows.find((x) => x.id === r.id).audioText, r.audioText);
@@ -66,10 +58,9 @@ test("diffStates: the lists and comments are one step each; bookkeeping is never
 test("undo puts a cell back even after something else changed it since, when the two do not overlap", () => {
   const live = doc([row("r1", "alpha bravo charlie")]);
   const step = { op: "rowField", rowId: "r1", key: "audioText", before: "alpha bravo charlie", after: "alpha BRAVO charlie" };
-  live.rows[0].audioText = "alpha BRAVO charlie delta";                 // the step, then a word added
+  live.rows[0].audioText = "alpha BRAVO charlie delta";
   assert.deepEqual(applyStepsLive(live, invertSteps([step])), { ok: true });
   assert.equal(live.rows[0].audioText, "alpha bravo charlie delta");
-  /* the same words changed again since: refused, and nothing is touched */
   live.rows[0].audioText = "alpha BRAVISSIMO charlie";
   const r = applyStepsLive(live, invertSteps([step]));
   assert.equal(r.ok, false);
@@ -122,7 +113,6 @@ test("history: typing coalesces into one entry per word, per cell, per pause", (
   assert.equal(h.undo(live).empty, true);
   assert.equal(h.redo(live).ok, true);
   assert.equal(live.rows[0].audioText, "hey ");
-  /* a new change drops the redo stack */
   h.record(t("hey ", "hey!"), 9000);
   assert.equal(h.sizes().redo, 0);
 });
@@ -145,33 +135,23 @@ test("forget (design D4): a merge that changed a cell drops the entries for it, 
 });
 
 test("caretAfterStep: the end of what differs, in the DOM's text", () => {
-  // 12a-undo.js's step() inverts the entry's steps before handing them to
-  // caretAfterStep for an undo (before/after swapped), so `before` is
-  // always the cell as it read before this operation and `after` is what
-  // it reads once applied — never the original, un-inverted typing step.
+  // step() inverts steps first, so before is pre-operation cell
   const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "one<br>two", after: "one<br>two three" };
   assert.equal(caretAfterStep(typed), "onetwo three".length, "redo: end of the retyped text");
   assert.equal(caretAfterStep(invertSteps([typed])[0]), "onetwo".length, "undo: where the typing began");
 });
 
 test("caretAfterStep: a common character right at the edit doesn't grow the match past it (#119)", () => {
-  // Typing " mid" right after "Alpha" in "Alpha beta" makes "Alpha mid beta" —
-  // the space that starts the insertion is the same character as the space
-  // the untouched " beta" already begins with, so a prefix search greedy
-  // from the left can walk one character past the true edit point.
   const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "Alpha beta", after: "Alpha mid beta" };
   assert.equal(caretAfterStep(invertSteps([typed])[0]), "Alpha".length, "undo: right after \"Alpha\", not after its space too");
   assert.equal(caretAfterStep(typed), "Alpha mid".length, "redo: end of the retyped word");
 });
 
 test("caretAfterStep: a change of marks alone lands at the end of it, not at 0", () => {
-  // The two texts agree throughout, so a match on the text alone ran the
-  // whole cell and put the caret before the first character.
   const bold = { op: "rowField", rowId: "r1", key: "audioText",
     before: "one two three four five", after: "one two three <strong>four</strong> five" };
   assert.equal(caretAfterStep(bold), "one two three four".length, "redo: after the bolded word");
   assert.equal(caretAfterStep(invertSteps([bold])[0]), "one two three four".length, "undo: the same");
-  // The typed "SFX:" making a line a cue, and the Direction button
   const cue = { op: "rowField", rowId: "r1", key: "audioText",
     before: "Line one<br>SFX:", after: "Line one<br><span class=\"audio-cue\">SFX:</span>" };
   assert.equal(caretAfterStep(invertSteps([cue])[0]), "Line oneSFX:".length);
@@ -182,8 +162,6 @@ test("caretAfterStep: a change of marks alone lands at the end of it, not at 0",
 });
 
 test("caretAfterStep: Tab closing a plain-language tag, undone and redone (#210)", () => {
-  // The keyword goes and the words become a tag: the text alone matched
-  // on through the tag's words and stopped at the keyword.
   const tagged = { op: "rowField", rowId: "r1", key: "visualText", before: "Wide VFX: lens flare",
     after: "Wide <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"lens flare\" contenteditable=\"false\">lens flare</span>" };
   assert.equal(caretAfterStep(invertSteps([tagged])[0]), "Wide VFX: lens flare".length, "undo: where the caret was when Tab closed it");
@@ -191,8 +169,6 @@ test("caretAfterStep: Tab closing a plain-language tag, undone and redone (#210)
 });
 
 test("caretAfterStep: never lands between the two halves of an emoji's surrogate pair", () => {
-  // "a😀b" -> undoing an insertion right after the emoji must not offer an
-  // offset that sits inside it.
   const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "a😀b", after: "a😀Xb" };
   const offset = caretAfterStep(invertSteps([typed])[0]);
   assert.equal(offset, "a😀".length);

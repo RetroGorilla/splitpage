@@ -1,16 +1,3 @@
-/* shared/blob-policy.js — the image record, the reference walker and the
- * byte sniffer every blob store agrees on (issue #82).
- *
- * NO _dom.mjs IMPORT, deliberately — see history-policy.test.mjs's header:
- * this module is loaded by the browser bundle, by Electron's main process
- * and by node, and a suite that installed jsdom first could not tell if it
- * had started to need a DOM.
- *
- * The byte fixtures are hand-built headers, not real image files: the
- * sniffer and the measurer only ever read headers, and a fixture spelled out
- * byte by byte says exactly which field is being read. Real encoder output
- * (a canvas's PNG, JPEG and WebP) is measured in browser suite 65-blobs.
- */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -44,14 +31,11 @@ const le16 = (n) => [n & 255, (n >> 8) & 255];
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
 const le24 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255];
 
-/* ---- fixtures ---- */
-
 const png = (w, h) => bytes(0x89, "PNG\r\n\x1a\n", be32(13), "IHDR", be32(w), be32(h), [8, 6, 0, 0, 0], be32(0));
 
 const JFIF = [0xff, 0xe0, ...be16(16), ..."JFIF\0".split("").map((c) => c.charCodeAt(0)), 1, 1, 0, 0, 1, 0, 1, 0, 0];
 const sof = (marker, w, h) => [0xff, marker, ...be16(17), 8, ...be16(h), ...be16(w), 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1];
 const jpeg = (...segments) => bytes([0xff, 0xd8], ...segments, [0xff, 0xd9]);
-/* An APP1 Exif segment whose IFD0 holds one entry: Orientation (0x0112). */
 const exif = (orientation, littleEndian) => {
   const r16 = littleEndian ? le16 : be16;
   const r32 = littleEndian ? (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255] : be32;
@@ -68,13 +52,11 @@ const gif = (w, h) => bytes("GIF89a", le16(w), le16(h), [0, 0, 0], [0x3b]);
 const riff = (chunk) => bytes("RIFF", [0, 0, 0, 0], "WEBP", chunk);
 const webpLossy = (w, h) => riff([..."VP8 ".split("").map((c) => c.charCodeAt(0)), 0, 0, 0, 0, 0x10, 0x02, 0x00, 0x9d, 0x01, 0x2a, ...le16(w), ...le16(h)]);
 const webpLossless = (w, h) => {
-  const bits = (w - 1) | ((h - 1) << 14); /* 28 bits: fits in a double's exact ints */
+  const bits = (w - 1) | ((h - 1) << 14);
   return riff([..."VP8L".split("").map((c) => c.charCodeAt(0)), 0, 0, 0, 0, 0x2f,
     bits & 255, (bits >>> 8) & 255, (bits >>> 16) & 255, (bits >>> 24) & 255]);
 };
 const webpExtended = (w, h) => riff([..."VP8X".split("").map((c) => c.charCodeAt(0)), 10, 0, 0, 0, 0x10, 0, 0, 0, ...le24(w - 1), ...le24(h - 1)]);
-
-/* ---- sniffImageMime ---- */
 
 test("sniffImageMime reads the four raster formats off their magic numbers", () => {
   assert.equal(sniffImageMime(png(1, 1)), "image/png");
@@ -82,7 +64,6 @@ test("sniffImageMime reads the four raster formats off their magic numbers", () 
   assert.equal(sniffImageMime(bytes("GIF87a", le16(1), le16(1))), "image/gif");
   assert.equal(sniffImageMime(gif(1, 1)), "image/gif");
   assert.equal(sniffImageMime(webpLossy(1, 1)), "image/webp");
-  /* A Node Buffer and a plain array are read the same way. */
   assert.equal(sniffImageMime(Buffer.from(png(1, 1))), "image/png");
   assert.equal(sniffImageMime(Array.from(gif(1, 1))), "image/gif");
 });
@@ -101,8 +82,6 @@ test("sniffImageMime never says SVG, or anything else it cannot prove", () => {
   assert.equal(sniffImageMime("GIF89a"), null, "a string is not bytes");
 });
 
-/* ---- imageDims ---- */
-
 test("imageDims: PNG from IHDR", () => {
   assert.deepEqual(imageDims(png(640, 480)), { width: 640, height: 480 });
   assert.deepEqual(imageDims(png(1, 70000)), { width: 1, height: 70000 });
@@ -118,22 +97,19 @@ test("imageDims: JPEG from the first start-of-frame, orientation applied", () =>
   assert.deepEqual(imageDims(jpeg(JFIF, sof(0xc0, 800, 600))), { width: 800, height: 600 }, "baseline SOF0");
   assert.deepEqual(imageDims(jpeg(JFIF, sof(0xc1, 801, 601))), { width: 801, height: 601 }, "extended SOF1");
   assert.deepEqual(imageDims(jpeg(JFIF, sof(0xc2, 802, 602))), { width: 802, height: 602 }, "progressive SOF2");
-  /* DHT (C4) sits in the SOF range and is not a frame. */
+  // DHT (C4) is in the SOF range, not a frame
   const dht = [0xff, 0xc4, ...be16(4), 0, 0];
   assert.deepEqual(imageDims(jpeg(dht, sof(0xc0, 10, 20))), { width: 10, height: 20 });
-  /* Fill bytes before a marker are legal. */
   assert.deepEqual(imageDims(jpeg([0xff, 0xff], sof(0xc0, 10, 20))), { width: 10, height: 20 });
-  /* EXIF orientation 6 (rotate 90) is shown portrait: width and height swap. */
   assert.deepEqual(imageDims(jpeg(exif(6, true), sof(0xc0, 4032, 3024))), { width: 3024, height: 4032 }, "II");
   assert.deepEqual(imageDims(jpeg(exif(8, false), sof(0xc2, 4032, 3024))), { width: 3024, height: 4032 }, "MM");
   assert.deepEqual(imageDims(jpeg(exif(3, false), sof(0xc0, 4032, 3024))), { width: 4032, height: 3024 }, "180 keeps shape");
   assert.deepEqual(imageDims(jpeg(exif(1, true), sof(0xc0, 4032, 3024))), { width: 4032, height: 3024 });
-  /* Scan data or the end before any frame: nothing to measure. */
   assert.equal(imageDims(jpeg(JFIF, [0xff, 0xda, ...be16(2)], sof(0xc0, 1, 1))), null);
   assert.equal(imageDims(jpeg(JFIF)), null);
   assert.equal(imageDims(jpeg(sof(0xc0, 0, 10))), null, "zero width");
   assert.equal(imageDims(jpeg(JFIF, sof(0xc0, 800, 600)).slice(0, 26)), null, "truncated frame header");
-  /* A broken Exif segment is ignored, not fatal. */
+  // Broken Exif is ignored, not fatal
   const badExif = [0xff, 0xe1, ...be16(10), ..."Exif\0\0".split("").map((c) => c.charCodeAt(0)), 0x4d, 0x4d];
   assert.deepEqual(imageDims(jpeg(badExif, sof(0xc0, 5, 7))), { width: 5, height: 7 });
 });
@@ -141,8 +117,6 @@ test("imageDims: JPEG from the first start-of-frame, orientation applied", () =>
 test("imageDims: GIF from the logical screen, or the first frame when that is 0 x 0", () => {
   assert.deepEqual(imageDims(gif(320, 200)), { width: 320, height: 200 });
   assert.deepEqual(imageDims(bytes("GIF87a", le16(3), le16(4), [0, 0, 0])), { width: 3, height: 4 });
-  /* A zero screen, a 2-entry global colour table, a graphic control
-     extension, then the frame at (1, 2) sized 10 x 20. */
   const zeroScreen = bytes("GIF89a", le16(0), le16(0), [0x80, 0, 0], [0, 0, 0, 255, 255, 255],
     [0x21, 0xf9, 4, 0, 0, 0, 0, 0], [0x2c], le16(1), le16(2), le16(10), le16(20), [0], [0x3b]);
   assert.deepEqual(imageDims(zeroScreen), { width: 11, height: 22 });
@@ -152,7 +126,6 @@ test("imageDims: GIF from the logical screen, or the first frame when that is 0 
 
 test("imageDims: WebP lossy, lossless and extended", () => {
   assert.deepEqual(imageDims(webpLossy(640, 480)), { width: 640, height: 480 });
-  /* The top two bits of each lossy dimension are a scale hint, not size. */
   assert.deepEqual(imageDims(webpLossy(640 | 0xc000, 480 | 0x4000)), { width: 640, height: 480 });
   assert.deepEqual(imageDims(webpLossless(1, 1)), { width: 1, height: 1 });
   assert.deepEqual(imageDims(webpLossless(1000, 750)), { width: 1000, height: 750 });
@@ -173,8 +146,6 @@ test("imageDims is null for anything that is not one of the four formats", () =>
   assert.equal(imageDims(new Uint8Array(0)), null);
   assert.equal(imageDims(undefined), null);
 });
-
-/* ---- normalizeImageRef ---- */
 
 test("normalizeImageRef: accept exactly the canonical record, return a fresh copy", () => {
   const ok = { sha256: SHA_B, width: 640, height: 480, mime: "image/png" };
@@ -218,8 +189,6 @@ test("isSha256Hex is the same strict shape", () => {
   assert.equal(isSha256Hex(SHA_A.slice(1)), false);
   assert.equal(isSha256Hex(null), false);
 });
-
-/* ---- refsIn ---- */
 
 test("refsIn collects rows, HTML fields, comments and replies — once each, in order", () => {
   const state = {
@@ -265,11 +234,8 @@ test("refsIn is empty for anything that is not a state", () => {
   assert.deepEqual(refsIn("x"), []);
   assert.deepEqual(refsIn({}), []);
   assert.deepEqual(refsIn({ rows: "x", comments: {} }), []);
-  /* Legacy states hold data: URIs, not refs. */
   assert.deepEqual(refsIn({ rows: [{ visualImage: "data:image/png;base64,AAAA", visualText: '<img src="data:image/png;base64,AAAA">' }] }), []);
 });
-
-/* ---- module shape ---- */
 
 test("a require() sees exactly what an import does — this file is CommonJS on purpose", () => {
   const require = createRequire(import.meta.url);

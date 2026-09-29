@@ -1,34 +1,3 @@
-/* Reopening a .docx (15-docx.js docxToRows): a Splitpage export comes back
- * as its script and nothing else; any other Word document reads as before.
- *
- * buildDocx writes the script as a table in the "SplitpageTable" style and
- * then, when there are any, a "Comments" section (a Heading1, a paragraph
- * per comment line and reply, and since 2fa8b33 the comments' pictures).
- * The importer used to walk that section as prose: the heading became a
- * bold row, each comment line a narration row and a comment's picture a
- * row picture. It now stops at the export's own trailing sections — found
- * by the Heading1 coming after a SplitpageTable-styled table, not by the
- * word alone, so a user's own "Comments" heading still imports.
- *
- * The .docx is built with the app's own buildDocx (S.state set directly,
- * fake JPEG headers interned into the registry, as
- * comment-images-export.test.mjs does) or, for a foreign document, written
- * by hand with zipWrite. JPEG only: a PNG row picture would be re-encoded
- * through a canvas, which jsdom does not have. Browser suite
- * 41-export-polish drives the same through the real File menu and open
- * path, breakdown and PNG pictures included.
- *
- * Since #169 the export draws round the words — tags in their colours, an
- * open comment's number after its words, the b-roll key as a chip, a line
- * of what the document is under the title, a scene gutter and a read time
- * either side of the script, a b-roll shot list, the narration's scene
- * numbers in the margin — and every piece of that is skipped on the way
- * back in. fixtures/ holds a script and a narration exported by the writer
- * before #169 (3.0.0-beta.8, c816264) from roundTripState below, and
- * OLD_READ is what the reader of that day read back from them: those files
- * must still read exactly so, and the same script exported now must read
- * back as exactly the same rows.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -45,7 +14,6 @@ initTags();
 initStatus();
 initDocx();
 
-/* Just enough of a JPEG for the registry to sniff and measure. */
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const pic = (bytes) => {
   const rec = intern(bytes);
@@ -84,7 +52,6 @@ test("a Splitpage export reopens as exactly its script: no comment rows, no comm
   for (const word of ["Comments", "COMMENTLINE", "REPLYLINE", "Ann", "Welcome”"]) {
     assert.equal(all.indexOf(word), -1, word + " leaked into a row");
   }
-  /* the row's own picture comes back on its row; no comment picture does */
   assert.equal(parsed.rows[0].imageRef && parsed.rows[0].imageRef.sha256, rowPic.rec.sha256);
   assert.deepEqual(parsed.rows.slice(1).map((r) => r.imageRef), [null, null]);
 });
@@ -104,8 +71,6 @@ test("an export with no comments reopens the same, and one with comments matches
   assert.equal(withComments.rows.length, 2);
 });
 
-/* A Word document of the user's own, the smallest one docxToRows reads:
-   document.xml alone, no rels. */
 const W_DOC = (body) => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + body + "</w:body></w:document>";
 const para = (text, style) => "<w:p>" + (style ? '<w:pPr><w:pStyle w:val="' + style + '"/></w:pPr>' : "") +
@@ -136,26 +101,20 @@ test("a user's own Word document with a Comments heading still imports it and wh
 test("only the export's own headings, in its own style, after its own table end the script", async () => {
   const script = table("SplitpageTable", [["No.", "Visual", "Audio"], ["01", "Shot", "Line."]]);
   const read = async (tail) => plainRows((await docxToRows(asFile(foreignDocx(para("T", "Title") + script + tail)))).rows);
-  /* a "Comments" that is not a Heading1, and a Heading1 that is not one of
-     the export's, are the user's and stay */
   assert.deepEqual(await read(para("Comments") + para("kept")), [
     { v: "Shot", a: "Line." }, { v: "", a: "Comments" }, { v: "", a: "kept" }
   ]);
   assert.deepEqual(await read(para("Notes", "Heading1") + para("kept")), [
     { v: "Shot", a: "Line." }, { v: "Notes", a: "" }, { v: "", a: "kept" }
   ]);
-  /* the export's breakdown heading ends it as the comments heading does,
-     and so does its b-roll shot list's (#169) */
   assert.deepEqual(await read(para("Production breakdown", "Heading1") + para("dropped") +
     para("Comments", "Heading1") + para("dropped too")), [{ v: "Shot", a: "Line." }]);
   assert.deepEqual(await read(para("B-roll shot list", "Heading1") + para("Scene 01") + para("a shot")),
     [{ v: "Shot", a: "Line." }]);
-  /* and before the table, the same heading is the user's */
+  // Same heading before the table is the user's
   const before = await docxToRows(asFile(foreignDocx(para("T", "Title") + para("Comments", "Heading1") + script)));
   assert.deepEqual(plainRows(before.rows), [{ v: "Comments", a: "" }, { v: "Shot", a: "Line." }]);
 });
-
-/* ---- #169: what the export draws round the words, and back again ---- */
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const wAttr = (el, name) => el.getAttributeNS(W, name) || el.getAttribute("w:" + name);
@@ -183,12 +142,6 @@ const DIR = (inner) => `<span class="stage-dir">${inner}</span>`;
 const CUE = (inner) => `<span class="audio-cue">${inner}</span>`;
 const KEY = (id) => `<span class="broll-key" data-broll-id="${id}" contenteditable="false">B-roll:</span>`;
 
-/* Every shape the writer draws differently since #169: tags (one bold in
-   part, one in a sound cue, one under a comment), the b-roll key, open and
-   resolved comments, a direction, the writer's own underline, strike,
-   highlight and link, a picture and a video link, a read time set by
-   hand, a scene with no audio and one with no visual. The fixtures were
-   exported from exactly this. */
 function roundTripState(pic) {
   return {
     schema: 2, title: "Round trip, then and now", wordsPerMinute: 150, targetSeconds: 60,
@@ -215,9 +168,9 @@ function roundTripState(pic) {
 const PIC = intern(jpegBytes(320, 180, 7));
 const loadRoundTrip = () => { S.state = migrateRows(roundTripState(PIC)); };
 
-/* What the reader of 3.0.0-beta.8 read back from the fixtures. */
 const MANUAL = '<a href="https://example.com/k1000" target="_blank" rel="noopener">the manual</a>';
 const R0_AUDIO = 'Forty dollars. <span class="stage-dir">beat</span> The meter\'s <em>dead</em>, the seals are <u>gone</u>, <s>sadly</s> and the <mark>shutter</mark> sticks. See ' + MANUAL + ".";
+// Reader output for pre-#169 fixtures; must never change
 const OLD_READ = {
   script: {
     title: "Round trip, then and now",
@@ -275,9 +228,7 @@ test("the title's meta line, tags, markers, the b-roll chip and the comments' un
   const script = kids(body, "tbl")[0];
   const runs = Array.from(script.getElementsByTagNameNS(W, "r"));
   const run = (text) => runs.find((r) => r.textContent === text);
-  /* open threads numbered down the script; the resolved one has none */
   assert.deepEqual(runs.filter((r) => runStyle(r) === "SplitpageMarker").map((r) => r.textContent.split(THIN).join("")), ["1", "2"]);
-  /* a tag: its words in its colour, underlined in it */
   const bench = run("workbench");
   assert.equal(runStyle(bench), "SplitpageTag");
   assert.equal(prop(bench, "color"), "2A7449");
@@ -285,21 +236,16 @@ test("the title's meta line, tags, markers, the b-roll chip and the comments' un
   assert.equal(prop(bench, "u", "color"), "2A7449");
   assert.equal(runStyle(run("Pentax")), "SplitpageTag");
   assert.ok(run("Pentax").getElementsByTagNameNS(W, "b").length, "the writer's bold inside a tag stays");
-  /* a tag in a cue line keeps the cue's style, and the tag's underline */
   assert.equal(runStyle(run("door slam")), "SplitpageCue");
   assert.equal(prop(run("door slam"), "u", "color"), "AB413E");
-  /* the b-roll key as its chip */
   const key = runs.find((r) => runStyle(r) === "SplitpageBroll");
   assert.equal(key.textContent, THIN + "B-roll:" + THIN);
   assert.equal(prop(key, "bdr", "color"), "00717F");
-  /* commented words: amber dotted while open, faint once resolved; a tag
-     under a comment keeps its colour and takes the comment's underline */
   assert.equal(prop(run("The meter's "), "u"), "dotted");
   assert.equal(prop(run("The meter's "), "u", "color"), "9E5800");
   assert.equal(prop(run("Old oil"), "u", "color"), "64635E");
   assert.equal(prop(run("Rita"), "color"), "A53C75");
   assert.equal(prop(run("Rita"), "u"), "dotted");
-  /* the writer's own underline has no colour of its own */
   assert.equal(prop(run("gone"), "u"), "single");
   assert.equal(prop(run("gone"), "u", "color"), null);
 });
@@ -311,19 +257,16 @@ test("the scene gutter and the read time sit either side of the script and are r
   const cells = (tr) => kids(tr, "tc");
   assert.deepEqual(cells(trs[0]).map((tc) => tc.textContent), ["Scene", "Visual", "Audio", "Read"]);
   assert.ok(trs[0].getElementsByTagNameNS(W, "tblHeader").length, "the header repeats on every page");
-  /* the words in their column's colour */
   assert.equal(prop(cells(trs[0])[1].getElementsByTagNameNS(W, "r")[0], "color"), "2863AB");
   assert.equal(prop(cells(trs[0])[2].getElementsByTagNameNS(W, "r")[0], "color"), "9E5800");
   const gutter = kids(cells(trs[2])[0], "p").map((p) => p.textContent);
   assert.deepEqual(gutter, ["02", "00:07", "● Ready"]);
   assert.deepEqual(kids(cells(trs[1])[0], "p").map((p) => p.textContent)[2], "✓ Shot");
   assert.deepEqual(kids(cells(trs[3])[0], "p").map((p) => p.textContent)[2], "○ To do");
-  /* the read time set by hand is boxed, an estimate is not */
   const read = (tr) => cells(tr)[3].getElementsByTagNameNS(W, "r")[0];
   assert.equal(read(trs[2]).textContent.split(THIN).join(""), "0:12");
   assert.ok(read(trs[2]).getElementsByTagNameNS(W, "bdr").length);
   assert.equal(read(trs[1]).getElementsByTagNameNS(W, "bdr").length, 0);
-  /* short scenes are kept whole on a page */
   assert.ok(trs.slice(1).every((tr) => tr.getElementsByTagNameNS(W, "cantSplit").length));
 });
 
@@ -341,7 +284,6 @@ test("the breakdown is grouped by category and no item's row splits across a pag
   assert.deepEqual(groups.map((tr) => tr.textContent), [
     "● Props & set dressing  1", "● Locations & shots  1", "● Cast & wardrobe  1", "● VFX & graphics  1", "● Music & SFX  1"
   ]);
-  /* each head in its category's colour, kept with the item under it */
   assert.equal(prop(groups[0].getElementsByTagNameNS(W, "r")[1], "color"), "764AA2");
   assert.ok(groups.every((tr) => tr.getElementsByTagNameNS(W, "keepNext").length));
   const pentax = trs.find((tr) => kids(tr, "tc")[0].textContent === "Pentax K1000");
@@ -359,7 +301,6 @@ test("the b-roll shot list, by scene, with a box for each shot", async () => {
   assert.deepEqual(paras.slice(at + 1, at + 6), [
     "1 of 1 shot · 1 flagged", "Scene 01  00:001/1 shot", "☑dust in the light", "Workbench  ·  Flagged", "Needs a haze."
   ]);
-  /* and none of it comes back as a scene */
   assert.deepEqual(plainRows((await docxToRows(asFile(buildDocx()))).rows).map((r) => r.v),
     ["Wide on the workbench, the Pentax K1000 in frame.\nB-roll: dust in the light", "Title card over the montage.", "Close on the needle.", ""]);
 });
@@ -372,12 +313,10 @@ test("the narration: its meta line and each scene's number in the margin, none o
   assert.match(paras[1].textContent, /^Narration · 3 scenes · \d+ words · about 0:\d\d at 150 wpm$/);
   const scenes = paras.slice(2);
   assert.ok(scenes.every((p) => paraStyle(p) === "SplitpageNarration"));
-  /* the number is the scene's own, so "03" (no narration) is missing */
   assert.deepEqual(scenes.map((p) => {
     const r = p.getElementsByTagNameNS(W, "r")[0];
     return runStyle(r) + ":" + r.textContent;
   }), ["SplitpageSceneNo:01", "SplitpageSceneNo:02", "SplitpageSceneNo:04"]);
-  /* hung out in the margin, a tab to the text's own edge */
   assert.ok(scenes.every((p) => prop(p, "ind", "hanging") && p.getElementsByTagNameNS(W, "tab").length));
   assert.equal(body.getElementsByTagNameNS(W, "tbl").length, 0, "prose, not a table");
 });
@@ -389,7 +328,6 @@ test("the package says what it is: a title Word shows, Splitpage, the day; page 
   const one = (ns, name) => core.getElementsByTagNameNS(ns, name)[0].textContent;
   assert.equal(one("http://purl.org/dc/elements/1.1/", "title"), "Round trip, then and now");
   assert.equal(one("http://purl.org/dc/elements/1.1/", "creator"), "Splitpage");
-  /* the day only: two exports of the same script are the same bytes */
   assert.match(one("http://purl.org/dc/terms/", "created"), /^\d{4}-\d\d-\d\dT00:00:00Z$/);
   assert.match(await text("docProps/app.xml"), /<Application>Splitpage<\/Application>/);
   const types = await text("[Content_Types].xml");

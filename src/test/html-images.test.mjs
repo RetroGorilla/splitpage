@@ -1,17 +1,3 @@
-/* Images inside HTML (#82 P6): comment and reply bodies (and the script
- * cells of a document from before #85 D7 moved their pictures into
- * comments) name a picture by its SHA-256, as
- *   <img class="comment-img" data-blob="<sha>" data-w data-h data-mime>
- * with no stored src. The sanitiser (04-richtext.js) is the one door: it
- * interns an inline data: image into that form, keeps a valid data-blob,
- * and drops everything else. The writers that must carry their pictures
- * (02c-blobs.js inlineStateImages: .splitpage, .md, standalone HTML, a
- * server without blob routes) put the bytes back inline, and a reader gets
- * the stored form back through migrateRows.
- *
- * The live half — the hydrator giving an <img data-blob> its blob: src on
- * screen, the composer, a paste — is browser suite 69-html-images.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +8,6 @@ import { migrateRows } from "../js/02-state.js";
 import { refsIn } from "../../shared/blob-policy.js";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
-/* A PNG header the sniffer and the measurer accept; each size its own sha. */
 const png = (w, h) => new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
   ...be32(w), ...be32(h), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44
@@ -138,14 +123,11 @@ test("an old document's inline comment, reply and cell images open content-addre
       replies: [{ id: "rp1", body: 'and <img src="' + dataUrl(c) + '">', author: "B" }] }]
   });
   assert.equal(JSON.stringify(doc).indexOf("data:image"), -1);
-  /* a picture in a script cell moves into a comment on it (#85 D7) */
   assert.equal(doc.rows[0].visualText, "pasted ");
   assert.equal(doc.comments.length, 2);
   assert.ok(doc.comments[1].body.endsWith("<br>" + stored(sha(a), 81, 13, "image/png")));
   assert.equal(doc.comments[0].body, "look " + stored(sha(b), 82, 13, "image/png"));
   assert.equal(doc.comments[0].replies[0].body, "and " + stored(sha(c), 83, 13, "image/png"));
-  /* refsIn — what history, drafts, the stash and the hosted upload all
-     persist or upload before they write — names every one of them */
   assert.deepEqual(refsIn(doc).sort(), [sha(a), sha(b), sha(c)].sort());
 });
 
@@ -158,7 +140,6 @@ test("a file carries HTML images inline, and reading it back gives the stored fo
     comments: [{ id: "c1", rowId: "r1", field: "audioText", body: '<img src="' + dataUrl(b) + '">',
       replies: [{ id: "rp1", body: 'r <img src="' + dataUrl(c) + '">', author: "B" }] }]
   });
-  /* the cell's two pictures are two comments of their own now (#85 D7) */
   assert.equal(doc.rows[0].visualText.indexOf("<img"), -1);
   assert.equal(doc.comments.length, 3);
   const file = JSON.parse(JSON.stringify(doc));
@@ -172,15 +153,12 @@ test("a file carries HTML images inline, and reading it back gives the stored fo
   assert.equal(back.rows[0].visualText, doc.rows[0].visualText);
   assert.deepEqual(back.comments.map((x) => x.body), doc.comments.map((x) => x.body));
   assert.equal(back.comments[0].replies[0].body, doc.comments[0].replies[0].body);
-  /* `only` inlines just the listed blobs — what the history job and the
-     drafts do for the ones the store refused */
   const some = JSON.parse(JSON.stringify(doc));
   assert.deepEqual(inlineStateImages(some, [sha(b)]), []);
   assert.equal(some.comments[1].body, doc.comments[1].body);
   assert.equal(some.comments[0].body, '<img src="' + dataUrlForSync(sha(b)) + '" class="comment-img">');
   assert.equal(some.comments[0].replies[0].body, doc.comments[0].replies[0].body);
-  /* a row cell an older copy of the app still wrote a picture into is
-     carried inline too: inlineStateImages reads cells as well */
+  // Older app copies wrote pictures inline into row cells
   const raw = { rows: [{ id: "r9", visualText: "v " + stored(sha(a), 91, 13, "image/png"), audioText: "" }], comments: [] };
   assert.deepEqual(inlineStateImages(raw), []);
   assert.equal(raw.rows[0].visualText, 'v <img src="' + dataUrlForSync(sha(a)) + '" class="comment-img">');
