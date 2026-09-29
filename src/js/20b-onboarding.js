@@ -11,37 +11,6 @@ import { openHelp, startTour } from "./20c-help.js";
 import { addServerBookmark, joinErrorText, openServersDialog } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
 
-/* ================= first-run setup wizard =================
-
-   Shown once, only over a genuinely pristine copy of the app (invariant
-   #30 — the pristine-seed gate, below). Skip and Finish both write the
-   same key, so neither path ever shows it again; File ▸ "Set up
-   Splitpage…" reopens it on demand without touching that key.
-
-   Like 20c-help.js and 20e-connect.js, this fragment runs its own wiring
-   directly rather than through init() (21-events.js): #onboarding-modal
-   and #file-menu already exist in the DOM by the time this classic
-   <script> runs, which is exactly as safe as doing it from init() (see
-   00-prelude.js's note on PAGE_SHELL for why a classic script can rely on
-   that). The File menu's own dispatch (handleFileMenuAction(),
-   18-local-files.js) has no branch for "setup" and does not need one — a
-   capture-phase listener on the same #file-menu element intercepts the
-   click first, exactly the pattern 20c-help.js uses for "help"/"tour".
-
-   Everything this wizard shows either describes the app in general terms
-   (never the seed document's own content — the tour's invariant #17
-   applies here too, since this is also a hint that must never edit the
-   document) or reaches into already-existing pieces: launcherFetch()
-   (13-hosted.js) for the install step, addServerBookmark()/joinServer()/
-   openServersDialog() (20e-connect.js, the one function among them added
-   for this) for joining a server, and startTour()/openHelp()
-   (20c-help.js) from the last step. Nothing here is called before those
-   files finish loading in the browser — every reference is inside an
-   event handler or an async callback, which only ever runs after every
-   fragment's top-level code has executed — even though 20b sorts before
-   20c/20e alphabetically; function declarations are hoisted for the whole
-   shared closure regardless of which fragment they came from. */
-
 export var ONBOARD_KEY = "splitpage-onboarding";
 
 function readOnboardKey() {
@@ -51,7 +20,7 @@ function readOnboardKey() {
   try {
     var parsed = JSON.parse(raw);
     return (parsed && typeof parsed === "object") ? parsed : null;
-  } catch (e) { return null; } /* unparseable counts as absent */
+  } catch (e) { return null; }
 }
 
 function writeOnboardKey(skipped) {
@@ -59,29 +28,9 @@ function writeOnboardKey(skipped) {
     localStorage.setItem(ONBOARD_KEY, JSON.stringify({
       v: 1, done: true, skipped: !!skipped, at: new Date().toISOString()
     }));
-  } catch (e) { /* private browsing / full quota — it just shows again next time */ }
+  } catch (e) { }
 }
 
-/* ---- the pristine-seed gate (invariant #30) ----
-
-   build.mjs stamps <meta name="splitpage-seed-check"> with
-   "<length>-<checksum>" for the exact text that ends up inside
-   #state-data, using the checksumText() below (see build.mjs's own copy
-   and the comment on it — the two never need to agree on an encoding,
-   because both sides are plain JS strings, one built at build time and
-   one read live here).
-
-   This is what lets the wizard tell "a fresh copy of the app" from "one
-   that already has somebody's script open": Phase 2 means opening a
-   project file never re-embeds it into the page, so on a served/installed
-   copy the only way #state-data can still read as the seed is that
-   nothing has replaced it — which above all means nobody has typed into
-   the seed document and saved over index.html itself. (A pre-commit hook
-   used to refuse that in a commit; since #80 index.html is not tracked at
-   all, so a save over it is a purely local accident.) A legacy
-   .html someone mails around still carries a real #state-data of its own,
-   so this gate keeps working for that case even though Phase 2 saves
-   never produce one again. */
 export function checksumText(str) {
   var h = 0x811c9dc5;
   for (var i = 0; i < str.length; i++) {
@@ -100,11 +49,9 @@ export function seedCheckPasses() {
   return meta.getAttribute("content") === expected;
 }
 
-/* ---- the wizard itself ---- */
-
 var onboardStep = 1;
 var onboardReturnFocus = null;
-var launcherInfoState = "unloaded"; /* "unloaded" | "loading" | "done" */
+var launcherInfoState = "unloaded";
 
 function onboardModal() { return document.getElementById("onboarding-modal"); }
 
@@ -147,8 +94,6 @@ function renderOnboardStep() {
   if (onboardStep === 2) loadLauncherInfo();
 }
 
-/* Anything that opens over the whole screen closes the side panels first
-   (invariant #16), through the one helper every full-screen view uses. */
 function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
@@ -171,10 +116,6 @@ function closeOnboarding() {
   onboardReturnFocus = null;
 }
 
-/* Skip and Finish are the only two paths that write the key — everything
-   else (the "Open the user guide" / "Servers…" links) just hides the
-   modal so it can be picked back up from the File menu, and shows again
-   on the next pristine load exactly as if nothing had happened yet. */
 function finishOnboarding(skipped) {
   writeOnboardKey(skipped);
   closeOnboarding();
@@ -196,22 +137,6 @@ function onboardFinishAndTour() {
   if (typeof startTour === "function") startTour();
 }
 
-/* ---- step 2: where this copy lives ----
-
-   Nothing here installs anything any more. #75 deleted the IExpress setup
-   and `installer/install.ps1` with it, and the POST that ran that script
-   went with them — so this step no longer offers a button, it explains the
-   shape of the copy you are looking at. A portable folder that runs from
-   wherever you put it is the honest description, and the desktop app is
-   the answer for anyone who wanted a Start Menu entry.
-
-   GET api/launcher/info answers only when this copy was started by
-   start.mjs and the request is on loopback (13-hosted.js's
-   launcherFetch()) — a 404/offline here just means "not available in
-   this copy" (opened from file://, a hosted copy, or the test harness,
-   none of which are the launcher), not an error worth alarming over. All
-   it buys is naming the folder; the advice below it is the same either
-   way. */
 function noLauncherHtml() {
   return '<p class="modal-hint">This copy of Splitpage runs wherever its folder is — ' +
     "copy it anywhere and it still works. Splitpage cannot register itself in the " +
@@ -228,9 +153,6 @@ function renderLauncherInfoBody(html) {
   if (el) el.innerHTML = html;
 }
 
-/* The desktop app has no launcher and no /api/launcher/* routes to ask —
-   it is already the installed thing this step points everyone else at, so
-   the honest answer is "you already have this". */
 function desktopInstallHtml() {
   return '<p class="modal-hint">Splitpage is already installed as a desktop app — this is it. ' +
     "Opening a <code>.splitpage</code> file (or a Markdown script saved from here) opens it " +
@@ -261,12 +183,10 @@ async function loadLauncherInfo() {
   try { info = await launcherFetch("api/launcher/info"); }
   catch (e) { info = null; }
   launcherInfoState = "done";
-  if (onboardStep !== 2) return; /* Back/Next moved on while this was in flight */
+  if (onboardStep !== 2) return;
   if (!info) renderLauncherInfoBody(noLauncherHtml());
   else renderLauncherInfo(info);
 }
-
-/* ---- step 3: how you'll be working ---- */
 
 function selectOnboardWork(kind) {
   var cards = document.querySelectorAll("#onboard-work-cards .onboard-card");
@@ -286,17 +206,13 @@ function onboardHostCommandText() {
   return el ? el.textContent : "start.bat --host --pin";
 }
 
-/* Same clipboard-then-textarea fallback as copySshCommand()
-   (20e-connect.js) — small enough, and specific enough to this one
-   string, that sharing the function was not worth reaching into that
-   file for. */
 async function copyOnboardHostCmd() {
   var text = onboardHostCommandText();
   try {
     await navigator.clipboard.writeText(text);
     if (typeof showToast === "function") showToast("Command copied.", "ok");
     return;
-  } catch (e) { /* fall through */ }
+  } catch (e) { }
   try {
     var ta = document.createElement("textarea");
     ta.value = text;
@@ -336,9 +252,6 @@ function setJoinError(message) {
   el.hidden = !message;
 }
 
-/* Reuses addServerBookmark() (20e-connect.js) — the one function added
-   there for this wizard — so joining and bookmarking a server is exactly
-   one code path whether it starts here or from the Servers dialog. */
 async function submitOnboardJoin() {
   var name = document.getElementById("onboard-join-name").value;
   var url = document.getElementById("onboard-join-url").value.trim();
@@ -366,45 +279,12 @@ async function submitOnboardJoin() {
   renderOnboardStep();
 }
 
-/* ---- deciding whether to show it on its own, at boot ----
-
-   Eligible only when ALL of:
-     - the pristine-seed gate passes (invariant #30);
-     - the key has never been written (Skip and Finish both write it);
-     - this load has not opened, and is not about to reopen, any project:
-       a hosted document or a file already adopted this load (a "server" or
-       "file" home, _home.js — set the moment openServerDoc() or
-       adoptProjectState() runs), or a remembered
-       file handle in IndexedDB that tryResumeLastProject() (21-events.js)
-       is either about to reopen outright or about to offer to reopen via
-       the resume banner. That last check is deliberately broad: a
-       remembered handle existing at all means this browser already has a
-       project it cares about, whether or not permission has to be
-       re-granted with a click first — showing the wizard over either
-       outcome is exactly the "must not appear over a document that's
-       about to reopen" case this gate exists for. */
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
-  /* A tab restoring a crash draft looks exactly like a first run from here:
-     the page IS the untouched seed until the draft is applied, which happens
-     after the boot load (21-events.js). Putting the welcome wizard over
-     somebody's recovered work would be the worst possible first thing to do
-     with it. draftRestorePending (20g-drafts.js) is DESKTOP.hasDraftToRestore
-     — which the desktop launch-intent gate names as well — so this line is
-     belt to that gate's braces, and is what covers it while the gate below
-     is still the older last-file one. */
+  // Restoring crash draft looks pristine; never welcome over it
   if (S.DESKTOP && draftRestorePending) return false;
   if (home.kind === "server" || home.kind === "file") return false;
-  /* Desktop has no per-tab equivalent of "a remembered handle exists" to
-     ask for any more (00-prelude.js's rememberLastFileHandle no longer
-     writes anything desktop-side — the main process persists open
-     documents itself, in desktop-state.json). TAB-BOOT-SYNC's fields
-     already say everything this gate needs: the wizard must appear at
-     most once per launch (firstTabOfLaunch), never over a session that
-     had anything open before (hadPriorSession), never over a tab about to
-     open a file or server document (launchIntent.type !== 'blank'), and
-     never over a tab about to restore a crash draft (hasDraftToRestore). */
   if (S.DESKTOP) {
     if (!S.DESKTOP.firstTabOfLaunch || S.DESKTOP.hadPriorSession ||
         (S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
@@ -414,9 +294,7 @@ async function onboardEligibleForAutoShow() {
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
-  /* Re-check what may have changed while the round trip above was in
-     flight (a file could have finished opening, or Skip/Finish could have
-     already run from a very fast manual File ▸ Setup…). */
+  // Re-check: Skip/Finish may have run during the await
   if (readOnboardKey()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   return true;
@@ -428,10 +306,7 @@ async function maybeAutoShowOnboarding() {
   if (eligible) openOnboarding();
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
-  /* ---- wiring ---- */
 
   (function wireOnboardingModal() {
     var modal = onboardModal();
@@ -454,8 +329,6 @@ export function __init() {
       }
       var card = e.target.closest("[data-onboard-work]");
       if (card) { selectOnboardWork(card.getAttribute("data-onboard-work")); return; }
-      /* Clicking the backdrop dismisses the wizard the same way Esc does —
-         it is exactly as much "I'm done with this" as pressing Escape. */
       if (e.target === modal) onboardSkip();
     });
 
@@ -468,38 +341,11 @@ export function __init() {
       }
     });
 
-    /* Esc = skip (this wizard's own rule). Bubble phase, no
-       stopPropagation() — same shape as help's and the tour's own Escape
-       handlers, deliberately NOT capture-phase like 20e-connect.js's. This
-       modal auto-opens over an otherwise-idle app, unlike every other one
-       here, so a capture-phase listener that stops the event would swallow
-       Escape for the whole page while it happens to be up in the
-       background — that's exactly what broke `07-untagged.txt`'s "Escape
-       dismisses the untagged-mention suggestion" (handled by a keydown
-       listener on `#rows`, which a capture-phase stop on `window` never
-       let the event reach). Letting it reach whatever it was actually sent
-       to first, and only acting here once it has bubbled all the way up
-       unstopped, means the wizard never swallows a key meant for something
-       underneath it — by the time nothing else has claimed it, focus really
-       is inside the wizard. */
+    // Bubble phase, no stopPropagation: capture would swallow Escape
     window.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); onboardSkip(); }
     });
 
-    /* A modal owns focus, not just the pixels (invariant #19) — but as a
-       Tab-key wraparound inside the modal, not a document-wide focusin trap
-       like help's/connect's. Those never auto-open, so nothing outside them
-       ever legitimately needs focus while they're up; this one auto-opens
-       over an otherwise-idle app, and a reactive "yank focus back" trap
-       fights ANY unrelated part of the page that focuses itself while the
-       wizard happens to be sitting open in the background — including a
-       test's `caret` on a script cell, which is exactly what broke
-       `07-untagged.txt` (typing still worked via the Selection API, but
-       focus itself had been dragged onto the modal's own close button, so
-       the untagged-suggestion Escape handler on `#rows` never saw the key).
-       The backdrop's own CSS already stops a real click from reaching
-       anything behind it; this only needs to keep Tab from walking a
-       keyboard user out the back of the modal into the page underneath. */
     modal.addEventListener("keydown", function (e) {
       if (e.key !== "Tab") return;
       var focusables = Array.prototype.filter.call(
@@ -513,28 +359,6 @@ export function __init() {
     });
   })();
 
-  /* File ▸ "Set up Splitpage…" — same capture-phase pattern as the Help
-     items in 20c-help.js: intercept the click on #file-menu before
-     18-local-files.js's own bubble-phase listener (handleFileMenuAction())
-     ever sees it, so that file needs no branch for "setup" at all.
-
-     Every OTHER File-menu action gets one thing piggybacked onto it too:
-     if the wizard is still open (nobody has been through Skip or Finish
-     yet), choosing anything from this menu — Help, the tour, Servers…,
-     Open, Save, all of it — closes it first, without writing the key. Help
-     and the tour are the only other full-screen modals in the app and both
-     only ever open from here, so this is the one place that can guarantee
-     what invariant #19 asks for: never two of them open at once. Without
-     it, a test (or, in principle, a user) that reaches a File-menu item
-     while the wizard is still showing underneath ends up with two modals
-     live together, each with its own Escape/focus-trap listener fighting
-     the other for which one Escape actually closes — this is what broke
-     14-help.txt (Escape closed the wizard instead of Help) before this was
-     added. This never fires from a real click on the menu button itself,
-     since that button sits under the wizard's own backdrop and a real
-     mouse click cannot reach it — only automated `.click()` calls (or a
-     keyboard user tabbing to it) can, which is exactly the case worth
-     covering. */
   (function wireOnboardingFileMenu() {
     var menu = document.getElementById("file-menu");
     if (!menu) return;
@@ -552,19 +376,8 @@ export function __init() {
 
   maybeAutoShowOnboarding();
 
-  /* ---- test hook ----
-     The wizard's own gate is what a headless test needs to drive directly —
-     there is no file picker to fake here, but there is a checksum to poke
-     at without waiting out a real reload. Nothing in the app reads this;
-     the same trick window.__splitpageFormats (20d-formats.js) plays. */
   window.__onboarding = {
     seedCheckPasses: seedCheckPasses,
-    /* → Promise<boolean>. WHY exposed: T3 (26-desktop-drafts.txt) needs to
-       prove the wizard's gate itself — not just draftRestorePending's raw
-       value — refuses to fire while a crash draft is still restoring
-       (DRAFT-RENDERER-API), the same "must not appear over a document
-       that's about to reopen" rule this gate exists for. Nothing in src/js
-       calls this. */
     eligible: onboardEligibleForAutoShow
   };
 }

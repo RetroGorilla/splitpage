@@ -1,22 +1,3 @@
-/* desktop/test/ipc-table.test.mjs: the IPC channel table against the three
- * files that use it.
- *
- * Node built-ins only, no Electron — requiring 'electron' outside Electron
- * fails, and main.js and both preloads do. So this reads them as TEXT and
- * holds the table and the source to each other in both directions: every
- * channel string either preload names is a row of the table for that
- * preload's origin, every row for that origin is named by that preload, and
- * main registers a handler for every row it is supposed to and for nothing
- * else. desktop/ipc-channels.js itself is plain CommonJS data, so that one
- * is loaded for real.
- *
- * What this cannot cover is a running app: that is desktop/test/smoke.mjs,
- * which needs Windows and a real Electron binary.
- *
- * Prints ALL PASS and exits 0, or lists the failures and exits 1.
- *
- * Run: node desktop/test/ipc-table.test.mjs
- */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,16 +20,6 @@ const PRELOADS = [
 
 const key = (name, direction) => `${name} (${direction})`;
 
-/* ------------------------------------------------------------------
-   Reading the sources.
-
-   A preload reaches main four ways, and each has a wrapper of its own
-   (invoke/send/sendSync/receive) plus the raw ipcRenderer call it is built
-   on — the table read itself is raw, because it is how the table arrives.
-   Both spellings are scanned, so this test keeps working if a call ever
-   goes back to ipcRenderer directly.
-   ------------------------------------------------------------------ */
-
 const RAW_DIRECTION = { invoke: "invoke", send: "send", sendSync: "sendSync", on: "receive" };
 
 function callsIn(src) {
@@ -62,15 +33,10 @@ function callsIn(src) {
   return found;
 }
 
-/* Every channel string in a file, whether it is called or not: a name
-   sitting in a constant still has to be one this origin owns. Matched on
-   the shape a channel name actually has, so the two origin URLs and the
-   "splitpage: " that starts a thrown message are not mistaken for one. */
 function literalsIn(src) {
   return new Set([...src.matchAll(/"(splitpage:[a-z0-9-]+)"/g)].map((m) => m[1]));
 }
 
-/* main.js registers through ipcHandle/ipcOn/ipcOnSync and nothing else. */
 const REGISTRAR_DIRECTION = { ipcHandle: "invoke", ipcOn: "send", ipcOnSync: "sendSync" };
 const registrations = [...MAIN.matchAll(/\b(ipcHandle|ipcOnSync|ipcOn)\(\s*"(splitpage:[^"]+)"/g)]
   .map((m) => ({ name: m[2], direction: REGISTRAR_DIRECTION[m[1]], at: m.index }));
@@ -80,10 +46,6 @@ const testModeAt = MAIN.indexOf("\n  if (TEST_MODE) {", registerIpcAt);
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
-
-/* ------------------------------------------------------------------
-   The table's own shape.
-   ------------------------------------------------------------------ */
 
 test("the table is frozen all the way down", () => {
   assert.equal(Object.isFrozen(IPC_CHANNELS), true, "the list");
@@ -113,8 +75,6 @@ test("every row has a name, a direction, a schema and at least one origin", () =
   }
 });
 
-/* Invariant #43 as data: the strip's origin shares nothing with the app's
-   but the one channel that hands out the table. */
 test("the two origins share only the table read", () => {
   const app = new Set(channelsForOrigin(APP_ORIGIN).map((c) => key(c.name, c.direction)));
   const strip = new Set(channelsForOrigin(TABSTRIP_ORIGIN).map((c) => key(c.name, c.direction)));
@@ -125,10 +85,6 @@ test("the two origins share only the table read", () => {
     assert.match(k, /^splitpage:tabstrip-/, `${k} is reachable from the strip`);
   }
 });
-
-/* ------------------------------------------------------------------
-   The preloads, both ways.
-   ------------------------------------------------------------------ */
 
 for (const preload of PRELOADS) {
   test(`${preload.file}: every channel it calls is in the table for its origin`, () => {
@@ -170,10 +126,6 @@ test("neither preload can reach the other's channels", () => {
   }
 });
 
-/* ------------------------------------------------------------------
-   main.js, both ways.
-   ------------------------------------------------------------------ */
-
 test("main.js registers nothing through ipcMain directly", () => {
   const direct = [...MAIN.matchAll(/ipcMain\.(handle|on)\(\s*"/g)];
   assert.deepEqual(direct.map((m) => m[0]), [], "every registration goes through ipcHandle/ipcOn/ipcOnSync");
@@ -201,9 +153,6 @@ test("main.js sends every main -> renderer row and registers none of them", () =
   for (const row of IPC_CHANNELS) {
     if (row.direction !== "receive") continue;
     assert.ok(sends.has(row.name), `${row.name} is in the table and main.js never sends it`);
-    /* splitpage:update-status is deliberately both — a push from main and a
-       question the page can ask — so a name that is also an inbound row is
-       expected to be registered. Any other one must not be. */
     if (!inbound.has(row.name)) {
       assert.equal(
         registrations.some((r) => r.name === row.name),
@@ -236,10 +185,6 @@ test("every testOnly channel is a __test hook and nothing else is", () => {
     );
   }
 });
-
-/* ------------------------------------------------------------------
-   The validator.
-   ------------------------------------------------------------------ */
 
 test("checkArgs accepts what the channels really send", () => {
   const tab = "0123456789abcdef0123456789abcdef";
@@ -278,9 +223,6 @@ test("checkArgs refuses the shapes the handlers used to refuse for themselves", 
   assert.ok(bad("splitpage:read-file", "invoke", ["a", "b"]), "more arguments than the channel takes");
 });
 
-/* #83 step 4: version history is six channels. Usage rides on
-   history-list's answer, and an import into Older is history-put with
-   {older:true} — the bucket named by a flag, never by a docId string. */
 test("version history is exactly six app-only invoke channels", () => {
   const names = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:history-")).map((c) => c.name).sort();
   assert.deepEqual(names, [
@@ -296,9 +238,6 @@ test("version history is exactly six app-only invoke channels", () => {
   assert.equal(channelFor("splitpage:history-import-older", "invoke"), null, "import-older folded into history-put");
 });
 
-/* Issue #86 is the update bridge's contract again (invariant #28): the page
-   asks for "what I am showing" to be opened in the browser and names
-   nothing — no URL, no path, no document id. */
 test("the teleprompter's Open in browser takes no argument, from the app page only", () => {
   const row = channelFor("splitpage:prompter-open-in-browser", "invoke");
   assert.ok(row, "declared");
@@ -311,8 +250,6 @@ test("the teleprompter's Open in browser takes no argument, from the app page on
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
-/* Issue #123: the same again for Present in Chromium — the page never
-   names the browser, its path or the URL. */
 test("Use Chromium Speech Recognition takes no argument, from the app page only", () => {
   const row = channelFor("splitpage:prompter-open-in-chromium", "invoke");
   assert.ok(row, "declared");
@@ -324,10 +261,6 @@ test("Use Chromium Speech Recognition takes no argument, from the app page only"
   assert.ok(!channelsForOrigin(TABSTRIP_ORIGIN).some((c) => c.name === row.name), "never the tab strip's");
 });
 
-/* Issue #8, the same contract again (invariant #45): the page asks whether
-   it can listen, to start and to stop — for itself — and names nothing: no
-   executable, no script, no argument, no language. What it hears comes
-   back on one receive row, to the app page only. */
 test("Follow My Voice takes no argument, from the app page only", () => {
   for (const name of ["splitpage:voice-status", "splitpage:voice-start", "splitpage:voice-stop"]) {
     const row = channelFor(name, "invoke");
@@ -345,11 +278,6 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
-/* Issue #10 is the same contract a third time: main holds the OAuth
-   listener and the tokens, so signing in, signing out and asking for status
-   name nothing, and the Drive calls name a Drive id or an upload request —
-   never a URL, and nothing the tab strip can reach. The id's shape and the
-   upload's fields are checked in desktop/google-drive.js (its own test). */
 test("the Google Drive channels: argument-free account calls, id-only Drive calls, app page only", () => {
   const row = (name) => channelFor(name, "invoke");
   for (const name of ["splitpage:drive-status", "splitpage:drive-sign-in", "splitpage:drive-sign-out"]) {
@@ -373,11 +301,6 @@ test("the Google Drive channels: argument-free account calls, id-only Drive call
   }
 });
 
-/* Issue #82: the blob channels name a blob by its SHA-256 and nothing else
-   (invariant #28) — the sha is typed, so a path, a URL, an uppercase or a
-   short sha never reaches a handler. What a schema cannot say (the bytes
-   are an image, hash to the sha, the missing list is shas and at most
-   2000) is main's and desktop/blob-store.js's, tested there. */
 test("the blob channels: a typed sha256, app page only", () => {
   const sha = "0123456789abcdef".repeat(4);
   const row = (name) => channelFor(name, "invoke");
@@ -405,10 +328,6 @@ test("the blob channels: a typed sha256, app page only", () => {
   }
 });
 
-/* Issues #141/#168: a pasted video's thumbnail is asked for by host and
-   id — never a URL, a host name of the page's choosing, or a path
-   (invariant #28). main.js checks the pair against each other again
-   (shared/video-embed.js parseVideoRef) and builds every address itself. */
 test("the video thumbnail channel: a typed host and video ref, app page only", () => {
   const c = channelFor("splitpage:video-thumbnail", "invoke");
   assert.ok(c, "the channel exists");
@@ -428,16 +347,12 @@ test("the video thumbnail channel: a typed host and video ref, app page only", (
   }
 });
 
-/* A malformed draft payload must reach the handler, which answers with a
-   code the renderer can back off on rather than a rejection (DRAFT-STORE). */
 test("the draft channels let a bad payload through to their own answer", () => {
   for (const name of ["splitpage:draft-write", "splitpage:draft-discard"]) {
     assert.equal(checkArgs(channelFor(name, "invoke").argsSchema, ["nonsense"]), null, name);
     assert.equal(checkArgs(channelFor(name, "invoke").argsSchema, [null]), null, name);
   }
 });
-
-/* ------------------------------------------------------------------ */
 
 const failures = [];
 for (const c of cases) {

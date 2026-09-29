@@ -1,16 +1,3 @@
-#!/usr/bin/env node
-/* Behaviour tests for server/server.js — the join PIN, CORS, the
- * compare-and-set save, and the launcher's loopback-only route.
- *
- *   node tools/test-server.mjs
- *
- * The browser harness (.claude/skills/run-splitpage-app) serves static files
- * itself and cannot start server.js with an environment, so everything that
- * depends on JOIN_PIN / ALLOW_ORIGINS / LAUNCH_TOKEN is tested here instead:
- * plain Node, no dependencies, starts real servers on free ports and talks to
- * them over HTTP. Exits non-zero on the first failure's suite.
- */
-
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
@@ -75,14 +62,12 @@ async function startServer(env) {
     try {
       const res = await fetch(base + "api/health");
       if (res.ok) break;
-    } catch { /* not up yet */ }
+    } catch { }
     await new Promise((r) => setTimeout(r, 100));
   }
   return {
     base,
     port,
-    /* the documents on disk, for the tests that care what a stored file
-       actually looks like */
     dataDir,
     stop() {
       child.kill();
@@ -96,14 +81,7 @@ async function json(res) {
   try { return await res.json(); } catch { return null; }
 }
 
-/* A request that announces a document-sized body and then sends twenty bytes
-   of it and stops, without ever ending the message. fetch() cannot express
-   that, so this is node:http directly.
-
-   It is the whole proof for "the token is checked before the body is read"
-   (#74): a server that reads first cannot answer this at all — it is still
-   waiting for 25 MB that will never arrive — so an answer here IS the
-   ordering. */
+// Stalled body: any answer proves token checked before read.
 function refuseBeforeBody(base, pathname, method, headers) {
   return new Promise((resolve) => {
     const url = new URL(pathname, base);
@@ -113,7 +91,7 @@ function refuseBeforeBody(base, pathname, method, headers) {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      try { req.destroy(); } catch { /* already gone */ }
+      try { req.destroy(); } catch { }
       resolve(value);
     };
     const req = httpRequest({
@@ -130,7 +108,7 @@ function refuseBeforeBody(base, pathname, method, headers) {
       res.on("data", (c) => { text += c; });
       const end = () => {
         let body = null;
-        try { body = JSON.parse(text); } catch { /* not JSON */ }
+        try { body = JSON.parse(text); } catch { }
         finish({ status: res.statusCode, body, closed: res.headers.connection === "close" });
       };
       res.on("end", end);
@@ -138,12 +116,10 @@ function refuseBeforeBody(base, pathname, method, headers) {
       res.on("aborted", end);
     });
     req.on("error", (err) => finish({ status: 0, error: String(err && err.message) }));
-    req.write('{"baseRev":0,"state":{'); /* deliberately unfinished */
+    req.write('{"baseRev":0,"state":{');
     timer = setTimeout(() => finish({ status: 0, error: "no answer — the body was read first" }), 5000);
   });
 }
-
-/* ---------- the PIN-protected server ---------- */
 
 const s = await startServer({
   JOIN_PIN: PIN,
@@ -153,7 +129,6 @@ const s = await startServer({
 });
 
 try {
-  /* health is open, and says a PIN is needed */
   {
     const res = await fetch(s.base + "api/health");
     const body = await json(res);
@@ -162,7 +137,6 @@ try {
     check("health carries a version", !!(body && body.version), JSON.stringify(body));
   }
 
-  /* the gate */
   {
     const res = await fetch(s.base + "api/docs");
     const body = await json(res);
@@ -176,7 +150,6 @@ try {
     eq("/api/me is behind the gate too", res.status, 401);
   }
 
-  /* wrong PIN, then the rate limit, then the right one */
   {
     const res = await fetch(s.base + "api/join", {
       method: "POST",
@@ -201,14 +174,12 @@ try {
     eq("...and says too-many-attempts", body && body.error, "too-many-attempts");
   }
 
-  /* The limiter is per address and this test has only one, so it has to be
-     let go before the right PIN can be tried. A minute is too long to wait in
-     a test — restart instead, which is also proof the token is per process. */
   s.stop();
-} finally { /* stopped above; guard against an early throw */ }
+} finally { /* nothing to clean up */ }
 
 const s2 = await startServer({
   JOIN_PIN: PIN,
+  // Deliberate: "null" must still be ignored.
   ALLOW_ORIGINS: ORIGIN + ",null",
   LAUNCH_TOKEN: LAUNCH,
   HOST: "127.0.0.1"
@@ -234,7 +205,6 @@ try {
     check("...and lists documents", !!(body && Array.isArray(body.docs)));
   }
 
-  /* CORS */
   {
     const res = await fetch(s2.base + "api/docs", {
       method: "OPTIONS",
@@ -259,9 +229,6 @@ try {
       res.headers.get("access-control-allow-origin"), null);
   }
   {
-    /* `null` is not one site: it is what every sandboxed iframe on the web
-       sends, so it is dropped from the allowlist rather than honoured (#63).
-       s2 is started with it in ALLOW_ORIGINS on purpose. */
     const res = await fetch(s2.base + "api/health", { headers: { "Origin": "null" } });
     eq("the literal origin `null` is never allowed, whatever ALLOW_ORIGINS says",
       res.headers.get("access-control-allow-origin"), null);
@@ -271,7 +238,6 @@ try {
     eq("static files never carry CORS headers", res.headers.get("access-control-allow-origin"), null);
   }
 
-  /* the compare-and-set save, unchanged by any of the above */
   {
     const created = await fetch(s2.base + "api/docs", {
       method: "POST",
@@ -302,10 +268,6 @@ try {
       !!(staleBody && staleBody.state && staleBody.state.title === "Conflict test"));
   }
 
-  /* the launcher's route. `info` is all that is left of it: `register` and
-     `update/stage` both spawned a program #75 deleted, so both are gone and
-     nothing under /api/launcher/ runs anything any more. What is still worth
-     asserting is the gate, which is why the route was ever allowed to exist. */
   {
     const res = await fetch(s2.base + "api/launcher/info");
     eq("launcher/info without the launch header is 404", res.status, 404);
@@ -322,8 +284,6 @@ try {
     check("...and what it is running on", !!(body && body.platform && body.arch));
   }
   {
-    /* A verb that no longer exists is a 404 like any other — not a 500 from
-       a half-removed route, and not a 200 with an error in it. */
     const res = await fetch(s2.base + "api/launcher/update/stage", {
       method: "POST", headers: { "x-splitpage-launch": LAUNCH }
     });
@@ -339,15 +299,12 @@ try {
     const res = await fetch(s2.base + "api/launcher/info", {
       headers: { "x-splitpage-launch": LAUNCH, "Origin": ORIGIN }
     });
-    /* the header is allow-listed for preflight, but the route is loopback-only
-       anyway — this is just proof the two features do not interact */
     eq("launcher/info still answers from an allowed origin", res.status, 200);
   }
 } finally {
   s2.stop();
 }
 
-/* the same server, reachable from the network: the launcher's route is gone */
 const s3 = await startServer({
   JOIN_PIN: PIN,
   LAUNCH_TOKEN: LAUNCH,
@@ -359,15 +316,6 @@ try {
 } finally {
   s3.stop();
 }
-
-/* ---------- the review credential (issue #30) ----------
- *
- * A second code, and a link key, that open the same documents to be read and
- * commented on. The interesting half is the PUT: the server has to accept a
- * whole document that differs from the stored one only by a comment and the
- * anchor that comment wrapped, and refuse everything else — so most of what
- * is below is one PUT per kind of change, against a known starting state.
- */
 
 const REVIEW_PIN = "5678";
 const REVIEW_KEY = "deadbeefdeadbeefdeadbeefdeadbeef";
@@ -464,15 +412,12 @@ try {
     eq("a wrong link key is refused like a wrong PIN", res.status, 401);
   }
 
-  /* the role comes back from the token, which is what makes it survive a
-     reconnect and makes it un-flippable from the client */
   {
     const mine = await json(await fetch(s4.base + "api/me", { headers: { "x-splitpage-token": reviewToken } }));
     eq("/api/me tells a reviewer what it is", mine && mine.role, "review");
     const theirs = await json(await fetch(s4.base + "api/me", { headers: { "x-splitpage-token": editToken } }));
     eq("...and an editor likewise", theirs && theirs.role, "edit");
   }
-  /* create and delete are writes, and a review session has none */
   {
     const res = await fetch(s4.base + "api/docs", {
       method: "POST",
@@ -484,7 +429,6 @@ try {
     eq("...saying review-only", body && body.error, "review-only");
   }
 
-  /* one document, created by the editor, for every PUT below */
   const created = await json(await fetch(s4.base + "api/docs", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
@@ -492,10 +436,6 @@ try {
   }));
   const docUrl = s4.base + "api/docs/" + created.id;
 
-  /* ---- the review link is per document (#63) ----
-     It used to be this launch's one key: it opened every script on the
-     server and listed the picker, while the dialog offered it as a way to
-     share the one you were looking at. */
   const other = await json(await fetch(s4.base + "api/docs", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
@@ -557,13 +497,6 @@ try {
     check("...while an editor still sees the library", (all && all.docs || []).length >= 2);
   }
 
-  /* Read, change one thing, write — the round trip the review client used to
-     make for every comment, and that the server used to judge by comparing
-     the upload against the stored script (reviewWriteAllowed, deleted in
-     #71). A review token now writes through the comment routes and nowhere
-     else, so every one of these is refused — and refused FLAT, not by a
-     verdict: the rev is read fresh each time, so a refusal below is never a
-     stale rev conflicting, and nothing was compared to reach it. */
   async function reviewPut(mutate, token) {
     const now = await json(await fetch(docUrl, { headers: { "x-splitpage-token": token || reviewToken } }));
     const next = JSON.parse(JSON.stringify(now.state));
@@ -575,7 +508,6 @@ try {
     });
     return { status: res.status, body: await json(res) };
   }
-  /* The route the review client uses instead (#71). */
   async function reviewPost(url, payload, token) {
     const res = await fetch(url + "/comments", {
       method: "POST",
@@ -593,9 +525,6 @@ try {
     eq("a reviewer cannot delete a document", res.status, 403);
   }
 
-  /* The write a review session exists for — a comment, plus the anchor it
-     wrapped around the words it is about — is refused as a PUT, and lands
-     through the comment route. */
   {
     const before = await readAs(docUrl);
     const out = await reviewPut((st) => {
@@ -626,25 +555,17 @@ try {
     check("...and it is stored", !!(body && (body.state.comments || []).some((c) => c.id === "c2")));
   }
   {
-    /* The stored state handed straight back. The old comparison passed this
-       one; a flat refusal does not look. */
     const out = await reviewPut(() => {});
     eq("a review PUT that changes nothing at all is refused too", out.status, 403);
     eq("...as review-only", out.body && out.body.error, "review-only");
   }
   {
-    /* And it is refused on the headers, before a byte of the body is read
-       (#74): a review token cannot make the server buffer a 25 MB upload
-       just to be told no. An answer at all is the proof. */
     const early = await refuseBeforeBody(s4.base, "api/docs/" + created.id, "PUT",
       { "x-splitpage-token": reviewToken });
     eq("a review PUT is refused before its body is read", early.status, 403, early.error);
     eq("...saying review-only", early.body && early.body.error, "review-only");
   }
   {
-    /* The scoped token from the per-document link is a reviewer on this
-       document like any other: the same PUT is refused, the same comment
-       goes through the comment route. */
     const out = await reviewPut((st) => {
       st.comments.push(newComment("c2s", "audioText", { quotedText: "Hello" }));
       st.rows[0].audioText =
@@ -655,7 +576,6 @@ try {
     eq("...as review-only", out.body && out.body.error, "review-only");
     const posted = await reviewPost(docUrl, {
       comment: newComment("c2s", "audioText", { quotedText: "Hello" }),
-      /* wraps words that are already there, beside an anchor already stored */
       anchor: {
         rowId: "r1", field: "audioText",
         html: '<span class="cmt-anchor" data-cmt="c2s">Hello</span> <span class="cmt-anchor" data-cmt="c2">there</span>'
@@ -665,8 +585,6 @@ try {
     eq("...anchored beside the anchor already there", posted.body && posted.body.anchored, true);
   }
   {
-    /* A PUT to somebody else's document never reaches the role rule at
-       all — the scope refuses it first. */
     const now = await json(await fetch(s4.base + "api/docs/" + other.id, { headers: { "x-splitpage-token": editToken } }));
     const res = await fetch(s4.base + "api/docs/" + other.id, {
       method: "PUT",
@@ -677,14 +595,6 @@ try {
     eq("...saying which rule refused it", (await json(res) || {}).error, "wrong-document");
   }
 
-  /* ---- a document saved before a field existed (#62) ----
-     The deleted comparison deep-compared the stored JSON key by key against
-     the client's migrateRows()-normalised copy. A document last saved before
-     `brollShots` existed has no such key; the reviewer's client always sent
-     `brollShots: []`, and every comment on such a document came back 403
-     review-only. There is no comparison left to disagree: the PUT is
-     refused because it is a review PUT, and the comment goes through the
-     route that never sees the rest of the state. */
   {
     const legacy = fixtureState();
     delete legacy.brollShots;
@@ -700,8 +610,6 @@ try {
     const now = await json(await fetch(legacyUrl, { headers: { "x-splitpage-token": reviewToken } }));
     check("a document stored without brollShots really has none", !("brollShots" in now.state));
 
-    /* exactly what the old reviewer's client sent: every field filled in by
-       migrateRows, plus the one comment and its anchor */
     const next = JSON.parse(JSON.stringify(now.state));
     next.brollShots = [];
     next.productionTags = [];
@@ -741,15 +649,7 @@ try {
     eq("...and filling an empty field with something is refused", refused.status, 403);
   }
 
-  /* ---- the anchor check that survived (#71) ----
-     placeAnchor() still has to decide whether one field's new HTML is the
-     stored field with this comment's span around some of it, and it uses
-     the one piece of the old comparison kept for exactly that
-     (fieldSignature over htmlTokens). These are the cases it exists for. */
   {
-    /* an anchor whose selection crossed a <strong> boundary: unwrapping it
-       cannot glue the element back together, so the comparison has to see
-       the two halves as the one run of text they render as */
     const out = await reviewPost(docUrl, {
       comment: newComment("c3", "visualText", { quotedText: "shot of" }),
       anchor: {
@@ -761,9 +661,6 @@ try {
     eq("...and is placed", out.body && out.body.anchored, true);
   }
   {
-    /* Only THIS comment's span is unwrapped before comparing. Another id's
-       span wrapped around a word that is not stored is new text, and the
-       anchor is not placed (the comment itself still lands). */
     const stored = (await readAs(docUrl)).state.rows[0].audioText;
     const out = await reviewPost(docUrl, {
       comment: newComment("c4", "audioText"),
@@ -777,11 +674,6 @@ try {
     eq("...and the scene is exactly as it was", (await readAs(docUrl)).state.rows[0].audioText, stored);
   }
 
-  /* And everything a review session never could do. Each of these changes
-     exactly one thing about the document as it stands at that moment. They
-     are refused flat now rather than by a comparison, and kept so that
-     anything which ever lets a review PUT through again has to come past
-     every one of them. */
   const refusals = [
     ["the script itself", (st) => { st.rows[0].audioText = "Hello there, everyone"; }],
     ["a scene's status", (st) => { st.rows[0].status = "shot"; }],
@@ -807,8 +699,6 @@ try {
     eq("a reviewer may not change " + what, out.status, 403);
     eq("...refused as review-only", out.body && out.body.error, "review-only");
   }
-  /* A reply is an addition, which the old comparison allowed through PUT.
-     It is refused there now and goes through the comment route. */
   {
     const out = await reviewPut((st) => {
       st.comments[0].replies.push({ id: "rp1", author: "Reviewer", body: "agreed", createdAt: "2026-02-01T00:00:02.000Z" });
@@ -820,8 +710,6 @@ try {
     });
     eq("...and a reviewer replies through the comment route", posted.status, 200);
   }
-  /* and the editor is untouched by all of it: an editor's PUT is written
-     as sent, comments and script alike, with nothing compared */
   {
     const out = await reviewPut((st) => {
       st.rows[0].audioText = "Hello there, everyone";
@@ -835,8 +723,6 @@ try {
   s4.stop();
 }
 
-/* A review code that is the join PIN, or one with no join PIN at all, locks
-   nothing — both are ignored rather than half-applied. */
 const s5 = await startServer({ JOIN_PIN: PIN, REVIEW_PIN: PIN, HOST: "127.0.0.1" });
 try {
   const res = await fetch(s5.base + "api/health");
@@ -866,13 +752,6 @@ try {
   s6.stop();
 }
 
-/* ---------- presence (issue #28) ----------
- *
- * A heartbeat and a listing in one round trip, in memory, behind the same
- * gate. The TTL is dialled down here so the "a tab that went away stops being
- * shown" half can be watched rather than assumed.
- */
-
 const s7 = await startServer({
   JOIN_PIN: PIN,
   REVIEW_PIN,
@@ -882,8 +761,7 @@ const s7 = await startServer({
 });
 
 try {
-  /* joinAs, not `join`: node:path's join() is imported at the top of this
-     file and a local of that name shadowed it for the whole suite. */
+  // Not named join: shadows node:path join imported above.
   const joinAs = async (payload) => json(await fetch(s7.base + "api/join", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -926,9 +804,6 @@ try {
     check("...and never about themselves", !body.here.some((p) => p.id === "p2"));
   }
   {
-    /* A review viewer (#30) is someone else in the document like anybody
-       else — and an anonymous one carries no name, which is what makes the
-       other end say "Guest". */
     const body = await json(await beat(editToken, { docId: "shared-doc", id: "p1", name: "Priya Malhotra", rowId: "r1", field: "visualText" }));
     eq("an editor is told about the review viewer", (body.here || []).length, 1);
     eq("...with no name to show", body.here[0].name, "");
@@ -943,8 +818,6 @@ try {
       body.here.every((p) => p.field !== "nonsense"));
   }
   {
-    /* A picked colour (#194) is passed on as "#RRGGBB" and nothing else:
-       it lands in another browser's style attribute. */
     await beat(editToken, { docId: "shared-doc", id: "p4", name: "Ana", color: "#80bdfb" });
     await beat(editToken, { docId: "shared-doc", id: "p5", name: "Bo", color: "red;background:url(x)" });
     const body = await json(await beat(editToken, { docId: "shared-doc", id: "p3" }));
@@ -955,8 +828,6 @@ try {
     check("...nor is a colour nobody sent", body.here.filter((p) => p.id === "p1").every((p) => !("color" in p)));
   }
   {
-    /* The beacon a closing tab sends: sendBeacon cannot set a header, so the
-       token comes in the body, and text/plain is what a beacon may use. */
     const res = await fetch(s7.base + "api/presence", {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
@@ -975,15 +846,11 @@ try {
     eq("a beacon carrying a wrong token is refused", res.status, 401);
   }
   {
-    /* p3 is still there from above and nothing has beaten since. */
     await new Promise((r) => setTimeout(r, 600));
     const body = await json(await beat(editToken, { docId: "shared-doc", id: "p1" }));
     eq("a tab that stopped beating expires", (body.here || []).length, 0);
   }
   {
-    /* Presence is not part of the document and must never become part of
-       one: a document that was beaten about all this time is byte for byte
-       what the editor last saved. */
     const created = await json(await fetch(s7.base + "api/docs", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-splitpage-token": editToken },
@@ -997,14 +864,6 @@ try {
       JSON.stringify(doc.state));
   }
 
-  /* ---------- the heartbeat is the pull channel (issue #69) ----------
-   *
-   * The beat is the only thing in hosted mode that round-trips on its own,
-   * so it is also how a second editor learns that somebody saved: it names
-   * the document and the rev it is at, and the client GETs and merges when
-   * that number has moved past the one it holds. This is the wire half; what
-   * the page does with the answer is tests/55-pull-merge.txt.
-   */
   {
     const made = await json(await fetch(s7.base + "api/docs", {
       method: "POST",
@@ -1026,9 +885,6 @@ try {
     check("...which is one past where it was", saved.rev === made.rev + 1, String(saved.rev));
   }
   {
-    /* Presence is in memory and a document is on disk, and the two are not
-       required to agree: somebody can be beating about a document that was
-       never published. No rev is no pull channel, not a refusal. */
     const res = await beat(editToken, { docId: "never-published", id: "pull3" });
     const body = await json(res);
     eq("a beat about a document that is not here still answers", res.status, 200);
@@ -1036,11 +892,6 @@ try {
     eq("...and still names the document it was asked about", body.docId, "never-published");
   }
   {
-    /* THE READ IS THE HEAD LINE AND NOT THE SCRIPT (#74's whole point, and
-       the reason this can run every two seconds for every tab). Proved by a
-       file whose head line is perfectly good and whose state is not JSON at
-       all: anything that parsed the document to answer a beat would throw,
-       and a GET of the same file duly does. */
     writeFileSync(join(s7.dataDir, "head-only.json"),
       JSON.stringify({
         id: "head-only", rev: 9,
@@ -1054,8 +905,6 @@ try {
     eq("...which is a document a full parse cannot read at all", read.status, 500);
   }
   {
-    /* A closing tab's beacon is the one beat that touches no disk: it is not
-       there to read an answer, so it is not given one. */
     const res = await fetch(s7.base + "api/presence", {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
@@ -1069,8 +918,6 @@ try {
   s7.stop();
 }
 
-/* An open server (no PIN at all) has no gate to pass, and presence works
-   there like everything else does. */
 const s8 = await startServer({ HOST: "127.0.0.1" });
 try {
   const res = await fetch(s8.base + "api/presence", {
@@ -1082,16 +929,6 @@ try {
 } finally {
   s8.stop();
 }
-
-/* ---------- the PIN rate limit behind a proxy (issue #74) ----------
- *
- * The limiter counts failures per address, and behind cloudflared, a reverse
- * proxy or Docker NAT every request arrives from the same one — so one
- * stranger's ten wrong guesses used to lock out everybody in the house.
- * TRUST_PROXY=1 says a proxy in front is rewriting the source address and
- * that X-Forwarded-For is worth reading. Off by default, because the header
- * is otherwise anybody's to write.
- */
 
 const guess = (server, headers) => fetch(server.base + "api/join", {
   method: "POST",
@@ -1126,17 +963,12 @@ try {
     eq("...and the person at the next desk still gets their own ten", other.status, 401);
   }
   {
-    /* A proxy appends: "the client, then whoever forwarded it". The first
-       entry is the only one the client did not choose. */
     const chain = await guess(sProxyOn, { "X-Forwarded-For": "1.1.1.1, 9.9.9.9" });
     eq("a forwarded chain is keyed on its first entry, not its last", chain.status, 429);
     const spoofed = await guess(sProxyOn, { "X-Forwarded-For": "2.2.2.2, 1.1.1.1" });
     eq("...so a guesser cannot hide behind one it appended", spoofed.status, 401);
   }
   {
-    /* Junk is not an address and must not become a bucket of its own —
-       otherwise a guesser writes a new one on every attempt. It falls back
-       to the socket, which is what these ten fill. */
     for (let i = 0; i < 10; i++) await guess(sProxyOn, { "X-Forwarded-For": "not an address" });
     const junk = await guess(sProxyOn, { "X-Forwarded-For": "still not an address" });
     eq("an unparseable X-Forwarded-For is ignored rather than trusted", junk.status, 429);
@@ -1146,14 +978,6 @@ try {
 } finally {
   sProxyOn.stop();
 }
-
-/* ---------- the token, before the body (issue #74) ----------
- *
- * Every gated route used to be reachable by an unauthenticated caller for as
- * long as it took them to upload 25 MB, which was then parsed and thrown
- * away with a 401. The refusal happens on the headers now — see
- * refuseBeforeBody() above for why an answer at all is the proof.
- */
 
 const sEarly = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
 try {
@@ -1184,17 +1008,11 @@ try {
     eq("so is a create", out.status, 401, out.error);
   }
   {
-    /* Presence is the route the issue named: it reads a body before the gate
-       on purpose, because a closing tab's sendBeacon cannot set a header. A
-       caller who did offer a header and got it wrong is refused first. */
     const out = await refuseBeforeBody(sEarly.base, "api/presence", "POST",
       { "x-splitpage-token": "0".repeat(64) });
     eq("presence with a wrong token header is refused before its body", out.status, 401, out.error);
   }
   {
-    /* And the beacon, which has no header to be judged on, is capped instead:
-       a heartbeat is a few hundred bytes and nothing unauthenticated gets to
-       send a document. */
     const res = await fetch(sEarly.base + "api/presence", {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=UTF-8" },
@@ -1218,15 +1036,6 @@ try {
 } finally {
   sEarly.stop();
 }
-
-/* ---------- the head line (issue #74) ----------
- *
- * A stored document carries its own summary on its first line, so the rev a
- * PUT compares against and the names the picker lists can be read without
- * parsing every script in the library in full. It is in the file rather than
- * in a sidecar beside it, so a crash cannot leave the two disagreeing, and
- * the file is still one JSON object.
- */
 
 function firstLine(path) {
   return readFileSync(path, "utf8").split("\n")[0];
@@ -1270,18 +1079,11 @@ try {
     eq("...and the line moves with the document", head.rev, 2);
     eq("...including the title", head.title, "Head line, saved");
     eq("...and the scene count", head.rows, 1);
-    /* The write is a temp file, fsynced, renamed over the target, and then
-       the directory is fsynced too — so what is left behind afterwards is
-       the document and nothing else. */
     check("a save leaves no temp file behind",
       !readdirSync(sHead.dataDir).some((n) => n.endsWith(".tmp")),
       readdirSync(sHead.dataDir).join(", "));
   }
 
-  /* ---- a document written before head lines existed ----
-     One JSON object on one line, which is what every document on every
-     server looked like until now. Nothing about it may break, and the rev a
-     PUT compares against has to come from a full parse instead. */
   const legacy = (id, rev, title) => {
     writeFileSync(join(sHead.dataDir, id + ".json"), JSON.stringify({
       id,
@@ -1321,9 +1123,6 @@ try {
     check("the picker lists a document with no head line", !!row, JSON.stringify(body.docs));
     eq("...by its title", row && row.title, "Also saved the old way");
     eq("...at its rev", row && row.rev, 7);
-    /* and the listing leaves it with a head line, so the next one is cheap.
-       The rewrite is the same content under the same lock as any other
-       write, and it happens behind the answer rather than delaying it. */
     let head = null;
     for (let i = 0; i < 40 && !head; i++) {
       await new Promise((r) => setTimeout(r, 50));
@@ -1338,8 +1137,6 @@ try {
   sHead.stop();
 }
 
-/* A published read-only library is not the place to be quietly rewriting
-   files, however good the reason. */
 const sHeadRO = await startServer({ HOST: "127.0.0.1", READ_ONLY: "1" });
 try {
   const path = join(sHeadRO.dataDir, "legacy-frozen.json");
@@ -1357,17 +1154,6 @@ try {
 } finally {
   sHeadRO.stop();
 }
-
-/* ---------- comments on their own (issue #71) ----------
- *
- * The review role used to post four words by uploading the whole script and
- * having the server prove, by comparing it against the stored one, that only
- * a comment had moved. `POST /api/docs/:id/comments` is that same act with
- * nothing else in the envelope, so most of what is below is about the things
- * a comparison used to be needed for: that only a comment lands, that two of
- * them at once both land, and that a document the comparison used to choke
- * on (#62) is now simply a document.
- */
 
 const sCmt = await startServer({
   JOIN_PIN: PIN,
@@ -1409,7 +1195,6 @@ try {
     quotedText: "there", author: "Reviewer", body: "a note", kind: "anchor"
   }, extra || {});
 
-  /* ---- the happy path: a comment, and nothing else in the envelope ---- */
   let afterFirst = 0;
   {
     const before = await readDocAs(doc.id, editToken);
@@ -1431,7 +1216,6 @@ try {
     eq("...and the reviewer's name on the document", now.state.lastEditedBy, "Reviewer");
   }
 
-  /* ---- the rev and the head line agree afterwards (#74) ---- */
   {
     const file = join(sCmt.dataDir, doc.id + ".json");
     const head = headOfFile(file);
@@ -1445,13 +1229,11 @@ try {
       readdirSync(sCmt.dataDir).join(", "));
   }
 
-  /* ---- an editor may use it too ---- */
   {
     const res = await post(doc.id, editToken, { comment: note("n2", { author: "Host" }) });
     eq("an editor may post through it as well", res.status, 200);
   }
 
-  /* ---- the anchor: one field of one scene, never the script ---- */
   {
     const res = await post(doc.id, reviewToken, {
       comment: note("n3"),
@@ -1493,7 +1275,6 @@ try {
     check("...and nothing was written", !(now.state.comments || []).some((c) => c.id === "n5"));
   }
 
-  /* ---- replies ---- */
   {
     const before = await readDocAs(doc.id, editToken);
     const wasAt = before.state.comments.find((c) => c.id === "n1").updatedAt;
@@ -1517,11 +1298,6 @@ try {
     eq("...saying no-such-comment", body && body.error, "no-such-comment");
   }
 
-  /* ---- resolve: an editor's, never a reviewer's ----
-     The owner's decision: reviewers never resolve or unresolve. Authorship
-     cannot be established here (an author is a typed name, and everyone on a
-     review link shares one token), so any resolve by a reviewer would be a
-     resolve of somebody else's comment. */
   {
     const before = await readDocAs(doc.id, editToken);
     const res = await patch(doc.id, reviewToken, "n1", { resolved: true, by: "Reviewer" });
@@ -1547,8 +1323,6 @@ try {
     eq("a per-document review link's token is refused the same way", viaLink.status, 403);
     eq("...saying reviewers-cannot-resolve", (await json(viaLink) || {}).error, "reviewers-cannot-resolve");
 
-    /* Refused before a byte of the body is read (#74): 20 MB announced,
-       twenty bytes sent. An answer at all is the proof. */
     const early = await refuseBeforeBody(sCmt.base, "/api/docs/" + doc.id + "/comments/n1", "PATCH",
       { "x-splitpage-token": reviewToken });
     eq("a reviewer's resolve is refused before its body is read", early.status, 403);
@@ -1582,8 +1356,6 @@ try {
     eq("...and a resolve that is not a boolean is 400", nonsense.status, 400);
   }
 
-  /* ---- posting the same comment twice ----
-     A client that lost the answer to a dropped connection and tried again. */
   {
     const first = await json(await post(doc.id, reviewToken, { comment: note("dup") }));
     const second = await json(await post(doc.id, reviewToken, { comment: note("dup", { body: "different words" }) }));
@@ -1595,7 +1367,6 @@ try {
       (now.state.comments || []).filter((c) => c.id === "dup").length, 1);
   }
 
-  /* ---- the shape a comment has to have ---- */
   {
     const cases = [
       ["a comment with no id", { comment: note("") }],
@@ -1619,7 +1390,6 @@ try {
       "anchorId,assignee,author,body,createdAt,field,id,kind,quotedText,replies,resolved,resolvedAt,resolvedBy,rowId,updatedAt");
   }
 
-  /* ---- what is not a route here ---- */
   {
     const read = await fetch(cmtUrl(doc.id), { headers: { "x-splitpage-token": reviewToken } });
     eq("there is no GET of the comments — reading is the document's own route", read.status, 405);
@@ -1631,7 +1401,6 @@ try {
     eq("...and a comment id that is not one is 400", badCid.status, 400);
   }
 
-  /* ---- the review link's scope (#63) holds here too ---- */
   {
     const scoped = await json(await fetch(sCmt.base + "api/share?doc=" + doc.id, {
       headers: { "x-splitpage-token": editToken }
@@ -1650,9 +1419,6 @@ try {
     const listed = await json(await fetch(sCmt.base + "api/docs", { headers: { "x-splitpage-token": scopedToken } }));
     eq("...nor lists the library", (listed && listed.docs || []).length, 1);
 
-    /* And the refusal happens before a byte of the body is read (#74): this
-       request announces 20 MB and sends twenty bytes of it. An answer at all
-       is the proof. */
     const early = await refuseBeforeBody(sCmt.base, "/api/docs/" + otherDoc.id + "/comments", "POST",
       { "x-splitpage-token": scopedToken });
     eq("a comment for the wrong document is refused before its body is read", early.status, 403);
@@ -1664,9 +1430,6 @@ try {
     eq("and with no token at all it is the gate that answers", noToken.status, 401);
   }
 
-  /* ---- the cap: a comment, not a script ----
-     MAX_BODY is 25 MB because a whole script with its images has to fit
-     through PUT. Nothing a reviewer sends here is anywhere near that. */
   {
     const huge = await post(doc.id, reviewToken, {
       comment: note("big", { body: "x".repeat(600 * 1024) })
@@ -1684,10 +1447,6 @@ try {
       !(now.state.comments || []).some((c) => c.id === "big" || c.id === "big2"));
   }
 
-  /* ---- two reviewers at once ----
-     The whole reason the append happens inside the document's lock rather
-     than as a read-modify-write: with the old PUT one of these two would
-     have lost, and been handed a 409 to merge and try again. */
   {
     const before = await readDocAs(doc.id, editToken);
     const scoped = await json(await fetch(sCmt.base + "api/share?doc=" + doc.id, {
@@ -1711,7 +1470,6 @@ try {
     eq("...and the head line with it", headOfFile(join(sCmt.dataDir, doc.id + ".json")).rev, revs[1]);
   }
   {
-    /* Ten at once, to be sure it is the lock doing it and not luck. */
     const before = await readDocAs(doc.id, editToken);
     const many = await Promise.all(Array.from({ length: 10 }, (_, i) =>
       post(doc.id, reviewToken, { comment: note("many-" + i, { author: "R" + i }) })));
@@ -1723,12 +1481,6 @@ try {
     eq("...the rev counting every one of them", now.rev, (before.rev || 0) + 10);
   }
 
-  /* ---- a document saved before any of this existed (#62) ----
-     No head line, no `comments` array, and none of the fields the client
-     fills in on load — which is exactly the document whose reviewers used
-     to be told "review-only" because their copy carried `brollShots: []`
-     and the stored one carried no such key. There is nothing to compare
-     here any more, so there is nothing to disagree about. */
   {
     const legacyPath = join(sCmt.dataDir, "legacy-comment.json");
     writeFileSync(legacyPath, JSON.stringify({
@@ -1769,11 +1521,6 @@ try {
     eq("...and on an id that is not one, 400", bad.status, 400);
   }
 
-  /* ---- the old path is closed (#71) ----
-     The review client posts through the routes above. A whole-document PUT
-     from a review token is refused outright — even one that carries nothing
-     but a comment, which the deleted comparison used to let through — and
-     an editor's PUT of that very same state is written exactly as before. */
   {
     const now = await readDocAs(doc.id, reviewToken);
     const next = JSON.parse(JSON.stringify(now.state));
@@ -1813,8 +1560,6 @@ try {
   sCmt.stop();
 }
 
-/* A published library takes no comments either — it is not a write with an
-   exemption, it is a write. */
 const sCmtRO = await startServer({ HOST: "127.0.0.1", READ_ONLY: "1" });
 try {
   writeFileSync(join(sCmtRO.dataDir, "frozen-doc.json"), JSON.stringify({
@@ -1833,15 +1578,8 @@ try {
   sCmtRO.stop();
 }
 
-/* ---------- images as content-addressed blobs (#82) ----------
- *
- * PUT/GET/missing under /api/blobs, the 422 a save or a comment gets for an
- * image the server does not hold, a review link's view of the blob store
- * (only what its document names, plus what it uploaded itself), a
- * reviewer's upload budget, and the D7 gate that stops a client predating
- * blob refs from saving over a document that holds some.
- */
-const BLOB_BUDGET = 10000;   /* two small uploads (each charged at least 4096) and no third */
+// Fits two uploads charged 4096 minimum each, not three.
+const BLOB_BUDGET = 10000;
 const sBlob = await startServer({
   JOIN_PIN: PIN,
   REVIEW_PIN,
@@ -1902,7 +1640,6 @@ try {
       (pre.headers.get("access-control-allow-headers") || "").includes("x-splitpage-client"));
   }
 
-  /* ---- round trip ---- */
   const one = pngOf(600);
   const oneSha = shaOf(one);
   {
@@ -1940,7 +1677,6 @@ try {
     eq("...and served as image/jpeg", (await getBlob(editToken, shaOf(jpg))).headers.get("content-type"), "image/jpeg");
   }
 
-  /* ---- refusals ---- */
   {
     const res = await putBlob(editToken, pngOf(300), "a".repeat(64));
     eq("bytes that do not hash to the name are 400", res.status, 400);
@@ -1963,7 +1699,6 @@ try {
     eq("...refused on its declared length, before the body", early.status, 413);
   }
 
-  /* ---- missing ---- */
   {
     const res = await missingAs(editToken, [oneSha, "c".repeat(64), oneSha]);
     eq("missing answers 200", res.status, 200);
@@ -1973,7 +1708,6 @@ try {
     eq("a non-sha in the list is 400", (await missingAs(editToken, ["nope"])).status, 400);
   }
 
-  /* ---- the list route ignores blobs/ ---- */
   {
     const res = await fetch(sBlob.base + "api/docs", { headers: hdr(editToken) });
     const body = await json(res);
@@ -1981,7 +1715,6 @@ try {
     eq("...and the picker lists no documents for it", body && body.docs && body.docs.length, 0);
   }
 
-  /* ---- saves naming images ---- */
   const unknown = "d".repeat(64);
   let refDoc = null;
   {
@@ -2024,7 +1757,6 @@ try {
       (await putDoc(refDoc.id, okBody.rev, again, NEW)).status, 200);
   }
 
-  /* ---- legacy base64 and D7 ---- */
   {
     const legacy = Object.assign(fixtureState(), { title: "Old style" });
     legacy.rows[0].visualImage = "data:image/png;base64," + pngOf(200).toString("base64");
@@ -2043,7 +1775,6 @@ try {
     eq("...while client 2 saves it", (await putDoc(refDoc.id, cur.rev, cur.state, NEW)).status, 200);
   }
 
-  /* ---- comments naming images ---- */
   {
     const url = sBlob.base + "api/docs/" + refDoc.id + "/comments";
     const post = (token, payload, headers) => fetch(url, { method: "POST", headers: hdr(token, headers), body: JSON.stringify(payload) });
@@ -2060,7 +1791,6 @@ try {
     eq("an old client's text comment on a document with refs is still taken", oldClient.status, 200);
   }
 
-  /* ---- reviewers: a review link sees only its own document's images ---- */
   const hidden = pngOf(400);
   const hiddenSha = shaOf(hidden);
   eq("(a second image, named by no document)", (await putBlob(editToken, hidden)).status, 201);
@@ -2094,10 +1824,7 @@ try {
     eq("...and post the comment carrying it", posted.status, 200);
   }
 
-  /* ---- a reviewer's upload budget ---- */
   {
-    /* Twice, and first: a re-send of bytes already here is charged nothing,
-       which is why the two uploads below still both fit. */
     eq("a reviewer re-sending bytes already here is 200", (await putBlob(reviewToken, one)).status, 200);
     eq("...and again, charged nothing", (await putBlob(reviewToken, one)).status, 200);
     const a = await putBlob(reviewToken, pngOf(3000));
@@ -2116,7 +1843,6 @@ try {
   sBlob.stop();
 }
 
-/* A published library stores no images either. */
 const sBlobRO = await startServer({ HOST: "127.0.0.1", READ_ONLY: "1" });
 try {
   const out = await refuseBeforeBody(sBlobRO.base, "api/blobs/" + "a".repeat(64), "PUT", { "Content-Length": "100" });

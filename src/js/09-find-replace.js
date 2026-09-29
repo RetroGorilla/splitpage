@@ -14,34 +14,11 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 
-/* ================= find & replace =================
-
-   Matching happens on a cell's TEXT as the document model reads it
-   (cellOf, 04c-doc-model.js, #85) — its projection, the plain text with a
-   b-roll key as one character — never on the HTML string. Running a regex
-   over the markup would happily rewrite the inside of an attribute — a
-   tag's stored name, a link's href, a comment anchor's id — and corrupt the
-   document in ways that only show up much later. Replacing is the model's
-   replaceText(), so formatting, links, tags and anchors all survive a
-   replace, and the cell is written back as toHtml() of the result.
-
-   Because the text is the projection rather than one text node at a time,
-   a match may run across a formatting boundary ("wid<strong>get</strong>")
-   or into and out of a comment. It may NOT touch a tagged word or a b-roll
-   key: those are atomic everywhere else in the app (you cannot type inside
-   one — see the contenteditable="false" note), and rewriting a tag's words
-   here would leave the visible text saying one thing while the tag still
-   tracked another. Renaming a tag is the Production panel's job, which
-   changes both halves together. Words inside a comment ARE replaceable:
-   the comment card compares its quote with the anchor's live text and says
-   so with a "Changed" tag (10-comments.js), so the panel never shows a
-   quote as current when it is not. */
-
 export var findOpen = false;
 S.findMatchCase = false;
-var findMatches = [];      /* [{rowId, field, nth}] in document order */
+var findMatches = [];
 var findIndex = -1;
-var findInTags = 0;        /* occurrences inside tags: shown, never matched */
+var findInTags = 0;
 
 function findNeedle() {
   return document.getElementById("find-input").value || "";
@@ -51,23 +28,7 @@ function escapeRegExpLiteral(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/* Every match-finding function below used to lowercase a copy of the
-   haystack with String#toLowerCase() and hunt through it with
-   String#indexOf(), then apply the resulting index straight to the
-   ORIGINAL string. That breaks for the handful of characters whose
-   lowercase form is a different length from the character itself — "İ"
-   (Latin capital I with dot above) becomes the two-character "i̇" under
-   toLowerCase(), so every index found in the lowercased copy from that
-   point on is off by one in the real string. On a match, that shifted
-   index landed replaceInHtml's slice points somewhere mid-run of
-   surrounding text, splicing the replacement into the wrong place and
-   corrupting the row's content.
-
-   A case-insensitive regex sidesteps the whole problem: it compares
-   characters against the untouched original string one at a time (no
-   transformed copy ever exists), so match indices are always correct
-   positions in `text`, and a literal pattern's match is always exactly
-   needle.length characters long. */
+// Never index the original through a lowercased copy; offsets shift
 function findAllMatches(text, needle, matchCase) {
   if (!needle) return [];
   var re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
@@ -79,11 +40,6 @@ function findAllMatches(text, needle, matchCase) {
   return out;
 }
 
-/* A cell cut into what a search may and may not touch, each piece with its
-   offset into the cell's projection: `free` is every stretch of text with
-   no tag on it, running across formatting and comments; `tagged` is each
-   tag's own words, one piece per tag. A b-roll key belongs to neither and
-   ends the stretch it sits in, so no match can reach across it. */
 function searchablePieces(cell) {
   var free = [], tagged = [];
   var pos = 0, cur = null, curTag = null;
@@ -104,8 +60,6 @@ function searchablePieces(cell) {
   return { free: free, tagged: tagged };
 }
 
-/* Every match in a cell, as {from, to} offsets into its projection, in
-   order. */
 export function findInCell(cell, needle, matchCase) {
   if (!needle) return [];
   return matchesInPieces(searchablePieces(cell), needle, matchCase);
@@ -121,8 +75,6 @@ function matchesInPieces(pieces, needle, matchCase) {
   return out;
 }
 
-/* How many occurrences sit inside tags and so cannot be replaced — used
-   only to explain the difference rather than leave it mysterious. */
 export function countInTags(cell, needle, matchCase) {
   if (!needle) return 0;
   return countInPieces(searchablePieces(cell), needle, matchCase);
@@ -134,11 +86,6 @@ function countInPieces(pieces, needle, matchCase) {
   }, 0);
 }
 
-/* The whole document's matches, [{rowId, field, nth}] in document order,
-   and how many more occurrences sit inside tags. Both come from the one
-   cut of each cell, so the in-tag count costs the find count no second
-   pass over the document (HANDOFF invariant #6). The in-tag number is for
-   display only: nothing ever selects or replaces one. */
 export function findInRows(rows, needle, matchCase) {
   var matches = [], inTags = 0;
   if (!needle) return { matches: matches, inTags: inTags };
@@ -153,30 +100,12 @@ export function findInRows(rows, needle, matchCase) {
   return { matches: matches, inTags: inTags };
 }
 
-/* What the find bar's count says when nothing can be stepped to: plain
-   "No matches", or — when the only occurrences are inside tags — how many,
-   so a search for a tagged word does not look like a miss. */
 export function noMatchLabel(inTags) {
   if (!inTags) return "No matches";
   return "No matches · " + (inTags === 1 ? "1 in a tag" : inTags + " in tags");
 }
 
-/* ---- the projection in a DOM ----
-
-   Where each character of a cell's projection lives in a DOM holding the
-   cell's HTML — the live cell on screen, or an inert parse of the stored
-   string. This walks the DOM the way fromHtml() reads it, so the offsets
-   find works in land on the characters they were found in:
-     - text is one character per character, except that a run of line
-       feeds / carriage returns is ONE (it shows as one space), and a
-       zero-width space (ensureTrailingCaretSpot's caret spot), the other C0
-       controls and U+FFFC are none;
-     - <br> is one ("\n"), and so is the end of a <div>/<p> (the sanitiser
-       turns each into a line break, and a blank one into just that);
-     - a b-roll key is one, the atom;
-     - a picture or a video card is none (design D7).
-   Each entry is {text, sc, so, ec, eo}: the character, and where it
-   starts and ends as DOM boundary points. */
+// Must walk the DOM as fromHtml does, or offsets drift
 export function domProjection(root) {
   var out = [];
   function at(node, index) { return { sc: node, so: index, ec: node, eo: index + 1 }; }
@@ -228,10 +157,7 @@ var DROPPED_CHAR_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/;
 var DROPPED_CHARS_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g;
 var OBJ = "\uFFFC";
 
-/* A DOM Range over projection offsets [from, to) of a cell whose DOM is
-   `root`, or null when the DOM does not hold the text `expect` says it
-   should (the cell on screen is not the stored one) — a range over the
-   wrong words is worse than none. */
+// Null when the DOM text differs from the stored cell
 export function domRangeFor(root, from, to, expect) {
   var chars = domProjection(root);
   var text = chars.map(function (c) { return c.text; }).join("");
@@ -242,29 +168,13 @@ export function domRangeFor(root, from, to, expect) {
   return range;
 }
 
-/* Replace the nth match in one field (nth === -1 means every one),
-   returning the new HTML and how many were changed. `hooks` is
-   registryTagHooks() of the registry, for writing tags back.
-
-   The replacement takes the marks of the first character it replaces
-   (replaceText), so a word replaced in bold stays bold and one inside a
-   comment stays inside it. The cell is then written as toHtml(): one
-   canonical nesting, so a replaced cell's HTML can differ from before in
-   how its elements nest — never in what they say.
-
-   The one exception is a cell holding a pasted picture or video card
-   (reachable only by pasting HTML): the model has no place for either
-   (design D7) and writing it back would silently delete them, so that
-   cell is edited in place instead — the same offsets, mapped onto an inert
-   parse of its HTML, the replacement typed where the first replaced
-   character was — and sanitised as before. */
 export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) {
   var cell = cellOf(html);
   var matches = findInCell(cell, needle, matchCase);
   if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
   if (!matches.length) return { html: html, changed: 0 };
   var text = replacement == null ? "" : String(replacement);
-  /* last first, so every earlier offset still points where it did */
+  // Last first so earlier offsets stay valid
   var todo = matches.slice().reverse();
   if (/<img[\s>]|video-embed-card/i.test(html || "")) {
     var body = inertBody(html);
@@ -276,9 +186,6 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
       if (text) range.insertNode(body.ownerDocument.createTextNode(text));
       expect = expect.slice(0, todo[i].from) + text + expect.slice(todo[i].to);
     }
-    /* a match that ended inside an element leaves that element empty (the
-       range keeps what it only partly covered); the model writes no empty
-       elements, so neither does this */
     Array.prototype.forEach.call(body.querySelectorAll("strong, em, u, s, mark, a, span.cmt-anchor, span.stage-dir"), function (el) {
       if (el.parentNode && !el.textContent && !el.querySelector("img, br")) el.parentNode.removeChild(el);
     });
@@ -315,10 +222,6 @@ function updateFindCount() {
   el.textContent = (findIndex + 1) + " of " + findMatches.length;
 }
 
-/* The current match as {cell, range} in the live DOM, or null. Its offsets
-   are found in the stored cell and mapped onto the cell on screen, which is
-   that same HTML rendered (plus, perhaps, a zero-width caret spot the
-   mapping skips); the range may start in one element and end in another. */
 function currentMatchRange() {
   if (findIndex < 0 || !findMatches[findIndex]) return null;
   var m = findMatches[findIndex];
@@ -339,13 +242,7 @@ function highlightsSupported() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
 }
 
-/* Show the match without touching focus or the selection. It used to be
-   selected and its cell focused, which moved the keyboard out of the find
-   box: the next Enter ("Next match") then typed a line break over the
-   match, and a letter typed to refine the search replaced it. Painted with
-   the CSS Custom Highlight API instead, as the untagged prompt is
-   (07-production-tags.js): a remark about the document, not a change to it.
-   A browser without the API scrolls to the match without marking it. */
+// Must not focus or select; Enter would type there
 function revealFindMatch() {
   var m = findMatches[findIndex];
   if (m) revealRow(m.rowId);
@@ -359,10 +256,6 @@ function revealFindMatch() {
   if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-/* The find box changed (typed, or match case flipped): the count names
-   match 1, so that is the one on screen, and Next goes on to 2. It used to
-   say "1 of N" with nothing shown, so the first Next skipped to 2 and a
-   Replace changed a match the user had never seen. */
 export function findQueryChanged() {
   refreshFindMatches(false);
   revealFindMatch();
@@ -376,7 +269,7 @@ export function stepFind(dir) {
 }
 
 export function replaceCurrent() {
-  if (reviewBlocked()) return;   /* find still works; replacing is an edit */
+  if (reviewBlocked()) return;
   var needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   var m = findMatches[findIndex];
@@ -432,13 +325,6 @@ export function replaceAll() {
   showToast("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
 }
 
-/* ---- Tag all as… (#218) ----
-
-   Every Visual-column mention of the search text tagged as one category,
-   named as the text was typed in the Find box: the rules, and what is
-   turned down, are bulkTagRows' (07-production-tags.js). The row under the
-   find bar asks first, with the count, and the tagging is one undo step
-   however many scenes it touches. */
 var bulkTagCat = null;
 
 function bulkTagNeedle() {
@@ -459,7 +345,6 @@ export function closeBulkTag() {
   if (btn) btn.setAttribute("aria-expanded", "false");
 }
 
-/* Why nothing can be tagged, in words, or "" when something can. */
 function bulkTagRefusal(needle, plan) {
   if (!needle) return "Type the words to tag in the Find box first.";
   if (needle.length > 80) return "That is too long to be a tag's name.";
@@ -497,8 +382,6 @@ function renderBulkTagRow() {
   return plan;
 }
 
-/* A category to start on: the item's own when the words are one already,
-   else the last one chosen, else Prop. */
 function defaultBulkTagCat(needle) {
   var key = normalizeTagName(needle);
   var tags = (S.state && S.state.productionTags) || [];
@@ -533,7 +416,6 @@ export function pickBulkTagCat(cat) {
   if (btn) btn.focus();
 }
 
-/* The find box changed: the question follows it while it is open. */
 function refreshBulkTagRow() {
   if (bulkTagOpen()) renderBulkTagRow();
 }
@@ -546,8 +428,7 @@ export function runBulkTag() {
   var plan = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, true);
   var why = bulkTagRefusal(needle, plan);
   if (why) { showToast(why, "warn"); return; }
-  /* One undo entry: whatever was typed before is recorded first, and the
-     entry is closed after, as the tag composer's "every mention" does. */
+  // Record prior typing first, then close the entry
   breakUndoCoalescing();
   var done = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, false);
   if (!done.hits) { showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn"); return; }
@@ -569,11 +450,10 @@ export function openFindBar() {
   findOpen = true;
   document.getElementById("findbar").hidden = false;
   var input = document.getElementById("find-input");
-  /* seed from the selection, the way every other editor does */
   var sel = window.getSelection();
   var picked = sel && !sel.isCollapsed ? String(sel).trim() : "";
   if (picked && picked.length <= 200 && picked.indexOf("\n") === -1) input.value = picked;
-  /* read before the find box takes focus, which moves the selection */
+  // Read before find box takes focus and moves selection
   var from = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
   input.focus();
   input.select();
@@ -585,11 +465,6 @@ export function openFindBar() {
   revealFindMatch();
 }
 
-/* Where find starts when it opens: the first match at or after the caret
-   (or the selection it was seeded from, which is that match), wrapping to
-   match 1 when there is none after it or the caret is not in the script.
-   Match 1 alone would scroll away from a word selected halfway down the
-   script to its first mention at the top. */
 function firstMatchFrom(range) {
   if (!range || !findMatches.length) return 0;
   var node = range.startContainer;
@@ -628,11 +503,6 @@ export function closeFindBar() {
   if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
 }
 
-/* Esc in the find bar: the bar goes and the match it was showing is
-   selected in its cell, the way an editor's find leaves you on what it
-   found, so the next thing typed edits there. The close button only
-   closes: it is a mouse away from wherever the caret was left, and the
-   writer opening closes the bar with the split view's cells behind it. */
 export function leaveFindAtMatch() {
   var hit = currentMatchRange();
   closeFindBar();
@@ -643,6 +513,4 @@ export function leaveFindAtMatch() {
   sel.addRange(hit.range);
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

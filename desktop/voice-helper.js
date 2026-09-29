@@ -1,43 +1,3 @@
-/* Splitpage desktop — Follow My Voice's listener process (issue #8).
- *
- * WHY A SEPARATE PROCESS. The Web Speech API the browser build uses exists
- * inside Electron but fails at once with a 'network' error: Google's speech
- * backend is reachable from a real Chrome or Edge install and not from here.
- * Windows has a recogniser of its own (System.Speech), offline and already
- * installed, and the simplest thing that can drive it is Windows' own
- * powershell.exe running desktop/voice/listen.ps1. That script listens to the
- * default microphone and writes what it hears to stdout as JSON lines; this
- * module runs it, reads those lines, and hands each one to main to forward
- * to the tab that asked.
- *
- * WHAT THE PAGE CAN SAY (invariant #45). Start and stop, for itself, and
- * nothing else: the channels take no argument (ipc-channels.js), and the
- * command line — the executable, the script, its arguments — is decided by
- * main from what it already holds (main.js § 9d). The worst a compromised
- * page can do is turn on the microphone listener while its own teleprompter
- * shows "Stop Following", which is what the button does anyway.
- *
- * WHAT COMES BACK (invariant #46). Only what this file rebuilds from the
- * helper's line: a type from a fixed list, a session number main assigned,
- * and one of text (a string, capped), code (a short lower-case word), lang
- * (a culture name) or name (the microphone's, capped, no control
- * characters — issue #118). Anything else on the line is dropped. The page
- * treats the text as words to match against the script, and the name as
- * text to show, never as markup.
- *
- * ONE LISTENER AT A TIME (invariant #47). There is one microphone. A second
- * tab starting takes it over: the first tab is told its session ended
- * ("taken"), then the new one starts. A tab closing, and the app quitting,
- * end the session its tab owns. The helper also exits by itself when its
- * stdin closes, so if main dies without cleaning up, the pipe closing is
- * what stops it listening.
- *
- * Plain CommonJS, Node built-ins only, no Electron: main.js requires it, and
- * desktop/test/voice-helper.test.mjs drives it under plain node with a fake
- * helper. Listed in electron-builder.yml's `files` for the same reason
- * drafts.js is.
- */
-
 "use strict";
 
 const { spawn: nodeSpawn } = require("node:child_process");
@@ -50,8 +10,6 @@ const MAX_NAME = 120;
 const MAX_LINE = 64 * 1024;
 const KILL_AFTER_MS = 2000;
 
-/* One line from the helper, rebuilt field by field. Returns null for
-   anything that is not a well-formed event. */
 function parseHelperLine(line) {
   let raw;
   try { raw = JSON.parse(line); } catch { return null; }
@@ -77,14 +35,6 @@ function parseHelperLine(line) {
   return event;
 }
 
-/* opts.command()   {file, args, env} to run, or null when this machine has
-                    no listener (not Windows, no powershell.exe). Called on
-                    every start, so a test can change it.
-   opts.onEvent     (tabId, event) for every event of every session,
-                    including {type:"end"} when its process has gone.
-   opts.spawn       child_process.spawn, replaceable in tests.
-   opts.killAfterMs how long a stopped helper gets to exit on its own after
-                    its stdin closes before it is killed. */
 function createVoiceHelper(opts) {
   const command = opts.command;
   const onEvent = opts.onEvent;
@@ -92,11 +42,11 @@ function createVoiceHelper(opts) {
   const killAfterMs = typeof opts.killAfterMs === "number" ? opts.killAfterMs : KILL_AFTER_MS;
 
   let nextSession = 1;
-  let current = null; /* {session, tabId, child, killTimer} */
+  let current = null;
   let started = 0;
 
   function emit(entry, event) {
-    try { onEvent(entry.tabId, Object.assign({ session: entry.session }, event)); } catch { /* a closing tab */ }
+    try { onEvent(entry.tabId, Object.assign({ session: entry.session }, event)); } catch { }
   }
 
   function end(entry, reason) {
@@ -104,9 +54,10 @@ function createVoiceHelper(opts) {
     entry.ended = true;
     if (current === entry) current = null;
     const child = entry.child;
-    try { child.stdin.end(); } catch { /* already closed */ }
+    try { child.stdin.end(); } catch { }
     if (child.exitCode === null && child.signalCode === null) {
-      entry.killTimer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } }, killAfterMs);
+      // Grace period after stdin closes, then force kill
+      entry.killTimer = setTimeout(() => { try { child.kill(); } catch { } }, killAfterMs);
       if (entry.killTimer.unref) entry.killTimer.unref();
     }
     if (reason && !entry.silent) emit(entry, { type: "end", reason });
@@ -149,11 +100,11 @@ function createVoiceHelper(opts) {
         const event = parseHelperLine(line);
         if (event) emit(entry, event);
       }
-      /* A helper that never ends a line is not one of ours. */
+      // Drop runaway partial line from a misbehaving helper
       if (buffer.length > MAX_LINE) buffer = "";
     });
-    child.stderr.on("data", () => { /* drained so a chatty helper cannot block on a full pipe */ });
-    child.stdin.on("error", () => { /* the helper exited first */ });
+    child.stderr.on("data", () => { });
+    child.stdin.on("error", () => { });
     child.on("error", () => {
       if (!entry.ended) emit(entry, { type: "error", code: "helper-failed" });
       end(entry, "exited");
@@ -165,13 +116,11 @@ function createVoiceHelper(opts) {
     return { ok: true, session: entry.session };
   }
 
-  /* Only the tab that owns the session can stop it. */
   function stop(tabId) {
     if (current && current.tabId === tabId) end(current, "stopped");
     return { ok: true };
   }
 
-  /* A tab going away: end its session without telling it. */
   function forget(tabId) {
     if (current && current.tabId === tabId) {
       current.silent = true;

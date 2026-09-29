@@ -1,33 +1,3 @@
-#!/usr/bin/env node
-/* Splitpage desktop — tab-strip width regression test (GitHub issue #17).
- *
- * CSS-only repro/verification: no Electron, no npm install. Serves
- * desktop/tabstrip/tabstrip.css over a throwaway HTTP server, drives it in
- * headless Chromium over the Chrome DevTools Protocol (the same discovery
- * and launch approach as .claude/skills/run-splitpage-app/driver.mjs — see
- * findBrowser() there), builds synthetic `.tabstrip > .tabstrip__tabs >
- * .tab` markup with varying titles, and reads back each tab's real
- * getBoundingClientRect().width.
- *
- * What it asserts (see GitHub issue #17, "Desktop tab strip: every tab
- * resizes when one tab's title changes"):
- *   1. With 3 tabs and one growing title, every tab's width stays pinned to
- *      the 180px target and does not move as that title grows.
- *   2. A title too long for its tab ellipsises inside that tab (its text
- *      overflows the title span: scrollWidth > clientWidth) rather than
- *      resizing the pill.
- *   3. With many tabs (12) in a narrow (900px) strip, tabs shrink to fit but
- *      never below their 76px min-width, and the strip still leaves some of
- *      the title bar as plain (draggable) chrome — it does not consume the
- *      whole window width.
- *
- * Run: node desktop/test/tabstrip-width.mjs
- *   SPLITPAGE_CHROME=<path>   override browser discovery
- *   SPLITPAGE_CHROME_ARGS="--a --b"   extra browser switches (CI: --no-sandbox)
- *
- * Wired into `npm test` (desktop/package.json) alongside smoke.mjs.
- */
-
 "use strict";
 
 import http from "node:http";
@@ -55,11 +25,6 @@ function check(cond, msg) {
   }
 }
 
-/* -------------------------------------------------------------- harness page */
-/* Builds `.tabstrip > .tabstrip__tabs > .tab` markup matching the real
-   structure closely enough to drive the same CSS rules (icon optional, a
-   title span, an optional dirty dot, a close button) — see
-   desktop/tabstrip/tabstrip.js buildTabEl for the real shape. */
 function harnessHtml(stripWidth) {
   return `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -112,7 +77,6 @@ window.tabsRowWidth = function () {
 </body></html>`;
 }
 
-/* ------------------------------------------------------------------ server */
 let server = null;
 function startServer(stripWidth) {
   return new Promise((resolve, reject) => {
@@ -137,9 +101,6 @@ function startServer(stripWidth) {
   });
 }
 
-/* ------------------------------------------------------------------ browser */
-/* Trimmed copy of driver.mjs's findBrowser(): same search order, same
-   PLAYWRIGHT_BROWSERS_PATH convention, so this test needs no npm install. */
 function findBrowser() {
   if (process.env.SPLITPAGE_CHROME && fs.existsSync(process.env.SPLITPAGE_CHROME)) {
     return process.env.SPLITPAGE_CHROME;
@@ -180,13 +141,10 @@ function startBrowser() {
     "--disable-gpu",
     "--window-size=1440,960",
   ];
+  // Chromium refuses to run as root without these.
   if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
   }
-  /* Same switch driver.mjs reads. CI is not root, and its runner's AppArmor
-     stops Chromium's sandbox starting, so it says so here (ci.yml sets it);
-     without this the browser dies before it listens and the failure is a bare
-     "no CDP page target". */
   if (process.env.SPLITPAGE_CHROME_ARGS) {
     args.push(...process.env.SPLITPAGE_CHROME_ARGS.split(/\s+/).filter(Boolean));
   }
@@ -292,14 +250,12 @@ async function evaluate(expression, awaitPromise = false) {
   return result.result.value;
 }
 
-/* --------------------------------------------------------------------- main */
 async function main() {
   await startServer(1440);
   startBrowser();
   await connectCdp();
   await navigate(`http://127.0.0.1:${PORT}/`);
 
-  // --- Case 1+2: 3 tabs, only the first (active) tab's title varies -------
   const titles = ["Ad", "Promo cut", "Penguin doc ep 1", "Penguin documentary episode 1"];
   const others = ["Ad", "Ad"];
   const widthsPerTitle = [];
@@ -325,23 +281,19 @@ async function main() {
     `case 1: tab width is unchanged as the active tab's title grows from ${JSON.stringify(titles[0])} to ${JSON.stringify(titles[titles.length - 1])}`
   );
 
-  // Also confirm the OTHER (unrelated, always "Ad") tabs never moved either,
-  // which is the crux of issue #17.
   const untouchedTabWidths = widthsPerTitle.map((m) => m[1].width);
   check(
     untouchedTabWidths.every((w) => Math.abs(w - untouchedTabWidths[0]) < 0.5),
     `case 1: the two untouched "Ad" tabs keep a constant width as tab 0's title changes (got: ${untouchedTabWidths.map((w) => w.toFixed(1)).join(", ")})`
   );
 
-  // --- Case 2: the long title ellipsises inside its own tab ---------------
   const longTitleMeasure = widthsPerTitle[widthsPerTitle.length - 1][0];
   check(
     longTitleMeasure.titleScrollWidth > longTitleMeasure.titleClientWidth,
     `case 2: a title too long for its tab overflows internally (scrollWidth ${longTitleMeasure.titleScrollWidth} > clientWidth ${longTitleMeasure.titleClientWidth}) instead of resizing the pill`
   );
 
-  // --- Case 3: many tabs in a narrow strip -> shrink, but not below min ---
-  await startServer2(900); // reopen server bound to a 900px body width
+  await startServer2(900);
   await navigate(`http://127.0.0.1:${PORT}/`);
   const manyTitles = [];
   for (let i = 0; i < 12; i++) manyTitles.push(`Tab ${i}`);

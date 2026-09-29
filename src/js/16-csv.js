@@ -5,31 +5,13 @@ import { commentBodyText } from "./10-comments.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 
-/* ================= csv ================= */
-
 export function csvEscape(v) {
   var s = String(v == null ? "" : v);
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-/* The script as a sheet: a row per scene with what the app shows round it
-   (#169) — where it starts, its status, its read time and whether that
-   was set by hand (#179), then the two columns, then what is in the
-   scene: its tags as the breakdown lists them ("Prop: Pentax K1000;
-   Location: workbench"), its b-roll shots and how far along each is, and
-   the numbers of the open threads on it (commentNumbers, the script's own
-   markers). "Scene" stays first and Visual and Audio keep their names, so
-   csvToRows finds them wherever they sit. A labelled "Total" row (and a
-   "Target" one when the script has a target) closes the scenes, with the
-   figures in the Status and Read columns; the comments follow under a
-   "Comments" line, each open one with its number and "Scene 03 · Audio".
-   Neither of those comes back in as a scene. */
 var CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
-/* Each scene's tags, as the breakdown has them, a category at a time in
-   the Production panel's order — "Prop: toothpick, naphtha; Gear:
-   overhead rig" — tags and sound cues (#219) alike, every item once.
-   Keyed by row index. */
 function sceneTagLists() {
   var byScene = Object.create(null);
   breakdownRows().forEach(function (r) {
@@ -48,8 +30,6 @@ function sceneTagLists() {
   return byScene;
 }
 
-/* Each scene's b-roll shots, read without writing (exportBrollScenes):
-   "the heron taking off (to shoot)", "… (shot, flagged)". */
 function sceneBrollLists() {
   var byScene = Object.create(null);
   exportBrollScenes().forEach(function (g) {
@@ -61,11 +41,6 @@ function sceneBrollLists() {
   return byScene;
 }
 
-/* The script as a table, for the .csv and the Excel workbook (16b-xlsx.js)
-   alike, so the two can never say different things: the heading, a row
-   per scene ({cells, status} — the scene's status id, which the workbook
-   colours), the Total and Target rows, and the comments ({cells, reply})
-   under their own heading. Cells are what the sheet shows, unescaped. */
 export var COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
 
 export function scriptTable() {
@@ -73,7 +48,6 @@ export function scriptTable() {
   var scenes = sceneFacts();
   var tags = sceneTagLists();
   var broll = sceneBrollLists();
-  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
   var comments = exportComments({ pieces: true });
   var open = Object.create(null);
   comments.forEach(function (c) {
@@ -139,14 +113,12 @@ export function buildCsv() {
     lines.push(t.commentHead.join(","));
     t.comments.forEach(function (c) { lines.push(line(c.cells)); });
   }
-  /* BOM so Excel reads the UTF-8 correctly */
+  // BOM makes Excel read UTF-8
   return "﻿" + lines.join("\r\n");
 }
 
 function parseCsv(text) {
   var rows = [], row = [], field = "", inQuotes = false;
-  /* A literal U+FEFF used to sit inside that first regex, invisible in the
-     source. Escaped now; the character it matches is unchanged. */
   /* eslint-disable-next-line no-control-regex -- C0 controls are what a CSV
      field must not carry into a row. */
   var src = String(text || "").replace(/^\uFEFF/, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
@@ -169,7 +141,6 @@ function parseCsv(text) {
   return rows.filter(function (r) { return r.some(function (c) { return c.trim(); }); });
 }
 
-/* true when column 0 is a short scene/shot index rather than real content */
 function looksLikeIndexColumn(table, from) {
   var checked = 0;
   for (var i = from; i < table.length && checked < 8; i++) {
@@ -184,7 +155,6 @@ function looksLikeIndexColumn(table, from) {
 export function csvToRows(text) {
   var table = parseCsv(text);
   if (!table.length) return [];
-  /* find the visual/audio columns from a header row if there is one */
   var vi, ai, start = 0;
   var head = table[0].map(function (c) { return c.trim().toLowerCase(); });
   var hv = head.findIndex(function (c) { return /^(visual|video|picture|image|shot|action)s?$/.test(c); });
@@ -195,29 +165,14 @@ export function csvToRows(text) {
   if (hv !== -1 && ha !== -1) {
     vi = hv; ai = ha; start = 1;
   } else if (table[0].length >= 3 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
-    /* our own export shape: Scene, Visual, Audio */
     vi = 1; ai = 2;
   } else if (table[0].length === 2 && looksLikeIndexColumn(table, looksLikeHeader ? 1 : 0)) {
-    /* A plain two-column sheet whose first column is just a scene/shot
-       index (e.g. "Scene,Description") has no separate audio column at
-       all — falling to the vi=0/ai=1 default below put the bare scene
-       NUMBER into Visual and the real content into Audio, backwards on
-       both counts. The one real content column reads as Visual (a
-       shot/scene description), with Audio left blank. */
     vi = 1; ai = -1;
   } else {
     vi = 0; ai = 1;
   }
   if (looksLikeHeader && start === 0) start = 1;
 
-  /* Our own export (buildCsv) — "Scene" first, Status, Visual and Audio
-     named — ends its scenes at a "Comments" line: the comments below it
-     are not scenes, though their Author and Date columns can sit where
-     Visual and Audio are and used to come back as rows. Only after our own
-     header, the way the Markdown and .docx readers wait for theirs, so
-     somebody else's sheet keeps a row that happens to say "Comments". The
-     totals rows above it ("Total", "Target") have neither column and are
-     skipped like any empty row. */
   var ours = head[0] === "scene" && head.indexOf("status") !== -1 && hv !== -1 && ha !== -1;
 
   var out = [];
@@ -236,6 +191,4 @@ export function csvToRows(text) {
   return out;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

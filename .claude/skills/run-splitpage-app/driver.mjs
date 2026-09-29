@@ -1,27 +1,3 @@
-/*
- * Splitpage driver, Node edition — serves the app on http://localhost:<port>/
- * and drives a headless Chromium over the Chrome DevTools Protocol.
- *
- * A line-for-line port of driver.ps1, which only runs on Adam's Windows
- * machine (PowerShell 5.1 + .NET + msedge.exe). This one runs anywhere Node 22
- * and a Chromium build exist — in particular the Linux cloud container, where
- * there is no PowerShell and no Edge. The two drivers read the SAME test
- * scripts and print the SAME lines, so a suite is never rewritten for one of
- * them: `tests/*.txt` stay the single source of truth and run-tests.ps1's
- * "RESULT:" parsing still works if it is ever pointed here.
- *
- * Node built-ins only, like every other harness in this repo: node:http for
- * the static server, the global WebSocket (Node 22) for CDP, node:child_process
- * for the browser. No npm install, nothing to keep in sync.
- *
- *   node .claude/skills/run-splitpage-app/driver.mjs --script tests/01-core.txt
- *   ... --port 8795 --cdp-port 9337   pin the ports
- *   ... --headed                      real window (needs a DISPLAY; try xvfb-run)
- *   ... --chrome <path>               override browser discovery
- *
- * See SKILL.md for the command list.
- */
-
 import http from "node:http";
 import net from "node:net";
 import fs from "node:fs";
@@ -32,7 +8,6 @@ import { spawn, execFileSync } from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-/* ------------------------------------------------------------------ args */
 function parseArgs(argv) {
   const out = {
     port: 8791, cdpPort: 9333, root: path.resolve(HERE, "..", "..", ".."),
@@ -41,8 +16,6 @@ function parseArgs(argv) {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    // PowerShell-style single-dash flags are accepted too, so a command line
-    // copied out of SKILL.md or HANDOFF.md works against either driver.
     const flag = a.replace(/^--?/, "").toLowerCase();
     if (a[0] !== "-") throw new Error(`unexpected argument: ${a}`);
     switch (flag) {
@@ -72,9 +45,6 @@ const log = (m) => process.stderr.write(`[driver] ${m}\n`);
 const out1 = (m) => process.stdout.write(`${m}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* -------------------------------------------------------- static server */
-/* Mirrors driver.ps1's own HttpListener rather than reusing start.mjs:
-   start.mjs also opens the URL in a real browser window. */
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
@@ -93,7 +63,6 @@ async function startServer() {
     catch { res.statusCode = 400; return res.end(); }
     if (p === "/") p = "/index.html";
     const f = path.resolve(root, "." + p);
-    // path.resolve collapses "..", so a request can never climb out of root.
     if (f !== root && !f.startsWith(root + path.sep)) { res.statusCode = 403; return res.end(); }
     let body;
     try {
@@ -111,9 +80,6 @@ async function startServer() {
   log(`server up on http://localhost:${opts.port}/ (root ${root})`);
 }
 
-/* -------------------------------------------------------------- browser */
-/* Edge on Windows, Playwright's Chromium in the cloud container, or whatever
-   chromium/chrome is on PATH. --chrome overrides all of it. */
 function findBrowser() {
   if (opts.chrome) {
     if (!fs.existsSync(opts.chrome)) throw new Error(`--chrome not found: ${opts.chrome}`);
@@ -123,44 +89,31 @@ function findBrowser() {
     return process.env.SPLITPAGE_CHROME;
   }
   const cands = [];
-  // The container sets PLAYWRIGHT_BROWSERS_PATH and forbids re-downloading, so
-  // look inside it rather than shelling out to playwright.
   const pw = process.env.PLAYWRIGHT_BROWSERS_PATH || "/opt/pw-browsers";
   if (fs.existsSync(pw)) {
     for (const d of fs.readdirSync(pw)) {
-      if (!/^chromium-/.test(d)) continue;      // headless_shell can't screenshot a real window
-      // Playwright's own layout, which has changed under us: older builds
-      // unpack to chrome-linux/, and the Chrome-for-Testing builds newer
-      // Playwright downloads unpack to chrome-linux64/. Both are listed
-      // rather than one being picked, because a machine can hold either —
-      // and getting this wrong does not fail loudly, it falls through to
-      // whatever is on PATH. On a GitHub runner that is /usr/bin/chromium,
-      // a snap wrapper that starts and never opens a CDP port, so the whole
-      // suite fails with "no CDP page target" and nothing says why.
+      // headless_shell can't screenshot; Playwright layout varies by version.
+      if (!/^chromium-/.test(d)) continue;
       cands.push(path.join(pw, d, "chrome-linux", "chrome"));
       cands.push(path.join(pw, d, "chrome-linux64", "chrome"));
       cands.push(path.join(pw, d, "chrome-mac", "Chromium.app", "Contents/MacOS/Chromium"));
       cands.push(path.join(pw, d, "chrome-mac-arm64", "Chromium.app", "Contents/MacOS/Chromium"));
       cands.push(path.join(pw, d, "chrome-win", "chrome.exe"));
       cands.push(path.join(pw, d, "chrome-win64", "chrome.exe"));
-      // And a catch-all for the next rename: any chrome-*/ holding an
-      // executable called chrome (or chrome.exe).
       try {
         for (const sub of fs.readdirSync(path.join(pw, d))) {
           if (!/^chrome-/.test(sub)) continue;
           cands.push(path.join(pw, d, sub, "chrome"));
           cands.push(path.join(pw, d, sub, "chrome.exe"));
         }
-      } catch { /* not a directory — the next candidate will do */ }
+      } catch { }
     }
   }
   if (process.platform === "win32") {
     cands.push(`${process.env["ProgramFiles(x86)"]}\\Microsoft\\Edge\\Application\\msedge.exe`);
     cands.push(`${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`);
   }
-  // google-chrome before chromium: on Ubuntu (and so on a GitHub runner)
-  // /usr/bin/chromium is a snap wrapper that cannot be driven over CDP,
-  // while google-chrome is a real binary.
+  // PATH chromium may be a snap wrapper with no CDP.
   cands.push("/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser");
   for (const c of cands) { if (c && fs.existsSync(c)) return c; }
   try {
@@ -170,7 +123,6 @@ function findBrowser() {
   throw new Error("no Chromium/Edge found — pass --chrome <path> or set SPLITPAGE_CHROME");
 }
 
-/* True when something already accepts connections on 127.0.0.1:port. */
 function portInUse(port) {
   return new Promise((resolve) => {
     const s = net.connect({ port, host: "127.0.0.1" });
@@ -184,9 +136,6 @@ let browserProc = null;
 let userDataDir = null;
 async function startBrowser() {
   if (browserProc) return;
-  // A browser still holding --cdp-port (a leftover from an earlier run, most
-  // often) would answer /json/list in place of ours: connectCdp attaches to
-  // it and every command then times out. Refuse up front instead.
   if (await portInUse(opts.cdpPort)) {
     const e = new Error(
       `CDP port ${opts.cdpPort} is already in use, probably by a browser left over from an earlier run. ` +
@@ -204,12 +153,9 @@ async function startBrowser() {
     "--disable-features=Translate,msEdgeSplitScreen,msImplicitSignin",
     "--window-size=1440,960",
   ];
-  // The container runs as root, where Chromium's sandbox refuses to start.
   if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
   }
-  // Escape hatch for environment-specific flags (a proxy, a CA, a feature
-  // switch) without editing this file: SPLITPAGE_CHROME_ARGS="--a --b".
   if (process.env.SPLITPAGE_CHROME_ARGS) {
     args.push(...process.env.SPLITPAGE_CHROME_ARGS.split(/\s+/).filter(Boolean));
   }
@@ -220,17 +166,8 @@ async function startBrowser() {
   log(`browser pid=${browserProc.pid} exe=${exe} cdp=${opts.cdpPort} headless=${!opts.headed}`);
 }
 
-/* On Windows, killing the msedge.exe we spawned does not take down the real
-   browser tree: it lives on, keeps --remote-debugging-port, and the next run
-   on that port attaches to it. Stop every msedge.exe whose command line
-   carries THIS run's profile directory. Never match by name alone, which
-   would close the user's own Edge. Mirrors driver.ps1's sweep. */
 function sweepBrowsers(dir) {
   if (process.platform !== "win32" || !dir) return;
-  // The directory goes in through the environment, not the command string, so
-  // nothing in it can be read as PowerShell. .Contains is a literal match
-  // (-like would treat [ ] in a --run-id as wildcards). A second pass catches
-  // any child that started while the first one was stopping its parent.
   const ps = [
     "$d = $env:SPLITPAGE_SWEEP_DIR",
     "for ($i = 0; $i -lt 3; $i++) {",
@@ -242,8 +179,6 @@ function sweepBrowsers(dir) {
     "}",
   ].join("\n");
   try {
-    // -EncodedCommand (UTF-16LE base64) sidesteps Windows argument quoting,
-    // which mangles the embedded quotes and newlines of a plain -Command.
     const enc = Buffer.from(ps, "utf16le").toString("base64");
     execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", enc], {
       stdio: "ignore", timeout: 30000,
@@ -254,7 +189,6 @@ function sweepBrowsers(dir) {
   }
 }
 
-/* ------------------------------------------------------------------ cdp */
 let ws = null;
 let msgId = 0;
 const pending = new Map();
@@ -298,7 +232,6 @@ async function connectCdp() {
       consoleLines.push(`${msg.params.entry.level}: ${msg.params.entry.text}`);
     }
   });
-  // A socket that dies mid-suite must fail the pending command, not hang it.
   ws.addEventListener("close", () => {
     for (const [, p] of pending) { clearTimeout(p.timer); p.reject(new Error("CDP websocket closed")); }
     pending.clear();
@@ -306,28 +239,8 @@ async function connectCdp() {
   log("cdp connected");
   await send("Page.enable");
   await send("Runtime.enable");
-  // Every suite runs in the light theme, whatever the machine's own (#169).
-  // A headless browser takes prefers-color-scheme from the OS, so on a
-  // machine set to dark mode the app drew its dark palette and every suite
-  // that reads a colour back (12's gear rule, 94's and 96's lamps) failed
-  // against values that are right in the light theme the suites are written
-  // for. A suite that wants the dark theme says so by setting data-theme on
-  // <html> itself (96 and 97 do). driver.ps1 does the same.
+  // Suites assume light theme; headless follows OS scheme.
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
-  // The first-run wizard shows itself over the pristine demo (invariant #30),
-  // which is exactly what every suite loads — and its backdrop swallows the
-  // real mouse clicks the suites make. Mark onboarding as done before any
-  // page script runs, unless the script asked for the wizard with ?wizard=1
-  // (13-onboarding.txt does). Runs again on every navigation, so a suite
-  // that removes the key and reloads without ?wizard=1 still gets no wizard.
-  // The New Tab page (20j-newtab.js) shows itself over the same pristine
-  // demo, for the same reason and with the same effect on every suite that
-  // clicks into it — off unless the script asked for it with ?newtab=1
-  // (30-new-tab.txt does).
-  // No suite touches the network (#141, #168): __splitpageNoRemote keeps a
-  // pasted YouTube or Vimeo link's thumbnail fetch and the gallery's player
-  // frame off the real hosts unless the suite installs a fake of its own
-  // (window.__videoTest, src/js/05v-video.js). driver.ps1 does the same.
   await send("Page.addScriptToEvaluateOnNewDocument", {
     source: `
 if (!/[?&]wizard=1(&|$)/.test(location.search)) {
@@ -368,9 +281,7 @@ async function js(expr, timeoutMs = 30000) {
   return r.result.value;
 }
 
-/* driver.ps1's Format-Val. `undefined` prints as "null" because PowerShell has
-   no undefined: CDP omits result.value and the variable lands as $null. Keep
-   it that way — suites were written against that output. */
+// Suites expect PowerShell output; undefined prints "null".
 function formatVal(v) {
   if (v === null || v === undefined) return "null";
   if (typeof v === "string") return v;
@@ -378,9 +289,7 @@ function formatVal(v) {
   return JSON.stringify(v);
 }
 
-/* PowerShell truthiness, which is not JS truthiness: an empty array is false
-   there and true here, and a one-element array is its element. `expect` is
-   specified against the PowerShell rules, so reproduce them. */
+// PowerShell truthiness; empty array is false.
 function truthy(v) {
   if (Array.isArray(v)) {
     if (v.length === 0) return false;
@@ -390,18 +299,14 @@ function truthy(v) {
   return !!v;
 }
 
-/* ----------------------------------------------------------- assertions */
 let checks = 0;
 let failures = 0;
 
-// expect <js>            — truthy, right now, no waiting
-// expect <js> == <value> — compare against a literal (string, number, bool)
-// Splitting on the LAST '==' so the expression may contain '===' freely.
 async function expectThat(rest) {
   checks++;
   let expr = rest, want = null, hasWant = false;
+  // Split on last so "===" stays in expression.
   const i = rest.lastIndexOf("==");
-  // only treat it as a comparison if the '==' isn't part of '===' or '!=='
   if (i > 0 && !"=!<>".includes(rest[i - 1])) {
     expr = rest.slice(0, i).trim();
     want = rest.slice(i + 2).trim();
@@ -410,9 +315,7 @@ async function expectThat(rest) {
   const got = await js(expr);
   if (hasWant) {
     const g = formatVal(got);
-    // PowerShell's -eq on strings is case-insensitive, and the suites lean on
-    // it: `expect ... == false` compares against PowerShell's "False". Match
-    // that or ~120 existing assertions would fail against a healthy app.
+    // Suites depend on PowerShell's case-insensitive -eq.
     if (g.toLowerCase() === want.toLowerCase()) { out1(`PASS ${expr} == ${want}`); return; }
     failures++;
     out1(`FAIL ${expr}`);
@@ -425,7 +328,6 @@ async function expectThat(rest) {
   out1(`FAIL ${expr}  (got ${formatVal(got)})`);
 }
 
-/* -------------------------------------------------------------- actions */
 async function waitFor(expr, timeoutMs = 15000) {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
@@ -444,12 +346,6 @@ async function go(target) {
   out1(`at ${url}`);
 }
 
-// A CSS selector, or one of:
-//   text=Some Label   smallest visible element whose trimmed innerText EQUALS it
-//   text*=Some Label  ... whose innerText CONTAINS it
-// Prefer text*= for Splitpage's header buttons: Production and Comments grow a
-// count badge inside them ("Production2"), so exact matching stops working the
-// moment the document has any tags or comments.
 const ROLES = "button,a,[role=button],[role=menuitem],[role=tab],label,summary,li,div,span";
 function resolveSel(sel) {
   const m = /^text(\*?)=(.*)$/.exec(sel);
@@ -463,27 +359,6 @@ function resolveSel(sel) {
   return `document.querySelector('${s}')`;
 }
 
-// A box measured once and trusted can already be stale by the time the two
-// Input.dispatchMouseEvent round trips actually reach Chromium. Confirmed
-// cause (issue #31): a header button sits inside `.topbar`, which is
-// `position: sticky` and condenses on scroll (src/js/20i-topbar.js) through
-// a scroll listener that is deliberately rAF-coalesced, i.e. asynchronous.
-// Calling `scrollIntoView` on an element that is already fully visible is
-// its own trap on a sticky ancestor: Chromium computes the scroll target
-// from the element's un-stuck static position, so "already visible" gets
-// scrolled anyway — which is exactly the kind of scroll that flips
-// `.is-condensed` a frame later and moves the button. Measured live: a
-// pixel that was the button a moment before (`elementFromPoint` returning
-// it, topbar condensed, scrollY 86) had the topbar decondensed and scrollY
-// reset to 0 by the time the click's own box came back, moving the button
-// out from under the coordinates already queued for dispatch. Fixed here by
-// (1) not scrolling at all when the element is already fully in the
-// viewport, (2) waiting two animation frames for any pending layout class
-// toggle to land before trusting a measurement, and (3) confirming with
-// `elementFromPoint` that the point about to be dispatched is really the
-// element (or a descendant of it), retrying a few times before giving up.
-// This also covers a panel that is mid open-transition (comments-panel's
-// 0.18s transform) and briefly reports zero size.
 async function measureForClick(e, sel) {
   const attempts = 6;
   let box = null;
@@ -508,8 +383,6 @@ async function measureForClick(e, sel) {
       return box;
     }
     if (i === attempts) break;
-    // Let a pending requestAnimationFrame (the condensing topbar, a CSS
-    // transition finishing) land before measuring again.
     await js(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
     await sleep(30 * i);
   }
@@ -536,9 +409,6 @@ async function focusEl(sel) {
   out1(`focused ${sel}`);
 }
 
-// Focus a contenteditable AND drop the caret in it. Plain .focus() leaves the
-// selection collapsed at offset 0 (or nowhere at all), so typed characters land
-// at the top of the cell or are swallowed entirely.
 async function setCaret(sel, where = "end") {
   const e = resolveSel(sel);
   const collapse = where === "start" ? "true" : "false";
@@ -558,8 +428,6 @@ async function typeText(text) {
   out1(`typed ${text.length} chars`);
 }
 
-// Per-character key events. Handlers that watch keydown — Splitpage's [ ] { }
-// ~ ~ tag shortcuts do — never fire for Input.insertText.
 async function pressChars(text) {
   for (const ch of text) {
     await send("Input.dispatchKeyEvent", { type: "keyDown", text: ch, unmodifiedText: ch, key: ch });
@@ -575,7 +443,6 @@ const KEY_MAP = {
   backspace: { key: "Backspace", code: "Backspace", vk: 8 },
   arrowdown: { key: "ArrowDown", code: "ArrowDown", vk: 40 },
   arrowup:   { key: "ArrowUp",   code: "ArrowUp",   vk: 38 },
-  // prompter scene-mode step keys (issue #26)
   arrowleft:  { key: "ArrowLeft",  code: "ArrowLeft",  vk: 37 },
   arrowright: { key: "ArrowRight", code: "ArrowRight", vk: 39 },
   delete:    { key: "Delete",    code: "Delete",    vk: 46 },
@@ -584,36 +451,24 @@ const KEY_MAP = {
   keyz:      { key: "z",         code: "KeyZ",      vk: 90 },
   keyf:      { key: "f",         code: "KeyF",      vk: 70 },
   keym:      { key: "m",         code: "KeyM",      vk: 77 },
-  // the rich-text shortcuts, which are otherwise only reachable by calling
-  // execCommand directly — which tests the browser, not Splitpage's handler
   keya:      { key: "a",         code: "KeyA",      vk: 65 },
   keyb:      { key: "b",         code: "KeyB",      vk: 66 },
   keyi:      { key: "i",         code: "KeyI",      vk: 73 },
   keyu:      { key: "u",         code: "KeyU",      vk: 85 },
-  // Ctrl/Cmd+Alt+H: hide-shot-scenes toggle (issue #25)
   keyh:      { key: "h",         code: "KeyH",      vk: 72 },
-  // Ctrl+Y: redo, the other spelling of Ctrl+Shift+Z
   keyy:      { key: "y",         code: "KeyY",      vk: 89 },
-  // the File menu's shortcuts (#145-#147): Save / Save a copy, Open,
-  // Export…, and the command menu
   keys:      { key: "s",         code: "KeyS",      vk: 83 },
   keyo:      { key: "o",         code: "KeyO",      vk: 79 },
   keye:      { key: "e",         code: "KeyE",      vk: 69 },
   keyk:      { key: "k",         code: "KeyK",      vk: 75 },
-  // the clipboard's own keys (#204: copy, cut and paste whole scenes)
   keyc:      { key: "c",         code: "KeyC",      vk: 67 },
   keyx:      { key: "x",         code: "KeyX",      vk: 88 },
   keyv:      { key: "v",         code: "KeyV",      vk: 86 },
-  // the annotation editor's tool keys (P, H, T, E; 2026-09-27)
   keyp:      { key: "p",         code: "KeyP",      vk: 80 },
   keyt:      { key: "t",         code: "KeyT",      vk: 84 },
 };
 const KEY_NAMES = "Enter, Tab, Escape, Backspace, ArrowDown, ArrowUp, ArrowLeft, ArrowRight, Delete, Home, End, KeyZ, KeyF, KeyM, KeyA, KeyB, KeyI, KeyU, KeyH, KeyY, KeyS, KeyO, KeyE, KeyK, KeyC, KeyX, KeyV, KeyP, KeyT";
 
-// mouse down|move|up|right <js expression giving {x, y}> — one real CDP mouse
-// event at a viewport point the page works out (#204: a drag out of a text
-// box, which only a held button moving across the page can make). `move`
-// carries the held left button; `right` is a right-click (press + release).
 async function mouseEvent(rest) {
   const m = /^\s*(down|move|up|right)\s+(.+)$/.exec(rest);
   if (!m) throw new Error("mouse needs: down|move|up|right <js giving {x,y}>");
@@ -631,8 +486,6 @@ async function mouseEvent(rest) {
 }
 
 async function pressKey(name, mods = "") {
-  // PowerShell hashtable lookup is case-insensitive; the suites write `key Tab`
-  // and `key ctrl Enter`, so keep names case-insensitive here too.
   const k = KEY_MAP[String(name).toLowerCase()];
   if (!k) throw new Error(`unknown key '${name}' (have: ${KEY_NAMES})`);
   let m = 0;
@@ -647,13 +500,10 @@ async function pressKey(name, mods = "") {
   out1(`key ${mods} ${name}`);
 }
 
-// viewport 375 812 mobile   — width height [mobile]
-// viewport reset
-// "mobile" also sets touch points and a mobile UA, which is what flips
-// Splitpage's (hover: none) rules and its IS_TOUCH gestures.
 async function setViewport(rest) {
   if (/^\s*reset\s*$/.test(rest)) {
     await send("Emulation.clearDeviceMetricsOverride");
+    // CDP rejects 0 even when disabling.
     await send("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
     out1("viewport reset");
     return;
@@ -663,9 +513,6 @@ async function setViewport(rest) {
   const w = parseInt(p[0], 10), h = parseInt(p[1], 10);
   const mobile = p.length >= 3 && /mobile/.test(p[2]);
   await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile });
-  // maxTouchPoints must be 1..16 even when disabling: CDP validates the field
-  // before it looks at `enabled`, so passing 0 threw on every non-mobile
-  // `viewport <w> <h>` and counted as a failing check.
   await send("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: mobile ? 5 : 1 });
   out1(`viewport ${w}x${h}${mobile ? " mobile" : ""}`);
 }
@@ -677,12 +524,10 @@ async function shot(name = "shot") {
   out1(`shot ${p}`);
 }
 
-/* --------------------------------------------------------------- runner */
 async function invokeLine(line) {
   line = line.trim();
   if (!line || line.startsWith("#")) return true;
-  // Split on the FIRST space only — splitting on \s+ would eat a leading space
-  // in the argument, and "press  [gaffer tape]" needs that space to survive.
+  // First space only; leading spaces in args matter.
   const i = line.indexOf(" ");
   const cmd = i < 0 ? line : line.slice(0, i);
   const rest = i < 0 ? "" : line.slice(i + 1);
@@ -713,7 +558,6 @@ async function invokeLine(line) {
       break;
     }
     case "focus": await focusEl(rest); break;
-    // selectors may contain spaces, so only a trailing " start" is an arg
     case "caret": {
       const m = /^(.*)\s+start$/.exec(rest);
       if (m) await setCaret(m[1], "start"); else await setCaret(rest, "end");
@@ -752,8 +596,6 @@ async function main() {
     let lines;
     if (opts.script) {
       if (!fs.existsSync(opts.script)) throw new Error(`script not found: ${opts.script}`);
-      // Always UTF-8, and strip a BOM: the suites carry em dashes and bullets
-      // in their assertions, and decoding them wrong fails a healthy app.
       lines = fs.readFileSync(opts.script, "utf8").replace(/^﻿/, "").split(/\r?\n/);
     } else {
       lines = fs.readFileSync(0, "utf8").replace(/^﻿/, "").split(/\r?\n/);
@@ -762,11 +604,9 @@ async function main() {
       try { if (!(await invokeLine(line))) break; }
       catch (e) {
         out1(`ERROR: ${e.message}`); failures++; exit = 1;
-        // Nothing after this line could run; don't print a FAIL per command.
         if (e.fatal) break;
       }
     }
-    // A run that asserted nothing is a run that proved nothing.
     if (checks === 0 && failures === 0) {
       out1("WARNING: no expect/wait assertions ran - this proved nothing.");
     }
@@ -775,9 +615,6 @@ async function main() {
     if (failures > 0) summary += ` - ${failures} FAILED`;
     out1("");
     out1(summary);
-    // The RESULT line stays the contract for run-tests.ps1, but the exit code
-    // has to agree with it or a CI job built on this driver is green on red.
-    // A suite that asserted nothing counts as a failure for the same reason.
     if (failures > 0 || checks === 0) exit = 1;
   } catch (e) {
     out1(`ERROR: ${e.message}`);

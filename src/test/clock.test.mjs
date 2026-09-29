@@ -1,9 +1,3 @@
-/* The one clock formatter (#180, 00p-prefs.js): the system's own format by
- * default, 12- or 24-hour when the person says so, and the header's save
- * status words and their tooltip time (#208) — driven with fixed dates rather than the real
- * clock. The 12-hour and 24-hour checks do not depend on the machine's
- * locale; the "system" one compares against Intl itself.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -17,6 +11,7 @@ import {
   savedWhenText
 } from "../js/00p-prefs.js";
 
+// Local-time dates keep checks independent of machine timezone
 const AFTERNOON = new Date(2026, 8, 24, 14, 52);
 const MORNING = new Date(2026, 8, 24, 9, 5);
 const MIDNIGHT = new Date(2026, 8, 24, 0, 15);
@@ -61,9 +56,7 @@ test("the save status (#208): just now for a minute, then all saved — never an
   assert.equal(savedStatusText(saved, saved + 20 * 1000), "Saved just now");
   assert.equal(savedStatusText(saved, saved + 59 * 1000), "Saved just now");
   assert.equal(savedStatusText(saved, saved + 60 * 1000), "All changes saved");
-  /* 43 minutes of nothing changing says nothing about autosave */
   assert.equal(savedStatusText(saved, saved + 43 * 60000), "All changes saved");
-  /* a document this page never wrote (just opened) has no "just now" */
   assert.equal(savedStatusText(0, saved), "All changes saved");
   for (const n of [1, 12, 43, 65]) assert.doesNotMatch(savedStatusText(saved, saved + n * 60000), /ago|min/);
 });

@@ -1,16 +1,3 @@
-/* The page's image registry (src/js/02c-blobs.js, issue #82 P1): intern
- * and its content addresses, the data: URI decoder, and the two async doors
- * — persist() and ensureBytes() — against the memory backend and against
- * scripted fakes that let a test decide when a write "lands".
- *
- * The IndexedDB backend is not here: jsdom has no IndexedDB and the repo
- * carries no shim, so browser suite 65-blobs drives it in a real Chromium
- * (intern, persist, reload, ensureBytes).
- *
- * The registry is module state, shared by every case in this file, so each
- * case uses images of its own (png(w, h) with distinct sizes) and installs
- * the backend it needs with setBackend().
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -40,8 +27,6 @@ import {
 } from "../js/02c-blobs.js";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
-/* A PNG header the sniffer and the measurer accept. The registry never
-   decodes pixels, so a header is a whole image as far as it can tell. */
 const png = (w, h) => new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
   ...be32(w), ...be32(h), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44
@@ -54,7 +39,6 @@ const sha = (b) => createHash("sha256").update(b).digest("hex");
 const b64 = (b) => Buffer.from(b).toString("base64");
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-/* A backend whose put()s wait until the test releases them. */
 function gatedBackend(persistent) {
   const held = new Map();
   const gates = [];
@@ -76,8 +60,6 @@ function gatedBackend(persistent) {
   };
   return b;
 }
-
-/* ---- intern ---- */
 
 test("intern: the record is the bytes' SHA-256, sniffed type and measured size", () => {
   setBackend(createMemoryBackend());
@@ -112,10 +94,8 @@ test("intern refuses what is not a measurable raster image", () => {
   assert.equal(bytesForSync("a".repeat(64)), null);
 });
 
-/* ---- data: URIs ---- */
-
 test("internDataUrl: the same picture is the same sha however its base64 is wrapped", () => {
-  const bytes = png(50, 20); /* 45 bytes: base64 ends in one "=" */
+  const bytes = png(50, 20);
   const clean = "data:image/png;base64," + b64(bytes);
   const rec = internDataUrl(clean);
   assert.equal(rec.sha256, sha(bytes));
@@ -125,9 +105,11 @@ test("internDataUrl: the same picture is the same sha however its base64 is wrap
     "data:image/png;base64," + body.replace(/(.{10})/g, "$1\r\n"),
     "data:image/png;base64," + body.replace(/(.{4})/g, "$1 \t"),
     "data:image/png;base64,\f" + body + "\f",
-    "data:image/png;base64," + body.replace(/=+$/, ""),        /* padding dropped */
-    "data:image/png;base64," + body + "\u000b",                 /* trailing C0: the URL parser trims it */
-    "data:image/jpg;base64," + body,                            /* the label is not the type */
+    "data:image/png;base64," + body.replace(/=+$/, ""),
+    // Trailing C0: URL parser trims it
+    "data:image/png;base64," + body + "\u000b",
+    // Label is not the type; jpg rejected
+    "data:image/jpg;base64," + body,
     "data:image/gif;base64," + body
   ];
   for (const v of variants) assert.deepEqual(internDataUrl(v), rec, JSON.stringify(v.slice(22, 40)));
@@ -158,7 +140,6 @@ test("dataUrlForSync is canonical: sniffed type, unwrapped base64, the same sha 
   const url = dataUrlForSync(rec.sha256);
   assert.equal(url, "data:image/jpeg;base64," + b64(bytes));
   assert.deepEqual(internDataUrl(url), rec);
-  /* Every tail length (0, 1 and 2 leftover bytes) encodes as node does. */
   for (const w of [60, 61, 62]) {
     const b = new Uint8Array([...png(w, 1), ...new Array(w - 60).fill(7)]);
     const r = intern(b);
@@ -169,6 +150,7 @@ test("dataUrlForSync is canonical: sniffed type, unwrapped base64, the same sha 
 
 test("urlForSync makes one object URL per blob and revokeObjectUrls lets it go", () => {
   const made = [], revoked = [];
+  // jsdom has no object URLs
   const orig = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   URL.createObjectURL = (blob) => { made.push(blob); return "blob:test/" + made.length; };
   URL.revokeObjectURL = (u) => { revoked.push(u); };
@@ -188,8 +170,6 @@ test("urlForSync makes one object URL per blob and revokeObjectUrls lets it go",
   }
 });
 
-/* ---- persist ---- */
-
 test("persist resolves only once the backend has stored the bytes", async () => {
   const backend = gatedBackend(true);
   setBackend(backend);
@@ -201,7 +181,6 @@ test("persist resolves only once the backend has stored the bytes", async () => 
   assert.deepEqual(backend.puts, [a, b], "one put per blob, duplicates folded");
   assert.equal(done, null, "not resolved while the writes are outstanding");
   assert.equal(isDurableSync(a), false);
-  /* A second persist of a blob being written waits for that write. */
   let second = null;
   const p2 = persist([a]).then((failed) => { second = failed; });
   await tick();
@@ -214,7 +193,6 @@ test("persist resolves only once the backend has stored the bytes", async () => 
   assert.deepEqual(second, []);
   assert.ok(backend.held.has(a) && backend.held.has(b));
   assert.equal(isDurableSync(a), true);
-  /* Already durable: resolves without writing again. */
   assert.deepEqual(await persist([a]), []);
   assert.deepEqual(backend.puts, [a, b]);
   assert.deepEqual(backendInfo(), { name: "gated", persistent: true });
@@ -231,7 +209,6 @@ test("persist reports what it could not make durable, and a later call retries",
   await tick();
   backend.release();
   assert.deepEqual(await p, [], "retried and stored");
-  /* Bytes this page never held: fine if the backend has them, reported if not. */
   const elsewhere = sha(png(83, 1));
   backend.held.set(elsewhere, png(83, 1));
   const nowhere = "9".repeat(64);
@@ -265,8 +242,6 @@ test("setBackend forgets what the previous backend held", async () => {
   assert.deepEqual(await p2, []);
 });
 
-/* ---- ensureBytes ---- */
-
 test("ensureBytes reads what memory lacks from the backend and reports the rest", async () => {
   const backend = gatedBackend(true);
   setBackend(backend);
@@ -290,7 +265,7 @@ test("ensureBytes re-hashes what the backend returns and refuses a mismatch", as
   const backend = gatedBackend(true);
   setBackend(backend);
   const claimed = "7".repeat(64);
-  backend.held.set(claimed, png(92, 1)); /* stored under the wrong name */
+  backend.held.set(claimed, png(92, 1));
   assert.deepEqual(await ensureBytes([claimed]), [claimed]);
   assert.equal(has(claimed), false);
   const garbage = sha(new Uint8Array([1, 2, 3]));
@@ -313,9 +288,6 @@ test("ensureBytes and persist never reject, even when the backend throws", async
   setBackend(createMemoryBackend());
 });
 
-/* ---- a row's picture (#82 P2a) ---- */
-
-/* jsdom has no object URLs; these tests need urlForSync to answer. */
 function withObjectUrls(fn) {
   const orig = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   let n = 0;
