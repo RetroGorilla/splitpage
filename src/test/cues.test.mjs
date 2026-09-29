@@ -1,14 +1,3 @@
-/* Sound cues in the Audio column (#219): the `cue` mark of the document
- * model (04c-doc-model.js) and everything that reads it.
- *
- * A cue is a whole line of an Audio cell starting "SFX:" or "Music:",
- * carrying cue. It is stored as <span class="audio-cue">, shown small and
- * in the Music/SFX colour, left out of the teleprompter, the read time and
- * the narration export, written as its own styled line by the script
- * exports, and listed as a Music/SFX item in the Production panel. The
- * live half — typing the colon, its Ctrl+Z, the look — is browser suite
- * 219-sound-cues.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -49,8 +38,6 @@ function cueDoc() {
   ] });
 }
 
-/* ---- the model ---- */
-
 test("stored as a span round the whole line, read back as the cue mark, a fixed point of the sanitiser", () => {
   const html = "Hello.<br>" + CUE("SFX: door slam") + "<br>On.";
   const cell = fromHtml(html);
@@ -62,16 +49,11 @@ test("stored as a span round the whole line, read back as the cue mark, a fixed 
 });
 
 test("the mark covers whole lines that start with the keyword, and only those", () => {
-  /* part of a line: the rest of it joins */
   assert.deepEqual(normalizeCell([C("SFX:"), T(" door")]), [C("SFX: door")]);
-  /* a line break is never in one, and the next line is not */
   assert.deepEqual(normalizeCell([C("SFX: a\nb")]), [C("SFX: a"), T("\nb")]);
-  /* its keyword gone, it is words again */
   assert.deepEqual(normalizeCell([C("door slam")]), [T("door slam")]);
   assert.deepEqual(normalizeCell([T("x "), C("SFX: a")]), [T("x SFX: a")]);
-  /* any case, spaces round the keyword */
   assert.deepEqual(normalizeCell([C("  music : theme")]), [C("  music : theme")]);
-  /* formatting and a comment inside keep their own marks, one span */
   const cell = [C("SFX: "), C("door", { b: true, cmt: ["c1"] })];
   assert.equal(toHtml(cell), CUE('SFX: <span class="cmt-anchor" data-cmt="c1"><strong>door</strong></span>'));
 });
@@ -80,14 +62,11 @@ test("typing the colon after SFX or Music at a line's start makes the line a cue
   const cell = fromHtml("Hello.<br>SFX:");
   const got = cueShortcut(cell, cellLength(cell));
   assert.equal(toHtml(got), "Hello.<br>" + CUE("SFX:"));
-  /* typing on is more of the cue */
   const more = insertText(got, cellLength(got), " door slam");
   assert.equal(toHtml(more), "Hello.<br>" + CUE("SFX: door slam"));
-  /* Enter at its end starts an ordinary line */
   const br = breakLine(more, cellLength(more), cellLength(more));
   const next = insertText(br.cell, br.pos, "Next.");
   assert.equal(toHtml(next), "Hello.<br>" + CUE("SFX: door slam") + "<br>Next.<br>");
-  /* Music too, any case; a colon in the middle of a line that was already written */
   const mid = fromHtml("music: big theme");
   assert.equal(toHtml(cueShortcut(mid, 6)), CUE("music: big theme"));
   assert.equal(toHtml(cueShortcut(fromHtml("  Sfx:"), 6)), CUE("  Sfx:"));
@@ -135,7 +114,6 @@ test("merge: a cue made on one side and words changed on the other both land", (
   const got = mergeCells(fromHtml(base), fromHtml(mine), fromHtml("Hi there.<br>SFX: door<br>On."));
   assert.equal(got.conflict, false);
   assert.equal(toHtml(got.cell), "Hi there.<br>" + CUE("SFX: door") + "<br>On.");
-  /* their words added to the cue line are in it */
   const longer = mergeCells(fromHtml(base), fromHtml(mine), fromHtml("Hi.<br>SFX: door slam<br>On."));
   assert.equal(toHtml(longer.cell), "Hi.<br>" + CUE("SFX: door slam") + "<br>On.");
 });
@@ -149,8 +127,6 @@ test("mergeStates carries a cue through the document merge", () => {
   assert.equal(out.rows[0].audioText, "Hello.<br>" + CUE("SFX: door") + "<br>Even more words");
   assert.equal(out.comments.length, 0, "no conflict card");
 });
-
-/* ---- where it shows ---- */
 
 test("the teleprompter never shows one, and voice follow has no word of it", () => {
   const cell = trimPrompterCell(withoutCues(fromHtml("Hello.<br>" + CUE("SFX: door slam") + "<br>World.")));
@@ -179,15 +155,11 @@ test("the Production panel lists it under Music/SFX, with the tags of the same n
     const sound = productionEntries().filter((e) => e.cat.id === "sound");
     assert.deepEqual(sound.map((e) => [e.name, e.mentions.length]).sort(), [["door slam", 2], ["upbeat intro", 1]]);
     assert.ok(s.productionTags.some((t) => t.cat === "sound" && t.name === "upbeat intro" && t.status === "needed"));
-    /* a bare "SFX:" names nothing */
     assert.deepEqual(tagsInField(CUE("SFX:")), []);
   });
 });
 
 test("an edited cue keeps its item: renamed in place with its status, no entry left per wording", () => {
-  /* Typing "Music: slow", " piano", " intro" with pauses used to leave
-     "slow" and "slow piano" as "Not in script" items, and a one-letter fix
-     to a cue set to "Have it" put a new item at Needed beside it. */
   const s = cueDoc();
   s.rows.push({ id: "r3", visualText: "", audioText: "", status: "todo" });
   const sound = () => s.productionTags.filter((t) => t.cat === "sound").map((t) => t.name + "/" + t.status).sort();
@@ -215,7 +187,6 @@ test("an edited cue keeps its item: renamed in place with its status, no entry l
 });
 
 test("an edited cue leaves the item alone while its old name is still in the script, or the new one is tracked", () => {
-  /* two cues of one name: editing one is a new item, the other keeps its own */
   const s = cueDoc();
   s.rows[1].audioText = CUE("SFX: door slam");
   withState(s, () => {
@@ -226,7 +197,6 @@ test("an edited cue leaves the item alone while its old name is still in the scr
     assert.deepEqual(s.productionTags.filter((t) => t.cat === "sound").map((t) => t.name + "/" + t.status).sort(),
       ["door slam/have", "door slams/needed", "upbeat intro/needed"]);
   });
-  /* the same sound tagged in the Visual column keeps the item too */
   const v = cueDoc();
   v.rows[0].visualText = 'Kitchen <span class="tag-anchor" data-tag-cat="sound" data-tag-name="door slam" contenteditable="false">door slam</span>';
   withState(v, () => {
@@ -236,7 +206,6 @@ test("an edited cue leaves the item alone while its old name is still in the scr
     assert.deepEqual(v.productionTags.filter((t) => t.cat === "sound").map((t) => t.name).sort(),
       ["door bang", "door slam", "upbeat intro"]);
   });
-  /* edited to a name already tracked: that item, and the old one stays */
   const t = cueDoc();
   withState(t, () => {
     healTagRegistry();
@@ -262,8 +231,6 @@ test("renaming the item rewrites the cue's words; removing it makes the line pla
 });
 
 test("a tag or a direction on a cue line is not part of its name, and a rename leaves both", () => {
-  /* The item used to be "door slam loud", and renaming it rewrote the line
-     from the colon on, deleting the prop tag and the direction. */
   const tag = (cat, name) => `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
   const dir = (t) => `<span class="stage-dir">${t}</span>`;
   const line = CUE("SFX: door " + tag("prop", "slam") + " " + dir("loud"));
@@ -272,20 +239,15 @@ test("a tag or a direction on a cue line is not part of its name, and a rename l
   assert.equal(renamed, CUE("SFX: door bang " + tag("prop", "slam") + " " + dir("loud")));
   assert.deepEqual(cuesInCell(fromHtml(renamed)).map((c) => c.name), ["door bang"]);
 
-  /* words on both sides of a tag are one name; a rename puts the new name
-     where the first words were and takes the rest out */
   const split = CUE("SFX: big " + tag("prop", "slam") + " door");
   assert.deepEqual(cuesInCell(fromHtml(split)).map((c) => c.name), ["big door"]);
   assert.equal(toHtml(editCues(fromHtml(split), () => true, "huge door")), CUE("SFX: huge door " + tag("prop", "slam")));
 
-  /* a cue that is all tag names nothing of its own: the tag is the item */
   const allTag = CUE("Music: " + tag("sound", "intro sting"));
   assert.deepEqual(cuesInCell(fromHtml(allTag)).map((c) => c.name), [""]);
   assert.deepEqual(tagsInField(allTag).map((t) => [t.catId, t.name]), [["sound", "intro sting"]]);
   assert.equal(toHtml(editCues(fromHtml(allTag), () => true, "x")), allTag);
 });
-
-/* ---- exports ---- */
 
 test("narration export leaves cues out, directions or not", () => {
   withState(cueDoc(), () => {

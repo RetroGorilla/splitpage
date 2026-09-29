@@ -6,39 +6,6 @@ import { syncFieldFromDom } from "./05-render.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 
-/* ================= editing a cell through the model (#85, design §5) =================
-
-   The hybrid editor: plain typing is the browser's (composition, dead
-   keys, spellcheck — the parts a hand-made editor gets wrong), and
-   everything structural — a format, a tag, a b-roll key, a line break, a
-   paste — is an edit of the cell's model instead of an execCommand:
-
-     editCell(cellEl, function (cell, sel) { return {cell: ..., sel: ...}; })
-
-   reads the cell's text as the model (04c-doc-model.js) with the selection
-   as model positions, lets the caller change both, writes the result into
-   state as canonical HTML, repaints that one cell and puts the selection
-   back. The change is one undo entry of its own (12a-undo.js).
-
-   POSITIONS. The model's positions are offsets into the cell's
-   projection: its text, with a line break one character and a b-roll key
-   one character. domToPos / posToDom translate between those and a point
-   in the rendered cell, walking the DOM the way the sanitiser reads it
-   (04-richtext.js walkSanitize): a <br> is one line break, a <div>/<p> the
-   browser may have made while typing ends in one, a zero-width caret spot
-   is nothing, a b-roll key is one character whatever its letters.
-
-   A cell still holding a picture or a video card is not edited through the
-   model — the model has no place for them — and editCell answers null for
-   it. No cell does any more: design D7 keeps them out of pasted script
-   text, and every document is read through migrateRows, which moves any
-   already in a cell into a comment. The check stays as the guard it is,
-   and nothing edits such a cell any other way. (A comment or reply draft,
-   which may hold them, is 05d-draft-edit.js.) */
-
-/* One position whatever is inside it: the b-roll key, and — in a comment
-   or reply draft (05d-draft-edit.js), where the model sees each as one
-   placeholder character — a picture or a video card. */
 var ATOM_SELECTOR = ".broll-key, .video-embed-card";
 
 function isAtomEl(node) {
@@ -51,11 +18,6 @@ function isBlankPara(node) {
   return node.childNodes.length === 1 && node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
 }
 
-/* Calls visit(kind, node, len) for every piece of the cell in reading
-   order: "text" (a text node; len = its characters without zero-width
-   spaces), "atom" (a b-roll key, a picture or a video card, len 1), "br" (len 1), "end" (the line
-   break a <div>/<p> ends in, len 1; node = the element). Stops when visit
-   returns true. */
 function walkCell(cellEl, visit) {
   var stop = false;
   (function walk(parent) {
@@ -76,21 +38,16 @@ function walkCell(cellEl, visit) {
   })(cellEl);
 }
 
-/* Characters of a text node before `offset`, zero-width spaces not
-   counted. */
 function textCount(node, offset) {
   return node.nodeValue.slice(0, offset).replace(/\u200B/g, "").length;
 }
 
-/* Does piece (kind, n) of the walk come at or after the start of node c? */
 function atOrAfter(kind, n, c) {
   if (n === c || c.contains(n)) return true;
-  /* the line break a <div>/<p> ends in comes after everything inside it */
   if (kind === "end" && n.contains(c)) return true;
   return !!(c.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
-/* The position where node c starts: the count of every piece before it. */
 function posBefore(cellEl, c) {
   var p = 0, result = null;
   walkCell(cellEl, function (kind, n, len) {
@@ -101,11 +58,9 @@ function posBefore(cellEl, c) {
   return result === null ? p : result;
 }
 
-/* The position just past everything inside node c. */
 function posAfterNode(cellEl, c) {
   var p = 0, result = null;
   walkCell(cellEl, function (kind, n, len) {
-    /* a <div>/<p>'s own line break is after its end, not inside it */
     var inside = n === c ? kind !== "end" : c.contains(n);
     if (!inside && atOrAfter(kind, n, c)) { result = p; return true; }
     p += len;
@@ -114,14 +69,11 @@ function posAfterNode(cellEl, c) {
   return result === null ? p : result;
 }
 
-/* A DOM point (as a Selection gives one) inside cellEl as a model position. */
 export function domToPos(cellEl, node, offset) {
   if (node !== cellEl && !cellEl.contains(node)) return null;
   var key = node.nodeType === 3 ? node.parentNode : node;
   var atom = key && key.closest ? key.closest(ATOM_SELECTOR) : null;
   if (atom && cellEl.contains(atom)) {
-    /* inside a b-roll key's letters: before it at its very start, after it
-       anywhere else */
     var atStart = offset === 0 && (node === atom || node === atom.firstChild);
     return atStart ? posBefore(cellEl, atom) : posAfterNode(cellEl, atom);
   }
@@ -130,10 +82,7 @@ export function domToPos(cellEl, node, offset) {
   return posAfterNode(cellEl, node);
 }
 
-/* A model position as a DOM point inside cellEl: inside a text node where
-   there is one, else before or after the element at that place. Never
-   inside a tag (the caret cannot sit in a contenteditable=false span) or
-   a b-roll key. */
+// Never inside contenteditable=false tag or b-roll key
 export function posToDom(cellEl, pos) {
   var p = 0, result = null, last = null;
   walkCell(cellEl, function (kind, n, len) {
@@ -142,11 +91,9 @@ export function posToDom(cellEl, pos) {
       if (pos <= p + len) {
         var tag = n.parentNode && n.parentNode.closest && n.parentNode.closest(".tag-anchor");
         if (tag && cellEl.contains(tag)) {
-          /* inside a tag: before it at its very start, after it otherwise */
           result = pos === p && tag.firstChild === n ? before(tag) : after(tag);
           return true;
         }
-        /* map a count of visible characters back to an offset in the node */
         var raw = n.nodeValue, seen = 0, i = 0;
         while (i < raw.length && seen < pos - p) { if (raw[i] !== "\u200B") seen++; i++; }
         result = { node: n, offset: i };
@@ -174,7 +121,6 @@ function endOf(el) {
   return { node: el, offset: el.childNodes.length };
 }
 
-/* The selection, if it is inside cellEl, as {from, to} with from <= to. */
 export function cellSelection(cellEl) {
   var sel = window.getSelection();
   if (!sel || !sel.rangeCount) return null;
@@ -197,30 +143,17 @@ export function setCellSelection(cellEl, from, to) {
   sel.addRange(range);
 }
 
-/* fn(cell, sel) -> {cell, sel: {from, to}} to change the cell, or null to
-   leave it. sel is null when the selection is not in this cell. Anything
-   else fn changes in the document (a tag's registry entry) is part of the
-   same undo entry; fn should change it only once it has decided to answer
-   a cell. The result may also carry also(): more of the same edit (a paste
-   moving a comment's anchor), run just after the cell is written into
-   state, so it sees the document as the edit leaves it. Returns the cell
-   element (the same one, repainted in place), or null when nothing was
-   done — the cell holds a picture or a video card, or fn declined. */
 export function editCell(cellEl, fn) {
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(rowId);
   if (idx === -1 || (field !== "visualText" && field !== "audioText")) return null;
-  /* whatever was typed a moment ago goes in first, as its own entry */
   syncFieldFromDom(cellEl);
   var row = S.state.rows[idx];
   var html = row[field] || "";
   if (/<img|video-embed-card/.test(html)) return null;
   var sel = cellSelection(cellEl);
-  /* Recorded and closed BEFORE fn runs, not after: fn may change more of
-     the document than the cell — a new tag's registry entry — and that
-     belongs in this edit's entry, so one Ctrl+Z takes back the tag and the
-     entry it made, and leaves what was typed. */
+  // Close prior entry first; fn's registry changes join this one
   breakUndoCoalescing();
   var out = fn(fromHtml(html), sel);
   if (!out || !out.cell) return null;
@@ -234,25 +167,15 @@ export function editCell(cellEl, fn) {
     out.also();
     markDirty();
   }
-  /* Repaint this one cell IN PLACE — its contents, never the element — the
-     way a keystroke leaves it. Replacing the element (renderRow) took focus
-     from it mid-edit, and Chrome fires focusout on a focused element as it
-     is removed, while it is still connected: onRootFocusOut then read the
-     old contents back over the edit just written. Kept, the cell stays
-     focused, stays the node everyone holds, and syncFieldFromDom records
-     that it shows what state says (noteFieldPainted), so the next render
-     leaves it alone. */
+  // In place; replacing element steals focus and fires stale focusout
   cellEl.innerHTML = next;
   ensureTrailingCaretSpot(cellEl);
   syncFieldFromDom(cellEl);
   cellEl.focus({ preventScroll: true });
   if (out.sel) setCellSelection(cellEl, out.sel.from, out.sel.to);
-  /* one entry of its own: the next keystroke starts another */
   flushEdits();
   breakUndoCoalescing();
   return cellEl;
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

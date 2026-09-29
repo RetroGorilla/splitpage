@@ -1,13 +1,3 @@
-/* A comment's anchor is its mark (#85, docs/DOCUMENT-MODEL.md §3.2).
- *
- * comment.rowId / comment.field only say where the comment's cmt mark is;
- * syncCommentAnchors (04c-doc-model.js) is the one function that keeps
- * them in step, run wherever words move between scenes: a split, a join, a
- * cut-and-paste, and every merge and load (migrateRows). joinCells' glue
- * keeps a comment one anchor when a split through its phrase is joined
- * back. The live half — Enter, Alt+Enter, Backspace, the card, Ctrl+Z — is
- * browser suite 78-split-join-model.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -30,10 +20,8 @@ test("a comment points at the first cell holding its mark, in document order", (
     comments: [comment("c1", "r1", "audioText"), comment("c2", "r1", "audioText")]
   };
   assert.equal(syncCommentAnchors(state), 2);
-  /* the visual column comes before the audio, as the panel sorts them */
   assert.deepEqual([state.comments[0].rowId, state.comments[0].field], ["r2", "visualText"]);
   assert.deepEqual([state.comments[1].rowId, state.comments[1].field], ["r3", "audioText"]);
-  /* already in step: nothing to do */
   assert.equal(syncCommentAnchors(state), 0);
 });
 
@@ -69,7 +57,6 @@ test("a split through a commented phrase marks both halves; the comment points a
   assert.equal(state.rows[0].audioText, "Alpha " + cmt("c1", "bravo"));
   assert.equal(state.rows[1].audioText, cmt("c1", " charlie") + " delta");
   assert.equal(syncCommentAnchors(state), 0);
-  /* split right before the phrase: all of it goes, and the comment with it */
   const [, tail] = splitCell(cell, 6);
   state.rows[0].audioText = "Alpha ";
   state.rows[1].audioText = toHtml(tail);
@@ -80,20 +67,15 @@ test("a split through a commented phrase marks both halves; the comment points a
 test("joinCells' glue takes the comment and link both sides share, and never formatting", () => {
   const c = { cmt: ["c1"] };
   assert.deepEqual(joinCells([T("bra", c)], [T("vo", c)], " "), [T("bra vo", c)]);
-  /* one anchor again after a split and a join: the whole phrase, space and all */
   const cell = fromHtml("Alpha " + cmt("c1", "bravo charlie") + " delta");
   const [a, b] = splitCell(cell, 9);
   assert.deepEqual(commentRange(joinCells(a, b, " "), "c1"), { from: 6, to: 20 });
-  /* on one side only: the glue is outside it */
   assert.deepEqual(joinCells([T("a", c)], [T("b")], " "), [T("a", c), T(" b")]);
-  /* two comments, one shared */
   assert.deepEqual(joinCells([T("a", { cmt: ["c1", "c2"] })], [T("b", { cmt: ["c2"] })], " "),
     [T("a", { cmt: ["c1", "c2"] }), T(" b", { cmt: ["c2"] })]);
-  /* a link both sides are in; bold on both sides stays off the space */
   const l = { href: "https://example.com/" };
   assert.deepEqual(joinCells([T("a", l)], [T("b", l)], " "), [T("a b", l)]);
   assert.deepEqual(joinCells([T("a", { b: true })], [T("b", { b: true })], " "), [T("a", { b: true }), T(" "), T("b", { b: true })]);
-  /* no glue asked for: nothing added */
   assert.deepEqual(joinCells([T("a", c)], [T("b", c)]), [T("ab", c)]);
 });
 
@@ -105,8 +87,6 @@ test("migrateRows points a stale comment at its words — an old file, or a merg
   });
   assert.equal(s.comments[0].rowId, "r2");
 
-  /* one side split the scene, carrying the commented words into a new one;
-     the other side resolved the comment, its rowId still the old scene */
   const base = migrateRows({
     schema: 2,
     rows: [{ id: "r1", visualText: "one", audioText: "Alpha " + cmt("c1", "bravo") }],

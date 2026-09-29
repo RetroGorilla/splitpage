@@ -89,12 +89,6 @@ import {
 import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 
-/* ================= local documents: open, save back, export ================= */
-
-/* A foreign file opened for round-trip export is the "import" home
-   (_home.js): {kind, handle, format, name, lastModified, size, inPlace,
-   dirty}. The file chip and File ▸ "Save to <name>" below are about it. */
-
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
   var ext = m ? m[1].toLowerCase() : "";
@@ -102,10 +96,7 @@ export function fileKindFromName(name) {
   if (ext === "csv") return "csv";
   if (ext === "md" || ext === "markdown") return "md";
   if (ext === "txt") return "txt";
-  /* The two project formats and the legacy one. "md" is deliberately in
-     both worlds: whether a .md file is one of ours or somebody else's is
-     decided by whether it carries a data block, not by its name
-     (openProjectFile). */
+  // md is ambiguous: data block decides, not extension
   if (ext === "splitpage") return "splitpage";
   if (ext === "html" || ext === "htm") return "html";
   return null;
@@ -115,29 +106,16 @@ export function updateFileChip() {
   updateHeaderFileChip();
   mirrorFileChipToWriter();
   updateReadonlyBanner();
-  /* the File menu’s card says the same thing, and may be showing */
   var menu = document.getElementById("file-menu");
   if (menu && !menu.hidden) refreshFileMenu();
 }
 
-/* The banner's own markup (page.html) has always been there, fully
-   written, but nothing ever referenced #readonly-banner by id anywhere
-   in src/js — serverMode.readOnly only disabled the "publish new doc"
-   menu item and showed a one-off toast on a blocked save. A reader
-   opening a script they cannot edit got no persistent explanation of
-   that. Piggybacks on updateFileChip() so it stays in sync with every
-   place document/server state actually changes. */
 function updateReadonlyBanner() {
   var banner = document.getElementById("readonly-banner");
   if (!banner) return;
   banner.hidden = !(S.serverMode.readOnly && onServerDoc());
 }
 
-/* The writer's bar carries the same chip, because it covers the header and
-   "where is this going when I hit Save" is not a question anyone should
-   have to close a view to answer. Copied from the header chip's rendered
-   state rather than re-deriving it — two copies of that branching would
-   drift apart, and a copy cannot. */
 export function mirrorFileChipToWriter() {
   var src = document.getElementById("file-chip");
   var dst = document.getElementById("wr-file-chip");
@@ -154,9 +132,6 @@ export function mirrorFileChipToWriter() {
 function updateHeaderFileChip() {
   var chip = document.getElementById("file-chip");
   var saveBack = document.getElementById("menu-save-back");
-  /* A hosted document takes the chip over: where your work is going is the
-     one thing you should never have to guess, and "on the server" is a
-     materially different answer from "in a file on this machine". */
   if (onServerDoc()) {
     chip.hidden = false;
     document.getElementById("file-chip-name").textContent = "On the server";
@@ -185,24 +160,10 @@ function updateHeaderFileChip() {
   setMenuItemLabel(saveBack, imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name);
 }
 
-/* Build the bytes for a given format. Returns {data, filename}.
-   opts.allowImageBundle lets a plain Markdown export ship as a small zip
-   instead of a lone .md when it needs to carry pictures (see the "md"
-   branch below) — on for the actual Export menu, off for saveBackToFile's
-   reuse of this same function, which writes back into a file whose name
-   and extension are already fixed and must stay a text file in place. */
-/* The name buildFileData() gives an export of `kind`, without building it —
-   what the Export dialog shows under its preview (18c-export-dialog.js).
-   buildFileData names every file through this, so the two cannot drift.
-   opts.imageBundle: a plain Markdown export that carries pictures ships as a
-   zip (see the "md" branch below). */
 export function exportFileName(kind, baseName, opts) {
   opts = opts || {};
   if (kind === "breakdown") return baseName + " - breakdown.csv";
   if (kind === "b-roll csv") return baseName + " - b-roll shot list.csv";
-  /* the Excel twins of the three spreadsheets (2026-09-28): the same names,
-     the workbook's own extension — the whole script's is "<base>.xlsx",
-     which the fall-through at the bottom already gives "xlsx" */
   if (kind === "breakdown xlsx") return baseName + " - breakdown.xlsx";
   if (kind === "b-roll xlsx") return baseName + " - b-roll shot list.xlsx";
   if (kind === "b-roll pdf") return baseName + " - b-roll shot list.pdf";
@@ -214,60 +175,37 @@ export function exportFileName(kind, baseName, opts) {
     return baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf";
   }
   if (kind === "md-table") return baseName + " - two column.md";
-  /* a SplitShare says what it is in its name, for whoever it is sent to */
   if (kind === "html") return baseName + " - SplitShare.html";
   if (kind === "md" && opts.imageBundle) return baseName + " (with images).zip";
   return baseName + "." + kind;
 }
 
-/* What an export is called before its format's suffix: the foreign file it
-   was opened from, or the script's title. */
 export function exportBaseName() {
   return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
 }
 
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
-  /* Every builder below is synchronous and reads pictures through
-     rowImageBytes/rowImageDataUrl (02c-blobs.js), which only answer for
-     bytes already in memory — so fetch any the document names first (#82). A
-     document with no refs asks for nothing and opens no store. */
+  // Builders are sync; image bytes must be in memory first
   await ensureBytes(refsIn(S.state));
   var filename = exportFileName(kind, baseName);
   if (kind === "docx") return { data: buildDocx(), filename: filename };
   if (kind === "csv") return { data: buildCsv(), filename: filename };
   if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
-  /* the b-roll shot list's own two (#150, 08d-broll-panel.js) */
   if (kind === "b-roll csv") return { data: buildBrollCsv(), filename: filename };
-  /* The same three as Excel workbooks (16b-xlsx.js, 2026-09-28): sized
-     columns, wrapped text, a frozen header and a sheet for each part, where
-     the CSVs above stay plain values for other tools to read. Synchronous
-     and reading S.state, like the CSV builders beside them. */
   if (kind === "xlsx") return { data: buildScriptXlsx(), filename: filename };
   if (kind === "breakdown xlsx") return { data: buildBreakdownXlsx(), filename: filename };
   if (kind === "b-roll xlsx") return { data: buildBrollXlsx(), filename: filename };
-  /* opts.brollView: every shot by scene from the Export dialog; without
-     it, the list as the b-roll page shows it, which is what its Print is */
   if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint(opts.brollView)), filename: filename };
   if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: filename };
   if (kind === "txt") return { data: htmlToPlainScript(), filename: filename };
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
   if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
-  /* export: true — the meta line, the gutter's columns and the Export tail,
-     none of which the saved .md project (the same table) may change */
   if (kind === "md-table") return { data: toMarkdownTableDoc(null, { export: true }), filename: filename };
-  /* The old save format, kept as an export only: one file that opens in
-     any browser with nothing installed. PAGE_SHELL and buildPublishHtml
-     exist for this and for nothing else now (HANDOFF §3.1). */
-  /* standaloneHtmlFor (02b-doc-id.js) leaves the document id out: this
-     export is a copy handed to someone else, and carrying the id would make
-     it a duplicate of this document the moment both are open. */
+  // Export omits docId: a copy would duplicate this document
   if (kind === "html") {
-    /* inline, like a .splitpage (#82): say so if a picture could not be */
     warnImagesLeftOut(missingInlineImages(S.state).length, filename);
-    /* a SplitShare, named for the script: the tab, the history list and
-       a link preview read "<title> — SplitShare" and the export's meta line */
     return {
       data: standaloneHtmlFor(S.state, {
         title: (S.state.title || "Untitled Script") + " — SplitShare",
@@ -277,14 +215,6 @@ export async function buildFileData(kind, baseName, opts) {
     };
   }
   if (kind === "md" && opts.allowImageBundle) {
-    /* A script with no pictures stays a single plain-text .md, same as
-       always. One with pictures ships as a small zip instead — the .md
-       referencing images/scene-NN.ext (toMarkdownDoc, 14-export.js)
-       alongside the actual files — rather than ballooning the text file
-       with base64 the way the old export did. Gated on allowImageBundle:
-       saveBackToFile() reuses this same branch to rewrite an already-open
-       file in place, and that file's name and extension are fixed — it
-       must stay the plain-text .md it already is. */
     var images = markdownExportImages();
     if (images.length) {
       var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
@@ -299,23 +229,17 @@ function htmlToPlainScript() {
   var lines = [S.state.title || "Untitled Script", ""];
   S.state.rows.forEach(function (row, i) {
     lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(cellOf(row.visualText)));
-    /* the video links in the scene's gallery captions (#135) */
     rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
     lines.push("      AUDIO: " + toPlainText(cellOf(row.audioText)));
     lines.push("");
   });
 
-  /* The breakdown belongs in here too — every other export carries it, and
-     a .txt that quietly dropped it looked like a script with nothing
-     tagged rather than one whose tags had been left out of the file. */
   var breakdown = breakdownRows();
   if (breakdown.length) {
     lines.push("PRODUCTION BREAKDOWN");
     lines.push("====================");
     lines.push("");
     breakdown.forEach(function (r) {
-      /* an orphan has no scene list to print — the old wording ran the
-         two branches together and read "0 mentions, scene not in script" */
       var where = r.inScript === "no"
         ? "not in script"
         : r.mentions + " mention" + (r.mentions === 1 ? "" : "s") +
@@ -331,7 +255,6 @@ function htmlToPlainScript() {
     lines.push("");
   }
 
-  /* pieces: a picture in a comment or reply is "[image]" (commentBodyText) */
   var comments = commentEntries({ pieces: true });
   if (comments.length) {
     lines.push("COMMENTS");
@@ -359,42 +282,6 @@ function htmlToPlainScript() {
   return lines.join("\n");
 }
 
-/* Re-opening one of this app's OWN project files — pull the full document
-   (rows, comments, tags, statuses, title) back out of it rather than
-   treating it as plain text to import. Three shapes arrive here:
-
-     .splitpage  the state JSON itself
-     .md         a Markdown table plus the same JSON in a data block —
-                 and, if the table was edited elsewhere, those edits
-                 reconciled back into it (20d-formats.js)
-     .html       a legacy save: the whole app with #state-data inside it
-
-   Anything else — and any .md WITHOUT a data block, i.e. somebody else's
-   Markdown — falls through to the ordinary lossy import, unchanged.
-   Whichever it was becomes the file Save writes to from here on, in its
-   own format; a legacy .html converts to .md on that first Save. */
-/* The reading half, on its own so a second caller can ask "what document is
-   in this file?" without adopting it (MARKDOWN-PARSE-RESULT). Crash-draft
-   restore (20g-drafts.js) needs exactly that: it has to compare what is on
-   disk now against the draft's base BEFORE deciding whether to adopt the
-   file, merge into it, or leave it alone entirely.
-
-     {state, kind, docIdEmbedded}   a project file, parsed
-     {error:'unreadable'}           the bytes could not be read
-     {error:'not-splitpage'}        our extension, but not our content
-     null                           not one of ours — import it instead
-
-   Every toast stays in openProjectFile() below: a restore reports its own
-   failures in its own words, and a file nobody asked to open has no
-   business putting an error toast on screen.
-
-   docIdEmbedded is read BEFORE migrateDocument(), which always leaves a
-   valid id behind — see parseMarkdownProject (20d-formats.js) for the same
-   ordering and for why a draft restore has to know the difference. */
-/* `opts.noAsk` forwards to applyMarkdownProject: a caller that is only
-   asking "what document is in this file?" — the merge review's probe
-   (18a-local-merge.js) — must not raise the row-count modal at the user,
-   who has not asked for anything yet. It takes the same answer Esc does. */
 export async function parseProjectFileState(file, opts) {
   var kind = fileKindFromName(file.name);
   if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
@@ -413,10 +300,6 @@ export async function parseProjectFileState(file, opts) {
     } catch (e) {
       return { error: "not-splitpage" };
     }
-    /* migrateDocument, not bare migrateRows: a file saved before document
-       ids existed would otherwise get a new random id on every open, and
-       its version history would start over each time. Its id is derived
-       from its own content instead (02b-doc-id.js). */
     var nativeEmbedded = docIdEmbeddedIn(native);
     return { state: migrateDocument(native, { kind: "file" }), kind: "splitpage", docIdEmbedded: nativeEmbedded };
   }
@@ -430,8 +313,7 @@ export async function parseProjectFileState(file, opts) {
     } catch (e) {
       return { error: "not-splitpage" };
     }
-    /* same reason as the .splitpage branch above — a legacy page carries
-       no id, so it gets the same content-derived one every time it opens */
+    // Legacy pages have no id; derived from content
     var legacyEmbedded = docIdEmbeddedIn(legacy);
     return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
   }
@@ -443,7 +325,6 @@ export async function parseProjectFileState(file, opts) {
     project = null;
   }
   if (!project) return null;
-  /* awaits the row-count question when the table and the record disagree */
   var reconciled = await applyMarkdownProject(project, opts);
   return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
 }
@@ -451,8 +332,6 @@ export async function parseProjectFileState(file, opts) {
 export async function openProjectFile(file, handle, opts) {
   opts = opts || {};
   var parsed = await parseProjectFileState(file);
-  /* Not one of ours (including a .md with no data block) — still worth
-     importing as text, exactly as before. */
   if (!parsed) return loadFileIntoEditor(file, handle);
   if (parsed.error === "unreadable") {
     showToast("Could not read " + file.name + ".", "error");
@@ -465,53 +344,24 @@ export async function openProjectFile(file, handle, opts) {
   return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
 }
 
-/* The one place a parsed project becomes THE document, whichever format
-   it arrived in. `newState` has already been through migrateRows() — by
-   way of migrateDocument(), so it carries its document id. */
 export function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
-  /* A document arriving in this tab is the New Tab page's whole purpose,
-     however it got here — the page's own Open button, the desktop shell
-     routing an open into this tab, a drop. (20j-newtab.js) */
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   S.state = newState;
   setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
-  /* `name` is the file's home as docHomeKey() (02b-doc-id.js) sees it when
-     there is no handle to ask — a plain <input type=file> open.
-     `diskBase` is the document exactly as this file last said it was: the
-     common ancestor "Merge them" needs to do a true three-way merge if the
-     file later changes under us (18a-local-merge.js). It rides on the home
-     record so it is dropped the moment the document's home changes, and
-     moves with it on every successful write (saveDoc, 14-export.js).
-     A hosted document and a local file are two homes for one Save button
-     (§3.1), and so is a foreign file opened for round-trip export: this
-     replaces whichever the page had. Opening a project replaces an import
-     outright — a .docx/.csv/foreign .md opened earlier no longer applies. */
   setHome("file", { handle: handle || null, format: kind, lastModified: file.lastModified || null,
                     name: file.name, diskBase: cloneState(S.state) });
-  /* The breakdown panel's open card, rename box and group mode all belong
-     to the document that was on screen a moment ago. Carrying them into a
-     different project meant a card springing open by itself whenever the
-     two happened to share an item name. */
+  // Stale card state would spring open in new project
   resetProductionPanelState();
 
-  /* This id came from a file on disk, so it has already left the page: a
-     later Save As must fork a new one rather than put this id in a second
-     file. Set before clearDirty(), whose setSaveButtons() funnel is where
-     syncDocIdentity() notices the new document. */
   S.docIdWrittenOut = true;
   clearDirty();
   render();
   updateIdentityChip();
   updateFileChip();
-  /* `silent` suppresses THIS toast and nothing else (DRAFT-RENDERER-API).
-     A crash-draft restore adopts the file on disk as a step on the way to
-     the document it is really about to show, and announcing "Opened X — 12
-     rows" mid-restore would describe a version of the document that was
-     already gone by the time the toast appeared. The restore says what
-     actually happened, once, when it is finished. */
+  // silent suppresses only this toast; restore reports once
   var commentNote = S.state.comments.length
     ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
   if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
@@ -520,8 +370,6 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (handle) rememberLastFileHandle(handle);
   return true;
 }
-
-/* ---- resuming the last project on launch ---- */
 
 export var pendingResumeHandle = null;
 
@@ -532,36 +380,20 @@ export async function tryResumeLastProject() {
   try {
     perm = await handle.queryPermission({ mode: "readwrite" });
   } catch (e) {
-    return; /* the handle API is gone, or this handle is from a browser/profile that can no longer use it */
+    return;
   }
   if (perm === "granted") {
     await resumeFromHandle(handle);
   } else if (perm === "prompt") {
-    /* re-granting access needs a real click — queryPermission can check
-       quietly, but requestPermission can't be called until one happens */
     showResumeBanner(handle);
   }
-  /* "denied" — say nothing further; that means access was explicitly revoked */
 }
 
 export async function resumeFromHandle(handle) {
   try {
     var file = await handle.getFile();
-    /* The resume banner needs a real click to grant permission, and that
-       can happen well after launch — the user may have typed straight
-       into the interim blank document, or opened something else first
-       via File > Open, while it sat there. skipSnapshot used to be
-       hardcoded true on the assumption nothing worth keeping could exist
-       yet; once something does (dirty), this needs the same undo safety
-       net a normal file-open gets, or replacing state below silently
-       discards it with no way back. */
-    /* kind-agnostic on purpose: whatever the last project was — .md,
-       .splitpage or a legacy .html — is what reopens here. */
     await openProjectFile(file, handle, { skipSnapshot: !S.dirty, resumed: true });
   } catch (e) {
-    /* moved, renamed, deleted, or on a drive that isn't connected right
-       now — not worth interrupting startup over; Version history and the
-       File menu are still right there if the user goes looking for it */
   }
 }
 
@@ -578,33 +410,20 @@ export function hideResumeBanner() {
   document.getElementById("resume-banner").hidden = true;
 }
 
-/* `opts.reload` marks the one caller that is NOT an open: reloadFileFromDisk()
-   re-reading the very file this document is already round-tripping, because
-   it changed under us. That is the same document with newer bytes, so it
-   keeps its id and its record — see the OPEN = A NEW DOCUMENT note below. */
 async function loadFileIntoEditor(file, handle, opts) {
   opts = opts || {};
   var kind = fileKindFromName(file.name);
-  /* The two project formats never belong here: openProjectFile reads them
-     properly and only ever hands this function a foreign document (that
-     includes a .md with no data block, which really is plain text). */
   if (kind === "splitpage" || kind === "html") kind = null;
   if (!kind) { showToast("That file type isn't supported — try .docx, .md, .txt or .csv.", "warn"); return; }
 
   var newRows, newTitle = null;
-  /* Unzipping and walking a long .docx is the slowest thing the app does
-     on the open path, and it used to run with the interface completely
-     still. The bar only appears if the parse is actually slow enough to
-     need it (04b-busy.js), so a small .md still opens with nothing shown.
-     Raised around the parse alone — never around the file picker, where
-     the wait is the user's own. */
+  // Busy bar wraps parse only, never the file picker
   var readBusy = beginBusy("Reading " + file.name + "…");
   try {
     if (kind === "docx") {
       var parsed = await docxToRows(file);
       newTitle = parsed.title;
       newRows = parsed.rows;
-      /* a Word file with no table: fall back to the paragraph auto-detection */
       if (!newRows.length && parsed.looseText) {
         var looseMode = detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph";
         newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode));
@@ -630,46 +449,12 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  /* opening a document replaces the whole script — keep a way back */
+  // Open replaces whole script; keep way back
   if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
-  /* OPEN = A NEW DOCUMENT (issue #7). This used to replace only
-     `state.rows` and the title and keep everything else, so an unrelated
-     .docx inherited the previous script's production tags, cast list,
-     b-roll list and review comments — a breakdown of text that never
-     mentioned any of them — and Save still pointed at the previous
-     project's file.
-
-     A foreign .docx/.md/.txt/.csv carries no record of its own, so there
-     is nothing here that belongs to the document being opened: the only
-     honest reading of "open this file" is a new document. Building it
-     through migrateRows() from its two required fields is the same
-     construction blankDocumentState() (20j-newtab.js) uses, and the only
-     way to be sure nothing of the old document survives — it mints a
-     fresh docId and fills in every list empty.
-
-     "Draft 2 of the same script" is still a real workflow and is still
-     supported; it is the Paste/Import modal (openImportModal,
-     11-import.js), which keeps the breakdown, the people, the b-roll and
-     the comments and now takes a file as well as pasted text.
-
-     `schema: SCHEMA_VERSION` because every reader above already hands back
-     HTML, not legacy Markdown: docxToRows builds escaped text plus
-     <strong>/<em>/<a>, normalizeImportedRows (.txt, a foreign .md, a Word
-     file with no table) has already run legacyMdToHtml once, and csvToRows
-     escapes each cell. Without it migrateRows reads the rows as
-     pre-rich-text and runs legacyMdToHtml a second time, which escapes the
-     markup into visible "<strong>" and every "&" into "&amp;" — and every
-     further export and reopen escaped it again. migrateRows still
-     sanitizes them either way. */
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
   if (opts.reload) {
-    /* Not an open: the same document, re-read from the same file. Only
-       the rows and the title come back — the breakdown, the cast, the
-       b-roll and the comments are this document's own and were never in
-       the .docx to begin with. */
-    /* the file changed under us: not an edit of this tab's either */
     flushEdits();
     S.state.rows = newRows;
     S.state.title = openedTitle;
@@ -677,22 +462,11 @@ async function loadFileIntoEditor(file, handle, opts) {
   } else {
     S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
     setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
-    /* The two homes of the Save button (§3.1) — the project file and the
-       hosted document — both belonged to whatever was on screen a moment
-       ago, and saving into either would overwrite an unrelated script.
-       The setHome("import") below replaces them. */
-    /* The breakdown panel's open card, rename box and group mode belong to
-       the document that just went away — same reason adoptProjectState()
-       resets them. */
     resetProductionPanelState();
-    /* This id was minted here and has never left the page, so a first Save
-       can take it with it rather than forking a new one (02b-doc-id.js). */
+    // Id minted here never left page; first Save keeps it
     S.docIdWrittenOut = false;
   }
 
-  /* `lastModified`/`size`: remember what the file looked like so we never
-     blindly overwrite a newer version someone edited in Word while we had
-     it open. A reload is the same home re-read, so it is set afresh too. */
   var imported = setHome("import", {
     name: file.name,
     handle: handle || null,
@@ -705,7 +479,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   markDirty();
   imported.dirty = false;
-  if (typeof closeNewTabPage === "function") closeNewTabPage(); /* 20j-newtab.js */
+  if (typeof closeNewTabPage === "function") closeNewTabPage();
   render();
   updateIdentityChip();
   updateFileChip();
@@ -718,17 +492,9 @@ async function loadFileIntoEditor(file, handle, opts) {
 }
 
 export async function openLocalFile() {
-  /* Desktop has a real native Open dialog — DESKTOP.openFileDialog() —
-     checked before either web fallback below, which are otherwise
-     untouched. null means the user cancelled the dialog; that is not an
-     error, so there is nothing further to do. */
   if (S.DESKTOP) {
     var entry = await S.DESKTOP.openFileDialog();
     if (!entry) return;
-    /* main may already have this path open in another tab (or window) —
-       routeOpen activates that tab instead of opening a second copy here.
-       'this-tab' is main confirming the sender (this pristine, ready tab)
-       is where it belongs, same as every open always landed before tabs. */
     var r = await S.DESKTOP.routeOpen({ kind: "file", fileId: entry.id });
     if (!r || r.where !== "this-tab") return;
     var desktopHandle = makeDesktopHandle(entry);
@@ -736,9 +502,6 @@ export async function openLocalFile() {
     await openProjectFile(desktopFile, desktopHandle);
     return;
   }
-  /* Prefer the File System Access API: it is the only path that can write the
-     user's own file back in place. It is blocked in cross-origin frames, so
-     fall back to a plain file input whenever it is unavailable or refused. */
   if (window.showOpenFilePicker) {
     try {
       var handles = await window.showOpenFilePicker({
@@ -759,8 +522,7 @@ export async function openLocalFile() {
       await openProjectFile(await handle.getFile(), handle);
       return;
     } catch (err) {
-      if (err && err.name === "AbortError") return; /* user cancelled the picker */
-      /* SecurityError / NotAllowedError in a sandboxed frame — use the input instead */
+      if (err && err.name === "AbortError") return;
     }
   }
   document.getElementById("open-file-input").click();
@@ -779,13 +541,7 @@ export function mimeForFilename(filename) {
   return "text/plain";
 }
 
-/* Every export and every "save a copy" goes through here. Desktop has no
-   download tray to drop a file into — an <a download> click is inert in
-   Electron's renderer sandbox anyway (see the Artifact runtime's own note
-   on this) — so it asks the native Save dialog for a destination and
-   writes the bytes there directly. A cancelled dialog is not a failure:
-   it returns false with no toast, exactly like a cancelled browser
-   download does nothing rather than erroring. */
+// Desktop uses native Save dialog; cancel returns false silently
 export async function deliverFile(filename, data, opts) {
   opts = opts || {};
   if (S.DESKTOP) {
@@ -810,8 +566,6 @@ export async function deliverFile(filename, data, opts) {
       return false;
     }
   }
-  /* Standard browser download: build a Blob, click a hidden <a download>,
-     revoke the object URL once the click has had a moment to be handled. */
   try {
     var blob = data instanceof Blob ? data : new Blob([data], { type: mimeForFilename(filename) });
     var url = URL.createObjectURL(blob);
@@ -830,17 +584,8 @@ export async function deliverFile(filename, data, opts) {
   }
 }
 
-/* Shared by both on-disk-conflict guards: the import re-save path
-   (saveBackToFile, below) and the project-save path (saveDoc, 14-export.js).
-   Compares `handle`'s file right now against the timestamp recorded the
-   last time we successfully read or wrote it. A failed re-read (file
-   moved, deleted, or on a drive that isn't connected) is reported the same
-   way as a detected change — "Never overwrite silently" (HANDOFF #1)
-   covers both, and force:true (the "Overwrite it" button) still gets
-   past either uncondtionally. Returns {ok:true} or
-   {ok:false, current: File|null}. */
 export async function checkFileConflict(handle, lastModified) {
-  if (!lastModified) return { ok: true }; /* nothing recorded yet to compare against */
+  if (!lastModified) return { ok: true };
   var current;
   try {
     current = await handle.getFile();
@@ -853,28 +598,15 @@ export async function checkFileConflict(handle, lastModified) {
   return { ok: true };
 }
 
-/* Which flow popped the conflict modal, so its buttons (reload /
-   overwrite / save-as-a-copy / merge) know whether to act on the import
-   re-save path's "import" home or the project-save path's "file" home.
-   Set by showFileConflict(), read by 21-events.js's button wiring. */
 export var fileConflictCtx = { kind: "import" };
-/* Bumped by every showFileConflict() and by closeFileConflict(), so a
-   modal still waiting on its merge probe never opens over a later one, or
-   after the user has already answered. */
+// Stale probe must not open modal over later one
 var fileConflictShowToken = 0;
 
-/* Which home record this conflict is about, read off fileConflictCtx the
-   same way each of the modal's buttons reads it — "Merge them" needs the
-   answer while the modal is going up, before any button is pressed. Null
-   when the document no longer lives where the conflict was found. */
 function fileConflictHome() {
   return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
 }
 
 export async function saveBackToFile(opts) {
-  /* The record this call writes back to, held across the awaits below: it
-     is the file the bytes were built for, whatever the page has since
-     opened. */
   var imported = importHome();
   if (!imported) return;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
@@ -886,9 +618,7 @@ export async function saveBackToFile(opts) {
     return;
   }
 
-  /* true in-place write, when the browser allows it */
   if (imported.handle && imported.handle.createWritable) {
-    /* has the file changed on disk since we opened it? */
     if (!opts || !opts.force) {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
@@ -905,13 +635,12 @@ export async function saveBackToFile(opts) {
         var after = await imported.handle.getFile();
         imported.lastModified = after.lastModified;
         imported.size = after.size;
-      } catch (e) { /* not fatal — the write already succeeded */ }
+      } catch (e) { }
       updateFileChip();
       showToast("Saved to " + imported.name, "ok");
       return;
     } catch (err) {
       if (err && err.name === "AbortError") return;
-      /* permission revoked or frame not allowed — fall through to a copy */
       imported.inPlace = false;
       updateFileChip();
     }
@@ -923,24 +652,12 @@ export async function saveBackToFile(opts) {
   if (ok) { imported.dirty = false; updateFileChip(); }
 }
 
-/* The file on disk moved under us. Never overwrite silently — the whole
-   point of this guard is that the other version might be someone's work.
-   `ctx` records which flow this is for ({kind:"import"} or
-   {kind:"project"}) so the modal's three buttons (21-events.js) know
-   whether to act on the "import" home or the "file" home (_home.js). */
 export function showFileConflict(fileName, currentFile, ctx) {
   fileConflictCtx = ctx || { kind: "import" };
   if (!currentFile) {
-    /* The file couldn't be re-read at all (moved, deleted, or the drive
-       it's on isn't connected right now) — not the same as "changed",
-       but the same "don't overwrite without asking" principle applies:
-       proceeding straight to a write here (what used to happen — the
-       read failure was silently swallowed) defeats the one thing this
-       guard exists to catch. Reuses the same modal/force-save path. */
     document.getElementById("file-conflict-detail").textContent =
       "Could not check whether " + fileName + " is still there — it may have been moved, " +
       "deleted, or is on a drive that isn't connected right now. Saving now would recreate it.";
-    /* nothing readable to merge with */
     resetMergeOffer();
     document.getElementById("file-conflict-modal").hidden = false;
     return;
@@ -951,16 +668,9 @@ export function showFileConflict(fileName, currentFile, ctx) {
   document.getElementById("file-conflict-detail").textContent =
     fileName + " changed on disk at " + when +
     ", after you opened it here. Saving now would overwrite that version.";
-  /* "Merge them" is revealed only once that version has been read back as
-     a document — a file this app cannot parse has nothing to merge
-     (18a-local-merge.js). The modal waits for that answer before it
-     opens: the row is right-aligned, so a button appearing a moment
-     after the others would shove them sideways under the pointer. The
-     read is local and takes milliseconds; should it ever not answer, the
-     four choices the modal has always had go up on their own. */
   var token = ++fileConflictShowToken;
   var show = function () {
-    if (token !== fileConflictShowToken) return;   /* superseded or closed */
+    if (token !== fileConflictShowToken) return;
     document.getElementById("file-conflict-modal").hidden = false;
   };
   var probe = offerFileMerge(currentFile, fileConflictHome());
@@ -987,10 +697,6 @@ export async function reloadFileFromDisk() {
   }
 }
 
-/* The project-save counterpart of reloadFileFromDisk() above — reopens
-   through openProjectFile() rather than loadFileIntoEditor() so a newer
-   on-disk version is read as a project (.md/.splitpage), tags, comments,
-   statuses and all, not flattened through the plain-text import path. */
 export async function reloadProjectFromDisk() {
   closeFileConflict();
   var file = fileHome();
@@ -1002,14 +708,6 @@ export async function reloadProjectFromDisk() {
   }
 }
 
-/* Every export in the File menu funnels through here — .docx, both
-   Markdowns, .csv and .xlsx, the breakdown, .pdf, standalone HTML, both
-   narration exports and both packing lists — so this is the one place that has to
-   know a long script takes a noticeable moment to build. withBusy raises
-   the top bar (04b-busy.js) only if the build actually takes long enough
-   to need it, which on a short script means nothing appears at all. */
-/* `more`: anything else buildFileData should know for this one (the
-   Export dialog's b-roll list asks for every shot, by scene) */
 export async function exportAs(kind, more) {
   var base = exportBaseName();
   var built;
@@ -1024,8 +722,6 @@ export async function exportAs(kind, more) {
   await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
 }
 
-/* An empty narration would export as a file containing nothing but the
-   title, which reads as a broken export rather than an empty column. */
 export async function exportNarration(kind) {
   if (!narrationRows().length) {
     showToast("There is no narration to export yet — the Audio column is empty.", "warn");
@@ -1034,8 +730,6 @@ export async function exportNarration(kind) {
   await exportAs(kind);
 }
 
-/* An empty packing list would export as a page with nothing on it but a
-   title, same reasoning as exportNarration(). */
 export async function exportPackingList(catId) {
   var cat = tagCategory(catId);
   var has = productionEntries().some(function (e) { return e.cat.id === catId; });
@@ -1046,11 +740,6 @@ export async function exportPackingList(catId) {
   await exportAs("packing-" + catId);
 }
 
-/* File ▸ Export… ▸ B-roll shot list: the landscape sheet, or either
-   spreadsheet (Excel or CSV), of every shot, by scene, however the b-roll
-   page was last left filtered or grouped — printing the list as it is on
-   screen is that page's own Print. With no shots at all it says so, as the
-   page does, whichever of the three was asked for. */
 export async function exportBrollList(action) {
   if (!brollEntries(true).length) {
     showToast("There is no b-roll to export yet — start a Visual line with B-roll:", "warn");
@@ -1062,11 +751,7 @@ export async function exportBrollList(action) {
 }
 
 export function handleFileMenuAction(action) {
-  /* The switches (#145, #178) leave the menu open, so the switch is seen
-     to move; everything else is somewhere to go, and closes it. */
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
-  /* Which format was exported last, for the dialog to start on and for
-     "Export again as …" — a per-device preference, never the document's. */
   if (isExportAction(action)) rememberExport(action);
   if (!S.state && action !== "history" && action !== "tagging-help"
       && action !== "drive-open" && action !== "about") {
@@ -1090,9 +775,6 @@ export function handleFileMenuAction(action) {
   else if (action === "export-md-table") exportAs("md-table");
   else if (action === "export-csv") exportAs("csv");
   else if (action === "export-xlsx") exportAs("xlsx");
-  /* Nothing tagged is still a file, in either: its header row and nothing
-     under it. The Excel one asks no more than the CSV always has — no toast,
-     no reason on the dialog's card. */
   else if (action === "export-breakdown") exportAs("breakdown");
   else if (action === "export-breakdown-xlsx") exportAs("breakdown xlsx");
   else if (action === "export-pdf") exportAs("pdf");
@@ -1115,6 +797,4 @@ export function handleFileMenuAction(action) {
   else if (action === "about") showAbout();
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {}

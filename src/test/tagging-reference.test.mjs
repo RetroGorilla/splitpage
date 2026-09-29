@@ -1,11 +1,3 @@
-/* The tagging reference card (page.html #tagging-help) against what the
- * app actually takes, so the card can never promise a word the tagger
- * does not know or leave one out (2026-09-28: the word forms, #210, were
- * there all along but only named in a sentence):
- *   - every plain-language keyword (07b-plain-tags.js PLAIN_TAG_KEYWORDS)
- *     is listed once, as "Name:", beside a sample in its own category;
- *   - every bracket shortcut's row shows a sample in its category.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

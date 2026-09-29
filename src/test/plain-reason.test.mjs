@@ -1,7 +1,3 @@
-/* plainReason() (13-hosted.js): what a failure toast says after the dash.
- * The browser's words for a dropped connection are turned into a sentence a
- * person can act on; reasons that were already written for a person pass
- * through untouched. */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

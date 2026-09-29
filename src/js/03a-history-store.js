@@ -12,10 +12,6 @@ import {
 import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
 import { checksumText, seedCheckPasses } from "./20b-onboarding.js";
-/* The policy half of version history — what is kept and what is thrown
-   away — is shared with desktop/main.js, which used to carry a line-for-line
-   copy of planHistoryEviction and its own clamps for a meta (#76). Re-
-   exported below so every importer of this module keeps naming this file. */
 import {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -27,9 +23,6 @@ import {
   planHistoryEviction,
   sanitizeHistoryMeta
 } from "../../shared/history-policy.js";
-/* HOW it is kept is one piece of code too since #83: the store below is
-   shared/history-store.js, the same one desktop/main.js runs over its
-   folder backend. */
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 export {
@@ -43,72 +36,15 @@ export {
   sanitizeHistoryMeta
 };
 
-/* Declared here, assigned in __init() below: these initialisers read the
-   DOM, read storage, or depend on another module's value, so they have to
-   run in fragment order rather than in whatever order the bundle lands in. */
 var historyChain;
 
-/* ================= version history store (per document) =================
-
-   Version history used to be ONE list in localStorage ('splitpage-snapshots',
-   12 entries, ~1.2 MB) shared by every document this browser ever opened:
-   restoring "an earlier version" could hand you a different script, and one
-   big document pushed everyone else's snapshots out. This fragment is the
-   renderer's half of its replacement. History is addressed only by (docId,
-   snapshot id) — HANDOFF invariant #38 — and one of three places answers,
-   chosen per call:
-
-     desktop   DESKTOP.historyPut exists: main owns the store (one
-               shared/history-store.js over desktop/history-fs-backend.js),
-               and desktopHistoryBackend below is a thin IPC client
-     idb       shared/history-store.js over 03c-history-idb.js's IndexedDB
-               backend (database 'splitpage-history' v3), once it has opened
-     memory    the same store over the shared memory backend — kept only
-               until this page closes
-
-   WHAT the store does (put-if-absent, the stamp, the trim to 50, cap
-   eviction, the quota retry, Older's creation and expiry, copy, which
-   bodies may go) is shared/history-store.js's and is not repeated here
-   (#83). What stays in this file is what only a page can do:
-
-     * captureSnapshot() stringifies SYNCHRONOUSLY and returns at once.
-       Eight callers replace `state` on the very next line (invariant #39),
-       so any await before the capture would snapshot the wrong document.
-       The write itself is queued; its outcome arrives on ticket.done.
-     * A capture the store refuses (quota, io, read-only) stays PENDING in
-       this page — listed, restorable, retried after the next successful
-       write.
-     * The images a snapshot names are made durable before it is written
-       (historyPersistRefs, invariant #52).
-     * No promise handed out here ever rejects (exportHistoryAll aside). A
-       failed history write must never become a failed save, a failed open
-       or an unhandled rejection.
-     * Every write runs through one in-page queue (enqueueHistory), so a
-       copyHistory() really does see the push that was issued before it,
-       and a burst of pushes is stored in call order.
-
-   '_older' is the bucket key for the one-time migration of the old shared
-   list ("Older history (before per-document history)"). It is never
-   accepted as a docId argument — the bucket is reachable only through
-   {older:true}, so a hostile file claiming docId "_older" cannot read or
-   write it. */
-
-/* HISTORY_PER_DOC, HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE and
-   HISTORY_OLDER_TTL_MS are shared/history-policy.js's, imported and
-   re-exported at the top of this file (#76). */
-/* Browser cap = max(5 MB, quota − (usage − historyBytes) − 50 MB): history
-   may use what the origin's quota leaves after everything else, minus
-   headroom, but never less than a floor that keeps a few snapshots alive. */
+// Cap floor keeps a few snapshots alive under quota pressure
 var HISTORY_BROWSER_MIN_CAP = 5 * 1024 * 1024;
 var HISTORY_BROWSER_HEADROOM = 50 * 1024 * 1024;
 var HISTORY_ESTIMATE_TTL_MS = 5 * 60 * 1000;
-/* The memory backend holds whole documents in this page's RAM. 50 per
-   document already bounds it per script; this bounds it across scripts. */
 var HISTORY_MEMORY_CAP = 50 * 1024 * 1024;
 var HISTORY_PENDING_PER_DOC = 10;
 var HISTORY_MIGRATION_LOOPS = 3;
-
-/* ---- scaffolding ---- */
 
 export function historyNoop() {}
 
@@ -121,9 +57,7 @@ function enqueueHistory(job, fallback) {
   return run;
 }
 
-/* Resolves once nothing is queued and no migration is running — re-checking
-   after each wait, because a finishing job may have queued another (a
-   pending-snapshot retry after a successful write). */
+// Re-checks after each wait; finishing jobs may queue more
 function historyIdle() {
   var c = historyChain;
   var m = historyMigrationPromise;
@@ -133,21 +67,11 @@ function historyIdle() {
   });
 }
 
-/* Test hook setNow() moves this clock (Older expiry, eviction order);
-   nothing else in the app reads it. It is the store's clock too. */
+// Test-only clock; also the store's clock
 var historyNowOverride = null;
 function historyNow() {
   return historyNowOverride != null ? historyNowOverride : Date.now();
 }
-
-/* historyUtf8Length — UTF-8 byte length without copying the string — is
-   shared/history-policy.js's (#83), imported and re-exported at the top of
-   this file so 20f-desktop.js keeps importing it from here. */
-
-/* sanitizeHistoryMeta — SnapshotMeta rebuilt from plain values with every
-   length clamped — is shared/history-policy.js's (#76), so a meta means the
-   same thing on both sides of the desktop bridge. Imported and re-exported
-   at the top of this file. */
 
 function historyStripMeta(m) {
   var out = sanitizeHistoryMeta(m);
@@ -155,14 +79,6 @@ function historyStripMeta(m) {
   return out;
 }
 
-/* ---- test faults (window.__historyTest.injectFault) ----
-   So the renderer-side logic (evict-and-retry, pending entries, the
-   migration's key removal) can be driven without actually filling a disk.
-   The store's own failures are the backend's: quota-once, quota-always and
-   io-always become failNext() on the idb and memory backends (so the
-   shared store's quota retry is what runs, exactly as it would for a real
-   full disk). The gates and import-fail stay here: they hold or refuse a
-   call at this file's edge. */
 var historyFault = null;
 var historyDelayGate = null;
 var historyDelayRelease = null;
@@ -170,7 +86,6 @@ var historyImportGate = null;
 var historyImportRelease = null;
 var historyImportGateHit = false;
 
-/* Arms (or clears) the put faults on one backend. */
 function historyArmFaults(backend) {
   if (!backend || typeof backend.clearFaults !== "function") return;
   backend.clearFaults();
@@ -189,8 +104,6 @@ function historyPutFaultGate() {
   return null;
 }
 
-/* One-shot: releasing the delayed put also clears the fault, so the put it
-   let through (and anything queued behind it) runs normally. */
 function releaseDelayedPut() {
   if (historyFault === "delay-put") historyFault = null;
   var r = historyDelayRelease;
@@ -199,15 +112,6 @@ function releaseDelayedPut() {
   if (r) r();
 }
 
-/* The same gate for importOlder, so a test can hold a migration open at the
-   exact point where it has read the legacy key but not yet confirmed it —
-   the only window in which "the key changed mid-migration" means anything.
-   Racing a real setItem() against an in-flight migrate() cannot decide that
-   window: on a fast backend the migration is already finished (and the key
-   already deleted) before the next CDP round trip lands, so the change is
-   really a change AFTER the migration, and the test reads a re-created key
-   next to removedKey === true. Re-armable, because exhausting
-   HISTORY_MIGRATION_LOOPS needs the key to change on every pass. */
 function historyImportFaultGate() {
   if (historyFault === "delay-import") {
     historyImportGateHit = true;
@@ -227,14 +131,6 @@ function releaseDelayedImport() {
   if (r) r();
 }
 
-/* ---- the browser's cap ----
-   From navigator.storage.estimate(), cached 5 minutes (real time, not
-   historyNow — the cache is about how often we ask the browser). The
-   estimate's usage includes history as it was THEN, so the history bytes at
-   estimate time are cached with it; mixing an old usage with today's
-   history size would misjudge "everything else". No estimate at all → no
-   cap of our own; the browser's quota error still triggers the store's
-   evict-and-retry. */
 var historyCapOverride = null;
 var historyEstimateCache = null;
 
@@ -255,10 +151,7 @@ function historyCapFrom(c) {
   return Math.max(HISTORY_BROWSER_MIN_CAP, c.quota - other - HISTORY_BROWSER_HEADROOM);
 }
 
-/* The store's capBytes(lastKnownTotal) for IndexedDB. Before the store has
-   read its index once, history's own size is unknown, and an estimate taken
-   then would count all of history as "everything else" — so that one call
-   answers no cap (the quota retry still guards it) and caches nothing. */
+// First call answers no cap; size unknown before index read
 function historyIdbCap(lastTotal) {
   if (historyCapOverride != null) return historyCapOverride;
   if (lastTotal == null) return Infinity;
@@ -269,16 +162,6 @@ function historyMemoryCap() {
   return historyCapOverride != null ? historyCapOverride : HISTORY_MEMORY_CAP;
 }
 
-/* ---- holds ----
-   Snapshots a restore is reading right now: bucket + "\n" + id → hold
-   count. WHY: restoreSnapshot reads a snapshot, stores a "Before
-   restoring" backup, and only then adopts. That backup's write may evict
-   (the quota retry, the over-cap pass, the per-document trim) and the
-   Older bucket is evicted first — so without a hold, restoring from Older
-   while storage is tight could delete the very snapshot being restored,
-   and the "restore anyway" click would find it gone. The list is the
-   store's holds() provider in this page, and travels with every desktop
-   call to main, whose store unions it into every eviction. */
 var historyProtected = {};
 
 function historyProtectKey(bucket, id) { return bucket + "\n" + id; }
@@ -290,9 +173,6 @@ function historyProtectedList() {
   });
 }
 
-/* ({docId?, older?, id}) — getHistorySnapshot's query shape → release().
-   Holds nest (a count per snapshot), and a release runs at most once. An
-   unusable query holds nothing and returns a no-op. */
 export function protectHistorySnapshot(q) {
   q = q || {};
   var id = typeof q.id === "string" ? q.id : "";
@@ -305,22 +185,11 @@ export function protectHistorySnapshot(q) {
   return function () {
     if (released) return;
     released = true;
-    /* resetForTest may have replaced the map meanwhile; then there is
-       nothing of ours left to release */
     if (holds !== historyProtected || !holds[key]) return;
     if (holds[key] > 1) holds[key]--; else delete holds[key];
   };
 }
 
-/* ---- the browser's store: shared/history-store.js ----
-
-   One store per backend per page: over 03c's IndexedDB backend once it has
-   opened, over the memory backend otherwise. historyStoreAdapter() gives
-   either one the call shape desktopHistoryBackend has (put/list/get/copy/
-   touch/importOlder/evict, plus the export's raw reads; list's answer
-   carries the store's usage), so nothing below the backend choice knows
-   which it is talking to — and adds the test gates, which belong to this
-   page, not to the store. */
 function historyMakeStore(backend, capBytes) {
   return createHistoryStore({
     backend: backend,
@@ -331,8 +200,6 @@ function historyMakeStore(backend, capBytes) {
   });
 }
 
-/* The raw index → one bucket's record as the test hook and the export read
-   it: counts and bytes computed (nothing stores them since #83). */
 function historyRecordOf(index, bucket) {
   var rec = index && index[bucket];
   if (!rec) return null;
@@ -349,7 +216,6 @@ function historyRecordOf(index, bucket) {
   return out;
 }
 
-/* …and its stored metas, oldest first, each carrying its bucket. */
 function historyMetasOf(index, bucket) {
   var rec = index && index[bucket];
   return (rec && Array.isArray(rec.snapshots) ? rec.snapshots : []).map(function (s) {
@@ -365,34 +231,27 @@ function historyStoreAdapter(store) {
     persistent: store.persistent,
     store: store,
     put: function (docId, meta, stateJson) {
-      /* the gate is taken at entry, so a release lets THIS put through */
       return Promise.resolve(historyPutFaultGate()).then(function () {
         return store.put(docId, meta, stateJson);
       });
     },
-    /* rejects when the backend cannot be read — importHistoryBundle's
-       strict read needs to tell that from "no history" (invariant #49).
-       The answer carries the store's usage (null when that read failed),
-       the way main's history-list does: the panel is the one reader of
-       usage, and it always wants the list too. */
+    // Must reject when unreadable; strict import needs it (#49)
     list: function (docId) {
       return store.list(docId || null).then(function (r) {
         return store.usage().then(function (u) { r.usage = u; return r; }, function () { r.usage = null; return r; });
       });
     },
+    // Query carries holds on reads; main's eviction is process-wide
     get: function (bucket, id) { return store.get(bucket, id); },
     copy: function (from, to) { return store.copy(from, to); },
     touch: function (docId, title) { return store.touch(docId, title); },
     importOlder: function (entries) {
       if (historyFault === "import-fail") return Promise.resolve({ ok: false, count: 0, added: 0, code: "io" });
-      /* The gate is captured at entry, so releasing it lets THIS call through
-         even when the test re-arms it in the same turn for the next loop. */
       return Promise.resolve(historyImportFaultGate()).then(function () {
         return store.importOlder(entries);
       });
     },
     evict: function (cap) { return store.evict(cap); },
-    /* the export's reads (exportHistoryAll) and the test hook's */
     rawDocIds: function () {
       return store.listDocs().then(function (docs) { return docs.map(function (d) { return d.docId; }); });
     },
@@ -405,8 +264,8 @@ function historyStoreAdapter(store) {
   };
 }
 
-var historyIdb = null;           /* {backend, store, adapter, ready, opening} */
-var historyMem = null;           /* {backend, store, adapter} */
+var historyIdb = null;
+var historyMem = null;
 var historyPersistAsked = false;
 
 function historyMemory() {
@@ -419,10 +278,6 @@ function historyMemory() {
   return historyMem;
 }
 
-/* 03c's backend and its store, opened once per page. open() resolves once
-   the database is usable (upgraded, or a newer one adopted read-only), and
-   rejects when IndexedDB cannot be opened at all — the caller's cue for
-   memory. */
 function historyOpenIdb() {
   if (historyIdb) return historyIdb.ready;
   if (historyFault === "idb-open-fail") return Promise.reject(new Error("Injected idb-open-fail"));
@@ -434,11 +289,7 @@ function historyOpenIdb() {
   var entry = { backend: backend, store: store, adapter: historyStoreAdapter(store), ready: null };
   historyIdb = entry;
   entry.ready = backend.open().then(function () {
-    /* Ask once for persistent storage so the browser does not evict
-       history under storage pressure. Only where userAgentData exists
-       (Chromium), which grants or refuses silently; elsewhere persist()
-       can raise a permission prompt, and a prompt nobody asked for is
-       worse than best-effort storage. */
+    // Only Chromium; elsewhere persist() may show a permission prompt
     if (!historyPersistAsked && typeof navigator !== "undefined" && navigator.userAgentData && navigator.storage &&
         typeof navigator.storage.persist === "function") {
       historyPersistAsked = true;
@@ -453,9 +304,6 @@ function historyOpenIdb() {
   return entry.ready;
 }
 
-/* The notice line for the panel (and the one toast) while the IndexedDB
-   store cannot take writes: a database a newer build wrote (read-only).
-   null otherwise. */
 function historyIdbNotice() {
   var e = historyIdb;
   if (!e) return null;
@@ -465,35 +313,9 @@ function historyIdbNotice() {
   return null;
 }
 
-/* ---- desktop backend (HISTORY-IPC) ----
-
-   On the desktop the store lives in the MAIN process — one
-   shared/history-store.js over desktop/history-fs-backend.js (#83) — and
-   main owns validation, the on-disk format, the trim and eviction. So this
-   object is a thin IPC client with no store of its own: it reshapes main's
-   answers into the shapes historyStoreAdapter() returns, and nothing above
-   it has to know which one it is talking to.
-
-   WHY EVERY CALL IS RACED. An invoke that never settles — main wedged
-   behind a slow disk, this view torn off mid-call, a handler that threw
-   before replying — would hold the one history queue (enqueueHistory) for
-   the life of the page. The snapshot would not even be reported as failed;
-   it would simply hang, never becoming 'pending', so nothing would ever
-   retry it. Thirty seconds, then code 'timeout' and the entry stays this
-   page's to retry.
-
-   WHY A REJECTION IS 'invalid'. Main answers a value for everything a
-   retry could fix (a full disk, an I/O error, a read-only folder, a body
-   over 256 MiB) and rejects ONLY when the call itself was malformed. An
-   entry that can never succeed is dropped rather than held in RAM forever
-   (historyStoreEntry). */
 var HISTORY_DESKTOP_TIMEOUT_MS = 30000;
-/* test hook setDesktopTimeout(): a suite cannot wait 30 s for each case */
 var historyDesktopTimeoutOverride = null;
 
-/* Main's usage, as it rides on a history-list answer: {totalBytes,
-   capBytes, overCap, docCount, readOnly}, or null when main could not read
-   it. */
 function historyDesktopUsage(u) {
   if (!u || typeof u !== "object") return null;
   return {
@@ -534,12 +356,6 @@ var desktopHistoryBackend = {
   name: "desktop",
   persistent: true,
 
-  /* Main's store does the quota retry and the eviction — its answer
-     already says how many snapshots went and whether we are still over
-     the cap. The held
-     snapshots travel WITH the call (orchestrator override §2b): a restore
-     from Older is reading one of them while this very write may be what
-     forces an eviction. */
   put: function (docId, meta, stateJson) {
     var clean = sanitizeHistoryMeta(meta);
     if (!normalizeDocId(docId) || !clean || typeof stateJson !== "string") {
@@ -549,7 +365,7 @@ var desktopHistoryBackend = {
       return S.DESKTOP.historyPut(docId, clean, stateJson, { protect: historyProtectedList() });
     }, { stored: false, code: "timeout" }, { stored: false, code: "invalid" }).then(function (r) {
       if (!r || typeof r !== "object") return { stored: false, code: "io" };
-      if (r.stored === false) return r;           /* our own timeout/invalid answer */
+      if (r.stored === false) return r;
       if (!r.ok) return { stored: false, code: typeof r.code === "string" ? r.code : "io" };
       var out = { stored: true, evicted: Number(r.evicted) || 0, overCap: !!r.overCap };
       if (r.duplicate) out.duplicate = true;
@@ -557,12 +373,7 @@ var desktopHistoryBackend = {
     });
   },
 
-  /* opts.strict (importHistoryBundle only): a timeout, a rejection or a
-     malformed answer resolves null instead of "empty". Every other caller
-     wants the panel to degrade to an empty list; the import must be able
-     to tell "this document has no history" from "could not read it",
-     because treating the second as the first would let its puts trim
-     genuine local snapshots away (invariant #49). */
+  // strict: null means could not read, never empty
   list: function (docId, opts) {
     var empty = { entries: [], older: [], olderExpiresAt: null };
     var failed = (opts && opts.strict) ? null : empty;
@@ -570,11 +381,7 @@ var desktopHistoryBackend = {
       return S.DESKTOP.historyList(docId || null);
     }, failed, failed).then(function (r) {
       if (!r || typeof r !== "object") return failed;
-      /* an answer with no entries array cannot say "no history" either */
       if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
-      /* Main sends metas with no document id in them (on disk the folder
-         IS the document), so stamp it back on for the panel — the
-         browser's store carries it on every meta it hands out. */
       var entries = (r.entries || []).map(historyStripMeta).filter(Boolean);
       if (docId) entries.forEach(function (m) { m.docId = docId; });
       var older = (r.older || []).map(historyStripMeta).filter(Boolean);
@@ -588,13 +395,6 @@ var desktopHistoryBackend = {
     });
   },
 
-  /* The held snapshots ride along on the READ as well as the write, in the
-     query object (the bridge passes it through whole). A restore takes its
-     hold and then reads — and main's eviction is process-wide, so between
-     that read and the "Before restoring" backup that follows it, a save in
-     ANOTHER tab, a history-copy or the expired-Older sweep could delete the
-     snapshot being read. Main remembers the list per page, so telling it at
-     the first call of a restore is what closes that window. */
   get: function (bucket, id) {
     var query = bucket === HISTORY_OLDER_KEY
       ? { older: true, protect: historyProtectedList() }
@@ -626,15 +426,6 @@ var desktopHistoryBackend = {
     }, null, null);
   },
 
-  /* There is no batch channel for Older (#83 step 4): each entry is a
-     history-put with {older:true} and a null docId — put-if-absent, no
-     stamp, the store's importOlder rules one entry at a time. In order,
-     stopping at the first refusal: both callers count what landed
-     (`added`) and a retry re-puts the rest cheaply. An entry the store
-     would skip (no valid meta or body, or over the body limit) is skipped
-     here too. The answer keeps importOlder's shape, except that `count`
-     is how many of THESE entries Older now holds (added + already there)
-     rather than the bucket's size — no caller reads it. */
   importOlder: function (entries) {
     if (!Array.isArray(entries)) return Promise.resolve({ ok: false, count: 0, added: 0, code: "invalid" });
     var added = 0, count = 0, i = 0;
@@ -659,20 +450,9 @@ var desktopHistoryBackend = {
     return next();
   },
 
-  /* Main evicts as part of every write it accepts, including the expired
-     Older bucket a list() reports empty — so there is nothing for this side
-     to ask for. It stays a function because runHistoryMigration's expiry
-     sweep probes for one. */
+  // Kept as a function; expiry sweep probes for one
   evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
 
-  /* Every document id this backend can enumerate, Older excluded — backs
-     exportHistoryAll() the same way historyStoreAdapter's rawDocIds does.
-     DESKTOP.historyListDocs() (desktop/main.js) answers from main's
-     store index, so this never touches disk itself. Still null on a timeout/rejection/malformed answer, which
-     is exportHistoryAll()'s "cannot enumerate" signal — but a working
-     bridge never returns it, so an older desktop build without this
-     method (or a real I/O problem) is the only way export still sees the
-     browser-only refusal. */
   rawDocIds: function () {
     return historyDesktopCall(function () {
       return S.DESKTOP.historyListDocs();
@@ -687,11 +467,6 @@ var desktopHistoryBackend = {
     });
   },
 
-  /* {title, lastOpenedAt} for one document — historyBuildExport's other
-     half of "docs" alongside rawList. Re-fetches the same full list
-     historyListDocs() answers rather than caching it: export runs once, on
-     demand, for at most a few dozen documents, and a cache here would be
-     one more place for this file's per-page state to drift from main's. */
   rawDoc: function (bucket) {
     return historyDesktopCall(function () {
       return S.DESKTOP.historyListDocs();
@@ -705,11 +480,6 @@ var desktopHistoryBackend = {
     });
   },
 
-  /* Raw metas for one bucket (a document, or HISTORY_OLDER_KEY), oldest-
-     or-newest order does not matter — historyFlattenForExport sorts its
-     own flattened list. Reuses this backend's own list() (above), which
-     already turns a DESKTOP.historyList() answer into sanitized metas;
-     list(null) asks for "no document, just tell me what's in Older". */
   rawList: function (bucket) {
     var docId = bucket === HISTORY_OLDER_KEY ? null : bucket;
     return desktopHistoryBackend.list(docId).then(function (r) {
@@ -719,14 +489,7 @@ var desktopHistoryBackend = {
   }
 };
 
-/* ---- backend choice (per call) ----
-
-   desktop when the bridge has history; else IndexedDB once it has opened;
-   else memory. An IndexedDB that fails to open is not retried for the rest
-   of this page: flipping between memory and IndexedDB mid-session would
-   scatter one document's history across two stores, and the memory half
-   would vanish at close while the panel had shown it as one list. */
-var historyForced = null;          /* test hook: 'idb' | 'memory' | null */
+var historyForced = null;
 var historyIdbFailed = false;
 var historyBackendNameNow = null;
 
@@ -752,22 +515,11 @@ function resolveHistoryBackend() {
   });
 }
 
-/* ---- capture ---- */
-
-/* The one pristine test (shared with the tab shell): the demo document
-   exactly as shipped, never touched, with no home. Snapshotting it would
-   fill every new user's history with copies of the seed before they have
-   typed a word. */
+// Snapshotting the untouched seed would fill new users' history
 export function isPristineSeedDocument() {
   return !!S.state && S.editSeq === 0 && !S.dirty && home.kind === "none" && seedCheckPasses();
 }
 
-/* Snapshots this page has captured but not (yet) stored, keyed
-   docId + "/" + id (a copy can put one id under two documents):
-     {docId, meta, stateJson, status: 'writing' | 'pending'}
-   'writing' is queued; 'pending' failed and waits for the next successful
-   write to retry it. The panel and getHistorySnapshot read these first, so
-   a snapshot is restorable the moment it is captured. */
 var historyLocal = {};
 var historyWarnedDocs = {};
 var historyLastAtMs = 0;
@@ -789,13 +541,6 @@ function historyRenderSoon() {
   } catch (e) { if (window.console) console.error(e); }
 }
 
-/* Pending entries are whole documents held in RAM, so each document keeps
-   at most HISTORY_PENDING_PER_DOC of them — the newest.
-
-   One warning per document — or, when the IndexedDB store itself cannot
-   take writes (a newer build made it read-only), ONE warning for the page
-   naming that, since every document's captures will wait for the same
-   thing. */
 function historyMarkPending(entry) {
   entry.status = "pending";
   var mine = historyLocalEntries(entry.docId, "pending");
@@ -807,7 +552,7 @@ function historyMarkPending(entry) {
   if (notice) {
     if (!historyWarnedDocs["store:" + notice.kind]) {
       historyWarnedDocs["store:" + notice.kind] = true;
-      try { showToast(notice.text, "warn"); } catch (e) { /* a toast is a courtesy */ }
+      try { showToast(notice.text, "warn"); } catch (e) { }
     }
     return;
   }
@@ -816,17 +561,11 @@ function historyMarkPending(entry) {
     try {
       showToast("Could not store a version history snapshot. It is kept in this window and will be " +
         "tried again — closing the window before then loses it.", "warn");
-    } catch (e) { /* a toast is a courtesy */ }
+    } catch (e) { }
   }
 }
 
-/* The images a snapshot names are made durable BEFORE the snapshot is
-   written (#82, invariant 52): no stored snapshot may name a blob the
-   blob store does not hold. The refs were read at capture, which stays
-   synchronous (invariant 39); this is the job's half. A blob the store
-   refused goes into the snapshot inline instead, when this page has its
-   bytes; one nobody has cannot be helped (a version restored after its
-   picture was lost) and is written as it is. */
+// Blobs must be durable before snapshot write (invariant 52)
 function historyPersistRefs(entry) {
   var refs = entry.refs || [];
   if (!refs.length) return Promise.resolve();
@@ -845,25 +584,18 @@ function historyStoreEntry(backend, entry) {
     if (r.stored) {
       if (historyLocal[key] === entry) delete historyLocal[key];
     } else if (r.code === "invalid") {
-      /* never going to succeed — do not hold it in RAM forever */
       if (historyLocal[key] === entry) delete historyLocal[key];
     } else if (historyLocal[key] === entry) {
       historyMarkPending(entry);
     }
     return r;
   }, function () {
-    /* Only an entry this page still holds can be retried; one already
-       dropped (the pending cap, resetForTest) must not raise a warning
-       about a snapshot that no longer exists anywhere. */
     if (historyLocal[historyLocalKey(entry.docId, entry.meta.id)] === entry) historyMarkPending(entry);
     return { stored: false, code: "io" };
   });
 }
 
-/* HISTORY-RENDERER-API captureSnapshot. Synchronous up to the returned
-   ticket; the write is queued. Returns null when there is nothing to
-   capture (no rows array), when this is the pristine seed and the caller
-   allowed skipping it, or when the document cannot be serialized. */
+// Synchronous up to ticket; write is queued (invariant 39)
 export function captureSnapshot(label, src, opts) {
   opts = opts || {};
   if (!src || typeof src !== "object" || !Array.isArray(src.rows)) return null;
@@ -873,8 +605,6 @@ export function captureSnapshot(label, src, opts) {
   try {
     stateJson = JSON.stringify(src);
   } catch (e) {
-    /* RangeError: a string longer than the engine allows (a document full
-       of pasted images). Nothing to store; say so once per document. */
     if (!historyWarnedDocs["size:" + docId]) {
       historyWarnedDocs["size:" + docId] = true;
       try { showToast("This document is too large to snapshot — version history is unavailable.", "warn"); } catch (x) {}
@@ -882,8 +612,7 @@ export function captureSnapshot(label, src, opts) {
     return null;
   }
   if (typeof stateJson !== "string") return null;
-  /* Strictly increasing within the page, so a burst inside one millisecond
-     still sorts (and trims) in call order. */
+  // Strictly increasing so same-millisecond bursts keep call order
   var atMs = historyNow();
   if (atMs <= historyLastAtMs) atMs = historyLastAtMs + 1;
   historyLastAtMs = atMs;
@@ -917,9 +646,6 @@ export function captureSnapshot(label, src, opts) {
   return { id: id, docId: docId, done: done };
 }
 
-/* Queued after the write that succeeded, oldest pending first; stops at the
-   first failure (the store is still refusing — no point hammering it).
-   Called from inside a job, so it only queues and never awaits. */
 function retryPendingSnapshots() {
   if (historyRetryQueued) return;
   historyRetryQueued = true;
@@ -940,10 +666,6 @@ function retryPendingSnapshots() {
   }, function () { historyRetryQueued = false; return null; });
 }
 
-/* ---- reads and copies ---- */
-
-/* This page's own entries for a document as panel metas, one per id not
-   already in `seen`. */
 function historyLocalMetas(docId, lists, seen) {
   var out = [];
   lists.forEach(function (e) {
@@ -958,22 +680,11 @@ function historyLocalMetas(docId, lists, seen) {
   return out;
 }
 
-/* → {entries, older, olderExpiresAt, backend, persistent, usage, notice}.
-   entries are this document's local ('writing'/'pending') and stored
-   ('stored') snapshots, newest first, one per id. Not queued: a read must
-   not wait behind a slow write, and the local entries already show what is
-   queued. notice (or null) is the one line the panel shows while the store
-   is read-only (#83). */
 export function listDocHistory(docId) {
   docId = normalizeDocId(docId);
-  /* Local entries are read both BEFORE the backend read and after it. A
-     write that commits in between is gone from historyLocal by the time
-     the second read runs, yet may be missing from the backend read that
-     began earlier — reading only once, afterwards, would drop that
-     snapshot from this render. */
+  // Read local entries before and after backend read; commits race
   var localBefore = docId ? historyLocalEntries(docId) : [];
   return resolveHistoryBackend().then(function (backend) {
-    /* the usage line rides on the list's answer (#83 step 4) */
     return backend.list(docId || null).then(null, function () {
       return { entries: [], older: [], olderExpiresAt: null, usage: null };
     }).then(function (listed) {
@@ -1004,8 +715,7 @@ export function listDocHistory(docId) {
   });
 }
 
-/* ({docId?, older?, id}) → {meta, stateJson} | null. Both ids validated
-   here (invariant #38); the Older bucket only through older:true. */
+// Validate both ids here; Older only via older:true (invariant 38)
 export function getHistorySnapshot(q) {
   q = q || {};
   var id = typeof q.id === "string" ? q.id : "";
@@ -1032,18 +742,11 @@ function historyTouchDocument(docId, title) {
   }, null);
 }
 
-/* Called only by syncDocIdentity (02b-doc-id.js), when the docId|home pair
-   changed — not per keystroke, and not from each open path separately. */
 export function historyDocumentChanged() {
   if (S.state && normalizeDocId(S.state.docId)) historyTouchDocument(S.state.docId, S.state.title);
   historyRenderSoon();
 }
 
-/* HISTORY-RENDERER-API copyHistory. Queued, so it sees every push issued
-   before it (those are stored or pending by the time it runs). Copies the
-   stored entries through the backend and this page's pending entries as
-   pending entries of `to`, keeping ids either way — so a second copy is a
-   no-op. Resolves {ok, copied, code?}; never rejects. */
 export function copyHistory(from, to) {
   if (from === HISTORY_OLDER_KEY || to === HISTORY_OLDER_KEY) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
   from = normalizeDocId(from);
@@ -1052,8 +755,7 @@ export function copyHistory(from, to) {
   if (from === to) return Promise.resolve({ ok: true, copied: 0 });
   return enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
-      /* A failed stored copy must not also skip the pending entries below:
-         they are this page's only copy of those snapshots. */
+      // Failed stored copy must not skip pending entries
       return backend.copy(from, to).then(null, function (e) {
         if (window.console) console.error(e);
         return { ok: false, copied: 0, code: "io" };
@@ -1083,34 +785,7 @@ export function copyHistory(from, to) {
   });
 }
 
-/* ---- export (X1: File ▸ Export app data…) ----
-
-   The read path history never needed until now: every existing caller
-   wants one document (list/get) or a write. Export wants EVERY document's
-   history at once — the browser's store answers that from its index
-   (listDocs), and the desktop backend through DESKTOP.historyListDocs(),
-   which main answers from its own store's index. rawDocIds() still returns
-   null on a genuine failure (an old desktop build, a rejected/timed-out
-   call), and exportHistoryAll() turns that into a rejection with a clear
-   code rather than silently exporting an empty bundle.
-
-   IMAGES (#82). A snapshot's state names its images by sha (refsIn,
-   shared/blob-policy.js) and their bytes live in the blob store, not in the
-   snapshot — so an export that carried only stateJson would arrive on the
-   other machine with every picture missing. exportHistoryAll() therefore
-   also returns
-     blobs:        {sha: {mime, b64}} for every sha an exported snapshot
-                   names whose bytes this page could get (the registry's
-                   ensureBytes: memory, then the blob backend — IndexedDB in
-                   a browser, main's <userData>/blobs on the desktop once
-                   that backend is set), each exactly once;
-     missingBlobs: [sha] the ones it could not — listed, never silently
-                   dropped, so the export can say so.
-   Blob bytes count toward HISTORY_EXPORT_CAP_BYTES like snapshot bodies do,
-   each blob once, charged to the newest snapshot that names it. */
 var HISTORY_EXPORT_CAP_BYTES = 200 * 1024 * 1024;
-/* A test-only stand-in for the cap (__historyTest.setExportCap), so a suite
-   can prove blobs count toward it without writing 200 MB. */
 var historyExportCapOverride = null;
 
 function historyExportCap() {
@@ -1123,11 +798,6 @@ function historyExportError(code, message) {
   return e;
 }
 
-/* Every stored snapshot across every document plus Older, newest first,
-   tagged with where it came from (docId, or null for Older). Only metas —
-   bodies are fetched afterwards, and only for what the cap keeps, so a
-   history well past 200 MB does not read every body just to discard most
-   of them. */
 function historyFlattenForExport(docs, olderMetas) {
   var flat = [];
   docs.forEach(function (d) {
@@ -1142,9 +812,6 @@ function historyFlattenForExport(docs, olderMetas) {
   return flat;
 }
 
-/* Applies the 200 MB total cap, newest snapshots first (so what survives a
-   truncated export is always what a user would want back most), then
-   fetches only the bodies that made the cut. */
 function historyAssembleExport(backend, docs, olderMetas) {
   var flat = historyFlattenForExport(docs, olderMetas);
   var total = 0, truncated = false, keep = {};
@@ -1207,14 +874,6 @@ function historyBuildExport(backend, ids) {
   });
 }
 
-/* HISTORY-RENDERER-API exportHistoryAll (X1). Queued through
-   enqueueHistory, so it never reads a document mid-put — but unlike every
-   other job on that queue, this one is allowed to REJECT: a caller needs
-   to tell "no history at all" apart from "this backend cannot enumerate
-   documents" (desktop, today), and enqueueHistory's own contract of never
-   rejecting exists to protect the QUEUE, not this one read. The fallback
-   below is what turns a thrown error back into a rejection for our caller
-   while still leaving the shared chain intact for the next job. */
 export function exportHistoryAll() {
   return enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
@@ -1231,9 +890,6 @@ export function exportHistoryAll() {
   }).then(historyExportAttachBlobs);
 }
 
-/* Cheap test before a JSON.parse: a state that names no image cannot
-   contain any of these (refsIn reads only imageRef, imageValue and
-   <img data-blob>), and nearly every snapshot today names none. */
 var HISTORY_BLOB_HINT_RE = /imageRef|imageValue|data-blob/;
 
 function historyRefsInJson(stateJson) {
@@ -1241,21 +897,11 @@ function historyRefsInJson(stateJson) {
   try { return refsIn(JSON.parse(stateJson)); } catch (e) { return []; }
 }
 
-/* What one blob adds to the file: its bytes as base64, its key and type,
-   and the JSON around them. */
 function historyBlobCost(sha, entry) {
   return sha.length + entry.mime.length + entry.b64.length + 40;
 }
 
-/* The second, image-aware pass of the cap, run AFTER the history job (so
-   reading blobs never holds the history queue). The first pass
-   (historyAssembleExport) picked snapshots by body size alone; this one
-   walks what it kept newest first, charges each snapshot its body plus
-   every image it is the newest snapshot to name, and drops a snapshot
-   whose total would pass the cap (truncated, as before). The newest
-   snapshot is always kept whole, as the first pass keeps it. Never
-   rejects on a blob problem: a sha whose bytes cannot be had goes to
-   missingBlobs, and the snapshot still exports. */
+// Runs after history job; blob reads must not hold queue
 async function historyExportAttachBlobs(out) {
   var cap = historyExportCap();
   var all = [];
@@ -1298,73 +944,10 @@ async function historyExportAttachBlobs(out) {
   return out;
 }
 
-/* ---- import (X2: File ▸ Import app data…) ----
-
-   THE ONLY WRITE PATH for imported history (invariant #49). Everything an
-   app-data file carries — per-document snapshots, the Older bucket, the
-   legacy 'splitpage-snapshots' list (20h-appdata.js normalises that one
-   and hands it in as Older entries) — reaches storage through here and
-   through nothing else, so the rules below hold for every byte of it:
-
-     * MERGE, NEVER REPLACE. Only backend.put (put-if-absent by snapshot id)
-       and backend.importOlder (put-if-absent into Older). Nothing here
-       deletes, and nothing evicts beyond what a put already does on its
-       own (the per-document trim, the over-cap pass, the quota retry).
-     * Every id is validated again here, whatever the caller did: a docId
-       that is not canonical fails that whole document, a snapshot id that
-       does not fit HISTORY_SNAP_ID_RE or a body that is not a string fails
-       that snapshot. The file is untrusted input.
-     * historyLocal is never touched: an imported snapshot is not this
-       page's capture, so it must never become a 'pending' entry held in
-       RAM and retried.
-     * IMAGES FIRST (#82). bundle.blobs ({sha: {mime, b64}}, 20h-appdata.js)
-       is verified and stored durably — the registry's persist(), which
-       resolves only once the blob backend holds the bytes — BEFORE the
-       first history put, so no imported snapshot is ever stored naming an
-       image this machine's store does not already hold. Verification: the
-       key is a sha, the base64 is strict, the bytes are at most
-       HISTORY_IMPORT_BLOB_MAX_BYTES, sniff as PNG/JPEG/GIF/WebP with a
-       readable size (never SVG; the entry's own `mime` is not trusted),
-       and hash to the key. A blob that fails is dropped and reported; the
-       snapshots naming it still import (they show a placeholder, as any
-       snapshot does whose image is gone). A blob no snapshot in the bundle
-       names is ignored — the file is untrusted, and the store is never
-       garbage-collected (#82 D4). No bundle.blobs (every file exported
-       before #82) imports exactly as it always did.
-
-   WHY OLDEST FIRST, AND WHY SOME ARE LEFT OUT. Every put re-stamps atMs to
-   just after the newest snapshot already in its bucket (historyStampAfter,
-   inside shared/history-store.js on both sides of the bridge). Imported oldest first into a document with no local
-   history, each one is already newer than the last, so every original
-   timestamp survives. Into a document that already has NEWER local
-   snapshots, the imported ones are re-stamped after them (their `at` text
-   is kept). Re-stamped snapshots sort as the newest, so the per-document
-   trim would delete genuine local snapshots to make room for older
-   imported ones. So a document only takes the imported snapshots that
-   would rank inside its newest HISTORY_PER_DOC of local ∪ incoming by
-   their ORIGINAL times; the rest are counted as skipped (and as capped).
-
-   Batches of HISTORY_IMPORT_BATCH puts each run as ONE enqueueHistory job,
-   with a macrotask yield between jobs — a big import must not freeze
-   typing, and a capture issued meanwhile slots in between batches instead
-   of waiting behind the whole file.
-
-   → Promise<{docs, added, skipped, failed, older, capped, blobs, code?}>,
-   never rejects. docs counts documents that received at least one
-   snapshot; older counts Older entries added; code is "quota" when storage
-   refused a write — the import stops there, and everything not yet written
-   is counted as failed. blobs is {stored, refused: [key], failed: [sha],
-   ignored}: stored counts images now held durably (already held counts
-   too), refused lists the ones that failed verification, failed the ones
-   the blob store would not take, ignored those no snapshot names. */
 var HISTORY_IMPORT_BATCH = 25;
-/* The largest image an import will store: the desktop blob bridge's own
-   cap (desktop/blob-store.js refuses more), and twice the server's. */
 var HISTORY_IMPORT_BLOB_MAX_BYTES = 16 * 1024 * 1024;
 var HISTORY_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-/* Strict base64 (what historyExportAttachBlobs writes: unwrapped, padded)
-   → bytes, or null. */
 function historyDecodeBase64(b64) {
   if (typeof b64 !== "string" || !HISTORY_BASE64_RE.test(b64)) return null;
   var bin;
@@ -1374,7 +957,6 @@ function historyDecodeBase64(b64) {
   return out;
 }
 
-/* Every sha the bundle's snapshots name, as a set. */
 function historyImportRefs(docs, older) {
   var refs = {};
   function scan(list) {
@@ -1390,7 +972,6 @@ function historyImportRefs(docs, older) {
   return refs;
 }
 
-/* One entry of bundle.blobs → its verified bytes, or a reason it is not. */
 function historyVerifyBlob(sha, entry) {
   if (!isSha256Hex(sha)) return { reason: "not-a-sha" };
   if (!entry || typeof entry !== "object" || typeof entry.b64 !== "string") return { reason: "malformed" };
@@ -1403,9 +984,6 @@ function historyVerifyBlob(sha, entry) {
   return { bytes: bytes };
 }
 
-/* Verifies, registers and persists every referenced blob of the bundle;
-   resolves once persist() has answered — i.e. once every blob that could
-   be stored IS stored durably. Never rejects. */
 async function historyImportBlobs(blobs, refs) {
   var out = { stored: 0, refused: [], failed: [], ignored: 0 };
   if (!blobs || typeof blobs !== "object" || Array.isArray(blobs)) return out;
@@ -1423,7 +1001,6 @@ async function historyImportBlobs(blobs, refs) {
     var rec = intern(v.bytes);
     if (!rec || rec.sha256 !== key) { out.refused.push(key); continue; }
     ready.push(key);
-    /* hashing a large image is real work on this thread; let typing in */
     await historyImportYield();
   }
   if (ready.length) {
@@ -1438,14 +1015,10 @@ function historyImportYield() {
   return new Promise(function (resolve) { setTimeout(resolve, 0); });
 }
 
-/* The browser's store answers 'quota'; main's answers 'enospc' for a full
-   disk. Both mean "stop — nothing later will fit either". */
 function historyImportIsQuota(code) {
   return code === "quota" || code === "enospc";
 }
 
-/* bundle snapshots → [{meta, stateJson}] that can be stored, one per id.
-   Unusable entries count as failed, a repeated id as skipped. */
 function historyImportEntries(list, counts) {
   var out = [], seen = {};
   (Array.isArray(list) ? list : []).forEach(function (s) {
@@ -1473,7 +1046,6 @@ export async function importHistoryBundle(bundle) {
     var docs = Array.isArray(bundle.docs) ? bundle.docs : [];
     var stopped = false;
 
-    /* Images before the history that names them (invariant #49). */
     if (bundle.blobs) result.blobs = await historyImportBlobs(bundle.blobs, historyImportRefs(docs, bundle.older));
 
     for (var d = 0; d < docs.length; d++) {
@@ -1486,9 +1058,6 @@ export async function importHistoryBundle(bundle) {
       if (!entries.length) continue;
       if (stopped) { result.failed += entries.length; continue; }
 
-      /* Read through the queue, so it sees every write issued before it.
-         strict: a desktop list that timed out or failed answers null, not
-         "empty" — null here means "could not read", never "no history". */
       var existing = await enqueueHistory(function (id) {
         return function () {
           return resolveHistoryBackend().then(function (backend) { return backend.list(id, { strict: true }); })
@@ -1498,8 +1067,6 @@ export async function importHistoryBundle(bundle) {
         };
       }(docId), function () { return null; });
       if (existing == null) {
-        /* Cannot tell what is already there — and so cannot tell what a put
-           would push out. Leave this document alone rather than guess. */
         result.failed += entries.length;
         continue;
       }
@@ -1523,11 +1090,10 @@ export async function importHistoryBundle(bundle) {
       keep.sort(historyImportByAtAscending);
 
       var docAdded = 0;
-      var processed = 0;   /* entries of keep that got an answer (or were given up on) */
+      var processed = 0;
       for (var start = 0; start < keep.length && !stopped; start += HISTORY_IMPORT_BATCH) {
         if (start > 0) await historyImportYield();
         var batch = keep.slice(start, start + HISTORY_IMPORT_BATCH);
-        /* done = puts that answered (added + skipped + failed) */
         var progress = { done: 0, added: 0, skipped: 0, failed: 0, quota: false };
         await enqueueHistory(function (id, batch, progress) {
           return function () {
@@ -1549,7 +1115,6 @@ export async function importHistoryBundle(bundle) {
             });
           };
         }(docId, batch, progress), function () {
-          /* a put that threw: whatever it had not reached is not stored */
           return null;
         });
         docAdded += progress.added;
@@ -1557,14 +1122,12 @@ export async function importHistoryBundle(bundle) {
         result.skipped += progress.skipped;
         result.failed += progress.failed;
         if (progress.quota) {
-          /* the refused put and everything after it in this document */
           stopped = true;
           result.code = "quota";
           processed += progress.done;
           result.failed += keep.length - processed;
           processed = keep.length;
         } else {
-          /* a put that threw leaves the rest of its batch unanswered */
           result.failed += batch.length - progress.done;
           processed += batch.length;
         }
@@ -1572,12 +1135,6 @@ export async function importHistoryBundle(bundle) {
 
       if (docAdded) {
         result.docs++;
-        /* A put already stamps the record's title and lastOpenedAt; the touch
-           is how a document with no local history before this import gets
-           the file's own title. A document that already had history keeps
-           its title — the local value wins — so it is touched with none.
-           backend.touch rather than historyTouchDocument(): this runs from a
-           job-issuing loop, and historyTouchDocument queues its own job. */
         var titleForTouch = existing.length ? "" : historyClip(doc.title, 300);
         await enqueueHistory(function (id, t) {
           return function () {
@@ -1614,23 +1171,12 @@ export async function importHistoryBundle(bundle) {
   return result;
 }
 
-/* ---- one-time migration of the shared localStorage list ---- */
-
 function historyLegacyRaw() {
   if (typeof readLegacySnapshotsRaw === "function") return readLegacySnapshotsRaw();
   try { return localStorage.getItem(SNAPSHOT_KEY); } catch (e) { return null; }
 }
 
-/* raw 'splitpage-snapshots' text → [{meta, stateJson}] for the Older
-   bucket, or null when the text is not a JSON array (a corrupt key is
-   never deleted — it may be a newer or older app's data we do not
-   understand). Entries without a state object are skipped: no version of
-   the app could ever restore them.
-
-   An id that does not fit HISTORY_SNAP_ID_RE is re-minted from the entry's
-   own content, never at random: a migration interrupted before the key is
-   removed runs again, and put-if-absent can only dedupe what gets the same
-   id both times. */
+// Corrupt key is never deleted; may be another app version's
 export function normalizeLegacySnapshots(raw) {
   if (typeof raw !== "string") return null;
   var list;
@@ -1668,16 +1214,7 @@ export function normalizeLegacySnapshots(raw) {
 
 var historyMigrationPromise = null;
 
-/* → Promise<{migrated, removedKey}>, never rejects. Re-entrant calls (boot
-   and a 'storage' event at once) share the running promise.
-
-   The key is removed only after the write is confirmed by reading the ids
-   back AND the key re-reads byte-identical to what was migrated. Another
-   tab still running an older build may append to the key mid-migration;
-   then the loop migrates again (put-if-absent keeps it cheap), at most
-   HISTORY_MIGRATION_LOOPS times, and otherwise leaves the key for next
-   time rather than delete a snapshot nobody copied. Nothing happens on
-   the memory backend. */
+// Remove key only after write is read back byte-identical
 export function startHistoryMigration() {
   if (historyMigrationPromise) return historyMigrationPromise;
   var p = runHistoryMigration().then(null, function (e) {
@@ -1697,11 +1234,6 @@ function runHistoryMigration() {
     if (backend.name === "memory") return result;
     if (historyLegacyRaw() == null) return result;
     var loops = 0;
-    /* An Older bucket past its 90 days goes first, as a whole: importing
-       into it would add entries that list() already reports as expired, so
-       the write could never be confirmed and the key would never go. A key
-       that reappears that late (an old build in another tab) starts a
-       fresh bucket with its own 90 days instead. */
     var expirySweep = typeof backend.evict === "function"
       ? enqueueHistory(function () { return backend.evict(Infinity); }, null)
       : Promise.resolve();
@@ -1725,7 +1257,7 @@ function runHistoryMigration() {
           try {
             localStorage.removeItem(SNAPSHOT_KEY);
             result.removedKey = true;
-          } catch (e) { /* storage blocked — try again next launch */ }
+          } catch (e) { }
           historyRenderSoon();
           return result;
         });
@@ -1735,20 +1267,15 @@ function runHistoryMigration() {
   });
 }
 
-/* ---- test hook ---- */
-
 function historyTestBucket(docId) {
   if (docId === HISTORY_OLDER_KEY || docId === "older") return HISTORY_OLDER_KEY;
   return normalizeDocId(docId);
 }
 
-/* The browser store now in use (idb or memory), or null on the desktop. */
 function historyTestStore() {
   return resolveHistoryBackend().then(function (b) { return b.store ? b : null; });
 }
 
-/* Bodies one bucket names that the backend really holds — bodies are
-   shared by content since #83, so this counts distinct shas. */
 function historyTestBodyCount(adapter, bucket) {
   var backend = adapter.store.backend;
   if (!bucket) return Promise.resolve(backend.bodyCount());
@@ -1763,8 +1290,6 @@ function historyTestBodyCount(adapter, bucket) {
   });
 }
 
-/* Closes and forgets this page's IndexedDB backend, then deletes the
-   database. Nothing reopens it until the next history call. */
 function historyDropIdb() {
   var e = historyIdb;
   historyIdb = null;
@@ -1777,8 +1302,6 @@ function historyDropIdb() {
         var req = indexedDB.deleteDatabase("splitpage-history");
         req.onsuccess = finish;
         req.onerror = finish;
-        /* another same-origin page's connection closes itself on
-           versionchange; give it a moment rather than hang the suite */
         req.onblocked = function () { setTimeout(finish, 3000); };
       } catch (x) { finish(); }
     });
@@ -1788,8 +1311,6 @@ function historyDropIdb() {
 function historyResetForTest() {
   historyFault = null;
   releaseDelayedPut();
-  /* A migration still parked on the import gate would hold the queue, and
-     historyIdle() below would never settle. */
   releaseDelayedImport();
   historyImportGateHit = false;
   return historyIdle().then(function () {
@@ -1812,28 +1333,18 @@ function historyResetForTest() {
   }).then(function () { return true; });
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
-  /* One promise chain for every history WRITE in this page. The chain itself
-     never rejects: a job that throws is logged and resolves to its fallback,
-     so one bad job cannot wedge every later snapshot behind it. A job must
-     never await another enqueueHistory() — it would wait on itself. */
+  // Chain never rejects; jobs must not await another enqueueHistory
   historyChain = Promise.resolve();
 
   window.__historyTest = {
     idle: historyIdle,
     backendName: function () { return historyBackendNameNow; },
-    /* 'idb' | 'memory' | null → resolves the backend name now in use */
     forceBackend: function (name) {
       historyForced = name === "idb" || name === "memory" ? name : null;
       if (historyForced === "idb") historyIdbFailed = false;
       return resolveHistoryBackend().then(function (b) { return b.name; });
     },
-    /* absolute ms, or null for the real clock */
-    /* Also forgets the last capture time: after a jump forward and back,
-       captures would otherwise keep future timestamps (last + 1 ms) until
-       the real clock caught up. */
     setNow: function (ms) {
       historyNowOverride = (ms == null || !isFinite(Number(ms))) ? null : Number(ms);
       historyLastAtMs = 0;
@@ -1844,10 +1355,6 @@ export function __init() {
       historyEstimateCache = null;
       return historyCapOverride;
     },
-    /* 'idb-open-fail' | 'quota-once' | 'quota-always' | 'io-always' |
-       'delay-put' | 'delay-import' | 'import-fail' | null. Clearing a
-       fault drains any pending snapshots, the way the next successful
-       write would. */
     injectFault: function (name) {
       var known = ["idb-open-fail", "quota-once", "quota-always", "io-always", "delay-put", "delay-import", "import-fail"];
       if (name == null) {
@@ -1863,11 +1370,7 @@ export function __init() {
       historyFault = known.indexOf(name) !== -1 ? name : null;
       if (historyIdb) historyArmFaults(historyIdb.backend);
       if (historyMem) historyArmFaults(historyMem.backend);
-      /* idb-open-fail only means something to an open that has not happened
-         yet, and boot has usually opened the database already. Drop the
-         backend so the next call really opens — and fails over to memory
-         for the rest of the page, as a real failure would. forceBackend('idb')
-         or resetForTest() undoes it. */
+      // Boot opened db already; drop backend so next call reopens
       if (historyFault === "idb-open-fail") {
         if (historyIdb) historyIdb.backend.close().then(historyNoop, historyNoop);
         historyIdb = null;
@@ -1877,40 +1380,29 @@ export function __init() {
     },
     releaseDelayedPut: releaseDelayedPut,
     releaseDelayedImport: releaseDelayedImport,
-    /* true once a migration has actually stopped on the 'delay-import' gate,
-       so a test can wait for that instead of guessing at a delay. Cleared by
-       re-arming the fault. */
     importGateHit: function () { return historyImportGateHit; },
-    /* stored metas of a document (or 'older'), oldest first */
     listRaw: function (docId) {
       var bucket = historyTestBucket(docId);
       if (!bucket) return Promise.resolve([]);
       return resolveHistoryBackend().then(function (b) { return b.rawList ? b.rawList(bucket) : []; });
     },
-    /* stored bodies one document (or 'older') names, or every body stored */
     bodyCount: function (docId) {
       var bucket = docId == null ? null : historyTestBucket(docId);
       if (docId != null && !bucket) return Promise.resolve(0);
       return historyTestStore().then(function (a) { return a ? historyTestBodyCount(a, bucket) : 0; });
     },
-    /* {docId, title, lastOpenedAt, migratedAt?, expiresAt?, count, bytes}
-       — count and bytes computed from the index — or null */
     docRecord: function (docId) {
       var bucket = historyTestBucket(docId);
       if (!bucket) return Promise.resolve(null);
       return resolveHistoryBackend().then(function (b) { return b.rawDoc ? b.rawDoc(bucket) : null; });
     },
-    /* the browser store's whole index, as plain data (bodies by sha) */
     rawIndex: function () {
       return historyTestStore().then(function (a) { return a ? a.store.rawIndex() : null; });
     },
-    /* {index, bodies} straight from the backend, for comparing two stores */
     inspect: function () {
       return historyTestStore().then(function (a) { return a ? a.store.backend.inspect() : null; });
     },
-    /* getHistorySnapshot itself: {docId?, older?, id} → {meta, stateJson} | null */
     read: getHistorySnapshot,
-    /* this page's not-yet-stored snapshots: [{docId, id, label, status}] */
     pending: function (docId) {
       return historyLocalEntries(docId ? normalizeDocId(docId) || "-" : null, "pending").map(function (e) {
         return { docId: e.docId, id: e.meta.id, label: e.meta.label, status: e.status };
@@ -1918,17 +1410,12 @@ export function __init() {
     },
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
-    /* the panel/toast notice text now, or null */
     notice: function () { var n = historyIdbNotice(); return n ? n.text : null; },
-    /* ms, or null for the real 30 s — how long a desktop bridge call may hang */
     setDesktopTimeout: function (ms) {
       historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
       return historyDesktopTimeoutOverride;
     },
-    /* the X2 write path itself: bundle.history's {docs, older} shape, plus
-       the app-data bundle's blobs */
     importBundle: importHistoryBundle,
-    /* bytes, or null for the real 200 MB — the export cap (#82: blobs count) */
     setExportCap: function (bytes) {
       historyExportCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Math.max(0, Number(bytes));
       return historyExportCapOverride;

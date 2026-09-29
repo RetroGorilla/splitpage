@@ -1,18 +1,3 @@
-/* src/js/03c-history-idb.js — the browser's IndexedDB backend for the one
- * history store (#83), and its v3 upgrade (#100) — over fake-indexeddb (a
- * devDependency, owner decision 5 on #83).
- *
- * fake-indexeddb keeps IndexedDB's auto-commit rule: a transaction with no
- * request pending when a macrotask ends commits, and the next request
- * throws TransactionInactiveError. So the store's contract cases below run
- * against the same kind of strictness the memory backend's strict mode
- * imitates, and they run over BOTH backends: whatever the store promises
- * over memory it must promise over IndexedDB.
- *
- * Every case gets its own IDBFactory, so no case sees another's database.
- * _dom.mjs first: 03c imports 02b-doc-id.js (sha256Bytes), whose module
- * graph expects the globals it installs.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -46,8 +31,6 @@ function req(r) {
   });
 }
 
-/* ---- fixtures ---- */
-
 const BACKENDS = {
   memory: () => createMemoryHistoryBackend({ strict: true, macrotask: (cb) => setImmediate(cb) }),
   idb: () => createIdbHistoryBackend({ indexedDB: new IDBFactory() })
@@ -65,8 +48,6 @@ function storeOver(backend, opts = {}) {
   });
   return { clock, backend, store };
 }
-
-/* ================= the store's contract, over both backends ================= */
 
 for (const [kind, make] of Object.entries(BACKENDS)) {
   const fixture = (opts = {}) => storeOver(make(), opts);
@@ -212,12 +193,10 @@ for (const [kind, make] of Object.entries(BACKENDS)) {
     await store.put(DOC_A, meta("s02", 2), body("kept"));
     await backend.dropBody(sha(body("gone")));
     assert.equal(await store.get(DOC_A, "s01"), null);
-    await store.evict(Infinity);   /* queued behind the heal */
+    await store.evict(Infinity);
     assert.deepEqual(await ids(store, DOC_A), ["s02"]);
   });
 }
-
-/* ================= this backend's own transaction rules ================= */
 
 function idbFixture(opts = {}) {
   const factory = opts.factory || new IDBFactory();
@@ -249,7 +228,8 @@ test("strict tx: a non-tx await inside exclusive() fails the job, as the rule sa
   await backend.open();
   const r = backend.exclusive(async (tx) => {
     await tx.list();
-    await new Promise((resolve) => setTimeout(resolve, 5));   /* a timer: the transaction commits here */
+    // Timer lets the auto-committing transaction commit
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await tx.commit({ [DOC_A]: { title: "", lastOpenedAt: 1, snapshots: [] } }, []);
   });
   await assert.rejects(r, (e) => e.code === "io" && /TransactionInactiveError/.test(e.message));
@@ -279,19 +259,17 @@ test("bodies are put only if absent, and dropped bodies go in the same transacti
     await tx.commit({ [DOC_A]: rec("h1") }, []);
   });
   await backend.exclusive(async (tx) => {
-    await tx.put("h1", "SECOND");          /* same sha: already there, not rewritten */
+    await tx.put("h1", "SECOND");
     assert.equal(await tx.get("h1"), "first");
   });
   assert.equal((await backend.inspect()).bodies.h1, "first");
 
-  /* the index change and the drop fail together */
   backend.failNext("commit", "io", 1);
   await assert.rejects(backend.exclusive(async (tx) => {
     await tx.put("h2", "other");
     await tx.commit({ [DOC_A]: rec("h2") }, ["h1"]);
   }));
   assert.deepEqual(Object.keys((await backend.inspect()).bodies), ["h1"]);
-  /* …and land together */
   await backend.exclusive(async (tx) => {
     await tx.put("h2", "other");
     await tx.commit({ [DOC_A]: rec("h2"), [DOC_B]: null }, ["h1"]);
@@ -302,8 +280,6 @@ test("bodies are put only if absent, and dropped bodies go in the same transacti
   assert.equal(after.index[DOC_A].bucket, undefined, "the key field is not part of the DocRecord");
 });
 
-/* ---- quota: both ways a browser reports it ---- */
-
 function patchBodiesPut(how, times = 1) {
   const orig = IDBObjectStore.prototype.put;
   let left = times;
@@ -311,12 +287,10 @@ function patchBodiesPut(how, times = 1) {
     if (this.name !== "bodies" || left <= 0) return orig.apply(this, args);
     left--;
     if (how === "request") {
-      /* Firefox-like: the request itself fails with QuotaExceededError */
       throw new DOMException("Injected quota", "QuotaExceededError");
     }
-    /* Chromium-like: the request is queued, then the TRANSACTION aborts
-       with QuotaExceededError and the request only sees AbortError */
     const r = orig.apply(this, args);
+    // Chromium-like: transaction aborts, request only sees AbortError
     this.transaction._abort("QuotaExceededError");
     return r;
   };
@@ -348,13 +322,6 @@ for (const how of ["transaction", "request"]) {
   });
 }
 
-/* ---- test-only fixtures: the databases older builds left behind ----
-
-   seedOld(factory, version, {v1, stores}) writes 'splitpage-history' as
-   2.1 (version 1: docs, snapMeta, snapBody, meta — 2.1's openHistoryDb
-   schema) or 3.0.0 (version 2: those four, unless v1 is false, plus index
-   and bodies) laid it out, then puts stores[name]'s rows. Not shipped: the
-   builds that wrote these are what the upgrade has to meet. */
 const V1_STORES = ["docs", "meta", "snapBody", "snapMeta"];
 
 async function seedOld(factory, version, { v1 = true, stores = {} } = {}) {
@@ -382,7 +349,6 @@ async function seedOld(factory, version, { v1 = true, stores = {} } = {}) {
   d.close();
 }
 
-/* {version, stores: {name: every row}} of the database as it is now. */
 async function dump(factory) {
   const d = await req(factory.open(HISTORY_IDB_NAME));
   const names = [...d.objectStoreNames].sort();
@@ -395,8 +361,6 @@ async function dump(factory) {
   return out;
 }
 
-/* v1 rows as 2.1 wrote them: a docs record with its counters, and each
-   snapshot as a snapMeta row plus its snapBody row. */
 function v1Rows(snaps, docs = []) {
   return {
     docs: docs.map((r) => ({ bytes: 0, count: 0, ...r })),
@@ -405,7 +369,6 @@ function v1Rows(snaps, docs = []) {
   };
 }
 
-/* v2 rows as 3.0.0 wrote them: one index record naming its bodies by sha. */
 function v2Rows(bucket, snaps) {
   return {
     index: [{
@@ -425,8 +388,6 @@ const V2_SNAPS = [
   { id: "b01", atMs: 300, text: body("v2-b1") },
   { id: "b02", atMs: 400, text: body("v2-b2") }
 ];
-
-/* ---- the v3 upgrade, from each state a profile can be in ---- */
 
 test("v3 from a finished 3.0.0 move (v2, v1 stores empty): the v1 stores go, v2 history is intact", async () => {
   const factory = new IDBFactory();
@@ -457,7 +418,6 @@ test("v3 from an unfinished 3.0.0 move (v2 with v1 rows left): v1 kept byte for 
   assert.deepEqual(Object.keys(after.stores), ["bodies", "docs", "index", "meta", "snapBody", "snapMeta"]);
   for (const n of V1_STORES) assert.deepEqual(after.stores[n], before.stores[n], n + " unchanged");
 
-  /* v2 reads and writes as usual; the v1 rows are never read (no reader) */
   assert.deepEqual(await ids(store, DOC_B), ["b02", "b01"]);
   assert.deepEqual(await ids(store, DOC_A), [], "v1-only history is not shown");
   assert.equal((await store.put(DOC_A, meta("n01", 900), body("n1"))).stored, true);
@@ -465,7 +425,6 @@ test("v3 from an unfinished 3.0.0 move (v2 with v1 rows left): v1 kept byte for 
   assert.deepEqual(await ids(store, DOC_A), ["n01"]);
   await store.evict(Infinity);
 
-  /* …and never written: still identical after all that, and after a reopen */
   await backend.close();
   const again = idbFixture({ factory });
   await again.backend.open();
@@ -522,10 +481,6 @@ test("v3 from a v2 database with no v1 stores at all (a 3.0.0 fresh profile): no
   assert.deepEqual(await ids(store, DOC_B), ["b02", "b01"]);
 });
 
-/* ---- other tabs, other versions ---- */
-
-/* An older build's connection: 2.1's (v1) and 3.0.0's (v2) both close on
-   versionchange. */
 async function openOld(factory, version, { closes = true } = {}) {
   await seedOld(factory, version);
   const db = await req(factory.open(HISTORY_IDB_NAME, version));
@@ -542,8 +497,6 @@ for (const version of [1, 2]) {
     await backend.open();
     assert.equal(old.seen.versionchange, 1);
     assert.equal(backend.readOnly, false);
-    /* the old build's next open fails with a VersionError: 2.1 then falls
-       back to memory, and 3.0.0 serves the database read-only (below) */
     await assert.rejects(req(factory.open(HISTORY_IDB_NAME, version)), (e) => e.name === "VersionError");
   });
 }
@@ -551,7 +504,6 @@ for (const version of [1, 2]) {
 test("an old connection that will NOT close: this open fails at once with 'io', and a late success is not adopted", async () => {
   const factory = new IDBFactory();
   const old = await openOld(factory, 1, { closes: false });
-  /* the factory as the backend sees it, keeping every open request */
   const opened = [];
   const spy = {
     open: (...args) => { const r = factory.open(...args); opened.push(r); return r; },
@@ -560,12 +512,12 @@ test("an old connection that will NOT close: this open fails at once with 'io', 
   const backend = createIdbHistoryBackend({ indexedDB: spy });
   await assert.rejects(backend.open(), (e) => e.code === "io" && /blocked/.test(e.message));
   assert.equal(old.seen.versionchange, 1);
-  old.db.close();                                  /* the upgrade now completes behind our back */
+  // Upgrade completes behind our back
+  old.db.close();
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(opened.length, 1);
   assert.equal(opened[0].readyState, "done");
   assert.equal(opened[0].result._closePending, true, "the late connection was closed, not adopted");
-  /* a later job opens afresh, at v3 */
   await backend.open();
   assert.equal(opened.length, 2);
   assert.equal(opened[1].result.version, HISTORY_IDB_VERSION);
@@ -575,7 +527,6 @@ test("an old connection that will NOT close: this open fails at once with 'io', 
 test("this connection closes on versionchange; a NEWER database is then served read-only", async () => {
   const { factory, backend, store } = idbFixture();
   await store.put(DOC_A, meta("s01", 1), body("a"));
-  /* a newer build upgrades to v4, keeping index + bodies */
   const v4req = factory.open(HISTORY_IDB_NAME, 4);
   v4req.onupgradeneeded = () => { v4req.result.createObjectStore("somethingNew"); };
   const v4 = await req(v4req);
@@ -587,7 +538,6 @@ test("this connection closes on versionchange; a NEWER database is then served r
   assert.equal((await store.get(DOC_A, "s01")).stateJson, body("a"));
   assert.deepEqual(await store.put(DOC_A, meta("s02", 2), body("b")), { stored: false, code: "read-only" });
   assert.equal((await store.usage()).readOnly, true);
-  /* a raw write job is refused too, and nothing changed */
   await assert.rejects(backend.exclusive((tx) => tx.commit({ [DOC_B]: null }, [])), (e) => e.code === "read-only");
 });
 

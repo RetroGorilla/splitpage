@@ -2,22 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- This page is a second privileged origin (splitpage://tabstrip, HANDOFF
-     §3.13 / invariant #43): chrome, not a document. It gets no file, draft
-     or history bridge, so a strict self-only CSP costs nothing and closes
-     off script/style injection even if something upstream of this page were
-     ever compromised. splitpage://tabstrip is listed in default-src (not
-     just self) because navigator.windowControlsOverlay and some Electron
-     internals resolve relative fetches against the scheme+host pair, not
-     bare 'self', on custom protocols. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' splitpage://tabstrip; script-src 'self'; style-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Splitpage tabs</title>
 <link rel="stylesheet" href="tabstrip.css">
 </head>
 <body>
-<!-- tabstrip.js owns everything under #tabstrip; this file supplies no
-     document data and makes no fetches beyond its own two sibling files. -->
 <div id="tabstrip" class="tabstrip" role="tablist" aria-label="Open documents"></div>
 <script src="tabstrip.js"></script>
 </body>

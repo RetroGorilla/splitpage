@@ -1,19 +1,3 @@
-/* desktop/test/fake-google.mjs: a local stand-in for the Google endpoints
- * desktop/google-drive.js talks to — the OAuth token and revoke endpoints and
- * the handful of Drive v3 REST calls the Drive modal uses. Shared by
- * google-drive.test.mjs (plain node) and smoke.mjs (the real app, pointed at
- * it through SPLITPAGE_TEST_GOOGLE_BASE under SPLITPAGE_TEST=1).
- *
- * It is strict where Google is: the token endpoint checks the PKCE verifier
- * against the challenge the auth URL carried, the redirect_uri and client_id
- * against the ones the code was issued for, and a code works once. Drive
- * calls need a live access token. It does not model scopes, quotas or paging
- * beyond one page.
- *
- * approve(authUrl) plays the consent screen: it records a code for that
- * request and returns the loopback callback URL Google would send the
- * browser to. The caller fetches that URL itself — that IS the browser.
- */
 import http from "node:http";
 import crypto from "node:crypto";
 
@@ -23,14 +7,14 @@ export async function startFakeGoogle(opts) {
   const o = opts || {};
   const clientId = o.clientId || "123-fake.apps.googleusercontent.com";
   const clientSecret = o.clientSecret || "fake-secret";
-  const codes = new Map();          // code -> {challenge, redirectUri, used}
-  const refreshTokens = new Map();  // rt -> {revoked}
+  const codes = new Map();
+  const refreshTokens = new Map();
   const accessTokens = new Set();
-  const log = [];                   // every request, method + path (no bodies)
+  const log = [];
   let seq = 0;
   const nextId = () => "f" + (++seq).toString(36).padStart(6, "0") + crypto.randomBytes(3).toString("hex");
 
-  const files = new Map();          // id -> {id,name,mimeType,parents,data?,modifiedTime}
+  const files = new Map();
   const add = (f) => { files.set(f.id, Object.assign({ modifiedTime: new Date().toISOString() }, f)); return f.id; };
   add({ id: "root", name: "My Drive", mimeType: FOLDER_MIME, parents: [] });
   const scriptsId = add({ id: "scriptsFolder01", name: "Scripts", mimeType: FOLDER_MIME, parents: ["root"] });
@@ -77,7 +61,7 @@ export async function startFakeGoogle(opts) {
       if (body.slice(start, start + 2).toString() === "--") break;
       const next = body.indexOf(sep, start);
       if (next === -1) break;
-      const part = body.slice(start + 2, next - 2); // strip leading CRLF and trailing CRLF
+      const part = body.slice(start + 2, next - 2);
       const split = part.indexOf("\r\n\r\n");
       parts.push({ headers: part.slice(0, split).toString(), data: part.slice(split + 4) });
       at = next;
@@ -123,7 +107,6 @@ export async function startFakeGoogle(opts) {
         return json(res, rec ? 200 : 400, rec ? {} : { error: "invalid_token" });
       }
 
-      /* ---- Drive: everything below needs a live access token ---- */
       const auth = /^Bearer (.+)$/.exec(String(req.headers.authorization || ""));
       if (!auth || !accessTokens.has(auth[1])) return json(res, 401, { error: { code: 401, message: "Invalid Credentials" } });
 
@@ -186,8 +169,6 @@ export async function startFakeGoogle(opts) {
     files,
     log,
     ids: { scripts: scriptsId, pilot: pilotId },
-    /* The consent screen. Returns the URL Google would redirect the browser
-       to, with `state` echoed unless overridden. */
     approve(authUrl, override) {
       const a = new URL(authUrl);
       const p = a.searchParams;
@@ -206,7 +187,6 @@ export async function startFakeGoogle(opts) {
       back.searchParams.set("scope", p.get("scope") || "");
       return back.href;
     },
-    /* Every secret this fake has handed out, for "is it on disk?" checks. */
     secrets() { return [...refreshTokens.keys(), ...accessTokens]; },
     isRevoked(rt) { const r = refreshTokens.get(rt); return !!(r && r.revoked); },
     close() { return new Promise((r) => { server.closeAllConnections(); server.close(() => r()); }); }

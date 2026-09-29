@@ -1,9 +1,3 @@
-/* A scene's length set by hand (#179): parseSceneLength and rowSeconds in
- * 01-scene-status.js, the `lengthSeconds` row key through migrateRows, the
- * merge, undo's diff and the two project formats. Setting it from the
- * rail, the totals and the repaint are browser suites 173-scene-length and
- * 174-scene-length-phone.
- */
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -30,8 +24,7 @@ import {
   parseSplitpageFile
 } from "../js/20d-formats.js";
 
-/* wordCount is built by the module's __init() (a memo over contentMemo,
-   07-production-tags.js), and the Markdown writer needs the tag reader */
+// wordCount needs __init(); Markdown writer needs the tag reader
 initTags();
 initSceneStatus();
 
@@ -43,14 +36,11 @@ function withState(s, fn) {
   try { return fn(s); } finally { S.state = was; }
 }
 
-/* 150 words a minute: 10 words is 4 seconds */
 const TEN = "one two three four five six seven eight nine ten";
 
 function doc(rows) {
   return migrateRows({ title: "L", wordsPerMinute: 150, rows });
 }
-
-/* ---- what you can type ---- */
 
 test("the forms Adam signed off: 1:30, 90, 90s, 1m30, 1m 30s", () => {
   assert.equal(parseSceneLength("1:30"), 90);
@@ -87,8 +77,6 @@ test("blank is the estimate, and anything else unreadable is NaN", () => {
     assert.ok(Number.isNaN(parseSceneLength(bad)), "accepted " + JSON.stringify(bad));
   }
 });
-
-/* ---- rowSeconds ---- */
 
 test("with nothing set, a scene's length is its Audio words at the reading speed", () => {
   const s = doc([{ id: "r1", audioText: TEN }]);
@@ -127,8 +115,6 @@ test("the reading speed moves an estimate and never a set length", () => {
   withState(s, () => assert.deepEqual(s.rows.map(rowSeconds), [2, 9]));
 });
 
-/* ---- stored ---- */
-
 test("migrateRows keeps whole seconds from 0 to a day, rounds, and drops the rest", () => {
   assert.equal(normalizeSceneLength(12), 12);
   assert.equal(normalizeSceneLength(12.6), 13);
@@ -145,7 +131,6 @@ test("migrateRows keeps whole seconds from 0 to a day, rounds, and drops the res
   ]);
   assert.equal(s.rows[0].lengthSeconds, 12);
   for (const r of s.rows.slice(1)) assert.ok(!("lengthSeconds" in r), r.id + " kept a length");
-  /* and migrating again changes nothing */
   assert.deepEqual(migrateRows(clone(s)).rows, s.rows);
 });
 
@@ -166,8 +151,6 @@ test(".splitpage and .md both carry it, and read it back", async () => {
   assert.equal(got.rows[0].lengthSeconds, 75);
   assert.ok(!("lengthSeconds" in got.rows[1]));
 });
-
-/* ---- merged ---- */
 
 function three() {
   const base = doc([{ id: "r1", audioText: TEN }, { id: "r2", audioText: "Two." }]);
@@ -222,8 +205,6 @@ test("setting a length is an edit: it outranks the other side's delete", () => {
   mine.rows.splice(0, 1);
   assert.equal(mergeStates(base, mine, theirs).merged.rows[0].lengthSeconds, 12);
 });
-
-/* ---- undone ---- */
 
 test("undo's diff sees it as one rowField step, and the step takes it back and forth", () => {
   const before = doc([{ id: "r1", audioText: TEN }]);

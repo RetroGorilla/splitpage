@@ -43,20 +43,11 @@ import {
   sceneFacts
 } from "./14b-export-kit.js";
 
-/* The swatch in front of a breakdown category (#171): a black circle and a
-   space, drawn in the category's colour. */
 var DOCX_CATEGORY_DOT = "● ";
 
-/* Declared here, assigned in __init() below: these initialisers read the
-   DOM, read storage, or depend on another module's value, so they have to
-   run in fragment order rather than in whatever order the bundle lands in. */
 var STYLES_XML;
 
-/* The export's table style: named so Word lists it, and the id
-   docxToRows finds the export's own script table by (exportTailStart). */
 var EXPORT_TABLE_STYLE_ID = "SplitpageTable";
-
-/* ================= .docx writing ================= */
 
 export function dataUrlToBytes(dataUrl) {
   var comma = dataUrl.indexOf(",");
@@ -67,10 +58,8 @@ export function dataUrlToBytes(dataUrl) {
   return out;
 }
 
-/* A picture's file extension inside a .docx, by the type its bytes are. */
 var DOCX_IMAGE_EXT = { "image/jpeg": "jpeg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
 
-/* read intrinsic pixel size straight out of the JPEG's SOF marker */
 export function jpegSize(bytes) {
   var i = 2;
   while (i < bytes.length - 9) {
@@ -85,25 +74,12 @@ export function jpegSize(bytes) {
   return { w: 800, h: 450 };
 }
 
-/* never divide by a bogus declared width */
 export function safeAspect(dim) {
   var w = dim && dim.w > 0 ? dim.w : 800;
   var h = dim && dim.h > 0 ? dim.h : 450;
   return { w: w, h: h, ratio: h / w };
 }
 
-/* Column widths that actually fit what's in them, instead of a fixed guess
-   — a Notes column full of real prose gets more room than a two-word
-   Status column, whatever the content looks like this run. `mins` is a
-   floor in the SAME character-count units as `longest`, not a twip width —
-   mixing the two would make the floor win every time, since a sane twip
-   minimum (hundreds) always dwarfs a column's actual character count.
-   Each column's weight is its longest cell (header included, so a header
-   alone always fits), clamped so one very long outlier can't starve every
-   other column — at 40 characters, or `maxChars` for a column that wraps
-   well (a list of scene numbers) — and widths are then totalWidth split
-   proportionally to those weights, with the rounding remainder folded into
-   the last column so the grid always sums to exactly totalWidth. */
 function fitColumnWidths(totalWidth, minChars, headers, rowsCells, maxChars) {
   var weights = headers.map(function (h, i) {
     var longest = String(h).length;
@@ -120,22 +96,9 @@ function fitColumnWidths(totalWidth, minChars, headers, rowsCells, maxChars) {
   return widths;
 }
 
-/* A cell's runs come from the document model (#85), not a walk of its
-   HTML: the same text in the same formats, except that neighbours in one
-   format the stored markup happened to keep in separate elements
-   (<strong>a</strong><strong>b</strong>) are one <w:r>, which Word draws
-   exactly as it drew two. */
-/* A stage direction (#167) is its own character style, bracketed by
-   toDocxRuns: italic and grey where Word shows it, and the style name is
-   how docxToRows knows one again when the file is opened. The italic and
-   the colour are also written on the run itself, for a viewer that ignores
-   character styles. opts.directions "omit" leaves them out (a narration
-   export without them). */
 var DIRECTION_STYLE = "SplitpageDirection";
 var DIRECTION_COLOR = "6B6A65";
 
-/* The runs without their directions, one space kept where one stood
-   between two words — toPlainText's "omit", over runs. */
 function omitDirectionRuns(runs) {
   var out = [], gap = false;
   runs.forEach(function (r) {
@@ -160,45 +123,20 @@ function omitDirectionRuns(runs) {
   return out;
 }
 
-/* A sound cue line (#219): its own character style, small and in the
-   Music/SFX colour, as the editor shows it — written on the run too, like
-   a direction's. It is its own line already (a cue is a whole line). A
-   narration export leaves cues out (opts.cues "omit"). */
 var CUE_STYLE = "SplitpageCue";
 var CUE_COLOR = "AB413E";
 var CUE_SIZE = 18;
 
-/* What the script export draws round the words, as the app draws it
-   (#169) — each its own character style, because the style is how
-   docxToRows tells the drawing from the words when the file comes back:
-
-   - a production tag: the words in the category's colour, underlined in
-     it (SplitpageTag). Read back as its plain words.
-   - an open comment's number after its words: a small amber number,
-     raised and boxed like the app's marker (SplitpageMarker). Read back as
-     nothing at all. The words under a comment get a dotted underline,
-     amber while it is open and faint once resolved (the app's own two).
-   - the b-roll key: its own text, small, bold and teal in a teal box —
-     the app's chip (SplitpageBroll). Read back as that text, not bold.
-
-   An underline the export draws (a tag's, a comment's) carries its own
-   colour; an underline the writer typed never does (it takes the text's
-   colour). That is the rule the reader keeps: in a Splitpage export, a
-   coloured underline is drawing, not formatting (colouredUnderline). A
-   run can be a tag under a comment: the tag keeps its colour, the
-   comment takes the underline. */
 var TAG_STYLE = "SplitpageTag";
 var MARKER_STYLE = "SplitpageMarker";
 var BROLL_STYLE = "SplitpageBroll";
 var MARKER_SIZE = 15;
 var BROLL_SIZE = 16;
-/* A thin space either side of a boxed run's words: a character border
-   hugs its glyphs, and these are the box's padding. */
 var CHIP_PAD = String.fromCharCode(0x2009);
 var CHIP_PAD_ENDS = new RegExp("^" + CHIP_PAD + "+|" + CHIP_PAD + "+$", "g");
 var NBSP = String.fromCharCode(0xA0);
 
-/* rPr children in the order the schema (CT_RPr) lists them. */
+// Child order must follow schema CT_RPr
 function rPrXml(p) {
   var out = "";
   if (p.style) out += '<w:rStyle w:val="' + p.style + '"/>';
@@ -220,9 +158,6 @@ function textRunXml(text, p) {
   return "<w:r>" + rPrXml(p || {}) + '<w:t xml:space="preserve">' + xmlEscape(text) + "</w:t></w:r>";
 }
 
-/* An open thread's number after its words, one run per number, boxed and
-   padded like the chip. The run is dropped whole on the way back in, so
-   what is in it never matters. */
 function markerRunsXml(nums) {
   return nums.map(function (n) {
     return textRunXml(CHIP_PAD + n + CHIP_PAD, {
@@ -231,15 +166,6 @@ function markerRunsXml(nums) {
   }).join("");
 }
 
-/* A cell as one paragraph, lines joined by <w:br/>. opts:
-     cues / directions  "omit" — the narration's options
-     annotate           {nums, open} — the script export: draw tags, the
-                        comments' underlines and markers and the b-roll
-                        key (exportRuns); nums is commentNumbers(), open
-                        commentOpenness() (each comment's id: open or not)
-     sz                 the column's size, for runs without their own
-     pPr                the paragraph's properties, as XML
-     lead               a run to start the paragraph with */
 function docxRunsXml(html, rels, opts) {
   opts = opts || {};
   var ann = opts.annotate;
@@ -264,7 +190,6 @@ function docxRunsXml(html, rels, opts) {
       p.color = PRINT_COLORS.broll;
       p.sz = BROLL_SIZE;
       p.bdr = PRINT_COLORS.broll;
-      /* the chip's padding inside its box, which the reader takes off */
       text = CHIP_PAD + text + CHIP_PAD;
     } else if (r.dir) {
       p.style = DIRECTION_STYLE;
@@ -297,8 +222,6 @@ function docxRunsXml(html, rels, opts) {
   return out + "</w:p>";
 }
 
-/* One inline picture as a run: `img` is what rels.addImage returned, `id`
-   the drawing's id (unique in the document), cx/cy its size in EMU. */
 function docxDrawingRun(img, id, cx, cy) {
   return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
     '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
@@ -311,12 +234,6 @@ function docxDrawingRun(img, id, cx, cy) {
     '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
 }
 
-/* A scene's video links (#135) as one small paragraph under its pictures:
-   "▶ " and each link — a web address as a hyperlink showing it, without
-   its "https://www." as the app shows it ("youtube.com/watch?v=…", which
-   fits the column where the whole address broke over two lines), a video
-   file by its name. docxVideoLinksOf (below) is how docxToRows knows it
-   again. */
 var VIDEO_LINKS_MARK = "▶ ";
 
 function shortHref(href) {
@@ -339,12 +256,6 @@ function docxVideoLinksXml(links, rels) {
   return out + '</w:p>';
 }
 
-/* A table cell's paragraph written by docxVideoLinksXml, read back as the
-   links it names — null for any other paragraph. Only "▶ " followed by
-   nothing but links and file names separated by " · " counts, each link
-   showing its own address, whole (an export before #169) or without its
-   "https://www." (since); a line of the user's own that happens to start
-   with the mark keeps its words. */
 function docxVideoLinksOf(pEl, linkMap) {
   var html = docxParaToHtml(pEl, linkMap);
   var text = htmlToPlainText(html);
@@ -364,9 +275,6 @@ function docxVideoLinksOf(pEl, linkMap) {
   return links.length ? links : null;
 }
 
-/* One table cell. opts: span (columns it covers), mar {top, bottom,
-   left, right} in twips (each defaults to the table style's), bottom (a
-   rule under the cell: {sz, color}). */
 function docxCellXml(inner, widthDxa, opts) {
   opts = opts || {};
   var mar = opts.mar || {};
@@ -380,9 +288,6 @@ function docxCellXml(inner, widthDxa, opts) {
     (inner || cellParaXml("")) + "</w:tc>";
 }
 
-/* A cell's paragraph: no space round it unless asked (the cell's margins
-   are the gap). o: keepNext, before, after (twips), jc. The pPr children
-   in the schema's order, as everywhere in this file. */
 function cellParaXml(runs, o) {
   o = o || {};
   return "<w:p><w:pPr>" + (o.keepNext ? "<w:keepNext/>" : "") +
@@ -390,10 +295,6 @@ function cellParaXml(runs, o) {
     (o.jc ? '<w:jc w:val="' + o.jc + '"/>' : "") + "</w:pPr>" + runs + "</w:p>";
 }
 
-/* A left-indented paragraph for plain (already-unformatted) multi-line
-   text — comment bodies and quotes, not the rich row content that
-   docxRunsXml() handles. Each source line becomes its own <w:t>, joined
-   by <w:br/> so line breaks survive instead of collapsing to one line. */
 function docxLineBreakParagraph(text, indentDxa, rPr) {
   var runXml = String(text || "").split(/\r\n|\r|\n/).map(function (line, i) {
     return (i > 0 ? '<w:br/>' : '') + '<w:t xml:space="preserve">' + xmlEscape(line) + '</w:t>';
@@ -402,30 +303,12 @@ function docxLineBreakParagraph(text, indentDxa, rPr) {
     '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + runXml + '</w:r></w:p>';
 }
 
-/* ---- the script table (#169, on paper) ----
-
-   Four columns, as the app lays a scene out: its gutter (the number, the
-   timecode it starts at, its status), Visual, Audio and its read time.
-   Only Visual and Audio are the script. The header row's "Visual" and
-   "Audio" are what mapTableColumns finds them by; "Scene" and "Read" match
-   neither, so those two columns are read past, as the old "No." column
-   always was. Rules across only, no grid: a stronger one under the header
-   (which repeats on every page), a hairline between scenes. Twentieths of
-   a point, inside 1080-twip margins on a Letter page (12240 wide): 10080
-   usable. The gutter's left margin and the read time's right one are
-   nothing, so the scene number lines up under the title and the read
-   times with the right margin. */
 var PAGE_W = 10080;
 var COL_SCENE = 1080, COL_VISUAL = 3880, COL_AUDIO = 4400, COL_READ = 720;
-/* The Visual column a point smaller than the Audio, as the app sets what
-   is seen smaller than what is said; the Audio is the body's 11pt. */
 var VISUAL_SZ = 20;
 var HEAD_SZ = 17;
 var GUTTER_SZ = 16;
 
-/* A status's lamp as Word can print it — a real character, where the PDF
-   has to draw one (STATUS_PRINT / TAG_STATUS_PRINT say which lamp). A
-   returned item gets the return arrow the Production panel shows. */
 var LAMP_CHARS = { outline: "○", fill: "●", half: "◐", check: "✓", ring: "↩" };
 
 function lampRunsXml(status, label, sz) {
@@ -433,8 +316,6 @@ function lampRunsXml(status, label, sz) {
     textRunXml(" " + label, { color: status.lamp === "outline" ? PRINT_COLORS.faint : PRINT_COLORS.dim, sz: sz });
 }
 
-/* The scene's gutter: the number, bold and larger; the timecode it starts
-   at, small and faint; the status, its lamp and its word. */
 function sceneCellXml(f) {
   var st = STATUS_PRINT[f.status.id] || STATUS_PRINT.todo;
   return docxCellXml(
@@ -444,8 +325,6 @@ function sceneCellXml(f) {
     COL_SCENE, { mar: { left: 0 } });
 }
 
-/* The read time at the right edge — boxed when it was set by hand (#179),
-   as the app boxes it. */
 function readCellXml(f) {
   var p = { color: PRINT_COLORS.dim, sz: 18 };
   if (f.readSet) p.bdr = PRINT_COLORS.borderStrong;
@@ -453,7 +332,6 @@ function readCellXml(f) {
     COL_READ, { mar: { right: 0 } });
 }
 
-/* A header row's cell: a small bold word over the stronger rule. */
 var HEAD_RULE_SZ = 8;
 
 function headCellXml(text, width, color, opts) {
@@ -462,14 +340,6 @@ function headCellXml(text, width, color, opts) {
     width, { mar: Object.assign({ top: 0, bottom: 80 }, opts.mar), bottom: { sz: HEAD_RULE_SZ, color: PRINT_COLORS.borderStrong } });
 }
 
-/* A scene short enough to sit whole on a page is never split across two
-   (w:cantSplit) — three lines at the foot of one page and the rest on the
-   next read badly. A longer one is left free to break (never leaving a
-   lone line either side: widow control, styles.xml): kept whole, it
-   would leave a third of a page empty behind it as often as not, and one
-   taller than a page could not be kept whole anyway. Lines are estimated
-   from the words (about 40 characters to a line in either column) and a
-   picture counted as eight. */
 var KEEP_WHOLE_LINES = 10;
 
 function sceneLineEstimate(row) {
@@ -480,21 +350,14 @@ function sceneLineEstimate(row) {
   return Math.max(lines(row.visualText) + pics * 8, lines(row.audioText));
 }
 
-/* Which comments are open, by id: true open, false resolved — for the
-   colour of the underline under their words. */
 function commentOpenness() {
   var out = Object.create(null);
   (S.state.comments || []).forEach(function (c) { if (c && c.id) out[c.id] = !c.resolved; });
   return out;
 }
 
-/* ---- the document's own paragraphs ---- */
-
 var META_STYLE = "SplitpageMeta";
 
-/* The line under the title, and under each appendix heading: small and
-   dim, in a paragraph style only this export writes, which is how
-   docxToRows knows to skip it. */
 function metaParaXml(text) {
   return '<w:p><w:pPr><w:pStyle w:val="' + META_STYLE + '"/></w:pPr>' + textRunXml(text) + "</w:p>";
 }
@@ -503,8 +366,6 @@ function titleParaXml(title) {
   return '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' + textRunXml(title) + "</w:p>";
 }
 
-/* An appendix heading. The first of them starts a page of its own, so the
-   script and what follows it are not run together. */
 function headingParaXml(text, newPage) {
   return '<w:p><w:pPr><w:pStyle w:val="Heading1"/>' + (newPage ? "<w:pageBreakBefore/>" : "") + "</w:pPr>" +
     textRunXml(text) + "</w:p>";
@@ -512,10 +373,6 @@ function headingParaXml(text, newPage) {
 
 function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
-/* A table in the export's own style (SplitpageTable, styles.xml — also
-   how docxToRows knows a Splitpage export's script table: exportTailStart)
-   at its columns' exact widths. The borders are written on the table too,
-   for a viewer that ignores table styles. */
 function tableXml(cols, rowsXml) {
   var width = cols.reduce(function (a, b) { return a + b; }, 0);
   return '<w:tbl><w:tblPr><w:tblStyle w:val="' + EXPORT_TABLE_STYLE_ID + '"/><w:tblW w:w="' + width + '" w:type="dxa"/>' +
@@ -525,8 +382,6 @@ function tableXml(cols, rowsXml) {
     rowsXml + "</w:tbl>";
 }
 
-/* Rules across only: none down the sides or between the columns, a
-   hairline between rows and under the last. */
 function tableBordersXml() {
   var hair = 'w:val="single" w:sz="4" w:space="0" w:color="' + PRINT_COLORS.border + '"';
   return "<w:tblBorders>" +
@@ -534,11 +389,8 @@ function tableBordersXml() {
     '<w:insideH ' + hair + '/><w:insideV w:val="nil"/></w:tblBorders>';
 }
 
-/* The breakdown table's column heads — isBreakdownHeader (below) knows
-   them, and the old export's, so either table is never read as script. */
 var BREAKDOWN_HEAD_WORDS = ["Item", "Status", "Scenes", "Assigned to", "Notes"];
 
-/* "Flagged" for a reshoot, in the app's red (--danger). */
 var FLAG_COLOR = "C4302A";
 var SHOT_INDENT = 400;
 
@@ -550,8 +402,6 @@ export function buildDocx() {
       links.push(href);
       return "rIdL" + links.length;
     },
-    /* Each picture keeps the type it is, named and declared as that type
-       (#82): a PNG used to go in as "imageN.jpeg" under image/jpeg. */
     addImage: function (bytes, mime) {
       var ext = DOCX_IMAGE_EXT[mime] || "jpeg";
       media.push({ bytes: bytes, ext: ext });
@@ -559,20 +409,13 @@ export function buildDocx() {
     }
   };
 
-  /* sha -> the picture's media part and pixel size, or null when its bytes
-     are not here: each ref'd row picture, and each comment picture once
-     written, so a comment showing one of those again reuses its part */
+  // Comment pictures reuse the row picture's media part
   var pictureParts = {};
 
-  /* the title, then one line of what the document is: "30 scenes · 9:44
-     running time · Target 9:00 · 0:44 over · 13 of 30 shot · 26
-     September 2026" */
   var facts = exportFacts();
   var body = titleParaXml(facts.title) + metaParaXml(exportSummaryParts(facts).concat(facts.date).join(" · "));
 
   var rowsXml = "";
-  /* header row, repeated on every page: the words in the column's own
-     colour, as the app heads its columns */
   rowsXml += "<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>" +
     headCellXml("Scene", COL_SCENE, null, { mar: { left: 0 } }) +
     headCellXml("Visual", COL_VISUAL, PRINT_COLORS.visual) +
@@ -582,14 +425,10 @@ export function buildDocx() {
 
   var scenes = sceneFacts();
   var ann = { nums: commentNumbers(), open: commentOpenness() };
-  /* a picture at most the Visual column's width inside its margins
-     (twips to EMU is x635) */
   var maxW = (COL_VISUAL - 200) * 635;
   S.state.rows.forEach(function (row, idx) {
     var visual = "";
-    /* A ref'd picture's bytes are in memory by now: buildFileData
-       (18-local-files.js) awaits ensureBytes before building. One that
-       nobody had is left out, as an unreadable one always was. */
+    // Bytes preloaded by buildFileData; missing ones are skipped
     var pic = rowImage(row) && rowImageBytes(row);
     if (pic) {
       try {
@@ -600,11 +439,8 @@ export function buildDocx() {
         var cy = Math.round(cx * dim.ratio);
         visual += cellParaXml(docxDrawingRun(img, media.length, cx, cy), { after: 80 });
         if (rowImage(row).ref) pictureParts[rowImage(row).ref.sha256] = { rid: img.rid, name: img.name, w: dim.w, h: dim.h };
-      } catch (e) { /* unreadable image — skip it rather than break the export */ }
+      } catch (e) { }
     }
-    /* the rest of the scene's gallery (#135), each picture under the one
-       before it, and its video links as one paragraph of "▶ " links —
-       what docxToRows reads back into the gallery */
     morePictureRefs(row).forEach(function (ref) {
       var more = pictureBytes(ref);
       if (!more) return;
@@ -614,7 +450,7 @@ export function buildDocx() {
         var mcx = Math.round(Math.min(maxW, mdim.w * 9525));
         visual += cellParaXml(docxDrawingRun(mimg, media.length, mcx, Math.round(mcx * mdim.ratio)), { after: 80 });
         pictureParts[ref.sha256] = { rid: mimg.rid, name: mimg.name, w: mdim.w, h: mdim.h };
-      } catch (e) { /* as above */ }
+      } catch (e) { }
     });
     visual += docxVideoLinksXml(rowVideoLinks(row), rels);
     visual += docxRunsXml(row.visualText, rels, { annotate: ann, sz: VISUAL_SZ, pPr: '<w:spacing w:after="0"/>' });
@@ -625,17 +461,7 @@ export function buildDocx() {
   });
 
   body += tableXml([COL_SCENE, COL_VISUAL, COL_AUDIO, COL_READ], rowsXml);
-  /* the first appendix section starts a page of its own */
   var appendix = 0;
-  /* ---- the production breakdown, by category (#169) ----
-
-     As the Production panel groups it: one table, its column heads
-     repeated on every page, and under them a row per category spanning
-     the table — a dot and the category's plural in its colour (#171), a
-     faint count — kept with the first item under it, then the category's
-     items. An item's row never splits across a page (the old export
-     broke "Camera shop" over one). The b-roll shots that need an item
-     (#149) are listed under its notes. */
   var groups = breakdownGroups();
   if (groups.length) {
     var itemCount = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
@@ -645,18 +471,12 @@ export function buildDocx() {
     var bHeaders = BREAKDOWN_HEAD_WORDS;
     var items = [];
     groups.forEach(function (g) { items = items.concat(g.items); });
-    /* floors and caps in characters, not twips — see fitColumnWidths
-       above. A narrow column needs a couple more than its words for the
-       cell's margins: the status's floor fits "● Sourcing" on one line,
-       the owner's "Assigned to". The scenes wrap well and stop at 16. */
     var bMins = [12, 13, 10, 13, 14];
     var bMaxes = [28, 13, 16, 18, 40];
     var bCellRows = items.map(function (r) {
       return [r.name, "● " + r.statusLabel, r.scenes.join(", "), r.owner,
         r.notes + (r.broll.length ? " B-roll: " + r.broll.join("; ") : "")];
     });
-    /* columns sized to what's actually in them (fitColumnWidths above),
-       not a fixed guess a long Notes column would just wrap badly under */
     var bCols = fitColumnWidths(PAGE_W, bMins, bHeaders, bCellRows, bMaxes);
     var BD_SZ = 19;
     var edge = function (i) {
@@ -668,7 +488,6 @@ export function buildDocx() {
 
     groups.forEach(function (g) {
       var color = g.color || PRINT_COLORS.text;
-      /* keepNext holds the category's head to the item under it */
       bRows += "<w:tr><w:trPr><w:cantSplit/></w:trPr>" +
         docxCellXml(cellParaXml(
           textRunXml(DOCX_CATEGORY_DOT, { color: color, sz: 20 }) +
@@ -689,7 +508,6 @@ export function buildDocx() {
           cellParaXml(textRunXml(r.owner, { color: PRINT_COLORS.dim, sz: BD_SZ })),
           notes
         ];
-        /* a list, set a little closer than the script's scenes */
         bRows += "<w:tr><w:trPr><w:cantSplit/></w:trPr>" + cells.map(function (inner, i) {
           return docxCellXml(inner, bCols[i], { mar: Object.assign({ top: 70, bottom: 90 }, edge(i)) });
         }).join("") + "</w:tr>";
@@ -699,13 +517,6 @@ export function buildDocx() {
     body += tableXml(bCols, bRows);
   }
 
-  /* ---- the b-roll shot list (#149), by scene ----
-
-     As the B-roll panel lists it: each scene's head — "Scene 04", the
-     timecode it starts at, and how many of its shots are shot at the right
-     — then each shot with its box, ticked in teal once shot, and under it
-     where, who, the props it needs and whether it is flagged for a
-     reshoot. Read without writing (exportBrollScenes). */
   var shots = exportBrollScenes();
   if (shots.length) {
     body += headingParaXml("B-roll shot list", !appendix++) + metaParaXml(brollSummaryText(shots));
@@ -740,7 +551,6 @@ export function buildDocx() {
     });
   }
 
-  /* ---- the comments, numbered as the script's markers are ---- */
   var comments = exportComments({ pieces: true });
   if (comments.length) {
     var openCount = comments.filter(function (c) { return !c.resolved; }).length;
@@ -748,18 +558,7 @@ export function buildDocx() {
       metaParaXml([openCount ? openCount + " open" : "", comments.length - openCount ? (comments.length - openCount) + " resolved" : ""]
         .filter(Boolean).join(" · "));
 
-    /* Pictures in comments and replies (#82 P6 keeps them in the body as
-       <img data-blob>; commentEntries' pieces name them by sha). Each is a
-       paragraph of its own at its body's indent, in the order the body has
-       it — sized as the PDF sizes them: at most CIMG_MAXW of what is left
-       of the text column beside the indent and CIMG_MAXH tall, aspect kept,
-       and never larger than its own pixels at 96 dpi, so a small picture
-       stays small. Each is embedded as the type it is, like a row's; the
-       same picture twice — or one a row already shows — is one media
-       part (pictureParts). One whose bytes are not here
-       (buildFileData has already fetched every one it could) is an italic
-       "[image unavailable]" in its place. */
-    var CIMG_MAXW = 0.6, CIMG_MAXH = 3302000; /* 260pt, in EMU */
+    var CIMG_MAXW = 0.6, CIMG_MAXH = 3302000;
     var drawingId = media.length;
 
     function commentPictureXml(sha, indentDxa) {
@@ -777,7 +576,7 @@ export function buildDocx() {
         pictureParts[sha] = img;
       }
       if (!img) return docxLineBreakParagraph("[image unavailable]", indentDxa, "<w:i/>");
-      /* twips to EMU is x635 */
+      // Twips to EMU is x635
       var scale = Math.min(9525, (10080 - indentDxa) * 635 * CIMG_MAXW / img.w, CIMG_MAXH / img.h);
       var cx = Math.max(1, Math.round(img.w * scale));
       var cy = Math.max(1, Math.round(img.h * scale));
@@ -785,8 +584,6 @@ export function buildDocx() {
         docxDrawingRun(img, ++drawingId, cx, cy) + '</w:p>';
     }
 
-    /* A comment's or reply's body in order. One with no picture is the one
-       paragraph it always was, "(empty)" and all. */
     function commentBodyXml(entry, indentDxa) {
       var pieces = entry.pieces || [];
       if (!pieces.some(function (p) { return p.image; })) {
@@ -797,12 +594,6 @@ export function buildDocx() {
       }).join("");
     }
 
-    /* Each thread headed by its number — white on a filled amber badge,
-       the number its marker in the script carries — then where it is
-       ("Scene 03 · Audio"), who wrote it and when; a resolved one has no
-       number and says who resolved it. The words it is about as a quote
-       under an amber rule (faint once resolved), the body, and each reply
-       indented under its author. */
     comments.forEach(function (c) {
       var head = "";
       if (c.number) {
@@ -834,29 +625,12 @@ export function buildDocx() {
   return packDocx(body, links, media);
 }
 
-/* Everything below the body: page setup, theme, styles, footer,
-   relationships and the zip itself — identical for any .docx this file
-   produces, so the narration export builds its own body and hands it to
-   the same packer rather than growing a second copy of the boilerplate. */
-
-/* A minimal but schema-complete DrawingML theme — the "document theme
-   font" Word actually reads styles.xml's asciiTheme/hAnsiTheme references
-   against. Calibri is Word's own long-standing default, so every Windows
-   and Mac install already has it; only the color scheme is Splitpage's
-   own. fmtScheme's four lists are fixed-size in the OOXML
-   schema (3 entries each) but nothing here ever draws a themed shape, so
-   each entry is the simplest legal one rather than a copy of Word's own
-   gradients. */
 var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Splitpage">' +
   '<a:themeElements>' +
   '<a:clrScheme name="Splitpage">' +
   '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>' +
   '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>' +
-  /* the app's light palette (PRINT_COLORS, TAG_PRINT_COLORS), so Word's
-     theme colours are the ones the document is drawn in: text, the raised
-     grey, then Visual, Audio, B-roll and three of the tag colours —
-     literal here, since this string is built before any module's values */
   '<a:dk2><a:srgbClr val="171613"/></a:dk2>' +
   '<a:lt2><a:srgbClr val="E9E8E4"/></a:lt2>' +
   '<a:accent1><a:srgbClr val="2863AB"/></a:accent1>' +
@@ -869,8 +643,6 @@ var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<a:folHlink><a:srgbClr val="764AA2"/></a:folHlink>' +
   '</a:clrScheme>' +
   '<a:fontScheme name="Splitpage">' +
-  /* Calibri for the headings too: the title and headings are bold, as the
-     app's are, and Calibri Light has no bold of its own to show */
   '<a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>' +
   '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>' +
   '</a:fontScheme>' +
@@ -899,11 +671,6 @@ var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '</a:themeElements>' +
   '</a:theme>';
 
-/* The running footer on every page (#169): the title at the left, "Page 2
-   of 8" at the right — Word's own PAGE and NUMPAGES fields, which it
-   works out as it lays the pages — small and faint over a hairline. A
-   title too long for the line is cut short with an ellipsis rather than
-   wrapped into the page number. */
 var FOOTER_TITLE_MAX = 90;
 
 function footerXml(title) {
@@ -924,11 +691,6 @@ function footerXml(title) {
     "</w:p></w:ftr>";
 }
 
-/* The package's own description of the document — what Word's File ▸
-   Info and the file's properties show: the script's title, Splitpage as
-   its author and the application that made it, and the day it was made.
-   The day, not the second: two exports of the same script are the same
-   bytes (suite 98 holds the Export dialog to the File menu that way). */
 function corePropsXml(title) {
   var d = new Date();
   var day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
@@ -948,9 +710,6 @@ var APP_PROPS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   ' xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
   "<Application>Splitpage</Application></Properties>";
 
-/* Word's current layout rules (compatibility mode 15), so the file opens
-   as a document of today's Word, not in "Compatibility Mode" — a table's
-   edge on the margin, as this export measures it. */
 var SETTINGS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
   '<w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/>' +
@@ -987,8 +746,6 @@ function packDocx(body, links, media) {
       ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"' +
       ' Target="media/image' + (idx + 1) + '.' + m.ext + '"/>';
   });
-  /* jpeg is always declared, as it always was; another type only when a
-     picture of that type is in the package */
   var extraTypes = "";
   ["png", "gif", "webp"].forEach(function (ext) {
     if (media.some(function (m) { return m.ext === ext; })) {
@@ -1035,22 +792,6 @@ function packDocx(body, links, media) {
   return zipWrite(entries);
 }
 
-/* ================= the narration on its own =================
-
-   The audio column lifted back out as an ordinary document: one paragraph
-   per scene, blank line between — which is exactly the shape "Paste a
-   script…" reads back in its paragraph mode, so a narration exported here
-   and re-imported reproduces the same rows it came from.
-
-   The visual column, the breakdown and the comments are all deliberately
-   missing. This is the file you hand to a voice artist, or carry into
-   Word to keep writing, not another copy of the whole script — every
-   other export already is that. */
-
-/* "Include stage directions" (#167), the narration export's one option
-   (the Export dialog, 18c-export-dialog.js): some voice artists want the
-   directions, some want clean copy. On unless switched off — per device,
-   like the remembered format, never in the document. "0" is off. */
 export var NARRATION_DIRECTIONS_KEY = "splitpage-export-directions";
 
 export function narrationIncludesDirections() {
@@ -1061,8 +802,6 @@ export function setNarrationIncludesDirections(on) {
   writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
 }
 
-/* opts.directions: true/false overrides the preference (tests). Sound
-   cues (#219) are never in it: this is what is said, and a cue is not. */
 function narrationTextOpts(opts) {
   var include = opts && typeof opts.directions === "boolean" ? opts.directions : narrationIncludesDirections();
   return include ? { cues: "omit" } : { directions: "omit", cues: "omit" };
@@ -1077,34 +816,12 @@ export function buildNarrationText(opts) {
   var t = narrationTextOpts(opts);
   var out = [S.state.title || "Untitled Script", ""];
   narrationRows(opts).forEach(function (row) {
-    /* A blank line is the separator between scenes in this format, so one
-       *inside* a scene would split it in two on the way back in — the
-       round trip this format exists for, quietly broken by a scene whose
-       narration happened to contain two line breaks in a row. Runs of
-       blank lines collapse to a single break; the scene stays one scene. */
     out.push(toPlainText(cellOf(row.audioText), t).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
   });
   return out.join("\n");
 }
 
-/* The narration .docx for a voice artist: the title, one line of what it
-   is — "Narration · 30 scenes · 1,462 words · about 9:45 at 150 wpm", the
-   read time worked out from the words said at the document's reading
-   speed, which is what a voice artist is asked to hit — then a paragraph
-   per scene at a size and spacing to read aloud from (the Narration
-   paragraph style: 12pt, 1.5 lines, a gap between), each with its scene's
-   number out in the left margin, small and faint, so a director can say
-   "pick up from 14". The number is the scene's number in the script, gaps
-   and all, not a count of the paragraphs.
-
-   The paragraph shape is the round trip: opened again (docxToRows) it is
-   the rows it always was — the title the title, each paragraph a scene.
-   The meta line is a paragraph style only this export writes and the
-   numbers a character style (SplitpageSceneNo), both skipped on the way
-   back in. The number hangs from a negative first-line indent and a tab
-   to the text's own edge — never a table, which would make it a different
-   document to read back. */
 var NARRATION_STYLE = "SplitpageNarration";
 var SCENE_NO_STYLE = "SplitpageSceneNo";
 var SCENE_NO_HANG = 560;
@@ -1137,8 +854,6 @@ export function buildNarrationDocx(opts) {
   return packDocx(body, links, []);
 }
 
-/* ================= .docx reading ================= */
-
 var W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 var R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 var A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
@@ -1149,8 +864,6 @@ function directChildren(el, localName) {
   });
 }
 
-/* Word writes <w:b w:val="0"/> to switch a style's bold OFF — treating the
-   element's mere presence as "on" makes every such run bold. */
 function docxFlag(props, name) {
   if (!props) return false;
   var el = props.getElementsByTagNameNS(W_NS, name)[0];
@@ -1162,33 +875,23 @@ function docxFlag(props, name) {
   return !(v === "0" || v === "false" || v === "none" || v === "off");
 }
 
-/* A run's character style id, lower-cased, or "". */
 function runStyleName(rEl) {
   var props = rEl.getElementsByTagNameNS(W_NS, "rPr")[0];
   var rs = props && props.getElementsByTagNameNS(W_NS, "rStyle")[0];
   return rs ? (rs.getAttributeNS(W_NS, "val") || rs.getAttribute("w:val") || "").toLowerCase() : "";
 }
 
-/* Runs a Splitpage export writes that are no part of the script: an open
-   comment's number after its words (SplitpageMarker) and a narration
-   paragraph's scene number in the margin (SplitpageSceneNo). Dropped
-   whole, wherever they are. */
 function isDroppedRun(rEl) {
   var st = runStyleName(rEl);
   return st === MARKER_STYLE.toLowerCase() || st === SCENE_NO_STYLE.toLowerCase();
 }
 
-/* An underline with a colour of its own. In a Splitpage export that is
-   one the export drew — a tag's, a comment's — never one the writer typed,
-   which the export writes without a colour (docxRunsXml). */
+// Only export-drawn underlines carry colour, never typed ones
 function colouredUnderline(props) {
   var el = props.getElementsByTagNameNS(W_NS, "u")[0];
   return !!el && !!(el.getAttributeNS(W_NS, "color") || el.getAttribute("w:color"));
 }
 
-/* opts.ownExport: the document is one a Splitpage export wrote (docxToRows
-   decides), so a coloured underline is the export's drawing, not the
-   writer's underline. */
 function docxParaToHtml(pEl, linkMap, opts) {
   var html = "";
   var own = !!(opts && opts.ownExport);
@@ -1202,13 +905,9 @@ function docxParaToHtml(pEl, linkMap, opts) {
       u = docxFlag(props, "u");
       s = docxFlag(props, "strike");
       mark = docxFlag(props, "highlight");
-      /* a stage direction a Splitpage export wrote (#167): its style, not
-         its look — the italic that shows it is not the writer's italic */
+      // Style marks a direction, not the writer's italic
       var rsv = runStyleName(rEl);
       if (rsv === DIRECTION_STYLE.toLowerCase()) { dir = true; i = false; }
-      /* the b-roll key's chip: its words as they were, the bold is the
-         chip's (a key carries no formatting of its own), and so is the
-         padding either side of them */
       if (rsv === BROLL_STYLE.toLowerCase()) { b = false; chip = true; }
       if (u && own && colouredUnderline(props)) u = false;
     }
@@ -1246,13 +945,6 @@ function docxParaToHtml(pEl, linkMap, opts) {
   return html;
 }
 
-/* ---- reading a Word document ----
-
-   Real scripts are not one uniform shape: a document typically mixes prose
-   (narration and stage directions) with one or more two-column tables, in a
-   meaningful order. So walk the body in document order and convert BOTH,
-   rather than taking the tables and throwing the prose away. */
-
 function paraStyleName(pEl) {
   var pPr = directChildren(pEl, "pPr")[0];
   if (!pPr) return "";
@@ -1265,9 +957,6 @@ function isHeadingPara(pEl) {
   return /^heading|^title$/.test(paraStyleName(pEl));
 }
 
-/* true when every run carrying text is bold — the usual convention for a
-   stage direction sitting among plain narration. A run the reader drops
-   (a narration's scene number) is no part of the paragraph's text. */
 function isAllBoldPara(pEl) {
   var runs = pEl.getElementsByTagNameNS(W_NS, "r");
   var sawText = false;
@@ -1285,7 +974,6 @@ function isAllBoldPara(pEl) {
   return sawText;
 }
 
-/* Every picture a cell holds, by relationship id, in order. */
 function allEmbedIds(el) {
   return Array.prototype.map.call(el.getElementsByTagNameNS(A_NS, "blip"), function (b) {
     return b.getAttributeNS(R_NS, "embed");
@@ -1300,14 +988,6 @@ function firstEmbedId(el) {
 var VISUAL_HEAD = /^(video|visual|picture|image|shot|shots|action|camera|b-?roll|screen|graphics?)\b/;
 var AUDIO_HEAD = /^(audio|voice|vo|narration|narrator|dialogue|dialog|script|line|lines|copy|speech)\b/;
 
-/* buildDocx()'s own "Production breakdown" table, verbatim — none of its
-   header words match VISUAL_HEAD/AUDIO_HEAD, so without this check
-   mapTableColumns() fell into its no-header fallback and grabbed the
-   first two columns ("Category"/"Item") as if they were Visual/Audio,
-   turning every breakdown row (and the header row itself) into a
-   fabricated scene on reimport. The export's heads since #169 (by
-   category, BREAKDOWN_HEAD_WORDS) and the ones before it, which files
-   already exported still carry. */
 var BREAKDOWN_HEADERS = [
   ["category", "item", "status", "assigned to", "mentions", "scenes", "notes"],
   ["item", "status", "scenes", "assigned to", "notes"]
@@ -1318,31 +998,6 @@ function isBreakdownHeader(head) {
   });
 }
 
-/* ---- where a Splitpage export's script ends ----
-
-   buildDocx() writes the script as one table and then, when the document
-   has them, a "Production breakdown" section (heading + table), a "B-roll
-   shot list" (heading + a paragraph per scene and shot, since #169) and a
-   "Comments" section (heading + a paragraph per comment line, reply and
-   picture). None is script: walked as prose, the headings came back as
-   bold rows, every comment line as a narration row, and a comment's
-   picture as a row picture. The breakdown table itself was already
-   skipped (isBreakdownHeader), its heading was not.
-
-   Recognised structurally, not by the words alone: the section starts at a
-   paragraph in the Heading1 style reading exactly one of the headings
-   buildDocx() writes, AFTER a table in the "SplitpageTable" table style —
-   a style id only this export defines (styles.xml, __init below) and
-   nobody produces by typing. A Word document of the user's own with a
-   "Comments" heading has no such table and imports exactly as it always
-   did. Files Splitpage exported before this check carry the same shape,
-   so they reopen cleanly too.
-
-   The comments are dropped, not rebuilt: the export carries them as
-   plain text with a formatted date and a scene label, not the anchor
-   (row, field, offsets), the formatting or the timestamps a comment
-   record needs, and opening a .docx starts a new document with no
-   comments of its own (issue #7). */
 var EXPORT_TABLE_STYLE = EXPORT_TABLE_STYLE_ID.toLowerCase();
 var EXPORT_SECTION_HEADINGS = ["Production breakdown", "B-roll shot list", "Comments"];
 
@@ -1353,8 +1008,6 @@ function tableStyleName(tblEl) {
   return (st.getAttributeNS(W_NS, "val") || st.getAttribute("w:val") || "").toLowerCase();
 }
 
-/* The index in `blocks` where a Splitpage export's own trailing sections
-   begin, or blocks.length when there are none (any other document). */
 function exportTailStart(blocks) {
   var sawExportTable = false;
   for (var i = 0; i < blocks.length; i++) {
@@ -1369,8 +1022,7 @@ function exportTailStart(blocks) {
   return blocks.length;
 }
 
-/* Work out which columns hold the visual and the audio. Tables in the wild
-   have an extra scene-number column, and put the columns in either order. */
+// Foreign tables may add scene column or swap order
 function mapTableColumns(rowsText) {
   var head = (rowsText[0] || []).map(function (t) { return t.toLowerCase().trim(); });
   if (isBreakdownHeader(head)) return null;
@@ -1378,8 +1030,6 @@ function mapTableColumns(rowsText) {
   var ai = head.findIndex(function (t) { return AUDIO_HEAD.test(t); });
   if (vi !== -1 && ai !== -1 && vi !== ai) return { vi: vi, ai: ai, skipHeader: true };
 
-  /* no usable header — ignore columns that are empty throughout (index
-     columns), then take the first two that carry content, left to right */
   var width = 0;
   rowsText.forEach(function (r) { width = Math.max(width, r.length); });
   var used = [];
@@ -1398,7 +1048,6 @@ export async function docxToRows(file) {
   var xml = new DOMParser().parseFromString(new TextDecoder().decode(docBytes), "application/xml");
   if (xml.getElementsByTagName("parsererror").length) throw new Error("bad-xml");
 
-  /* hyperlink and image targets live in the rels part */
   var linkMap = {}, imageMap = {};
   var relBytes = await zip.get("word/_rels/document.xml.rels");
   if (relBytes) {
@@ -1416,24 +1065,15 @@ export async function docxToRows(file) {
   var blocks = Array.prototype.filter.call(bodyEl.childNodes, function (n) {
     return n.nodeType === 1 && (n.localName === "p" || n.localName === "tbl");
   });
-  /* A document a Splitpage export wrote — its script table in the export's
-     own table style, or the line under its title in the export's own
-     paragraph style (the narration has no table) — draws round the words
-     in ways the reader must not take for formatting (docxParaToHtml). */
   var ownExport = blocks.some(function (n) {
     return n.localName === "tbl" ? tableStyleName(n) === EXPORT_TABLE_STYLE : paraStyleName(n) === META_STYLE.toLowerCase();
   });
   var paraOpts = { ownExport: ownExport };
-  /* a Splitpage export ends at its script: its breakdown, b-roll and
-     comments sections are not rows (exportTailStart above); and the line
-     of what the document is, under its title, is no scene (metaParaXml) */
+  // Export tail sections and meta line are not rows
   blocks = blocks.slice(0, exportTailStart(blocks)).filter(function (n) {
     return !(n.localName === "p" && paraStyleName(n) === META_STYLE.toLowerCase());
   });
 
-  /* Only read bold as "this is a direction" when the document uses it that
-     way — sparingly, among plain paragraphs. In an all-bold document it
-     means nothing. */
   var loose = blocks.filter(function (n) { return n.localName === "p" && !isHeadingPara(n); });
   var withText = loose.filter(function (n) { return htmlToPlainText(docxParaToHtml(n, linkMap, paraOpts)); });
   var boldCount = withText.filter(isAllBoldPara).length;
@@ -1469,8 +1109,7 @@ export async function docxToRows(file) {
         cellHtml.push(tcs.map(function (tc) {
           var parts = [];
           directChildren(tc, "p").forEach(function (pEl) {
-            /* buildDocx's line of a scene's video links (#135) goes
-               back into its gallery, not its words */
+            // Video links belong to the gallery, not words
             var vl = docxVideoLinksOf(pEl, linkMap);
             if (vl) { vl.forEach(function (l) { rowLinks.push(l); }); return; }
             var h = docxParaToHtml(pEl, linkMap, paraOpts);
@@ -1487,8 +1126,6 @@ export async function docxToRows(file) {
       for (var i = mapping.skipHeader ? 1 : 0; i < cellHtml.length; i++) {
         var v = cellHtml[i][mapping.vi] || "";
         var a = cellHtml[i][mapping.ai] || "";
-        /* a picture can sit in either cell — the first is the scene's
-           picture, any after it the rest of its gallery (#135) */
         var targets = [];
         for (var c = 0; c < cellEls[i].length; c++) {
           allEmbedIds(cellEls[i][c]).forEach(function (id) {
@@ -1506,7 +1143,6 @@ export async function docxToRows(file) {
       return;
     }
 
-    /* paragraph */
     var html = docxParaToHtml(node, linkMap, paraOpts);
     var plain = htmlToPlainText(html);
     var embedId = firstEmbedId(node);
@@ -1514,17 +1150,6 @@ export async function docxToRows(file) {
     if (!plain && !target) return;
 
     if (isHeadingPara(node)) {
-      /* a heading at the very top, before anything else has been kept, is
-         the document's title; otherwise headings are section markers
-         worth keeping as their own row. This used to also require there
-         be no MORE than one heading anywhere in the whole document — but
-         buildDocx() always adds a second Heading1 ("Comments" /
-         "Production breakdown") once there's a saved comment or tracked
-         item, which defeated that count on every one of its own exports:
-         the title paragraph became a bogus row. (That appended section is
-         cut off before this walk now — exportTailStart.) Position (nothing kept yet) is
-         the actual invariant the comment above describes — count of
-         headings elsewhere in the document has nothing to do with it. */
       if (title === null && !rows.length && !pending) { title = plain; return; }
       flush();
       rows.push(newRow({ visualText: "<strong>" + html + "</strong>" }));
@@ -1532,7 +1157,6 @@ export async function docxToRows(file) {
     }
 
     if (target) {
-      /* an image paragraph is a visual: attach it to the row being built */
       if (pending && !pending.imageRef && !pending._pendingImage) {
         pending._pendingImage = target;
         if (plain) pending.visualText = pending.visualText ? pending.visualText + "<br>" + html : html;
@@ -1543,7 +1167,6 @@ export async function docxToRows(file) {
       return;
     }
 
-    /* a paragraph wrapped entirely in brackets is a direction by convention */
     var bracketed = /^\s*[[(].*[\])]\s*$/.test(plain) && plain.length < 200;
     if ((boldMeansVisual && isAllBoldPara(node)) || bracketed) {
       flush();
@@ -1551,7 +1174,6 @@ export async function docxToRows(file) {
       return;
     }
 
-    /* narration: fill the direction we are holding, or stand on its own */
     if (pending && !pending.audioText) {
       pending.audioText = html;
       flush();
@@ -1562,19 +1184,16 @@ export async function docxToRows(file) {
   });
   flush();
 
-  /* pull each referenced picture out of the package and inline it */
   async function pictureAt(target) {
     try {
       var path = target.indexOf("/") === 0 ? target.slice(1) : "word/" + target;
       var imgBytes = await zip.get(path);
       if (!imgBytes) return null;
       var raw = bytesToDataUrl(imgBytes, mimeForPath(path));
-      /* JPEG, at most 1000px — what a picture attached by hand becomes
-         too — then into the image registry (#82), named by its record */
       var rec = internDataUrl(await toJpegDataUrl(raw));
       if (rec) queuePersist([rec.sha256]);
       return rec;
-    } catch (e) { return null; }   /* unreadable picture — keep the row, drop the image */
+    } catch (e) { return null; }
   }
   for (var ri = 0; ri < rows.length; ri++) {
     var pendingTarget = rows[ri]._pendingImage;
@@ -1589,7 +1208,6 @@ export async function docxToRows(file) {
       var mrec = await pictureAt(pendingMore[mi]);
       if (mrec) more.push({ imageRef: mrec });
     }
-    /* each video is an item of its own, after the pictures (#135) */
     (pendingLinks || []).forEach(function (l) { more.push({ links: [Object.assign({}, l, { poster: true })] }); });
     if (more.length) rows[ri].moreImages = more;
     rows[ri].audioText = audioDirectionsHtml(rows[ri].audioText);
@@ -1599,17 +1217,6 @@ export async function docxToRows(file) {
   return { title: title, rows: rows, looseText: "" };
 }
 
-/* Stage directions coming in (#167). In the Audio column an inline
-   "((words))" becomes one, and one a Splitpage export wrote (its own
-   character style, read above) loses the brackets the export printed
-   round it. The Visual column has none: a styled one that landed there —
-   a paragraph that was nothing but a direction goes to the Visual column
-   by the bracket rule above — is its words, brackets and all. A cell
-   with neither is left exactly as it was read.
-
-   Sound cues (#219) the same way: in the Audio column a line starting
-   "SFX:" or "Music:" becomes one, as typing it would; in the Visual column
-   it is its words. */
 export function audioDirectionsHtml(html) {
   if (!html) return html;
   var dirs = html.indexOf("((") !== -1 || html.indexOf("stage-dir") !== -1;
@@ -1627,7 +1234,6 @@ function noDirectionsHtml(html) {
   return toHtml(flattenCues(setMark(c, 0, cellLength(c), "dir", false)));
 }
 
-/* re-encode any image to JPEG so every downstream writer can rely on it */
 function toJpegDataUrl(dataUrl) {
   return new Promise(function (resolve) {
     if (!dataUrl) { resolve(null); return; }
@@ -1667,8 +1273,6 @@ function bytesToDataUrl(bytes, mime) {
   return "data:" + mime + ";base64," + btoa(bin);
 }
 
-/* Eval-time work for this module. _entry.js calls every module's __init()
-   in filename order — the order these statements used to run in. */
 export function __init() {
   var C = PRINT_COLORS;
   var font = function (which) {
@@ -1684,13 +1288,6 @@ export function __init() {
       "<w:pPr>" + pPr + "</w:pPr><w:rPr>" + rPr + "</w:rPr></w:style>";
   };
 
-  /* Named styles, as Word's own documents have them: Normal, the title
-     and the appendix headings in the theme's heading font (the theme names
-     Calibri for both, so a writer who changes the document's fonts in Word
-     changes them all), the export's own paragraph and character styles —
-     each how docxToRows tells what the export drew from what was written
-     (docxRunsXml and the reader below) — and the table style, rules across
-     only. Colours are the app's light palette (PRINT_COLORS). */
   STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
     '<w:docDefaults>' +
@@ -1702,25 +1299,19 @@ export function __init() {
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
     paraStyle("Title", "Title", '<w:keepNext/><w:spacing w:after="80" w:line="240" w:lineRule="auto"/>',
       font("major") + '<w:b/><w:sz w:val="40"/><w:szCs w:val="40"/>') +
-    /* the line of what the document is, under the title and the headings */
     paraStyle(META_STYLE, "Document details", '<w:keepNext/><w:spacing w:after="360"/>',
       '<w:color w:val="' + C.dim + '"/><w:sz w:val="18"/><w:szCs w:val="18"/>', true) +
     paraStyle("Heading1", "heading 1", '<w:keepNext/><w:keepLines/><w:spacing w:before="480" w:after="80"/><w:outlineLvl w:val="0"/>',
       font("major") + '<w:b/><w:sz w:val="28"/><w:szCs w:val="28"/>') +
-    /* the narration export's paragraphs: to be read aloud off the page */
     paraStyle(NARRATION_STYLE, "Narration", '<w:spacing w:after="200" w:line="360" w:lineRule="auto"/>',
       '<w:sz w:val="24"/><w:szCs w:val="24"/>', true) +
-    /* a stage direction (#167, docxRunsXml) */
     charStyle(DIRECTION_STYLE, "Stage direction", '<w:i/><w:color w:val="' + DIRECTION_COLOR + '"/>') +
-    /* a sound cue line (#219, docxRunsXml) */
     charStyle(CUE_STYLE, "Sound cue", '<w:color w:val="' + CUE_COLOR + '"/><w:sz w:val="' + CUE_SIZE + '"/>') +
-    /* what the script export draws round the words (docxRunsXml) */
     charStyle(TAG_STYLE, "Production tag", '<w:u w:val="single"/>') +
     charStyle(MARKER_STYLE, "Comment marker", '<w:b/><w:color w:val="' + C.audio + '"/><w:position w:val="6"/>' +
       '<w:sz w:val="' + MARKER_SIZE + '"/><w:bdr w:val="single" w:sz="4" w:space="0" w:color="' + C.audio + '"/>') +
     charStyle(BROLL_STYLE, "B-roll key", '<w:b/><w:color w:val="' + C.broll + '"/><w:sz w:val="' + BROLL_SIZE + '"/>' +
       '<w:bdr w:val="single" w:sz="4" w:space="0" w:color="' + C.broll + '"/>') +
-    /* the narration's scene numbers in the margin */
     charStyle(SCENE_NO_STYLE, "Scene number", '<w:color w:val="' + C.faint + '"/><w:sz w:val="16"/>') +
     '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/>' +
       '<w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/>' +

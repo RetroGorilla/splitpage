@@ -1,26 +1,3 @@
-/* The one home record (_home.js, #73).
- *
- * Where a document lives used to be three globals — docFileHandle,
- * openedFile, serverDoc — zeroed against each other by hand, and a path
- * that forgot one left two homes half-set at once. What is pinned here is
- * the part that makes that impossible, and the one answer everything else
- * reads off it:
- *
- *   - there is always exactly one home, and it starts out "none" without a
- *     page and without any module's __init() having run (#92);
- *   - setHome() replaces the record whole, so nothing of the previous kind
- *     survives a change of home;
- *   - a record carries its own kind's fields and no others — a field name
- *     left over from the old globals throws where it is written instead of
- *     reading back as undefined somewhere else;
- *   - restoreHome() puts back the same object, for the one caller (saveDoc's
- *     undoRetarget) that is compared against by identity;
- *   - autoSaveTarget() (14-export.js) still answers "server" | "file" | null
- *     off it, the contract autoSaveIdleFor keys on (#70).
- *
- * The first block imports _home.js alone and no DOM, on purpose: the module
- * is a leaf, and what a leaf needs to be importable is nothing.
- */
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -101,8 +78,6 @@ test("fileHome and importHome never hand one kind's handle to the other", () => 
 });
 
 test("a field from another kind, or the old globals, throws where it is written", () => {
-  /* docFileHandle.kind was the file's format; on the record `kind` is the
-     tag, and the format is `format`. */
   assert.throws(() => setHome("file", { format: "md", name: "a.md", kind: "md" }), /format is `format`/);
   assert.throws(() => setHome("file", { handle: null, kind: "md" }), /format is `format`/);
   assert.throws(() => setHome("server", { id: "d", handle: null }), /server home has no field "handle"/);
@@ -113,8 +88,7 @@ test("a field from another kind, or the old globals, throws where it is written"
 });
 
 test("a home that would mean nothing is refused rather than stored", () => {
-  /* `{id: null}` used to be how serverDoc said "not on the server". That is
-     "none" now, and nothing else. */
+  // {id: null} once meant "not on server"; now "none"
   assert.throws(() => setHome("server", { id: null }), /needs "id"/);
   assert.throws(() => setHome("server", {}), /needs "id"/);
   assert.throws(() => setHome("file", { name: "a.md" }), /needs "format"/);
@@ -134,8 +108,6 @@ test("restoreHome puts back the same object, not a copy", () => {
 });
 
 test("the record's own facts move in place while the home stays the same", () => {
-  /* A server rev after a PUT, a file's timestamp after a write: the same
-     home, one fact newer. Identity is what an awaiting save checks. */
   const rec = setHome("server", { id: "doc-4", rev: 1 });
   home.rev = 2;
   assert.equal(rec.rev, 2);
@@ -143,9 +115,6 @@ test("the record's own facts move in place while the home stays the same", () =>
   setHome("none");
 });
 
-/* The readers. autoSaveTarget() lives in a module that needs a DOM to
-   import (its neighbours sanitise HTML), so these borrow jsdom — but still
-   no page, and no __init(). */
 test("autoSaveTarget answers server, file or null off the home", async () => {
   await import("./_dom.mjs");
   const { autoSaveTarget } = await import("../js/14-export.js");
@@ -159,20 +128,16 @@ test("autoSaveTarget answers server, file or null off the home", async () => {
   assert.equal(autoSaveTarget(), "server");
   assert.equal(onServerDoc(), true);
 
-  /* a project file with somewhere to write */
   setHome("file", { handle: { name: "a.md" }, format: "md", name: "a.md" });
   assert.equal(autoSaveTarget(), "file");
   assert.equal(onServerDoc(), false);
 
-  /* a plain <input type=file> open: a home, but Save has to ask first */
   setHome("file", { handle: null, format: "md", name: "a.md" });
   assert.equal(autoSaveTarget(), null);
 
-  /* a legacy .html project: its next save opens a picker */
   setHome("file", { handle: { name: "old.html" }, format: "html", name: "old.html" });
   assert.equal(autoSaveTarget(), null);
 
-  /* an imported .docx has a handle, but Save never writes into it */
   setHome("import", { handle: { name: "a.docx", createWritable() {} }, name: "a.docx", format: "docx" });
   assert.equal(autoSaveTarget(), null);
 
