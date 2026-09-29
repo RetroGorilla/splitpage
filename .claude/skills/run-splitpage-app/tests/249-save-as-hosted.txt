@@ -1,0 +1,144 @@
+# Save As from a hosted document is a copy, not a save (#249, saveDoc in
+# 14-export.js).
+#
+# A Save As from a server document deliberately writes a local file and keeps
+# the page on the server document (56-one-home.txt pins the home). What it
+# used to do on success was the rest of a save: it replaced the document's
+# merge baseline with the copy — taking the copy's new id — and cleared the
+# dirty flag and the pending autosave, though no PUT had happened. The editor
+# then called unsaved edits saved, and a later merge measured against a
+# baseline the server never accepted.
+#
+# Driven through the real saveDoc() twice: once by the handle path (the fake
+# desktop backend, 20f-desktop.js, whose native Save dialog hands back a
+# handle) and once by the download path (no backend and no
+# showSaveFilePicker, the way Firefox is, with the file caught at
+# URL.createObjectURL). For each, edits are typed into a hosted document with
+# autosave held pending, and then:
+#
+#   * the hosted baseline, dirty flag, pending autosave and document id are
+#     all exactly as they were — the first Save As and a second one that
+#     forks a new id;
+#   * the copy carries the edits and, for the fork, an id of its own;
+#   * a local document still does what it always did: the copy becomes its
+#     baseline, its id follows the fork and it reads clean.
+#
+# The hosted document is never saved to a server here, so the dirty flag can
+# only be cleared by saveDoc's own success path — which is what is under test.
+
+open
+
+eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.HT=window.__hostedTest; window.A=F.autosave; window.__idOf=function(t){var m=/"docId":\s*"([^"]*)"/.exec(t); return m ? m[1] : null;}; return !!(F && D && HT && A);})()
+expect true
+
+# --- a hosted document with unsaved edits, and its autosave held pending ----
+eval (function(){HT.setSession({docId:'doc-249', rev: 3}); A.timing().idle = 60000; A.timing().max = 60000; window.__hostId = F.docId(); window.__baseJson = JSON.stringify(HT.base()); return true;})()
+expect HT.home().kind === 'server'
+expect HT.dirty() === false
+expect A.target() === 'server'
+caret #rows .row .audio-cell .cell-editable
+type edits nobody has sent
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('nobody has sent') !== -1
+expect HT.dirty() === true
+expect A.pending() === true
+# the edit is in the live document and not in the baseline
+expect JSON.stringify(F.state()).indexOf('nobody has sent') !== -1
+eval (function(){window.__baseJson = JSON.stringify(HT.base()); return window.__baseJson.indexOf('nobody has sent');})()
+expect window.__baseJson.indexOf('nobody has sent') === -1
+
+# --- handle path: the first Save As, no fork yet --------------------------
+eval (function(){var f = D.makeFakeBackend(); var dlg = f.saveFileDialog; f.__picked = []; f.saveFileDialog = function(o){ return dlg.call(f, o).then(function(r){ if (r) f.__picked.push(r.id); return r; }); }; window.fakeH = f; D.setBackend(f); return true;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.fakeH.__picked.length === 1
+expect window.fakeH._text(window.fakeH.__picked[0]).indexOf('nobody has sent') !== -1
+expect HT.home().kind === 'server'
+expect HT.home().id === 'doc-249'
+expect F.docId() === window.__hostId
+expect HT.dirty() === true
+expect A.pending() === true
+expect JSON.stringify(HT.base()) === window.__baseJson
+expect document.getElementById('save-status').textContent === 'Unsaved changes'
+
+# --- handle path: a second Save As forks a new id -------------------------
+# The first one wrote the id out, so this copy gets an id of its own, and the
+# baseline must not take it.
+expect F.writtenOut()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.fakeH.__picked.length === 2
+eval (function(){window.__copyH = window.fakeH._text(window.fakeH.__picked[1]); window.__copyHId = window.__idOf(window.__copyH); return window.__copyHId;})()
+expect /^d[0-9a-f]{32}$/.test(window.__copyHId)
+expect window.__copyHId !== window.__hostId
+expect window.__copyH.indexOf('nobody has sent') !== -1
+expect F.docId() === window.__hostId
+expect HT.base().docId === window.__hostId
+expect JSON.stringify(HT.base()) === window.__baseJson
+expect HT.dirty() === true
+expect A.pending() === true
+expect HT.home().kind === 'server'
+expect F.docFile().kind === null
+
+# --- download path: no backend, no file picker ----------------------------
+eval (function(){D.restoreBackend(); window.__pickerWas = window.showSaveFilePicker; window.showSaveFilePicker = undefined; window.__files=[]; window.__urlWas = URL.createObjectURL; var r=URL.createObjectURL.bind(URL); URL.createObjectURL=function(b){window.__files.push({blob:b,name:null}); return r(b);}; window.__clickWas = HTMLAnchorElement.prototype.click; var c=HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click=function(){ if(this.download){ var f=window.__files[window.__files.length-1]; if(f && !f.name) f.name=this.download; return; } return c.apply(this,arguments); }; return !F.docFile().kind;})()
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.__files.length === 1
+expect /\.md$/.test(window.__files[0].name)
+eval (async function(){ window.__copyD = await window.__files[0].blob.text(); window.__copyDId = window.__idOf(window.__copyD); return window.__copyDId; })()
+expect /^d[0-9a-f]{32}$/.test(window.__copyDId)
+expect window.__copyDId !== window.__hostId
+expect window.__copyDId !== window.__copyHId
+expect window.__copyD.indexOf('nobody has sent') !== -1
+expect F.docId() === window.__hostId
+expect HT.base().docId === window.__hostId
+expect JSON.stringify(HT.base()) === window.__baseJson
+expect HT.dirty() === true
+expect A.pending() === true
+expect HT.home().kind === 'server'
+expect HT.home().id === 'doc-249'
+expect F.docFile().kind === null
+expect document.getElementById('save-status').textContent === 'Unsaved changes'
+
+# --- the edits are still the hosted document's to send --------------------
+# Nothing was lost by the copy: clean only when a real save says so.
+expect JSON.stringify(F.state()).indexOf('nobody has sent') !== -1
+
+# --- a local document keeps today's behaviour: the copy is its baseline ---
+eval (function(){HT.setSession({docId:null}); A.timing().idle = 60000; A.timing().max = 60000; window.__localId = F.docId(); return HT.home().kind;})()
+expect HT.home().kind === 'none'
+caret #rows .row .audio-cell .cell-editable
+type local words
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('local words') !== -1
+expect HT.dirty() === true
+eval (function(){D.setBackend(window.fakeH); window.showSaveFilePicker = window.__pickerWas; window.fakeH.__picked.length = 0; return true;})()
+# handle path (writtenOut is already true, so this one forks)
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.fakeH.__picked.length === 1
+expect F.docId() !== window.__localId
+expect F.docId() === window.__idOf(window.fakeH._text(window.fakeH.__picked[0]))
+expect HT.base().docId === F.docId()
+expect JSON.stringify(HT.base()).indexOf('local words') !== -1
+expect HT.dirty() === false
+expect HT.home().kind === 'file'
+expect F.docFile().kind === 'md'
+expect document.getElementById('save-status').textContent === 'Saved'
+
+# download path, from a local document whose home is a file: the copy is
+# still the baseline and the document reads clean
+eval (function(){D.restoreBackend(); window.showSaveFilePicker = undefined; window.__files.length = 0; window.__localId2 = F.docId(); return true;})()
+caret #rows .row .audio-cell .cell-editable
+type more local words
+eval document.activeElement.blur()
+wait document.querySelector('#rows .row .audio-cell .cell-editable').textContent.indexOf('more local words') !== -1
+expect HT.dirty() === true
+eval (async function(){ await F.save({saveAs: true}); return true; })()
+expect window.__files.length === 1
+eval (async function(){ window.__copyL = await window.__files[0].blob.text(); return window.__idOf(window.__copyL); })()
+expect F.docId() !== window.__localId2
+expect F.docId() === window.__idOf(window.__copyL)
+expect HT.base().docId === F.docId()
+expect JSON.stringify(HT.base()).indexOf('more local words') !== -1
+expect HT.dirty() === false
+
+# --- put the page back the way every other suite boots ---------------------
+eval (function(){window.showSaveFilePicker = window.__pickerWas; URL.createObjectURL = window.__urlWas; HTMLAnchorElement.prototype.click = window.__clickWas; D.restoreBackend(); return true;})()

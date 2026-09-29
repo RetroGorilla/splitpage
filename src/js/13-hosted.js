@@ -52,6 +52,7 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { clearDirty, showToast } from "./12-dirty-toast.js";
+import { scheduleAutoSave } from "./14-export.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -788,12 +789,16 @@ export async function publishToServer() {
     return false;
   }
   var published = cloneState(S.state);
+  // Typing continues during the upload; compare after, like saveToServer (#248)
+  var seqAtPublish = S.editSeq;
   // Fork id if held elsewhere; else shared version history
   var oldId = S.state.docId;
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
   var via = conn;
+  // Another document can be opened mid-POST; home record too, since a local doc has no server id (#247)
+  var homeAtStart = home;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
       return sendWithBlobs(published, function (sending, acceptMissing) {
@@ -804,15 +809,23 @@ export async function publishToServer() {
     });
   } catch (err) { handleApiError(err, "Could not put that on the server"); return false; }
   if (via !== conn) return false;
+  // User moved on: copy stays on server, page untouched; false = no share link (#247)
+  if (S.state.docId !== oldId || home !== homeAtStart) {
+    showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
+      "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
+    return false;
+  }
   setHome("server", { id: body.id, rev: body.rev || 1 });
   setBaseState(published, "publishToServer: what the server just accepted");
-  // Adopt only after server has it; guards concurrent open
-  if (forkDocId && S.state.docId === oldId) {
+  // Adopt only after server has it (the moved-on check above guards concurrent open)
+  if (forkDocId) {
     S.state.docId = forkDocId;
     copyDocHistorySafe(oldId, forkDocId);
   }
   S.docIdWrittenOut = true;
-  clearDirty();
+  // Typed since the snapshot: stay dirty and save to the new home (#248)
+  if (S.editSeq === seqAtPublish) clearDirty();
+  else scheduleAutoSave();
   updateFileChip();
   showToast("Published to the server as “" + (S.state.title || body.id) + "” — collaborators can open it now", "ok");
   return true;

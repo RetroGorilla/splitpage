@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer, connect as netConnect } from "node:net";
 import { request as httpRequest } from "node:http";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
@@ -1854,6 +1854,34 @@ try {
   eq("...but still answers missing", miss.status, 200);
 } finally {
   sBlobRO.stop();
+}
+
+// fetch() won't send a malformed target (#250), so use a raw socket
+function rawRequest(port, text) {
+  return new Promise((resolve) => {
+    const sock = netConnect(port, "127.0.0.1");
+    let got = "";
+    const timer = setTimeout(() => sock.destroy(), 5000);
+    sock.on("connect", () => sock.write(text));
+    sock.on("data", (c) => { got += c; });
+    sock.on("error", () => { /* a reset is an answer of a kind; got says which */ });
+    sock.on("close", () => { clearTimeout(timer); resolve(got); });
+  });
+}
+
+const sBadUrl = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
+try {
+  for (const target of ["http://[", "//["]) {
+    const answer = await rawRequest(sBadUrl.port,
+      "GET " + target + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    check("a request target the URL constructor rejects (" + target + ") is answered 400",
+      /^HTTP\/1\.1 400 /.test(answer), JSON.stringify(answer.slice(0, 60)));
+    // a dead server refuses the connection: a failed check, not a crashed run
+    const health = await fetch(sBadUrl.base + "api/health").catch((err) => ({ status: String(err && err.cause && err.cause.code || err) }));
+    eq("...and the same server still answers health", health.status, 200);
+  }
+} finally {
+  sBadUrl.stop();
 }
 
 console.log("");
