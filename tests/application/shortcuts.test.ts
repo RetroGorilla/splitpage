@@ -35,7 +35,7 @@ test("a key event finds the action that declares it", () => {
   const registry = createActionRegistry();
   registry.register({ id: "hide", label: "Hide", group: "G", keys: ["mod+alt+h"], run: () => {} });
   registry.register({ id: "find", label: "Find", group: "G", keys: ["mod+f"], run: () => {} });
-  assert.equal(actionForKey(registry.shortcuts(), key("f", { ctrl: true })), "find");
-  assert.equal(actionForKey(registry.shortcuts(), key("h", { meta: true, alt: true })), "hide");
+  assert.equal(actionForKey(registry.shortcuts(), key("f", { ctrl: true }))?.id, "find");
+  assert.equal(actionForKey(registry.shortcuts(), key("h", { meta: true, alt: true }))?.id, "hide");
   assert.equal(actionForKey(registry.shortcuts(), key("x", { ctrl: true })), null);
 });

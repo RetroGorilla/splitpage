@@ -13,6 +13,8 @@ export interface ActionDefinition {
   readonly group: string;
   readonly icon?: string;
   readonly keys?: readonly string[];
+  readonly bindKeys?: () => boolean;
+  readonly claimKeys?: boolean;
   readonly words?: string;
   readonly availability?: () => Availability;
   readonly run: (source: ActionSource) => void;
@@ -40,6 +42,7 @@ export type InvokeOutcome =
 export interface KeyedAction {
   readonly id: string;
   readonly keys: readonly string[];
+  readonly claim: boolean;
 }
 
 export interface ActionRegistry {
@@ -93,7 +96,9 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
       return definitions.has(id);
     },
     shortcuts() {
-      return [...definitions.values()].filter((d) => d.keys && d.keys.length).map((d) => ({ id: d.id, keys: d.keys ?? [] }));
+      return [...definitions.values()]
+        .filter((d) => d.keys && d.keys.length && (d.bindKeys ? d.bindKeys() : true))
+        .map((d) => ({ id: d.id, keys: d.keys ?? [], claim: d.claimKeys === true }));
     },
     view(id) {
       const definition = definitions.get(id);

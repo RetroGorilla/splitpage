@@ -9,7 +9,6 @@ import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
-import { writerOpen } from "./19-writer.js";
 import {
   canOpenPrompterInBrowser,
   canOpenPrompterInChromium,
@@ -402,35 +401,8 @@ function onMenuKeydown(e) {
   }
 }
 
-function runMenuItem(action) {
-  var item = document.querySelector('#file-menu [data-file-action="' + action + '"]');
-  if (item && !item.disabled) item.click();
-  return !!item && !item.disabled;
-}
-
 export function modalIsOpen() {
   return !!document.querySelector(".modal-backdrop:not([hidden]), .cmdk-backdrop:not([hidden])");
-}
-
-function onShortcutKeydown(e) {
-  if (e.defaultPrevented || e.isComposing) return;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  if (S.DESKTOP) return;
-  var k = String(e.key || "").toLowerCase();
-  if (k === "s") {
-    e.preventDefault();
-    if (modalIsOpen() || !S.state) return;
-    if (e.shiftKey) runMenuItem("save-as");
-    else {
-      var save = el("btn-save");
-      if (save && !save.disabled) save.click();
-    }
-  } else if (k === "o" && !e.shiftKey) {
-    e.preventDefault();
-    if (modalIsOpen() || S.prompterOpen || writerOpen || !S.state) return;
-    toggleFileMenu(false);
-    runMenuItem("open");
-  }
 }
 
 export function __init() {
@@ -455,7 +427,6 @@ export function __init() {
     });
   }
   window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
-  window.addEventListener("keydown", onShortcutKeydown);
   renderKeyChips(menu);
   var search = el("btn-command");
   if (search && search.parentElement) renderKeyChips(search.parentElement);

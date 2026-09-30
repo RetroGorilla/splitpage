@@ -294,6 +294,7 @@ import {
   armServerDraftResume,
   draftRestorePending
 } from "./20g-drafts.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
@@ -1551,7 +1552,7 @@ function init() {
     markDirty();
   });
 
-  document.getElementById("btn-save").addEventListener("click", function () { saveDoc(); });
+  document.getElementById("btn-save").addEventListener("click", saveFromButton);
   document.getElementById("btn-present").addEventListener("click", function () {
     if (!S.state) { showToast("Still loading…", "warn"); return; }
     openPrompter();
@@ -1727,7 +1728,7 @@ function init() {
     if (expandShotBtn) expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids"));
   });
 
-  document.getElementById("wr-save").addEventListener("click", function () { saveDoc(); });
+  document.getElementById("wr-save").addEventListener("click", saveFromButton);
 
   document.getElementById("wr-size").addEventListener("input", function (e) {
     applyWriterSize(parseInt(e.target.value, 10), true);
@@ -1782,6 +1783,11 @@ function init() {
   }
 
   if (S.DESKTOP && typeof initDesktop === "function") initDesktop();
+}
+
+function saveFromButton() {
+  var outcome = appActions.invoke("save", "button");
+  if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
 }
 
 export function __init() {

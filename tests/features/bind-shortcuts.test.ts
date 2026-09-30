@@ -81,3 +81,13 @@ test("a key a focused control already handled is left alone", () => {
   target.dispatchEvent(keydown({ key: "h", ctrlKey: true, altKey: true }));
   assert.deepEqual(runs, []);
 });
+
+test("a claimed key is kept from the browser even when its action is refused", () => {
+  const registry = createActionRegistry();
+  registry.register({ id: "save", label: "Save", group: "G", keys: ["mod+s"], claimKeys: true, availability: () => ({ enabled: false, reason: "Still loading…" }), run: () => {} });
+  const target = new EventTarget();
+  bindShortcuts(target, registry);
+  const event = keydown({ key: "s", ctrlKey: true });
+  target.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true);
+});

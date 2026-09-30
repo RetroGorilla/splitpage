@@ -52,7 +52,6 @@ import {
   autoSaveHalt,
   exportMetaLine,
   markdownExportImages,
-  saveDoc,
   slugify,
   strBytes,
   toMarkdownDoc,
@@ -756,10 +755,8 @@ export function handleFileMenuAction(action) {
       && action !== "drive-open" && action !== "about") {
     showToast("Still loading…", "warn"); return;
   }
-  if (action === "save-as") saveDoc({ saveAs: true });
-  else if (action === "new") startNewScript();
+  if (action === "new") startNewScript();
   else if (action === "export-again") exportAgain();
-  else if (action === "open") openLocalFile();
   else if (action === "paste") openImportModal();
   else if (action === "gdoc-import") openGdocModal();
   else if (action === "save-back") saveBackToFile();
