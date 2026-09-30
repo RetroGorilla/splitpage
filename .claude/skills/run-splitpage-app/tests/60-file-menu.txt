@@ -189,17 +189,20 @@ expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 
 # --- Ctrl+S, Ctrl+Shift+S and Ctrl+O in the browser -------------------------
-# Each reaches the file picker its button or menu item reaches. The pickers
-# are replaced here so nothing waits on a real one headless cannot drive.
-eval (function(){window.__hits=[];window.showSaveFilePicker=function(){window.__hits.push('save');return Promise.reject(new DOMException('cancelled','AbortError'));};window.showOpenFilePicker=function(){window.__hits.push('open');return Promise.reject(new DOMException('cancelled','AbortError'));};return true;})()
+# Each does what its button or menu item does, told apart by what reaches the
+# file: on a script kept in a file, Ctrl+S writes it in place, Ctrl+Shift+S
+# asks where to put a copy, and Ctrl+O asks for a file to open. The pickers
+# and the file are fakes, so nothing waits on a real one headless cannot drive.
+eval (function(){window.__hits=[];window.showSaveFilePicker=function(){window.__hits.push('save');return Promise.reject(new DOMException('cancelled','AbortError'));};window.showOpenFilePicker=function(){window.__hits.push('open');return Promise.reject(new DOMException('cancelled','AbortError'));};var text=JSON.stringify({schema:2,title:'Kept',rows:[{id:'r1',visualText:'Wide',audioText:'Kept words.',status:'todo'}],comments:[]});window.__mtime=Date.now()-100000;window.__fh={name:'kept.splitpage',createWritable:async function(){window.__hits.push('write');return {write:async function(){},close:async function(){window.__mtime=Date.now();}};},getFile:async function(){return new File([text],'kept.splitpage',{lastModified:window.__mtime});}};return F.openFile(new File([text],'kept.splitpage',{lastModified:window.__mtime}),window.__fh);})()
+wait F.docFile().name === 'kept.splitpage'
 caret #rows .row .audio-cell .cell-editable
 key ctrl KeyS
-sleep 300
+sleep 400
 key ctrl+shift KeyS
-sleep 300
+sleep 400
 key ctrl KeyO
-sleep 300
-expect window.__hits.join(',') == save,save,open
+sleep 400
+expect window.__hits.join(',') == write,save,open
 expect document.getElementById('file-menu').hidden
 
 # --- the desktop app: its menu accelerators already send these -------------
