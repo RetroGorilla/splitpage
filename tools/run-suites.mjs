@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,6 +10,12 @@ const IS_WINDOWS = process.platform === "win32";
 const LOG_LIMIT = 2 * 1024 * 1024;
 const LINE_LIMIT = 4096;
 const PORT_STRIDE = 10;
+const HTTP_BASE = 18100;
+const CDP_BASE = 19300;
+const PORT_MIN = 1024;
+const PORT_MAX = 65535;
+const TIMEOUT_MAX = 86400;
+const FLAGS = ["lanes", "port-base", "timeout", "suites", "driver", "node"];
 const SUMMARY = /^RESULT: (0|-?[1-9]\d{0,8})\/(0|[1-9]\d{0,8}) checks passed(?: - ([1-9]\d{0,8}) FAILED)?$/;
 
 export const DRAIN_MS = 2000;
@@ -28,18 +35,37 @@ export const EXIT = Object.freeze({ OK: 0, SUITES_FAILED: 1, CONFIG: 2, RUNNER_E
 
 export class ConfigError extends Error {}
 
-function positiveInteger(name, raw, fallback) {
+function wholeNumber(name, raw, fallback, min, max) {
   if (raw === undefined || raw === "") return fallback;
+  if (!/^\d+$/.test(raw)) throw new ConfigError(`${name} must be a whole number, got ${JSON.stringify(raw)}`);
   const n = Number(raw);
-  if (!Number.isInteger(n) || n < 1) throw new ConfigError(`${name} must be a positive integer, got ${JSON.stringify(raw)}`);
+  if (n < min || n > max) throw new ConfigError(`${name} must be from ${min} to ${max}, got ${raw}`);
   return n;
 }
 
-function nonNegativeInteger(name, raw, fallback) {
-  if (raw === undefined || raw === "") return fallback;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) throw new ConfigError(`${name} must be a non-negative integer, got ${JSON.stringify(raw)}`);
-  return n;
+const PORT_LABEL = { http: "HTTP port", cdp: "CDP port", reserve: "reservation port" };
+
+export function portPlan(portBase, lanes) {
+  const highest = CDP_BASE + portBase + (lanes - 1) * PORT_STRIDE;
+  if (highest > PORT_MAX) {
+    throw new ConfigError(`--port-base ${portBase} with ${lanes} lanes needs ports up to ${highest}; the highest port is ${PORT_MAX}`);
+  }
+  const owners = new Map();
+  const plan = [];
+  for (let lane = 0; lane < lanes; lane++) {
+    const http = HTTP_BASE + portBase + lane * PORT_STRIDE;
+    const entry = { lane, http, cdp: CDP_BASE + portBase + lane * PORT_STRIDE, reserve: http + 1 };
+    for (const kind of ["http", "cdp", "reserve"]) {
+      const port = entry[kind];
+      const label = `lane ${lane}'s ${PORT_LABEL[kind]}`;
+      if (port < PORT_MIN || port > PORT_MAX) throw new ConfigError(`${label} would be ${port}, outside ${PORT_MIN}-${PORT_MAX}`);
+      const other = owners.get(port);
+      if (other) throw new ConfigError(`port ${port} would be both ${other} and ${label}; use fewer --lanes`);
+      owners.set(port, label);
+    }
+    plan.push(entry);
+  }
+  return plan;
 }
 
 export function parseArgs(argv, env = {}) {
@@ -47,15 +73,24 @@ export function parseArgs(argv, env = {}) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const value = argv[i + 1];
-      if (value === undefined || value.startsWith("--")) throw new ConfigError(`--${key} needs a value`);
-      flags[key] = value;
-      i++;
-    } else {
-      positional.push(a);
+    if (a === "--") { positional.push(...argv.slice(i + 1)); break; }
+    if (!a.startsWith("-")) { positional.push(a); continue; }
+    const eq = a.indexOf("=");
+    const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
+    if (!a.startsWith("--") || !FLAGS.includes(key)) {
+      throw new ConfigError(`unknown option ${eq === -1 ? a : a.slice(0, eq)}; the options are ${FLAGS.map((f) => "--" + f).join(", ")}`);
     }
+    if (Object.hasOwn(flags, key)) throw new ConfigError(`--${key} was given twice`);
+    let value;
+    if (eq === -1) {
+      value = argv[i + 1];
+      i++;
+      if (value !== undefined && value.startsWith("--")) value = undefined;
+    } else {
+      value = a.slice(eq + 1);
+    }
+    if (value === undefined || value === "") throw new ConfigError(`--${key} needs a value`);
+    flags[key] = value;
   }
   if (positional.length > 2) throw new ConfigError(`unexpected argument ${JSON.stringify(positional[2])}`);
   let filter = null;
@@ -63,12 +98,16 @@ export function parseArgs(argv, env = {}) {
     try { filter = new RegExp(positional[1]); }
     catch (e) { throw new ConfigError(`bad suite filter ${JSON.stringify(positional[1])}: ${e.message}`); }
   }
+  const lanes = wholeNumber("--lanes (LANES)", flags.lanes ?? env.LANES, 6, 1, PORT_MAX);
+  const portBase = wholeNumber("--port-base (PORT_BASE)", flags["port-base"] ?? env.PORT_BASE, 0, 0, PORT_MAX);
+  const timeoutSec = wholeNumber("--timeout (SUITE_TIMEOUT)", flags.timeout ?? env.SUITE_TIMEOUT, 600, 1, TIMEOUT_MAX);
   return {
     out: resolve(positional[0] || "../splitpage-runs/latest"),
     filter,
-    lanes: positiveInteger("lanes", flags.lanes ?? env.LANES, 6),
-    portBase: nonNegativeInteger("port-base", flags["port-base"] ?? env.PORT_BASE, 0),
-    timeoutMs: positiveInteger("timeout", flags.timeout ?? env.SUITE_TIMEOUT, 600) * 1000,
+    lanes,
+    portBase,
+    ports: portPlan(portBase, lanes),
+    timeoutMs: timeoutSec * 1000,
     suiteDir: resolve(flags.suites ?? env.SPLITPAGE_SUITE_DIR ?? join(SKILL_DIR, "tests")),
     driver: resolve(flags.driver ?? env.SPLITPAGE_SUITE_DRIVER ?? join(SKILL_DIR, "driver.mjs")),
     node: flags.node ?? env.SPLITPAGE_SUITE_NODE ?? process.execPath
@@ -83,8 +122,8 @@ export function discoverSuites(suiteDir, filter) {
 }
 
 export function driverCommand(config, file, lane) {
-  const port = 18100 + config.portBase + lane * PORT_STRIDE;
-  const cdp = 19300 + config.portBase + lane * PORT_STRIDE;
+  const port = HTTP_BASE + config.portBase + lane * PORT_STRIDE;
+  const cdp = CDP_BASE + config.portBase + lane * PORT_STRIDE;
   return {
     cmd: config.node,
     args: [
@@ -95,6 +134,37 @@ export function driverCommand(config, file, lane) {
       "--shot-dir", join(config.out, "shots")
     ]
   };
+}
+
+function bindPort(port) {
+  return new Promise((resolveBind) => {
+    const server = createServer();
+    server.once("error", (e) => resolveBind({ server: null, code: e.code ?? e.message }));
+    server.listen(port, "127.0.0.1", () => resolveBind({ server, code: null }));
+  });
+}
+
+function closeServer(server) {
+  return new Promise((resolveClose) => server.close(() => resolveClose()));
+}
+
+export async function claimPorts(plan) {
+  const held = [];
+  const busy = [];
+  for (const entry of plan) {
+    for (const kind of ["reserve", "http", "cdp"]) {
+      const { server, code } = await bindPort(entry[kind]);
+      if (!server) { busy.push(`${entry[kind]} (lane ${entry.lane}'s ${PORT_LABEL[kind]}, ${code})`); continue; }
+      if (kind === "reserve") held.push(server);
+      else await closeServer(server);
+    }
+  }
+  const release = () => Promise.all(held.splice(0).map(closeServer));
+  if (busy.length) {
+    await release();
+    throw new ConfigError(`port collision: ${busy.join(", ")} already in use, by another run-suites or something else on this machine; nothing was started. Pick a free block with --port-base`);
+  }
+  return { release };
 }
 
 export function createSummaryScanner() {
@@ -306,32 +376,37 @@ export function exitCodeFor(results) {
 export async function runSuites(config, files, { print = console.log, owned = new Set() } = {}) {
   if (files.length === 0) throw new ConfigError("no suites matched");
   const laneCount = Math.min(config.lanes, files.length);
-  mkdirSync(config.out, { recursive: true });
-  const results = [];
-  let next = 0;
-  let failure = null;
-  async function lane(i) {
-    while (failure === null && next < files.length) {
-      const file = files[next++];
-      const r = await runOne(config, file, i, owned);
-      if (failure !== null) return;
-      writeFileSync(join(config.out, `${file}.log`), r.log);
-      results.push(r);
-      print(`${r.status} ${file} ${r.result}`);
+  const ports = await claimPorts((config.ports ?? portPlan(config.portBase, config.lanes)).slice(0, laneCount));
+  try {
+    mkdirSync(config.out, { recursive: true });
+    const results = [];
+    let next = 0;
+    let failure = null;
+    async function lane(i) {
+      while (failure === null && next < files.length) {
+        const file = files[next++];
+        const r = await runOne(config, file, i, owned);
+        if (failure !== null) return;
+        writeFileSync(join(config.out, `${file}.log`), r.log);
+        results.push(r);
+        print(`${r.status} ${file} ${r.result}`);
+      }
     }
+    const stopAll = (e) => {
+      if (failure === null) failure = e;
+      for (const entry of owned) entry.stop();
+    };
+    await Promise.all(Array.from({ length: laneCount }, (_, i) => lane(i).catch(stopAll)));
+    if (failure !== null) throw failure;
+    const lines = summarize(results);
+    writeFileSync(join(config.out, "summary.txt"), lines.join("\n") + "\n");
+    const failed = lines.filter((l) => !l.startsWith(STATUS.PASS + " "));
+    print(failed.length ? failed.join("\n") : "ALL PASS");
+    print(`${results.length} of ${files.length} suites ran, ${results.length - failed.length} passed`);
+    return { results, exitCode: exitCodeFor(results) };
+  } finally {
+    await ports.release();
   }
-  const stopAll = (e) => {
-    if (failure === null) failure = e;
-    for (const entry of owned) entry.stop();
-  };
-  await Promise.all(Array.from({ length: laneCount }, (_, i) => lane(i).catch(stopAll)));
-  if (failure !== null) throw failure;
-  const lines = summarize(results);
-  writeFileSync(join(config.out, "summary.txt"), lines.join("\n") + "\n");
-  const failed = lines.filter((l) => !l.startsWith(STATUS.PASS + " "));
-  print(failed.length ? failed.join("\n") : "ALL PASS");
-  print(`${results.length} of ${files.length} suites ran, ${results.length - failed.length} passed`);
-  return { results, exitCode: exitCodeFor(results) };
 }
 
 function internalError(e) {
@@ -349,7 +424,11 @@ export async function main(argv, env) {
   try {
     const config = parseArgs(argv, env);
     const files = discoverSuites(config.suiteDir, config.filter);
-    console.log(`${files.length} suites in ${config.suiteDir}, ${config.lanes} lanes, logs in ${config.out}`);
+    if (files.length === 0) throw new ConfigError("no suites matched");
+    if (!existsSync(config.driver)) throw new ConfigError(`driver not found: ${config.driver}`);
+    const laneCount = Math.min(config.lanes, files.length);
+    const first = config.ports[0];
+    console.log(`${files.length} suites in ${config.suiteDir}, ${laneCount} lanes on HTTP ${first?.http}+ and CDP ${first?.cdp}+, logs in ${config.out}`);
     const { exitCode } = await runSuites(config, files, { owned });
     return exitCode;
   } catch (e) {
