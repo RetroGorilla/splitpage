@@ -61,3 +61,32 @@ refuses inline `eslint-disable` directives in the migrated folders and
 
 Supported Node versions are 22 (from 22.22.2) and 24 (from 24.15.0), per
 `package.json`'s `engines`; `.nvmrc` pins the one used locally and in CI.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main` or
+`4.0-development` and every push to either branch. Its jobs call the scripts
+above and nothing else.
+
+| Job | Runs |
+| --- | --- |
+| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width, browser suites 01 and 52 through `tools/run-suites.mjs`; uploads the built app |
+| `node-24` | A clean `npm ci` and `npm run verify` on Node 24 |
+| `gate` | Passes when `checks` and `node-24` passed, or when the change was prose only and both were skipped |
+| `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
+
+`gate` is the one check to mark required in branch protection: a
+prose-only pull request completes it without waiting on the others. Prose
+means Markdown other than `docs/help.md` (the build renders it into the app),
+`.claude/handoff/`, issue templates, `CODEOWNERS` and `LICENSE`.
+
+`.github/workflows/docker.yml` builds and starts both Docker images when a
+Docker build input changes; its path filters list every file the Dockerfile
+copies. `.github/workflows/release.yml` builds the Windows installers from a
+tag.
+
+The full browser regression, the Windows runs and the packaged x64/ARM64
+checks are local milestone and release gates (plan section 4). The
+maintainer's machines are never registered as runners for pull-request
+workflows.
