@@ -13,7 +13,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       label: "Hide shot scenes",
       group: "This document",
       icon: "i-eye-off",
-      keys: ["mod+alt+h"],
+      keys: ["mod+alt+h", "mod+alt+shift+h"],
       words: "collapse done finished filter shot scenes",
       availability: () => availableUnless(["loading", "dialog"], screenNow(), Boolean(hideShotScenes)),
       run: () => { toggleHideShotScenes(); }
@@ -40,7 +40,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       label: "Find & replace",
       group: "This document",
       icon: "i-find",
-      keys: ["mod+f"],
+      keys: ["mod+f", "mod+shift+f", "mod+alt+f", "mod+alt+shift+f"],
       words: "search replace look for",
       availability: () => availableUnless(["loading", "writer", "dialog"], screenNow()),
       run: () => {

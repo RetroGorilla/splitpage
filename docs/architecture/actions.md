@@ -76,10 +76,13 @@ answers `screenNow()` (still loading, Present, the Writer, the tour) and
 file that needs to know something `S` holds asks the bridge, so the day `S`
 goes, one file changes.
 
-The command menu is itself an overlay. While it reads what to list, it asks
+A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
+(`launcher`) are separate blockers, because the shortcuts never treated them
+alike: Save, Save a copy, Open and Export are refused behind the command menu,
+while Find and Hide shot scenes act behind it (Find then takes the focus, and
+the command menu closes). While the command menu reads what to list, it asks
 through `askingFromLauncher()`, so each action is judged as it will be once
-the menu has closed to run it. Any other surface sees the open command menu as
-a dialog: a shortcut other than `mod+k` does nothing behind it. `src/js/_entry.js` registers them and binds the shortcuts after
+the menu has closed to run it. `src/js/_entry.js` registers them and binds the shortcuts after
 every module's `__init`. Registration lives in the entry because `21-events.js`
 is inside the 63-module import cycle, and a migrated file imported from there
 would join it (`npm run check:deps` refuses that).
@@ -98,10 +101,10 @@ File menu path shows the reason as a toast.
 
 | Action id | Surfaces | Old owner |
 | --- | --- | --- |
-| `toggle-hide-shot` | File menu, command menu, `mod+alt+h` | `18-local-files.js` dispatch, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
+| `toggle-hide-shot` | File menu, command menu, `mod+alt+h` (Shift held too, as before) | `18-local-files.js` dispatch, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
 | `toggle-rundown-min` | File menu, command menu, the rundown's own button | `18-local-files.js`, `18d-command-menu.js`, `05f-rundown.js` click listener |
 | `history` | File menu, command menu | `18-local-files.js`, `18d-command-menu.js` |
-| `find` | File menu, command menu, `mod+f` | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
+| `find` | File menu, command menu, `mod+f` (Shift or Alt held too, as before) | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
 | `export` | File menu, command menu, `mod+e` | `18-local-files.js`, `18d-command-menu.js`, an `18c-export-dialog.js` keydown listener |
 | `command-menu` | File menu, header button, `mod+k` (opens and closes) | `18-local-files.js`, `18d-command-menu.js` click and keydown listeners |
 | `save` | Header and Writer Save buttons, command menu, `mod+s`, desktop menu | `21-events.js` button listeners, `18d-command-menu.js` button mirror, an `18b-file-menu.js` keydown listener |
