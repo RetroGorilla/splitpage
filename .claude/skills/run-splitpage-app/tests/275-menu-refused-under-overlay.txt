@@ -1,0 +1,264 @@
+# Menu commands behind a dialog, the writer or Present. The desktop app's
+# native menu items and their accelerators reach the page as one call,
+# D.runMenuCommand (desktop/main.js sendMenuCommand, 20f-desktop.js
+# runDesktopMenuCommand), which clicks the File menu item or the header's
+# Save. Each command is refused under the same things its own shortcut
+# already refused under, with a toast that says why, instead of acting behind
+# them. The file pickers are replaced so nothing waits on a real one.
+# __tidy() starts each section clean, so a command that acted where it should
+# not have fails only its own checks.
+
+open
+viewport 1400 900
+eval (function(){ window.D = window.__desktopTest; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__hide = function () { return localStorage.getItem('splitpage-hide-shot') || '0'; }; window.__run = function (cmd) { D.runMenuCommand(cmd); return true; }; window.__tidy = function () { if (__shown('export-modal')) document.getElementById('export-close').click(); if (__shown('cmdk')) document.getElementById('cmdk-close').click(); if (__shown('findbar')) document.getElementById('find-close').click(); window.__h0 = __hide(); __take(); __toasts(); return true; }; return !!(D && D.runMenuCommand); })()
+
+# --- with nothing open, each command acts -----------------------------------
+eval __tidy()
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+eval __run('save-as')
+sleep 400
+expect __take() === 'save'
+eval __run('open')
+sleep 400
+expect __take() === 'open'
+eval __run('export')
+sleep 300
+expect __shown('export-modal')
+key Escape
+sleep 300
+expect !__shown('export-modal')
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+key Escape
+sleep 200
+expect !__shown('cmdk')
+eval __run('find')
+sleep 300
+expect __shown('findbar')
+jsclick #find-close
+sleep 200
+expect !__shown('findbar')
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() !== window.__h0
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+
+# --- under a dialog: refused, and the toast says why --------------------------
+eval __run('about')
+sleep 300
+expect __shown('about-modal')
+eval __tidy()
+eval __run('save')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('save-as')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+# the File menu item itself, which is what the native item clicks
+jsclick #file-menu [data-file-action="export"]
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+# the header's Save, which the native Save and its Ctrl+S click
+jsclick #btn-save
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+# a command its shortcut never refused still acts
+eval __run('toggle-rundown-min')
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') === '1'
+eval __run('toggle-rundown-min')
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') === '0'
+expect __toasts() === ''
+expect __shown('about-modal')
+jsclick #about-modal .modal-close
+sleep 300
+expect !__shown('about-modal')
+
+# --- the open command menu counts as a dialog for Save, Open and Export ------
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+eval __run('save')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('save-as')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+
+# --- under the writer: Open, Export, Search commands and Find are refused ----
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+eval __tidy()
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the Writer first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the Writer first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the Writer first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the Writer first.'
+eval __tidy()
+# ...and Save, Save a copy and Hide shot scenes still act there
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+eval __run('save-as')
+sleep 400
+expect __take() === 'save'
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() !== window.__h0
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+expect __toasts().indexOf('first.') === -1
+# a dialog over the writer: the writer's own Save button is refused
+eval __run('about')
+sleep 300
+expect __shown('about-modal')
+eval __tidy()
+jsclick #wr-save
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+jsclick #about-modal .modal-close
+sleep 300
+expect !__shown('about-modal')
+eval __tidy()
+jsclick #wr-save
+sleep 400
+expect __take() === 'save'
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+
+# --- under Present: Open, Export and Search commands are refused -------------
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 400
+eval __tidy()
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close Present first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close Present first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close Present first.'
+eval __tidy()
+# ...and Save, Save a copy, Hide shot scenes and Find still act there
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+eval __run('save-as')
+sleep 400
+expect __take() === 'save'
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() !== window.__h0
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+eval __run('find')
+sleep 300
+expect __shown('findbar')
+jsclick #find-close
+sleep 200
+expect __toasts().indexOf('first.') === -1
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 300
+
+# --- during the tour: Search commands is refused -----------------------------
+eval __tidy()
+eval __run('tour')
+sleep 400
+expect __shown('tour-overlay')
+eval __toasts()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Finish or skip the tour first.'
+eval __tidy()
+jsclick #tour-skip
+sleep 300
+expect !__shown('tour-overlay')
+
+# --- with everything closed again, the commands act as before ----------------
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+key Escape
+sleep 200
+eval __run('open')
+sleep 400
+expect __take() === 'open'
+
+# nothing here edited the document
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save
