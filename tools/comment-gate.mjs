@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { REPO, commentsIn, listRepoFiles, lineOf } from "./source-scan.mjs";
-import { configCommentsIn, configKind } from "./config-comments.mjs";
+import { configCommentsIn, configKind, DOCKERFILE_PATH, COMPOSE_PATH } from "./config-comments.mjs";
 
 export const BASELINE_PATH = join(REPO, "tools", "comment-baseline.json");
 
@@ -22,8 +22,8 @@ export const COMMENT_FREE = [
   /^src\/legacy\//,
   /^tests\//,
   /^\.github\//,
-  /(^|\/)Dockerfile[^/]*$/,
-  /(^|\/)docker-compose\.ya?ml$/,
+  DOCKERFILE_PATH,
+  COMPOSE_PATH,
   /^eslint\.config\.mjs$/,
   /\.jsonc?$/
 ];
@@ -125,7 +125,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   try {
     result = checkComments(files, baseline);
   } catch (error) {
-    printError(`comment-gate: FAILED — cannot parse ${error.message}`);
+    printError(`comment-gate: FAILED — ${error.message}`);
     return 1;
   }
   const { added, stale, current } = result;
