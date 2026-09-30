@@ -36,7 +36,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       claimKeys: true,
       words: "store keep write disk",
       availability: () => unless(["loading", "dialog"], buttonAllows("btn-save")),
-      run: () => { void saveDoc(); }
+      run: () => saveDoc()
     }),
     registry.register({
       id: "save-as",
@@ -48,7 +48,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       claimKeys: true,
       words: "save as duplicate copy another file",
       availability: () => unless(["loading", "dialog"], menuItemAvailability("save-as")),
-      run: () => { void saveDoc({ saveAs: true }); }
+      run: () => saveDoc({ saveAs: true })
     }),
     registry.register({
       id: "open",
@@ -60,9 +60,9 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       claimKeys: true,
       words: "load file document project md splitpage docx",
       availability: () => unless(["loading", "dialog", "prompter", "writer"], menuItemAvailability("open")),
-      run: () => {
+      run: async () => {
         if (fileMenuOpen()) toggleFileMenu(false);
-        void openLocalFile();
+        await openLocalFile();
       }
     }),
     registry.register({

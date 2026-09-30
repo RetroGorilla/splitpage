@@ -103,7 +103,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       icon: "i-box",
       words: "backup move desktop app data history bookmarks",
       availability: () => loadedMenuItem("export-app-data"),
-      run: () => { void exportAppData(); }
+      run: () => exportAppData()
     },
     {
       id: "import-app-data",
@@ -112,7 +112,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       icon: "i-box",
       words: "restore move desktop app data history bookmarks",
       availability: () => loadedMenuItem("import-app-data"),
-      run: () => { void openImportAppData(); }
+      run: () => { openImportAppData(); }
     }
   ];
   const disposers = definitions.map((d) => registry.register(d));

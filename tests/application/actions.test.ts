@@ -47,6 +47,26 @@ test("a throwing action reaches the reporting boundary and fails", () => {
   assert.deepEqual(reported, [["a", "boom"]]);
 });
 
+test("an action whose promise rejects reaches the reporting boundary", async () => {
+  const reported: unknown[] = [];
+  const registry = createActionRegistry({ report: (error, id) => { reported.push([id, (error as Error).message]); } });
+  registry.register({ id: "save", label: "Save", group: "G", run: () => Promise.reject(new Error("disk full")) });
+  assert.deepEqual(registry.invoke("save", "shortcut"), { kind: "ran", id: "save" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(reported, [["save", "disk full"]]);
+});
+
+test("an action whose promise resolves reports nothing", async () => {
+  const reported: unknown[] = [];
+  const registry = createActionRegistry({ report: (error) => { reported.push(error); } });
+  let finished = false;
+  registry.register({ id: "open", label: "Open", group: "G", run: async () => { await Promise.resolve(); finished = true; } });
+  assert.equal(registry.invoke("open", "menu").kind, "ran");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(finished, true);
+  assert.deepEqual(reported, []);
+});
+
 test("the view carries label, keys, checked state and reason", () => {
   const registry = createActionRegistry();
   registry.register({

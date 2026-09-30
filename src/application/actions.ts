@@ -22,7 +22,7 @@ export interface ActionDefinition {
   readonly claimKeys?: boolean;
   readonly words?: string;
   readonly availability?: () => Availability;
-  readonly run: (source: ActionSource) => void;
+  readonly run: (source: ActionSource) => void | Promise<void>;
 }
 
 export interface ActionView {
@@ -86,6 +86,10 @@ function toView(definition: ActionDefinition): ActionView {
   };
 }
 
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
+}
+
 function claimChords(definitions: ReadonlyMap<string, ActionDefinition>, definition: ActionDefinition): void {
   const owners = new Map<string, string>();
   for (const other of definitions.values()) {
@@ -101,6 +105,7 @@ function claimChords(definitions: ReadonlyMap<string, ActionDefinition>, definit
 
 export function createActionRegistry(options: RegistryOptions = {}): ActionRegistry {
   const definitions = new Map<string, ActionDefinition>();
+  const report = (error: unknown, id: string): void => { options.report?.(error, id); };
 
   return {
     register(definition) {
@@ -133,10 +138,11 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
       const a = availabilityOf(definition);
       if (!a.enabled) return { kind: "unavailable", id, reason: a.reason ?? "" };
       try {
-        definition.run(source);
+        const pending: unknown = definition.run(source);
+        if (isThenable(pending)) pending.then(undefined, (error: unknown) => { report(error, id); });
         return { kind: "ran", id };
       } catch (error) {
-        options.report?.(error, id);
+        report(error, id);
         return { kind: "failed", id, error };
       }
     }
