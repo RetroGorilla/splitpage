@@ -2,11 +2,13 @@
 # 1, pinned before milestones 2 and 3 move them into the document core and a
 # session): typing a word, Alt+Enter split, Ctrl+Enter new scene, Ctrl+B on a
 # selection, the status dot, deleting an empty scene and Alt+Arrow moving a
-# scene. For each: the rows it leaves, ONE undo entry, the document marked
-# unsaved, where the caret ends up, and Ctrl+Z (and for typing Ctrl+Y) putting
-# it back. Undoing everything leaves the document unsaved, as it does today.
-# Passes against the code before the action registry (4.0-development
-# 19c66f7) and after it. Every `eval` is one physical line.
+# scene. For each: the rows it leaves, ONE undo entry, where the caret ends
+# up, and Ctrl+Z (and for typing Ctrl+Y) putting it back. Typing, the first
+# edit, marks the document unsaved; the others start from an unsaved document.
+# Undoing back to the rows it was opened with leaves it unsaved, as it does
+# today (checked after the first Ctrl+Z and again at the end). Passes against
+# the code before the action registry (4.0-development 47c0309) and after it.
+# Every `eval` is one physical line.
 
 open
 wait document.querySelectorAll('#rows .row').length > 0
@@ -31,6 +33,7 @@ key ctrl KeyZ
 sleep 300
 expect rows() === ORIG
 expect undo() === '0/1'
+expect unsaved()
 key ctrl KeyY
 sleep 300
 expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / r2|||todo / r3|Close|Delta echo|todo'
@@ -44,7 +47,6 @@ sleep 300
 expect rows() === 'r1|Wide shot|Alpha |todo / new||bravo charliexyz|todo / r2|||todo / r3|Close|Delta echo|todo'
 expect undo() === '2/0'
 expect focusRow() === 'other:audioText'
-expect unsaved()
 eval document.activeElement.blur()
 key ctrl KeyZ
 sleep 300
@@ -108,5 +110,9 @@ sleep 300
 expect rows() === TYPED
 expect undo() === '1/1'
 
-# everything undone that was undone, and the document is still unsaved
+# the typing undone too: the rows it was opened with, and still unsaved
+key ctrl KeyZ
+sleep 300
+expect rows() === ORIG
+expect undo() === '0/2'
 expect unsaved()
