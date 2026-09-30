@@ -104,6 +104,27 @@ test("an action that throws still keeps its key from the browser", () => {
   assert.equal(event.defaultPrevented, true);
 });
 
+test("plain typing never asks the registry for its shortcuts, and a held modifier asks once", () => {
+  const registry = createActionRegistry();
+  let asked = 0;
+  const runs: string[] = [];
+  registry.register({ id: "hide", label: "Hide", group: "G", keys: () => { asked++; return ["mod+alt+h"]; }, run: () => { runs.push("hide"); } });
+  registry.register({ id: "help", label: "Help", group: "G", keys: ["F1"], run: () => { runs.push("help"); } });
+  const target = new EventTarget();
+  bindShortcuts(target, registry);
+  asked = 0;
+  for (const key of ["h", "H", " ", "Enter", "Backspace", "ArrowDown"]) target.dispatchEvent(keydown({ key, shiftKey: key === "H" }));
+  assert.equal(asked, 0);
+  assert.deepEqual(runs, []);
+  target.dispatchEvent(keydown({ key: "h", ctrlKey: true, altKey: true }));
+  assert.equal(asked, 1);
+  target.dispatchEvent(keydown({ key: "F1" }));
+  assert.equal(asked, 2);
+  target.dispatchEvent(keydown({ key: "x", altKey: true }));
+  assert.equal(asked, 3);
+  assert.deepEqual(runs, ["hide", "help"]);
+});
+
 test("a claimed key is kept from the browser even when its action is refused", () => {
   const registry = createActionRegistry();
   registry.register({ id: "save", label: "Save", group: "G", keys: ["mod+s"], claimKeys: true, availability: () => ({ enabled: false, reason: "Still loading…" }), run: () => {} });
