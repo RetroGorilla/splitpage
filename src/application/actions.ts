@@ -114,6 +114,20 @@ function claimChords(definitions: ReadonlyMap<string, ActionDefinition>, definit
   }
 }
 
+export function registerAll(registry: ActionRegistry, definitions: readonly ActionDefinition[]): () => void {
+  const disposers: (() => void)[] = [];
+  const dispose = (): void => {
+    while (disposers.length) disposers.pop()?.();
+  };
+  try {
+    for (const definition of definitions) disposers.push(registry.register(definition));
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+  return dispose;
+}
+
 export function createActionRegistry(options: RegistryOptions = {}): ActionRegistry {
   const definitions = new Map<string, ActionDefinition>();
   const report = (error: unknown, id: string): void => { options.report?.(error, id); };

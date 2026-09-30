@@ -1,4 +1,5 @@
 import type { ActionDefinition, ActionRegistry } from "../application/actions.ts";
+import { registerAll } from "../application/actions.ts";
 import { showTaggingHelp } from "../js/10-comments.js";
 import { openLongDemo } from "../js/18b-file-menu.js";
 import { showAbout } from "../js/20a-update.js";
@@ -101,6 +102,5 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       run: () => { openImportAppData(); }
     }
   ];
-  const disposers = definitions.map((d) => registry.register(d));
-  return () => { for (const dispose of disposers) dispose(); };
+  return registerAll(registry, definitions);
 }

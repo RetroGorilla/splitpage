@@ -1,4 +1,5 @@
 import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
+import { registerAll } from "../application/actions.ts";
 import { promptForTarget } from "../js/03-sync.js";
 import { openGdocModal, openImportModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, reviewMode, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
@@ -154,6 +155,5 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       run: async () => { await openPrompterInChromium(); }
     }
   ];
-  const disposers = definitions.map((d) => registry.register(d));
-  return () => { for (const dispose of disposers) dispose(); };
+  return registerAll(registry, definitions);
 }
