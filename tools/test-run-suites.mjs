@@ -142,6 +142,11 @@ function readSummary(out) {
   return readFileSync(path, "utf8").trim().split("\n").filter(Boolean);
 }
 
+function readLog(out, file) {
+  const path = join(out, `${file}.log`);
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
 function byFile(summary) {
   const map = {};
   for (const line of summary || []) {
@@ -324,7 +329,8 @@ function idleClient(port) {
 function unitChecks() {
   console.log("\nclassify():\n");
 
-  const dup ="RESULT: 1/1 checks passed\nRESULT: 2/2 checks passed";
+  const long = "RESULT: " + "x".repeat(5000);
+  const dup = "RESULT: 1/1 checks passed\nRESULT: 2/2 checks passed";
   eq("exit 0 with a passing RESULT is PASS", classify({ code: 0 }, "x\nRESULT: 3/3 checks passed\n").status, STATUS.PASS);
   eq("exit 1 with FAILED in RESULT is FAIL", classify({ code: 1 }, "RESULT: 2/3 checks passed - 1 FAILED").status, STATUS.FAIL);
   eq("exit 0 with FAILED in RESULT is still FAIL", classify({ code: 0 }, "RESULT: 2/3 checks passed - 1 FAILED").status, STATUS.FAIL);
@@ -341,6 +347,14 @@ function unitChecks() {
   eq("the driver's error-before-any-check summary is FAIL", classify({ code: 1 }, "RESULT: -1/0 checks passed - 1 FAILED").status, STATUS.FAIL);
   eq("a passing summary killed by a signal is FAIL", classify({ code: null, signal: "SIGKILL" }, "RESULT: 3/3 checks passed").status, STATUS.FAIL);
   eq("output held open after exit is LEFTOVER", classify({ code: 0, heldOpen: true }, "RESULT: 3/3 checks passed").status, LEFTOVER);
+  const timedOut = classify({ code: null, signal: "SIGKILL", timedOut: true, limitSec: 1 }, dup).result;
+  check("a TIMEOUT after two RESULT lines says so", timedOut.includes("2 RESULT lines") && !timedOut.includes("no RESULT line"), timedOut);
+  const held = classify({ code: 0, heldOpen: true }, dup).result;
+  check("a LEFTOVER after two RESULT lines says so", held.includes("2 RESULT lines") && !held.includes("no RESULT line"), held);
+  const malformed = classify({ code: 0 }, long).result;
+  check("a 5000-character malformed line is quoted in at most about 200 characters", malformed.startsWith("malformed") && malformed.length < 260, `${malformed.length} characters`);
+  const doubled = classify({ code: 0 }, `${long}\n${long}`).result;
+  check("two 5000-character RESULT lines are quoted in at most about 200 characters each", doubled.startsWith("duplicate") && doubled.length < 520, `${doubled.length} characters`);
 
   console.log("\nparseArgs() and portPlan():\n");
 
@@ -355,6 +369,9 @@ function unitChecks() {
   check("a flag given twice is a config error", argsError(["o", "--lanes", "1", "--lanes", "2"]), null);
   eq("--flag=value is accepted", parsed(["o", "--lanes=2"]).lanes, 2);
   eq("-- ends the options", parsed(["o", "--", "-core"]).filter?.source, "-core");
+  eq("--help asks for the usage", parsed(["o", "--laness", "--help"]).help, true);
+  eq("-h asks for the usage", parsed(["-h"]).help, true);
+  eq("-h after -- is a filter, not a request for help", parsed(["o", "--", "-h"]).filter?.source, "-h");
   check("a padded lane count is a config error", argsError(["o"], { LANES: " 2" }), null);
   check("a fractional lane count is a config error", argsError(["o", "--lanes", "1.5"]), null);
   check("600.0 is a config error", argsError(["o", "--timeout", "600.0"]), null);
@@ -385,6 +402,13 @@ async function processChecks() {
     eq("summary lists the passing suite", r.summary?.[0], "PASS pass.txt RESULT: 3/3 checks passed");
     check("a per-suite log is written", existsSync(join(r.out, "pass.txt.log")), null);
     check("stdout reports ALL PASS", r.stdout.includes("ALL PASS"), r.stdout);
+  }
+
+  for (const flag of ["--help", "-h"]) {
+    const r = run([flag]);
+    eq(`${flag} exits 0`, r.status, EXIT.OK);
+    check(`${flag} prints the usage`, r.stdout.includes("usage:") && r.stdout.includes("--port-base"), r.stdout);
+    eq(`${flag} spawns nothing`, spawnedKinds(r.state).length, 0);
   }
 
   {
@@ -429,6 +453,7 @@ async function processChecks() {
       eq(`${file} is ${status}`, files[file]?.status, status);
       check(`${file} says ${JSON.stringify(reason)}`, (files[file]?.result ?? "").startsWith(reason), files[file]?.result);
     }
+    check("long.txt's summary line stays short", (files["long.txt"]?.result ?? "").length < 260, `${files["long.txt"]?.result?.length} characters`);
     check("no invalid summary is reported as passing", !r.stdout.includes("ALL PASS") && !(r.summary || []).some((l) => l.startsWith("PASS ")), r.stdout);
     check("each invalid-summary suite still has its log", Object.keys(expected).every((f) => existsSync(join(r.out, `${f}.log`))), null);
   }
@@ -519,6 +544,13 @@ async function processChecks() {
     reap(info);
   }
 
+  {
+    const r = run(["^dupehang", "--timeout", "1"]);
+    const line = r.summary?.[0] ?? "";
+    eq("a hung suite that printed two RESULT lines is TIMEOUT", line.split(" ")[0], STATUS.TIMEOUT);
+    check("its TIMEOUT says 2 RESULT lines", line.includes("2 RESULT lines") && !line.includes("no RESULT line"), line);
+  }
+
   for (const timeout of ["1", "60"]) {
     const r = run(["^orphan", "--timeout", timeout], { timeout: 30000 });
     const info = recorded(r.state, "orphan");
@@ -528,6 +560,7 @@ async function processChecks() {
     if (POSIX) {
       eq(`--timeout ${timeout}: a held-open suite exits 1`, r.status, EXIT.SUITES_FAILED);
       eq(`--timeout ${timeout}: a held-open suite is LEFTOVER`, r.summary?.[0]?.split(" ")[0], LEFTOVER);
+      check(`--timeout ${timeout}: its log says the process group was killed`, readLog(r.out, "orphan.txt").includes("killing what is left of its process group"), readLog(r.out, "orphan.txt"));
       check(`--timeout ${timeout}: the grandchild left in the process group is gone`, waitDead(info?.grandchild), `pid ${info?.grandchild} still alive`);
     } else {
       skip(`--timeout ${timeout}: a held-open suite is LEFTOVER and its grandchild is killed`, "win32 has no process groups and libuv ends a Node driver's children when it exits, so nothing is left holding the pipes; this runs on the Linux CI");
