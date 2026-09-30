@@ -259,7 +259,8 @@ const writeCases = [
   ["a nested element write", 'S.state.rows[0].text = "x";', ["global:S.state.*"]],
   ["a nested delete", "delete S.state.rows[0];", ["global:S.state.*"]],
   ["Object.assign into a member", "Object.assign(S.state, patch);", ["global:S.state.*"]],
-  ["Object.assign into S itself", "Object.assign(S, patch);", ["global:S[?]"]],
+  ["Object.assign into S itself", "Object.assign(S, patch);", ["global:S.*"]],
+  ["Reflect.set on S itself", 'Reflect.set(S, "dirty", true);', ["global:S.*"]],
   ["an optional-chain mutating call", "S.state?.rows?.push(1);", ["global:S.state.*"]],
   ...MUTATORS.map((m) => [`a ${m}() call`, `S.state.rows.${m}(x);`, ["global:S.state.*"]]),
   ["writes through a const alias", "const st = S.state;\nst.rows.length = 0;", ["global:S.state.*"]],
@@ -292,6 +293,30 @@ eq("write: through a destructured dynamic import", writesOf('const { S } = await
 eq("write: through a destructured require", writesOf('const { S } = require("./_state.js");\nS.dirty = true;\n'), ["global:S.dirty"]);
 eq("a require that is a parameter loads nothing", stateFindings({ "src/js/a.js": 'export function f(require) { const { S } = require("./_state.js"); S.dirty = 1; }\n' }), []);
 eq("an import type of S is still a state-import", stateFindings({ "src/js/t.ts": 'import type { S } from "./_state.js";\nexport type T = typeof S;\n' }), ["state-import src/js/t.ts global:S"]);
+
+eq("each write target is described by what it does", findViolations(graph({
+  ...STATE_FILE,
+  "src/js/w.js": 'import { S } from "./_state.js";\nS.dirty = true;\nS.state.rows = [];\nObject.assign(S, patch);\nS[key] = 1;\n'
+})).filter((v) => v.rule === "state-write").map((v) => `${v.target} ${v.detail}`), [
+  "global:S.* changes members of S in place",
+  "global:S.dirty replaces S.dirty",
+  "global:S.state.* changes S.state in place",
+  "global:S[?] replaces S[?]"
+]);
+
+eq("export type { S } from is a bridge, as import type { S } is an importer", stateFindings({
+  "src/js/types.ts": 'export type { S } from "./_state.js";\n'
+}), ["state-import src/js/types.ts global:S"]);
+
+{
+  const chain = { "src/js/n1.js": 'export * as n1 from "./_state.js";\n' };
+  for (let i = 2; i <= 7; i++) chain[`src/js/n${i}.js`] = `export * as n${i} from "./n${i - 1}.js";\n`;
+  const found = findViolations(graph({ ...STATE_FILE, ...chain })).map((v) => `${v.rule} ${v.source}`);
+  eq("a re-export chain longer than the report follows is reported where it stops", found.filter((f) => f.startsWith("state-bridge-limit")), ["state-bridge-limit src/js/n6.js"]);
+  eq("and every bridge before it is still an importer", found.filter((f) => f.startsWith("state-import")).length, 5);
+  const loop = findViolations(graph({ ...STATE_FILE, "src/js/loop.js": 'export { S } from "./_state.js";\nexport * as again from "./loop.js";\n' })).map((v) => `${v.rule} ${v.source}`);
+  check("a module that re-exports itself under a new name stops and is reported", loop.includes("state-bridge-limit src/js/loop.js"), loop.join("\n"));
+}
 
 eq("export default S is a bridge", stateFindings({
   "src/js/d.js": 'import { S } from "./_state.js";\nexport default S;\n',

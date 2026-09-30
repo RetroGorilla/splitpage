@@ -329,21 +329,18 @@ function bindScopes(sf) {
 
   const handleExport = (node, s) => {
     const spec = node.moduleSpecifier ? literalText(node.moduleSpecifier) : null;
-    if (node.isTypeOnly) return;
     if (spec !== null) {
       if (!node.exportClause) reexports.push({ star: true, spec, node });
       else if (ts.isNamespaceExport(node.exportClause)) reexports.push({ name: node.exportClause.name.text, spec, via: [], node });
       else {
-        for (const el of node.exportClause.elements) {
-          if (!el.isTypeOnly) reexports.push({ name: el.name.text, spec, via: [(el.propertyName ?? el.name).text], node });
-        }
+        for (const el of node.exportClause.elements) reexports.push({ name: el.name.text, spec, via: [(el.propertyName ?? el.name).text], node });
       }
       return;
     }
     if (node.moduleSpecifier || !node.exportClause || !ts.isNamedExports(node.exportClause)) return;
     for (const el of node.exportClause.elements) {
       const local = el.propertyName ?? el.name;
-      if (!el.isTypeOnly && ts.isIdentifier(local)) localExports.push({ name: el.name.text, local, scope: s, node });
+      if (ts.isIdentifier(local)) localExports.push({ name: el.name.text, local, scope: s, node });
     }
   };
 
@@ -591,8 +588,9 @@ function prefixOf(a, b) {
 
 function stateProviders(modules) {
   const provides = new Map();
+  const truncated = new Set();
   const add = (path, entry) => {
-    if (entry.path.length > MAX_STATE_PATH || entry.sub.length > MAX_STATE_PATH) return false;
+    if (entry.path.length > MAX_STATE_PATH || entry.sub.length > MAX_STATE_PATH) { truncated.add(path); return false; }
     const list = provides.get(path) ?? [];
     const k = JSON.stringify(entry);
     if (list.some((e) => JSON.stringify(e) === k)) return false;
@@ -618,11 +616,11 @@ function stateProviders(modules) {
       }
     }
   }
-  return provides;
+  return { provides, truncated };
 }
 
-function stateUsage(m, provides) {
-  const usage = { importsState: false, bridge: false, line: null, reads: 0, writes: [] };
+function stateUsage(m, provides, truncated) {
+  const usage = { importsState: false, bridge: false, truncated: truncated.has(m.path), line: null, reads: 0, writes: [] };
   if (m.path === STATE_MODULE) return usage;
   const seen = (line) => { usage.importsState = true; usage.line = usage.line === null ? line : Math.min(usage.line, line); };
   if (provides.has(m.path)) {
@@ -649,9 +647,15 @@ function stateUsage(m, provides) {
 }
 
 export function stateWriteTarget(spath, write) {
-  if (spath.length === 0) return write === "mutate" ? `global:${STATE_EXPORT}[?]` : null;
+  if (spath.length === 0) return write === "mutate" ? `global:${STATE_EXPORT}.*` : null;
   const member = spath[0] === "*" ? `${STATE_EXPORT}[?]` : `${STATE_EXPORT}.${spath[0]}`;
   return `global:${member}${write === "mutate" || spath.length > 1 ? ".*" : ""}`;
+}
+
+function stateWriteDetail(target) {
+  const name = target.slice("global:".length);
+  if (name === `${STATE_EXPORT}.*`) return `changes members of ${STATE_EXPORT} in place`;
+  return name.endsWith(".*") ? `changes ${name.slice(0, -2)} in place` : `replaces ${name}`;
 }
 
 export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
@@ -671,8 +675,8 @@ export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
     };
     modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, globals: analysis.globals, stateLinks });
   }
-  const provides = stateProviders(modules);
-  for (const m of modules.values()) m.state = stateUsage(m, provides);
+  const { provides, truncated } = stateProviders(modules);
+  for (const m of modules.values()) m.state = stateUsage(m, provides, truncated);
   return modules;
 }
 
@@ -778,8 +782,11 @@ export function findViolations(modules) {
       if (m.state.importsState) add("state-import", m.path, `global:${STATE_EXPORT}`, m.state.line, m.state.bridge ? `re-exports ${STATE_EXPORT}` : `imports ${STATE_EXPORT}`);
       for (const w of m.state.writes) {
         const target = stateWriteTarget(w.spath, w.write);
-        if (target) add("state-write", m.path, target, w.line, target.endsWith(".*") ? "changes state inside the member" : "replaces the member");
+        if (target) add("state-write", m.path, target, w.line, stateWriteDetail(target));
       }
+    }
+    if (m.state.truncated) {
+      add("state-bridge-limit", m.path, `global:${STATE_EXPORT}`, null, `re-exports ${STATE_EXPORT} through more than ${MAX_STATE_PATH} names; the report stops following it here`);
     }
   }
   for (const e of cycleEdges(modules)) add("cycle-edge", e.source, e.target, e.line, `runtime import inside a ${e.size}-module cycle`);
