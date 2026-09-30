@@ -7,10 +7,10 @@ appear in the app under **Help**. The format follows
 ## Unreleased
 
 ### Changed
-- In the desktop app, a menu command or its shortcut (Export, Find, Search
-  commands, Hide shot scenes) chosen while a dialog, the writer or Present is
-  open now says why it did nothing, instead of acting behind them. The
-  browser shortcuts already refused there.
+- In the desktop app, a menu command or its shortcut (Save, Save a copy, Open,
+  Export, Find, Search commands, Hide shot scenes) chosen while a dialog, the
+  writer or Present is open now says why it did nothing, instead of acting
+  behind them. The browser shortcuts already refused there.
 
 ### Fixed
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a

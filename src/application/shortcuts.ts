@@ -45,9 +45,9 @@ function chordFor(text: string): KeyChord {
   return chord;
 }
 
-export function actionForKey(actions: readonly KeyedAction[], input: KeyInput): string | null {
+export function actionForKey(actions: readonly KeyedAction[], input: KeyInput): KeyedAction | null {
   for (const action of actions) {
-    if (action.keys.some((k) => chordMatches(chordFor(k), input))) return action.id;
+    if (action.keys.some((k) => chordMatches(chordFor(k), input))) return action;
   }
   return null;
 }

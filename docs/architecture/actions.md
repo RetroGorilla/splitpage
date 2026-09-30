@@ -25,6 +25,14 @@ a toast. The command menu shows it greyed out with the reason. A shortcut
 leaves the key to the browser. A key that a focused control already handled
 (`defaultPrevented`) never reaches a global action.
 
+Two definition options shape the shortcut binding. `claimKeys` keeps the key
+from the browser even when the action is refused, so Ctrl+S and Ctrl+O never
+open the browser's own Save page or Open file dialogs. `bindKeys` says, at the
+moment of the key press, whether the page binds the keys at all: in the desktop
+app the native menu's accelerators own Ctrl+S, Ctrl+Shift+S and Ctrl+O, so the
+page leaves them alone and nothing runs twice. The command menu shows the keys
+either way.
+
 `src/application/shortcuts.ts` parses chords and finds the action a key event
 names. `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown
 target and returns a function that removes the listener.
@@ -69,9 +77,13 @@ File menu path shows the reason as a toast.
 | `find` | File menu, command menu, `mod+f` | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
 | `export` | File menu, command menu, `mod+e` | `18-local-files.js`, `18d-command-menu.js`, an `18c-export-dialog.js` keydown listener |
 | `command-menu` | File menu, header button, `mod+k` (opens and closes) | `18-local-files.js`, `18d-command-menu.js` click and keydown listeners |
+| `save` | Header and Writer Save buttons, command menu, `mod+s`, desktop menu | `21-events.js` button listeners, `18d-command-menu.js` button mirror, an `18b-file-menu.js` keydown listener |
+| `save-as` | File menu, command menu, `mod+shift+s`, desktop menu | `18-local-files.js`, `18d-command-menu.js`, `18b-file-menu.js` keydown |
+| `open` | File menu, command menu, `mod+o`, desktop menu | `18-local-files.js`, `18d-command-menu.js`, `18b-file-menu.js` keydown |
 
-Browser suites `268-actions-every-surface.txt` and
-`269-file-actions-every-surface.txt` check each surface, and the
+Browser suites `268-actions-every-surface.txt`,
+`269-file-actions-every-surface.txt` and `270-save-open-every-surface.txt`
+check each surface, and the
 shortcut refused under a dialog. The File menu's markup (label, `data-keys`)
 is still in `src/page.html`; the command menu reads the definition.
 

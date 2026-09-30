@@ -85,6 +85,17 @@ test("shortcuts lists only actions that declare keys, without asking their avail
   let asked = 0;
   registry.register({ id: "a", label: "A", group: "G", keys: ["mod+a"], availability: () => { asked++; return { enabled: true }; }, run: () => {} });
   registry.register({ id: "b", label: "B", group: "G", run: () => {} });
-  assert.deepEqual(registry.shortcuts(), [{ id: "a", keys: ["mod+a"] }]);
+  assert.deepEqual(registry.shortcuts(), [{ id: "a", keys: ["mod+a"], claim: false }]);
   assert.equal(asked, 0);
+});
+
+test("keys another owner binds are not offered for binding, and claimed keys say so", () => {
+  const registry = createActionRegistry();
+  registry.register({ id: "save", label: "Save", group: "G", keys: ["mod+s"], claimKeys: true, run: () => {} });
+  let desktop = true;
+  registry.register({ id: "open", label: "Open", group: "G", keys: ["mod+o"], bindKeys: () => !desktop, run: () => {} });
+  assert.deepEqual(registry.shortcuts(), [{ id: "save", keys: ["mod+s"], claim: true }]);
+  assert.deepEqual(registry.view("open")?.keys, ["mod+o"]);
+  desktop = false;
+  assert.deepEqual(registry.shortcuts().map((s) => s.id), ["save", "open"]);
 });

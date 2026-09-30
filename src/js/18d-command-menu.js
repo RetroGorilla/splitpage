@@ -119,12 +119,12 @@ function commands() {
     return reviewMode() ? "Viewing only — the writer changes the script" : "";
   };
   COMMANDS = [
-    fromButton("save", "btn-save", "File", "Save", "i-save", "store keep write disk", "mod+s"),
-    fromMenu("save-as", "File", "save as duplicate copy another file"),
+    fromAction("save"),
+    fromAction("save-as"),
     fromMenu("save-back", "File", "write back original docx csv txt"),
     fromMenu("autosave", "File", "automatic save saving"),
     fromMenu("new", "File", "blank empty create start fresh document"),
-    fromMenu("open", "File", "load file document project md splitpage docx"),
+    fromAction("open"),
     fromMenu("server-open", "File", "server hosted shared documents"),
     fromMenu("paste", "File", "import revised draft text", "Import: paste a script…"),
     fromMenu("gdoc-import", "File", "import google docs link url", "Import: Google Doc link…"),
