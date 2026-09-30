@@ -43,6 +43,10 @@ function blocked(blocker: Blocker, screen: ScreenState): boolean {
   return screen[blocker];
 }
 
+export function firstRefusal(screen: Availability, own: Availability): Availability {
+  return screen.enabled ? own : screen;
+}
+
 export function availableUnless(blockers: readonly Blocker[], screen: ScreenState, checked?: boolean): Availability {
   const hit = blockers.find((b) => blocked(b, screen));
   const base: Availability = hit ? { enabled: false, reason: REASONS[hit] } : { enabled: true };

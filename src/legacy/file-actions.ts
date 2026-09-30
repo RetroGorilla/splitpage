@@ -1,18 +1,11 @@
-import type { ActionRegistry, Availability } from "../application/actions.ts";
+import type { ActionRegistry } from "../application/actions.ts";
 import { saveDoc } from "../js/14-export.js";
 import { openLocalFile } from "../js/18-local-files.js";
 import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
 import { openExportDialog } from "../js/18c-export-dialog.js";
 import { closeCommandMenu, commandMenuOpen, openCommandMenu } from "../js/18d-command-menu.js";
-import { menuItemAvailability } from "./menu-items.ts";
-import { availableUnless } from "./screen.ts";
-import type { Blocker } from "./screen.ts";
-import { inDesktopApp, screenNow } from "./screen-state.ts";
-
-function buttonAllows(id: string): Availability | null {
-  const button = document.getElementById(id);
-  return button instanceof HTMLButtonElement && button.disabled ? { enabled: false, reason: "" } : null;
-}
+import { availableUnless, firstRefusal } from "./screen.ts";
+import { inDesktopApp, saveInProgress, screenNow } from "./screen-state.ts";
 
 function pageOwnsKeys(): boolean {
   return !inDesktopApp();
@@ -20,11 +13,6 @@ function pageOwnsKeys(): boolean {
 
 function closeFileMenu(): void {
   if (fileMenuOpen()) toggleFileMenu(false);
-}
-
-function unless(blockers: readonly Blocker[], own: Availability | null): Availability {
-  const screen = availableUnless(blockers, screenNow());
-  return screen.enabled && own ? own : screen;
 }
 
 export function registerFileActions(registry: ActionRegistry): () => void {
@@ -38,7 +26,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "store keep write disk",
-      availability: () => unless(["loading", "dialog", "launcher"], buttonAllows("btn-save")),
+      availability: () => firstRefusal(availableUnless(["loading", "dialog", "launcher"], screenNow()),
+        saveInProgress() ? { enabled: false, reason: "" } : { enabled: true }),
       run: () => {
         closeFileMenu();
         return saveDoc();
@@ -53,7 +42,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "save as duplicate copy another file",
-      availability: () => unless(["loading", "dialog", "launcher"], menuItemAvailability("save-as")),
+      availability: () => availableUnless(["loading", "dialog", "launcher"], screenNow()),
       run: () => {
         closeFileMenu();
         return saveDoc({ saveAs: true });
@@ -68,7 +57,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "load file document project md splitpage docx",
-      availability: () => unless(["loading", "dialog", "launcher", "prompter", "writer"], menuItemAvailability("open")),
+      availability: () => availableUnless(["loading", "dialog", "launcher", "prompter", "writer"], screenNow()),
       run: async () => {
         closeFileMenu();
         await openLocalFile();

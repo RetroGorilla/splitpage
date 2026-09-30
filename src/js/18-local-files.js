@@ -116,9 +116,23 @@ export function mirrorFileChipToWriter() {
   dstState.classList.toggle("unsaved", srcState.classList.contains("unsaved"));
 }
 
+export function saveBackItemState() {
+  var imported = onServerDoc() ? null : importHome();
+  if (!imported) return { hidden: false, disabled: true, reason: "", label: "Save to file" };
+  return { hidden: false, disabled: false, reason: "",
+           label: imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name };
+}
+
+function paintSaveBackItem() {
+  var saveBack = document.getElementById("menu-save-back");
+  var state = saveBackItemState();
+  saveBack.disabled = state.disabled;
+  setMenuItemLabel(saveBack, state.label);
+}
+
 function updateHeaderFileChip() {
   var chip = document.getElementById("file-chip");
-  var saveBack = document.getElementById("menu-save-back");
+  paintSaveBackItem();
   if (onServerDoc()) {
     chip.hidden = false;
     document.getElementById("file-chip-name").textContent = "On the server";
@@ -129,15 +143,11 @@ function updateHeaderFileChip() {
       : S.dirty && autoSaveHalt ? "· not saved yet"
       : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
     srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || !!S.dirty);
-    saveBack.disabled = true;
-    setMenuItemLabel(saveBack, "Save to file");
     return;
   }
   var imported = importHome();
   if (!imported) {
     chip.hidden = true;
-    saveBack.disabled = true;
-    setMenuItemLabel(saveBack, "Save to file");
     return;
   }
   chip.hidden = false;
@@ -145,8 +155,6 @@ function updateHeaderFileChip() {
   var stateEl = document.getElementById("file-chip-state");
   stateEl.textContent = imported.dirty ? "· unsaved changes" : "· up to date";
   stateEl.classList.toggle("unsaved", !!imported.dirty);
-  saveBack.disabled = false;
-  setMenuItemLabel(saveBack, imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name);
 }
 
 export function exportFileName(kind, baseName, opts) {

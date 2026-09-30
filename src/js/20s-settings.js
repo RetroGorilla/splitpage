@@ -43,6 +43,7 @@ import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-t
 import { renderDesktopAppNotice } from "./20a-update.js";
 import { TOUR_DONE_KEY, startTour } from "./20c-help.js";
 import { openServersDialog } from "./20e-connect.js";
+import { appDataImportShown } from "./20f-desktop.js";
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
@@ -112,8 +113,7 @@ function clockExample(mode) {
 }
 
 function importAvailable() {
-  var btn = document.querySelector('#file-menu [data-file-action="import-app-data"]');
-  return !!(btn && !btn.hidden);
+  return appDataImportShown();
 }
 
 function collaborationHtml() {

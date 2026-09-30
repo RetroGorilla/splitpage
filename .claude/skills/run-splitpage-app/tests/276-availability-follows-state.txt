@@ -1,0 +1,43 @@
+# What an action allows follows the app's state, not what the File menu last
+# rendered (4.0 milestone 1). The File menu refreshes its items only when it
+# opens, so a surface that reads an action's availability without opening it
+# (the command menu's own reading, the desktop app's native menu) must ask
+# the same rule the menu renders from. Each check changes the state with the
+# File menu closed.
+
+open
+viewport 1400 900
+eval (function(){ window.fetch = function(){ return new Promise(function(){}); }; window.C = window.__commandTest; window.D = window.__desktopTest; window.H = window.__hostedTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__item = function (q, id) { var hit = null; C.results(q).forEach(function (g) { g.items.forEach(function (i) { if (i.id === id) hit = i; }); }); return hit; }; window.__toasts = function () { return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (t) { return t.textContent; }).join('|'); }; window.__clearToasts = function () { document.getElementById('toast-host').innerHTML = ''; return true; }; return true; })()
+
+# the File menu is opened once while editing, then closed
+click #btn-file
+sleep 200
+expect document.querySelector('#file-menu [data-file-action="paste"]').disabled === false
+jsclick #file-menu-close
+sleep 200
+
+# --- Paste a script, once the session becomes a review session --------------
+eval H.setSession({ role: 'review', docId: 'shared-doc' }); true
+sleep 300
+expect H.reviewMode() === true
+expect __item('paste a script', 'paste').disabled === true
+expect __item('paste a script', 'paste').why.indexOf('Viewing only') === 0
+eval __clearToasts()
+eval D.runMenuCommand('paste'); true
+sleep 300
+expect !__shown('import-modal')
+expect __toasts().indexOf('Viewing only — you can comment, but not change the script.') !== -1
+eval H.setSession({ role: 'edit', docId: null }); true
+sleep 300
+expect H.reviewMode() === false
+expect __item('paste a script', 'paste').disabled === false
+
+# --- Present in browser, once the desktop app's bridge is there --------------
+eval (function(){ window.fakeP = D.makeFakeBackend(); D.setBackend(window.fakeP); return true; })()
+expect __item('present in browser', 'prompter-open-in-browser') !== null
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+expect __item('present in browser', 'prompter-open-in-browser') === null
+
+# nothing here edited the document
+expect document.getElementById('btn-save').textContent == Save

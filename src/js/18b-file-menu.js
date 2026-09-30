@@ -158,6 +158,11 @@ function recentsSupported() {
   return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
 }
 
+export function pasteItemState() {
+  var viewing = reviewMode();
+  return { hidden: false, disabled: viewing, reason: viewing ? "Viewing only — you can comment, but not change the script" : "" };
+}
+
 export function refreshFileMenu() {
   var presentBrowser = el("menu-present-browser");
   if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
@@ -169,9 +174,9 @@ export function refreshFileMenu() {
 
   var paste = document.querySelector('#file-menu [data-file-action="paste"]');
   if (paste) {
-    var viewing = reviewMode();
-    paste.disabled = viewing;
-    setMenuItemReason(paste, viewing ? "Viewing only — you can comment, but not change the script" : "");
+    var pasteState = pasteItemState();
+    paste.disabled = pasteState.disabled;
+    setMenuItemReason(paste, pasteState.reason);
   }
 
   refreshFileCard();
