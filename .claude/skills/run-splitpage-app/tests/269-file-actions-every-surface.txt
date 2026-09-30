@@ -2,8 +2,7 @@
 # File menu, the command menu, the shortcut and the header button do the same
 # thing, and each is refused under the Writer and under a dialog. Written
 # before the three moved onto the action registry; the section on the open
-# command menu was added with the move, when that rule was made the same for
-# every shortcut.
+# command menu was added with the move.
 
 open
 viewport 1400 900
@@ -106,17 +105,11 @@ key Escape
 sleep 200
 expect !__shown('findbar')
 
-# --- behind the open command menu only its own shortcut acts ----------------
-eval window.__hide0 = localStorage.getItem('splitpage-hide-shot'); true
+# --- behind the open command menu Export does nothing; Ctrl+K closes it ------
+# (Find and Hide shot scenes still answer there: 275-shortcuts-as-before.txt)
 key ctrl KeyK
 sleep 200
 expect __shown('cmdk')
-key ctrl KeyF
-sleep 200
-expect !__shown('findbar')
-key ctrl+alt KeyH
-sleep 200
-expect localStorage.getItem('splitpage-hide-shot') === window.__hide0
 key ctrl KeyE
 sleep 200
 expect !__shown('export-modal')

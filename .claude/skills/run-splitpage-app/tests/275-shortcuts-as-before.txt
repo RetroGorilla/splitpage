@@ -1,0 +1,107 @@
+# Keyboard details the action registry has to keep (4.0 milestone 1): Find
+# answers Ctrl+F with Shift or Alt held too, Hide shot scenes Ctrl+Alt+H with
+# Shift held too; Ctrl+S and Ctrl+Shift+S close an open File menu as they
+# save; and with the command menu open, Ctrl+F and Ctrl+Alt+H still act while
+# Ctrl+E, Ctrl+S and Ctrl+O do not. Passes against the code before the
+# registry (4.0-development 19c66f7) and after it.
+
+open
+viewport 1400 900
+eval (function(){ localStorage.removeItem('splitpage-hide-shot'); window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__prevented = null; window.addEventListener('keydown', function (e) { window.__prevented = e.defaultPrevented; }); return true; })()
+
+# --- Find: Ctrl+F, Ctrl+Shift+F, Ctrl+Alt+F, Ctrl+Shift+Alt+F ---------------
+key ctrl KeyF
+sleep 200
+expect __shown('findbar')
+expect window.__prevented === true
+key Escape
+sleep 200
+expect !__shown('findbar')
+key ctrl+shift KeyF
+sleep 200
+expect __shown('findbar')
+expect window.__prevented === true
+key Escape
+sleep 200
+expect !__shown('findbar')
+key ctrl+alt KeyF
+sleep 200
+expect __shown('findbar')
+key Escape
+sleep 200
+expect !__shown('findbar')
+key ctrl+shift+alt KeyF
+sleep 200
+expect __shown('findbar')
+key Escape
+sleep 200
+expect !__shown('findbar')
+
+# --- Hide shot scenes: Ctrl+Alt+H and Ctrl+Shift+Alt+H ---------------------
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 1
+key ctrl+shift+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 0
+expect window.__prevented === true
+key ctrl+shift+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 1
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 0
+
+# --- Ctrl+S and Ctrl+Shift+S close an open File menu -----------------------
+click #btn-file
+sleep 200
+expect !document.getElementById('file-menu').hidden
+key ctrl+shift KeyS
+sleep 400
+expect document.getElementById('file-menu').hidden
+expect __take() === 'save'
+click #btn-file
+sleep 200
+expect !document.getElementById('file-menu').hidden
+key ctrl KeyS
+sleep 400
+expect document.getElementById('file-menu').hidden
+expect __take() === 'save'
+
+# --- with the command menu open ----------------------------------------------
+key ctrl KeyK
+sleep 200
+expect __shown('cmdk')
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 1
+expect __shown('cmdk')
+key ctrl KeyE
+sleep 200
+expect !__shown('export-modal')
+expect __shown('cmdk')
+key ctrl KeyS
+sleep 300
+expect window.__prevented === true
+expect __take() === ''
+expect __shown('cmdk')
+key ctrl KeyO
+sleep 300
+expect window.__prevented === true
+expect __take() === ''
+expect __shown('cmdk')
+key ctrl KeyF
+sleep 300
+expect __shown('findbar')
+expect !__shown('cmdk')
+expect document.activeElement.id == find-input
+key Escape
+sleep 200
+expect !__shown('findbar')
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 0
+
+# nothing here edited the document
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save

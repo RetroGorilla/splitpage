@@ -18,6 +18,10 @@ function pageOwnsKeys(): boolean {
   return !inDesktopApp();
 }
 
+function closeFileMenu(): void {
+  if (fileMenuOpen()) toggleFileMenu(false);
+}
+
 function unless(blockers: readonly Blocker[], own: Availability | null): Availability {
   const screen = availableUnless(blockers, screenNow());
   return screen.enabled && own ? own : screen;
@@ -34,8 +38,11 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "store keep write disk",
-      availability: () => unless(["loading", "dialog"], buttonAllows("btn-save")),
-      run: () => saveDoc()
+      availability: () => unless(["loading", "dialog", "launcher"], buttonAllows("btn-save")),
+      run: () => {
+        closeFileMenu();
+        return saveDoc();
+      }
     }),
     registry.register({
       id: "save-as",
@@ -46,8 +53,11 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "save as duplicate copy another file",
-      availability: () => unless(["loading", "dialog"], menuItemAvailability("save-as")),
-      run: () => saveDoc({ saveAs: true })
+      availability: () => unless(["loading", "dialog", "launcher"], menuItemAvailability("save-as")),
+      run: () => {
+        closeFileMenu();
+        return saveDoc({ saveAs: true });
+      }
     }),
     registry.register({
       id: "open",
@@ -58,9 +68,9 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "load file document project md splitpage docx",
-      availability: () => unless(["loading", "dialog", "prompter", "writer"], menuItemAvailability("open")),
+      availability: () => unless(["loading", "dialog", "launcher", "prompter", "writer"], menuItemAvailability("open")),
       run: async () => {
-        if (fileMenuOpen()) toggleFileMenu(false);
+        closeFileMenu();
         await openLocalFile();
       }
     }),
@@ -71,9 +81,9 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       icon: "i-export",
       keys: ["mod+e"],
       words: "download save as format dialog",
-      availability: () => availableUnless(["loading", "dialog", "prompter", "writer"], screenNow()),
+      availability: () => availableUnless(["loading", "dialog", "launcher", "prompter", "writer"], screenNow()),
       run: () => {
-        if (fileMenuOpen()) toggleFileMenu(false);
+        closeFileMenu();
         openExportDialog();
       }
     }),
