@@ -132,7 +132,10 @@ running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
 `gate` is the one check to mark required in branch protection: a
 prose-only pull request completes it without waiting on the others. Prose
 means Markdown other than `docs/help.md` (the build renders it into the app),
-`.claude/handoff/`, issue templates, `CODEOWNERS` and `LICENSE`.
+`.claude/handoff/`, `CODEOWNERS` and `LICENSE`. The issue templates' YAML is
+not prose: the comment gate reads it, so a change to it runs the checks.
+`tools/test-ci-changes.mjs` fails if any file the comment gate reads would be
+classed as prose.
 
 `.github/workflows/docker.yml` runs when a Docker build input changes; its
 path filters list every file either Dockerfile copies. Job `image` builds the
