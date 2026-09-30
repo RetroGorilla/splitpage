@@ -193,8 +193,7 @@ Stop here: views cannot mutate the document; each feature is one folder.
 Milestones 0–6 are 4.0. 7–9 land in 4.x as those areas next need changing,
 unless 4.0 has slack.
 
-## Decisions needed before milestone 0
+## Decisions
 
-1. TypeScript for new folders (recommended) or JavaScript with JSDoc types
-   checked by `tsc --checkJs`.
-2. CI: keep main-only, or pay for per-PR checks on the private repo.
+- TypeScript for new folders, erasable syntax only: decided.
+- CI: keep main-only, or pay for per-PR checks on the private repo. Open.
