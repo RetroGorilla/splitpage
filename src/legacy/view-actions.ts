@@ -2,13 +2,12 @@ import type { ActionRegistry, ActionDefinition, Availability } from "../applicat
 import { closeProductionPanel, closeGearPanel, openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
 import { closeBrollPanel, openBrollPanel } from "../js/08d-broll-panel.js";
 import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
-import { reviewMode } from "../js/13-hosted.js";
+import { VIEWING_ONLY, reviewMode } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
 import { availableUnless } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
 
-const VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
 const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
 
 function shownButton(id: string): boolean {

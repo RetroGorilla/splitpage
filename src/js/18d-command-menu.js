@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
 import { invokeFrom } from "./12-dirty-toast.js";
 import {
@@ -6,14 +5,12 @@ import {
   fileMenuOpen,
   keyChipWords,
   keyChipsHtml,
-  modalIsOpen,
   refreshFileMenu,
   toggleFileMenu
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
-import { writerOpen } from "./19-writer.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { askingFromLauncher } from "../legacy/screen.ts";
+import { askingFromLauncher, launcherShown } from "../legacy/screen.ts";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
@@ -271,22 +268,11 @@ function move(delta) {
 }
 
 export function commandMenuOpen() {
-  var m = el("cmdk");
-  return !!m && !m.hidden;
-}
-
-function blockedNow() {
-  if (!S.state) return "loading";
-  if (S.prompterOpen) return "prompter";
-  if (writerOpen) return "writer";
-  if (modalIsOpen()) return "modal";
-  var tour = el("tour-overlay");
-  if (tour && !tour.hidden) return "tour";
-  return "";
+  return launcherShown();
 }
 
 export function openCommandMenu() {
-  if (commandMenuOpen() || blockedNow()) return false;
+  if (commandMenuOpen()) return false;
   if (fileMenuOpen()) toggleFileMenu(false);
   var ae = document.activeElement;
   var range = null;

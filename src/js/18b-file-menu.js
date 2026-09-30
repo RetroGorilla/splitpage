@@ -406,10 +406,6 @@ function onMenuKeydown(e) {
   }
 }
 
-export function modalIsOpen() {
-  return !!document.querySelector(".modal-backdrop:not([hidden]), .cmdk-backdrop:not([hidden])");
-}
-
 export function __init() {
   var menu = el("file-menu");
   var btn = el("btn-file");

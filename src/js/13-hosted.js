@@ -876,9 +876,11 @@ export function applyReviewMode() {
   if (title) title.readOnly = on;
 }
 
+export var VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
+
 export function reviewBlocked() {
   if (!reviewMode()) return false;
-  showToast("Viewing only — you can comment on this script, but not change it.", "warn");
+  showToast(VIEWING_ONLY, "warn");
   return true;
 }
 
