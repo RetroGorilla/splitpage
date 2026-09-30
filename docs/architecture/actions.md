@@ -41,6 +41,16 @@ every module's `__init`. Registration lives in the entry because `21-events.js`
 is inside the 63-module import cycle, and a migrated file imported from there
 would join it (`npm run check:deps` refuses that).
 
+## Refusals are the same on every surface
+
+Decided 30 September 2026: an action is refused under the same conditions
+whichever surface asks, and those conditions are the ones the keyboard
+shortcuts already used. Before this, the desktop app's native menu and its
+accelerators went through the File menu path, which checked only that a
+document had loaded, so they acted over an open dialog, the Writer or
+Present where the browser shortcut refused. They now refuse too, and the
+File menu path shows the reason as a toast.
+
 ## Migrated so far
 
 | Action id | Surfaces | Old owner |
