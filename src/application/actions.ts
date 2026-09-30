@@ -9,7 +9,7 @@ export interface Availability {
 
 export interface ActionDefinition {
   readonly id: string;
-  readonly label: string;
+  readonly label: string | (() => string);
   readonly group: string;
   readonly icon?: string;
   readonly keys?: readonly string[] | (() => readonly string[]);
@@ -75,12 +75,12 @@ function toView(definition: ActionDefinition): ActionView {
   const visible = a.visible !== false;
   return {
     id: definition.id,
-    label: definition.label,
+    label: typeof definition.label === "function" ? definition.label() : definition.label,
     group: definition.group,
     icon: definition.icon ?? "",
     keys: keysOf(definition),
     words: definition.words ?? "",
-    enabled: visible && a.enabled,
+    enabled: a.enabled,
     visible,
     reason: a.enabled ? "" : a.reason ?? "",
     checked: a.checked ?? null
@@ -118,7 +118,7 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
       const definition = definitions.get(id);
       if (!definition) return { kind: "unknown", id };
       const a = availabilityOf(definition);
-      if (a.visible === false || !a.enabled) return { kind: "unavailable", id, reason: a.reason ?? "" };
+      if (!a.enabled) return { kind: "unavailable", id, reason: a.reason ?? "" };
       try {
         definition.run(source);
         return { kind: "ran", id };

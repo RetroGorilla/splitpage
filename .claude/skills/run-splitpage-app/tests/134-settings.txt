@@ -68,7 +68,7 @@ jsclick #menu-hide-shot
 sleep 200
 expect localStorage.getItem('splitpage-hide-shot') === '1'
 expect window.__on('settings-hide-shot') === true
-expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first'; })
+expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first.'; })
 # changed in another tab while Settings is open: Settings follows
 eval (function(){ localStorage.setItem('splitpage-hide-shot', '0'); window.dispatchEvent(new StorageEvent('storage', { key: 'splitpage-hide-shot', oldValue: '1', newValue: '0', storageArea: localStorage })); return true; })()
 wait window.__on('settings-hide-shot') === false

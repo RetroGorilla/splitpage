@@ -1,14 +1,10 @@
 import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
-import { promptForTarget } from "./03-sync.js";
-import { reviewMode } from "./13-hosted.js";
 import {
   IS_MAC,
   fileMenuOpen,
   keyChipWords,
   keyChipsHtml,
-  keysWorkHere,
-  menuItemReason,
   modalIsOpen,
   refreshFileMenu,
   toggleFileMenu
@@ -23,38 +19,6 @@ var RECENT_MAX = 5;
 var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This document", "Help"];
 
 function el(id) { return document.getElementById(id); }
-
-function menuButton(action) {
-  return document.querySelector('#file-menu [data-file-action="' + action + '"]');
-}
-
-function fromMenu(action, group, words, label) {
-  return {
-    id: action,
-    group: group,
-    words: words || "",
-    read: function () {
-      var btn = menuButton(action);
-      if (!btn || btn.hidden) return null;
-      if (action === "save-back" && btn.disabled) return null;
-      var use = btn.querySelector(".mi-icon use");
-      var lab = btn.querySelector(".mi-label");
-      return {
-        label: label || (lab ? lab.textContent : btn.textContent),
-        icon: use ? use.getAttribute("href").slice(1) : "i-file",
-        keys: btn.hasAttribute("data-keys") && keysWorkHere(btn) ? btn.getAttribute("data-keys") : "",
-        why: btn.disabled ? (menuItemReason(btn) || btn.title || "Not available right now") : menuItemReason(btn),
-        disabled: btn.disabled,
-        state: btn.getAttribute("role") === "menuitemcheckbox"
-          ? (btn.getAttribute("aria-checked") === "true" ? "On" : "Off") : ""
-      };
-    },
-    run: function () {
-      var btn = menuButton(action);
-      if (btn && !btn.disabled) btn.click();
-    }
-  };
-}
 
 function fromExport(action, words) {
   return {
@@ -99,16 +63,16 @@ function commands() {
   COMMANDS = [
     fromAction("save"),
     fromAction("save-as"),
-    fromMenu("save-back", "File", "write back original docx csv txt"),
-    fromMenu("autosave", "File", "automatic save saving"),
-    fromMenu("new", "File", "blank empty create start fresh document"),
+    fromAction("save-back"),
+    fromAction("autosave"),
+    fromAction("new"),
     fromAction("open"),
-    fromMenu("server-open", "File", "server hosted shared documents"),
-    fromMenu("paste", "File", "import revised draft text", "Import: paste a script…"),
-    fromMenu("gdoc-import", "File", "import google docs link url", "Import: Google Doc link…"),
-    fromMenu("drive-open", "File", "import google drive cloud files", "Import: Google Drive…"),
-    fromMenu("collaborate", "Share", "collaborate share invite link url people live together send edit comment publish"),
-    fromMenu("server-publish", "Share", "publish upload server hosted"),
+    fromAction("server-open"),
+    fromAction("paste"),
+    fromAction("gdoc-import"),
+    fromAction("drive-open"),
+    fromAction("collaborate"),
+    fromAction("server-publish"),
     fromAction("servers"),
     fromAction("export"),
     fromExport("export-pdf", "pdf print"),
@@ -137,18 +101,9 @@ function commands() {
     fromAction("find"),
     fromAction("toggle-hide-shot"),
     fromAction("toggle-rundown-min"),
-    {
-      id: "set-target",
-      group: "This document",
-      words: "target length goal duration aim runtime running time clock back timing over under minutes",
-      read: function () {
-        var why = reviewMode() ? "Viewing only — the writer sets the target" : "";
-        return { label: "Set target length…", icon: "i-clock", keys: "", why: why, disabled: !!why, state: "" };
-      },
-      run: function () { promptForTarget(); }
-    },
-    fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
-    fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
+    fromAction("set-target"),
+    fromAction("prompter-open-in-browser"),
+    fromAction("prompter-open-in-chromium"),
     fromAction("settings"),
     fromAction("help"),
     fromAction("tour"),

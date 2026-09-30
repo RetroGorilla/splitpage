@@ -24,11 +24,14 @@ test("an unavailable action does not run and gives its reason", () => {
   assert.equal(ran, 1);
 });
 
-test("a hidden action is unavailable even when enabled", () => {
+test("a hidden action is not listed but still runs from a surface that has it", () => {
   const registry = createActionRegistry();
-  registry.register({ id: "a", label: "A", group: "G", availability: () => ({ enabled: true, visible: false }), run: () => {} });
-  assert.equal(registry.invoke("a", "menu").kind, "unavailable");
-  assert.equal(registry.view("a")?.enabled, false);
+  let ran = 0;
+  registry.register({ id: "a", label: "A", group: "G", availability: () => ({ enabled: true, visible: false }), run: () => { ran++; } });
+  assert.equal(registry.view("a")?.visible, false);
+  assert.equal(registry.view("a")?.enabled, true);
+  assert.equal(registry.invoke("a", "native-menu").kind, "ran");
+  assert.equal(ran, 1);
 });
 
 test("an unknown action is reported as unknown", () => {
@@ -109,4 +112,13 @@ test("keys can depend on where the app runs, read each time", () => {
   desktop = true;
   assert.deepEqual(registry.view("help")?.keys, ["F1"]);
   assert.deepEqual(registry.shortcuts(), [{ id: "help", keys: ["F1"], claim: false }]);
+});
+
+test("a label can follow the app's state, read each time", () => {
+  const registry = createActionRegistry();
+  let host = "";
+  registry.register({ id: "servers", label: () => (host ? `Servers… (${host})` : "Servers…"), group: "G", run: () => {} });
+  assert.equal(registry.view("servers")?.label, "Servers…");
+  host = "studio";
+  assert.equal(registry.view("servers")?.label, "Servers… (studio)");
 });

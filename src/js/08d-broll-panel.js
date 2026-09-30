@@ -29,7 +29,7 @@ import {
   renameBrollInScript,
   updateBrollBadge
 } from "./08c-broll.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty, showRefusal, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
@@ -1220,8 +1220,7 @@ export function wireBrollPanel() {
   if (closeBtn) closeBtn.addEventListener("click", closeBrollPanel);
   var openBtn = document.getElementById("btn-broll");
   if (openBtn) openBtn.addEventListener("click", function () {
-    var outcome = appActions.invoke("panel-broll", "button");
-    if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
+    showRefusal(appActions.invoke("panel-broll", "button"));
   });
   document.addEventListener("mousedown", function (e) {
     if (!groupMenuOpen && !menuFor) return;

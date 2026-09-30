@@ -33,20 +33,14 @@ import { commentBodyText, commentEntries, formatTimestamp } from "./10-comments.
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
-  openGdocModal,
-  openImportModal,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markDirty, showRefusal, showToast } from "./12-dirty-toast.js";
 import {
   linkTurnedOff,
   onServerDoc,
-  openDriveModal,
-  openServerPicker,
-  publishToServer,
   serverSessionExpired
 } from "./13-hosted.js";
-import { openCollaborate } from "./13b-collaborate.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
   autoSaveHalt,
@@ -56,7 +50,6 @@ import {
   strBytes,
   toMarkdownDoc,
   toMarkdownTableDoc,
-  toggleAutoSave,
   warnImagesLeftOut,
   zipWrite
 } from "./14-export.js";
@@ -71,15 +64,15 @@ import { buildCsv, csvToRows } from "./16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.js";
 import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
-import { exportAgain, isExportAction, rememberExport } from "./18c-export-dialog.js";
+import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject,
   parseSplitpageFile
 } from "./20d-formats.js";
 import {
-  makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser, openPrompterInChromium
+  makeDesktopHandle, notifyDesktopDocumentState
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { appActions } from "../legacy/app-actions.ts";
@@ -745,20 +738,13 @@ export function handleFileMenuAction(action) {
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
-    var outcome = appActions.invoke(action, "menu");
-    if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
+    showRefusal(appActions.invoke(action, "menu"));
     return;
   }
-  if (!S.state && action !== "drive-open") {
+  if (!S.state) {
     showToast("Still loading…", "warn"); return;
   }
-  if (action === "new") startNewScript();
-  else if (action === "export-again") exportAgain();
-  else if (action === "paste") openImportModal();
-  else if (action === "gdoc-import") openGdocModal();
-  else if (action === "save-back") saveBackToFile();
-  else if (action === "autosave") toggleAutoSave();
-  else if (action === "export-docx") exportAs("docx");
+  if (action === "export-docx") exportAs("docx");
   else if (action === "export-md") exportAs("md");
   else if (action === "export-md-table") exportAs("md-table");
   else if (action === "export-csv") exportAs("csv");
@@ -772,12 +758,6 @@ export function handleFileMenuAction(action) {
   else if (action === "export-packing-gear") exportPackingList("gear");
   else if (action === "export-packing-prop") exportPackingList("prop");
   else if (action === "export-broll-pdf" || action === "export-broll-csv" || action === "export-broll-xlsx") exportBrollList(action);
-  else if (action === "drive-open") openDriveModal();
-  else if (action === "server-open") openServerPicker();
-  else if (action === "server-publish") publishToServer();
-  else if (action === "collaborate") openCollaborate();
-  else if (action === "prompter-open-in-browser") openPrompterInBrowser();
-  else if (action === "prompter-open-in-chromium") openPrompterInChromium();
 }
 
 export function __init() {}

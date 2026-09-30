@@ -136,6 +136,12 @@ export function updateSaveStatus() {
   }
 }
 
+export function showRefusal(outcome) {
+  if (!outcome || outcome.kind !== "unavailable" || !outcome.reason) return;
+  var text = outcome.reason;
+  showToast(/[.!?…]$/.test(text) ? text : text + ".", "warn");
+}
+
 export function showToast(msg, kind, sticky) {
   var host = document.getElementById("toast-host");
   var el = document.createElement("div");

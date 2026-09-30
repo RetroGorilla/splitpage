@@ -12,10 +12,10 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
-import { openCollaborate } from "./13b-collaborate.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
 
@@ -529,7 +529,7 @@ export function __init() {
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
         else if (action === "review-copy") copyReviewLink();
-        else if (action === "collaborate") { closeServersDialog(); openCollaborate(); }
+        else if (action === "collaborate") { closeServersDialog(); appActions.invoke("collaborate", "button"); }
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");

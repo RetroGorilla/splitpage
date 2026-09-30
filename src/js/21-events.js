@@ -190,7 +190,7 @@ import {
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "./11-import.js";
-import { markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { markDirty, showActionToast, showRefusal, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { caretAfterStep, configureUndo, lastUndoEntry, redo, settleAfterApply, undo } from "./12a-undo.js";
 import {
   armDriveDelete,
@@ -1764,8 +1764,7 @@ function init() {
 }
 
 function runFromButton(id) {
-  var outcome = appActions.invoke(id, "button");
-  if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
+  showRefusal(appActions.invoke(id, "button"));
 }
 
 function saveFromButton() { runFromButton("save"); }
