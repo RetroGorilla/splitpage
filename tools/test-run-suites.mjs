@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -38,13 +39,18 @@ function configError(argv, env) {
   catch (e) { return e instanceof ConfigError; }
 }
 
+function parsed(argv, env) {
+  try { return parseArgs(argv, env); }
+  catch (e) { return { error: e.message }; }
+}
+
 const work = mkdtempSync(join(tmpdir(), "splitpage-run-suites-"));
 const suites = join(work, "suites");
 mkdirSync(suites);
 const KINDS = [
   "pass", "crlf", "split", "fail", "errored", "silent", "stderr", "lying",
   "zero", "garbage", "partial", "negative", "contradictory", "overwritten", "twice", "trailing",
-  "hang", "orphan", "escaped", "afterhang"
+  "hang", "slow", "orphan", "escaped", "afterhang"
 ];
 for (const name of KINDS) writeFileSync(join(suites, `${name}.txt`), "");
 
@@ -85,6 +91,7 @@ switch (kind) {
     forever();
     break;
   }
+  case "slow": setTimeout(() => done(["RESULT: 1/1 checks passed"], 0), 4000); break;
   case "orphan": {
     const grandchild = spawn(process.execPath, idle, { stdio: ["ignore", "inherit", "inherit"] });
     record({ grandchild: grandchild.pid });
@@ -107,6 +114,10 @@ switch (kind) {
   default: done(["RESULT: unknown fake kind " + kind], 1);
 }
 `);
+
+function randomPortBase() {
+  return 10 * Math.floor(Math.random() * 1300);
+}
 
 function newState() {
   const state = join(work, "state-" + Math.random().toString(16).slice(2, 10));
@@ -162,11 +173,12 @@ function reap(info) {
   }
 }
 
-function run(args, { timeout = 60000, runner = RUNNER, out } = {}) {
+function runOnce(args, { portBase, timeout, runner, out }) {
   const dir = out ?? join(work, "out-" + Math.random().toString(16).slice(2, 10));
   const state = newState();
+  const argv = [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver, "--port-base", String(portBase)];
   const started = Date.now();
-  const r = spawnSync(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver], {
+  const r = spawnSync(process.execPath, argv, {
     cwd: REPO,
     encoding: "utf8",
     env: { ...process.env, FAKE_DRIVER_STATE: state },
@@ -184,10 +196,21 @@ function run(args, { timeout = 60000, runner = RUNNER, out } = {}) {
   };
 }
 
-function start(args, { runner = RUNNER } = {}) {
+function run(args, { portBase, timeout = 60000, runner = RUNNER, out } = {}) {
+  if (portBase !== undefined) return runOnce(args, { portBase, timeout, runner, out });
+  let r;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    r = runOnce(args, { portBase: randomPortBase(), timeout, runner, out });
+    if (!(r.status === EXIT.CONFIG && /port collision/.test(r.stderr))) break;
+    console.log(`  note: random port block was busy, retrying (${r.stderr.trim()})`);
+  }
+  return r;
+}
+
+function start(args, { portBase = randomPortBase(), runner = RUNNER } = {}) {
   const dir = join(work, "out-" + Math.random().toString(16).slice(2, 10));
   const state = newState();
-  const child = spawn(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver], {
+  const child = spawn(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver, "--port-base", String(portBase)], {
     cwd: REPO,
     env: { ...process.env, FAKE_DRIVER_STATE: state },
     stdio: ["ignore", "pipe", "pipe"]
@@ -207,6 +230,24 @@ async function waitFor(predicate, ms) {
     await new Promise((r) => setTimeout(r, 50));
   }
   return true;
+}
+
+function freePort() {
+  return new Promise((resolvePort) => {
+    const server = createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolvePort(port));
+    });
+  });
+}
+
+function hold(port) {
+  return new Promise((resolveHold, rejectHold) => {
+    const server = createServer();
+    server.once("error", rejectHold);
+    server.listen(port, "127.0.0.1", () => resolveHold(server));
+  });
 }
 
 console.log("\nclassify():\n");
@@ -234,8 +275,21 @@ check("lanes below one is a config error", configError(["o", "--lanes", "0"]), n
 check("non-numeric port base is a config error", configError(["o"], { PORT_BASE: "x" }), null);
 check("an invalid regex is a config error", configError(["o", "["]), null);
 check("a flag without a value is a config error", configError(["o", "--lanes"]), null);
-eq("env LANES is read when no flag is given", parseArgs(["o"], { LANES: "3" }).lanes, 3);
-eq("--lanes wins over env", parseArgs(["o", "--lanes", "2"], { LANES: "3" }).lanes, 2);
+eq("env LANES is read when no flag is given", parsed(["o"], { LANES: "3" }).lanes, 3);
+eq("--lanes wins over env", parsed(["o", "--lanes", "2"], { LANES: "3" }).lanes, 2);
+check("an unknown flag is a config error", configError(["o", "--laness", "1"]), null);
+check("a single-dash option is a config error", configError(["o", "-x"]), null);
+check("a flag given twice is a config error", configError(["o", "--lanes", "1", "--lanes", "2"]), null);
+eq("--flag=value is accepted", parsed(["o", "--lanes=2"]).lanes, 2);
+eq("-- ends the options", parsed(["o", "--", "-core"]).filter?.source, "-core");
+check("a fractional lane count is a config error", configError(["o", "--lanes", "1.5"]), null);
+check("a hexadecimal timeout is a config error", configError(["o", "--timeout", "0x10"]), null);
+check("a timeout beyond one day is a config error", configError(["o", "--timeout", "86401"]), null);
+check("a port base past the port range is a config error", configError(["o", "--port-base", "999999999"]), null);
+check("a port base whose last lane passes 65535 is a config error", configError(["o", "--port-base", "46186"]), null);
+check("the same port base is fine with fewer lanes", !configError(["o", "--port-base", "46186", "--lanes", "1"]), null);
+check("lanes whose HTTP and CDP ports overlap are a config error", configError(["o", "--lanes", "121"]), null);
+check("120 lanes do not overlap", !configError(["o", "--lanes", "120"]), null);
 
 console.log("\nrun-suites.mjs as a process:\n");
 
@@ -303,6 +357,55 @@ console.log("\nrun-suites.mjs as a process:\n");
   const r = run(["^pass", "--lanes", "0"]);
   eq("invalid lane count exits 2", r.status, EXIT.CONFIG);
   eq("invalid lane count spawns nothing", spawnedKinds(r.state).length, 0);
+}
+
+{
+  const r = run(["^pass", "--laness", "1"]);
+  eq("an unknown flag exits 2", r.status, EXIT.CONFIG);
+  check("an unknown flag is named", r.stderr.includes("--laness"), r.stderr);
+  eq("an unknown flag spawns nothing", spawnedKinds(r.state).length, 0);
+  eq("an unknown flag writes no summary", r.summary, null);
+}
+
+{
+  const r = run(["^pass"], { portBase: 999999999 });
+  eq("an out-of-range port base exits 2", r.status, EXIT.CONFIG);
+  eq("an out-of-range port base spawns nothing", spawnedKinds(r.state).length, 0);
+  eq("an out-of-range port base writes no summary", r.summary, null);
+}
+
+{
+  let port = await freePort();
+  for (let i = 0; i < 20 && (port - 18100 < 0 || port + 1200 > 65535); i++) port = await freePort();
+  const server = await hold(port);
+  const r = run(["^pass", "--lanes", "1"], { portBase: port - 18100 });
+  server.close();
+  eq("a busy HTTP port exits 2", r.status, EXIT.CONFIG);
+  check("a busy HTTP port is named as a collision", r.stderr.includes(String(port)) && /in use/.test(r.stderr), r.stderr);
+  eq("a busy HTTP port spawns nothing", spawnedKinds(r.state).length, 0);
+}
+
+{
+  const port = await freePort();
+  const server = await hold(port);
+  const r = run(["^pass", "--lanes", "1"], { portBase: port - 19300 });
+  server.close();
+  eq("a busy CDP port exits 2", r.status, EXIT.CONFIG);
+  check("a busy CDP port is named as a collision", r.stderr.includes(String(port)) && /in use/.test(r.stderr), r.stderr);
+  eq("a busy CDP port spawns nothing", spawnedKinds(r.state).length, 0);
+}
+
+{
+  const portBase = randomPortBase();
+  const first = start(["^slow", "--lanes", "1", "--timeout", "60"], { portBase });
+  const running = await waitFor(() => spawnedKinds(first.state).length > 0, 10000);
+  check("the first invocation started its suite", running, null);
+  const second = run(["^pass", "--lanes", "1"], { portBase });
+  eq("a second invocation on the same ports exits 2", second.status, EXIT.CONFIG);
+  check("the second invocation names the collision", /in use/.test(second.stderr), second.stderr);
+  eq("the second invocation spawns nothing", spawnedKinds(second.state).length, 0);
+  const done = await first.closed;
+  eq("the first invocation still passes", done.code, EXIT.OK);
 }
 
 {
