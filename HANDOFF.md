@@ -2038,7 +2038,7 @@ evaluation order via `_entry.js`):
 | `20i-topbar.js` | the header on scroll (`.is-condensed`: the rundown's ruler shed, played as FLIP, two thresholds and the scroll offset put back); the title's full text as its tooltip; and the toolbar's labels (PR #233): each panel toggle's, Collab's and Write's label width measured with a Range into `--label-w` (the CSS animates the label closing below 1300 / 1000 and a closed one opening on hover or focus, over its neighbours, with a negative margin of the same width — app.css "the toolbar's labels"), `--label-x` to carry an opening pill to a neighbour's edge, and `.is-label-open` for a pointer that isn't a touch |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
-| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
+| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (the registry's `settings` action, src/legacy/help-actions.ts, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
 | `21-events.js` | all event wiring, `init()` |
 
@@ -2084,18 +2084,27 @@ own file retired the markers, and means editing the repo's README no longer
 rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
 visible text on the Help page — keep any inside a fenced code block.
 
-**File-menu items owned outside `18-local-files.js`'s `handleFileMenuAction()`:**
-`20c-help.js` and `20e-connect.js` each add a capture-phase listener on
-`#file-menu` matching only their own action. `20b-onboarding.js`'s listener
-matches *every* action and closes the wizard first, registering ahead of the
-other two (alphabetical order) — keeping only one full-screen modal open at
-a time (invariant #19). The wizard's own Escape/Tab handling listens in the
-bubble phase instead, since it can sit open, unnoticed, during an unrelated
-test.
+**Choosing a File menu item:** one click listener on `#file-menu`
+(`21-events.js`) hands an enabled item's id to `handleFileMenuAction()`
+(`18-local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
+the menu, remembers an export and invokes the action from the registry
+(`docs/architecture/actions.md`). Help, Servers, Tour and Set up are actions
+like the rest; the capture-phase listeners `20c-help.js`, `20e-connect.js`
+and `20b-onboarding.js` once added are gone. The setup wizard registers with
+`onFileMenuChoice()` and closes on *every* choice before the action is asked
+whether it can run, keeping only one full-screen modal open at a time
+(invariant #19); so a File menu command from the desktop app's native menu
+closes the wizard and runs where its shortcut is refused under the wizard,
+as in 3.1. The wizard's own Escape/Tab handling listens in the bubble phase
+instead, since it can sit open, unnoticed, during an unrelated test.
 
 Since #145 the menu is a dropdown (`18b-file-menu.js`), but every item is
-still one `<button data-file-action>` inside `#file-menu`, exactly once — the
-desktop native menu clicks them (`runDesktopMenuCommand`). What an item's
+still one `<button data-file-action>` inside `#file-menu`, exactly once. The
+desktop native menu no longer clicks them: `runDesktopMenuCommand` hands the
+command to `nativeMenuRunner()` (`src/legacy/native-menu.ts`), which runs a
+File menu item's action through `handleFileMenuAction(id, "native-menu")`,
+reading no rendered state; only a command it does not know (an export
+format) still clicks its item. What an item's
 state is lives on the button (`hidden`, `disabled`, the `.mi-why` second line
 through `setMenuItemReason`), and a label is rewritten through
 `setMenuItemLabel`, never the button's `textContent`, which would take its

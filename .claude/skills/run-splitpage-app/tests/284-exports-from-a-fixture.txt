@@ -8,7 +8,7 @@
 # gives the same bytes (Markdown, SplitShare, the PDFs; the zipped formats
 # carry a time); and what the view is doing (Hide shot scenes, the Writer)
 # does not change the Markdown. Passes against the code before the action
-# registry (4.0-development 19c66f7) and after it. Every `eval` is one
+# registry (4.0-development 47c0309) and after it. Every `eval` is one
 # physical line.
 
 open

@@ -2,7 +2,7 @@
 # did before the action registry (4.0 milestone 1): Collaborate from the
 # Servers dialog and from the header's Collab button, on a server that is
 # read-only. Passes against the code before the registry (4.0-development
-# 19c66f7) and after it.
+# 19c66f7 and 47c0309) and after it.
 
 open
 viewport 1400 900

@@ -6,8 +6,8 @@
 # status words, state and tooltip, the file chip, the File menu's card, and
 # Save to file. Times are read in the page and compared as "T". 187-autosave-
 # status-words.txt covers the words over time; this is the matrix. Passes
-# against the code before the action registry (4.0-development 19c66f7) and
-# after it. Every `eval` is one physical line.
+# against the code before the action registry (4.0-development 19c66f7 and
+# 47c0309) and after it. Every `eval` is one physical line.
 
 open
 wait document.querySelectorAll('#rows .row').length > 0
