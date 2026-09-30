@@ -207,7 +207,7 @@ function run(args, { portBase, timeout = 60000, runner = RUNNER, out } = {}) {
   return r;
 }
 
-function start(args, { portBase = randomPortBase(), runner = RUNNER } = {}) {
+function start(args, { portBase, runner = RUNNER }) {
   const dir = join(work, "out-" + Math.random().toString(16).slice(2, 10));
   const state = newState();
   const child = spawn(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver, "--port-base", String(portBase)], {
@@ -232,22 +232,37 @@ async function waitFor(predicate, ms) {
   return true;
 }
 
-function freePort() {
-  return new Promise((resolvePort) => {
-    const server = createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address();
-      server.close(() => resolvePort(port));
-    });
-  });
-}
-
 function hold(port) {
   return new Promise((resolveHold, rejectHold) => {
     const server = createServer();
     server.once("error", rejectHold);
     server.listen(port, "127.0.0.1", () => resolveHold(server));
   });
+}
+
+async function freePortBase(lanes = 1) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const portBase = randomPortBase();
+    const ports = [];
+    for (let lane = 0; lane < lanes; lane++) ports.push(18100 + portBase + 10 * lane, 18101 + portBase + 10 * lane, 19300 + portBase + 10 * lane);
+    const held = [];
+    for (const port of ports) {
+      try { held.push(await hold(port)); }
+      catch { break; }
+    }
+    await Promise.all(held.map((s) => new Promise((r) => s.close(r))));
+    if (held.length === ports.length) return portBase;
+  }
+  throw new Error("no free port block found");
+}
+
+async function holdInBlock(first) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const portBase = randomPortBase();
+    try { return { portBase, port: first + portBase, server: await hold(first + portBase) }; }
+    catch {}
+  }
+  throw new Error(`no free port near ${first} to occupy`);
 }
 
 console.log("\nclassify():\n");
@@ -375,10 +390,8 @@ console.log("\nrun-suites.mjs as a process:\n");
 }
 
 {
-  let port = await freePort();
-  for (let i = 0; i < 20 && (port - 18100 < 0 || port + 1200 > 65535); i++) port = await freePort();
-  const server = await hold(port);
-  const r = run(["^pass", "--lanes", "1"], { portBase: port - 18100 });
+  const { portBase, port, server } = await holdInBlock(18100);
+  const r = run(["^pass", "--lanes", "1"], { portBase });
   server.close();
   eq("a busy HTTP port exits 2", r.status, EXIT.CONFIG);
   check("a busy HTTP port is named as a collision", r.stderr.includes(String(port)) && /in use/.test(r.stderr), r.stderr);
@@ -386,9 +399,8 @@ console.log("\nrun-suites.mjs as a process:\n");
 }
 
 {
-  const port = await freePort();
-  const server = await hold(port);
-  const r = run(["^pass", "--lanes", "1"], { portBase: port - 19300 });
+  const { portBase, port, server } = await holdInBlock(19300);
+  const r = run(["^pass", "--lanes", "1"], { portBase });
   server.close();
   eq("a busy CDP port exits 2", r.status, EXIT.CONFIG);
   check("a busy CDP port is named as a collision", r.stderr.includes(String(port)) && /in use/.test(r.stderr), r.stderr);
@@ -396,7 +408,7 @@ console.log("\nrun-suites.mjs as a process:\n");
 }
 
 {
-  const portBase = randomPortBase();
+  const portBase = await freePortBase();
   const first = start(["^slow", "--lanes", "1", "--timeout", "60"], { portBase });
   const running = await waitFor(() => spawnedKinds(first.state).length > 0, 10000);
   check("the first invocation started its suite", running, null);
@@ -472,7 +484,7 @@ for (const [signal, code, runner, who] of [["SIGINT", 130, RUNNER, "the runner"]
     skip(`${name} stops the run and kills its drivers`, "win32 cannot deliver a catchable SIGINT/SIGTERM to a child process, so this runs on the Linux CI");
     continue;
   }
-  const running = start(["^hang", "--timeout", "60"], { runner });
+  const running = start(["^hang", "--timeout", "60"], { runner, portBase: await freePortBase() });
   const ready = await waitFor(() => recorded(running.state, "hang") !== null, 10000);
   const info = recorded(running.state, "hang");
   check(`${name}: the hung suite started`, ready && info?.driver > 0 && info?.grandchild > 0, JSON.stringify(info));
