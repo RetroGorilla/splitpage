@@ -6,14 +6,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const SKILL_DIR = join(REPO, ".claude", "skills", "run-splitpage-app");
 const LOG_LIMIT = 2 * 1024 * 1024;
+const LINE_LIMIT = 4096;
 const PORT_STRIDE = 10;
+const SUMMARY = /^RESULT: (0|-?[1-9]\d{0,8})\/(0|[1-9]\d{0,8}) checks passed(?: - ([1-9]\d{0,8}) FAILED)?$/;
 
 export const STATUS = Object.freeze({
   PASS: "PASS",
   FAIL: "FAIL",
+  BAD_RESULT: "BAD-RESULT",
+  NO_RESULT: "NO-RESULT",
   TIMEOUT: "TIMEOUT",
-  LAUNCH_ERROR: "LAUNCH-ERROR",
-  NO_RESULT: "NO-RESULT"
+  LAUNCH_ERROR: "LAUNCH-ERROR"
 });
 
 export const EXIT = Object.freeze({ OK: 0, SUITES_FAILED: 1, CONFIG: 2, INTERRUPTED: 130 });
@@ -89,14 +92,91 @@ export function driverCommand(config, file, lane) {
   };
 }
 
-export function classify(outcome, log) {
-  const matches = log.match(/RESULT:[^\n]*/g);
-  const result = matches ? matches[matches.length - 1] : null;
+export function createSummaryScanner() {
+  let partial = "";
+  let count = 0;
+  let first = null;
+  let last = null;
+  let lastIsSummary = false;
+  let done = null;
+  const take = (raw) => {
+    const line = (raw.endsWith("\r") ? raw.slice(0, -1) : raw).slice(0, LINE_LIMIT);
+    if (line.trim() === "") return;
+    if (!line.startsWith("RESULT:")) { lastIsSummary = false; return; }
+    count++;
+    if (first === null) first = line;
+    last = line;
+    lastIsSummary = true;
+  };
+  return {
+    push(chunk) {
+      let start = 0;
+      for (;;) {
+        const nl = chunk.indexOf("\n", start);
+        if (nl === -1) { partial = (partial + chunk.slice(start)).slice(0, LINE_LIMIT); return; }
+        take(partial + chunk.slice(start, nl));
+        partial = "";
+        start = nl + 1;
+      }
+    },
+    end() {
+      if (done) return done;
+      take(partial);
+      partial = "";
+      done = { count, first, last, lastIsSummary };
+      return done;
+    }
+  };
+}
+
+export function scanSummary(text) {
+  const scanner = createSummaryScanner();
+  scanner.push(text);
+  return scanner.end();
+}
+
+export function judgeSummary(scanned) {
+  const { count, first, last, lastIsSummary } = scanned;
+  if (count === 0) return { kind: "missing" };
+  if (count > 1) return { kind: "bad", reason: `duplicate: ${count} RESULT lines, first ${JSON.stringify(first)}, last ${JSON.stringify(last)}` };
+  const line = last;
+  const quoted = JSON.stringify(line);
+  if (!lastIsSummary) return { kind: "bad", reason: `trailing output: ${quoted} is not the last line`, line };
+  const m = SUMMARY.exec(line);
+  if (!m) return { kind: "bad", reason: `malformed: ${quoted}`, line };
+  const passed = Number(m[1]);
+  const total = Number(m[2]);
+  if (m[3] !== undefined) {
+    if (Number(m[3]) !== total - passed) return { kind: "bad", reason: `contradictory: ${quoted}`, line };
+    return { kind: "failing", line };
+  }
+  if (total === 0) return { kind: "bad", reason: `zero checks: ${quoted}`, line };
+  if (passed < 0) return { kind: "bad", reason: `negative: ${quoted}`, line };
+  if (passed < total) return { kind: "bad", reason: `incomplete: ${quoted}`, line };
+  if (passed > total) return { kind: "bad", reason: `contradictory: ${quoted}`, line };
+  return { kind: "passing", line };
+}
+
+function describeExit(outcome) {
+  if (outcome.code !== null && outcome.code !== undefined) return `exit ${outcome.code}`;
+  if (outcome.signal) return `signal ${outcome.signal}`;
+  return "no exit status";
+}
+
+export function classify(outcome, stdout) {
+  const scanned = typeof stdout === "string" ? scanSummary(stdout) : stdout;
   if (outcome.launchError) return { status: STATUS.LAUNCH_ERROR, result: outcome.launchError };
-  if (outcome.timedOut) return { status: STATUS.TIMEOUT, result: result || "no RESULT line before timeout" };
-  if (!result) return { status: STATUS.NO_RESULT, result: `exit ${outcome.code ?? outcome.signal}` };
-  if (outcome.code === 0 && !/FAILED/.test(result)) return { status: STATUS.PASS, result };
-  return { status: STATUS.FAIL, result: `${result} (exit ${outcome.code ?? outcome.signal})` };
+  const verdict = judgeSummary(scanned);
+  const seen = verdict.line ? `last summary ${JSON.stringify(verdict.line)}` : "no RESULT line";
+  if (outcome.timedOut) {
+    const limit = outcome.limitSec ? `no exit within ${outcome.limitSec}s` : "no exit within the suite timeout";
+    return { status: STATUS.TIMEOUT, result: `${limit}, ${seen}` };
+  }
+  const exit = describeExit(outcome);
+  if (verdict.kind === "missing") return { status: STATUS.NO_RESULT, result: `no RESULT line (${exit})` };
+  if (verdict.kind === "bad") return { status: STATUS.BAD_RESULT, result: `${verdict.reason} (${exit})` };
+  if (verdict.kind === "passing" && outcome.code === 0 && !outcome.signal) return { status: STATUS.PASS, result: verdict.line };
+  return { status: STATUS.FAIL, result: `${verdict.line} (${exit})` };
 }
 
 function appendBounded(current, chunk) {
@@ -120,11 +200,12 @@ function runOne(config, file, lane, live) {
   return new Promise((resolveRun) => {
     let log = "";
     let settled = false;
-    const outcome = { code: null, signal: null, timedOut: false, launchError: null };
+    const scanner = createSummaryScanner();
+    const outcome = { code: null, signal: null, timedOut: false, launchError: null, limitSec: config.timeoutMs / 1000 };
     const finish = () => {
       if (settled) return;
       settled = true;
-      resolveRun({ file, log, ...classify(outcome, log) });
+      resolveRun({ file, log, ...classify(outcome, scanner.end()) });
     };
     let child;
     try {
@@ -136,8 +217,10 @@ function runOne(config, file, lane, live) {
     }
     live.add(child);
     const timer = setTimeout(() => { outcome.timedOut = true; killTree(child); }, config.timeoutMs);
-    child.stdout.on("data", (d) => { log = appendBounded(log, String(d)); });
-    child.stderr.on("data", (d) => { log = appendBounded(log, String(d)); });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (d) => { log = appendBounded(log, d); scanner.push(d); });
+    child.stderr.on("data", (d) => { log = appendBounded(log, d); });
     child.on("error", (e) => {
       outcome.launchError = e.message;
       clearTimeout(timer);
@@ -161,7 +244,7 @@ export function summarize(results) {
 }
 
 export function exitCodeFor(results) {
-  return results.every((r) => r.status === STATUS.PASS) ? EXIT.OK : EXIT.SUITES_FAILED;
+  return results.length > 0 && results.every((r) => r.status === STATUS.PASS) ? EXIT.OK : EXIT.SUITES_FAILED;
 }
 
 export async function runSuites(config, files, { print = console.log, live = new Set() } = {}) {
