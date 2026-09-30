@@ -26,7 +26,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "store keep write disk",
-      availability: () => firstRefusal(availableUnless(["loading", "dialog", "launcher"], screenNow()),
+      availability: (source) => firstRefusal(
+        availableUnless(source === "shortcut" ? ["loading", "dialog", "launcher"] : ["dialog", "launcher"], screenNow()),
         saveInProgress() ? { enabled: false, reason: "" } : { enabled: true }),
       run: () => {
         closeFileMenu();
@@ -84,9 +85,9 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       keys: ["mod+k"],
       words: "command palette search run",
       availability: () => (commandMenuOpen() ? { enabled: true } : availableUnless(["loading", "prompter", "writer", "dialog", "tour"], screenNow())),
-      run: () => {
-        if (commandMenuOpen()) closeCommandMenu();
-        else openCommandMenu();
+      run: (source) => {
+        if (!commandMenuOpen()) openCommandMenu();
+        else if (source === "shortcut") closeCommandMenu();
       }
     })
   ];

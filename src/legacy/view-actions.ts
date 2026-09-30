@@ -9,6 +9,7 @@ import { availableUnless } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
 
 const VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
+const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
 
 function shownButton(id: string): boolean {
   const button = document.getElementById(id);
@@ -24,14 +25,19 @@ function panelOpen(id: string): boolean {
   return panel !== null && !panel.hidden;
 }
 
-function panel(id: string, label: string, buttonId: string, panelId: string, words: string, open: () => void, close: () => void): ActionDefinition {
+function loadingRefusal(reason: string | null): Availability {
+  return reason !== null && screenNow().loading ? { enabled: false, reason } : { enabled: true };
+}
+
+function panel(id: string, label: string, buttonId: string, panelId: string, words: string, whileLoading: string | null,
+  open: () => void, close: () => void): ActionDefinition {
   return {
     id,
     label,
     group: "View",
     icon: "i-panel",
     words,
-    availability: () => withButton(buttonId, availableUnless(["loading"], screenNow())),
+    availability: () => withButton(buttonId, loadingRefusal(whileLoading)),
     run: () => {
       if (panelOpen(panelId)) close();
       else open();
@@ -42,23 +48,23 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
 export function registerViewActions(registry: ActionRegistry): () => void {
   const definitions: ActionDefinition[] = [
     panel("panel-production", "Production panel", "btn-production", "production-panel",
-      "breakdown tags props locations cast show hide toggle", openProductionPanel, closeProductionPanel),
+      "breakdown tags props locations cast show hide toggle", "Still loading...", openProductionPanel, closeProductionPanel),
     panel("panel-gear", "Gear panel", "btn-gear", "gear-panel",
-      "gear equipment kit camera show hide toggle", openGearPanel, closeGearPanel),
+      "gear equipment kit camera show hide toggle", "Still loading...", openGearPanel, closeGearPanel),
     panel("panel-broll", "B-roll panel", "btn-broll", "broll-panel",
-      "broll b roll shots cutaways show hide toggle", openBrollPanel, closeBrollPanel),
+      "broll b roll shots cutaways show hide toggle", null, openBrollPanel, closeBrollPanel),
     panel("panel-comments", "Comments panel", "btn-comments", "comments-panel",
-      "comments notes review feedback show hide toggle", openCommentsPanel, closeCommentsPanel),
+      "comments notes review feedback show hide toggle", "Still loading…", openCommentsPanel, closeCommentsPanel),
     {
       id: "write",
       label: "Write",
       group: "View",
       icon: "i-pen",
       words: "writer narration word processor audio column",
-      availability: () => {
+      availability: (source) => {
         const screen = availableUnless(["loading"], screenNow());
-        const allowed: Availability = screen.enabled && reviewMode() ? { enabled: false, reason: VIEWING_ONLY } : screen;
-        return withButton("btn-write", allowed);
+        const refused: Availability = { enabled: false, reason: source === "command-menu" ? VIEWING_ONLY_LISTED : VIEWING_ONLY };
+        return withButton("btn-write", screen.enabled && reviewMode() ? refused : screen);
       },
       run: () => { openWriter(); }
     },

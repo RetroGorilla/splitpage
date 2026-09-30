@@ -21,7 +21,7 @@ export interface ActionDefinition {
   readonly bindKeys?: () => boolean;
   readonly claimKeys?: boolean;
   readonly words?: string;
-  readonly availability?: () => Availability;
+  readonly availability?: (source: ActionSource) => Availability;
   readonly run: (source: ActionSource) => void | Promise<void>;
 }
 
@@ -48,8 +48,8 @@ export interface ActionRegistry {
   register(definition: ActionDefinition): () => void;
   has(id: string): boolean;
   shortcuts(): readonly KeyedAction[];
-  view(id: string): ActionView | undefined;
-  list(): readonly ActionView[];
+  view(id: string, source?: ActionSource): ActionView | undefined;
+  list(source?: ActionSource): readonly ActionView[];
   invoke(id: string, source: ActionSource): InvokeOutcome;
 }
 
@@ -59,8 +59,10 @@ export interface RegistryOptions {
 
 const ALWAYS: Availability = { enabled: true };
 
-function availabilityOf(definition: ActionDefinition): Availability {
-  return definition.availability ? definition.availability() : ALWAYS;
+const LISTING: ActionSource = "command-menu";
+
+function availabilityOf(definition: ActionDefinition, source: ActionSource): Availability {
+  return definition.availability ? definition.availability(source) : ALWAYS;
 }
 
 function keysOf(definition: ActionDefinition): readonly string[] {
@@ -69,8 +71,8 @@ function keysOf(definition: ActionDefinition): readonly string[] {
   return typeof keys === "function" ? keys() : keys;
 }
 
-function toView(definition: ActionDefinition): ActionView {
-  const a = availabilityOf(definition);
+function toView(definition: ActionDefinition, source: ActionSource): ActionView {
+  const a = availabilityOf(definition, source);
   const visible = a.visible !== false;
   return {
     id: definition.id,
@@ -125,17 +127,17 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
         .map((d) => ({ id: d.id, keys: keysOf(d), claim: d.claimKeys === true }))
         .filter((k) => k.keys.length > 0);
     },
-    view(id) {
+    view(id, source = LISTING) {
       const definition = definitions.get(id);
-      return definition ? toView(definition) : undefined;
+      return definition ? toView(definition, source) : undefined;
     },
-    list() {
-      return [...definitions.values()].map(toView);
+    list(source = LISTING) {
+      return [...definitions.values()].map((d) => toView(d, source));
     },
     invoke(id, source) {
       const definition = definitions.get(id);
       if (!definition) return { kind: "unknown", id };
-      const a = availabilityOf(definition);
+      const a = availabilityOf(definition, source);
       if (!a.enabled) return { kind: "unavailable", id, reason: a.reason ?? "" };
       try {
         const pending: unknown = definition.run(source);
