@@ -3,8 +3,8 @@
 # a review session and in the desktop app, plus the key chips, switch states
 # and icons. Since the command menu is built from the action registry rather
 # than a hand-kept list, this pins that nothing was added, dropped or moved.
-# Passes against the code before the registry (4.0-development 19c66f7) and
-# after it.
+# Passes against the code before the registry (4.0-development 19c66f7 and
+# 47c0309) and after it.
 
 open
 viewport 1400 900

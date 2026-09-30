@@ -7,7 +7,7 @@
 # menu's Search commands leaves it open. Write in a review session reads
 # differently in the command menu and on its button. The header's Search
 # button does nothing where it cannot open. Passes against the code before
-# the registry (4.0-development 19c66f7) and after it.
+# the registry (4.0-development 47c0309) and after it.
 
 open
 viewport 1400 900

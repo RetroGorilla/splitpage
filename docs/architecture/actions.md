@@ -46,7 +46,8 @@ Production and Gear buttons say "Still loading..." and the B-roll button does
 not wait for the document at all. `tests/legacy/while-loading.test.ts` checks
 the loading cases against the real definitions (the browser suites cannot
 reach a page that is still loading); `278-commands-as-before.txt` checks the
-rest, and passes against 3.1's code too.
+rest, and passes against the code before the registry (4.0-development
+47c0309) too.
 
 Showing a refusal is a port of the registry. `presentRefusals(presenter)`
 installs the one presenter and returns its disposer; `invoke` hands every
@@ -117,7 +118,8 @@ shows up in the command menu with no edit to it. The command menu never lists
 its own action, `command-menu`. `tests/legacy/command-palette.test.ts` checks
 this against the real registry instance; `279-command-menu-listing.txt` pins
 the whole listing, key chips, switch states and icons in the browser, a
-review session and the desktop app, and passes against 3.1's code too.
+review session and the desktop app, and passes against the code before the
+registry (4.0-development 19c66f7 and 47c0309) too.
 
 `src/application/shortcuts.ts` parses chords, names them canonically
 (`chordKey()`) and finds the action a key event names; a key event with no
@@ -261,7 +263,8 @@ nothing at all for a refusal without one. The export formats are not actions
 yet (milestone 5) and keep the File menu item's own dispatch.
 
 `280-other-surfaces.txt` checks the Settings buttons, the wizard's links and
-these native menu rules, against 3.1's code too.
+these native menu rules, against the code before the registry
+(4.0-development 47c0309) too.
 
 One side effect of 3.1's synthetic clicks is not kept. Ctrl+S, Ctrl+Shift+S,
 Ctrl+O, a native menu command and a command run from the command menu used to
@@ -313,14 +316,15 @@ formats in milestone 5.
 
 Browser suites `268-actions-every-surface.txt`,
 `269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt`,
-`272-view-actions-every-surface.txt`, `273-help-actions-every-surface.txt` and
-`274-more-actions-every-surface.txt` check each surface, and the
-shortcut refused under a dialog. `276-availability-follows-state.txt`,
-`277-refusals-say-why.txt`, `278-commands-as-before.txt`,
-`279-command-menu-listing.txt`, `280-other-surfaces.txt` and
-`281-script-zoom-commands.txt` check the rules above; all but 276 pass
-against 3.1's code too. The characterisation suites milestone 1 adds for the
-next slices, `282-editor-operations.txt`,
+`272-view-actions-every-surface.txt`, `273-help-actions-every-surface.txt`,
+`274-more-actions-every-surface.txt` and `286-find-from-every-surface.txt`
+check each surface, and the shortcut refused under a dialog.
+`276-availability-follows-state.txt`, `277-refusals-say-why.txt`,
+`278-commands-as-before.txt`, `279-command-menu-listing.txt`,
+`280-other-surfaces.txt` and `281-script-zoom-commands.txt` check the rules
+above; all but 276 pass against the code before the registry
+(4.0-development 47c0309) too, as do 270 and 286. The characterisation
+suites milestone 1 adds for the next slices, `282-editor-operations.txt`,
 `283-save-status-by-destination.txt`, `284-exports-from-a-fixture.txt` and
 `285-save-buttons-one-state.txt`, pass against it as well. The File menu's
 markup (label, `data-keys`) is still in `src/page.html`; the command menu

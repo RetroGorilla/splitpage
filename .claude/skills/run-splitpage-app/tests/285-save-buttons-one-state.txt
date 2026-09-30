@@ -3,8 +3,8 @@
 # during a save, after a save that failed and after one that went through,
 # both show the same text, dirty mark and disabled state; while a save runs
 # neither starts another, from either button, the desktop app's native menu
-# or Ctrl+S. Passes against the code before the action registry (4.0-development
-# 19c66f7) and after it. Every `eval` is one physical line.
+# or Ctrl+S. Passes against the code before the action registry
+# (4.0-development 47c0309) and after it. Every `eval` is one physical line.
 
 open
 wait document.querySelectorAll('#rows .row').length > 0
