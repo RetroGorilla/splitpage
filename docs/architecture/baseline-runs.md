@@ -27,7 +27,13 @@ caused by the milestone 0 changes:
 | `252-header-presence-fit.txt` | 12–15/18 (varies) | presence chips do not fit the header as asserted |
 | `38-newtab-phone.txt` | 19/20 | a New Tab element overflows the phone viewport |
 
-All three measure widths. In this container the app's web fonts do not load
+A later full run (164 suites, on the milestone 1 branch) also failed
+`190-scene-select.txt` at one check: a mouse drag between fixed coordinates
+leaves no text selected. It then failed three times out of three on the
+commit before this work as well, after passing there earlier the same day, so
+it is intermittent here and not caused by these changes.
+
+The three width suites all measure widths. In this container the app's web fonts do not load
 (the script font measured as a fallback family in
 [performance-record.md](performance-record.md)), which the run-splitpage-app
 skill names as a cause of width disagreements. Rerunning with the fonts loaded

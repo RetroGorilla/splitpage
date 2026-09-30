@@ -235,7 +235,7 @@ sleep 300
 type write
 sleep 200
 expect document.querySelector('#cmdk-list [data-cmd="write"]').getAttribute('aria-disabled') == true
-expect document.querySelector('#cmdk-list [data-cmd="write"] .cmdk-why').textContent == Viewing only — the writer changes the script
+expect document.querySelector('#cmdk-list [data-cmd="write"] .cmdk-why').textContent == Viewing only — you can comment on this script, but not change it.
 expect C.results('paste').some(function(g){return g.items.some(function(i){return i.id === 'paste' && i.disabled && i.why.indexOf('Viewing only') === 0;});})
 key Enter
 sleep 300

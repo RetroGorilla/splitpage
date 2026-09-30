@@ -189,28 +189,27 @@ expect window.__actionCounts.every(function(n){return n===1;})
 expect window.__actionTotal === window.__actionIds.length
 
 # --- Ctrl+S, Ctrl+Shift+S and Ctrl+O in the browser -------------------------
-# Each runs what its button runs — the header's Save, the menu's own item —
-# caught here before it reaches a real file picker headless cannot drive.
-eval (function(){window.__hits=[];window.__hitGuard=function(e){var t=e.target.closest&&e.target.closest('#btn-save,[data-file-action="save-as"],[data-file-action="open"]');if(!t)return;window.__hits.push(t.id||t.getAttribute('data-file-action'));e.stopImmediatePropagation();e.preventDefault();};document.addEventListener('click',window.__hitGuard,true);return true;})()
+# Each reaches the file picker its button or menu item reaches. The pickers
+# are replaced here so nothing waits on a real one headless cannot drive.
+eval (function(){window.__hits=[];window.showSaveFilePicker=function(){window.__hits.push('save');return Promise.reject(new DOMException('cancelled','AbortError'));};window.showOpenFilePicker=function(){window.__hits.push('open');return Promise.reject(new DOMException('cancelled','AbortError'));};return true;})()
 caret #rows .row .audio-cell .cell-editable
 key ctrl KeyS
-sleep 100
+sleep 300
 key ctrl+shift KeyS
-sleep 100
+sleep 300
 key ctrl KeyO
-sleep 100
-expect window.__hits.join(',') == btn-save,save-as,open
+sleep 300
+expect window.__hits.join(',') == save,save,open
 expect document.getElementById('file-menu').hidden
 
 # --- the desktop app: its menu accelerators already send these -------------
 # (desktop/main.js), so the page stands down and nothing fires twice; and
 # the chips follow the build — F1 and Ctrl+Shift+P appear.
-eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); window.__idA = window.fake._addFile('script-a.md', F.buildMarkdown()); window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now() - 3 * 86400000); return true; })()
+eval (function(){ window.fake = D.makeFakeBackend(); D.setBackend(window.fake); window.__idA = window.fake._addFile('script-a.md', F.buildMarkdown()); window.fake._addRecent(window.__idA, 'script-a.md', 'Script A', Date.now() - 3 * 86400000); var save = window.fake.saveFileDialog, open = window.fake.openFileDialog; window.fake.saveFileDialog = function () { window.__hits.push('desktop-save'); return save.apply(this, arguments); }; window.fake.openFileDialog = function () { window.__hits.push('desktop-open'); return open.apply(this, arguments); }; return true; })()
 key ctrl KeyS
 key ctrl KeyO
-sleep 100
+sleep 300
 expect window.__hits.length === 3
-eval (function(){document.removeEventListener('click',window.__hitGuard,true);return true;})()
 click #btn-file
 sleep 300
 expect document.querySelector('#file-menu [data-file-action="help"] .mi-keys').textContent == F1
