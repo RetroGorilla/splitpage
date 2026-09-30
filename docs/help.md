@@ -14,6 +14,13 @@ own network you can also [host a shared session](#hosting-a-shared-session).
 
 ## What's new since 3.1
 
+- In the desktop app, some menu-bar commands ran behind an open dialog, the
+  writer or Present. They now stop and say what to close first: Save and
+  Save As… (Ctrl+S, Ctrl+Shift+S) while a dialog or the command menu is
+  open; Open… (Ctrl+O) and Export… while either of those, the writer or
+  Present is; Find & replace while a dialog or the writer is; Hide shot
+  scenes (Ctrl+Alt+H) while a dialog is. Search Commands… already stopped
+  under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 
