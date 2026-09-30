@@ -124,6 +124,11 @@ above and nothing else.
 | `gate` | Passes when `checks` and `node-24` passed, or when the change was prose only and both were skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
+The persistence suite costs little: on its first hosted run (PR #270,
+`ubuntu-latest`, 30 September 2026) `265-browser-drafts.txt` passed 80 of 80
+checks in 8.0 s, from the runner's start line to its `ALL PASS`; the step
+running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
+
 `gate` is the one check to mark required in branch protection: a
 prose-only pull request completes it without waiting on the others. Prose
 means Markdown other than `docs/help.md` (the build renders it into the app),
