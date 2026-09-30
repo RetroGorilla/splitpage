@@ -18,19 +18,29 @@ export function presentRefusal(refusal: Refusal, source: ActionSource): void {
 
 export function startActions(registry: ActionRegistry, keyTarget: EventTarget): () => void {
   if (running) throw new Error("the actions are already started; stop them first");
-  const disposers = [
-    registry.presentRefusals(presentRefusal),
-    registerThisDocumentActions(registry),
-    registerFileActions(registry),
-    registerViewActions(registry),
-    registerHelpActions(registry),
-    registerShareActions(registry),
-    registerZoomActions(registry),
-    runMenuCommandsWith(nativeMenuRunner(registry)),
-    mountShortcuts({ target: keyTarget, registry })
+  const steps: readonly (() => () => void)[] = [
+    () => registry.presentRefusals(presentRefusal),
+    () => registerThisDocumentActions(registry),
+    () => registerFileActions(registry),
+    () => registerViewActions(registry),
+    () => registerHelpActions(registry),
+    () => registerShareActions(registry),
+    () => registerZoomActions(registry),
+    () => runMenuCommandsWith(nativeMenuRunner(registry)),
+    () => mountShortcuts({ target: keyTarget, registry })
   ];
-  const stop = (): void => {
+  const disposers: (() => void)[] = [];
+  const undo = (): void => {
     while (disposers.length) disposers.pop()?.();
+  };
+  try {
+    for (const step of steps) disposers.push(step());
+  } catch (error) {
+    undo();
+    throw error;
+  }
+  const stop = (): void => {
+    undo();
     if (running === stop) running = null;
   };
   running = stop;

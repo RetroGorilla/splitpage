@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry } from "../../src/application/actions.ts";
+import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionSource } from "../../src/application/actions.ts";
 
 test("an action runs from any source and learns which one", () => {
@@ -198,4 +198,23 @@ test("a label can follow the app's state, read each time", () => {
   assert.equal(registry.view("servers")?.label, "Servers…");
   host = "studio";
   assert.equal(registry.view("servers")?.label, "Servers… (studio)");
+});
+
+test("a group of actions registers whole or not at all", () => {
+  const registry = createActionRegistry();
+  registry.register({ id: "taken", label: "Taken", group: "G", keys: ["mod+t"], run: () => {} });
+  const group = (last: string, keys: string[]) => [
+    { id: "a", label: "A", group: "G", keys: ["mod+a"], run: () => {} },
+    { id: "b", label: "B", group: "G", run: () => {} },
+    { id: last, label: "C", group: "G", keys, run: () => {} }
+  ];
+  assert.throws(() => registerAll(registry, group("taken", [])), /taken is already registered/);
+  assert.deepEqual(registry.list().map((v) => v.id), ["taken"]);
+  assert.throws(() => registerAll(registry, group("c", ["mod+T"])), /mod\+t is already bound to taken/);
+  assert.deepEqual(registry.list().map((v) => v.id), ["taken"]);
+  assert.deepEqual(registry.shortcuts().map((k) => k.id), ["taken"]);
+  const off = registerAll(registry, group("c", ["mod+c"]));
+  assert.deepEqual(registry.list().map((v) => v.id), ["taken", "a", "b", "c"]);
+  off();
+  assert.deepEqual(registry.list().map((v) => v.id), ["taken"]);
 });

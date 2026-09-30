@@ -1,4 +1,5 @@
 import type { ActionRegistry, ActionDefinition, Availability } from "../application/actions.ts";
+import { registerAll } from "../application/actions.ts";
 import { closeProductionPanel, closeGearPanel, openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
 import { closeBrollPanel, openBrollPanel } from "../js/08d-broll-panel.js";
 import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
@@ -77,6 +78,5 @@ export function registerViewActions(registry: ActionRegistry): () => void {
       run: () => { openPrompter(); }
     }
   ];
-  const disposers = definitions.map((d) => registry.register(d));
-  return () => { for (const dispose of disposers) dispose(); };
+  return registerAll(registry, definitions);
 }

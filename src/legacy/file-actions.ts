@@ -1,4 +1,5 @@
 import type { ActionRegistry } from "../application/actions.ts";
+import { registerAll } from "../application/actions.ts";
 import { saveDoc } from "../js/14-export.js";
 import { openLocalFile } from "../js/18-local-files.js";
 import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
@@ -16,8 +17,8 @@ function closeFileMenu(): void {
 }
 
 export function registerFileActions(registry: ActionRegistry): () => void {
-  const disposers = [
-    registry.register({
+  return registerAll(registry, [
+    {
       id: "save",
       label: "Save",
       group: "File",
@@ -33,8 +34,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
         closeFileMenu();
         return saveDoc();
       }
-    }),
-    registry.register({
+    },
+    {
       id: "save-as",
       label: "Save a copy…",
       group: "File",
@@ -48,8 +49,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
         closeFileMenu();
         return saveDoc({ saveAs: true });
       }
-    }),
-    registry.register({
+    },
+    {
       id: "open",
       label: "Open…",
       group: "File",
@@ -63,8 +64,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
         closeFileMenu();
         await openLocalFile();
       }
-    }),
-    registry.register({
+    },
+    {
       id: "export",
       label: "Export…",
       group: "Export",
@@ -76,8 +77,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
         closeFileMenu();
         openExportDialog();
       }
-    }),
-    registry.register({
+    },
+    {
       id: "command-menu",
       label: "Search commands…",
       group: "File",
@@ -93,7 +94,6 @@ export function registerFileActions(registry: ActionRegistry): () => void {
         if (!commandMenuOpen()) openCommandMenu();
         else if (source === "shortcut") closeCommandMenu();
       }
-    })
-  ];
-  return () => { for (const dispose of disposers) dispose(); };
+    }
+  ]);
 }
