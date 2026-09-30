@@ -686,7 +686,7 @@ export function stronglyConnected(modules, includeTypeOnly) {
   const successors = (path) => [...new Set(modules.get(path).edges
     .filter((e) => e.kind === "file" && (includeTypeOnly || !e.typeOnly) && modules.has(e.target))
     .map((e) => e.target))];
-  for (const start of [...modules.keys()].sort()) {
+  for (const start of [...modules.keys()].sort(byCodePoint)) {
     if (index.has(start)) continue;
     const work = [{ node: start, next: 0, succ: null }];
     while (work.length) {
@@ -715,15 +715,23 @@ export function stronglyConnected(modules, includeTypeOnly) {
         let w;
         do { w = stack.pop(); onStack.delete(w); component.push(w); } while (w !== frame.node);
         const selfLoop = component.length === 1 && successors(component[0]).includes(component[0]);
-        if (component.length > 1 || selfLoop) components.push(component.sort());
+        if (component.length > 1 || selfLoop) components.push(component.sort(byCodePoint));
       }
     }
   }
-  return components.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]));
+  return components.sort((a, b) => b.length - a.length || byCodePoint(a[0], b[0]));
 }
 
 function key(v) {
   return `${v.rule}\u0000${v.source}\u0000${v.target}`;
+}
+
+export function byCodePoint(a, b) {
+  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+}
+
+export function compareExceptions(a, b) {
+  return byCodePoint(a.rule, b.rule) || byCodePoint(a.source, b.source) || byCodePoint(a.target, b.target);
 }
 
 export function cycleEdges(modules) {
@@ -775,7 +783,7 @@ export function findViolations(modules) {
     }
   }
   for (const e of cycleEdges(modules)) add("cycle-edge", e.source, e.target, e.line, `runtime import inside a ${e.size}-module cycle`);
-  return [...found.values()].sort((a, b) => key(a).localeCompare(key(b)));
+  return [...found.values()].sort(compareExceptions);
 }
 
 export function migratedCycles(modules) {
@@ -814,7 +822,7 @@ export function metrics(modules) {
     stateFieldWriters: production.filter((m) => directSets(m).length > 0).map((m) => ({ path: m.path, writes: directSets(m).length, reads: m.state.reads })),
     stateWriters: production.filter((m) => m.state.writes.length > 0).map((m) => ({
       path: m.path,
-      targets: [...new Set(m.state.writes.map((w) => stateWriteTarget(w.spath, w.write)).filter(Boolean))].sort()
+      targets: [...new Set(m.state.writes.map((w) => stateWriteTarget(w.spath, w.write)).filter(Boolean))].sort(byCodePoint)
     })),
     migratedModules: [...modules.values()].filter((m) => isMigrated(m.layer)).length
   };
