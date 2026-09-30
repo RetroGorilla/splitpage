@@ -23,10 +23,18 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
    npm ci
    npm run verify
    ```
-   Anything you can see in the app also needs a browser suite; see
-   [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md).
-   `node tools/run-suites.mjs <out-dir> [regex]` runs them on Linux/macOS,
-   `run-tests.ps1` on Windows.
+   `npm run verify` is CI's fast gate, apart from the checks that need a
+   browser (the tab strip width and the browser suites). While
+   you work, run the focused checks for what you changed: the table in
+   [docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change)
+   says which, and `npm test -- --only <path>` narrows the unit tests.
+   Anything you can see in the app also needs its browser suites:
+   `node tools/run-suites.mjs <out-dir> '<regex over full filenames>'` on
+   Linux/macOS, `run-tests.ps1 -Only <full name>` on Windows (see
+   [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md)).
+   CI runs every unit test and the smoke, CSP and persistence suites on the
+   pull request; the full browser regression and the platform checks are run
+   at milestone and release gates.
 3. If what a person sees or does changed, update
    [`docs/help.md`](docs/help.md) and add a line under **Unreleased** in
    [CHANGELOG.md](CHANGELOG.md).

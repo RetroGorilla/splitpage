@@ -16,7 +16,7 @@
     "check:deps": "node tools/dep-report.mjs",
     "check:comments": "node tools/comment-gate.mjs",
     "typecheck": "node tools/typecheck.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run check:deps && npm run check:comments && node build.mjs && npm run test:all"
+    "verify": "npm run lint && npm run typecheck && npm run check:deps && npm run check:comments && node build.mjs && git diff --exit-code -- sw.js && npm run test:all"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
@@ -30,6 +30,7 @@
     "globals": "17.12.0",
     "jsdom": "30.1.1",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.0"
+    "typescript-eslint": "8.71.0",
+    "yaml": "2.9.1"
   }
 }
