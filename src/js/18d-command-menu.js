@@ -16,6 +16,7 @@ import {
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
 import { writerOpen } from "./19-writer.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
@@ -87,6 +88,28 @@ function fromButton(id, btnId, group, label, icon, words, keys, blockedWhy) {
   };
 }
 
+function fromAction(id) {
+  var first = appActions.view(id);
+  return {
+    id: id,
+    group: first ? first.group : "",
+    words: first ? first.words : "",
+    read: function () {
+      var view = appActions.view(id);
+      if (!view || !view.visible) return null;
+      return {
+        label: view.label,
+        icon: view.icon || "i-file",
+        keys: view.keys.length ? view.keys[0] : "",
+        why: view.enabled ? "" : (view.reason || "Not available right now"),
+        disabled: !view.enabled,
+        state: view.checked === null ? "" : (view.checked ? "On" : "Off")
+      };
+    },
+    run: function () { appActions.invoke(id, "command-menu"); }
+  };
+}
+
 var COMMANDS = null;
 
 function commands() {
@@ -132,10 +155,10 @@ function commands() {
     fromButton("panel-comments", "btn-comments", "View", "Comments panel", "i-panel", "comments notes review feedback show hide toggle"),
     fromButton("write", "btn-write", "View", "Write", "i-pen", "writer narration word processor audio column", "", viewing),
     fromButton("present", "btn-present", "View", "Present", "i-play", "teleprompter prompter autocue read play"),
-    fromMenu("history", "This document", "versions restore snapshot backup older undo"),
+    fromAction("history"),
     fromMenu("find", "This document", "search replace look for"),
-    fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
-    fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
+    fromAction("toggle-hide-shot"),
+    fromAction("toggle-rundown-min"),
     {
       id: "set-target",
       group: "This document",

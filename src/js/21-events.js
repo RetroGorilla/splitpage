@@ -5,7 +5,6 @@ import { cycleRowStatus } from "./01-scene-status.js";
 import {
   expandHiddenShotStrip,
   revealRow,
-  toggleHideShotScenes,
   updateHideShotMenu
 } from "./01b-hide-shot.js";
 import { loadInitialState } from "./02-state.js";
@@ -1248,14 +1247,6 @@ function init() {
     else openFindBar();
   });
 
-  window.addEventListener("keydown", function (e) {
-    if (!(e.ctrlKey || e.metaKey) || !e.altKey) return;
-    if (e.key !== "h" && e.key !== "H") return;
-    if (!S.state) return;
-    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
-    e.preventDefault();
-    toggleHideShotScenes();
-  });
 
   document.addEventListener("focusin", function (e) {
     var cell = e.target.closest && e.target.closest(".cell-editable");

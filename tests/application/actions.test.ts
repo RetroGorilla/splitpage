@@ -79,3 +79,12 @@ test("list returns every registered action in registration order", () => {
   registry.register({ id: "a", label: "A", group: "G", run: () => {} });
   assert.deepEqual(registry.list().map((v) => v.id), ["b", "a"]);
 });
+
+test("shortcuts lists only actions that declare keys, without asking their availability", () => {
+  const registry = createActionRegistry();
+  let asked = 0;
+  registry.register({ id: "a", label: "A", group: "G", keys: ["mod+a"], availability: () => { asked++; return { enabled: true }; }, run: () => {} });
+  registry.register({ id: "b", label: "B", group: "G", run: () => {} });
+  assert.deepEqual(registry.shortcuts(), [{ id: "a", keys: ["mod+a"] }]);
+  assert.equal(asked, 0);
+});

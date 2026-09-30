@@ -2,9 +2,7 @@ import { S } from "./_state.js";
 import { absorbRemoteChange, flushEdits } from "./12a-undo.js";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
-import { toggleHideShotScenes } from "./01b-hide-shot.js";
 import { migrateRows } from "./02-state.js";
-import { toggleRundownMinimized } from "./05f-rundown.js";
 import {
   docIdEmbeddedIn,
   migrateDocument,
@@ -16,7 +14,6 @@ import { rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
-  openHistoryPanel,
   pushSnapshot,
   setBaseState,
   stampRow,
@@ -90,6 +87,7 @@ import {
 } from "./20f-desktop.js";
 import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
@@ -751,7 +749,12 @@ export async function exportBrollList(action) {
 export function handleFileMenuAction(action) {
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
-  if (!S.state && action !== "history" && action !== "tagging-help"
+  if (appActions.has(action)) {
+    var outcome = appActions.invoke(action, "menu");
+    if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
+    return;
+  }
+  if (!S.state && action !== "tagging-help"
       && action !== "drive-open" && action !== "about") {
     showToast("Still loading…", "warn"); return;
   }
@@ -765,9 +768,6 @@ export function handleFileMenuAction(action) {
   else if (action === "gdoc-import") openGdocModal();
   else if (action === "save-back") saveBackToFile();
   else if (action === "autosave") toggleAutoSave();
-  else if (action === "toggle-hide-shot") toggleHideShotScenes();
-  else if (action === "toggle-rundown-min") toggleRundownMinimized();
-  else if (action === "history") openHistoryPanel();
   else if (action === "export-docx") exportAs("docx");
   else if (action === "export-md") exportAs("md");
   else if (action === "export-md-table") exportAs("md-table");
