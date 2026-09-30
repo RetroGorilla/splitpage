@@ -92,6 +92,18 @@ test("a keydown without a key, as autofill sends, passes through untouched", () 
   assert.equal(event.defaultPrevented, false);
 });
 
+test("an action that throws still keeps its key from the browser", () => {
+  const registry = createActionRegistry();
+  registry.register({ id: "hide", label: "Hide", group: "G", keys: ["mod+alt+h"], run: () => { throw new Error("broken"); } });
+  const target = new EventTarget();
+  const outcomes: string[] = [];
+  bindShortcuts(target, registry, { onOutcome: (o) => outcomes.push(o.kind) });
+  const event = keydown({ key: "h", ctrlKey: true, altKey: true });
+  target.dispatchEvent(event);
+  assert.deepEqual(outcomes, ["failed"]);
+  assert.equal(event.defaultPrevented, true);
+});
+
 test("a claimed key is kept from the browser even when its action is refused", () => {
   const registry = createActionRegistry();
   registry.register({ id: "save", label: "Save", group: "G", keys: ["mod+s"], claimKeys: true, availability: () => ({ enabled: false, reason: "Still loading…" }), run: () => {} });
