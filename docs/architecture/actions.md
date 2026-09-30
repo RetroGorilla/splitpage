@@ -22,7 +22,8 @@ a button, and the desktop app's native menu (which clicks the File menu item).
 
 Each surface decides how to show a refusal. The File menu shows the reason as
 a toast. The command menu shows it greyed out with the reason. A shortcut
-leaves the key to the browser.
+leaves the key to the browser. A key that a focused control already handled
+(`defaultPrevented`) never reaches a global action.
 
 `src/application/shortcuts.ts` parses chords and finds the action a key event
 names. `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown
@@ -35,8 +36,15 @@ Until the bootstrap of milestone 7 exists, one registry instance lives in
 rethrows the error on a microtask, so a failing action still reaches the
 browser as an uncaught error, as it did before.
 
-`src/legacy/document-actions.ts` defines the actions whose handlers are still
-in `src/js`. `src/js/_entry.js` registers them and binds the shortcuts after
+`src/legacy/document-actions.ts` and `src/legacy/file-actions.ts` define the
+actions whose handlers are still in `src/js`. `src/legacy/screen.ts` names what
+can refuse an action (still loading, Present, the Writer, a dialog, the tour)
+with the reason a person is shown.
+
+The command menu is itself an overlay. While it reads what to list, it asks
+through `askingFromLauncher()`, so each action is judged as it will be once
+the menu has closed to run it. Any other surface sees the open command menu as
+a dialog: a shortcut other than `mod+k` does nothing behind it. `src/js/_entry.js` registers them and binds the shortcuts after
 every module's `__init`. Registration lives in the entry because `21-events.js`
 is inside the 63-module import cycle, and a migrated file imported from there
 would join it (`npm run check:deps` refuses that).
@@ -58,8 +66,12 @@ File menu path shows the reason as a toast.
 | `toggle-hide-shot` | File menu, command menu, `mod+alt+h` | `18-local-files.js` dispatch, `18d-command-menu.js` menu mirror, a `21-events.js` keydown listener |
 | `toggle-rundown-min` | File menu, command menu, the rundown's own button | `18-local-files.js`, `18d-command-menu.js`, `05f-rundown.js` click listener |
 | `history` | File menu, command menu | `18-local-files.js`, `18d-command-menu.js` |
+| `find` | File menu, command menu, `mod+f` | `18-local-files.js`, `18d-command-menu.js`, a `21-events.js` keydown listener |
+| `export` | File menu, command menu, `mod+e` | `18-local-files.js`, `18d-command-menu.js`, an `18c-export-dialog.js` keydown listener |
+| `command-menu` | File menu, header button, `mod+k` (opens and closes) | `18-local-files.js`, `18d-command-menu.js` click and keydown listeners |
 
-Browser suite `268-actions-every-surface.txt` checks each surface, and the
+Browser suites `268-actions-every-surface.txt` and
+`269-file-actions-every-surface.txt` check each surface, and the
 shortcut refused under a dialog. The File menu's markup (label, `data-keys`)
 is still in `src/page.html`; the command menu reads the definition.
 

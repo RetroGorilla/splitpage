@@ -1,13 +1,16 @@
-import type { ActionRegistry, Availability } from "../application/actions.ts";
+import type { ActionRegistry } from "../application/actions.ts";
 import { S } from "../js/_state.js";
 import { hideShotScenes, toggleHideShotScenes } from "../js/01b-hide-shot.js";
 import { openHistoryPanel } from "../js/03-sync.js";
 import { isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
+import { findOpen, openFindBar } from "../js/09-find-replace.js";
+import { writerOpen } from "../js/19-writer.js";
+import { availableUnless } from "./screen.ts";
+import type { ScreenState } from "./screen.ts";
 
-const STILL_LOADING: Availability = { enabled: false, reason: "Still loading…" };
-
-function dialogOpen(): boolean {
-  return document.querySelector(".modal-backdrop:not([hidden])") !== null;
+export function screenNow(): ScreenState {
+  const tour = document.getElementById("tour-overlay");
+  return { loading: !S.state, prompter: Boolean(S.prompterOpen), writer: Boolean(writerOpen), tour: Boolean(tour && !tour.hidden) };
 }
 
 export function registerDocumentActions(registry: ActionRegistry): () => void {
@@ -19,11 +22,7 @@ export function registerDocumentActions(registry: ActionRegistry): () => void {
       icon: "i-eye-off",
       keys: ["mod+alt+h"],
       words: "collapse done finished filter shot scenes",
-      availability: () => {
-        if (!S.state) return STILL_LOADING;
-        if (dialogOpen()) return { enabled: false, reason: "Close the open dialog first", checked: Boolean(hideShotScenes) };
-        return { enabled: true, checked: Boolean(hideShotScenes) };
-      },
+      availability: () => availableUnless(["loading", "dialog"], screenNow(), Boolean(hideShotScenes)),
       run: () => { toggleHideShotScenes(); }
     }),
     registry.register({
@@ -32,7 +31,7 @@ export function registerDocumentActions(registry: ActionRegistry): () => void {
       group: "This document",
       icon: "i-rundown-min",
       words: "rundown strip timeline minimize collapse thin bar more room",
-      availability: () => (S.state ? { enabled: true, checked: isRundownMinimized() } : STILL_LOADING),
+      availability: () => availableUnless(["loading"], screenNow(), isRundownMinimized()),
       run: () => { toggleRundownMinimized(); }
     }),
     registry.register({
@@ -42,6 +41,20 @@ export function registerDocumentActions(registry: ActionRegistry): () => void {
       icon: "i-history",
       words: "versions restore snapshot backup older undo",
       run: () => { openHistoryPanel(); }
+    }),
+    registry.register({
+      id: "find",
+      label: "Find & replace",
+      group: "This document",
+      icon: "i-find",
+      keys: ["mod+f"],
+      words: "search replace look for",
+      availability: () => availableUnless(["loading", "writer", "dialog"], screenNow()),
+      run: () => {
+        const input = document.getElementById("find-input");
+        if (findOpen && input instanceof HTMLInputElement) input.select();
+        else openFindBar();
+      }
     })
   ];
   return () => { for (const dispose of disposers) dispose(); };

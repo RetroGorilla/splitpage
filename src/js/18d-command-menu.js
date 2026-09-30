@@ -17,6 +17,7 @@ import {
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
 import { writerOpen } from "./19-writer.js";
 import { appActions } from "../legacy/app-actions.ts";
+import { askingFromLauncher } from "../legacy/screen.ts";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
@@ -95,7 +96,7 @@ function fromAction(id) {
     group: first ? first.group : "",
     words: first ? first.words : "",
     read: function () {
-      var view = appActions.view(id);
+      var view = askingFromLauncher(function () { return appActions.view(id); });
       if (!view || !view.visible) return null;
       return {
         label: view.label,
@@ -131,7 +132,7 @@ function commands() {
     fromMenu("collaborate", "Share", "collaborate share invite link url people live together send edit comment publish"),
     fromMenu("server-publish", "Share", "publish upload server hosted"),
     fromMenu("servers", "Share", "server connect bookmark address pin join"),
-    fromMenu("export", "Export", "download save as format dialog"),
+    fromAction("export"),
     fromExport("export-pdf", "pdf print"),
     fromExport("export-docx", "word docx document google docs"),
     fromExport("export-md", "markdown md text stacked"),
@@ -156,7 +157,7 @@ function commands() {
     fromButton("write", "btn-write", "View", "Write", "i-pen", "writer narration word processor audio column", "", viewing),
     fromButton("present", "btn-present", "View", "Present", "i-play", "teleprompter prompter autocue read play"),
     fromAction("history"),
-    fromMenu("find", "This document", "search replace look for"),
+    fromAction("find"),
     fromAction("toggle-hide-shot"),
     fromAction("toggle-rundown-min"),
     {
@@ -444,18 +445,8 @@ export function __init() {
   var trigger = el("btn-command");
   if (trigger) {
     trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
-    trigger.addEventListener("click", function () { openCommandMenu(); });
+    trigger.addEventListener("click", function () { appActions.invoke("command-menu", "button"); });
   }
-
-  window.addEventListener("keydown", function (e) {
-    if (e.defaultPrevented || e.isComposing) return;
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-    if (String(e.key || "").toLowerCase() !== "k") return;
-    if (commandMenuOpen()) { e.preventDefault(); closeCommandMenu(); return; }
-    if (blockedNow()) return;
-    e.preventDefault();
-    openCommandMenu();
-  });
 
   window.__commandTest = {
     results: function (q) {

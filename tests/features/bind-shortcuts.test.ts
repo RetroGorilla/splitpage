@@ -73,3 +73,11 @@ test("an action registered after binding is found, and one unregistered is not",
   target.dispatchEvent(keydown({ key: "f", metaKey: true }));
   assert.deepEqual(runs, ["find"]);
 });
+
+test("a key a focused control already handled is left alone", () => {
+  const { registry, runs, target } = setup();
+  target.addEventListener("keydown", (e) => { e.preventDefault(); });
+  bindShortcuts(target, registry);
+  target.dispatchEvent(keydown({ key: "h", ctrlKey: true, altKey: true }));
+  assert.deepEqual(runs, []);
+});
