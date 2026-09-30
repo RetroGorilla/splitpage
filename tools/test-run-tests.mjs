@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlin
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO } from "./source-scan.mjs";
-import { discover, runTests } from "./run-tests.mjs";
+import { discover, runTests, parseArgs, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
@@ -116,6 +116,61 @@ console.log("\nthe discovery probe (a real run):\n");
   const orphan = runIn(repo);
   eq("a TypeScript test where no group looks fails", orphan.code, 1);
   check("and is named", orphan.err.includes("src/test/omitted.test.ts looks like a test but no group runs it"), orphan.err);
+}
+
+console.log("\nfocused runs (--only):\n");
+
+eq("--only takes a value in either spelling, and several", parseArgs(["unit", "--only", "src/test/a", "--only=b.test"]), { sets: ["unit"], listOnly: false, only: ["src/test/a", "b.test"] });
+eq("no set with --only means every set", parseArgs(["--only", "x"]).sets, SETS);
+check("--only with no value is a usage error", Boolean(parseArgs(["--only"]).error) && Boolean(parseArgs(["--only", "--list"]).error));
+check("an unknown flag is a usage error", Boolean(parseArgs(["--changed"]).error));
+
+{
+  const files = ["src/test/a.test.mjs", "src/test/b.test.mjs", "desktop/test/d.test.mjs", "tools/test-x.mjs", "tools/test-y.mjs"];
+  const focusedRun = (only, sets = SETS, extra = {}) => {
+    const out = [];
+    const err = [];
+    const calls = [];
+    const code = runTests({ repo: REPO, sets, files, only, print: (l) => out.push(l), printError: (l) => err.push(l), spawn: (cmd, args) => { calls.push(args); return { status: 0 }; }, ...extra });
+    return { code, out: out.join("\n"), err: err.join("\n"), calls };
+  };
+
+  const one = focusedRun(["src/test/b"]);
+  eq("only the matching file runs", one.calls, [["--test", "src/test/b.test.mjs"]]);
+  eq("and the run passes", one.code, 0);
+  check("the whole discovery is still printed", one.out.includes("discovered frontend: 2 files") && one.out.includes("  tools/test-y.mjs"), one.out);
+  check("the selected scope is printed", one.out.includes("focused run: --only src/test/b selects 1 of 5 discovered test files in unit, desktop, tools"), one.out);
+  check("it says it is not the full gate", one.out.includes("this is NOT the full gate") && one.out.includes("FOCUSED: 1 of 5 discovered test files ran; this is not the full gate"), one.out);
+  check("groups with nothing selected say so", one.out.includes("desktop: none selected (1 discovered)") && one.out.includes("frontend: 1 of 1 selected files executed (2 discovered), passed"), one.out);
+
+  const windows = focusedRun(["tools\\test-"]);
+  eq("a Windows path selects the same files", windows.calls, [["tools/test-x.mjs"], ["tools/test-y.mjs"]]);
+
+  const several = focusedRun(["a.test", "d.test"]);
+  eq("several --only values select their union", several.calls, [["--test", "src/test/a.test.mjs"], ["desktop/test/d.test.mjs"]]);
+
+  const none = focusedRun(["no-such-test"]);
+  eq("a filter that matches nothing is an error, not a pass", none.code, 2);
+  check("and says so", none.err.includes("--only no-such-test matched no discovered test file"), none.err);
+  eq("and runs nothing", none.calls, []);
+
+  const wrongSet = focusedRun(["tools/test-x"], ["unit"]);
+  eq("a filter outside the chosen set matches nothing", wrongSet.code, 2);
+
+  const orphaned = runTests({ repo: REPO, sets: SETS, files: [...files, "server/api.test.mjs"], only: ["src/test/a"], print: () => {}, printError: () => {}, spawn: () => { throw new Error("must not run"); } });
+  eq("an orphaned test still fails a focused run, before anything runs", orphaned, 1);
+
+  const overlap = [{ name: "one", set: "unit", runner: "script", matches: (p) => p.startsWith("src/"), requiredWhen: () => true }, { name: "two", set: "unit", runner: "script", matches: (p) => p.endsWith(".mjs"), requiredWhen: () => true }];
+  eq("an overlap still fails a focused run", runTests({ repo: REPO, sets: ["unit"], files: ["src/a.test.mjs"], groups: overlap, only: ["src/a"], print: () => {}, printError: () => {}, spawn: () => { throw new Error("must not run"); } }), 1);
+
+  const emptyRequired = runTests({ repo: REPO, sets: ["unit"], files: ["src/core/text/runs.ts", "src/test/a.test.mjs"], only: ["src/test/a"], print: () => {}, printError: () => {}, spawn: () => ({ status: 0 }) });
+  eq("an empty required group still fails a focused run", emptyRequired, 1);
+
+  const failing = focusedRun(["src/test/a"], SETS, { spawn: () => ({ status: 1 }) });
+  eq("a failing selected file fails the focused run", failing.code, 1);
+
+  const listed = focusedRun(["tools/"], SETS, { listOnly: true });
+  eq("--list with --only prints the selection and runs nothing", [listed.code, listed.calls.length, listed.out.includes("selects 2 of 5")], [0, 0, true]);
 }
 
 console.log("\ntypecheck():\n");
