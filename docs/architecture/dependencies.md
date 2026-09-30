@@ -9,7 +9,7 @@ comments.
 | Command | What it checks | Baseline |
 | --- | --- | --- |
 | `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, unresolvable modules, computed dynamic loads, cycles through migrated folders, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
-| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files | `tools/comment-baseline.json` |
+| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included), Dockerfiles and JSON | `tools/comment-baseline.json` |
 
 Both fail on anything new and on anything the baseline lists that has gone.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
@@ -216,21 +216,48 @@ bridge, is explained here.
 
 ## Comment gate
 
-Scanned: every tracked or untracked-but-not-ignored `.js`, `.mjs`, `.cjs`,
-`.ts`, `.mts`, `.cts`, `.css`, `.html`, `.sh`, `.ps1`, `.bat` and `.cmd` file,
-except `node_modules/`, `.claude/handoff/`, the generated `index.html` and
-`eslint.config.mjs`. Workflow and configuration files are not source and are
-not scanned (plan section 2 sets their own rule).
+Scanned: every tracked or untracked-but-not-ignored file of these kinds,
+except `node_modules/`, `.claude/handoff/` and the generated `index.html`:
+
+| Files | Parser | What counts as a comment |
+| --- | --- | --- |
+| `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `eslint.config.mjs` included | TypeScript (`tools/source-scan.mjs`) | `//` and `/* */` outside strings, templates and regexes |
+| `.css`, `.html` (inline `<style>` and script too) | `tools/source-scan.mjs` | `/* */`, `<!-- -->` |
+| `.sh`, `.ps1`, `.bat`, `.cmd` | `tools/source-scan.mjs` | `#` at a word start outside quotes and heredocs, `<# #>`, `rem`/`::` |
+| `.yml`, `.yaml` | the `yaml` package's CST (`tools/config-comments.mjs`) | every YAML comment token; `#` in a quoted scalar, a URL or a block scalar's content is not one |
+| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:`, else `defaults.run.shell`, else the runner's: `pwsh` when a `runs-on` label (a group's `labels:` included) names Windows, `bash` when one names Ubuntu, Linux or macOS. When none says (an expression such as `${{ matrix.os }}`, a group without labels, a self-hosted runner without an OS label), the step is read both ways; if the two readings differ the gate fails and asks for `shell:` | a `#` comment inside the script, whole-line or trailing; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it |
+| `Dockerfile`, `Dockerfile.*`, `Dockerfile-*`, `Dockerfile_*`, `*.dockerfile` (any case; not `.md` or `.txt`) | `tools/config-comments.mjs` | whole-line `#` (inside a continuation too), a trailing shell comment in a shell-form `RUN`/`CMD`/`ENTRYPOINT`/`HEALTHCHECK CMD`, and comments in a `RUN` heredoc's script; a `COPY`/`ADD` heredoc is file content |
+| `.json`, `.jsonc` (`tsconfig*.json` included) | TypeScript's scanner | `//` and `/* */` outside strings |
 
 The baseline stores each file's comments as whitespace-normalised text, so a
 comment may move but not change, be duplicated, or appear in a new file.
 `src/core/`, `src/application/`, `src/contracts/`, `src/adapters/`,
-`src/features/`, `src/bootstrap/`, `src/legacy/` and `tests/` can never carry a
-baselined comment.
+`src/features/`, `src/bootstrap/`, `src/legacy/`, `tests/`, `.github/`, every
+Dockerfile, every compose file (`docker-compose*.yml`, `compose*.yaml`),
+`eslint.config.mjs` and every JSON file can never carry a baselined comment;
+all of them have none. The Dockerfile and compose names come from one pair of
+patterns in `tools/config-comments.mjs` (`DOCKERFILE_PATH`, `COMPOSE_PATH`),
+used both to pick the parser and to mark the file comment-free. The one YAML file
+still on the baseline is `desktop/electron-builder.yml` (66 comment lines at
+the time the gate learned YAML), which is desktop packaging and moves to docs
+when that file is next changed.
 
-Not comments: an interpreter directive (`#!`) on the first line, and the build
-markers `/*{{APP_CSS}}*/` and `//{{APP_JS}}` in `src/page.html`, which
-`build.mjs` replaces and which are allowed there exactly once each.
+Not comments: an interpreter directive (`#!`) on the first line of a script,
+and the build markers `/*{{APP_CSS}}*/` and `//{{APP_JS}}` in `src/page.html`,
+which `build.mjs` replaces and which are allowed there exactly once each. A
+Dockerfile parser directive (`# syntax=`, `# escape=`, `# check=` before
+anything else in the file) is a comment unless `DIRECTIVES` in
+`tools/comment-gate.mjs` lists that exact line for that file; none is listed
+today. A file that does not parse (a broken YAML file) fails the gate, and so
+does a workflow step whose shell cannot be told (above).
+
+Not scanned yet, because no parser covers them: `.gitignore`,
+`.gitattributes`, `.dockerignore`, `.npmrc`, `.env.example` and other
+dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. Inside
+workflows, JavaScript run through `shell: node {0}` or an
+`actions/github-script` `script:` is not scanned as JavaScript, and a `run:`
+given as a YAML alias (`run: *name`) is not read as a script unless its anchor
+is itself a step's `run:`.
 
 ## Baseline at the start of 4.0
 

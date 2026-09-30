@@ -15,7 +15,7 @@
 | Release | 4.0, from `4.0-development` (created from `main`); `main` merged in at least weekly |
 | Plugins, SDK, extension runtime | Out of scope |
 | Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
-| Comments | None in authored code; workflow and configuration files may carry a comment that records a constraint, never narration (section 2) |
+| Comments | None in authored code, tests, CSS, HTML, scripts or workflow/configuration files; rationale lives in `docs/` (section 2) |
 | CI | Fast gates on hosted runners for PRs and the development branch; the full browser regression, Electron smoke and Windows x64/ARM64 checks run locally at milestone and release gates (section 4) |
 | ARM64 | A Windows ARM64 device is available; runtime checks run on it and the release row stands as written |
 | Invariants | Ledger in `docs/architecture/invariants.md`; `HANDOFF.md` section 5 stays in step with it (milestone 0) |
@@ -60,11 +60,9 @@ Do not split a foundational interface across multiple simultaneous implementatio
 
 ### No comments in authored code
 
-Add no inline, block, documentation, TODO/FIXME or lint/type suppression comments to authored code, tests, CSS, HTML or scripts. Write contracts and rationale in `docs/architecture/`, `docs/decisions/`, types, names and tests.
+Add no inline, block, documentation, TODO/FIXME or lint/type suppression comments to authored code, tests, CSS, HTML, scripts or workflow/configuration files. Write contracts and rationale in `docs/architecture/`, `docs/decisions/`, types, names and tests.
 
-Workflow and configuration files (`.github/workflows/*.yml`, `eslint.config.mjs`, `tsconfig*.json`, `docker-compose.yml`, `Dockerfile*`) are the one exception. A comment there is allowed only where it records a constraint a reader cannot recover from the file itself or from the docs: why a flag exists, what breaks without it, which external behavior forced it. A comment that restates what the next line does, or explains something already documented, is removed in review. When in doubt, put it in `docs/` and leave the file bare.
-
-A parser-aware check must distinguish actual comments from URLs, regexes and strings. Preserve interpreter directives and exact required build-template markers through file-specific configuration. Move the two `build.mjs` lint suppressions, and the other inline `eslint-disable` directives across the repository (sixteen at the baseline), into narrowly scoped configuration as their files are touched; milestone 0 handles `build.mjs`. Do not introduce broad exclusions for new folders. Existing unmigrated comments have an exact, frozen baseline; no new comments are allowed, and migrated areas have none. Preserve attribution in LICENSE/NOTICE and third-party metadata; generated/vendor content is outside the authored-source check.
+A parser-aware check must distinguish actual comments from URLs, regexes and strings. Preserve interpreter directives and exact required build-template markers through file-specific configuration. Move the two `build.mjs` lint suppressions, and the other inline `eslint-disable` directives across the repository (sixteen at the baseline), into narrowly scoped configuration as their files are touched; milestone 0 handles `build.mjs`. Do not introduce broad exclusions for whole workflow files or new folders. Existing unmigrated comments have an exact, frozen baseline; no new comments are allowed, and migrated areas have none. Preserve attribution in LICENSE/NOTICE and third-party metadata; generated/vendor content is outside the authored-source check.
 
 ### Engineering constraints
 
@@ -122,7 +120,7 @@ Every check is a local script first (`package.json` scripts and `tools/`); CI jo
 
 **Hosted, on every PR targeting `main` or `4.0-development` and every push to `4.0-development`:** the fast gates. Lint, types, the comment/layer/dependency gates, every discovered unit/application/adapter/tool test, the build, and the selected browser smoke/CSP/persistence suites already in `ci.yml`. Linux runners only. A documentation-only PR completes the required check through a cheap gate rather than staying pending behind path filters. Workflow path filters include new folders and every actual build input.
 
-**Local, at milestone and release gates:** the full browser regression on Linux (`tools/run-suites.mjs`) and on Windows (`run-tests.ps1`), real Electron smoke, and the Windows x64 and ARM64 packaged checks on the maintainer's x64 and ARM64 devices. Run impacted suites locally during feature PRs. A milestone is declared complete, and a release cut, only with the recorded output of those runs (`summary.txt`, the smoke log, the platform check logs) attached to the closing PR. A scheduled hosted full run is optional and does not replace the local gate.
+**Local, at milestone and release gates:** the full browser regression on Linux (`tools/run-suites.mjs`) and on Windows (`run-tests.ps1`), real Electron smoke, and the Windows x64 and ARM64 packaged checks on the maintainer's x64 and ARM64 devices. Run impacted tests and suites locally during feature PRs, chosen by the change table in `docs/architecture/testing.md`; the hosted fast gates still run every discovered test and never narrow to the test files a change touched. A milestone is declared complete, and a release cut, only with the recorded output of those runs (`summary.txt`, the smoke log, the platform check logs) attached to the closing PR. A scheduled hosted full run is optional and does not replace the local gate.
 
 The workstation is never registered as a self-hosted runner for automatically triggered PR workflows. Local gate runs are started by hand.
 
@@ -305,7 +303,7 @@ Replace unconditional `desktop/.npmrc` ARM64 installation assumptions with runne
 
 Use the following as the starting instruction for a session on `4.0-development`, with this file attached:
 
-> Implement `docs/IMPLEMENTATION-PLAN.md` on `4.0-development` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions; a workflow or configuration file may carry a comment only where section 2 allows it. Read section 0 for the decisions already made and do not reopen them. Continue milestone 0 from where the branch is: check which of its eight items have landed, then complete the rest in order: layer/exception baselines, strict TypeScript, lint and test discovery, the section 4 CI policy, the invariant ledger, the performance record. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
+> Implement `docs/IMPLEMENTATION-PLAN.md` on `4.0-development` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions, in workflow and configuration files included. Read section 0 for the decisions already made and do not reopen them. Continue milestone 0 from where the branch is: check which of its eight items have landed, then complete the rest in order: layer/exception baselines, strict TypeScript, lint and test discovery, the section 4 CI policy, the invariant ledger, the performance record. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
 
 The first deliverable is working verification and an accurate baseline, not an empty folder scaffold or a renamed `21-events.js`.
 
