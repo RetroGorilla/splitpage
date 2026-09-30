@@ -1487,6 +1487,8 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 
 ## 5. Invariants — break these and data goes quietly wrong
 
+Each rule below has a row in [docs/architecture/invariants.md](docs/architecture/invariants.md) (tests, 4.0 owner, milestone, and whether code will absorb it). Change the two together.
+
 1. **Edit with the Edit tool, one site at a time.** Never in-place regex
    substitution (`sed`/`perl -pi`) on `index.html` — no git to restore from.
 2. **Change a script cell through the document model, never by editing its

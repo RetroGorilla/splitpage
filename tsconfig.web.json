@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/adapters/**/*.ts", "src/features/**/*.ts", "src/bootstrap/**/*.ts", "src/legacy/**/*.ts"],
+  "exclude": ["**/*.test.ts"]
+}
