@@ -60,8 +60,19 @@ export function discover(files, groups = GROUPS) {
   return { groups: result, overlaps, orphans };
 }
 
+export function normalizePattern(pattern) {
+  return pattern.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+export function selectFiles(files, only) {
+  if (!only.length) return files;
+  const patterns = only.map(normalizePattern);
+  return files.filter((f) => patterns.some((p) => f.includes(p)));
+}
+
 function runGroup(entry, { repo, node, print, spawn }) {
-  const { group, files } = entry;
+  const { group } = entry;
+  const files = entry.selected;
   if (group.runner === "node-test") {
     print(`\n[${group.name}] node --test ${files.length} files`);
     const r = spawn(node, ["--test", ...files], { cwd: repo, stdio: "inherit" });
@@ -87,10 +98,12 @@ export function runTests({
   print = console.log,
   printError = console.error,
   spawn = spawnSync,
-  listOnly = false
+  listOnly = false,
+  only = []
 } = {}) {
   const { groups: found, overlaps, orphans } = discover(files, groups);
-  const chosen = found.filter((e) => sets.includes(e.group.set));
+  const focused = only.length > 0;
+  const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only) }));
   let failed = false;
 
   for (const e of chosen) {
@@ -102,31 +115,63 @@ export function runTests({
   for (const e of chosen) {
     if (e.required && e.files.length === 0) { failed = true; printError(`run-tests: group ${e.group.name} found no test files`); }
   }
+
+  const discovered = chosen.reduce((n, e) => n + e.files.length, 0);
+  const picked = chosen.reduce((n, e) => n + e.selected.length, 0);
+  const scope = only.map(normalizePattern).join(", ");
+  if (focused) {
+    print(`\nfocused run: --only ${scope} selects ${picked} of ${discovered} discovered test files in ${sets.join(", ")}`);
+    for (const e of chosen) for (const f of e.selected) print(`  ${f}`);
+    print("focused run: this is NOT the full gate; `npm run test:all`, which CI runs, executes every discovered file");
+  }
   if (failed) return 1;
+  if (focused && picked === 0) {
+    printError(`run-tests: --only ${scope} matched no discovered test file in ${sets.join(", ")}`);
+    return 2;
+  }
   if (listOnly) return 0;
 
   const summary = [];
   for (const e of chosen) {
+    const extra = focused ? ` (${e.files.length} discovered)` : "";
     if (e.files.length === 0) { summary.push(`${e.group.name}: no files`); continue; }
+    if (e.selected.length === 0) { summary.push(`${e.group.name}: none selected${extra}`); continue; }
     const r = runGroup(e, { repo, node, print, spawn });
-    summary.push(`${e.group.name}: ${r.executed} of ${e.files.length} files executed, ${r.ok ? "passed" : "FAILED"}`);
-    if (!r.ok || r.executed !== e.files.length) failed = true;
+    summary.push(`${e.group.name}: ${r.executed} of ${e.selected.length} ${focused ? "selected " : ""}files executed${extra}, ${r.ok ? "passed" : "FAILED"}`);
+    if (!r.ok || r.executed !== e.selected.length) failed = true;
   }
   print("\nrun-tests summary");
   for (const line of summary) print(`  ${line}`);
+  if (focused) print(`  FOCUSED: ${picked} of ${discovered} discovered test files ran; this is not the full gate`);
   return failed ? 1 : 0;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const args = process.argv.slice(2);
-  const listOnly = args.includes("--list");
-  const named = args.filter((a) => a !== "--list");
+export function parseArgs(args) {
+  const only = [];
+  const named = [];
+  let listOnly = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--list") listOnly = true;
+    else if (a === "--only" || a.startsWith("--only=")) {
+      const value = a === "--only" ? args[++i] : a.slice("--only=".length);
+      if (!value || value.startsWith("--")) return { error: "--only needs a path or a substring of one" };
+      only.push(value);
+    } else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --list or --only <path-or-substring>` };
+    else named.push(a);
+  }
   const unknown = named.filter((a) => !SETS.includes(a) && a !== "all");
-  if (unknown.length) {
-    console.error(`run-tests: unknown set ${unknown.join(", ")}; use ${SETS.join(", ")} or all`);
+  if (unknown.length) return { error: `unknown set ${unknown.join(", ")}; use ${SETS.join(", ")} or all` };
+  const sets = named.length === 0 || named.includes("all") ? SETS : named;
+  return { sets, listOnly, only };
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.error) {
+    console.error(`run-tests: ${parsed.error}`);
     process.exitCode = 2;
   } else {
-    const sets = named.length === 0 || named.includes("all") ? SETS : named;
-    process.exitCode = runTests({ sets, listOnly });
+    process.exitCode = runTests(parsed);
   }
 }
