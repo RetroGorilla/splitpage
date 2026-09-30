@@ -385,6 +385,10 @@ console.log("\nviolations and baseline:\n");
   check("an unresolvable relative import is reported", rules.includes("missing-module src/application/s.ts src/application/missing.ts"), rules.join("\n"));
 }
 
+eq("violations sort by code point, field by field, not by locale", findViolations(graph({
+  "src/core/document/t.ts": "export const t = [clearTimeout, TextDecoder, URL, setTimeout, AbortController];\n"
+})).map((v) => v.target), ["global:AbortController", "global:TextDecoder", "global:URL", "global:clearTimeout", "global:setTimeout"]);
+
 {
   const before = findViolations(graph({ "src/core/document/a.ts": 'import { x } from "../../js/x.js";\n', "src/js/x.js": "", "src/js/y.js": "" }));
   const after = findViolations(graph({ "src/core/document/a.ts": 'import { y } from "../../js/y.js";\n', "src/js/x.js": "", "src/js/y.js": "" }));
@@ -606,6 +610,12 @@ try {
 
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
   eq("an unknown argument exits 2", r.status, 2);
+
+  const sorted = cliRepo({ "shared/t.js": '"use strict";\nmodule.exports = [clearTimeout, TextDecoder, URL, setTimeout];\n' });
+  cli(sorted, "--init");
+  const initText = readFileSync(join(sorted, "tools/dep-baseline.json"), "utf8");
+  eq("--init writes the baseline in code-point order", JSON.parse(initText).exceptions.map((e) => e.target), ["global:TextDecoder", "global:URL", "global:clearTimeout", "global:setTimeout"]);
+  eq("--prune rewrites the same bytes", [cli(sorted, "--prune").code, readFileSync(join(sorted, "tools/dep-baseline.json"), "utf8") === initText], [0, true]);
 } finally {
   rmSync(cliWork, { recursive: true, force: true });
 }
