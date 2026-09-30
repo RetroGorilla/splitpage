@@ -12,13 +12,39 @@ runs the fast gates in the order CI does.
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
-| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery) |
+| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list) |
 | `npm run test:all` | All three sets |
-| `npm run verify` | lint, typecheck, check:deps, check:comments, build, test:all |
+| `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
 
-Browser suites and the desktop smoke run by hand at milestone and release
-gates: `node tools/run-suites.mjs <out-dir> [regex]` on Linux/macOS,
-`run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for Electron.
+The full browser regression and the desktop smoke run by hand at milestone
+and release gates: `node tools/run-suites.mjs <out-dir> [regex]` on
+Linux/macOS, `run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for
+Electron. How to drive the browser suites is in
+[the run-splitpage-app skill](../../.claude/skills/run-splitpage-app/SKILL.md).
+
+## What to run for which change
+
+While a pull request is being written, run the focused checks for what it
+touches. CI then runs every fast gate on every pull request: lint, types, the
+dependency and comment gates, the build, every discovered unit, desktop and
+tool test, and the smoke, CSP and persistence browser suites. CI never
+narrows to the test files a change touched; `--only` is a local tool.
+
+| Change | Run while working |
+| --- | --- |
+| A pure rule in one feature or core policy | Its unit tests (`npm test -- --only <folder>`), `npm run typecheck`, `npm run lint`, `npm run check:deps`, `npm run check:comments` |
+| A feature's controller, view or bindings | The feature's tests, and the browser suites for its real input, focus and selection |
+| A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
+| Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`, `249-save-as-hosted.txt`, `265-browser-drafts.txt`, the collaboration suites `26[0-4]-collaborate-*.txt`) |
+| Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
+| Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
+| Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `tools/run-suites.mjs` on Linux and `run-tests.ps1` on Windows, the Electron smoke, the Windows x64 and ARM64 packaged checks; `summary.txt` and the logs attached to the closing pull request |
+
+`npm run verify` before pushing is cheap and runs CI's fast gate apart from
+the checks that need a browser: the tab strip width
+(`node desktop/test/tabstrip-width.mjs`) and the browser suites. Its `sw.js`
+check compares the stamped file with the one git has, so an edit to `sw.js`
+you have not staged or committed fails it; `git add sw.js` settles that.
 
 `node tools/perf-record.mjs [report.md]` drives the built app in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
@@ -43,6 +69,22 @@ A file named like a test that no group runs (`src/test/x.test.ts`,
 `server/x.test.mjs`) fails the run, as does a file two groups claim.
 `node tools/run-tests.mjs --list [unit|desktop|tools|all]` prints discovery
 without running anything.
+
+`--only <path-or-substring>` narrows a run to the discovered files whose path
+contains it (repeatable; `\` and `/` alike): `npm test -- --only
+src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
+Discovery and its orphan, overlap and empty-group checks still run over
+everything, the selected files are listed, and the run says it is not the
+full gate. A filter that matches nothing exits 2. It is for local feedback
+only; CI always runs `npm run test:all` unfiltered.
+
+`tools/test-run-tests.mjs` links the repository's `node_modules` into a
+temporary repository to type-check it. On Windows the link is a directory
+junction, which needs neither administrator rights nor Developer Mode. If the
+link still cannot be made on a Windows workstation, the typecheck cases print
+`SKIP` with the reason and the summary counts them as skipped, not passed.
+Anywhere else, and on Windows when `CI` is set, a link that cannot be made
+fails the run.
 
 ## TypeScript
 
@@ -82,20 +124,34 @@ above and nothing else.
 | Job | Runs |
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width, browser suites 01 and 52 through `tools/run-suites.mjs`; uploads the built app |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
 | `node-24` | A clean `npm ci` and `npm run verify` on Node 24 |
 | `gate` | Passes when `checks` and `node-24` passed, or when the change was prose only and both were skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
+The persistence suite costs little: on its first hosted run (PR #270,
+`ubuntu-latest`, 30 September 2026) `265-browser-drafts.txt` passed 80 of 80
+checks in 8.0 s, from the runner's start line to its `ALL PASS`; the step
+running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
+
 `gate` is the one check to mark required in branch protection: a
 prose-only pull request completes it without waiting on the others. Prose
 means Markdown other than `docs/help.md` (the build renders it into the app),
-`.claude/handoff/`, issue templates, `CODEOWNERS` and `LICENSE`.
+`.claude/handoff/`, `CODEOWNERS` and `LICENSE`. The issue templates' YAML is
+not prose: the comment gate reads it, so a change to it runs the checks.
+`tools/test-ci-changes.mjs` fails if any file the comment gate reads would be
+classed as prose.
 
-`.github/workflows/docker.yml` builds and starts both Docker images when a
-Docker build input changes; its path filters list every file the Dockerfile
-copies. `.github/workflows/release.yml` builds the Windows installers from a
-tag.
+`.github/workflows/docker.yml` runs when a Docker build input changes; its
+path filters list every file either Dockerfile copies. Job `image` builds the
+root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
+Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
+`splitpage-app` artifact into an empty folder (`tools/artifact-files.mjs`,
+which reads the list from `ci.yml`), builds `Dockerfile.prebuilt`
+there, starts it and checks `/api/health`'s version, `/` and `/sw.js` against
+`VERSION` and its HEALTHCHECK. `.github/workflows/release.yml` builds the
+Windows installers from a tag. [ci.md](ci.md) explains the settings in these
+files that the files themselves cannot.
 
 The full browser regression, the Windows runs and the packaged x64/ARM64
 checks are local milestone and release gates (plan section 4). The

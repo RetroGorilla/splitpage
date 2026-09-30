@@ -1,6 +1,6 @@
 ---
 name: run-splitpage-app
-description: Run, drive and test the Splitpage app in a real headless browser. Use when changing the app source in src/, verifying a Splitpage feature works, reproducing a reported bug, taking screenshots of the app, or running the regression suite before committing. Also use when asked to "test splitpage", "run the tests", or "check nothing broke".
+description: Run, drive and test the Splitpage app in a real headless browser. Use when changing the app source in src/, verifying a Splitpage feature works, reproducing a reported bug, taking screenshots of the app, choosing which tests a change needs, or running the full regression at a milestone or release gate. Also use when asked to "test splitpage", "run the tests", or "check nothing broke".
 ---
 
 # Running and testing Splitpage
@@ -52,31 +52,43 @@ where you are, never by what you are testing:
 | --- | --- | --- |
 | Runs on | Windows only | anywhere with Node 22 + a Chromium |
 | Built from | PowerShell 5.1 + .NET + `msedge.exe` | Node built-ins + Playwright's Chromium |
-| Suite runner | `run-tests.ps1` (parallel lanes) | none — one suite per invocation |
+| Suite runner | `run-tests.ps1` (parallel lanes) | `tools/run-suites.mjs` (parallel lanes; see "Driving it from the cloud") |
 
-`driver.ps1` is the original and still the one the full regression runs
-under. `driver.mjs` exists so a source change can be driven from the Linux
-cloud container, which has no PowerShell and no Edge — see "Driving it from
-the cloud" below.
+`driver.ps1` is the original; the Windows half of the full regression runs
+under it and the Linux half under `driver.mjs`. `driver.mjs` also lets a
+source change be driven from the Linux cloud container, which has no
+PowerShell and no Edge, and it is what CI runs.
 
-Building and packaging need Node 18+, which the Windows machine may not
-have — if `node build.mjs` cannot run there, you cannot test a source change
-at all, and saying so is better than testing a stale `index.html`.
+Building needs Node 22 (22.22.2 or later) or 24 (24.15.0 or later), per
+`package.json`'s `engines`; `.nvmrc` pins the one CI uses. If `node build.mjs`
+cannot run, you cannot test a source change at all, and saying so is better
+than testing a stale `index.html`.
 
-## Run the regression suite
+## Which tests to run
 
-Do this before committing any change to `src/`, and **rebuild first** or you
-will be testing the previous version of the app:
+During a change, run the focused checks for what you touched, from the table
+in [docs/architecture/testing.md](../../../docs/architecture/testing.md#what-to-run-for-which-change):
+the unit tests of the area (`npm test -- --only <path>`), and the browser
+suites for its input, focus, saving or export paths. CI runs lint, types, the
+gates, every unit/desktop/tool test and the smoke, CSP and persistence suites
+on every pull request, so a focused run is feedback, not the gate. The full
+browser regression below, on Linux and Windows, is run at milestone and
+release gates (plan section 4) and its `summary.txt` attached to the closing
+PR. **Rebuild first** whichever you run, or you will be testing the previous
+version of the app.
+
+## Run the full regression (milestone and release gates)
 
 ```bash
 node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS` (suites 01–30, 16 unused) and exit 0, or lists
-every failing assertion and exits 1. Options:
+Runs every suite in `tests/` (162 today) and ends with
+`ALL PASS` and exit 0, or lists every failing assertion and exits 1. The
+Linux half is `node tools/run-suites.mjs <out-dir>` (below). Options:
 
-- `-Only 02` — run just the suite whose filename starts with `02`
+- `-Only 265-browser-drafts` — run just the suites whose filename starts with that (a PowerShell wildcard; numeric prefixes repeat, so `-Only 261` runs two suites)
 - `-Parallel N` — how many suites run at once (default 4; each has its own ports, Edge profile and log)
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
@@ -105,6 +117,8 @@ TypeScript tests beside migrated source and `tests/` under `node --test`
 build step: each file imports the module it is about straight out of
 `src/js` and calls it. Add to these rather than to a browser suite whenever
 the thing you changed is a pure function of a document.
+`npm test -- --only src/test/formats` runs just the matching files and says
+it is not the full gate; CI always runs them all.
 
 | File | Covers |
 | --- | --- |
@@ -319,6 +333,7 @@ the thing you changed is a pure function of a document.
 | `tests/264-collaborate-phone.txt` | Collaborate at 390×844 with touch, light and dark: sign in, the question and the links inside the screen with nothing past its edge, the key field 16px and 44px, each Copy full-width under its link, the whole link shown wrapped, New link / Turn off 36px, an armed Turn off in red with its warning; and the guest's name box on the same phone (16px field, inside the screen) |
 | `tests/265-browser-drafts.txt` | crash-safe drafts in the BROWSER for a script on a server (PR #233, 20g-drafts.js over 03d-drafts-idb.js), with 263's fetch emulator plus `failPut` (kept in localStorage so each `goto` reinstalls it; the page's "unsaved changes" prompt disarmed before each, as a crash would): a guest's edits while saves fail kept in IndexedDB under the server and document id, with the server's last version as its ancestor and no token, link key or fragment anywhere in it; a second script in a new tab its own draft, no collision; its link turned off mid-session and the draft still following the typing with nothing saved; the first link opened again after the server moved on — merged, both sides kept, "Undo merge" up, no PUT however short autosave's wait, the chip "not saved yet" (screenshot `265-recovered`), the draft taken over by the new page and removed by a save that lands; no IndexedDB at all (`useIndexedDB(null)`) — the writer stops, no toast, no error; the second link found off on arrival — its kept changes open as an unsaved copy (screenshot `265-link-off-copy`) and stay kept. `wait` does not await a promise, so the store is read into `__rec` every 100ms |
 | `tests/266-header-collab-condense.txt` | the header's **Collab** button and the toolbar's labels (PR #233, app.css "the toolbar's labels", 20i-topbar.js): Collab beside Write, the people icon, a secondary button (Present still the one `.btn-accent`), its name "Collaborate — invite people to this script", Tab-reachable, a click and Enter opening the Collaborate dialog; a link guest and a review session getting it `aria-disabled` (still tabbable) with *Only the script's owner can invite people.* as tooltip and toast. Then in a resized iframe (as 85/252), tokens at 0.01ms for the sweeps: every 10px from 761 to 1920 plus each px at 990–1010 and 1290–1310, short and 60-character titles and a panel open — no two header controls overlap, nothing past the edge, the left half not overflowing, the toggles' labels closed below 1300 (1250 before Collab) and Collab's and Write's below 1000, Comments' count (12) always shown. With the real tokens: crossing 1300 by 20px both ways the label closes and opens over ≥3 frames with no overlap on any frame; `mouse hover` on a closed Production, then Comments, opening it over frames inside the panels' slot, ending on a neighbour's edge, opaque (`--hover`), with every control's layout slot (margin box) unmoved on every frame and Gear still under its own centre; pointing away and a touch `pointerenter` opening nothing; Tab opening Gear then B-roll (`:focus-visible`); Collab at 990 opening leftwards between Search and Write, Write not opening; reduced motion (tokens collapsed) opening within three frames; the dark pill colours; screenshots `266-header-{1920,1280,1000,800}-{light,dark}` with a button pointed at, `266-hover-production-1100`, `266-hover-collab-990`; and at 390 the bottom bar's six tabs unchanged, no Collab/panels/Write above |
+| `tests/275-menu-refused-under-overlay.txt` | the desktop app's native menu commands and accelerators (`D.runMenuCommand`, which clicks the File menu item or the header's Save) refused behind what their own shortcut already refused behind, with a toast (`refusedUnderOverlay`, 18b-file-menu.js): Save, Save a copy, Open, Export, Search commands, Find and Hide shot scenes under a dialog ("Close the open dialog first."), as is the writer's Save button; Save, Save a copy, Open and Export under the open command menu; Open, Export, Search commands and Find under the writer ("Close the writer first."); Open, Export and Search commands under Present ("Close Present first."); Search commands during the tour ("Finish or skip the tour first."); a dialog over the writer or Present named first. What still acts there: Hide shot scenes, Find and Search commands (no toast) behind the command menu, Save, Save a copy and Hide shot scenes in the writer and Present, Find in Present, Minimise the rundown under a dialog, and every command with nothing open; and the in-page shortcuts under a dialog refusing without a toast |
 
 ## The server's own tests
 
@@ -464,13 +479,35 @@ node tools/run-suites.mjs ../splitpage-runs/one --lanes 1 --timeout 900 '^01-cor
 
 Filter by full filename: numeric prefixes repeat (`261` and `262` each name
 two suites). Flags `--lanes` (default 6), `--port-base` (offset for a second
-runner on the same machine), `--timeout` (seconds per suite, default 600);
-`LANES`, `PORT_BASE` and `SUITE_TIMEOUT` in the environment do the same.
+runner on the same machine), `--timeout` (seconds per suite, default 600, at
+most 86400); `LANES`, `PORT_BASE` and `SUITE_TIMEOUT` in the environment do
+the same, and `--help` prints them all. Parsing is strict: an unknown flag is
+an error, numbers must be plain decimal digits (`" 2"`, `600.0` and `1e1` are
+rejected), and a filter that starts with `-` needs `--` in front of it.
 
-Its exit status is the answer: 0 only when every suite is `PASS`; 1 when any
-suite is `FAIL`, `TIMEOUT` (killed with its browser), `NO-RESULT` (the driver
-exited without a `RESULT:` line) or `LAUNCH-ERROR`; 2 when nothing matched or
-a flag is invalid. It only ever kills processes it started.
+Lane `n` uses HTTP port `18100 + base + 10n` and CDP port `19300 + base + 10n`.
+Before starting anything the runner binds each of them and holds both
+`HTTP + 1` and `CDP + 1` for the whole run, so a run whose ports would overlap
+another's stops with a port collision instead of fighting it. `--port-base`
+must be a multiple of 10. A safe base for a second run is one at least
+`10 × lanes` away from the first run's base and from that base ± 1200, so
+`100` next to a default run of up to 10 lanes. Any overlap, including one run's
+HTTP ports landing on another's CDP ports, is caught before a suite starts.
+
+Its exit status is the answer: 0 only when every suite is `PASS`, meaning
+exactly one `RESULT: n/n checks passed` line with `n` above zero, last on
+stdout, and exit 0. It is 1 when any suite is `FAIL`, `BAD-RESULT` (a
+malformed, zero-check, negative, incomplete, contradictory, repeated or
+not-last `RESULT:` line), `NO-RESULT` (the driver exited without a `RESULT:`
+line), `TIMEOUT` (killed with its browser), `LEFTOVER` (something the driver
+started still held its output open 2 s after the driver exited) or
+`LAUNCH-ERROR`. It is 2 when nothing matched, a flag is invalid, the driver or
+suite folder is missing, or a port is taken, and 3 when the runner itself
+failed. After SIGHUP, SIGINT or SIGTERM it exits 129, 130 or 143. SIGTERM used
+to give 130, like Ctrl+C.
+It only ever kills processes it started: on Linux/macOS each driver's own
+process group, on Windows the driver's tree while the driver is alive, and
+Ctrl+C, SIGTERM or an internal error kills them before it exits.
 `tools/test-run-suites.mjs` (in `npm run test:tools`) checks each of those
 against a fake driver. `run-tests.ps1` remains the Windows runner.
 
