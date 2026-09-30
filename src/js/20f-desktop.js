@@ -101,6 +101,10 @@ var DESKTOP_HEADER_ACTIONS = {
   "present": "present"
 };
 
+function fileMenuItem(id) {
+  return document.querySelector('#file-menu [data-file-action="' + cssAttr(id) + '"]');
+}
+
 function runDesktopMenuCommand(cmd) {
   if (runScriptZoomCommand(cmd)) return;
   var header = DESKTOP_HEADER_ACTIONS[cmd];
@@ -108,12 +112,17 @@ function runDesktopMenuCommand(cmd) {
   if (appActions.has(id)) {
     var view = appActions.view(id, "native-menu");
     if (view && !view.enabled && !view.reason) return;
-    if (!header) { handleFileMenuAction(id, "native-menu"); return; }
-    invokeFrom(id, "native-menu");
-    toggleFileMenu(false);
+    if (header) {
+      invokeFrom(id, "native-menu");
+      toggleFileMenu(false);
+    } else if (fileMenuItem(id)) {
+      handleFileMenuAction(id, "native-menu");
+    } else {
+      invokeFrom(id, "native-menu");
+    }
     return;
   }
-  var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');
+  var item = fileMenuItem(cmd);
   if (item && !item.disabled) item.click();
 }
 
