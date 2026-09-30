@@ -26,8 +26,8 @@ import { setHideShotScenes } from "./01b-hide-shot.js";
 import { escapeHtml } from "./02-state.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
-import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments, showTaggingHelp } from "./10-comments.js";
-import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments } from "./10-comments.js";
+import { invokeFrom, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   COLLAB_SERVER_KEY,
   DEFAULT_COLLAB_SERVER,
@@ -41,8 +41,7 @@ import { AUTOSAVE_KEY, setAutoSaveEnabled } from "./14-export.js";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, applyWriterSize, readWriterSize } from "./19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
-import { TOUR_DONE_KEY, startTour } from "./20c-help.js";
-import { openServersDialog } from "./20e-connect.js";
+import { TOUR_DONE_KEY } from "./20c-help.js";
 import { appDataImportShown } from "./20f-desktop.js";
 
 var SETTINGS_ID = "settings-modal";
@@ -352,24 +351,19 @@ function applyInput(target) {
   }
 }
 
-function clickFileMenuItem(action) {
-  var btn = document.querySelector('#file-menu [data-file-action="' + action + '"]');
-  if (btn && !btn.disabled) btn.click();
-}
-
 function runAction(action) {
   if (action === "close") { closeSettings(); return; }
   if (action === "scale-reset") { writePref(SCRIPT_SCALE_KEY, "1"); return; }
   if (action === "tagging-help") {
     closeSettings();
-    showTaggingHelp();
+    invokeFrom("tagging-help", "button");
     announce(TAGGING_HELP_KEY);
     return;
   }
   if (action === "tour") {
     closeSettings();
     writePref(TOUR_DONE_KEY, null);
-    startTour();
+    invokeFrom("tour", "button");
     return;
   }
   if (action === "desktop-notice") {
@@ -384,10 +378,10 @@ function runAction(action) {
     renderSettings();
     return;
   }
-  if (action === "servers") { closeSettings(); openServersDialog(); return; }
-  if (action === "drive") { closeSettings(); clickFileMenuItem("drive-open"); return; }
-  if (action === "export-app-data") { closeSettings(); clickFileMenuItem("export-app-data"); return; }
-  if (action === "import-app-data") { closeSettings(); clickFileMenuItem("import-app-data"); }
+  if (action === "servers") { closeSettings(); invokeFrom("servers", "button"); return; }
+  if (action === "drive") { closeSettings(); invokeFrom("drive-open", "button"); return; }
+  if (action === "export-app-data") { closeSettings(); invokeFrom("export-app-data", "button"); return; }
+  if (action === "import-app-data") { closeSettings(); invokeFrom("import-app-data", "button"); }
 }
 
 function wireModal(m) {

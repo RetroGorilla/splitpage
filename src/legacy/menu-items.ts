@@ -1,4 +1,4 @@
-import type { Availability } from "../application/actions.ts";
+import type { ActionSource, Availability } from "../application/actions.ts";
 
 export interface MenuItemState {
   readonly hidden: boolean;
@@ -6,9 +6,13 @@ export interface MenuItemState {
   readonly reason: string;
 }
 
-export function itemAvailability(state: MenuItemState): Availability {
+export function greyedOut(reason: string, source: ActionSource): Availability {
+  return { enabled: false, reason: source === "native-menu" ? "" : reason };
+}
+
+export function itemAvailability(state: MenuItemState, source: ActionSource): Availability {
   const visible = !state.hidden;
-  if (state.disabled) return { enabled: false, visible, reason: state.reason };
+  if (state.disabled) return { ...greyedOut(state.reason, source), visible };
   return visible ? { enabled: true } : { enabled: true, visible };
 }
 

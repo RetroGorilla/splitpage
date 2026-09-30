@@ -3,7 +3,8 @@
 # opens, so a surface that reads an action's availability without opening it
 # (the command menu's own reading, the desktop app's native menu) must ask
 # the same rule the menu renders from. Each check changes the state with the
-# File menu closed.
+# File menu closed. (The native menu stays silent about an item the File menu
+# would show greyed out, as in 3.1, so there it simply does nothing.)
 
 open
 viewport 1400 900
@@ -26,7 +27,7 @@ eval __clearToasts()
 eval D.runMenuCommand('paste'); true
 sleep 300
 expect !__shown('import-modal')
-expect __toasts().indexOf('Viewing only — you can comment, but not change the script.') !== -1
+expect __toasts() === ''
 eval H.setSession({ role: 'edit', docId: null }); true
 sleep 300
 expect H.reviewMode() === false

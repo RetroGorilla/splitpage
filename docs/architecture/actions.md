@@ -2,7 +2,8 @@
 
 An action is one thing a person can ask the app to do, with one definition
 that every surface uses: the File menu, the command menu, a keyboard shortcut,
-a button, and the desktop app's native menu (which clicks the File menu item).
+a button (the header's, the Writer's, the Settings dialog's, the setup
+wizard's, the Servers dialog's), and the desktop app's native menu.
 
 ## The registry
 
@@ -156,7 +157,31 @@ shortcuts already used. Before this, the desktop app's native menu and its
 accelerators went through the File menu path, which checked only that a
 document had loaded, so they acted over an open dialog, the Writer or
 Present where the browser shortcut refused. They now refuse too, and the
-File menu path shows the reason as a toast.
+File menu path shows the reason as a toast. 3.1.x gets the same change from
+#273 (`275-menu-refused-under-overlay.txt`), which passes on this code; it is
+the only change of behavior the move to the registry keeps.
+
+## The desktop app's native menu
+
+`runDesktopMenuCommand` (`20f-desktop.js`) receives a command name from
+`desktop/main.js` and runs the action of that id with the source
+`"native-menu"`, reading no rendered state. Its six header commands
+(`save`, `toggle-production`, `toggle-gear`, `toggle-comments`, `write`,
+`present`) name the header buttons' actions and close an open File menu, as
+the click on the button they used to send did. Every other command goes
+through `handleFileMenuAction(id, "native-menu")`, what choosing the File
+menu item does: it closes the setup wizard and the File menu, remembers an
+export, and invokes the action. Refusals are shown as toasts, except where
+the File menu would show the item greyed out (Collaborate for a link guest,
+Paste a script in a review session, the server items, Save while a save
+runs): the native menu cannot grey an item out, and in 3.1 it did nothing
+there, so `greyedOut()` and `itemAvailability()` (`src/legacy/menu-items.ts`)
+give such a refusal no reason for that source, and the native path does
+nothing at all for a refusal without one. The script zoom commands and the
+export formats are not actions yet and keep their own paths.
+
+`280-other-surfaces.txt` checks the Settings buttons, the wizard's links and
+these native menu rules, against 3.1's code too.
 
 ## Migrated so far
 
@@ -174,10 +199,10 @@ File menu path shows the reason as a toast.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
-| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help) | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js` |
-| `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
+| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Servers, Help and Tour also from the Settings dialog's and the setup wizard's buttons | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js` and `20b-onboarding.js` |
+| `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
-| `new`, `paste`, `gdoc-import`, `drive-open`, `save-back`, `autosave`, `export-again`, `server-open`, `server-publish` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
+| `new`, `paste`, `gdoc-import`, `drive-open`, `save-back`, `autosave`, `export-again`, `server-open`, `server-publish` | File menu, command menu, desktop menu; Google Drive also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, a `20s-settings.js` File menu click |
 | `collaborate` | File menu, command menu, header Collab button, the Servers dialog's button | `18-local-files.js`, `18d-command-menu.js`, `13b-collaborate.js` and `20e-connect.js` click handlers |
 | `set-target` | Command menu | `18d-command-menu.js` |
 | `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |

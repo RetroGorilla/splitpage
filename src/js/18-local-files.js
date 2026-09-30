@@ -66,6 +66,7 @@ import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, p
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
+import { closeOnboarding } from "./20b-onboarding.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject,
@@ -742,11 +743,12 @@ export async function exportBrollList(action) {
   else await exportAs("b-roll pdf", { brollView: { filter: "all", group: "scene" } });
 }
 
-export function handleFileMenuAction(action) {
+export function handleFileMenuAction(action, source) {
+  closeOnboarding();
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
-    invokeFrom(action, "menu");
+    invokeFrom(action, source || "menu");
     return;
   }
   if (!S.state) {
