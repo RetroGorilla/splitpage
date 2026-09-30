@@ -20,8 +20,10 @@ a button, and the desktop app's native menu (which clicks the File menu item).
 | `unknown` | No action has that id |
 | `failed` | The handler threw; the registry's `report` function received the error |
 
-Each surface decides how to show a refusal. The File menu shows the reason as
-a toast. The command menu shows it greyed out with the reason. A shortcut
+Each surface decides how to show a refusal. The File menu and the buttons
+show it as a toast through `showRefusal()` (`12-dirty-toast.js`), which ends
+the reason with a full stop: a reason is written as a menu line ("Close the
+open dialog first") and a toast is a sentence. The command menu shows it greyed out with the reason. A shortcut
 leaves the key to the browser. A key that a focused control already handled
 (`defaultPrevented`) never reaches a global action.
 
@@ -35,8 +37,14 @@ either way. `keys` may be a function, read each time: Help shows F1 only in
 the desktop app, whose menu binds it.
 
 `src/legacy/menu-items.ts` reads a File menu item's hidden and disabled state
-(and the reason it shows) for actions whose availability the menu still
-decides.
+(and the reason it shows), and its current label, for actions whose
+availability the menu still decides. `label` may be a function too: Servers
+shows the connected host, Save to file the imported file's name.
+
+`visible: false` only keeps an action out of the command menu. It still runs
+from a surface that has it: the desktop app's native menu reaches items the
+File menu hides (Google Drive, Present in browser), and their handlers explain
+the refusal themselves.
 
 `src/application/shortcuts.ts` parses chords and finds the action a key event
 names. `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown
@@ -91,11 +99,20 @@ File menu path shows the reason as a toast.
 | `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help) | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js` |
 | `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
+| `new`, `paste`, `gdoc-import`, `drive-open`, `save-back`, `autosave`, `export-again`, `server-open`, `server-publish` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
+| `collaborate` | File menu, command menu, header Collab button, the Servers dialog's button | `18-local-files.js`, `18d-command-menu.js`, `13b-collaborate.js` and `20e-connect.js` click handlers |
+| `set-target` | Command menu | `18d-command-menu.js` |
+| `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |
+
+The File menu's export formats (`export-pdf` and the rest) still dispatch in
+`18-local-files.js`; milestone 5's format registry takes them over. The New
+Tab page's buttons are different actions (a blank new script, paste as a new
+script, open into this tab) and stay its own.
 
 Browser suites `268-actions-every-surface.txt`,
 `269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt` and
-`272-view-actions-every-surface.txt` and `273-help-actions-every-surface.txt`
-check each surface, and the
+`272-view-actions-every-surface.txt`, `273-help-actions-every-surface.txt` and
+`274-more-actions-every-surface.txt` check each surface, and the
 shortcut refused under a dialog. The File menu's markup (label, `data-keys`)
 is still in `src/page.html`; the command menu reads the definition.
 

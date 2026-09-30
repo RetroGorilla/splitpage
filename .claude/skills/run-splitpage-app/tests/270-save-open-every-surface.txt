@@ -78,7 +78,7 @@ eval document.getElementById('toast-host').innerHTML = ''; true
 jsclick #btn-save
 sleep 300
 expect __take() === ''
-expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first'; })
+expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first.'; })
 key Escape
 sleep 300
 

@@ -9,7 +9,7 @@ import { openServersDialog } from "../js/20e-connect.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
 import { screenNow } from "./document-actions.ts";
-import { menuItemAvailability } from "./menu-items.ts";
+import { menuItemAvailability, menuItemLabel } from "./menu-items.ts";
 import { availableUnless } from "./screen.ts";
 
 function fromMenuItem(action: string): Availability {
@@ -25,7 +25,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
   const definitions: ActionDefinition[] = [
     {
       id: "servers",
-      label: "Servers…",
+      label: () => menuItemLabel("servers", "Servers…"),
       group: "Share",
       icon: "i-globe",
       words: "server connect bookmark address pin join",
