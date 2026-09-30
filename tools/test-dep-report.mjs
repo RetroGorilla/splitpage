@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSync, existsSync, symlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -610,6 +610,13 @@ try {
 
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
   eq("an unknown argument exits 2", r.status, 2);
+
+  const linkedRepo = cliRepo({ "src/js/a.js": "export const a = 1;\n" });
+  symlinkSync(join(linkedRepo, "tools"), join(linkedRepo, "linked"), "junction");
+  const viaLink = (...args) => spawnSync(process.execPath, [join("linked", "dep-report.mjs"), ...args], { cwd: linkedRepo, encoding: "utf8" });
+  eq("run through a linked folder, an unknown argument still exits 2", viaLink("--bogus").status, 2);
+  const linkedMetrics = viaLink("--metrics");
+  eq("run through a linked folder, the report still runs", [linkedMetrics.status, linkedMetrics.stdout.includes("frontendModules")], [0, true]);
 
   const sorted = cliRepo({ "shared/t.js": '"use strict";\nmodule.exports = [clearTimeout, TextDecoder, URL, setTimeout];\n' });
   cli(sorted, "--init");
