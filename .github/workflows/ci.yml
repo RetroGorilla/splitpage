@@ -45,8 +45,6 @@ jobs:
     timeout-minutes: 25
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
-      # Ubuntu 24.04's AppArmor blocks the user namespaces Chromium's sandbox
-      # needs; without these flags the browser dies before opening a CDP port.
       SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
       - uses: actions/checkout@v4
@@ -83,8 +81,6 @@ jobs:
       - name: Unit, desktop and tool tests
         run: npm run test:all
 
-      # The runner's /usr/bin/chromium is a snap that never opens a debugging
-      # port, so the Playwright build is resolved here and handed to the driver.
       - name: Install Chromium
         run: |
           npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium
@@ -188,12 +184,8 @@ jobs:
         run: npm ci
         working-directory: desktop
         env:
-          # desktop/.npmrc pins arch=arm64 for the Windows-on-ARM machine; an
-          # npm_config_* variable outranks it so the runner's own arch wins.
           npm_config_arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
 
-      # Through node, not npm: npm would turn desktop/.npmrc's arch=arm64 into
-      # npm_config_arch and fetch a binary this x64 runner cannot execute.
       - name: Fetch the dev Electron binary
         run: node node_modules/electron/install.js
         working-directory: desktop
@@ -204,9 +196,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends xvfb
           npx --yes playwright@${PLAYWRIGHT_VERSION} install-deps chromium
 
-      # Xvfb is started by hand because xvfb-run intermittently returns its own
-      # cleanup failure as the exit status. The grep drops xkbcomp's harmless
-      # unknown-keysym warnings (about 1,700 lines a run).
       - name: Desktop smoke (dev target)
         working-directory: desktop
         run: |
