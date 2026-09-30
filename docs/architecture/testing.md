@@ -20,6 +20,12 @@ Browser suites and the desktop smoke run by hand at milestone and release
 gates: `node tools/run-suites.mjs <out-dir> [regex]` on Linux/macOS,
 `run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for Electron.
 
+`node tools/perf-record.mjs [report.md]` drives the built app in headless
+Chromium and records typing, new-scene, bulk delete/undo and export timings on
+the seed and the long demo, with the machine, browser and font it ran under.
+[performance-record.md](performance-record.md) is the 4.0 starting point;
+compare a later run only under the same conditions.
+
 ## Test discovery
 
 `tools/run-tests.mjs` finds tests by path, prints every file it found, runs
