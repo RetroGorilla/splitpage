@@ -44,8 +44,8 @@ Until the bootstrap of milestone 7 exists, one registry instance lives in
 rethrows the error on a microtask, so a failing action still reaches the
 browser as an uncaught error, as it did before.
 
-`src/legacy/document-actions.ts` and `src/legacy/file-actions.ts` define the
-actions whose handlers are still in `src/js`. `src/legacy/screen.ts` names what
+`src/legacy/document-actions.ts`, `src/legacy/file-actions.ts` and
+`src/legacy/view-actions.ts` define the actions whose handlers are still in `src/js`. `src/legacy/screen.ts` names what
 can refuse an action (still loading, Present, the Writer, a dialog, the tour)
 with the reason a person is shown.
 
@@ -80,10 +80,13 @@ File menu path shows the reason as a toast.
 | `save` | Header and Writer Save buttons, command menu, `mod+s`, desktop menu | `21-events.js` button listeners, `18d-command-menu.js` button mirror, an `18b-file-menu.js` keydown listener |
 | `save-as` | File menu, command menu, `mod+shift+s`, desktop menu | `18-local-files.js`, `18d-command-menu.js`, `18b-file-menu.js` keydown |
 | `open` | File menu, command menu, `mod+o`, desktop menu | `18-local-files.js`, `18d-command-menu.js`, `18b-file-menu.js` keydown |
+| `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
+| `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
+| `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 
 Browser suites `268-actions-every-surface.txt`,
-`269-file-actions-every-surface.txt` and `270-save-open-every-surface.txt`
-check each surface, and the
+`269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt` and
+`272-view-actions-every-surface.txt` check each surface, and the
 shortcut refused under a dialog. The File menu's markup (label, `data-keys`)
 is still in `src/page.html`; the command menu reads the definition.
 

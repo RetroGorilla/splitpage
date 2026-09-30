@@ -71,24 +71,6 @@ function fromExport(action, words) {
   };
 }
 
-function fromButton(id, btnId, group, label, icon, words, keys, blockedWhy) {
-  return {
-    id: id,
-    group: group,
-    words: words,
-    read: function () {
-      var btn = el(btnId);
-      if (!btn || btn.hidden) return null;
-      var why = blockedWhy ? blockedWhy() : "";
-      return { label: label, icon: icon, keys: keys || "", why: why, disabled: !!why || btn.disabled, state: "" };
-    },
-    run: function () {
-      var btn = el(btnId);
-      if (btn && !btn.disabled) btn.click();
-    }
-  };
-}
-
 function fromAction(id) {
   var first = appActions.view(id);
   return {
@@ -115,9 +97,6 @@ var COMMANDS = null;
 
 function commands() {
   if (COMMANDS) return COMMANDS;
-  var viewing = function () {
-    return reviewMode() ? "Viewing only — the writer changes the script" : "";
-  };
   COMMANDS = [
     fromAction("save"),
     fromAction("save-as"),
@@ -149,13 +128,12 @@ function commands() {
     fromExport("export-broll-pdf", "b-roll broll shot list shots second unit print pdf landscape"),
     fromExport("export-broll-xlsx", "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets"),
     fromExport("export-broll-csv", "b-roll broll shot list shots spreadsheet csv excel sheets"),
-    fromButton("panel-production", "btn-production", "View", "Production panel", "i-panel",
-      "breakdown tags props locations cast show hide toggle"),
-    fromButton("panel-gear", "btn-gear", "View", "Gear panel", "i-panel", "gear equipment kit camera show hide toggle"),
-    fromButton("panel-broll", "btn-broll", "View", "B-roll panel", "i-panel", "broll b roll shots cutaways show hide toggle"),
-    fromButton("panel-comments", "btn-comments", "View", "Comments panel", "i-panel", "comments notes review feedback show hide toggle"),
-    fromButton("write", "btn-write", "View", "Write", "i-pen", "writer narration word processor audio column", "", viewing),
-    fromButton("present", "btn-present", "View", "Present", "i-play", "teleprompter prompter autocue read play"),
+    fromAction("panel-production"),
+    fromAction("panel-gear"),
+    fromAction("panel-broll"),
+    fromAction("panel-comments"),
+    fromAction("write"),
+    fromAction("present"),
     fromAction("history"),
     fromAction("find"),
     fromAction("toggle-hide-shot"),

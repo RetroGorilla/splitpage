@@ -131,7 +131,6 @@ import {
   closeProductionPanel,
   handleSelectionClick,
   jumpToTag,
-  openGearPanel,
   openProductionPanel,
   renderGearList,
   renderProduction,
@@ -248,7 +247,6 @@ import {
   jumpFromWriterToRow,
   onWriterFormat,
   onWriterKeydown,
-  openWriter,
   placeCaretAtTextOffset,
   renderWriter,
   scheduleWriterStats,
@@ -262,7 +260,6 @@ import {
   buildPrompterContent,
   closePrompter,
   cueSceneForCurrentPosition,
-  openPrompter,
   promptSceneMode,
   prompterFlip,
   prompterMirror,
@@ -1254,11 +1251,7 @@ function init() {
     if (e.target.closest(".btn")) e.preventDefault();
   });
 
-  document.getElementById("btn-production").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading...", "warn"); return; }
-    var panel = document.getElementById("production-panel");
-    if (panel.hidden) openProductionPanel(); else closeProductionPanel();
-  });
+  document.getElementById("btn-production").addEventListener("click", function () { runFromButton("panel-production"); });
   document.getElementById("production-close").addEventListener("click", closeProductionPanel);
   wireTagEntityContainer("production-panel");
   document.getElementById("production-panel").addEventListener("keydown", function (e) {
@@ -1290,11 +1283,7 @@ function init() {
     }
   });
 
-  document.getElementById("btn-gear").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading...", "warn"); return; }
-    var panel = document.getElementById("gear-panel");
-    if (panel.hidden) openGearPanel(); else closeGearPanel();
-  });
+  document.getElementById("btn-gear").addEventListener("click", function () { runFromButton("panel-gear"); });
   document.getElementById("gear-close").addEventListener("click", closeGearPanel);
   wireTagEntityContainer("gear-panel");
   document.getElementById("gear-modes").addEventListener("click", function (e) {
@@ -1477,11 +1466,7 @@ function init() {
     el.addEventListener("drop", onDraftDrop);
   });
 
-  document.getElementById("btn-comments").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading…", "warn"); return; }
-    var panel = document.getElementById("comments-panel");
-    if (panel.hidden) openCommentsPanel(); else closeCommentsPanel();
-  });
+  document.getElementById("btn-comments").addEventListener("click", function () { runFromButton("panel-comments"); });
   document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
   initSidePanelResizeHandles();
   document.getElementById("comments-panel").addEventListener("change", function (e) {
@@ -1553,10 +1538,7 @@ function init() {
   });
 
   document.getElementById("btn-save").addEventListener("click", saveFromButton);
-  document.getElementById("btn-present").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading…", "warn"); return; }
-    openPrompter();
-  });
+  document.getElementById("btn-present").addEventListener("click", function () { runFromButton("present"); });
 
   document.getElementById("btn-file").addEventListener("click", function (e) {
     e.stopPropagation();
@@ -1699,11 +1681,7 @@ function init() {
     else if (e.key === "ArrowRight") { stepScene(1); }
   });
 
-  document.getElementById("btn-write").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading…", "warn"); return; }
-    if (reviewBlocked()) return;
-    openWriter();
-  });
+  document.getElementById("btn-write").addEventListener("click", function () { runFromButton("write"); });
 
   var writerDocEl = document.getElementById("writer-doc");
   writerDocEl.addEventListener("input", onRootInput);
@@ -1785,10 +1763,12 @@ function init() {
   if (S.DESKTOP && typeof initDesktop === "function") initDesktop();
 }
 
-function saveFromButton() {
-  var outcome = appActions.invoke("save", "button");
+function runFromButton(id) {
+  var outcome = appActions.invoke(id, "button");
   if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
 }
+
+function saveFromButton() { runFromButton("save"); }
 
 export function __init() {
   if (document.readyState === "loading") {

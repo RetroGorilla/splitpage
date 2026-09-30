@@ -71,6 +71,7 @@ import { __init as init_21_events } from "./21-events.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { registerDocumentActions } from "../legacy/document-actions.ts";
 import { registerFileActions } from "../legacy/file-actions.ts";
+import { registerViewActions } from "../legacy/view-actions.ts";
 import { bindShortcuts } from "../features/shortcuts/bind-shortcuts.ts";
 
 init_00_prelude();
@@ -145,4 +146,5 @@ init_20s_settings();
 init_21_events();
 registerDocumentActions(appActions);
 registerFileActions(appActions);
+registerViewActions(appActions);
 bindShortcuts(window, appActions);
