@@ -113,9 +113,13 @@ this against the real registry instance; `279-command-menu-listing.txt` pins
 the whole listing, key chips, switch states and icons in the browser, a
 review session and the desktop app, and passes against 3.1's code too.
 
-`src/application/shortcuts.ts` parses chords and finds the action a key event
-names. `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown
-target and returns a function that removes the listener.
+`src/application/shortcuts.ts` parses chords, names them canonically
+(`chordKey()`) and finds the action a key event names; a key event with no
+`key` (Chrome's autofill sends one) matches nothing. `register()` refuses a
+chord another action already declares, so no first match can win silently.
+`src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown target and
+returns a function that removes the listener; `mount.ts` is the feature's
+mount, which the bootstrap calls.
 
 ## The legacy shim
 
@@ -125,16 +129,16 @@ rethrows the error on a microtask, so a failing action still reaches the
 browser as an uncaught error, as it did before.
 
 `src/legacy/this-document-actions.ts` (the command menu's "This document"
-group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts` and
-`share-actions.ts` define the actions whose handlers are still in `src/js`.
-`src/legacy/screen.ts` names what can refuse an action (still loading,
-Present, the Writer, a dialog, the tour) with the reason a person is shown; it
-imports nothing from `src/js`, so the numbered modules can import it without
-joining their import cycle.
+group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts`,
+`share-actions.ts` and `zoom-actions.ts` define the actions whose handlers are
+still in `src/js`. `src/legacy/screen.ts` names what can refuse an action
+(still loading, Present, the Writer, a dialog, the open command menu, the
+tour) with the reason a person is shown; it imports nothing from `src/js`, so
+the numbered modules can import it without joining their import cycle.
 
 `src/legacy/screen-state.ts` is the one bridge to the global state `S`: it
-answers `screenNow()` (still loading, Present, the Writer, the tour) and
-`inDesktopApp()`. No other file under `src/legacy/` imports `S`; an action
+answers `screenNow()` (still loading, Present, the Writer, the tour),
+`inDesktopApp()` and `saveInProgress()`. No other file under `src/legacy/` imports `S`; an action
 file that needs to know something `S` holds asks the bridge, so the day `S`
 goes, one file changes.
 
@@ -156,7 +160,7 @@ undoes them all in reverse; `stopActions()` calls it. Starting again while
 started is refused, so neither a listener nor an action can be doubled.
 `src/js/_entry.js` calls `startActions(appActions, window)` after every
 module's `__init`. It lives in the entry because `21-events.js` is inside the
-61-module import cycle, and a migrated file imported from there would join it
+60-module import cycle, and a migrated file imported from there would join it
 (`npm run check:deps` refuses that). `tests/bootstrap/start-actions.test.ts`
 starts, stops and starts again on the real definitions and finds one listener
 and no leftover action each time; `tests/features/mount-shortcuts.test.ts`
@@ -193,20 +197,30 @@ the only change of behavior the move to the registry keeps.
 `"native-menu"`, reading no rendered state. Its six header commands
 (`save`, `toggle-production`, `toggle-gear`, `toggle-comments`, `write`,
 `present`) name the header buttons' actions and close an open File menu, as
-the click on the button they used to send did. Every other command goes
-through `handleFileMenuAction(id, "native-menu")`, what choosing the File
-menu item does: it closes the setup wizard and the File menu, remembers an
-export, and invokes the action. Refusals are shown as toasts, except where
+the click on the button they used to send did. A command that is a File menu
+item goes through `handleFileMenuAction(id, "native-menu")`, what choosing
+that item does: it closes the setup wizard and the File menu, remembers an
+export, and invokes the action. Any other registered command (the script
+zoom commands) runs as itself. Refusals are shown as toasts, except where
 the File menu would show the item greyed out (Collaborate for a link guest,
 Paste a script in a review session, the server items, Save while a save
 runs): the native menu cannot grey an item out, and in 3.1 it did nothing
 there, so `greyedOut()` and `itemAvailability()` (`src/legacy/menu-items.ts`)
 give such a refusal no reason for that source, and the native path does
-nothing at all for a refusal without one. The script zoom commands and the
-export formats are not actions yet and keep their own paths.
+nothing at all for a refusal without one. The export formats are not actions
+yet (milestone 5) and keep the File menu item's own dispatch.
 
 `280-other-surfaces.txt` checks the Settings buttons, the wizard's links and
 these native menu rules, against 3.1's code too.
+
+One side effect of 3.1's synthetic clicks is not kept. Ctrl+S, Ctrl+Shift+S,
+Ctrl+O, a native menu command and a command run from the command menu used to
+reach their handler by clicking a button or menu item, and that click also
+reached the page's document-level click listeners: the File menu's (kept
+explicitly: Save, Save a copy, Open, Export and the native header commands
+close an open File menu) and the Production panel's tag menu's, which closed
+an open tag menu. That last one is not reproduced; an open tag menu now stays
+open when a command runs from the keyboard or a menu.
 
 ## Migrated so far
 
@@ -239,11 +253,19 @@ Tab page's buttons are different actions (a blank new script, paste as a new
 script, open into this tab) and stay its own.
 
 Browser suites `268-actions-every-surface.txt`,
-`269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt` and
+`269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt`,
 `272-view-actions-every-surface.txt`, `273-help-actions-every-surface.txt` and
 `274-more-actions-every-surface.txt` check each surface, and the
-shortcut refused under a dialog. The File menu's markup (label, `data-keys`)
-is still in `src/page.html`; the command menu reads the definition.
+shortcut refused under a dialog. `276-availability-follows-state.txt`,
+`277-refusals-say-why.txt`, `278-commands-as-before.txt`,
+`279-command-menu-listing.txt`, `280-other-surfaces.txt` and
+`281-script-zoom-commands.txt` check the rules above; all but 276 pass
+against 3.1's code too. The characterisation suites milestone 1 adds for the
+next slices, `282-editor-operations.txt`,
+`283-save-status-by-destination.txt`, `284-exports-from-a-fixture.txt` and
+`285-save-buttons-one-state.txt`, pass against it as well. The File menu's
+markup (label, `data-keys`) is still in `src/page.html`; the command menu
+reads the definition.
 
 ## Adding an action
 
