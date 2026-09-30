@@ -4,6 +4,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { commentsIn } from "./source-scan.mjs";
 import { checkComments, scanFile, run, commentsFor, commentFree, isScanned, REQUIRED_MARKERS } from "./comment-gate.mjs";
+import { configKind } from "./config-comments.mjs";
 
 let passed = 0;
 const failures = [];
@@ -162,7 +163,24 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
 {
   let threw = "";
   try { commentsFor(".github/workflows/bad.yml", "a: [1, 2\nb: c\n"); } catch (e) { threw = e.message; }
-  check("a YAML file that does not parse is an error, not a pass", threw.startsWith(".github/workflows/bad.yml:"), threw);
+  check("a YAML file that does not parse is an error, not a pass", threw.startsWith("cannot parse .github/workflows/bad.yml:"), threw);
+}
+
+{
+  const job = (runsOn, steps) => ["jobs:", "  a:", `    runs-on: ${runsOn}`, "    steps:", ...steps, ""].join("\n");
+  const blockThenComment = ["      - run: |", "          <# it's a PowerShell block #>", "          Write-Host x # after"];
+  const shellError = (text) => { try { commentsFor(".github/workflows/m.yml", text); return ""; } catch (e) { return e.message; } };
+
+  const matrix = shellError(job("${{ matrix.os }}", blockThenComment));
+  check("an expression runner with PowerShell-only syntax and no shell: is refused, not read as bash", matrix.includes(".github/workflows/m.yml:6: cannot tell whether this run: step is bash or PowerShell"), matrix);
+  eq("the same step with shell: pwsh is read as PowerShell", found(".github/workflows/m.yml", job("${{ matrix.os }}", [...blockThenComment, "        shell: pwsh"])), ["<# it's a PowerShell block #>", "# after"]);
+  eq("an expression runner whose script reads the same either way is scanned", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci # why"])), ["# why"]);
+  eq("an expression runner with no comment at all passes", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci"])), []);
+  eq("a runner group's labels are read", found(".github/workflows/m.yml", job("{ group: big, labels: [windows-2022] }", ["      - run: '<# block #>'"])), ["<# block #>"]);
+  check("a runner group with no labels is unknown", shellError(job("{ group: big }", blockThenComment)).includes("cannot tell"));
+  eq("a self-hosted Linux runner is bash", found(".github/workflows/m.yml", job("[self-hosted, linux]", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])), []);
+  check("a self-hosted runner with no OS label and a bash heredoc is refused", shellError(job("[self-hosted, x64]", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])).includes("cannot tell"));
+  eq("defaults.run.shell settles an expression runner", found(".github/workflows/m.yml", "defaults:\n  run:\n    shell: pwsh\n" + job("${{ matrix.os }}", blockThenComment)), ["<# it's a PowerShell block #>", "# after"]);
 }
 
 console.log("\nDockerfiles:\n");
@@ -227,6 +245,14 @@ eq("eslint.config.mjs is scanned", isScanned("eslint.config.mjs"), true);
 eq("workflow, Docker, compose, eslint and JSON files can never be baselined", [
   ".github/workflows/ci.yml", ".github/dependabot.yml", "Dockerfile", "Dockerfile.prebuilt", "docker-compose.yml", "eslint.config.mjs", "tsconfig.base.json", "package.json"
 ].map(commentFree), [true, true, true, true, true, true, true, true]);
+{
+  const dockerfiles = ["Dockerfile", "Dockerfile.prebuilt", "Dockerfile-dev", "Dockerfile_dev", "app.Dockerfile", "web.dockerfile", "docker/Dockerfile"];
+  const composes = ["docker-compose.yml", "docker-compose.yaml", "docker-compose.override.yml", "compose.yml", "compose.yaml", "deploy/compose.prod.yaml"];
+  const neither = ["Dockerfile.md", "docs/Dockerfile-notes.txt", "Dockerfiles/build.sh", "mycompose.yml", "desktop/electron-builder.yml"];
+  eq("every Dockerfile name is scanned as a Dockerfile and comment-free", dockerfiles.map((p) => [configKind(p), commentFree(p)]), dockerfiles.map(() => ["dockerfile", true]));
+  eq("every compose file name is scanned as YAML and comment-free", composes.map((p) => [configKind(p), commentFree(p)]), composes.map(() => ["yaml", true]));
+  eq("look-alikes are neither", neither.map((p) => [configKind(p) === "dockerfile", commentFree(p)]), neither.map(() => [false, false]));
+}
 {
   const listed = checkComments([{ path: ".github/workflows/ci.yml", text: "on: push # why\n" }], { files: { ".github/workflows/ci.yml": ["# why"] } });
   eq("a workflow comment fails even when a baseline lists it", listed.added.length, 1);
@@ -335,6 +361,9 @@ function runIn(repo, mode) {
   const broken = runIn(repo, "check");
   eq("a workflow that does not parse fails the gate", broken.code, 1);
   check("and says which file", broken.err.includes("cannot parse .github/workflows/ci.yml"), broken.err);
+  writeFileSync(join(repo, ".github/workflows/ci.yml"), "on: push\njobs:\n  a:\n    runs-on: ${{ matrix.os }}\n    steps:\n      - run: |\n          <# it's #>\n          x # y\n");
+  const ambiguous = runIn(repo, "check");
+  check("a step whose shell cannot be told fails the gate and says what to set", ambiguous.code === 1 && ambiguous.err.includes("set shell:"), ambiguous.err);
 }
 
 rmSync(work, { recursive: true, force: true });

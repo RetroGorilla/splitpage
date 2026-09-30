@@ -2,12 +2,14 @@ import ts from "typescript";
 import { Parser, parseAllDocuments, LineCounter, isMap, isSeq, isScalar } from "yaml";
 import { shellComments, batchComments, extensionOf } from "./source-scan.mjs";
 
+export const DOCKERFILE_PATH = /(^|\/)(?![^/]*\.(?:md|txt)$)(?:Dockerfile(?:[._-][\w.-]*)?|[\w.-]+\.dockerfile)$/i;
+export const COMPOSE_PATH = /(^|\/)(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$/;
+
 export function configKind(path) {
-  const name = path.slice(path.lastIndexOf("/") + 1);
   const ext = extensionOf(path);
+  if (DOCKERFILE_PATH.test(path)) return "dockerfile";
   if (ext === ".yml" || ext === ".yaml") return "yaml";
   if (ext === ".json" || ext === ".jsonc") return "jsonc";
-  if (/^Dockerfile(?:\.[\w-]+)?$/.test(name) || /\.dockerfile$/i.test(name)) return "dockerfile";
   return null;
 }
 
@@ -42,13 +44,34 @@ export function shellDialect(shell) {
   return "sh";
 }
 
-function scalarText(node) {
-  if (isScalar(node)) return node.value == null ? "" : String(node.value);
-  if (isSeq(node)) return node.items.map(scalarText).join(" ");
-  return "";
+export function runnerOs(runsOn) {
+  if (runsOn == null) return null;
+  let labels = runsOn;
+  if (isMap(runsOn)) {
+    labels = runsOn.get("labels", true);
+    if (labels == null) return "unknown";
+  }
+  const texts = (isSeq(labels) ? labels.items : [labels]).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
+  if (texts.some((t) => t === null || t.includes("${{"))) return "unknown";
+  if (texts.some((t) => /windows/i.test(t))) return "windows";
+  if (texts.some((t) => /ubuntu|linux|macos|darwin/i.test(t))) return "other";
+  return "unknown";
 }
 
-function runComments(doc, lineCounter) {
+function stepComments(path, script, shell, os, line) {
+  if (shell != null) return scriptComments(script, shellDialect(shell));
+  if (os === "windows") return scriptComments(script, "ps1");
+  if (os === "other") return scriptComments(script, "sh");
+  const asBash = scriptComments(script, "sh");
+  const asPowerShell = scriptComments(script, "ps1");
+  const key = (list) => JSON.stringify(list.map((c) => [c.start, c.text]));
+  if (key(asBash) !== key(asPowerShell)) {
+    throw new Error(`${path}:${line}: cannot tell whether this run: step is bash or PowerShell, and its comments differ between the two; set shell: on the step or defaults.run.shell`);
+  }
+  return asBash;
+}
+
+function runComments(path, doc, lineCounter) {
   const found = [];
   const visit = (node, ctx) => {
     if (isSeq(node)) { for (const item of node.items) visit(item, ctx); return; }
@@ -56,7 +79,8 @@ function runComments(doc, lineCounter) {
     const local = { ...ctx };
     const defaults = node.getIn(["defaults", "run", "shell"]);
     if (defaults != null) local.shell = String(defaults);
-    if (/windows/i.test(scalarText(node.get("runs-on", true)))) local.windows = true;
+    const os = runnerOs(node.get("runs-on", true));
+    if (os !== null) local.os = os;
     for (const pair of node.items) {
       const key = isScalar(pair.key) ? pair.key.value : null;
       if (key === "steps" && isSeq(pair.value)) {
@@ -64,10 +88,9 @@ function runComments(doc, lineCounter) {
           if (!isMap(step)) continue;
           const run = step.get("run", true);
           if (!isScalar(run) || typeof run.value !== "string") continue;
-          const shell = step.get("shell") ?? local.shell ?? (local.windows ? "pwsh" : "bash");
           const block = run.type === "BLOCK_LITERAL" || run.type === "BLOCK_FOLDED";
           const first = lineCounter.linePos(run.range[0]).line + (block ? 1 : 0);
-          for (const c of scriptComments(run.value, shellDialect(shell))) {
+          for (const c of stepComments(path, run.value, step.get("shell") ?? local.shell, local.os, first)) {
             found.push({ start: run.range[0], end: run.range[1], text: c.text, line: first + lineAt(run.value, c.start) - 1 });
           }
         }
@@ -91,10 +114,10 @@ export function yamlComments(path, text) {
   const docs = parseAllDocuments(text, { lineCounter });
   const list = Array.isArray(docs) ? docs : [docs];
   const errors = list.flatMap((d) => d.errors ?? []);
-  if (errors.length) throw new Error(`${path}: ${errors[0].message.split("\n")[0]}`);
+  if (errors.length) throw new Error(`cannot parse ${path}: ${errors[0].message.split("\n")[0]}`);
   const comments = [];
   cstComments([...new Parser().parse(text)], comments);
-  if (isWorkflow(path)) for (const doc of list) comments.push(...runComments(doc, lineCounter));
+  if (isWorkflow(path)) for (const doc of list) comments.push(...runComments(path, doc, lineCounter));
   return comments.sort((a, b) => a.start - b.start);
 }
 

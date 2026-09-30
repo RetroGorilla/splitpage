@@ -82,16 +82,19 @@ except `node_modules/`, `.claude/handoff/` and the generated `index.html`:
 | `.css`, `.html` (inline `<style>` and script too) | `tools/source-scan.mjs` | `/* */`, `<!-- -->` |
 | `.sh`, `.ps1`, `.bat`, `.cmd` | `tools/source-scan.mjs` | `#` at a word start outside quotes and heredocs, `<# #>`, `rem`/`::` |
 | `.yml`, `.yaml` | the `yaml` package's CST (`tools/config-comments.mjs`) | every YAML comment token; `#` in a quoted scalar, a URL or a block scalar's content is not one |
-| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:` (else `defaults.run.shell`, else `pwsh` on a Windows runner, else `bash`) | a `#` comment inside the script, whole-line or trailing; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it |
-| `Dockerfile`, `Dockerfile.*`, `*.dockerfile` | `tools/config-comments.mjs` | whole-line `#` (inside a continuation too), a trailing shell comment in a shell-form `RUN`/`CMD`/`ENTRYPOINT`/`HEALTHCHECK CMD`, and comments in a `RUN` heredoc's script; a `COPY`/`ADD` heredoc is file content |
+| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:`, else `defaults.run.shell`, else the runner's: `pwsh` when a `runs-on` label (a group's `labels:` included) names Windows, `bash` when one names Ubuntu, Linux or macOS. When none says (an expression such as `${{ matrix.os }}`, a group without labels, a self-hosted runner without an OS label), the step is read both ways; if the two readings differ the gate fails and asks for `shell:` | a `#` comment inside the script, whole-line or trailing; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it |
+| `Dockerfile`, `Dockerfile.*`, `Dockerfile-*`, `Dockerfile_*`, `*.dockerfile` (any case; not `.md` or `.txt`) | `tools/config-comments.mjs` | whole-line `#` (inside a continuation too), a trailing shell comment in a shell-form `RUN`/`CMD`/`ENTRYPOINT`/`HEALTHCHECK CMD`, and comments in a `RUN` heredoc's script; a `COPY`/`ADD` heredoc is file content |
 | `.json`, `.jsonc` (`tsconfig*.json` included) | TypeScript's scanner | `//` and `/* */` outside strings |
 
 The baseline stores each file's comments as whitespace-normalised text, so a
 comment may move but not change, be duplicated, or appear in a new file.
 `src/core/`, `src/application/`, `src/contracts/`, `src/adapters/`,
 `src/features/`, `src/bootstrap/`, `src/legacy/`, `tests/`, `.github/`, every
-Dockerfile, `docker-compose.yml`, `eslint.config.mjs` and every JSON file can
-never carry a baselined comment; all of them have none. The one YAML file
+Dockerfile, every compose file (`docker-compose*.yml`, `compose*.yaml`),
+`eslint.config.mjs` and every JSON file can never carry a baselined comment;
+all of them have none. The Dockerfile and compose names come from one pair of
+patterns in `tools/config-comments.mjs` (`DOCKERFILE_PATH`, `COMPOSE_PATH`),
+used both to pick the parser and to mark the file comment-free. The one YAML file
 still on the baseline is `desktop/electron-builder.yml` (66 comment lines at
 the time the gate learned YAML), which is desktop packaging and moves to docs
 when that file is next changed.
@@ -102,7 +105,8 @@ which `build.mjs` replaces and which are allowed there exactly once each. A
 Dockerfile parser directive (`# syntax=`, `# escape=`, `# check=` before
 anything else in the file) is a comment unless `DIRECTIVES` in
 `tools/comment-gate.mjs` lists that exact line for that file; none is listed
-today. A file that does not parse (a broken YAML file) fails the gate.
+today. A file that does not parse (a broken YAML file) fails the gate, and so
+does a workflow step whose shell cannot be told (above).
 
 Not scanned yet, because no parser covers them: `.gitignore`, `.dockerignore`,
 `.npmrc`, `.env.example` and other dotfiles, and Markdown.
