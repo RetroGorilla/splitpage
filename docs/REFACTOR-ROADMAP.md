@@ -78,8 +78,24 @@ values, no comments in authored code.
   `npm run check:deps` fails when a count grows.
 - `tools/no-comments.mjs`, parser-based, config-driven exceptions.
 - `tsconfig.json` scoped to new folders; `npm run typecheck`.
-- Audit `HANDOFF.md` §5: each invariant marked tested (which test) or
-  untested. Untested ones that milestones 1–5 touch get tests in 1.
+- Invariant audit of `HANDOFF.md` §5 (62 rules). A table beside the list,
+  one row per rule: held by which test (tested / partly / untested), the
+  milestone that touches its code, and its fate:
+  - **keep**: a product rule (#3 never touch text inside a tag, #60 same
+    export bytes all day); its test becomes acceptance for the milestone
+    that moves the code.
+  - **absorb**: a structural rule that exists because the code's shape
+    needs a coder to remember it (#4 update `migrateRows` and
+    `mergeStates` together; #6 wire refreshes through `scheduleIdleRefresh`;
+    #16 full-screen views close the side panels). The named milestone makes
+    the code enforce it (one policy table, subscriptions, the overlay
+    manager); the row says what replaces it. A milestone is not done until
+    its absorb rows are enforced by code or deleted from §5 with the PR
+    saying why.
+  - **practice**: a working habit, not behaviour (#1); skipped.
+  Untested keep/absorb rows touched by milestones 1–5 get tests in 1.
+  §5 getting shorter is a second measure of progress beside the dependency
+  counts.
 - Clean locked install and `test:all` on Node 22 and 24, recorded.
 
 Stop here: full browser runs off Windows; a number that says whether
@@ -196,4 +212,8 @@ unless 4.0 has slack.
 ## Decisions
 
 - TypeScript for new folders, erasable syntax only: decided.
-- CI: keep main-only, or pay for per-PR checks on the private repo. Open.
+- CI: open. Options: keep main-only on GitHub's runners; or register the
+  Windows machine as a self-hosted runner (`runs-on: self-hosted`), which
+  costs no minutes, allows per-PR runs, and runs the suites, Electron smoke
+  and installer checks on the platform that is trusted anyway. Either way
+  every check is a local script first.
