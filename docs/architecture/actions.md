@@ -20,6 +20,11 @@ a button, and the desktop app's native menu (which clicks the File menu item).
 | `unknown` | No action has that id |
 | `failed` | The handler threw; the registry's `report` function received the error |
 
+A handler may return a promise (`run` returns `void | Promise<void>`). The
+outcome is then `ran` as soon as it starts, and a rejection reaches `report`
+with the action's id, so an asynchronous failure is reported the same way as
+a synchronous one rather than disappearing into a discarded promise.
+
 Each surface decides how to show a refusal. The File menu and the buttons
 show it as a toast through `showRefusal()` (`12-dirty-toast.js`), which ends
 the reason with a full stop: a reason is written as a menu line ("Close the

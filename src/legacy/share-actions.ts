@@ -27,7 +27,7 @@ function desktopKeys(keys: readonly string[]): () => readonly string[] {
   return () => (S.DESKTOP ? keys : []);
 }
 
-function menuAction(id: string, label: string | (() => string), group: string, icon: string, words: string, run: () => void): ActionDefinition {
+function menuAction(id: string, label: string | (() => string), group: string, icon: string, words: string, run: () => void | Promise<void>): ActionDefinition {
   return { id, label, group, icon, words, availability: () => loadedMenuItem(id), run };
 }
 
@@ -43,7 +43,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
         const a = loadedMenuItem("save-back");
         return a.enabled ? a : { ...a, visible: false };
       },
-      run: () => { void saveBackToFile(); }
+      run: async () => { await saveBackToFile(); }
     },
     {
       id: "autosave",
@@ -55,7 +55,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       run: () => { toggleAutoSave(); }
     },
     menuAction("new", "New script", "File", "i-file-plus", "blank empty create start fresh document", () => { startNewScript(); }),
-    menuAction("server-open", "Open from the server…", "File", "i-server", "server hosted shared documents", () => { void openServerPicker(); }),
+    menuAction("server-open", "Open from the server…", "File", "i-server", "server hosted shared documents", () => openServerPicker()),
     menuAction("paste", "Import: paste a script…", "File", "i-clipboard", "import revised draft text", () => { openImportModal(); }),
     menuAction("gdoc-import", "Import: Google Doc link…", "File", "i-link", "import google docs link url", () => { openGdocModal(); }),
     {
@@ -65,7 +65,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       icon: "i-cloud",
       words: "import google drive cloud files",
       availability: () => menuItemAvailability("drive-open") ?? { enabled: true },
-      run: () => { void openDriveModal(); }
+      run: () => { openDriveModal(); }
     },
     {
       id: "collaborate",
@@ -79,10 +79,10 @@ export function registerShareActions(registry: ActionRegistry): () => void {
         const why = collaborateBlockedReason();
         return why ? { enabled: false, reason: why } : { enabled: true };
       },
-      run: () => { void openCollaborate(); }
+      run: () => openCollaborate()
     },
-    menuAction("server-publish", "Put this script on the server", "Share", "i-cloud-up", "publish upload server hosted", () => { void publishToServer(); }),
-    menuAction("export-again", () => menuItemLabel("export-again", "Export again"), "Export", "i-repeat", "export again repeat last", () => { void exportAgain(); }),
+    menuAction("server-publish", "Put this script on the server", "Share", "i-cloud-up", "publish upload server hosted", async () => { await publishToServer(); }),
+    menuAction("export-again", () => menuItemLabel("export-again", "Export again"), "Export", "i-repeat", "export again repeat last", () => { exportAgain(); }),
     {
       id: "set-target",
       label: "Set target length…",
@@ -104,10 +104,10 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       bindKeys: () => false,
       words: "teleprompter browser follow my voice present",
       availability: () => loadedMenuItem("prompter-open-in-browser"),
-      run: () => { void openPrompterInBrowser(); }
+      run: async () => { await openPrompterInBrowser(); }
     },
     menuAction("prompter-open-in-chromium", "Use Chromium Speech Recognition", "This document",
-      "i-mic", "teleprompter chrome edge chromium speech recognition voice", () => { void openPrompterInChromium(); })
+      "i-mic", "teleprompter chrome edge chromium speech recognition voice", async () => { await openPrompterInChromium(); })
   ];
   const disposers = definitions.map((d) => registry.register(d));
   return () => { for (const dispose of disposers) dispose(); };
