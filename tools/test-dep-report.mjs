@@ -417,7 +417,7 @@ function runIn(repo, mode) {
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 
-{
+try {
   const repo = repoWith({
     "shared/p.js": '"use strict";\nmodule.exports = new URL("https://x.test");\n',
     "src/js/a.js": 'import "../../shared/p.js";\n'
@@ -448,9 +448,9 @@ function runIn(repo, mode) {
   const cyclic = runIn(repo, "check");
   eq("a cycle in core fails the check", cyclic.code, 1);
   check("the cycle is named", cyclic.err.includes("cycle (runtime)"), cyclic.err);
+} finally {
+  rmSync(work, { recursive: true, force: true });
 }
-
-rmSync(work, { recursive: true, force: true });
 
 console.log("\nthe CLI against a temporary git repository:\n");
 
@@ -495,7 +495,7 @@ function lines(r, prefix) {
   return r.err.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && l.startsWith(prefix)).map((l) => l.replace(/ \(.*\)$/, "")).sort();
 }
 
-{
+try {
   const repo = cliRepo(LEGACY);
   const init = cli(repo, "--init");
   eq("--init on the legacy fixture exits 0", init.code, 0);
@@ -578,14 +578,12 @@ function lines(r, prefix) {
   eq("--prune accepts it", cli(repo, "--prune").code, 0);
   eq("the pruned baseline keeps only the importers", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["state-import src/js/a.js", "state-import src/js/b.js"]);
   eq("and the check passes", cli(repo).code, 0);
-}
 
-{
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
   eq("an unknown argument exits 2", r.status, 2);
+} finally {
+  rmSync(cliWork, { recursive: true, force: true });
 }
-
-rmSync(cliWork, { recursive: true, force: true });
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {
