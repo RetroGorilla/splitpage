@@ -12,7 +12,7 @@ export interface ActionDefinition {
   readonly label: string;
   readonly group: string;
   readonly icon?: string;
-  readonly keys?: readonly string[];
+  readonly keys?: readonly string[] | (() => readonly string[]);
   readonly bindKeys?: () => boolean;
   readonly claimKeys?: boolean;
   readonly words?: string;
@@ -64,6 +64,12 @@ function availabilityOf(definition: ActionDefinition): Availability {
   return definition.availability ? definition.availability() : ALWAYS;
 }
 
+function keysOf(definition: ActionDefinition): readonly string[] {
+  const keys = definition.keys;
+  if (keys === undefined) return [];
+  return typeof keys === "function" ? keys() : keys;
+}
+
 function toView(definition: ActionDefinition): ActionView {
   const a = availabilityOf(definition);
   const visible = a.visible !== false;
@@ -72,7 +78,7 @@ function toView(definition: ActionDefinition): ActionView {
     label: definition.label,
     group: definition.group,
     icon: definition.icon ?? "",
-    keys: definition.keys ?? [],
+    keys: keysOf(definition),
     words: definition.words ?? "",
     enabled: visible && a.enabled,
     visible,
@@ -97,8 +103,9 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
     },
     shortcuts() {
       return [...definitions.values()]
-        .filter((d) => d.keys && d.keys.length && (d.bindKeys ? d.bindKeys() : true))
-        .map((d) => ({ id: d.id, keys: d.keys ?? [], claim: d.claimKeys === true }));
+        .filter((d) => d.bindKeys ? d.bindKeys() : true)
+        .map((d) => ({ id: d.id, keys: keysOf(d), claim: d.claimKeys === true }))
+        .filter((k) => k.keys.length > 0);
     },
     view(id) {
       const definition = definitions.get(id);

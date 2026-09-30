@@ -99,3 +99,14 @@ test("keys another owner binds are not offered for binding, and claimed keys say
   desktop = false;
   assert.deepEqual(registry.shortcuts().map((s) => s.id), ["save", "open"]);
 });
+
+test("keys can depend on where the app runs, read each time", () => {
+  const registry = createActionRegistry();
+  let desktop = false;
+  registry.register({ id: "help", label: "Help", group: "G", keys: () => (desktop ? ["F1"] : []), run: () => {} });
+  assert.deepEqual(registry.view("help")?.keys, []);
+  assert.deepEqual(registry.shortcuts(), []);
+  desktop = true;
+  assert.deepEqual(registry.view("help")?.keys, ["F1"]);
+  assert.deepEqual(registry.shortcuts(), [{ id: "help", keys: ["F1"], claim: false }]);
+});

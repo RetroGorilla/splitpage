@@ -38,7 +38,6 @@ import {
   updateCollaborateMenu
 } from "./13b-collaborate.js";
 import { AUTOSAVE_KEY, setAutoSaveEnabled } from "./14-export.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, applyWriterSize, readWriterSize } from "./19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
@@ -441,16 +440,6 @@ export function __init() {
     if (e.key && e.key.indexOf("splitpage-") === 0) onPrefChanged(e.key);
   });
 
-  var menu = document.getElementById("file-menu");
-  if (menu) {
-    menu.addEventListener("click", function (e) {
-      var item = e.target.closest('[data-file-action="settings"]');
-      if (!item) return;
-      e.stopPropagation();
-      toggleFileMenu(false);
-      openSettings();
-    }, true);
-  }
 
   window.__settingsTest = {
     open: openSettings,

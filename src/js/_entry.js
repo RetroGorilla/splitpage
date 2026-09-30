@@ -72,6 +72,7 @@ import { appActions } from "../legacy/app-actions.ts";
 import { registerDocumentActions } from "../legacy/document-actions.ts";
 import { registerFileActions } from "../legacy/file-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
+import { registerHelpActions } from "../legacy/help-actions.ts";
 import { bindShortcuts } from "../features/shortcuts/bind-shortcuts.ts";
 
 init_00_prelude();
@@ -147,4 +148,5 @@ init_21_events();
 registerDocumentActions(appActions);
 registerFileActions(appActions);
 registerViewActions(appActions);
+registerHelpActions(appActions);
 bindShortcuts(window, appActions);

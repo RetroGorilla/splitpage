@@ -11,7 +11,6 @@ import {
   menuItemReason,
   modalIsOpen,
   refreshFileMenu,
-  openLongDemo,
   toggleFileMenu
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
@@ -110,7 +109,7 @@ function commands() {
     fromMenu("drive-open", "File", "import google drive cloud files", "Import: Google Drive…"),
     fromMenu("collaborate", "Share", "collaborate share invite link url people live together send edit comment publish"),
     fromMenu("server-publish", "Share", "publish upload server hosted"),
-    fromMenu("servers", "Share", "server connect bookmark address pin join"),
+    fromAction("servers"),
     fromAction("export"),
     fromExport("export-pdf", "pdf print"),
     fromExport("export-docx", "word docx document google docs"),
@@ -150,23 +149,15 @@ function commands() {
     },
     fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
     fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
-    fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
-    fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
-    fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
-    {
-      id: "long-demo",
-      group: "Help",
-      words: "demo example sample long thirty 30 scenes test try every feature",
-      read: function () {
-        return { label: "Open the long demo (30 scenes)", icon: "i-file-plus", keys: "", why: "", disabled: false, state: "" };
-      },
-      run: function () { openLongDemo(); }
-    },
-    fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),
-    fromMenu("about", "Help", "version about", "About Splitpage"),
-    fromMenu("tagging-help", "Tags", "tags tagging reference shortcuts brackets help"),
-    fromMenu("export-app-data", "Help", "backup move desktop app data history bookmarks"),
-    fromMenu("import-app-data", "Help", "restore move desktop app data history bookmarks")
+    fromAction("settings"),
+    fromAction("help"),
+    fromAction("tour"),
+    fromAction("long-demo"),
+    fromAction("setup"),
+    fromAction("about"),
+    fromAction("tagging-help"),
+    fromAction("export-app-data"),
+    fromAction("import-app-data")
   ];
   return COMMANDS;
 }
