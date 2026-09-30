@@ -29,7 +29,6 @@ import {
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
 import { brollEntries } from "./08c-broll.js";
 import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
-import { openFindBar } from "./09-find-replace.js";
 import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
 import {
   detectTwoColumnFormat,
@@ -74,8 +73,7 @@ import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.
 import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
-import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
-import { openCommandMenu } from "./18d-command-menu.js";
+import { exportAgain, isExportAction, rememberExport } from "./18c-export-dialog.js";
 import { showAbout } from "./20a-update.js";
 import {
   applyMarkdownProject,
@@ -760,9 +758,7 @@ export function handleFileMenuAction(action) {
   }
   if (action === "save-as") saveDoc({ saveAs: true });
   else if (action === "new") startNewScript();
-  else if (action === "export") openExportDialog();
   else if (action === "export-again") exportAgain();
-  else if (action === "command-menu") openCommandMenu();
   else if (action === "open") openLocalFile();
   else if (action === "paste") openImportModal();
   else if (action === "gdoc-import") openGdocModal();
@@ -786,7 +782,6 @@ export function handleFileMenuAction(action) {
   else if (action === "server-open") openServerPicker();
   else if (action === "server-publish") publishToServer();
   else if (action === "collaborate") openCollaborate();
-  else if (action === "find") openFindBar();
   else if (action === "prompter-open-in-browser") openPrompterInBrowser();
   else if (action === "prompter-open-in-chromium") openPrompterInChromium();
   else if (action === "export-app-data") exportAppData();

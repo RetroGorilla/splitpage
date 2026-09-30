@@ -151,10 +151,8 @@ import {
   bulkTagOpen,
   closeBulkTag,
   closeFindBar,
-  findOpen,
   findQueryChanged,
   leaveFindAtMatch,
-  openFindBar,
   pickBulkTagCat,
   replaceAll,
   replaceCurrent,
@@ -1237,16 +1235,6 @@ function init() {
     if (e.target.id === "replace-input") { replaceCurrent(); return; }
     stepFind(e.shiftKey ? -1 : 1);
   });
-  window.addEventListener("keydown", function (e) {
-    if (!(e.ctrlKey || e.metaKey) || (e.key !== "f" && e.key !== "F")) return;
-    if (!S.state) return;
-    if (writerOpen) return;
-    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
-    e.preventDefault();
-    if (findOpen) { document.getElementById("find-input").select(); }
-    else openFindBar();
-  });
-
 
   document.addEventListener("focusin", function (e) {
     var cell = e.target.closest && e.target.closest(".cell-editable");

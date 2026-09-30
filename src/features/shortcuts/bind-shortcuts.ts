@@ -8,6 +8,7 @@ export interface ShortcutBindingOptions {
 
 export function bindShortcuts(target: EventTarget, registry: ActionRegistry, options: ShortcutBindingOptions = {}): () => void {
   const onKeyDown = (event: Event): void => {
+    if (event.defaultPrevented) return;
     const id = actionForKey(registry.shortcuts(), event as unknown as KeyInput);
     if (id === null) return;
     const outcome = registry.invoke(id, "shortcut");
