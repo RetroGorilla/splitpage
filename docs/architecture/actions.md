@@ -144,10 +144,35 @@ alike: Save, Save a copy, Open and Export are refused behind the command menu,
 while Find and Hide shot scenes act behind it (Find then takes the focus, and
 the command menu closes). While the command menu reads what to list, it asks
 through `askingFromLauncher()`, so each action is judged as it will be once
-the menu has closed to run it. `src/js/_entry.js` registers them and binds the shortcuts after
-every module's `__init`. Registration lives in the entry because `21-events.js`
-is inside the 63-module import cycle, and a migrated file imported from there
-would join it (`npm run check:deps` refuses that).
+the menu has closed to run it.
+
+## Starting and stopping
+
+`src/bootstrap/actions.ts` owns the lifetime. `startActions(registry,
+keyTarget)` registers every group of actions and mounts the shortcuts feature
+(`mountShortcuts()` in `src/features/shortcuts/mount.ts`, one `keydown`
+listener on the target), keeps every disposer, and returns the function that
+undoes them all in reverse; `stopActions()` calls it. Starting again while
+started is refused, so neither a listener nor an action can be doubled.
+`src/js/_entry.js` calls `startActions(appActions, window)` after every
+module's `__init`. It lives in the entry because `21-events.js` is inside the
+61-module import cycle, and a migrated file imported from there would join it
+(`npm run check:deps` refuses that). `tests/bootstrap/start-actions.test.ts`
+starts, stops and starts again on the real definitions and finds one listener
+and no leftover action each time; `tests/features/mount-shortcuts.test.ts`
+does the same for the feature alone.
+
+No listener left in `src/js` handles a chord the shortcuts feature binds:
+the old Ctrl+S, Ctrl+Shift+S, Ctrl+O (`18b`), Ctrl+E (`18c`), Ctrl+K (`18d`),
+Ctrl+F and Ctrl+Alt+H (`21-events.js`) listeners are gone, and a search of
+every `keydown` listener finds no other one for those keys. One overlap is
+older than the registry and kept: in Present, the prompter's own listener
+flips the text on F whatever modifiers are held, so Ctrl+F there flips it and
+opens Find, as in 3.1. In the desktop app, Ctrl+S, Ctrl+Shift+S and Ctrl+O
+belong to the native menu's accelerators (the page does not bind them), Ctrl+E,
+Ctrl+F and Ctrl+K to the page (their accelerators are not registered), and
+Ctrl+Alt+H to both: the page runs it and keeps the key, and only when the page
+refuses does the accelerator's command run, and refuse again with a toast.
 
 ## Refusals are the same on every surface
 
