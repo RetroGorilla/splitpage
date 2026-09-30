@@ -86,29 +86,28 @@ the file you edit as well as the file that ships, and the build only stamps
 its cache name. Rebuild after a version bump and commit `sw.js`; CI fails if
 the committed copy's stamp has drifted from `VERSION`.
 
-Rebuild before testing any `src/` change, always:
+Rebuild (`node build.mjs`) before testing any `src/` change; a stale
+`index.html` looks exactly like a change that had no effect. Which tests a
+change needs, and when the full browser regression runs (milestone and
+release gates), is the table in
+[docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change);
+how to drive the suites, and their gotchas, is
+`.claude/skills/run-splitpage-app/SKILL.md`.
 
-```bash
-node build.mjs
-powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
-```
-
-The browser suite (`tests/01-core.txt` … `28-autosave.txt`, 16 retired)
-drives headless Edge over CDP. `-Only 22` runs one suite, `-Headed` shows the
-browser. Windows-only. Predates Google Drive, Google Doc import, two-column
-Markdown export, and the update/About box — hand- and Chromium-tested only.
-Full reference and gotchas: `.claude/skills/run-splitpage-app/SKILL.md`.
-`run-tests.ps1` mints its own 8-hex `$RunId` per run so two runs can share
-the machine without one's orphan-process sweep killing the other's browser.
+On Windows the suites run under `run-tests.ps1`, which drives headless Edge
+over CDP and mints its own 8-hex `$RunId` per run so two runs can share the
+machine without one's orphan-process sweep killing the other's browser.
 
 **Away from Windows**, `.claude/skills/run-splitpage-app/driver.mjs` is the
 same driver in Node — same `tests/*.txt`, same commands, same `RESULT:` line —
 so a `src/` change can be driven from the Linux cloud container, which has
-neither PowerShell nor Edge. One suite per invocation (`run-tests.ps1` is not
-ported):
+neither PowerShell nor Edge. `tools/run-suites.mjs` runs suites through it in
+parallel lanes, selected by a regex over full filenames; `driver.mjs --script`
+runs one:
 
 ```bash
 node build.mjs
+node tools/run-suites.mjs ../splitpage-runs/latest '^265-browser-drafts\.txt$'
 node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
 
@@ -120,18 +119,21 @@ Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Since
 asserted nothing at all, which is what lets CI gate on it; `driver.ps1` still
 only exits non-zero for a command that throws, so read its `RESULT:` line.
 
-**CI** (`.github/workflows/ci.yml`, #58) runs `npm run lint`, `node
-build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
-`desktop/test/ipc-table.test.mjs`, `desktop/test/google-drive.test.mjs`, `tools/test-server.mjs`,
-`tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
-A second job, `desktop-smoke`, runs `desktop/test/smoke.mjs --only-target
-dev` against an Xvfb display (#89) — that is where `main.js` and `preload.js`
-are actually executed, ~600 checks of it. It is its own job because it
-launches ~60 real Electron processes — 6.3 minutes on a Windows 11 x64
-machine, far longer on a slow shared runner — which is more than everything
-else together. It is not the
-full regression run — that is still `run-tests.ps1` on Windows, or
-`driver.mjs` one suite at a time here, plus the packaged targets.
+**CI** (`.github/workflows/ci.yml`, #58) runs the fast gates on every pull
+request: lint, types, the dependency and comment gates, the build and its
+`sw.js` stamp, every discovered unit, desktop and tool test
+(`npm run test:all`), and the smoke, CSP and persistence browser suites
+(`01-core.txt`, `52-csp.txt`, `265-browser-drafts.txt`).
+[docs/architecture/testing.md](docs/architecture/testing.md#ci) lists the
+jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
+--only-target dev` against an Xvfb display (#89) on pushes to `main` — that
+is where `main.js` and `preload.js` are actually executed, ~600 checks of it.
+It is its own job because it launches ~60 real Electron processes — 6.3
+minutes on a Windows 11 x64 machine, far longer on a slow shared runner —
+which is more than everything else together. None of this is the full
+regression: every suite through `tools/run-suites.mjs` on Linux and
+`run-tests.ps1` on Windows, plus the packaged targets, runs at milestone and
+release gates.
 
 Since #80 CI also **produces** the app. It builds `index.html` and uploads
 it, with `sw.js`, `manifest.webmanifest`, the icons, `VERSION`, `server/`
@@ -149,7 +151,11 @@ is really built: `bash -n` and shellcheck over `deploy.sh`, a legacy-builder
 `docker build`, then the container started as `99:100` with the settings
 `deploy.sh` insists on, checked through `/api/health` (VERSION, `links`,
 `linksPersist`), its own HEALTHCHECK and an owner sign-in that must survive a
-restart. It runs only when a deploy-relevant file changes (its `paths:`).
+restart. A second job in the same workflow, `prebuilt`, builds the app, copies
+only the artifact's files (the list `tools/artifact-files.mjs` reads from
+`ci.yml`) into an empty folder and builds and starts `Dockerfile.prebuilt`
+from there. The workflow runs only when a deploy-relevant file changes (its
+`paths:`).
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not
