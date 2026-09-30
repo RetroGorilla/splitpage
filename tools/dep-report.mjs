@@ -49,6 +49,16 @@ const OBJECT_MUTATORS = {
 
 const MAX_STATE_PATH = 6;
 
+const BINDING_KINDS = new Set([
+  "ImportDeclaration", "ExportDeclaration", "ImportEqualsDeclaration", "ImportType", "ExportAssignment", "VariableStatement",
+  "VariableDeclarationList", "FunctionDeclaration", "FunctionExpression", "ArrowFunction", "MethodDeclaration", "Constructor",
+  "GetAccessor", "SetAccessor", "CallSignature", "ConstructSignature", "MethodSignature", "IndexSignature", "FunctionType",
+  "ConstructorType", "JSDocFunctionType", "ClassStaticBlockDeclaration", "ClassDeclaration", "ClassExpression", "PropertyDeclaration",
+  "TypeParameter", "InterfaceDeclaration", "TypeAliasDeclaration", "EnumDeclaration", "ModuleDeclaration", "ModuleBlock",
+  "ForOfStatement", "ForStatement", "ForInStatement", "Block", "CaseBlock", "MappedType", "ConditionalType", "CatchClause",
+  "CallExpression"
+].map((name) => ts.SyntaxKind[name]));
+
 export function layerOf(path) {
   if (path.startsWith("src/test/") || path.startsWith("tests/") || /\.test\.[cm]?[jt]s$/.test(path)) return "tests";
   const core = /^src\/core\/([^/]+)\//.exec(path);
@@ -373,6 +383,7 @@ function bindScopes(sf) {
       }
       return;
     }
+    if (!BINDING_KINDS.has(node.kind)) { children(node, s); return; }
     if (hasModifier(node, ts.SyntaxKind.DeclareKeyword)) return;
     if (ts.isImportDeclaration(node)) { handleImport(node, s); return; }
     if (ts.isExportDeclaration(node)) { handleExport(node, s); return; }
