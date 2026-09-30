@@ -1,6 +1,6 @@
 ---
 name: run-splitpage-app
-description: Run, drive and test the Splitpage app in a real headless browser. Use when changing the app source in src/, verifying a Splitpage feature works, reproducing a reported bug, taking screenshots of the app, or running the regression suite before committing. Also use when asked to "test splitpage", "run the tests", or "check nothing broke".
+description: Run, drive and test the Splitpage app in a real headless browser. Use when changing the app source in src/, verifying a Splitpage feature works, reproducing a reported bug, taking screenshots of the app, choosing which tests a change needs, or running the full regression at a milestone or release gate. Also use when asked to "test splitpage", "run the tests", or "check nothing broke".
 ---
 
 # Running and testing Splitpage
@@ -52,31 +52,43 @@ where you are, never by what you are testing:
 | --- | --- | --- |
 | Runs on | Windows only | anywhere with Node 22 + a Chromium |
 | Built from | PowerShell 5.1 + .NET + `msedge.exe` | Node built-ins + Playwright's Chromium |
-| Suite runner | `run-tests.ps1` (parallel lanes) | none — one suite per invocation |
+| Suite runner | `run-tests.ps1` (parallel lanes) | `tools/run-suites.mjs` (parallel lanes; see "Driving it from the cloud") |
 
-`driver.ps1` is the original and still the one the full regression runs
-under. `driver.mjs` exists so a source change can be driven from the Linux
-cloud container, which has no PowerShell and no Edge — see "Driving it from
-the cloud" below.
+`driver.ps1` is the original; the Windows half of the full regression runs
+under it and the Linux half under `driver.mjs`. `driver.mjs` also lets a
+source change be driven from the Linux cloud container, which has no
+PowerShell and no Edge, and it is what CI runs.
 
-Building and packaging need Node 18+, which the Windows machine may not
-have — if `node build.mjs` cannot run there, you cannot test a source change
-at all, and saying so is better than testing a stale `index.html`.
+Building needs Node 22 (22.22.2 or later) or 24 (24.15.0 or later), per
+`package.json`'s `engines`; `.nvmrc` pins the one CI uses. If `node build.mjs`
+cannot run, you cannot test a source change at all, and saying so is better
+than testing a stale `index.html`.
 
-## Run the regression suite
+## Which tests to run
 
-Do this before committing any change to `src/`, and **rebuild first** or you
-will be testing the previous version of the app:
+During a change, run the focused checks for what you touched, from the table
+in [docs/architecture/testing.md](../../../docs/architecture/testing.md#what-to-run-for-which-change):
+the unit tests of the area (`npm test -- --only <path>`), and the browser
+suites for its input, focus, saving or export paths. CI runs lint, types, the
+gates, every unit/desktop/tool test and the smoke, CSP and persistence suites
+on every pull request, so a focused run is feedback, not the gate. The full
+browser regression below, on Linux and Windows, is run at milestone and
+release gates (plan section 4) and its `summary.txt` attached to the closing
+PR. **Rebuild first** whichever you run, or you will be testing the previous
+version of the app.
+
+## Run the full regression (milestone and release gates)
 
 ```bash
 node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Ends with `ALL PASS` (suites 01–30, 16 unused) and exit 0, or lists
-every failing assertion and exits 1. Options:
+Runs every suite in `tests/` (162 today) and ends with
+`ALL PASS` and exit 0, or lists every failing assertion and exits 1. The
+Linux half is `node tools/run-suites.mjs <out-dir>` (below). Options:
 
-- `-Only 02` — run just the suite whose filename starts with `02`
+- `-Only 265-browser-drafts` — run just the suites whose filename starts with that (a PowerShell wildcard; numeric prefixes repeat, so `-Only 261` runs two suites)
 - `-Parallel N` — how many suites run at once (default 4; each has its own ports, Edge profile and log)
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
@@ -105,6 +117,8 @@ TypeScript tests beside migrated source and `tests/` under `node --test`
 build step: each file imports the module it is about straight out of
 `src/js` and calls it. Add to these rather than to a browser suite whenever
 the thing you changed is a pure function of a document.
+`npm test -- --only src/test/formats` runs just the matching files and says
+it is not the full gate; CI always runs them all.
 
 | File | Covers |
 | --- | --- |

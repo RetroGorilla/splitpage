@@ -53,26 +53,29 @@ stamps its cache name from `VERSION`. Commit it like any other source file,
 and rebuild after a version bump so the stamp is current — CI fails if it
 isn't.
 
-Before pushing, run what CI runs:
+Before pushing, run CI's fast gate:
 
 ```
-npm run verify        # lint, types, dependency and comment gates, build, every unit test
+npm run verify        # lint, types, dependency and comment gates, build and sw.js stamp, every unit test
 node desktop/test/tabstrip-width.mjs       # needs a Chromium; see the skill below
 ```
 
-[docs/architecture/testing.md](docs/architecture/testing.md) lists what each
-script runs.
+While you work, run the focused checks for what you changed, browser suites
+included for anything you can see in the app: the table in
+[docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change)
+says which, and the same page lists what each script runs.
+[`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md)
+drives the browser suites.
 
-and at least the core browser suite — see
-[`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md).
-
-CI (`.github/workflows/ci.yml`) does the same on every pull request, builds
-the app, and uploads the built files as a `splitpage-app` artifact — a
-ready-built copy for running the server without a checkout
-(`Dockerfile.prebuilt`; [DEPLOY.md](DEPLOY.md) §8). The server itself is
-deployed from a checkout by `deploy.sh`, whose Dockerfile builds the app;
-`.github/workflows/docker.yml` builds and starts that image whenever a file
-it depends on changes.
+CI (`.github/workflows/ci.yml`) runs the same fast gate on every pull
+request, plus the smoke, CSP and persistence browser suites, builds the app,
+and uploads the built files as a `splitpage-app` artifact — a ready-built
+copy for running the server without a checkout (`Dockerfile.prebuilt`;
+[DEPLOY.md](DEPLOY.md) §8). The server itself is deployed from a checkout by
+`deploy.sh`, whose `Dockerfile` builds the app. Whenever a file either image
+depends on changes, `.github/workflows/docker.yml` builds and starts both:
+the root `Dockerfile` from the checkout, and `Dockerfile.prebuilt` from the
+artifact's files alone.
 
 ## Building a release
 
