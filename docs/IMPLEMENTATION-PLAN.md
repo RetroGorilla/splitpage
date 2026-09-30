@@ -47,9 +47,10 @@ No UI framework replacement, editor-engine replacement, persisted document schem
 1. Read applicable repository instructions, `docs/help.md`, `HANDOFF.md` section 5, build/packaging scripts and tests for the area being changed. Resolve stale prose against executable source and fixtures.
 2. Use the existing `4.0-development` branch, or create it from current `main` if absent. Preserve unrelated working changes; use a clean worktree where necessary.
 3. Keep PRs focused on one ownership boundary. Separate a demonstrated behavioral repair from a broad extraction. Keep the application runnable after each PR.
-4. Merge current 3.1.x fixes forward at least weekly and immediately when relevant to the next slice. Port fixes into the new owner; do not restore deleted implementations or maintain two competing paths. Run impacted checks after every forward merge.
-5. Continue through milestones after their gates pass. Do not pause for routine naming, file placement or reversible implementation decisions. Record substantive behavior/compatibility uncertainties before dependent changes.
-6. Do not deploy to the live service, overwrite user data, publish releases or merge into `main` as an incidental verification step.
+4. Bugs are fixed on `3.1.x-development` first, so 3.1 users get them without waiting for 4.0. Merge `3.1.x-development` (not only `main`, which lags it until a 3.1.x release is cut) into `4.0-development` at least weekly and immediately when a fix touches an area the next slice moves. A fix whose code has already moved is ported into the new owner during that merge, with its regression test; do not restore deleted implementations or maintain two competing paths. Run impacted checks after every forward merge.
+5. Open enhancement issues wait for 4.x unless they are small and outside the areas a pending milestone migrates; a feature built on 3.1.x costs a port when merged forward, and one that touches editor, saving, formats or feature views is built once on the new structure instead. The integration owner decides per issue and says so on the issue.
+6. Continue through milestones after their gates pass. Do not pause for routine naming, file placement or reversible implementation decisions. Record substantive behavior/compatibility uncertainties before dependent changes.
+7. Do not deploy to the live service, overwrite user data, publish releases or merge into `main` as an incidental verification step.
 
 ### Ownership of shared work
 
