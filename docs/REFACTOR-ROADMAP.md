@@ -5,9 +5,34 @@ target architecture from that plan stands (pure core → application → views,
 adapters at the edges, plugins through a versioned contract). This file
 changes the order, the size of each step, and who does the work.
 
-How the work happens: one maintainer, AI agents in parallel worktrees, small
-PRs on the active development branch. No long-lived refactor branch. A bug
-fix that touches code already moved goes into its new home.
+The refactor ships as **4.0**. The branch is `4.0-development`, following
+the `3.1-development` convention; `main` (3.1.x fixes) is merged into it at
+least weekly so it never drifts far. PRs into it are small and per
+milestone lane. A 3.1.x bug fix that touches code already moved is ported
+into the new home when merged forward.
+
+How the work happens: one maintainer, AI agents in parallel worktrees.
+
+## What 4.0 contains
+
+| In 4.0 | Milestones |
+| --- | --- |
+| Tooling, wiring, core, session/commands, export registry | 0–4 |
+| Plugin preview (trusted authors), marked experimental in Help | 5 |
+| Save coordinator | 6 |
+
+Milestones 7–10 land in 4.x point releases as the areas they cover next
+need changing. SDK v1 (milestone 11) is 4.x or 5.0, decided once real
+plugins exist.
+
+A major version does not license format, wire or IPC changes. 3.1 files,
+servers and desktop builds must interoperate with 4.0. Plugin package and
+settings storage are new and versioned from the start.
+
+Release gate for 4.0: every 3.1 browser suite green on Linux and Windows,
+unit/desktop/server tests green, real Electron smoke, both Docker paths,
+x64 and ARM64 installers, dependency baseline not above its milestone-0
+value in any count, no comments in authored code.
 
 Each milestone says what is better if the project stops right after it.
 
@@ -211,4 +236,5 @@ Stop here: views cannot mutate the document; disposing a tab leaks nothing.
    checked by `tsc --checkJs`.
 3. CI spend: keep main-only CI and rely on local/agent runs, or pay for
    per-PR checks and required status checks on the private repo.
-4. Which branch refactor PRs land on (`3.1.x-development` today).
+4. Confirm the 4.0 contents table above: is the plugin preview required for
+   4.0, or is 4.0 the refactor alone with plugins in 4.1?
