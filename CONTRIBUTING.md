@@ -21,9 +21,7 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
    setup; the short version is:
    ```
    npm ci
-   node build.mjs
-   npm run lint
-   npm run test:all
+   npm run verify
    ```
    Anything you can see in the app also needs a browser suite; see
    [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md).

@@ -34,7 +34,7 @@ booted browser, which is why several suites still open a page to assert
 something that is really just arithmetic over an object.
 
 ```bash
-npm test                      # src/test/*.test.mjs, no browser
+npm test                      # src/test, TypeScript tests beside source, tests/; no browser
 node build.mjs && node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
 
@@ -99,7 +99,9 @@ Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 
 ## The unit tests
 
-`npm test` — `node --test "src/test/*.test.mjs"`. No browser, no server, no
+`npm test` — `tools/run-tests.mjs unit`, which runs `src/test/*.test.mjs`,
+TypeScript tests beside migrated source and `tests/` under `node --test`
+(docs/architecture/testing.md). No browser, no server, no
 build step: each file imports the module it is about straight out of
 `src/js` and calls it. Add to these rather than to a browser suite whenever
 the thing you changed is a pure function of a document.

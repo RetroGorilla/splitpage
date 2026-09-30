@@ -56,10 +56,12 @@ isn't.
 Before pushing, run what CI runs:
 
 ```
-npm run lint
-npm run test:all      # src/test, the desktop modules, the server, the updater
+npm run verify        # lint, types, dependency and comment gates, build, every unit test
 node desktop/test/tabstrip-width.mjs       # needs a Chromium; see the skill below
 ```
+
+[docs/architecture/testing.md](docs/architecture/testing.md) lists what each
+script runs.
 
 and at least the core browser suite — see
 [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md).
