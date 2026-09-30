@@ -9,7 +9,7 @@ comments.
 | Command | What it checks | Baseline |
 | --- | --- | --- |
 | `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, unresolvable modules, computed dynamic loads, cycles through migrated folders | `tools/dep-baseline.json` |
-| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files | `tools/comment-baseline.json` |
+| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included), Dockerfiles and JSON | `tools/comment-baseline.json` |
 
 Both fail on anything new and on anything the baseline lists that has gone.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
@@ -108,8 +108,13 @@ anything else in the file) is a comment unless `DIRECTIVES` in
 today. A file that does not parse (a broken YAML file) fails the gate, and so
 does a workflow step whose shell cannot be told (above).
 
-Not scanned yet, because no parser covers them: `.gitignore`, `.dockerignore`,
-`.npmrc`, `.env.example` and other dotfiles, and Markdown.
+Not scanned yet, because no parser covers them: `.gitignore`,
+`.gitattributes`, `.dockerignore`, `.npmrc`, `.env.example` and other
+dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. Inside
+workflows, JavaScript run through `shell: node {0}` or an
+`actions/github-script` `script:` is not scanned as JavaScript, and a `run:`
+given as a YAML alias (`run: *name`) is not read as a script unless its anchor
+is itself a step's `run:`.
 
 ## Baseline at the start of 4.0
 
