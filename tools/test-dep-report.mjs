@@ -42,6 +42,11 @@ eq("an unlisted core folder is core", layerOf("src/core/timing/x.ts"), "core");
 eq("a feature folder is named", layerOf("src/features/rows/view.ts"), "features/rows");
 eq("numbered modules are legacy-js", layerOf("src/js/21-events.js"), "legacy-js");
 eq("src/test is tests", layerOf("src/test/undo.test.mjs"), "tests");
+eq("an unknown src folder is src-unknown, not other", layerOf("src/util/helper.js"), "src-unknown");
+eq("a file directly under src is src-unknown", layerOf("src/entry.js"), "src-unknown");
+eq("a root script is still other", layerOf("build.mjs"), "other");
+check("core may not import an unknown src folder", !layerAllows("core/document", "src-unknown"));
+check("a feature may not import an unknown src folder", !layerAllows("features/rows", "src-unknown"));
 eq("a .test.ts beside source is tests", layerOf("src/core/text/runs.test.ts"), "tests");
 check("core/text may import core/document", layerAllows("core/text", "core/document"));
 check("core/document may not import core/text", !layerAllows("core/document", "core/text"));
@@ -217,6 +222,18 @@ eq("an aliased import of S is a state-import", stateFindings({ "src/js/a.js": 'i
 eq("a namespace import of the state module is a state-import", stateFindings({ "src/js/a.js": 'import * as G from "./_state.js";\nexport const r = G.S.dirty;\n' }), ["state-import src/js/a.js global:S"]);
 eq("a literal dynamic import of the state module is a state-import", stateFindings({ "src/js/a.js": 'export const p = import("./_state.js").then((m) => m.S);\n' }), ["state-import src/js/a.js global:S"]);
 eq("a side-effect import binds nothing", stateFindings({ "src/js/a.js": 'import "./_state.js";\n' }), []);
+eq("a module in an unknown src folder is production and its folder is reported", findViolations(graph({
+  ...STATE_FILE,
+  "src/util/helper.js": 'import { S } from "../js/_state.js";\nS.state = null;\n',
+  "src/entry.js": 'import { S } from "./js/_state.js";\nS.dirty = true;\n'
+})).map((v) => `${v.rule} ${v.source} ${v.target}`), [
+  "state-import src/entry.js global:S",
+  "state-import src/util/helper.js global:S",
+  "state-write src/entry.js global:S.dirty",
+  "state-write src/util/helper.js global:S.state",
+  "unknown-layer src/entry.js src/",
+  "unknown-layer src/util/helper.js src/util/"
+]);
 eq("tests and tools are not production importers", stateFindings({
   "src/test/a.test.mjs": 'import { S } from "../js/_state.js";\nS.state = null;\n',
   "tools/demo.mjs": 'import { S } from "../src/js/_state.js";\nS.dirty = 1;\n'
@@ -543,6 +560,14 @@ try {
     "new layer: src/features/rows/view.ts:1 -> src/legacy/state.ts",
     "new state-import: src/features/rows/view.ts:1 -> global:S",
     "new state-import: src/legacy/state.ts:1 -> global:S"
+  ]);
+
+  const outside = attempt(repo, { "src/util/helper.js": 'import { S } from "../js/_state.js";\nS.state = null;\n' });
+  eq("an S writer in a src folder outside the layer table fails", outside.code, 1);
+  eq("its folder, import and write are all named", lines(outside, "new "), [
+    "new state-import: src/util/helper.js:1 -> global:S",
+    "new state-write: src/util/helper.js:2 -> global:S.state",
+    "new unknown-layer: src/util/helper.js -> src/util/"
   ]);
 
   const twoFile = attempt(repo, { "src/js/d.js": 'import "./e.js";\n', "src/js/e.js": 'import "./d.js";\n' });

@@ -69,6 +69,7 @@ export function layerOf(path) {
   const top = /^src\/(application|contracts|adapters|bootstrap|legacy)\//.exec(path);
   if (top) return top[1];
   if (path.startsWith("src/js/")) return "legacy-js";
+  if (path.startsWith("src/")) return "src-unknown";
   if (path.startsWith("shared/")) return "shared";
   if (path.startsWith("server/")) return "server";
   if (path.startsWith("desktop/")) return "desktop";
@@ -747,6 +748,10 @@ export function findViolations(modules) {
     if (!found.has(key(v))) found.set(key(v), { ...v, line, detail });
   };
   for (const m of modules.values()) {
+    if (m.layer === "src-unknown") {
+      const folder = m.path.split("/").length > 2 ? m.path.split("/").slice(0, 2).join("/") + "/" : "src/";
+      add("unknown-layer", m.path, folder, null, `${folder} is not a folder in the layer table`);
+    }
     for (const e of m.edges) {
       if (e.kind === "file") {
         const targetLayer = layerOf(e.target);
