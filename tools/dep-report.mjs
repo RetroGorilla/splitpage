@@ -844,8 +844,8 @@ function readBaseline(path) {
 
 function writeBaseline(path, exceptions, previous) {
   const reasons = new Map((previous.exceptions ?? []).filter((e) => e.reason).map((e) => [key(e), e.reason]));
-  const rows = exceptions.map(({ rule, source, target }) => {
-    const reason = reasons.get(key({ rule, source, target }));
+  const rows = [...exceptions].sort(compareExceptions).map(({ rule, source, target, reason: given }) => {
+    const reason = given ?? reasons.get(key({ rule, source, target }));
     return JSON.stringify(reason ? { rule, source, target, reason } : { rule, source, target });
   });
   writeFileSync(path, rows.length ? `{\n  "exceptions": [\n    ${rows.join(",\n    ")}\n  ]\n}\n` : "{\n  \"exceptions\": []\n}\n");
@@ -855,7 +855,12 @@ function describe(v) {
   return `${v.rule}: ${v.source}${v.line ? ":" + v.line : ""} -> ${v.target}${v.detail ? " (" + v.detail + ")" : ""}`;
 }
 
-export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", print = console.log, printError = console.error } = {}) {
+export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", reason = "", print = console.log, printError = console.error } = {}) {
+  const acceptReason = typeof reason === "string" ? reason.trim() : "";
+  if (mode === "accept" && !acceptReason) {
+    printError('dep-report: --accept needs a reason, e.g. --accept "helper moved from 05-render.js to 06-rows.js"');
+    return 2;
+  }
   const modules = loadGraph(repo);
   const violations = findViolations(modules);
   const cycles = migratedCycles(modules);
@@ -874,12 +879,16 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   }
 
   const { added, resolved } = compareBaseline(violations, baseline);
-  print(`dep-report: ${modules.size} modules, ${m.frontendModules} frontend, largest frontend runtime cycle ${m.largestFrontendRuntimeCycle}, ${m.runtimeCycleEdges} runtime cycle edges, ${m.stateImporters.length} S importers, ${m.stateAssigners.length} S.state assigners, ${m.stateWriters.length} S writers, ${violations.length} known exceptions`);
+  const recorded = baseline.exceptions ?? [];
+  print(`dep-report: ${modules.size} modules, ${m.frontendModules} frontend, largest frontend runtime cycle ${m.largestFrontendRuntimeCycle}, ${m.runtimeCycleEdges} runtime cycle edges, ${m.stateImporters.length} S importers, ${m.stateAssigners.length} S.state assigners, ${m.stateWriters.length} S writers; ${recorded.length} exceptions in the baseline, ${added.length} new, ${resolved.length} resolved`);
+  const printCycles = () => {
+    for (const c of cycles) printError(`  cycle (${c.graph}) through migrated ${c.migrated.join(", ")}: ${c.modules.join(" -> ")}`);
+  };
 
   if (mode === "prune") {
     if (added.length) {
       for (const v of added) printError("  new " + describe(v));
-      printError("dep-report: --prune only removes resolved exceptions; fix the new ones first");
+      printError('dep-report: --prune only removes resolved exceptions; fix the new ones, or record them with --accept "<reason>"');
       return 1;
     }
     writeBaseline(baselinePath, violations, baseline);
@@ -887,11 +896,24 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
     return 0;
   }
 
-  let failed = false;
-  for (const c of cycles) {
-    failed = true;
-    printError(`  cycle (${c.graph}) through migrated ${c.migrated.join(", ")}: ${c.modules.join(" -> ")}`);
+  if (mode === "accept") {
+    if (cycles.length) {
+      printCycles();
+      printError("dep-report: a cycle through a migrated folder cannot be accepted; nothing was written");
+      return 1;
+    }
+    if (!added.length) {
+      print("dep-report: nothing new to accept");
+      return 0;
+    }
+    writeBaseline(baselinePath, [...recorded, ...added.map((v) => ({ ...v, reason: acceptReason }))], baseline);
+    for (const v of added) print("  + " + describe(v));
+    print(`dep-report: accepted ${added.length} new exceptions with the reason "${acceptReason}"${resolved.length ? `; ${resolved.length} resolved remain, remove them with --prune` : ""}`);
+    return 0;
   }
+
+  let failed = cycles.length > 0;
+  printCycles();
   for (const v of added) { failed = true; printError("  new " + describe(v)); }
   for (const e of resolved) { failed = true; printError(`  resolved ${e.rule}: ${e.source} -> ${e.target} (remove it from the baseline with --prune)`); }
   if (failed) {
@@ -912,12 +934,16 @@ function isMainModule() {
 }
 
 if (isMainModule()) {
-  const flag = process.argv[2];
-  const mode = { "--metrics": "metrics", "--init": "init", "--prune": "prune" }[flag] ?? (flag ? null : "check");
-  if (mode === null) {
-    console.error(`dep-report: unknown argument ${flag}; use --metrics, --prune or --init`);
+  const args = process.argv.slice(2);
+  const modes = { "--metrics": "metrics", "--init": "init", "--prune": "prune" };
+  let options = null;
+  if (args.length === 0) options = { mode: "check" };
+  else if (args.length === 1 && modes[args[0]]) options = { mode: modes[args[0]] };
+  else if (args[0] === "--accept" && args.length <= 2) options = { mode: "accept", reason: args[1] ?? "" };
+  if (options === null) {
+    console.error(`dep-report: unknown argument ${args.join(" ")}; use --metrics, --prune, --init or --accept "<reason>"`);
     process.exitCode = 2;
   } else {
-    process.exitCode = run({ mode });
+    process.exitCode = run(options);
   }
 }
