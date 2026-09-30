@@ -76,7 +76,9 @@ key ctrl KeyF
 sleep 200
 expect __shown('findbar')
 expect document.activeElement.id == find-input
-jsclick #rows .row .audio-cell .cell-editable
+caret #rows .row .audio-cell .cell-editable
+sleep 200
+expect document.activeElement === document.querySelector('#rows .row .audio-cell .cell-editable')
 key ctrl KeyF
 sleep 200
 expect __shown('findbar')
