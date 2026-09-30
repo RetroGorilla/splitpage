@@ -44,6 +44,12 @@ A file named like a test that no group runs (`src/test/x.test.ts`,
 `node tools/run-tests.mjs --list [unit|desktop|tools|all]` prints discovery
 without running anything.
 
+`tools/test-run-tests.mjs` links the repository's `node_modules` into a
+temporary repository to type-check it. On Windows the link is a directory
+junction, which needs neither administrator rights nor Developer Mode; if the
+link still cannot be made, the typecheck cases print `SKIP` with the reason
+and the summary counts them as skipped, not passed.
+
 ## TypeScript
 
 Node runs `.ts` files directly by stripping types; it does not read

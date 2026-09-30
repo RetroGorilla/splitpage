@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlinkSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO } from "./source-scan.mjs";
@@ -8,6 +8,8 @@ import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
 const failures = [];
+const skipped = [];
+const links = [];
 
 function check(name, ok, detail) {
   if (ok) { passed++; console.log("  ok   " + name); return; }
@@ -118,11 +120,22 @@ console.log("\nthe discovery probe (a real run):\n");
 
 console.log("\ntypecheck():\n");
 
+function linkNodeModules(repo) {
+  const link = join(repo, "node_modules");
+  try {
+    symlinkSync(join(REPO, "node_modules"), link, process.platform === "win32" ? "junction" : "dir");
+    links.push(link);
+    return null;
+  } catch (error) {
+    return `${error.code ?? "error"}: ${error.message}`;
+  }
+}
+
 function typedRepo(files) {
   const repo = repoWith({ "package.json": '{ "type": "module" }\n', ...files });
   for (const name of ["tsconfig.base.json", ...CONFIGS]) copyFileSync(join(REPO, name), join(repo, name));
-  symlinkSync(join(REPO, "node_modules"), join(repo, "node_modules"), "dir");
-  return repo;
+  const problem = linkNodeModules(repo);
+  return problem ? { problem } : { repo };
 }
 
 function checkTypes(repo) {
@@ -132,11 +145,16 @@ function checkTypes(repo) {
   return { code, out: out.join("\n"), err: err.join("\n") };
 }
 
-{
-  const repo = typedRepo({
-    "src/core/text/runs.ts": "export function double(n: number): number { return n * 2; }\n",
-    "src/core/text/runs.test.ts": 'import { test } from "node:test";\nimport { double } from "./runs.ts";\ntest("d", () => { double(1); });\n'
-  });
+const typed = typedRepo({
+  "src/core/text/runs.ts": "export function double(n: number): number { return n * 2; }\n",
+  "src/core/text/runs.test.ts": 'import { test } from "node:test";\nimport { double } from "./runs.ts";\ntest("d", () => { double(1); });\n'
+});
+
+if (typed.problem) {
+  skipped.push(`typecheck() over a temporary repository — node_modules could not be linked into it (${typed.problem})`);
+  console.log("  SKIP typecheck() — node_modules could not be linked into a temporary repository: " + typed.problem);
+} else {
+  const { repo } = typed;
   const clean = checkTypes(repo);
   eq("clean core and test files pass", clean.code, 0);
   check("each config reports its own files", clean.out.includes("tsconfig.core.json: 1 files") && clean.out.includes("tsconfig.test.json: 1 files"), clean.out);
@@ -162,9 +180,11 @@ function checkTypes(repo) {
   check("and is named", stray.err.includes("server/stray.ts is not in any of"), stray.err);
 }
 
+for (const link of links) unlinkSync(link);
 rmSync(work, { recursive: true, force: true });
 
-console.log(`\n${passed} passed, ${failures.length} failed\n`);
+console.log(`\n${passed} passed, ${failures.length} failed, ${skipped.length} skipped\n`);
+for (const s of skipped) console.log("  SKIP " + s);
 if (failures.length) {
   for (const f of failures) console.log("  " + f);
   process.exit(1);
