@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, run
 } from "./dep-report.mjs";
@@ -212,7 +213,7 @@ function runIn(repo, mode) {
 }
 
 {
-  const r = spawnSync(process.execPath, [join(dirname(new URL(import.meta.url).pathname), "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
   eq("an unknown argument exits 2", r.status, 2);
 }
 
