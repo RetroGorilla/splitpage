@@ -13,8 +13,10 @@ comments.
 
 Both fail on anything new and on anything the baseline lists that has gone.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
-baseline only when none exists. `node tools/dep-report.mjs --metrics` prints the
-informational numbers, which are not a pass/fail condition.
+baseline only when none exists. `node tools/dep-report.mjs --accept "<reason>"`
+records reviewed new dependency exceptions ([Baseline workflow](#baseline-workflow)).
+`node tools/dep-report.mjs --metrics` prints the informational numbers, which
+are not a pass/fail condition.
 
 ## Layers
 
@@ -38,6 +40,14 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `shared` | `shared/` | itself |
 | `tests` | `src/test/`, `tests/`, `*.test.*` | anything |
 | `legacy-js`, `server`, `desktop` | `src/js/`, `server/`, `desktop/` | anything except tests |
+| `src-unknown` | any other `src/` folder, or a file directly under `src/` | anything, but each file is an `unknown-layer` violation |
+
+A script under `src/` outside the folders above is an `unknown-layer`
+violation keyed by its top-level folder (`src/util/`, or `src/` for a file
+directly under it): add the folder to the table (`layerOf`) or move the file.
+Until then it counts as production for the `S` rules below, and core,
+`contracts`, `application`, `adapters`, features, `legacy` and `shared` may
+not import it.
 
 Core, `contracts`, `application`, `shared` and feature layers may not import a
 Node built-in or a package (`platform-import`). Core, `contracts`,
@@ -46,19 +56,28 @@ Node built-in or a package (`platform-import`). Core, `contracts`,
 CommonJS files.
 
 A name is a global only where no binding for it is in scope. The report walks
-the lexical scopes of each file: module, function, block, loop head, `catch`
-clause and class. `var` and function declarations are hoisted to their
-function (a function declared inside a block stays in the block, as in strict
-code); parameters, destructured names, imports and `catch` bindings are
-bindings; a function or class expression's own name is visible only inside
-it. So a
-parameter named `fetch` in one function does not hide a global `fetch` in the
-next, and a local declared later in the module still covers an earlier
-function. Property names, method names and labels are not references; a
-shorthand property (`{ performance }`) is. An ambient `declare const window`
-describes the global and is not a local binding. A call to `require` is a load
-only where `require` is not a binding in scope. The walker adds about 0.2 s to
-a full run (from about 1.2 s to about 1.4 s on the Windows workstation).
+the lexical scopes of each file: module, function parameters, function body,
+block, loop head, `catch` clause and class. `var` and function declarations
+are hoisted to their function body (a function declared inside a block stays
+in the block, as in strict code); parameters, destructured names, imports and
+`catch` bindings are bindings; a parameter's default value sees the other
+parameters and the enclosing scopes but not the body's declarations
+(`function f(a = fetch) { var fetch }` uses the global); a function or class
+expression's own name is visible only inside it. So a parameter named `fetch`
+in one function does not hide a global `fetch` in the next, and a local
+declared later in the module still covers an earlier function. Property names,
+method names and labels are not references; a shorthand property
+(`{ performance }`) is. An ambient `declare const window` describes the global
+and is not a local binding. A call to `require` is a load only where `require`
+is not a binding in scope.
+
+Types and values are separate names. A type parameter, type alias, interface
+or `import type` does not hide a global value (`function f<URL>() { return new
+URL(…) }` uses the global `URL`), and a local value does not hide a global
+type in a type annotation. Classes, enums, namespaces and ordinary imports are
+both. `typeof x` and the left side of a qualified name look up values, then
+type-only imports. The walker adds about 0.2 s to a full run (from about 1.2 s
+to about 1.4 s on the Windows workstation).
 
 A cycle containing any file in a migrated layer (`core`, `contracts`,
 `application`, `adapters`, `features`, `bootstrap`, `legacy`) fails whether it
@@ -78,8 +97,11 @@ the new entry is reported as new and the old one as resolved.
 | `state-write` | production module | `global:S.<member>` or `global:S.<member>.*` | it writes a member of `S` (below) |
 | `cycle-edge` | importing module | imported module | the runtime import has both ends in the same strongly connected component |
 
-Production is every layer except `tests`, `tools` and `other`.
-`src/js/_state.js`, which defines `S`, is neither an importer nor a writer.
+Production is every layer except `tests`, `tools` and `other` (files outside
+`src/`, `shared/`, `server/`, `desktop/` and `tools/`, such as `build.mjs`).
+Every file under `src/` that is not a test is production, including one in an
+unknown folder. `src/js/_state.js`, which defines `S`, is neither an importer
+nor a writer.
 
 ### Importing `S`
 
@@ -88,18 +110,40 @@ module that re-exports it, by name (`import { S }`), alias (`import { S as
 T }`), namespace (`import * as G`, then `G.S`), default, destructured literal
 `await import()` or `require`, or when it loads such a module with a literal
 `import()` or `require` whose result it does not bind (counted, since the
-report cannot see what it does with it). `import type { S }` counts too. A
-side-effect `import "./_state.js"` binds nothing and does not.
+report cannot see what it does with it). `import type { S }` counts too, as
+does the type-only re-export `export type { S } from`. A side-effect
+`import "./_state.js"` binds nothing and does not.
 
 A module is a bridge when it re-exports `S`: `export { S } from`, `export *
 from` or `export * as x from` a module that provides `S`, `export { S as T }`
 or `export default S` of an imported `S`, or an exported alias of `S` or part
-of it (`export const live = S.state`). Bridges are followed through any number
-of hops, and a module importing from one is an `S` importer whose writes are
-attributed as if it had imported `S` itself. A bridge is itself a
-`state-import`; one in `src/legacy/` is allowed by the layer rules, and its
-baseline entry carries a `reason` naming the migration that removes it. A
-feature importing a bridge also breaks the layer rule.
+of it (`export const live = S.state`). A module importing from a bridge is an
+`S` importer whose writes are attributed as if it had imported `S` itself.
+Bridges are followed until the export path from a module to `S`, or the
+member path below `S` that an exported alias names, reaches six names (five
+`export * as` hops, for example); the module where either would grow longer is
+a `state-bridge-limit` violation, so the limit cannot hide an importer
+silently. A bridge is itself a `state-import`; one in `src/legacy/`
+is allowed by the layer rules, and its baseline entry carries a `reason`
+naming the migration that removes it. A feature importing a bridge also
+breaks the layer rule.
+
+Only re-exports and exported aliases are bridges. A function, an object
+literal, a class static, `module.exports`, or an existing legacy helper that
+returns live state is an untracked facade: `adoptRestoredState` in
+`src/js/02b-doc-id.js` replaces `S.state` and returns it, and a module that
+calls it and writes to the result is not reported for that call or that
+write. Features, `application`, `adapters`, `contracts` and core are still
+protected, because the layer rules stop them importing `src/js` or
+`src/legacy` at all. `src/js`, `src/legacy` and `src/bootstrap` may import
+legacy modules, so there the only protection against a facade is review. A
+keyed rule for every `src/legacy` → `src/js` edge, recorded like `cycle-edge`,
+is a candidate for milestone 2.
+
+One known false positive is accepted because it errs on the safe side: an
+exported `const` snapshot of a primitive member (`export const wasDirty =
+S.dirty`) is treated as a bridge, so its consumers count as `S` importers
+although they only hold a copied value.
 
 ### Writing `S`
 
@@ -107,7 +151,8 @@ The target names the top-level member of `S` and how it was written:
 
 - `global:S.<member>`: the member is replaced. Assignment (`=`, compound and
   logical), `++`/`--`, `delete`, a destructuring-assignment target or a
-  `for…in`/`for…of` head. `S["state"]` is `S.state`; a computed key is
+  `for…in`/`for…of` head. `S["state"]` is `S.state`; an assignment through a
+  computed key (`S[key] = …`) replaces a member chosen at run time and is
   `global:S[?]`.
 - `global:S.<member>.*`: something inside the member changes. An assignment,
   update or `delete` below it (`S.state.rows = []`,
@@ -116,8 +161,13 @@ The target names the top-level member of `S` and how it was written:
   called on a chain inside it; or the member as the first argument of
   `Object.assign`, `Object.defineProperty`, `Object.defineProperties`,
   `Object.setPrototypeOf`, `Reflect.set`, `Reflect.deleteProperty`,
-  `Reflect.defineProperty` or `Reflect.setPrototypeOf`. `Object.assign(S, …)`
-  is `global:S[?]`.
+  `Reflect.defineProperty` or `Reflect.setPrototypeOf`.
+- `global:S.*`: `S` itself is the first argument of one of those functions
+  (`Object.assign(S, …)`, `Reflect.set(S, …)`), so its members change in place
+  without the report knowing which.
+
+Each entry's detail says which: `replaces S.dirty`, `changes S.state in
+place`, `changes members of S in place`.
 
 Writes through an alias count as writes to what it aliases: a `const`, or a
 `let`/`var` that is never reassigned, initialised from a chain rooted at `S`
@@ -149,11 +199,19 @@ module leaves `S` alone. It does not see:
 
 - a value from `S` passed to a function that mutates it (`normalize(S.state)`,
   `sortRows(S.state.rows)`), returned, stored in another object or captured
-  as `this`;
-- a copy that shares its elements (`S.state.rows.slice()` then a write to an
-  element of the copy);
-- callbacks other than those listed, `Map`/`Set` and other methods not in the
-  mutator list, `Function.prototype.call`/`apply` and iterator protocols;
+  as `this`, and the untracked facades above;
+- a named function passed as a callback (`S.state.rows.forEach(markDone)`,
+  where `markDone` writes to its parameter); only inline function and arrow
+  callbacks are followed;
+- the result of a call, even when it is an element of `S`
+  (`const row = S.state.rows.find(…); row.done = true`, or `filter(…)[0]`),
+  and a copy that shares its elements (`S.state.rows.slice()` then a write to
+  an element of the copy);
+- `Map` and `Set` mutators (`set`, `add`, `delete`, `clear`) and any other
+  method not in the mutator list;
+- `Function.prototype.call` and `apply`
+  (`Array.prototype.push.call(S.state.rows, x)`), and iterator protocols;
+- a chain that passes through a comma expression (`(0, S.state).rows = []`);
 - an alias that is reassigned anywhere in its scope (dropped, not guessed),
   and `module.exports` or computed re-exports as bridges;
 - `eval`, `new Function`, and loads through a computed specifier (those are
@@ -176,26 +234,46 @@ resolved entry.
 - **Paying debt.** Make the change. `npm run check:deps` fails and lists the
   resolved entries; `node tools/dep-report.mjs --prune` removes them. Commit
   the smaller baseline with the change.
-- **New debt.** `--prune` refuses it. The only expected additions are bridges
-  and adapters in `src/legacy/`; add those entries to
-  `tools/dep-baseline.json` by hand, each with a `reason`, and they are
-  reviewed like any other exception.
-- **Changing the rules.** Remove the baseline, run `--init`, and restore the
-  `reason` fields from the previous version.
+- **Reviewed new debt.** `--prune` refuses new entries. When one is expected,
+  such as a bridge in `src/legacy/` or a helper moved between two modules
+  already in the cycle (which adds a `cycle-edge`), run
+  `node tools/dep-report.mjs --accept "<reason>"`:
+  - it adds exactly the current new violations, each with that reason, and
+    lists them;
+  - it refuses a missing or blank reason (exit 2), and refuses while a cycle
+    runs through a migrated folder (exit 1, nothing written);
+  - it does not prune: `--prune` removes the resolved entries afterwards and
+    keeps every reason.
 
-The file holds one exception per line, sorted by rule, source and target, so a
-diff shows exactly which entries came and went. `--metrics` keeps the
-informational numbers: `stateImporters`, `stateAssigners` (modules replacing
-`S.state`) and `stateFieldWriters` (modules replacing any member) as before,
-plus `runtimeCycleEdges`, `stateBridges` and `stateWriters`, the modules and
-targets behind `state-write`.
+  The reason says why the entry is needed and what removes it; it is reviewed
+  with the change like any other exception.
+- **Changing the rules.** `--accept "<the rule change>"` records the entries a
+  new rule finds, and `--prune` removes those it no longer finds. Removing the
+  baseline and running `--init` records everything without review and drops
+  every `reason`, so it is only for a repository with no baseline.
+
+The file holds one exception per line, so a diff shows exactly which entries
+came and went. Entries are sorted by rule, then source, then target, comparing
+code points (UTF-8 bytes) rather than locale collation, so `--init`, `--prune`
+and `--accept` write the same bytes on every machine. A check prints the size
+of the baseline and the counts of new and resolved entries separately.
+
+`--metrics` prints the informational numbers:
+- `stateImporters` and `stateAssigners` (modules replacing `S.state`) keep
+  their meaning;
+- `stateFieldWriters` still lists the modules that replace any member, but its
+  `reads` has changed: it counts every reference to `S` or an alias of it that
+  is not a write, where it used to count only `S.<field>` reads;
+- new: `runtimeCycleEdges`, `stateBridges` and `stateWriters` (the modules and
+  targets behind `state-write`).
 
 ## Recorded exceptions
 
 The baseline is a list of `{ rule, source, target }`. An entry may carry a
 `reason`; `--prune` keeps it. The legacy debt entries (`state-import`,
-`state-write`, `cycle-edge`) carry none: they are the `src/js` modules as they
-stood at the start of 4.0, and they only shrink. Every other entry, and any
+`state-write`, `cycle-edge`) recorded at the start of 4.0 carry none: they are
+the `src/js` modules as they stood then, and they only shrink. An entry added
+later with `--accept` carries the reason given. Every other entry, and any
 bridge, is explained here.
 
 - **`shared/video-embed.js` platform globals** (`URL`, `AbortController`,
