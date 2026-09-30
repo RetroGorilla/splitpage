@@ -611,6 +611,40 @@ try {
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
   eq("an unknown argument exits 2", r.status, 2);
 
+  const accepting = cliRepo(LEGACY);
+  cli(accepting, "--init");
+  const baselineFile = join(accepting, "tools/dep-baseline.json");
+  const initial = readFileSync(baselineFile, "utf8");
+  writeFiles(accepting, { "src/js/a.js": LEGACY["src/js/a.js"] + 'import "./f.js";\n' });
+  const moved = cli(accepting);
+  eq("moving a helper between two cycle members fails the check", moved.code, 1);
+  check("the summary counts the baseline and the new entries separately", moved.out.includes("6 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
+  eq("--accept without a reason exits 2", cli(accepting, "--accept").code, 2);
+  eq("--accept with a blank reason exits 2", cli(accepting, "--accept", "  ").code, 2);
+  eq("and leaves the baseline alone", readFileSync(baselineFile, "utf8"), initial);
+  const accepted = cli(accepting, "--accept", "helper moved from b.js to f.js; a.js now calls it directly");
+  eq("--accept with a reason exits 0", accepted.code, 0);
+  check("it prints what it added", accepted.out.includes("+ cycle-edge: src/js/a.js:4 -> src/js/f.js"), accepted.out);
+  const afterAccept = JSON.parse(readFileSync(baselineFile, "utf8")).exceptions;
+  eq("exactly the new entry is added, with the reason", afterAccept.filter((e) => e.reason), [
+    { rule: "cycle-edge", source: "src/js/a.js", target: "src/js/f.js", reason: "helper moved from b.js to f.js; a.js now calls it directly" }
+  ]);
+  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 6);
+  eq("the check passes after --accept", cli(accepting).code, 0);
+
+  writeFiles(accepting, { "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { S.dirty = true; return f(); }\n' });
+  const mixed = cli(accepting, "--accept", "b.js sets the dirty flag while it waits for the session owner");
+  eq("--accept adds new entries but does not prune", [mixed.code, cli(accepting).code], [0, 1]);
+  check("and says what is left to prune", mixed.out.includes("1 resolved"), mixed.out);
+  eq("--prune then removes the resolved entry and keeps both reasons", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["src/js/f.js", "global:S.dirty"]]);
+  eq("and the check passes", cli(accepting).code, 0);
+
+  writeFiles(accepting, { "src/core/document/a.ts": 'import "./b.ts";\n', "src/core/document/b.ts": 'import "./a.ts";\n' });
+  const beforeCycle = readFileSync(baselineFile, "utf8");
+  const refused = cli(accepting, "--accept", "trying to accept a cycle in core");
+  eq("--accept refuses while a cycle runs through a migrated folder", refused.code, 1);
+  eq("and writes nothing", readFileSync(baselineFile, "utf8"), beforeCycle);
+
   const linkedRepo = cliRepo({ "src/js/a.js": "export const a = 1;\n" });
   symlinkSync(join(linkedRepo, "tools"), join(linkedRepo, "linked"), "junction");
   const viaLink = (...args) => spawnSync(process.execPath, [join("linked", "dep-report.mjs"), ...args], { cwd: linkedRepo, encoding: "utf8" });
