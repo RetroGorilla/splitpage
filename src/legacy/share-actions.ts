@@ -121,7 +121,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "Export",
       icon: "i-repeat",
       words: "export again repeat last",
-      availability: () => loaded(itemAvailability(exportAgainItemState())),
+      availability: () => ({ ...loaded(itemAvailability(exportAgainItemState())), visible: false }),
       run: () => { exportAgain(); }
     },
     {

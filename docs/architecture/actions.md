@@ -95,7 +95,22 @@ menu follow it.
 `visible: false` only keeps an action out of the command menu. It still runs
 from a surface that has it: the desktop app's native menu reaches items the
 File menu hides (Google Drive, Present in browser), and their handlers explain
-the refusal themselves.
+the refusal themselves. Export again is never listed (its availability always
+says `visible: false`), because the 3.1 command menu did not offer it.
+
+## The command menu
+
+`18d-command-menu.js` lists `appActions.list()` each time it renders, with
+nothing cached between openings, plus the export formats, which are not
+actions until milestone 5's format registry. `LIST_ORDER` there keeps the 3.1
+order. An action it does not name is listed after the named ones, in the
+order it was registered, under its own `group`; a group the command menu does
+not know is listed after the known groups. So an action registered anywhere
+shows up in the command menu with no edit to it. The command menu never lists
+its own action, `command-menu`. `tests/legacy/command-palette.test.ts` checks
+this against the real registry instance; `279-command-menu-listing.txt` pins
+the whole listing, key chips, switch states and icons in the browser, a
+review session and the desktop app, and passes against 3.1's code too.
 
 `src/application/shortcuts.ts` parses chords and finds the action a key event
 names. `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown
