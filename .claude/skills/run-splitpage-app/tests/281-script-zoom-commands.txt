@@ -1,0 +1,61 @@
+# The script zoom commands from every surface that has them (4.0 milestone
+# 1): the desktop app's View menu (Zoom In, Zoom Out, Actual Size) and
+# Ctrl + "+" / "-" / "0". The keys act only in the editor view and leave the
+# key to the browser elsewhere; the menu commands act wherever they are
+# chosen, the Writer included. Neither shows in the command menu. Passes
+# against the code before the zoom commands moved onto the action registry
+# (4.0-development 19c66f7) and after.
+
+open
+viewport 1400 900
+eval (function(){ localStorage.removeItem('splitpage-script-scale'); window.D = window.__desktopTest; window.C = window.__commandTest; window.scale = function () { return parseFloat(getComputedStyle(document.getElementById('root')).getPropertyValue('--script-scale')); }; window.ctrlKey = function (key, code) { var ev = new KeyboardEvent('keydown', { key: key, code: code, ctrlKey: true, bubbles: true, cancelable: true }); (document.activeElement || document.body).dispatchEvent(ev); return ev.defaultPrevented; }; window.__listed = function (q) { return C.results(q).some(function (g) { return g.items.some(function (i) { return /zoom/.test(i.id); }); }); }; return true; })()
+sleep 300
+expect scale() === 1
+
+# --- the View menu's commands ---------------------------------------------------
+eval D.runMenuCommand('script-zoom-in'); true
+sleep 700
+expect scale() === 1.1
+eval D.runMenuCommand('script-zoom-in'); true
+sleep 700
+expect scale() === 1.25
+eval D.runMenuCommand('script-zoom-out'); true
+sleep 700
+expect scale() === 1.1
+eval D.runMenuCommand('script-zoom-reset'); true
+sleep 300
+expect scale() === 1
+expect localStorage.getItem('splitpage-script-scale') === null
+
+# --- the keys, in the editor view ------------------------------------------------
+expect ctrlKey('=', 'Equal') === true
+sleep 700
+expect scale() === 1.1
+expect ctrlKey('0', 'Digit0') === true
+sleep 300
+expect scale() === 1
+
+# --- in the Writer the keys are the browser's, the menu still zooms the script ---
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect ctrlKey('=', 'Equal') === false
+sleep 300
+expect scale() === 1
+eval D.runMenuCommand('script-zoom-in'); true
+sleep 700
+expect scale() === 1.1
+eval D.runMenuCommand('script-zoom-reset'); true
+sleep 300
+expect scale() === 1
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+
+# --- none of them is offered in the command menu ---------------------------------
+expect __listed('zoom') === false
+expect __listed('actual size') === false
+expect __listed('script') === false
+
+# nothing here edited the document
+expect document.getElementById('btn-save').textContent == Save

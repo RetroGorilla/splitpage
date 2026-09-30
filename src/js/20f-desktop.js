@@ -13,7 +13,6 @@ import {
 import { hashText as historyHashText } from "./03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
-import { runScriptZoomCommand } from "./05s-script-zoom.js";
 import { invokeFrom, markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { concatBytes, saveDoc, strBytes } from "./14-export.js";
@@ -106,7 +105,6 @@ function fileMenuItem(id) {
 }
 
 function runDesktopMenuCommand(cmd) {
-  if (runScriptZoomCommand(cmd)) return;
   var header = DESKTOP_HEADER_ACTIONS[cmd];
   var id = header || cmd;
   if (appActions.has(id)) {
