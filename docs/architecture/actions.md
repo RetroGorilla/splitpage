@@ -123,9 +123,16 @@ review session and the desktop app, and passes against 3.1's code too.
 (`chordKey()`) and finds the action a key event names; a key event with no
 `key` (Chrome's autofill sends one) matches nothing. `register()` refuses a
 chord another action already declares, so no first match can win silently.
+A chord holds `mod` or `alt` unless its key is a function key (F1 to F24);
+`parseChord()` refuses one like `k` or `shift+k`.
 `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown target and
 returns a function that removes the listener; `mount.ts` is the feature's
-mount, which the bootstrap calls.
+mount, which the bootstrap calls. The binder passes over a keydown with no
+Control, Command or Alt held that is not a function key (`canBeShortcut()`)
+before it asks the registry for its shortcuts, so typing never reaches the
+lookup, and asks once for any other keydown. A key whose action ran, or
+threw, is kept from the browser, as 3.1's handlers did by calling
+`preventDefault` first; a refused one only when the action claims its keys.
 
 ## The legacy shim
 
@@ -166,7 +173,11 @@ feature (`mountShortcuts()` in `src/features/shortcuts/mount.ts`, one
 `keydown` listener on the target). It keeps every disposer and returns the
 function that undoes them all in reverse; `stopActions()` calls it. Starting
 again while started is refused, so neither a listener nor an action can be
-doubled.
+doubled. If a step throws (a group declaring an id or a chord already taken),
+the steps already done are undone in reverse and the error is rethrown, so
+the actions are left unstarted and can be started again. Each group
+registers through `registerAll()` (`src/application/actions.ts`), whole or
+not at all.
 
 These are supplied here, rather than imported where they are used, so that no
 numbered module gains an import inside their 60-module cycle: the toast module
