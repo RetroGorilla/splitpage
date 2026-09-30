@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseChord, chordKey, chordMatches, actionForKey } from "../../src/application/shortcuts.ts";
+import { parseChord, chordKey, chordMatches, actionForKey, canBeShortcut } from "../../src/application/shortcuts.ts";
 import { createActionRegistry } from "../../src/application/actions.ts";
 
 const key = (k: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean; composing?: boolean } = {}) => ({
@@ -16,6 +16,28 @@ test("a chord parses its modifiers and key", () => {
 test("a chord with no key or an unknown modifier is refused", () => {
   assert.throws(() => parseChord("mod+shift"), /names no key/);
   assert.throws(() => parseChord("hyper+k"), /unknown modifiers/);
+});
+
+test("a chord holds mod or alt unless its key is a function key, so typing is never taken", () => {
+  assert.throws(() => parseChord("k"), /needs mod or alt/);
+  assert.throws(() => parseChord("shift+k"), /needs mod or alt/);
+  assert.throws(() => parseChord("Escape"), /needs mod or alt/);
+  assert.deepEqual(parseChord("shift+F5"), { key: "f5", mod: false, shift: true, alt: false });
+  assert.deepEqual(parseChord("F12"), { key: "f12", mod: false, shift: false, alt: false });
+  assert.deepEqual(parseChord("alt+k"), { key: "k", mod: false, shift: false, alt: true });
+});
+
+test("only a key with mod or alt held, or a function key, can be a shortcut", () => {
+  assert.equal(canBeShortcut(key("k", { ctrl: true })), true);
+  assert.equal(canBeShortcut(key("k", { meta: true })), true);
+  assert.equal(canBeShortcut(key("k", { alt: true })), true);
+  assert.equal(canBeShortcut(key("F1")), true);
+  assert.equal(canBeShortcut(key("F12", { shift: true })), true);
+  assert.equal(canBeShortcut(key("k")), false);
+  assert.equal(canBeShortcut(key("K", { shift: true })), false);
+  assert.equal(canBeShortcut(key("Escape")), false);
+  assert.equal(canBeShortcut(key("F")), false);
+  assert.equal(canBeShortcut({ ctrlKey: false, metaKey: false, shiftKey: false, altKey: false }), false);
 });
 
 test("mod is Control or Command, and every modifier must match exactly", () => {
