@@ -7,7 +7,6 @@ const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const PROSE_ONLY = [
   /^\.claude\/handoff\//,
-  /^\.github\/ISSUE_TEMPLATE\//,
   /^\.github\/CODEOWNERS$/,
   /^LICENSE$/
 ];

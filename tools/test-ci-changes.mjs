@@ -3,6 +3,8 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { needsChecks, changedFiles } from "./ci-changes.mjs";
+import { isScanned, canScan } from "./comment-gate.mjs";
+import { listRepoFiles } from "./source-scan.mjs";
 
 let passed = 0;
 const failures = [];
@@ -24,6 +26,17 @@ eq("a browser suite needs the checks", needsChecks([".claude/skills/run-splitpag
 eq("a workflow change needs the checks", needsChecks([".github/workflows/ci.yml"]), true);
 eq("an unknown diff runs everything", needsChecks(null), true);
 eq("an empty diff runs everything", needsChecks([]), true);
+eq("an issue template's YAML needs the checks: the comment gate reads it", needsChecks([".github/ISSUE_TEMPLATE/bug.yml"]), true);
+eq("a Markdown issue template is still prose", needsChecks([".github/ISSUE_TEMPLATE/question.md"]), false);
+eq("CODEOWNERS and LICENSE are prose", needsChecks([".github/CODEOWNERS", "LICENSE"]), false);
+
+{
+  const gated = (p) => isScanned(p) && canScan(p);
+  const samples = [".github/ISSUE_TEMPLATE/bug.yml", ".github/ISSUE_TEMPLATE/config.yml", ".github/dependabot.yml", "docs/x.yaml", "tsconfig.json", "Dockerfile", "tools/x.sh"];
+  eq("no file the comment gate reads is prose-only", samples.filter((p) => gated(p) && !needsChecks([p])), []);
+  const tree = listRepoFiles().filter((p) => gated(p) && !needsChecks([p]));
+  eq("and none in the repository is either", tree, []);
+}
 
 console.log("\nchangedFiles():\n");
 
