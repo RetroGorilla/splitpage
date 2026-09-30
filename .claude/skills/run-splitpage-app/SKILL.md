@@ -466,20 +466,30 @@ Filter by full filename: numeric prefixes repeat (`261` and `262` each name
 two suites). Flags `--lanes` (default 6), `--port-base` (offset for a second
 runner on the same machine), `--timeout` (seconds per suite, default 600, at
 most 86400); `LANES`, `PORT_BASE` and `SUITE_TIMEOUT` in the environment do
-the same. An unknown flag is an error. Lane `n` uses HTTP port
-`18100 + base + 10n` and CDP port `19300 + base + 10n`; before starting
-anything the runner binds each of them and holds `HTTP + 1` for the whole run,
-so a second run on the same block stops with a port collision instead of
-fighting the first. Give it another `--port-base`.
+the same, and `--help` prints them all. Parsing is strict: an unknown flag is
+an error, numbers must be plain decimal digits (`" 2"`, `600.0` and `1e1` are
+rejected), and a filter that starts with `-` needs `--` in front of it.
+
+Lane `n` uses HTTP port `18100 + base + 10n` and CDP port `19300 + base + 10n`.
+Before starting anything the runner binds each of them and holds both
+`HTTP + 1` and `CDP + 1` for the whole run, so a run whose ports would overlap
+another's stops with a port collision instead of fighting it. `--port-base`
+must be a multiple of 10. A safe base for a second run is one at least
+`10 × lanes` away from the first run's base and from that base ± 1200, so
+`100` next to a default run of up to 10 lanes. Any overlap, including one run's
+HTTP ports landing on another's CDP ports, is caught before a suite starts.
 
 Its exit status is the answer: 0 only when every suite is `PASS`, meaning
 exactly one `RESULT: n/n checks passed` line with `n` above zero, last on
 stdout, and exit 0. It is 1 when any suite is `FAIL`, `BAD-RESULT` (a
-malformed, zero-check, incomplete, contradictory, repeated or not-last
-`RESULT:` line), `NO-RESULT` (the driver exited without a `RESULT:` line),
-`TIMEOUT` (killed with its browser), `LEFTOVER` (something the driver started
-still held its output open after it exited) or `LAUNCH-ERROR`; 2 when nothing
-matched, a flag is invalid or a port is taken; 3 when the runner itself failed.
+malformed, zero-check, negative, incomplete, contradictory, repeated or
+not-last `RESULT:` line), `NO-RESULT` (the driver exited without a `RESULT:`
+line), `TIMEOUT` (killed with its browser), `LEFTOVER` (something the driver
+started still held its output open 2 s after the driver exited) or
+`LAUNCH-ERROR`. It is 2 when nothing matched, a flag is invalid, the driver or
+suite folder is missing, or a port is taken, and 3 when the runner itself
+failed. After SIGHUP, SIGINT or SIGTERM it exits 129, 130 or 143. SIGTERM used
+to give 130, like Ctrl+C.
 It only ever kills processes it started: on Linux/macOS each driver's own
 process group, on Windows the driver's tree while the driver is alive, and
 Ctrl+C, SIGTERM or an internal error kills them before it exits.
