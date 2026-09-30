@@ -1,0 +1,74 @@
+{
+  "exceptions": [
+    {
+      "rule": "platform-global",
+      "source": "shared/video-embed.js",
+      "target": "global:AbortController"
+    },
+    {
+      "rule": "platform-global",
+      "source": "shared/video-embed.js",
+      "target": "global:clearTimeout"
+    },
+    {
+      "rule": "platform-global",
+      "source": "shared/video-embed.js",
+      "target": "global:setTimeout"
+    },
+    {
+      "rule": "platform-global",
+      "source": "shared/video-embed.js",
+      "target": "global:TextDecoder"
+    },
+    {
+      "rule": "platform-global",
+      "source": "shared/video-embed.js",
+      "target": "global:URL"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "desktop/main.js",
+      "target": "require(path.join(SHARED_ROOT, \"doc-id-policy.js\"))"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "desktop/main.js",
+      "target": "require(path.join(SHARED_ROOT, \"history-policy.js\"))"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "desktop/main.js",
+      "target": "require(path.join(SHARED_ROOT, \"history-store.js\"))"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "desktop/main.js",
+      "target": "require(path.join(SHARED_ROOT, \"video-embed.js\"))"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "desktop/test/verify-dist-payload.test.mjs",
+      "target": "import( pathToFileURL(path.join(here, \"..\", \"verify-dist-payload.mjs\")) )"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "desktop/verify-dist-payload.mjs",
+      "target": "import(pathToFileURL(require.resolve(\"app-builder-lib/out/toolsets/7zip.js\")))"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "tools/test-run-suites.mjs",
+      "target": "import(pathToFileURL(RUNNER).href)"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "tools/test-update.mjs",
+      "target": "import(pathToFileURL(join(testAppRoot, \"update.mjs\")).href)"
+    },
+    {
+      "rule": "unresolved-dynamic",
+      "source": "tools/test-update.mjs",
+      "target": "import(pathToFileURL(updateModulePath).href)"
+    }
+  ]
+}

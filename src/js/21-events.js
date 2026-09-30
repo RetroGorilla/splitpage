@@ -256,7 +256,8 @@ import {
   renderWriter,
   scheduleWriterStats,
   updateWriterFormatState,
-  writerOpen
+  writerOpen,
+  writerUndoStep
 } from "./19-writer.js";
 import {
   acquireWakeLock,
@@ -642,8 +643,13 @@ function onUndoKey(e) {
   if (ownsItsUndo(document.activeElement)) return false;
   if (reviewMode()) return false;
   e.preventDefault();
-  if (redoing) redo(); else undo();
+  undoOrRedo(redoing);
   return true;
+}
+
+function undoOrRedo(redoing) {
+  if (writerUndoStep(redoing ? "redo" : "undo")) return;
+  if (redoing) redo(); else undo();
 }
 
 function onDraftUndoKey(e, box) {
@@ -714,7 +720,7 @@ function onUndoBeforeInput(e) {
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
   if (!cellEl || !isScriptCell(cellEl)) return;
   e.preventDefault();
-  if (e.inputType === "historyRedo") redo(); else undo();
+  undoOrRedo(e.inputType === "historyRedo");
 }
 
 function onFormatBeforeInput(e) {

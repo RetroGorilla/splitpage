@@ -1,5 +1,19 @@
 import js from "@eslint/js";
 import globals from "globals";
+import tseslint from "typescript-eslint";
+
+const typescriptFiles = ["**/*.ts", "**/*.mts", "**/*.cts"];
+
+const commentFree = [
+  "src/core/**",
+  "src/application/**",
+  "src/contracts/**",
+  "src/adapters/**",
+  "src/features/**",
+  "src/bootstrap/**",
+  "src/legacy/**",
+  "tests/**"
+];
 
 const issueRules = {
   "no-redeclare": "error",
@@ -93,5 +107,30 @@ export default [
       sourceType: "module",
       globals: globals.node
     }
+  },
+
+  {
+    files: ["build.mjs"],
+    rules: { "no-control-regex": "off" }
+  },
+
+  ...tseslint.configs.strict.map((config) => ({ ...config, files: typescriptFiles })),
+
+  {
+    files: typescriptFiles,
+    languageOptions: { sourceType: "module" },
+    rules: {
+      "no-undef": "off",
+      "no-unused-vars": "off",
+      "no-redeclare": "off",
+      "@typescript-eslint/no-unused-vars": ["error", { caughtErrors: "none" }],
+      "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/no-import-type-side-effects": "error"
+    }
+  },
+
+  {
+    files: commentFree,
+    linterOptions: { noInlineConfig: true }
   }
 ];
