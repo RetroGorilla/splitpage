@@ -5,8 +5,8 @@ import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
 import { reviewMode } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
-import { screenNow } from "./document-actions.ts";
 import { availableUnless } from "./screen.ts";
+import { screenNow } from "./screen-state.ts";
 
 const VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
 

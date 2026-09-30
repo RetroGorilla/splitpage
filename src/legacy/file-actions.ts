@@ -1,14 +1,13 @@
 import type { ActionRegistry, Availability } from "../application/actions.ts";
-import { S } from "../js/_state.js";
 import { saveDoc } from "../js/14-export.js";
 import { openLocalFile } from "../js/18-local-files.js";
 import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
 import { openExportDialog } from "../js/18c-export-dialog.js";
 import { closeCommandMenu, commandMenuOpen, openCommandMenu } from "../js/18d-command-menu.js";
-import { screenNow } from "./document-actions.ts";
 import { menuItemAvailability } from "./menu-items.ts";
 import { availableUnless } from "./screen.ts";
 import type { Blocker } from "./screen.ts";
+import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 function buttonAllows(id: string): Availability | null {
   const button = document.getElementById(id);
@@ -16,7 +15,7 @@ function buttonAllows(id: string): Availability | null {
 }
 
 function pageOwnsKeys(): boolean {
-  return !S.DESKTOP;
+  return !inDesktopApp();
 }
 
 function unless(blockers: readonly Blocker[], own: Availability | null): Availability {
