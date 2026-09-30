@@ -12,7 +12,7 @@ export function bindShortcuts(target: EventTarget, registry: ActionRegistry, opt
     const action = actionForKey(registry.shortcuts(), event as unknown as KeyInput);
     if (action === null) return;
     const outcome = registry.invoke(action.id, "shortcut");
-    if (outcome.kind === "ran" || action.claim) event.preventDefault();
+    if (outcome.kind === "ran" || outcome.kind === "failed" || action.claim) event.preventDefault();
     options.onOutcome?.(outcome);
   };
   target.addEventListener("keydown", onKeyDown);
