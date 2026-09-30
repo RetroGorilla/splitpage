@@ -34,6 +34,28 @@ test("a hidden action is not listed but still runs from a surface that has it", 
   assert.equal(ran, 1);
 });
 
+test("availability can depend on the surface that asks, and a view is the command menu's reading", () => {
+  const registry = createActionRegistry();
+  const asked: ActionSource[] = [];
+  let ran = 0;
+  registry.register({
+    id: "save", label: "Save", group: "G",
+    availability: (source) => {
+      asked.push(source);
+      return source === "shortcut" ? { enabled: false, reason: "Still loading…" } : { enabled: true };
+    },
+    run: () => { ran++; }
+  });
+  assert.deepEqual(registry.invoke("save", "shortcut"), { kind: "unavailable", id: "save", reason: "Still loading…" });
+  assert.equal(registry.invoke("save", "button").kind, "ran");
+  assert.equal(registry.view("save")?.enabled, true);
+  assert.equal(registry.view("save", "shortcut")?.enabled, false);
+  assert.equal(registry.list()[0]?.enabled, true);
+  assert.equal(registry.list("shortcut")[0]?.reason, "Still loading…");
+  assert.deepEqual(asked, ["shortcut", "button", "command-menu", "shortcut", "command-menu", "shortcut"]);
+  assert.equal(ran, 1);
+});
+
 test("an unknown action is reported as unknown", () => {
   assert.deepEqual(createActionRegistry().invoke("nope", "menu"), { kind: "unknown", id: "nope" });
 });

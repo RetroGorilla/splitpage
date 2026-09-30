@@ -24,7 +24,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       group: "This document",
       icon: "i-rundown-min",
       words: "rundown strip timeline minimize collapse thin bar more room",
-      availability: () => availableUnless(["loading"], screenNow(), isRundownMinimized()),
+      availability: (source) => availableUnless(source === "button" ? [] : ["loading"], screenNow(), isRundownMinimized()),
       run: () => { toggleRundownMinimized(); }
     }),
     registry.register({

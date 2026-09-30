@@ -106,7 +106,7 @@ sleep 200
 expect !__shown('findbar')
 
 # --- behind the open command menu Export does nothing; Ctrl+K closes it ------
-# (Find and Hide shot scenes still answer there: 275-shortcuts-as-before.txt)
+# (Find and Hide shot scenes still answer there: 278-commands-as-before.txt)
 key ctrl KeyK
 sleep 200
 expect __shown('cmdk')

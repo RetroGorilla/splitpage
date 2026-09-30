@@ -9,7 +9,7 @@ a button, and the desktop app's native menu (which clicks the File menu item).
 `src/application/actions.ts` holds the registry. A definition has a stable
 `id`, a `label`, a `group` (the command menu's heading), an optional `icon`,
 `keys` (chords such as `mod+alt+h`; `mod` is Control or Command), search
-`words`, an `availability()` and a `run(source)`.
+`words`, an `availability(source)` and a `run(source)`.
 
 `invoke(id, source)` checks availability and returns one of:
 
@@ -24,6 +24,26 @@ A handler may return a promise (`run` returns `void | Promise<void>`). The
 outcome is then `ran` as soon as it starts, and a rejection reaches `report`
 with the action's id, so an asynchronous failure is reported the same way as
 a synchronous one rather than disappearing into a discarded promise.
+
+`availability` is told which surface asks. `view(id, source)` and
+`list(source)` default to `"command-menu"`, the command menu being the one
+reader of a view. An action is meant to be allowed and refused alike on every
+surface, and almost every definition ignores the source. The exceptions keep
+differences the surfaces had in 3.1, which 4.0 does not change:
+
+| Action | Difference kept from 3.1 |
+| --- | --- |
+| `save` | Its buttons and the native menu (which clicked the header's Save) do not wait for the document to load; Ctrl+S does |
+| `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
+| `write` | In a review session the command menu reads "Viewing only — the writer changes the script"; the button and the native menu say "Viewing only — you can comment on this script, but not change it." |
+| `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source) |
+
+Two others differ by action rather than by surface, as in 3.1: the
+Production and Gear buttons say "Still loading..." and the B-roll button does
+not wait for the document at all. `tests/legacy/while-loading.test.ts` checks
+the loading cases against the real definitions (the browser suites cannot
+reach a page that is still loading); `278-commands-as-before.txt` checks the
+rest, and passes against 3.1's code too.
 
 Each surface decides how to show a refusal. A surface that says why calls
 `invokeFrom(id, source)` (`12-dirty-toast.js`) rather than `invoke`: it
