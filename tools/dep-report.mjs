@@ -1,17 +1,20 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join, posix } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { REPO, isScript, listRepoFiles, parseScript, lineOf } from "./source-scan.mjs";
+import { REPO, isScript, listRepoFiles, parseScript } from "./source-scan.mjs";
 
 export const BASELINE_PATH = join(REPO, "tools", "dep-baseline.json");
+export const STATE_MODULE = "src/js/_state.js";
+export const STATE_EXPORT = "S";
 
 const EXCLUDED = [/^node_modules\//, /\/node_modules\//, /^\.claude\/handoff\//, /^index\.html$/];
 const RESOLVE_SUFFIXES = ["", ".ts", ".js", ".mjs", ".cjs", ".mts", ".cts", ".json", "/index.ts", "/index.js", "/index.mjs"];
 const BUILTINS = new Set(builtinModules.flatMap((m) => [m, m.replace(/^node:/, "")]));
 
 export const MIGRATED_LAYERS = ["core", "contracts", "application", "adapters", "features", "bootstrap", "legacy"];
+const NON_PRODUCTION = ["tests", "tools", "other"];
 
 const CORE_DEPENDENCIES = {
   "core/document": ["core/document"],
@@ -31,6 +34,34 @@ const PLATFORM_GLOBALS = new Set([
 
 const COMMONJS_GLOBALS = new Set(["require", "module", "exports"]);
 
+export const MUTATING_METHODS = new Set(["push", "pop", "splice", "shift", "unshift", "sort", "reverse", "fill", "copyWithin"]);
+
+const ELEMENT_CALLBACKS = new Map([
+  ...["forEach", "map", "filter", "some", "every", "find", "findIndex", "findLast", "findLastIndex", "flatMap"].map((m) => [m, 0]),
+  ["reduce", 1],
+  ["reduceRight", 1]
+]);
+
+const OBJECT_MUTATORS = {
+  Object: new Set(["assign", "defineProperty", "defineProperties", "setPrototypeOf"]),
+  Reflect: new Set(["set", "deleteProperty", "defineProperty", "setPrototypeOf"])
+};
+
+const MAX_STATE_PATH = 6;
+
+const TYPE_ONLY_KINDS = new Set(["type", "import-type"]);
+const VALUE_AND_TYPE_KINDS = new Set(["class", "enum", "namespace", "import", "import-equals"]);
+
+const BINDING_KINDS = new Set([
+  "ImportDeclaration", "ExportDeclaration", "ImportEqualsDeclaration", "ImportType", "ExportAssignment", "VariableStatement",
+  "VariableDeclarationList", "FunctionDeclaration", "FunctionExpression", "ArrowFunction", "MethodDeclaration", "Constructor",
+  "GetAccessor", "SetAccessor", "CallSignature", "ConstructSignature", "MethodSignature", "IndexSignature", "FunctionType",
+  "ConstructorType", "JSDocFunctionType", "ClassStaticBlockDeclaration", "ClassDeclaration", "ClassExpression", "PropertyDeclaration",
+  "TypeParameter", "InterfaceDeclaration", "TypeAliasDeclaration", "EnumDeclaration", "ModuleDeclaration", "ModuleBlock",
+  "ForOfStatement", "ForStatement", "ForInStatement", "Block", "CaseBlock", "MappedType", "ConditionalType", "CatchClause",
+  "CallExpression"
+].map((name) => ts.SyntaxKind[name]));
+
 export function layerOf(path) {
   if (path.startsWith("src/test/") || path.startsWith("tests/") || /\.test\.[cm]?[jt]s$/.test(path)) return "tests";
   const core = /^src\/core\/([^/]+)\//.exec(path);
@@ -41,6 +72,7 @@ export function layerOf(path) {
   const top = /^src\/(application|contracts|adapters|bootstrap|legacy)\//.exec(path);
   if (top) return top[1];
   if (path.startsWith("src/js/")) return "legacy-js";
+  if (path.startsWith("src/")) return "src-unknown";
   if (path.startsWith("shared/")) return "shared";
   if (path.startsWith("server/")) return "server";
   if (path.startsWith("desktop/")) return "desktop";
@@ -50,6 +82,10 @@ export function layerOf(path) {
 
 export function isMigrated(layer) {
   return MIGRATED_LAYERS.includes(layer.split("/")[0]);
+}
+
+export function isProduction(layer) {
+  return !NON_PRODUCTION.includes(layer);
 }
 
 function isCore(layer) {
@@ -107,98 +143,536 @@ function literalText(node) {
   return null;
 }
 
-function isDeclarationName(node) {
-  const p = node.parent;
-  if (!p) return false;
-  if ((ts.isPropertyAccessExpression(p) || ts.isQualifiedName(p)) && p.name === node) return true;
-  if ((ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p) || ts.isPropertySignature(p) || ts.isMethodDeclaration(p)
-    || ts.isMethodSignature(p) || ts.isGetAccessorDeclaration(p) || ts.isSetAccessorDeclaration(p) || ts.isEnumMember(p)) && p.name === node) return true;
-  if ((ts.isImportSpecifier(p) || ts.isExportSpecifier(p)) && (p.propertyName === node || p.name === node)) return true;
-  if ((ts.isLabeledStatement(p) || ts.isBreakStatement(p) || ts.isContinueStatement(p)) && p.label === node) return true;
-  if (ts.isBindingElement(p) && p.propertyName === node) return true;
-  if (ts.isJsxAttribute(p) && p.name === node) return true;
-  return false;
+function keyOf(node) {
+  if (node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isNumericLiteral(node))) return node.text;
+  return "*";
 }
 
-function collectDeclaredNames(sf) {
-  const names = new Set();
-  const visit = (node) => {
-    if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)) && ts.isIdentifier(node.name)) names.add(node.name.text);
-    if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isFunctionExpression(node) || ts.isClassExpression(node)
-      || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node)) && node.name) names.add(node.name.text);
-    if (ts.isImportClause(node) && node.name) names.add(node.name.text);
-    if (ts.isNamespaceImport(node) || ts.isImportSpecifier(node) || ts.isImportEqualsDeclaration(node)) names.add(node.name.text);
-    ts.forEachChild(node, visit);
+function staticName(node) {
+  if (ts.isIdentifier(node) || ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isPrivateIdentifier(node)) return node.text;
+  if (ts.isComputedPropertyName(node)) {
+    const key = keyOf(node.expression);
+    return key === "*" ? null : key;
+  }
+  return null;
+}
+
+function isWrapper(node) {
+  return ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isAsExpression(node)
+    || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node);
+}
+
+function unwrap(node) {
+  while (isWrapper(node)) node = node.expression;
+  return node;
+}
+
+function outermost(node) {
+  while (node.parent && isWrapper(node.parent)) node = node.parent;
+  return node;
+}
+
+function hasModifier(node, kind) {
+  return Boolean(node.modifiers?.some((m) => m.kind === kind));
+}
+
+const NAMED_DECLARATIONS = [
+  ts.isPropertyAssignment, ts.isPropertyDeclaration, ts.isPropertySignature, ts.isMethodDeclaration, ts.isMethodSignature,
+  ts.isGetAccessorDeclaration, ts.isSetAccessorDeclaration, ts.isEnumMember, ts.isEnumDeclaration, ts.isInterfaceDeclaration,
+  ts.isTypeAliasDeclaration, ts.isClassDeclaration, ts.isClassExpression, ts.isFunctionDeclaration, ts.isFunctionExpression,
+  ts.isVariableDeclaration, ts.isParameter, ts.isTypeParameterDeclaration, ts.isModuleDeclaration, ts.isImportClause,
+  ts.isNamespaceImport, ts.isNamespaceExport, ts.isImportEqualsDeclaration, ts.isNamedTupleMember, ts.isJsxAttribute,
+  ts.isImportAttribute, ts.isNamespaceExportDeclaration
+];
+
+function isReference(node) {
+  const p = node.parent;
+  if (!p) return false;
+  if (ts.isPropertyAccessExpression(p)) return p.expression === node;
+  if (ts.isQualifiedName(p)) return p.left === node;
+  if (ts.isShorthandPropertyAssignment(p)) return true;
+  if (ts.isBindingElement(p)) return p.initializer === node;
+  if (ts.isImportSpecifier(p) || ts.isExportSpecifier(p)) return false;
+  if (ts.isMetaProperty(p) || ts.isTypePredicateNode(p)) return false;
+  if (ts.isLabeledStatement(p) || ts.isBreakStatement(p) || ts.isContinueStatement(p)) return false;
+  if (p.name === node && NAMED_DECLARATIONS.some((is) => is(p))) return false;
+  return true;
+}
+
+function referenceSpace(node) {
+  const p = node.parent;
+  if (ts.isTypeReferenceNode(p) && p.typeName === node) return "type";
+  if ((ts.isQualifiedName(p) && p.left === node) || (ts.isTypeQueryNode(p) && p.exprName === node)) return "typeof";
+  if (ts.isExpressionWithTypeArguments(p) && p.expression === node && ts.isHeritageClause(p.parent)
+    && (p.parent.token === ts.SyntaxKind.ImplementsKeyword || ts.isInterfaceDeclaration(p.parent.parent))) return "type";
+  return "value";
+}
+
+function isAssignmentOperator(kind) {
+  return kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
+}
+
+function isPatternTarget(literal) {
+  if (!ts.isArrayLiteralExpression(literal) && !ts.isObjectLiteralExpression(literal)) return false;
+  return writeKind(literal) !== null;
+}
+
+function writeKind(node) {
+  const n = outermost(node);
+  const p = n.parent;
+  if (!p) return null;
+  if (ts.isBinaryExpression(p) && p.left === n && isAssignmentOperator(p.operatorToken.kind)) return "assign";
+  if ((ts.isPrefixUnaryExpression(p) || ts.isPostfixUnaryExpression(p))
+    && (p.operator === ts.SyntaxKind.PlusPlusToken || p.operator === ts.SyntaxKind.MinusMinusToken)) return "assign";
+  if (ts.isDeleteExpression(p)) return "delete";
+  if ((ts.isForInStatement(p) || ts.isForOfStatement(p)) && p.initializer === n) return "assign";
+  if (ts.isArrayLiteralExpression(p) || ts.isSpreadElement(p) || ts.isSpreadAssignment(p)) {
+    const literal = ts.isArrayLiteralExpression(p) ? p : p.parent;
+    return isPatternTarget(literal) ? "assign" : null;
+  }
+  if (ts.isPropertyAssignment(p) && p.initializer === n) return isPatternTarget(p.parent) ? "assign" : null;
+  if (ts.isShorthandPropertyAssignment(p) && p.name === n) return isPatternTarget(p.parent) ? "assign" : null;
+  return null;
+}
+
+function chainOf(expr) {
+  const path = [];
+  let e = expr;
+  for (;;) {
+    if (isWrapper(e)) { e = e.expression; continue; }
+    if (ts.isPropertyAccessExpression(e)) { path.unshift(e.name.text); e = e.expression; continue; }
+    if (ts.isElementAccessExpression(e)) { path.unshift(keyOf(e.argumentExpression)); e = e.expression; continue; }
+    break;
+  }
+  return ts.isIdentifier(e) ? { root: e, path } : null;
+}
+
+function bindScopes(sf) {
+  const refs = [];
+  const refOf = new Map();
+  const bindings = [];
+  const elementOf = new Map();
+  const loads = [];
+  const reexports = [];
+  const localExports = [];
+  const scopeOf = (parent, isFunction) => ({ parent, isFunction, values: new Map(), types: new Map() });
+  const moduleScope = scopeOf(null, true);
+  const functionScope = (s) => { while (!s.isFunction) s = s.parent; return s; };
+
+  const declare = (s, id, kind, extra = {}) => {
+    const spaces = TYPE_ONLY_KINDS.has(kind) ? [s.types] : VALUE_AND_TYPE_KINDS.has(kind) ? [s.values, s.types] : [s.values];
+    const existing = spaces[0].get(id.text);
+    if (existing) { existing.reassigned = true; return existing; }
+    const b = { name: id.text, kind, reassigned: false, source: null, aliasInit: null, aliasPath: null, accesses: [], ...extra };
+    for (const names of spaces) names.set(id.text, b);
+    bindings.push(b);
+    return b;
   };
-  visit(sf);
-  return names;
+
+  const loadOf = (init) => {
+    let e = unwrap(init);
+    let awaited = false;
+    if (ts.isAwaitExpression(e)) { awaited = true; e = unwrap(e.expression); }
+    if (!ts.isCallExpression(e)) return null;
+    const spec = literalText(e.arguments[0]);
+    if (spec === null) return null;
+    if (e.expression.kind === ts.SyntaxKind.ImportKeyword && awaited) return { spec, call: e, requireCallee: null };
+    if (ts.isIdentifier(e.expression) && e.expression.text === "require") return { spec, call: e, requireCallee: e.expression };
+    return null;
+  };
+
+  const declarePattern = (name, target, kind, init, path, load, s, out) => {
+    if (ts.isIdentifier(name)) {
+      const b = declare(target, name, kind);
+      if (path !== null && load) b.source = { spec: load.spec, via: path, node: load.call, requireCallee: load.requireCallee };
+      else if (path !== null && init) { b.aliasInit = init; b.aliasPath = path; }
+      out.push(b);
+      return;
+    }
+    const isObject = ts.isObjectBindingPattern(name);
+    name.elements.forEach((el, i) => {
+      if (ts.isOmittedExpression(el)) return;
+      let key = null;
+      if (!el.dotDotDotToken) key = isObject ? staticName(el.propertyName ?? el.name) : String(i);
+      if (el.propertyName && ts.isComputedPropertyName(el.propertyName)) walk(el.propertyName.expression, s);
+      if (el.initializer) walk(el.initializer, s);
+      declarePattern(el.name, target, kind, init, path !== null && key !== null ? [...path, key] : null, load, s, out);
+    });
+  };
+
+  const declareVariables = (list, s, element = null) => {
+    const flags = list.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const | ts.NodeFlags.Using);
+    const kind = flags === 0 ? "var" : flags === ts.NodeFlags.Let ? "let" : "const";
+    const target = flags === 0 ? functionScope(s) : s;
+    const out = [];
+    for (const d of list.declarations) {
+      const init = d.initializer ?? null;
+      declarePattern(d.name, target, kind, init ?? element, init || !element ? [] : ["*"], init ? loadOf(init) : null, s, out);
+      if (d.type) walk(d.type, s);
+      if (init) walk(init, s);
+    }
+    return out;
+  };
+
+  const declareParameter = (p, fs, element) => {
+    for (const m of p.modifiers ?? []) if (ts.isDecorator(m)) walk(m.expression, fs);
+    declarePattern(p.name, fs, "param", element, element ? ["*"] : null, null, fs, []);
+    if (p.type) walk(p.type, fs);
+    if (p.initializer) walk(p.initializer, fs);
+  };
+
+  const recordLoad = (call, kind) => {
+    const spec = literalText(call.arguments[0]);
+    const requireCallee = kind === "require" ? call.expression : null;
+    loads.push({ call, kind, spec, requireCallee });
+  };
+
+  const handleImport = (node, s) => {
+    const spec = literalText(node.moduleSpecifier);
+    const clause = node.importClause;
+    if (!clause || spec === null) return;
+    const source = (via) => ({ source: { spec, via, node, requireCallee: null } });
+    const kind = (typeOnly) => (clause.isTypeOnly || typeOnly ? "import-type" : "import");
+    if (clause.name) declare(s, clause.name, kind(false), source(["default"]));
+    const nb = clause.namedBindings;
+    if (nb && ts.isNamespaceImport(nb)) declare(s, nb.name, kind(false), source([]));
+    if (nb && ts.isNamedImports(nb)) {
+      for (const el of nb.elements) declare(s, el.name, kind(el.isTypeOnly), source([(el.propertyName ?? el.name).text]));
+    }
+  };
+
+  const handleExport = (node, s) => {
+    const spec = node.moduleSpecifier ? literalText(node.moduleSpecifier) : null;
+    if (spec !== null) {
+      if (!node.exportClause) reexports.push({ star: true, spec, node });
+      else if (ts.isNamespaceExport(node.exportClause)) reexports.push({ name: node.exportClause.name.text, spec, via: [], node });
+      else {
+        for (const el of node.exportClause.elements) reexports.push({ name: el.name.text, spec, via: [(el.propertyName ?? el.name).text], node });
+      }
+      return;
+    }
+    if (node.moduleSpecifier || !node.exportClause || !ts.isNamedExports(node.exportClause)) return;
+    for (const el of node.exportClause.elements) {
+      const local = el.propertyName ?? el.name;
+      if (ts.isIdentifier(local)) localExports.push({ name: el.name.text, local, scope: s, node });
+    }
+  };
+
+  const walkFunction = (node, s) => {
+    for (const m of node.modifiers ?? []) if (ts.isDecorator(m)) walk(m.expression, s);
+    if (node.name && ts.isComputedPropertyName(node.name)) walk(node.name.expression, s);
+    if (ts.isFunctionDeclaration(node) && node.name) declare(s, node.name, "function");
+    const fs = scopeOf(s, true);
+    if (ts.isFunctionExpression(node) && node.name) declare(fs, node.name, "function");
+    for (const tp of node.typeParameters ?? []) walk(tp, fs);
+    const element = elementOf.get(node);
+    (node.parameters ?? []).forEach((p, i) => declareParameter(p, fs, element && element.index === i ? element.init : null));
+    if (node.type) walk(node.type, fs);
+    const body = node.body;
+    if (!body) return;
+    const bs = scopeOf(fs, true);
+    if (ts.isBlock(body)) for (const st of body.statements) walk(st, bs);
+    else walk(body, bs);
+  };
+
+  const walkClass = (node, s) => {
+    for (const m of node.modifiers ?? []) if (ts.isDecorator(m)) walk(m.expression, s);
+    if (ts.isClassDeclaration(node) && node.name) declare(s, node.name, "class");
+    const cs = scopeOf(s, false);
+    if (ts.isClassExpression(node) && node.name) declare(cs, node.name, "class");
+    for (const tp of node.typeParameters ?? []) walk(tp, cs);
+    for (const h of node.heritageClauses ?? []) walk(h, cs);
+    for (const m of node.members) walk(m, cs);
+  };
+
+  const children = (node, s) => ts.forEachChild(node, (c) => { walk(c, s); });
+
+  function walk(node, s) {
+    if (ts.isIdentifier(node)) {
+      if (isReference(node)) {
+        const r = { node, scope: s, space: referenceSpace(node), binding: null };
+        refs.push(r);
+        refOf.set(node, r);
+      }
+      return;
+    }
+    if (!BINDING_KINDS.has(node.kind)) { children(node, s); return; }
+    if (hasModifier(node, ts.SyntaxKind.DeclareKeyword)) return;
+    if (ts.isImportDeclaration(node)) { handleImport(node, s); return; }
+    if (ts.isExportDeclaration(node)) { handleExport(node, s); return; }
+    if (ts.isImportEqualsDeclaration(node)) { declare(s, node.name, "import-equals"); return; }
+    if (ts.isImportTypeNode(node)) { for (const t of node.typeArguments ?? []) walk(t, s); return; }
+    if (ts.isExportAssignment(node)) {
+      walk(node.expression, s);
+      if (!node.isExportEquals) localExports.push({ name: "default", expression: node.expression, scope: s, node });
+      return;
+    }
+    if (ts.isVariableStatement(node)) {
+      const declared = declareVariables(node.declarationList, s);
+      if (hasModifier(node, ts.SyntaxKind.ExportKeyword)) for (const b of declared) localExports.push({ name: b.name, binding: b, scope: s, node });
+      return;
+    }
+    if (ts.isVariableDeclarationList(node)) { declareVariables(node, s); return; }
+    if (ts.isFunctionLike(node) || ts.isClassStaticBlockDeclaration(node)) { walkFunction(node, s); return; }
+    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) { walkClass(node, s); return; }
+    if (ts.isTypeParameterDeclaration(node)) { declare(s, node.name, "type"); children(node, s); return; }
+    if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node)) {
+      declare(s, node.name, ts.isEnumDeclaration(node) ? "enum" : "type");
+      children(node, scopeOf(s, false));
+      return;
+    }
+    if (ts.isModuleDeclaration(node)) {
+      if (ts.isIdentifier(node.name)) declare(s, node.name, "namespace");
+      if (node.body) walk(node.body, s);
+      return;
+    }
+    if (ts.isModuleBlock(node)) { children(node, scopeOf(s, true)); return; }
+    if (ts.isForOfStatement(node)) {
+      const ls = scopeOf(s, false);
+      if (ts.isVariableDeclarationList(node.initializer)) declareVariables(node.initializer, ls, node.expression);
+      else walk(node.initializer, ls);
+      walk(node.expression, ls);
+      walk(node.statement, ls);
+      return;
+    }
+    if (ts.isBlock(node) || ts.isCaseBlock(node) || ts.isForStatement(node) || ts.isForInStatement(node)
+      || ts.isMappedTypeNode(node) || ts.isConditionalTypeNode(node)) {
+      children(node, scopeOf(s, false));
+      return;
+    }
+    if (ts.isCatchClause(node)) {
+      const cs = scopeOf(s, false);
+      if (node.variableDeclaration) declarePattern(node.variableDeclaration.name, cs, "let", null, null, null, cs, []);
+      walk(node.block, cs);
+      return;
+    }
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const fn = node.arguments[0];
+      if (callee.kind === ts.SyntaxKind.ImportKeyword) recordLoad(node, "dynamic-import");
+      else if (ts.isIdentifier(callee) && callee.text === "require") recordLoad(node, "require");
+      else if (ts.isPropertyAccessExpression(callee) && ELEMENT_CALLBACKS.has(callee.name.text) && fn && (ts.isFunctionExpression(fn) || ts.isArrowFunction(fn))) {
+        elementOf.set(fn, { init: callee.expression, index: ELEMENT_CALLBACKS.get(callee.name.text) });
+      }
+    }
+    children(node, s);
+  }
+
+  walk(sf, moduleScope);
+
+  const lookup = (s, name, space = "typeof") => {
+    for (let c = s; c; c = c.parent) {
+      const b = (space === "type" ? c.types : c.values).get(name);
+      if (b) return b;
+      const typeImport = space === "typeof" ? c.types.get(name) : null;
+      if (typeImport?.kind === "import-type") return typeImport;
+    }
+    return null;
+  };
+  for (const r of refs) {
+    r.binding = lookup(r.scope, r.node.text, r.space);
+    if (r.binding && writeKind(r.node) === "assign") r.binding.reassigned = true;
+  }
+  const isFree = (identifier) => !refOf.get(identifier)?.binding;
+  return { refs, refOf, bindings, loads, reexports, localExports, lookup, isFree };
+}
+
+function accessAt(identifier, isFree) {
+  const path = [];
+  let n = identifier;
+  for (;;) {
+    const p = n.parent;
+    if (isWrapper(p)) { n = p; continue; }
+    if (ts.isPropertyAccessExpression(p) && p.expression === n) { path.push(p.name.text); n = p; continue; }
+    if (ts.isElementAccessExpression(p) && p.expression === n) { path.push(keyOf(p.argumentExpression)); n = p; continue; }
+    break;
+  }
+  if (writeKind(n)) return { path, write: "set", node: n };
+  const p = n.parent;
+  if (ts.isCallExpression(p) && p.expression === n && path.length && MUTATING_METHODS.has(path[path.length - 1])) {
+    return { path: path.slice(0, -1), write: "mutate", node: n };
+  }
+  if (ts.isCallExpression(p) && p.arguments[0] === n && ts.isPropertyAccessExpression(p.expression) && ts.isIdentifier(p.expression.expression)) {
+    const owner = p.expression.expression;
+    if (OBJECT_MUTATORS[owner.text]?.has(p.expression.name.text) && isFree(owner)) return { path, write: "mutate", node: n };
+  }
+  return { path, write: null, node: n };
 }
 
 export function analyzeScript(path, text) {
   const sf = parseScript(path, text);
+  const commonjs = /\.c[jt]s$/.test(path) || sf.statements.some((s) => ts.isExpressionStatement(s) && literalText(s.expression) === "use strict");
+  const at = (node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+  const scopes = bindScopes(sf);
+  const { refs, refOf, isFree } = scopes;
+
+  const loadsByCall = new Map(scopes.loads.map((l) => [l.call, l]));
+  const liveLoad = (l) => l.kind !== "require" || isFree(l.requireCallee);
   const imports = [];
   const unresolved = [];
-  const globals = new Map();
-  const state = { importsState: false, stateWrites: 0, stateFieldWrites: 0, stateReads: 0 };
-  const declared = collectDeclaredNames(sf);
-  const commonjs = /\.c[jt]s$/.test(path) || sf.statements.some((s) => ts.isExpressionStatement(s) && literalText(s.expression) === "use strict");
-  const at = (node) => lineOf(text, node.getStart(sf));
-  const add = (spec, typeOnly, kind, node) => imports.push({ spec, typeOnly, kind, line: at(node) });
-  let stateName = null;
-
-  const visit = (node) => {
+  const visitEdges = (node) => {
     if (ts.isImportDeclaration(node)) {
       const spec = literalText(node.moduleSpecifier);
-      if (spec !== null) {
-        add(spec, Boolean(node.importClause?.isTypeOnly), "import", node);
-        if (/(^|\/)_state(\.js)?$/.test(spec) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
-          for (const el of node.importClause.namedBindings.elements) {
-            if ((el.propertyName ?? el.name).text === "S") { state.importsState = true; stateName = el.name.text; }
-          }
-        }
-      }
+      if (spec !== null) imports.push({ spec, typeOnly: Boolean(node.importClause?.isTypeOnly), kind: "import", line: at(node) });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
       const spec = literalText(node.moduleSpecifier);
-      if (spec !== null) add(spec, node.isTypeOnly, "re-export", node);
+      if (spec !== null) imports.push({ spec, typeOnly: node.isTypeOnly, kind: "re-export", line: at(node) });
     } else if (ts.isImportTypeNode(node)) {
       const arg = node.argument;
       const spec = ts.isLiteralTypeNode(arg) ? literalText(arg.literal) : null;
-      if (spec !== null) add(spec, true, "type-import", node);
-    } else if (ts.isCallExpression(node)) {
-      const callee = node.expression;
-      const isDynamicImport = callee.kind === ts.SyntaxKind.ImportKeyword;
-      const isRequire = ts.isIdentifier(callee) && callee.text === "require" && !declared.has("require");
-      if (isDynamicImport || isRequire) {
-        const spec = literalText(node.arguments[0]);
-        const kind = isDynamicImport ? "dynamic-import" : "require";
-        if (spec !== null) add(spec, false, kind, node);
-        else unresolved.push({ kind, expression: node.getText(sf).replace(/\s+/g, " "), line: at(node) });
-      }
-    } else if (ts.isIdentifier(node) && PLATFORM_GLOBALS.has(node.text) && !declared.has(node.text) && !isDeclarationName(node)) {
-      if (!(commonjs && COMMONJS_GLOBALS.has(node.text))) {
-        if (!globals.has(node.text)) globals.set(node.text, at(node));
+      if (spec !== null) imports.push({ spec, typeOnly: true, kind: "type-import", line: at(node) });
+    } else if (ts.isCallExpression(node) && loadsByCall.has(node)) {
+      const l = loadsByCall.get(node);
+      if (liveLoad(l)) {
+        if (l.spec !== null) imports.push({ spec: l.spec, typeOnly: false, kind: l.kind, line: at(node) });
+        else unresolved.push({ kind: l.kind, expression: node.getText(sf).replace(/\s+/g, " "), line: at(node) });
       }
     }
-    if (stateName && ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === stateName) {
-      const p = node.parent;
-      const written = p && ts.isBinaryExpression(p) && p.left === node && p.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && p.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
-      const updated = p && (ts.isPrefixUnaryExpression(p) || ts.isPostfixUnaryExpression(p)) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(p.operator);
-      const deleted = p && ts.isDeleteExpression(p);
-      if (written || updated || deleted) {
-        state.stateFieldWrites++;
-        if (node.name.text === "state") state.stateWrites++;
-      } else {
-        state.stateReads++;
-      }
-    }
-    ts.forEachChild(node, visit);
+    ts.forEachChild(node, visitEdges);
   };
-  visit(sf);
-  return { imports, unresolved, globals: [...globals].map(([name, line]) => ({ name, line })), state };
+  visitEdges(sf);
+
+  const globals = new Map();
+  for (const r of refs) {
+    const name = r.node.text;
+    if (r.binding || !PLATFORM_GLOBALS.has(name) || (commonjs && COMMONJS_GLOBALS.has(name))) continue;
+    const line = at(r.node);
+    if (!globals.has(name) || globals.get(name) > line) globals.set(name, line);
+  }
+
+  const memo = new Map();
+  const targetOf = (b, seen) => {
+    if (memo.has(b)) return memo.get(b);
+    let t = null;
+    if (b.source) {
+      if (!b.source.requireCallee || isFree(b.source.requireCallee)) t = { root: b, path: [] };
+    } else if (b.aliasInit && !b.reassigned && !seen.has(b)) {
+      seen.add(b);
+      const chain = chainOf(b.aliasInit);
+      const inner = chain ? refOf.get(chain.root)?.binding : null;
+      const it = inner ? targetOf(inner, seen) : null;
+      if (it) t = { root: it.root, path: [...it.path, ...chain.path, ...b.aliasPath] };
+    }
+    memo.set(b, t);
+    return t;
+  };
+
+  for (const r of refs) {
+    if (!r.binding) continue;
+    const t = targetOf(r.binding, new Set());
+    if (!t) continue;
+    const access = accessAt(r.node, isFree);
+    t.root.accesses.push({ path: [...t.path, ...access.path], write: access.write, line: access.write ? at(access.node) : 0 });
+  }
+
+  const sources = [];
+  const boundCalls = new Set();
+  for (const b of scopes.bindings) {
+    if (!b.source || (b.source.requireCallee && !isFree(b.source.requireCallee))) continue;
+    if (ts.isCallExpression(b.source.node)) boundCalls.add(b.source.node);
+    sources.push({ spec: b.source.spec, via: b.source.via, line: at(b.source.node), accesses: b.accesses });
+  }
+
+  const loads = scopes.loads
+    .filter((l) => l.spec !== null && liveLoad(l) && !boundCalls.has(l.call))
+    .map((l) => ({ spec: l.spec, line: at(l.call) }));
+
+  const exportsOut = scopes.reexports.map((e) => (e.star ? { star: true, spec: e.spec, line: at(e.node) } : { name: e.name, spec: e.spec, via: e.via, line: at(e.node) }));
+  for (const e of scopes.localExports) {
+    let binding = e.binding ?? null;
+    let extra = [];
+    if (e.local) binding = scopes.lookup(e.scope, e.local.text);
+    if (e.expression) {
+      const chain = chainOf(e.expression);
+      binding = chain ? refOf.get(chain.root)?.binding ?? null : null;
+      extra = chain ? chain.path : [];
+    }
+    const t = binding ? targetOf(binding, new Set()) : null;
+    if (!t) continue;
+    exportsOut.push({ name: e.name, spec: t.root.source.spec, via: [...t.root.source.via, ...t.path, ...extra], line: at(e.node) });
+  }
+
+  return { imports, unresolved, globals: [...globals].map(([name, line]) => ({ name, line })), sources, loads, exports: exportsOut };
 }
 
 export function isAnalyzed(path) {
   return isScript(path) && !EXCLUDED.some((re) => re.test(path)) && !/(^|\/)(eslint\.config|vitest\.config)\.[cm]?js$/.test(path);
+}
+
+function prefixOf(a, b) {
+  return a.length <= b.length && a.every((k, i) => k === b[i] || k === "*" || b[i] === "*");
+}
+
+function stateProviders(modules) {
+  const provides = new Map();
+  const truncated = new Set();
+  const add = (path, entry) => {
+    if (entry.path.length > MAX_STATE_PATH || entry.sub.length > MAX_STATE_PATH) { truncated.add(path); return false; }
+    const list = provides.get(path) ?? [];
+    const k = JSON.stringify(entry);
+    if (list.some((e) => JSON.stringify(e) === k)) return false;
+    list.push(entry);
+    provides.set(path, list);
+    return true;
+  };
+  if (modules.has(STATE_MODULE)) add(STATE_MODULE, { path: [STATE_EXPORT], sub: [] });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const m of modules.values()) {
+      for (const e of m.stateLinks.exports) {
+        const from = e.target ? provides.get(e.target) : null;
+        if (!from) continue;
+        for (const q of [...from]) {
+          let entry = null;
+          if (e.star) { if (q.path[0] !== "default") entry = q; }
+          else if (prefixOf(q.path, e.via)) entry = { path: [e.name], sub: [...q.sub, ...e.via.slice(q.path.length)] };
+          else if (prefixOf(e.via, q.path)) entry = { path: [e.name, ...q.path.slice(e.via.length)], sub: q.sub };
+          if (entry && add(m.path, entry)) changed = true;
+        }
+      }
+    }
+  }
+  return { provides, truncated };
+}
+
+function stateUsage(m, provides, truncated) {
+  const usage = { importsState: false, bridge: false, truncated: truncated.has(m.path), line: null, reads: 0, writes: [] };
+  if (m.path === STATE_MODULE) return usage;
+  const seen = (line) => { usage.importsState = true; usage.line = usage.line === null ? line : Math.min(usage.line, line); };
+  if (provides.has(m.path)) {
+    usage.bridge = true;
+    for (const e of m.stateLinks.exports) if (e.target && provides.has(e.target)) seen(e.line);
+  }
+  for (const s of m.stateLinks.sources) {
+    const from = s.target ? provides.get(s.target) : null;
+    const matches = (from ?? []).filter((q) => prefixOf(q.path, s.via) || prefixOf(s.via, q.path));
+    if (!matches.length) continue;
+    seen(s.line);
+    for (const a of s.accesses) {
+      const full = [...s.via, ...a.path];
+      const q = matches.find((c) => prefixOf(c.path, full));
+      if (!q) { if (matches.some((c) => prefixOf(full, c.path))) usage.reads++; continue; }
+      const spath = [...q.sub, ...full.slice(q.path.length)];
+      if (a.write) usage.writes.push({ spath, write: a.write, line: a.line });
+      else usage.reads++;
+    }
+  }
+  for (const l of m.stateLinks.loads) if (l.target && provides.has(l.target)) seen(l.line);
+  usage.writes.sort((a, b) => a.line - b.line);
+  return usage;
+}
+
+export function stateWriteTarget(spath, write) {
+  if (spath.length === 0) return write === "mutate" ? `global:${STATE_EXPORT}.*` : null;
+  const member = spath[0] === "*" ? `${STATE_EXPORT}[?]` : `${STATE_EXPORT}.${spath[0]}`;
+  return `global:${member}${write === "mutate" || spath.length > 1 ? ".*" : ""}`;
+}
+
+function stateWriteDetail(target) {
+  const name = target.slice("global:".length);
+  if (name === `${STATE_EXPORT}.*`) return `changes members of ${STATE_EXPORT} in place`;
+  return name.endsWith(".*") ? `changes ${name.slice(0, -2)} in place` : `replaces ${name}`;
 }
 
 export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
@@ -206,9 +680,20 @@ export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
   const modules = new Map();
   for (const { path, text } of sources) {
     const analysis = analyzeScript(path, text);
+    const fileTarget = (spec) => {
+      const r = resolveSpecifier(path, spec, fileSet);
+      return r.kind === "file" ? r.target : null;
+    };
     const edges = analysis.imports.map((i) => ({ ...i, ...resolveSpecifier(path, i.spec, fileSet) }));
-    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, globals: analysis.globals, state: analysis.state });
+    const stateLinks = {
+      sources: analysis.sources.map((s) => ({ ...s, target: fileTarget(s.spec) })),
+      loads: analysis.loads.map((l) => ({ ...l, target: fileTarget(l.spec) })),
+      exports: analysis.exports.map((e) => ({ ...e, target: fileTarget(e.spec) }))
+    };
+    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, globals: analysis.globals, stateLinks });
   }
+  const { provides, truncated } = stateProviders(modules);
+  for (const m of modules.values()) m.state = stateUsage(m, provides, truncated);
   return modules;
 }
 
@@ -222,7 +707,7 @@ export function stronglyConnected(modules, includeTypeOnly) {
   const successors = (path) => [...new Set(modules.get(path).edges
     .filter((e) => e.kind === "file" && (includeTypeOnly || !e.typeOnly) && modules.has(e.target))
     .map((e) => e.target))];
-  for (const start of [...modules.keys()].sort()) {
+  for (const start of [...modules.keys()].sort(byCodePoint)) {
     if (index.has(start)) continue;
     const work = [{ node: start, next: 0, succ: null }];
     while (work.length) {
@@ -251,15 +736,38 @@ export function stronglyConnected(modules, includeTypeOnly) {
         let w;
         do { w = stack.pop(); onStack.delete(w); component.push(w); } while (w !== frame.node);
         const selfLoop = component.length === 1 && successors(component[0]).includes(component[0]);
-        if (component.length > 1 || selfLoop) components.push(component.sort());
+        if (component.length > 1 || selfLoop) components.push(component.sort(byCodePoint));
       }
     }
   }
-  return components.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]));
+  return components.sort((a, b) => b.length - a.length || byCodePoint(a[0], b[0]));
 }
 
 function key(v) {
   return `${v.rule}\u0000${v.source}\u0000${v.target}`;
+}
+
+export function byCodePoint(a, b) {
+  return Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
+}
+
+export function compareExceptions(a, b) {
+  return byCodePoint(a.rule, b.rule) || byCodePoint(a.source, b.source) || byCodePoint(a.target, b.target);
+}
+
+export function cycleEdges(modules) {
+  const component = new Map();
+  for (const c of stronglyConnected(modules, false)) for (const p of c) component.set(p, c);
+  const out = new Map();
+  for (const m of modules.values()) {
+    const c = component.get(m.path);
+    if (!c) continue;
+    for (const e of m.edges) {
+      const pair = `${m.path}\u0000${e.target}`;
+      if (e.kind === "file" && !e.typeOnly && component.get(e.target) === c && !out.has(pair)) out.set(pair, { source: m.path, target: e.target, line: e.line, size: c.length });
+    }
+  }
+  return [...out.values()];
 }
 
 export function findViolations(modules) {
@@ -269,6 +777,10 @@ export function findViolations(modules) {
     if (!found.has(key(v))) found.set(key(v), { ...v, line, detail });
   };
   for (const m of modules.values()) {
+    if (m.layer === "src-unknown") {
+      const folder = m.path.split("/").length > 2 ? m.path.split("/").slice(0, 2).join("/") + "/" : "src/";
+      add("unknown-layer", m.path, folder, null, `${folder} is not a folder in the layer table`);
+    }
     for (const e of m.edges) {
       if (e.kind === "file") {
         const targetLayer = layerOf(e.target);
@@ -283,8 +795,19 @@ export function findViolations(modules) {
     if (platformGlobalsBanned(m.layer)) {
       for (const g of m.globals) add("platform-global", m.path, `global:${g.name}`, g.line, `${m.layer} may not use ${g.name}`);
     }
+    if (isProduction(m.layer)) {
+      if (m.state.importsState) add("state-import", m.path, `global:${STATE_EXPORT}`, m.state.line, m.state.bridge ? `re-exports ${STATE_EXPORT}` : `imports ${STATE_EXPORT}`);
+      for (const w of m.state.writes) {
+        const target = stateWriteTarget(w.spath, w.write);
+        if (target) add("state-write", m.path, target, w.line, stateWriteDetail(target));
+      }
+    }
+    if (m.state.truncated) {
+      add("state-bridge-limit", m.path, `global:${STATE_EXPORT}`, null, `re-exports ${STATE_EXPORT} through more than ${MAX_STATE_PATH} names; the report stops following it here`);
+    }
   }
-  return [...found.values()].sort((a, b) => key(a).localeCompare(key(b)));
+  for (const e of cycleEdges(modules)) add("cycle-edge", e.source, e.target, e.line, `runtime import inside a ${e.size}-module cycle`);
+  return [...found.values()].sort(compareExceptions);
 }
 
 export function migratedCycles(modules) {
@@ -310,14 +833,21 @@ export function compareBaseline(violations, baseline) {
 export function metrics(modules) {
   const frontend = new Map([...modules].filter(([p]) => p.startsWith("src/") && layerOf(p) !== "tests"));
   const runtime = stronglyConnected(frontend, false);
-  const production = [...modules.values()].filter((m) => !["tests", "tools", "other"].includes(m.layer));
+  const production = [...modules.values()].filter((m) => isProduction(m.layer));
+  const directSets = (m) => m.state.writes.filter((w) => w.write === "set" && w.spath.length === 1);
   return {
     frontendModules: frontend.size,
     largestFrontendRuntimeCycle: runtime[0]?.length ?? 0,
     frontendRuntimeCycles: runtime.length,
+    runtimeCycleEdges: cycleEdges(modules).length,
     stateImporters: production.filter((m) => m.state.importsState).map((m) => m.path),
-    stateAssigners: production.filter((m) => m.state.stateWrites > 0).map((m) => m.path),
-    stateFieldWriters: production.filter((m) => m.state.stateFieldWrites > 0).map((m) => ({ path: m.path, writes: m.state.stateFieldWrites, reads: m.state.stateReads })),
+    stateBridges: production.filter((m) => m.state.bridge).map((m) => m.path),
+    stateAssigners: production.filter((m) => directSets(m).some((w) => w.spath[0] === "state")).map((m) => m.path),
+    stateFieldWriters: production.filter((m) => directSets(m).length > 0).map((m) => ({ path: m.path, writes: directSets(m).length, reads: m.state.reads })),
+    stateWriters: production.filter((m) => m.state.writes.length > 0).map((m) => ({
+      path: m.path,
+      targets: [...new Set(m.state.writes.map((w) => stateWriteTarget(w.spath, w.write)).filter(Boolean))].sort(byCodePoint)
+    })),
     migratedModules: [...modules.values()].filter((m) => isMigrated(m.layer)).length
   };
 }
@@ -338,18 +868,23 @@ function readBaseline(path) {
 
 function writeBaseline(path, exceptions, previous) {
   const reasons = new Map((previous.exceptions ?? []).filter((e) => e.reason).map((e) => [key(e), e.reason]));
-  const body = { exceptions: exceptions.map(({ rule, source, target }) => {
-    const reason = reasons.get(key({ rule, source, target }));
-    return reason ? { rule, source, target, reason } : { rule, source, target };
-  }) };
-  writeFileSync(path, JSON.stringify(body, null, 2) + "\n");
+  const rows = [...exceptions].sort(compareExceptions).map(({ rule, source, target, reason: given }) => {
+    const reason = given ?? reasons.get(key({ rule, source, target }));
+    return JSON.stringify(reason ? { rule, source, target, reason } : { rule, source, target });
+  });
+  writeFileSync(path, rows.length ? `{\n  "exceptions": [\n    ${rows.join(",\n    ")}\n  ]\n}\n` : "{\n  \"exceptions\": []\n}\n");
 }
 
 function describe(v) {
   return `${v.rule}: ${v.source}${v.line ? ":" + v.line : ""} -> ${v.target}${v.detail ? " (" + v.detail + ")" : ""}`;
 }
 
-export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", print = console.log, printError = console.error } = {}) {
+export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", reason = "", print = console.log, printError = console.error } = {}) {
+  const acceptReason = typeof reason === "string" ? reason.trim() : "";
+  if (mode === "accept" && !acceptReason) {
+    printError('dep-report: --accept needs a reason, e.g. --accept "helper moved from 05-render.js to 06-rows.js"');
+    return 2;
+  }
   const modules = loadGraph(repo);
   const violations = findViolations(modules);
   const cycles = migratedCycles(modules);
@@ -368,12 +903,16 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   }
 
   const { added, resolved } = compareBaseline(violations, baseline);
-  print(`dep-report: ${modules.size} modules, ${m.frontendModules} frontend, largest frontend runtime cycle ${m.largestFrontendRuntimeCycle}, ${m.stateImporters.length} S importers, ${m.stateAssigners.length} S.state assigners, ${violations.length} known exceptions`);
+  const recorded = baseline.exceptions ?? [];
+  print(`dep-report: ${modules.size} modules, ${m.frontendModules} frontend, largest frontend runtime cycle ${m.largestFrontendRuntimeCycle}, ${m.runtimeCycleEdges} runtime cycle edges, ${m.stateImporters.length} S importers, ${m.stateAssigners.length} S.state assigners, ${m.stateWriters.length} S writers; ${recorded.length} exceptions in the baseline, ${added.length} new, ${resolved.length} resolved`);
+  const printCycles = () => {
+    for (const c of cycles) printError(`  cycle (${c.graph}) through migrated ${c.migrated.join(", ")}: ${c.modules.join(" -> ")}`);
+  };
 
   if (mode === "prune") {
     if (added.length) {
       for (const v of added) printError("  new " + describe(v));
-      printError("dep-report: --prune only removes resolved exceptions; fix the new ones first");
+      printError('dep-report: --prune only removes resolved exceptions; fix the new ones, or record them with --accept "<reason>"');
       return 1;
     }
     writeBaseline(baselinePath, violations, baseline);
@@ -381,11 +920,24 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
     return 0;
   }
 
-  let failed = false;
-  for (const c of cycles) {
-    failed = true;
-    printError(`  cycle (${c.graph}) through migrated ${c.migrated.join(", ")}: ${c.modules.join(" -> ")}`);
+  if (mode === "accept") {
+    if (cycles.length) {
+      printCycles();
+      printError("dep-report: a cycle through a migrated folder cannot be accepted; nothing was written");
+      return 1;
+    }
+    if (!added.length) {
+      print("dep-report: nothing new to accept");
+      return 0;
+    }
+    writeBaseline(baselinePath, [...recorded, ...added.map((v) => ({ ...v, reason: acceptReason }))], baseline);
+    for (const v of added) print("  + " + describe(v));
+    print(`dep-report: accepted ${added.length} new exceptions with the reason "${acceptReason}"${resolved.length ? `; ${resolved.length} resolved remain, remove them with --prune` : ""}`);
+    return 0;
   }
+
+  let failed = cycles.length > 0;
+  printCycles();
   for (const v of added) { failed = true; printError("  new " + describe(v)); }
   for (const e of resolved) { failed = true; printError(`  resolved ${e.rule}: ${e.source} -> ${e.target} (remove it from the baseline with --prune)`); }
   if (failed) {
@@ -396,13 +948,26 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   return 0;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
-  const flag = process.argv[2];
-  const mode = { "--metrics": "metrics", "--init": "init", "--prune": "prune" }[flag] ?? (flag ? null : "check");
-  if (mode === null) {
-    console.error(`dep-report: unknown argument ${flag}; use --metrics, --prune or --init`);
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
+  const args = process.argv.slice(2);
+  const modes = { "--metrics": "metrics", "--init": "init", "--prune": "prune" };
+  let options = null;
+  if (args.length === 0) options = { mode: "check" };
+  else if (args.length === 1 && modes[args[0]]) options = { mode: modes[args[0]] };
+  else if (args[0] === "--accept" && args.length <= 2) options = { mode: "accept", reason: args[1] ?? "" };
+  if (options === null) {
+    console.error(`dep-report: unknown argument ${args.join(" ")}; use --metrics, --prune, --init or --accept "<reason>"`);
     process.exitCode = 2;
   } else {
-    process.exitCode = run({ mode });
+    process.exitCode = run(options);
   }
 }
