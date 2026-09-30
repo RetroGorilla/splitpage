@@ -3,7 +3,8 @@
 An action is one thing a person can ask the app to do, with one definition
 that every surface uses: the File menu, the command menu, a keyboard shortcut,
 a button (the header's, the Writer's, the Settings dialog's, the setup
-wizard's, the Servers dialog's), and the desktop app's native menu.
+wizard's, the Servers dialog's, the New Tab page's), and the desktop app's
+native menu.
 
 ## The registry
 
@@ -276,7 +277,7 @@ open when a command runs from the keyboard or a menu.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
-| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Servers, Help and Tour also from the Settings dialog's and the setup wizard's buttons | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js` and `20b-onboarding.js` |
+| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Servers, Help and Tour also from the Settings dialog's and the setup wizard's buttons; Servers (Join a shared session) and Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
 | `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
 | `new`, `paste`, `gdoc-import`, `drive-open`, `save-back`, `autosave`, `export-again`, `server-open`, `server-publish` | File menu, command menu, desktop menu; Google Drive also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, a `20s-settings.js` File menu click |
@@ -287,8 +288,17 @@ open when a command runs from the keyboard or a menu.
 
 The File menu's export formats (`export-pdf` and the rest) still dispatch in
 `18-local-files.js`; milestone 5's format registry takes them over. The New
-Tab page's buttons are different actions (a blank new script, paste as a new
-script, open into this tab) and stay its own.
+Tab page's Tour and Join a shared session run the `tour` and `servers`
+actions (source `button`; neither can be refused, so nothing changed for
+them). Its other buttons are different actions (a blank new script, a
+starter, paste as a new script, open into this tab) and stay its own.
+
+The export dialog's Collaborate… link is kept as it was: it closes the
+dialog and clicks the File menu's Collaborate item through
+`runExportAction()`, as the dialog's formats do. So it does nothing, and says
+nothing, when that item was last painted greyed out (a link guest), where
+invoking `collaborate` would show the reason in a toast. It moves with the
+formats in milestone 5.
 
 Browser suites `268-actions-every-surface.txt`,
 `269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt`,

@@ -543,8 +543,6 @@
     {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/18-local-files.js"},
     {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/20a-update.js"},
     {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/20b-onboarding.js"},
-    {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/20c-help.js"},
-    {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/20e-connect.js"},
     {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/20f-desktop.js"},
     {"rule":"cycle-edge","source":"src/js/20j-newtab.js","target":"src/js/20g-drafts.js"},
     {"rule":"cycle-edge","source":"src/js/20s-settings.js","target":"src/js/01b-hide-shot.js"},

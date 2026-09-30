@@ -14,11 +14,10 @@ import { arrivingOnLink } from "./13-hosted.js";
 import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
-import { startTour } from "./20c-help.js";
-import { openServersDialog } from "./20e-connect.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { draftRestorePending } from "./20g-drafts.js";
 import { STARTERS, starterById } from "./_starters.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var newTabPageShown = false;
 
@@ -337,11 +336,11 @@ export function __init() {
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
       else if (action === "long-demo") startStarterScript("long-demo");
       else if (action === "open") newTabOpenFile();
-      else if (action === "join") openServersDialog();
+      else if (action === "join") appActions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
       else if (action === "gdoc") openGdocModal();
       else if (action === "dismiss") closeNewTabPage();
-      else if (action === "tour") { closeNewTabPage(); startTour(); }
+      else if (action === "tour") { closeNewTabPage(); appActions.invoke("tour", "button"); }
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();
