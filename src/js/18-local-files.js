@@ -76,7 +76,7 @@ import { buildCsv, csvToRows } from "./16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.js";
 import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
+import { refreshFileMenu, refusedUnderOverlay, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
 import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
 import { openCommandMenu } from "./18d-command-menu.js";
 import { showAbout } from "./20a-update.js";
@@ -755,6 +755,7 @@ export function handleFileMenuAction(action) {
       && action !== "drive-open" && action !== "about") {
     showToast("Still loading…", "warn"); return;
   }
+  if (refusedUnderOverlay(action)) return;
   if (action === "save-as") saveDoc({ saveAs: true });
   else if (action === "new") startNewScript();
   else if (action === "export") openExportDialog();
