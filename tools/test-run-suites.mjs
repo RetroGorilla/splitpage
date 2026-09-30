@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -6,11 +6,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNNER = join(REPO, "tools", "run-suites.mjs");
+const WRAPPER = join(REPO, ".claude", "handoff", "direction-b", "run-all-suites.mjs");
 const { classify, STATUS, EXIT, parseArgs, ConfigError } = await import(pathToFileURL(RUNNER).href);
 
+const POSIX = process.platform !== "win32";
 const BAD_RESULT = "BAD-RESULT";
+const LEFTOVER = "LEFTOVER";
+const RUNNER_ERROR = 3;
 
 let passed = 0;
+let skipped = 0;
 const failures = [];
 
 function check(name, ok, detail) {
@@ -21,6 +26,11 @@ function check(name, ok, detail) {
 
 function eq(name, actual, expected) {
   check(name, actual === expected, `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+
+function skip(name, why) {
+  skipped++;
+  console.log(`  SKIP ${name} — ${why}`);
 }
 
 function configError(argv, env) {
@@ -34,14 +44,14 @@ mkdirSync(suites);
 const KINDS = [
   "pass", "crlf", "split", "fail", "errored", "silent", "stderr", "lying",
   "zero", "garbage", "partial", "negative", "contradictory", "overwritten", "twice", "trailing",
-  "hang"
+  "hang", "orphan", "escaped", "afterhang"
 ];
 for (const name of KINDS) writeFileSync(join(suites, `${name}.txt`), "");
 
 const fakeDriver = join(work, "fake-driver.mjs");
 writeFileSync(fakeDriver, `
 import { spawn } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
 const kind = basename(arg("--script"), ".txt");
@@ -73,6 +83,25 @@ switch (kind) {
     const grandchild = spawn(process.execPath, idle, { stdio: "ignore" });
     record({ grandchild: grandchild.pid });
     forever();
+    break;
+  }
+  case "orphan": {
+    const grandchild = spawn(process.execPath, idle, { stdio: ["ignore", "inherit", "inherit"] });
+    record({ grandchild: grandchild.pid });
+    done(["RESULT: 1/1 checks passed"], 0);
+    break;
+  }
+  case "escaped": {
+    const grandchild = spawn(process.execPath, idle, { stdio: ["ignore", "inherit", "inherit"], detached: true });
+    record({ grandchild: grandchild.pid });
+    forever();
+    break;
+  }
+  case "afterhang": {
+    const started = Date.now();
+    const poll = setInterval(() => {
+      if (existsSync(join(state, "hang.json")) || Date.now() - started > 10000) { clearInterval(poll); done(["RESULT: 1/1 checks passed"], 0); }
+    }, 50);
     break;
   }
   default: done(["RESULT: unknown fake kind " + kind], 1);
@@ -133,11 +162,11 @@ function reap(info) {
   }
 }
 
-function run(args, { timeout = 60000 } = {}) {
-  const dir = join(work, "out-" + Math.random().toString(16).slice(2, 10));
+function run(args, { timeout = 60000, runner = RUNNER, out } = {}) {
+  const dir = out ?? join(work, "out-" + Math.random().toString(16).slice(2, 10));
   const state = newState();
   const started = Date.now();
-  const r = spawnSync(process.execPath, [RUNNER, dir, ...args, "--suites", suites, "--driver", fakeDriver], {
+  const r = spawnSync(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver], {
     cwd: REPO,
     encoding: "utf8",
     env: { ...process.env, FAKE_DRIVER_STATE: state },
@@ -153,6 +182,31 @@ function run(args, { timeout = 60000 } = {}) {
     out: dir,
     state
   };
+}
+
+function start(args, { runner = RUNNER } = {}) {
+  const dir = join(work, "out-" + Math.random().toString(16).slice(2, 10));
+  const state = newState();
+  const child = spawn(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver], {
+    cwd: REPO,
+    env: { ...process.env, FAKE_DRIVER_STATE: state },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (d) => { stdout += d; });
+  child.stderr.on("data", (d) => { stderr += d; });
+  const closed = new Promise((resolveClose) => child.on("close", (code, signal) => resolveClose({ code, signal, stdout, stderr })));
+  return { child, closed, state, out: dir };
+}
+
+async function waitFor(predicate, ms) {
+  const deadline = Date.now() + ms;
+  while (!predicate()) {
+    if (Date.now() > deadline) return false;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return true;
 }
 
 console.log("\nclassify():\n");
@@ -172,6 +226,7 @@ eq("more passed than ran is BAD-RESULT", classify({ code: 0 }, "RESULT: 4/3 chec
 eq("a RESULT line that is not at the start of a line is not a summary", classify({ code: 0 }, "echo RESULT: 3/3 checks passed").status, STATUS.NO_RESULT);
 eq("the driver's error-before-any-check summary is FAIL", classify({ code: 1 }, "RESULT: -1/0 checks passed - 1 FAILED").status, STATUS.FAIL);
 eq("a passing summary killed by a signal is FAIL", classify({ code: null, signal: "SIGKILL" }, "RESULT: 3/3 checks passed").status, STATUS.FAIL);
+eq("output held open after exit is LEFTOVER", classify({ code: 0, heldOpen: true }, "RESULT: 3/3 checks passed").status, LEFTOVER);
 
 console.log("\nparseArgs():\n");
 
@@ -266,6 +321,69 @@ console.log("\nrun-suites.mjs as a process:\n");
   reap(info);
 }
 
+for (const timeout of ["1", "60"]) {
+  const r = run(["^orphan", "--timeout", timeout], { timeout: 30000 });
+  const info = recorded(r.state, "orphan");
+  check(`--timeout ${timeout}: a driver that exits leaving a grandchild settles`, r.signal === null && r.status !== null, `runner killed after ${r.elapsed}ms`);
+  check(`--timeout ${timeout}: a driver that exits leaving a grandchild settles within 15s`, r.elapsed < 15000, `${r.elapsed}ms`);
+  check(`--timeout ${timeout}: the orphaning driver reported its grandchild`, info?.grandchild > 0, JSON.stringify(info));
+  if (POSIX) {
+    eq(`--timeout ${timeout}: a held-open suite exits 1`, r.status, EXIT.SUITES_FAILED);
+    check(`--timeout ${timeout}: a held-open suite is LEFTOVER or TIMEOUT`, [LEFTOVER, STATUS.TIMEOUT].includes(r.summary?.[0]?.split(" ")[0]), r.summary?.[0]);
+    check(`--timeout ${timeout}: the grandchild left in the process group is gone`, waitDead(info?.grandchild), `pid ${info?.grandchild} still alive`);
+  } else {
+    skip(`--timeout ${timeout}: a held-open suite is LEFTOVER and its grandchild is killed`, "win32 has no process groups and libuv ends a Node driver's children when it exits, so nothing is left holding the pipes; this runs on the Linux CI");
+  }
+  reap(info);
+}
+
+{
+  const r = run(["^escaped", "--timeout", "1"], { timeout: 30000 });
+  const info = recorded(r.state, "escaped");
+  check("a descendant outside the process group cannot hold the runner open", r.signal === null && r.status !== null, `runner killed after ${r.elapsed}ms`);
+  eq("a suite whose output outlives the kill is TIMEOUT", r.summary?.[0]?.split(" ")[0], STATUS.TIMEOUT);
+  check("a suite whose output outlives the kill settles within 12s", r.elapsed < 12000, `${r.elapsed}ms`);
+  check("the escaping driver reported its grandchild", info?.driver > 0 && info?.grandchild > 0, JSON.stringify(info));
+  check("the escaped driver itself was killed", waitDead(info?.driver), `pid ${info?.driver} still alive`);
+  reap(info);
+}
+
+{
+  const out = join(work, "out-" + Math.random().toString(16).slice(2, 10));
+  mkdirSync(join(out, "afterhang.txt.log"), { recursive: true });
+  const r = run(["^(afterhang|hang)\\.txt$", "--lanes", "2", "--timeout", "60"], { out, timeout: 30000 });
+  const info = recorded(r.state, "hang");
+  eq("a log that cannot be written stops the run with exit 3", r.status, RUNNER_ERROR);
+  check("the write failure is reported", /afterhang\.txt\.log/.test(r.stderr), r.stderr);
+  check("the run stops well before the other suite's timeout", r.elapsed < 15000, `${r.elapsed}ms`);
+  check("no summary claims a result after the failure", !existsSync(join(out, "summary.txt")), null);
+  check("the other lane's driver had started", info?.driver > 0 && info?.grandchild > 0, JSON.stringify(info));
+  check("the other lane's driver is killed", waitDead(info?.driver), `pid ${info?.driver} still alive`);
+  check("the other lane's grandchild is killed", waitDead(info?.grandchild), `pid ${info?.grandchild} still alive`);
+  reap(info);
+}
+
+for (const [signal, code, runner, who] of [["SIGINT", 130, RUNNER, "the runner"], ["SIGTERM", 143, RUNNER, "the runner"], ["SIGTERM", 143, WRAPPER, "the compatibility wrapper"]]) {
+  const name = `${signal} to ${who}`;
+  if (!POSIX) {
+    skip(`${name} stops the run and kills its drivers`, "win32 cannot deliver a catchable SIGINT/SIGTERM to a child process, so this runs on the Linux CI");
+    continue;
+  }
+  const running = start(["^hang", "--timeout", "60"], { runner });
+  const ready = await waitFor(() => recorded(running.state, "hang") !== null, 10000);
+  const info = recorded(running.state, "hang");
+  check(`${name}: the hung suite started`, ready && info?.driver > 0 && info?.grandchild > 0, JSON.stringify(info));
+  const sent = Date.now();
+  running.child.kill(signal);
+  const done = await Promise.race([running.closed, new Promise((r) => setTimeout(() => r(null), 15000))]);
+  check(`${name}: exits promptly`, done !== null && Date.now() - sent < 15000, `${Date.now() - sent}ms`);
+  eq(`${name}: exits ${code}`, done?.code, code);
+  check(`${name}: the driver is killed`, waitDead(info?.driver), `pid ${info?.driver} still alive`);
+  check(`${name}: the driver's grandchild is killed`, waitDead(info?.grandchild), `pid ${info?.grandchild} still alive`);
+  if (done === null) running.child.kill("SIGKILL");
+  reap(info);
+}
+
 {
   const r = run(["^pass", "--node", join(work, "no-such-node")]);
   eq("an unlaunchable driver exits 1", r.status, EXIT.SUITES_FAILED);
@@ -277,9 +395,17 @@ console.log("\nrun-suites.mjs as a process:\n");
   eq("a single lane runs every suite", r.summary?.length, 2);
 }
 
+{
+  const ok = run(["^pass"], { runner: WRAPPER });
+  eq("the compatibility wrapper passes a passing run through", ok.status, EXIT.OK);
+  eq("the compatibility wrapper writes the same summary", ok.summary?.[0], "PASS pass.txt RESULT: 3/3 checks passed");
+  const bad = run(["^pass", "--lanes", "0"], { runner: WRAPPER });
+  eq("the compatibility wrapper passes a config error through", bad.status, EXIT.CONFIG);
+}
+
 rmSync(work, { recursive: true, force: true });
 
-console.log(`\n${passed} passed, ${failures.length} failed on ${process.platform}\n`);
+console.log(`\n${passed} passed, ${failures.length} failed, ${skipped} skipped on ${process.platform}\n`);
 if (failures.length) {
   for (const f of failures) console.log("  " + f);
   process.exit(1);
