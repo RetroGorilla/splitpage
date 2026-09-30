@@ -98,6 +98,9 @@ jobs:
       - name: Browser suites 01 (core) and 52 (content security policy)
         run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2
 
+      - name: Browser suite 265 (drafts kept in IndexedDB and restored, persistence)
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites/persistence" '^265-browser-drafts\.txt$' --lanes 1
+
       - name: Upload the suite logs
         if: failure()
         uses: actions/upload-artifact@v4

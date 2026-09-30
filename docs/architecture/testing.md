@@ -96,7 +96,7 @@ above and nothing else.
 | Job | Runs |
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width, browser suites 01 and 52 through `tools/run-suites.mjs`; uploads the built app |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
 | `node-24` | A clean `npm ci` and `npm run verify` on Node 24 |
 | `gate` | Passes when `checks` and `node-24` passed, or when the change was prose only and both were skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
@@ -106,10 +106,15 @@ prose-only pull request completes it without waiting on the others. Prose
 means Markdown other than `docs/help.md` (the build renders it into the app),
 `.claude/handoff/`, issue templates, `CODEOWNERS` and `LICENSE`.
 
-`.github/workflows/docker.yml` builds and starts both Docker images when a
-Docker build input changes; its path filters list every file the Dockerfile
-copies. `.github/workflows/release.yml` builds the Windows installers from a
-tag.
+`.github/workflows/docker.yml` runs when a Docker build input changes; its
+path filters list every file either Dockerfile copies. Job `image` builds the
+root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
+Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
+`splitpage-app` artifact into an empty folder, builds `Dockerfile.prebuilt`
+there, starts it and checks `/api/health`'s version, `/` and `/sw.js` against
+`VERSION` and its HEALTHCHECK. `.github/workflows/release.yml` builds the
+Windows installers from a tag. [ci.md](ci.md) explains the settings in these
+files that the files themselves cannot.
 
 The full browser regression, the Windows runs and the packaged x64/ARM64
 checks are local milestone and release gates (plan section 4). The

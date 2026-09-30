@@ -12,6 +12,7 @@ lists what each job runs.
 | --- | --- |
 | `checks` job, `SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage` | Ubuntu 24.04's AppArmor blocks the user namespaces Chromium's sandbox needs. Without these flags the browser dies before it opens a DevTools (CDP) port, and every browser step fails. |
 | `checks` job, step `Install Chromium` | The runner's `/usr/bin/chromium` is a snap that never opens a debugging port. The step installs Playwright's Chromium (pinned by `PLAYWRIGHT_VERSION`) under `PLAYWRIGHT_BROWSERS_PATH`, finds its `chrome` binary and hands it to the driver as `SPLITPAGE_CHROME`. |
+| `checks` job, step `Browser suite 265 (…persistence)` | The fast gate's persistence suite. `265-browser-drafts.txt` keeps a server document's unsaved edits in IndexedDB while saves fail (through a fetch emulator), finds them again after reloads, merges them and drops the draft once a save lands. It is its own step so its runtime shows in the job log; its logs land in `suites/persistence/`, inside the folder the failure upload takes. |
 | `desktop-smoke` job, step `Install desktop dependencies`, `npm_config_arch` | `desktop/.npmrc` pins `arch=arm64` for the maintainer's Windows-on-ARM machine. An `npm_config_*` environment variable outranks `.npmrc`, so the runner's own architecture wins. Plan section 8 replaces the unconditional pin. |
 | `desktop-smoke` job, step `Fetch the dev Electron binary` | Runs `node node_modules/electron/install.js` directly, not through npm: npm would turn `desktop/.npmrc`'s `arch=arm64` into `npm_config_arch` and fetch a binary the x64 runner cannot execute. |
 | `desktop-smoke` job, step `Desktop smoke (dev target)` | Xvfb is started by hand because `xvfb-run` intermittently returns its own cleanup failure as the exit status. The `grep` on Xvfb's stderr drops xkbcomp's harmless unknown-keysym warnings, about 1,700 lines a run. |
@@ -20,6 +21,13 @@ lists what each job runs.
 
 `image` builds the root `Dockerfile` with the legacy builder (as `deploy.sh`
 does on unRAID) and starts it with the settings `deploy.sh` insists on.
+`prebuilt` builds the app, copies into an empty folder only the files
+`ci.yml` uploads as the `splitpage-app` artifact, and builds and starts
+`Dockerfile.prebuilt` from that folder, so the recipe DEPLOY.md §8 gives for
+running without a checkout is exercised on the artifact's inputs. Its file
+list in the step `Stage the files ci.yml uploads as the splitpage-app
+artifact` mirrors the `Upload the built app` step in `ci.yml`; change both
+together (a change to `ci.yml` runs this workflow for that reason).
 
 ## `.github/workflows/release.yml`
 
