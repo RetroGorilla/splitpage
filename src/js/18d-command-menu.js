@@ -18,101 +18,71 @@ var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This do
 
 function el(id) { return document.getElementById(id); }
 
-function fromExport(action, words) {
+var OWN_ACTION = "command-menu";
+
+var EXPORT_COMMANDS = [
+  ["export-pdf", "pdf print"],
+  ["export-docx", "word docx document google docs"],
+  ["export-md", "markdown md text stacked"],
+  ["export-md-table", "markdown md table two columns side by side"],
+  ["export-xlsx", "excel xlsx spreadsheet workbook sheets numbers table"],
+  ["export-csv", "spreadsheet csv excel sheets table"],
+  ["export-html", "splitshare share standalone page html web browser send any device app"],
+  ["export-narration-docx", "narration voice over voiceover audio artist word docx"],
+  ["export-narration-txt", "narration voice over voiceover audio artist text txt"],
+  ["export-breakdown-xlsx", "breakdown excel xlsx spreadsheet workbook tags props locations cast list"],
+  ["export-breakdown", "breakdown csv tags props locations cast list"],
+  ["export-packing-gear", "packing list checklist gear equipment kit pdf"],
+  ["export-packing-prop", "packing list checklist props prop pdf"],
+  ["export-broll-pdf", "b-roll broll shot list shots second unit print pdf landscape"],
+  ["export-broll-xlsx", "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets"],
+  ["export-broll-csv", "b-roll broll shot list shots spreadsheet csv excel sheets"]
+];
+
+var LIST_ORDER = [
+  "save", "save-as", "save-back", "autosave", "new", "open", "server-open", "paste", "gdoc-import", "drive-open",
+  "collaborate", "server-publish", "servers", "export"
+].concat(EXPORT_COMMANDS.map(function (e) { return e[0]; })).concat([
+  "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
+  "history", "find", "toggle-hide-shot", "toggle-rundown-min", "set-target",
+  "prompter-open-in-browser", "prompter-open-in-chromium",
+  "settings", "help", "tour", "long-demo", "setup", "about", "tagging-help", "export-app-data", "import-app-data"
+]);
+
+function exportEntry(action, words) {
+  var why = exportActionReason(action);
   return {
-    id: action,
-    group: "Export",
-    words: "export download " + words,
-    read: function () {
-      var why = exportActionReason(action);
-      return { label: "Export as " + EXPORT_ACTION_NAMES[action], icon: "i-export", keys: "",
-               why: why, disabled: !!why, state: "" };
-    },
-    run: function () { runExportAction(action); }
+    cmd: { id: action, group: "Export", words: "export download " + words, run: function () { runExportAction(action); } },
+    view: { label: "Export as " + EXPORT_ACTION_NAMES[action], icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
   };
 }
 
-function fromAction(id) {
-  var first = appActions.view(id);
+function actionEntry(view) {
   return {
-    id: id,
-    group: first ? first.group : "",
-    words: first ? first.words : "",
-    read: function () {
-      var view = askingFromLauncher(function () { return appActions.view(id); });
-      if (!view || !view.visible) return null;
-      return {
-        label: view.label,
-        icon: view.icon || "i-file",
-        keys: view.keys.length ? view.keys[0] : "",
-        why: view.enabled ? "" : (view.reason || "Not available right now"),
-        disabled: !view.enabled,
-        state: view.checked === null ? "" : (view.checked ? "On" : "Off")
-      };
-    },
-    run: function () { invokeFrom(id, "command-menu"); }
+    cmd: { id: view.id, group: view.group, words: view.words, run: function () { invokeFrom(view.id, "command-menu"); } },
+    view: {
+      label: view.label,
+      icon: view.icon || "i-file",
+      keys: view.keys.length ? view.keys[0] : "",
+      why: view.enabled ? "" : view.reason,
+      disabled: !view.enabled,
+      state: view.checked === null ? "" : (view.checked ? "On" : "Off")
+    }
   };
 }
 
-var COMMANDS = null;
+function listRank(id) {
+  var at = LIST_ORDER.indexOf(id);
+  return at === -1 ? LIST_ORDER.length : at;
+}
 
-function commands() {
-  if (COMMANDS) return COMMANDS;
-  COMMANDS = [
-    fromAction("save"),
-    fromAction("save-as"),
-    fromAction("save-back"),
-    fromAction("autosave"),
-    fromAction("new"),
-    fromAction("open"),
-    fromAction("server-open"),
-    fromAction("paste"),
-    fromAction("gdoc-import"),
-    fromAction("drive-open"),
-    fromAction("collaborate"),
-    fromAction("server-publish"),
-    fromAction("servers"),
-    fromAction("export"),
-    fromExport("export-pdf", "pdf print"),
-    fromExport("export-docx", "word docx document google docs"),
-    fromExport("export-md", "markdown md text stacked"),
-    fromExport("export-md-table", "markdown md table two columns side by side"),
-    fromExport("export-xlsx", "excel xlsx spreadsheet workbook sheets numbers table"),
-    fromExport("export-csv", "spreadsheet csv excel sheets table"),
-    fromExport("export-html", "splitshare share standalone page html web browser send any device app"),
-    fromExport("export-narration-docx", "narration voice over voiceover audio artist word docx"),
-    fromExport("export-narration-txt", "narration voice over voiceover audio artist text txt"),
-    fromExport("export-breakdown-xlsx", "breakdown excel xlsx spreadsheet workbook tags props locations cast list"),
-    fromExport("export-breakdown", "breakdown csv tags props locations cast list"),
-    fromExport("export-packing-gear", "packing list checklist gear equipment kit pdf"),
-    fromExport("export-packing-prop", "packing list checklist props prop pdf"),
-    fromExport("export-broll-pdf", "b-roll broll shot list shots second unit print pdf landscape"),
-    fromExport("export-broll-xlsx", "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets"),
-    fromExport("export-broll-csv", "b-roll broll shot list shots spreadsheet csv excel sheets"),
-    fromAction("panel-production"),
-    fromAction("panel-gear"),
-    fromAction("panel-broll"),
-    fromAction("panel-comments"),
-    fromAction("write"),
-    fromAction("present"),
-    fromAction("history"),
-    fromAction("find"),
-    fromAction("toggle-hide-shot"),
-    fromAction("toggle-rundown-min"),
-    fromAction("set-target"),
-    fromAction("prompter-open-in-browser"),
-    fromAction("prompter-open-in-chromium"),
-    fromAction("settings"),
-    fromAction("help"),
-    fromAction("tour"),
-    fromAction("long-demo"),
-    fromAction("setup"),
-    fromAction("about"),
-    fromAction("tagging-help"),
-    fromAction("export-app-data"),
-    fromAction("import-app-data")
-  ];
-  return COMMANDS;
+function listedEntries() {
+  var views = askingFromLauncher(function () { return appActions.list(); });
+  var entries = views.filter(function (v) { return v.visible && v.id !== OWN_ACTION; }).map(actionEntry)
+    .concat(EXPORT_COMMANDS.map(function (e) { return exportEntry(e[0], e[1]); }));
+  return entries.map(function (entry, i) { return { entry: entry, at: i }; })
+    .sort(function (a, b) { return (listRank(a.entry.cmd.id) - listRank(b.entry.cmd.id)) || (a.at - b.at); })
+    .map(function (x) { return x.entry; });
 }
 
 function recentIds() {
@@ -149,11 +119,9 @@ function scoreFor(view, cmd, terms) {
 export function commandResults(query) {
   var q = String(query || "").trim().toLowerCase();
   var terms = q.split(/\s+/).filter(Boolean);
-  var all = [];
-  commands().forEach(function (cmd, i) {
-    var view = cmd.read();
-    if (view) all.push({ cmd: cmd, view: view, order: i });
-  });
+  var all = listedEntries().map(function (entry, i) { return { cmd: entry.cmd, view: entry.view, order: i }; });
+  var groupOrder = GROUP_ORDER.slice();
+  all.forEach(function (it) { if (groupOrder.indexOf(it.cmd.group) === -1) groupOrder.push(it.cmd.group); });
   var groups = {};
   var put = function (g, item) { (groups[g] = groups[g] || []).push(item); };
   if (!terms.length) {
@@ -171,10 +139,10 @@ export function commandResults(query) {
       groups[g].sort(function (a, b) { return (b.score - a.score) || (a.order - b.order); });
     });
   }
-  var out = GROUP_ORDER.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] }; });
+  var out = groupOrder.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] }; });
   if (terms.length) {
     var best = function (g) { return Math.max.apply(null, g.items.map(function (it) { return it.score; })); };
-    out.sort(function (a, b) { return best(b) - best(a) || GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group); });
+    out.sort(function (a, b) { return best(b) - best(a) || groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group); });
   }
   return out;
 }
