@@ -34,7 +34,7 @@ them, and prints how many ran in each group.
 | Group | Files | Runner | Must be non-empty |
 | --- | --- | --- | --- |
 | `frontend` | `src/test/*.test.mjs` | `node --test` | always |
-| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once any migrated folder holds TypeScript source |
+| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated folder holds TypeScript source and `tests/` has no test for it |
 | `tests` | `tests/**/*.test.*` | `node --test` | once `tests/` holds TypeScript |
 | `desktop` | `desktop/test/*.test.mjs` | `node <file>`, one at a time | always |
 | `tools` | `tools/test-*.mjs` | `node <file>`, one at a time | always |

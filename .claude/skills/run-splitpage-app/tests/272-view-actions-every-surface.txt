@@ -1,0 +1,112 @@
+# The header's view buttons and the command menu (4.0 milestone 1): the four
+# side panels open and close, Write and Present open, the same way from
+# either surface. Written before they moved onto the action registry, and
+# kept unchanged after.
+
+open
+viewport 1400 900
+eval (function(){ window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__run = function (id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; return true; })()
+
+# --- each panel: its button opens and closes it; the command menu toggles it -
+jsclick #btn-production
+sleep 300
+expect __shown('production-panel')
+expect document.getElementById('btn-production').getAttribute('aria-pressed') == true
+jsclick #btn-production
+sleep 300
+expect !__shown('production-panel')
+key ctrl KeyK
+sleep 200
+type production panel
+sleep 200
+eval __run('panel-production')
+sleep 300
+expect __shown('production-panel')
+jsclick #production-close
+sleep 300
+
+jsclick #btn-gear
+sleep 300
+expect __shown('gear-panel')
+jsclick #btn-gear
+sleep 300
+expect !__shown('gear-panel')
+key ctrl KeyK
+sleep 200
+type gear panel
+sleep 200
+eval __run('panel-gear')
+sleep 300
+expect __shown('gear-panel')
+jsclick #gear-close
+sleep 300
+
+jsclick #btn-broll
+sleep 300
+expect __shown('broll-panel')
+jsclick #btn-broll
+sleep 300
+expect !__shown('broll-panel')
+key ctrl KeyK
+sleep 200
+type b-roll panel
+sleep 200
+eval __run('panel-broll')
+sleep 300
+expect __shown('broll-panel')
+jsclick #broll-close
+sleep 300
+
+jsclick #btn-comments
+sleep 300
+expect __shown('comments-panel')
+jsclick #btn-comments
+sleep 300
+expect !__shown('comments-panel')
+key ctrl KeyK
+sleep 200
+type comments panel
+sleep 200
+eval __run('panel-comments')
+sleep 300
+expect __shown('comments-panel')
+jsclick #comments-panel-close
+sleep 300
+
+# --- Write: button and command menu ------------------------------------------
+jsclick #btn-write
+wait __shown('writer')
+sleep 600
+jsclick #wr-close
+wait !__shown('writer')
+sleep 600
+key ctrl KeyK
+sleep 200
+type write
+sleep 200
+eval __run('write')
+wait __shown('writer')
+sleep 600
+jsclick #wr-close
+wait !__shown('writer')
+sleep 600
+
+# --- Present: button and command menu ----------------------------------------
+jsclick #btn-present
+wait __shown('prompter')
+sleep 600
+jsclick #pp-close
+wait !__shown('prompter')
+sleep 600
+key ctrl KeyK
+sleep 200
+type present
+sleep 200
+eval __run('present')
+wait __shown('prompter')
+sleep 600
+jsclick #pp-close
+wait !__shown('prompter')
+sleep 600
+
+expect document.getElementById('btn-save').textContent == Save

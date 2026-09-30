@@ -2,9 +2,7 @@ import { S } from "./_state.js";
 import { absorbRemoteChange, flushEdits } from "./12a-undo.js";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
-import { toggleHideShotScenes } from "./01b-hide-shot.js";
 import { migrateRows } from "./02-state.js";
-import { toggleRundownMinimized } from "./05f-rundown.js";
 import {
   docIdEmbeddedIn,
   migrateDocument,
@@ -16,7 +14,6 @@ import { rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
-  openHistoryPanel,
   pushSnapshot,
   setBaseState,
   stampRow,
@@ -32,36 +29,27 @@ import {
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
 import { brollEntries } from "./08c-broll.js";
 import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
-import { openFindBar } from "./09-find-replace.js";
-import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
+import { commentBodyText, commentEntries, formatTimestamp } from "./10-comments.js";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
-  openGdocModal,
-  openImportModal,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markDirty, showRefusal, showToast } from "./12-dirty-toast.js";
 import {
   linkTurnedOff,
   onServerDoc,
-  openDriveModal,
-  openServerPicker,
-  publishToServer,
   serverSessionExpired
 } from "./13-hosted.js";
-import { openCollaborate } from "./13b-collaborate.js";
 import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
   autoSaveHalt,
   exportMetaLine,
   markdownExportImages,
-  saveDoc,
   slugify,
   strBytes,
   toMarkdownDoc,
   toMarkdownTableDoc,
-  toggleAutoSave,
   warnImagesLeftOut,
   zipWrite
 } from "./14-export.js";
@@ -76,20 +64,18 @@ import { buildCsv, csvToRows } from "./16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.js";
 import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
-import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
-import { openCommandMenu } from "./18d-command-menu.js";
-import { showAbout } from "./20a-update.js";
+import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject,
   parseSplitpageFile
 } from "./20d-formats.js";
 import {
-  makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser, openPrompterInChromium
+  makeDesktopHandle, notifyDesktopDocumentState
 } from "./20f-desktop.js";
-import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
@@ -751,24 +737,14 @@ export async function exportBrollList(action) {
 export function handleFileMenuAction(action) {
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
-  if (!S.state && action !== "history" && action !== "tagging-help"
-      && action !== "drive-open" && action !== "about") {
+  if (appActions.has(action)) {
+    showRefusal(appActions.invoke(action, "menu"));
+    return;
+  }
+  if (!S.state) {
     showToast("Still loading…", "warn"); return;
   }
-  if (action === "save-as") saveDoc({ saveAs: true });
-  else if (action === "new") startNewScript();
-  else if (action === "export") openExportDialog();
-  else if (action === "export-again") exportAgain();
-  else if (action === "command-menu") openCommandMenu();
-  else if (action === "open") openLocalFile();
-  else if (action === "paste") openImportModal();
-  else if (action === "gdoc-import") openGdocModal();
-  else if (action === "save-back") saveBackToFile();
-  else if (action === "autosave") toggleAutoSave();
-  else if (action === "toggle-hide-shot") toggleHideShotScenes();
-  else if (action === "toggle-rundown-min") toggleRundownMinimized();
-  else if (action === "history") openHistoryPanel();
-  else if (action === "export-docx") exportAs("docx");
+  if (action === "export-docx") exportAs("docx");
   else if (action === "export-md") exportAs("md");
   else if (action === "export-md-table") exportAs("md-table");
   else if (action === "export-csv") exportAs("csv");
@@ -782,17 +758,6 @@ export function handleFileMenuAction(action) {
   else if (action === "export-packing-gear") exportPackingList("gear");
   else if (action === "export-packing-prop") exportPackingList("prop");
   else if (action === "export-broll-pdf" || action === "export-broll-csv" || action === "export-broll-xlsx") exportBrollList(action);
-  else if (action === "drive-open") openDriveModal();
-  else if (action === "server-open") openServerPicker();
-  else if (action === "server-publish") publishToServer();
-  else if (action === "collaborate") openCollaborate();
-  else if (action === "find") openFindBar();
-  else if (action === "prompter-open-in-browser") openPrompterInBrowser();
-  else if (action === "prompter-open-in-chromium") openPrompterInChromium();
-  else if (action === "export-app-data") exportAppData();
-  else if (action === "import-app-data") openImportAppData();
-  else if (action === "tagging-help") showTaggingHelp();
-  else if (action === "about") showAbout();
 }
 
 export function __init() {}

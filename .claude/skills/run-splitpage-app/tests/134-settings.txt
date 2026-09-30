@@ -63,8 +63,14 @@ expect localStorage.getItem('splitpage-theme') === null
 click #settings-modal label[for="settings-hide-shot"]
 expect localStorage.getItem('splitpage-hide-shot') === '1'
 expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
-# changed from the File menu while Settings is open: Settings follows
+# the File menu's switch is refused while Settings (a dialog) is open, and says why
 jsclick #menu-hide-shot
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') === '1'
+expect window.__on('settings-hide-shot') === true
+expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first.'; })
+# changed in another tab while Settings is open: Settings follows
+eval (function(){ localStorage.setItem('splitpage-hide-shot', '0'); window.dispatchEvent(new StorageEvent('storage', { key: 'splitpage-hide-shot', oldValue: '1', newValue: '0', storageArea: localStorage })); return true; })()
 wait window.__on('settings-hide-shot') === false
 expect localStorage.getItem('splitpage-hide-shot') === '0'
 

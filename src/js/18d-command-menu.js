@@ -1,59 +1,24 @@
 import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
-import { promptForTarget } from "./03-sync.js";
-import { reviewMode } from "./13-hosted.js";
 import {
   IS_MAC,
   fileMenuOpen,
   keyChipWords,
   keyChipsHtml,
-  keysWorkHere,
-  menuItemReason,
   modalIsOpen,
   refreshFileMenu,
-  openLongDemo,
   toggleFileMenu
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
 import { writerOpen } from "./19-writer.js";
+import { appActions } from "../legacy/app-actions.ts";
+import { askingFromLauncher } from "../legacy/screen.ts";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
 var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This document", "Help"];
 
 function el(id) { return document.getElementById(id); }
-
-function menuButton(action) {
-  return document.querySelector('#file-menu [data-file-action="' + action + '"]');
-}
-
-function fromMenu(action, group, words, label) {
-  return {
-    id: action,
-    group: group,
-    words: words || "",
-    read: function () {
-      var btn = menuButton(action);
-      if (!btn || btn.hidden) return null;
-      if (action === "save-back" && btn.disabled) return null;
-      var use = btn.querySelector(".mi-icon use");
-      var lab = btn.querySelector(".mi-label");
-      return {
-        label: label || (lab ? lab.textContent : btn.textContent),
-        icon: use ? use.getAttribute("href").slice(1) : "i-file",
-        keys: btn.hasAttribute("data-keys") && keysWorkHere(btn) ? btn.getAttribute("data-keys") : "",
-        why: btn.disabled ? (menuItemReason(btn) || btn.title || "Not available right now") : menuItemReason(btn),
-        disabled: btn.disabled,
-        state: btn.getAttribute("role") === "menuitemcheckbox"
-          ? (btn.getAttribute("aria-checked") === "true" ? "On" : "Off") : ""
-      };
-    },
-    run: function () {
-      var btn = menuButton(action);
-      if (btn && !btn.disabled) btn.click();
-    }
-  };
-}
 
 function fromExport(action, words) {
   return {
@@ -69,21 +34,25 @@ function fromExport(action, words) {
   };
 }
 
-function fromButton(id, btnId, group, label, icon, words, keys, blockedWhy) {
+function fromAction(id) {
+  var first = appActions.view(id);
   return {
     id: id,
-    group: group,
-    words: words,
+    group: first ? first.group : "",
+    words: first ? first.words : "",
     read: function () {
-      var btn = el(btnId);
-      if (!btn || btn.hidden) return null;
-      var why = blockedWhy ? blockedWhy() : "";
-      return { label: label, icon: icon, keys: keys || "", why: why, disabled: !!why || btn.disabled, state: "" };
+      var view = askingFromLauncher(function () { return appActions.view(id); });
+      if (!view || !view.visible) return null;
+      return {
+        label: view.label,
+        icon: view.icon || "i-file",
+        keys: view.keys.length ? view.keys[0] : "",
+        why: view.enabled ? "" : (view.reason || "Not available right now"),
+        disabled: !view.enabled,
+        state: view.checked === null ? "" : (view.checked ? "On" : "Off")
+      };
     },
-    run: function () {
-      var btn = el(btnId);
-      if (btn && !btn.disabled) btn.click();
-    }
+    run: function () { appActions.invoke(id, "command-menu"); }
   };
 }
 
@@ -91,24 +60,21 @@ var COMMANDS = null;
 
 function commands() {
   if (COMMANDS) return COMMANDS;
-  var viewing = function () {
-    return reviewMode() ? "Viewing only — the writer changes the script" : "";
-  };
   COMMANDS = [
-    fromButton("save", "btn-save", "File", "Save", "i-save", "store keep write disk", "mod+s"),
-    fromMenu("save-as", "File", "save as duplicate copy another file"),
-    fromMenu("save-back", "File", "write back original docx csv txt"),
-    fromMenu("autosave", "File", "automatic save saving"),
-    fromMenu("new", "File", "blank empty create start fresh document"),
-    fromMenu("open", "File", "load file document project md splitpage docx"),
-    fromMenu("server-open", "File", "server hosted shared documents"),
-    fromMenu("paste", "File", "import revised draft text", "Import: paste a script…"),
-    fromMenu("gdoc-import", "File", "import google docs link url", "Import: Google Doc link…"),
-    fromMenu("drive-open", "File", "import google drive cloud files", "Import: Google Drive…"),
-    fromMenu("collaborate", "Share", "collaborate share invite link url people live together send edit comment publish"),
-    fromMenu("server-publish", "Share", "publish upload server hosted"),
-    fromMenu("servers", "Share", "server connect bookmark address pin join"),
-    fromMenu("export", "Export", "download save as format dialog"),
+    fromAction("save"),
+    fromAction("save-as"),
+    fromAction("save-back"),
+    fromAction("autosave"),
+    fromAction("new"),
+    fromAction("open"),
+    fromAction("server-open"),
+    fromAction("paste"),
+    fromAction("gdoc-import"),
+    fromAction("drive-open"),
+    fromAction("collaborate"),
+    fromAction("server-publish"),
+    fromAction("servers"),
+    fromAction("export"),
     fromExport("export-pdf", "pdf print"),
     fromExport("export-docx", "word docx document google docs"),
     fromExport("export-md", "markdown md text stacked"),
@@ -125,46 +91,28 @@ function commands() {
     fromExport("export-broll-pdf", "b-roll broll shot list shots second unit print pdf landscape"),
     fromExport("export-broll-xlsx", "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets"),
     fromExport("export-broll-csv", "b-roll broll shot list shots spreadsheet csv excel sheets"),
-    fromButton("panel-production", "btn-production", "View", "Production panel", "i-panel",
-      "breakdown tags props locations cast show hide toggle"),
-    fromButton("panel-gear", "btn-gear", "View", "Gear panel", "i-panel", "gear equipment kit camera show hide toggle"),
-    fromButton("panel-broll", "btn-broll", "View", "B-roll panel", "i-panel", "broll b roll shots cutaways show hide toggle"),
-    fromButton("panel-comments", "btn-comments", "View", "Comments panel", "i-panel", "comments notes review feedback show hide toggle"),
-    fromButton("write", "btn-write", "View", "Write", "i-pen", "writer narration word processor audio column", "", viewing),
-    fromButton("present", "btn-present", "View", "Present", "i-play", "teleprompter prompter autocue read play"),
-    fromMenu("history", "This document", "versions restore snapshot backup older undo"),
-    fromMenu("find", "This document", "search replace look for"),
-    fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
-    fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
-    {
-      id: "set-target",
-      group: "This document",
-      words: "target length goal duration aim runtime running time clock back timing over under minutes",
-      read: function () {
-        var why = reviewMode() ? "Viewing only — the writer sets the target" : "";
-        return { label: "Set target length…", icon: "i-clock", keys: "", why: why, disabled: !!why, state: "" };
-      },
-      run: function () { promptForTarget(); }
-    },
-    fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
-    fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
-    fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
-    fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
-    fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
-    {
-      id: "long-demo",
-      group: "Help",
-      words: "demo example sample long thirty 30 scenes test try every feature",
-      read: function () {
-        return { label: "Open the long demo (30 scenes)", icon: "i-file-plus", keys: "", why: "", disabled: false, state: "" };
-      },
-      run: function () { openLongDemo(); }
-    },
-    fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),
-    fromMenu("about", "Help", "version about", "About Splitpage"),
-    fromMenu("tagging-help", "Tags", "tags tagging reference shortcuts brackets help"),
-    fromMenu("export-app-data", "Help", "backup move desktop app data history bookmarks"),
-    fromMenu("import-app-data", "Help", "restore move desktop app data history bookmarks")
+    fromAction("panel-production"),
+    fromAction("panel-gear"),
+    fromAction("panel-broll"),
+    fromAction("panel-comments"),
+    fromAction("write"),
+    fromAction("present"),
+    fromAction("history"),
+    fromAction("find"),
+    fromAction("toggle-hide-shot"),
+    fromAction("toggle-rundown-min"),
+    fromAction("set-target"),
+    fromAction("prompter-open-in-browser"),
+    fromAction("prompter-open-in-chromium"),
+    fromAction("settings"),
+    fromAction("help"),
+    fromAction("tour"),
+    fromAction("long-demo"),
+    fromAction("setup"),
+    fromAction("about"),
+    fromAction("tagging-help"),
+    fromAction("export-app-data"),
+    fromAction("import-app-data")
   ];
   return COMMANDS;
 }
@@ -421,18 +369,8 @@ export function __init() {
   var trigger = el("btn-command");
   if (trigger) {
     trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
-    trigger.addEventListener("click", function () { openCommandMenu(); });
+    trigger.addEventListener("click", function () { appActions.invoke("command-menu", "button"); });
   }
-
-  window.addEventListener("keydown", function (e) {
-    if (e.defaultPrevented || e.isComposing) return;
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-    if (String(e.key || "").toLowerCase() !== "k") return;
-    if (commandMenuOpen()) { e.preventDefault(); closeCommandMenu(); return; }
-    if (blockedNow()) return;
-    e.preventDefault();
-    openCommandMenu();
-  });
 
   window.__commandTest = {
     results: function (q) {
