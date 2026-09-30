@@ -2,8 +2,8 @@
 # state (4.0 milestone 1, which gave them one Save action). After an edit,
 # during a save, after a save that failed and after one that went through,
 # both show the same text, dirty mark and disabled state; while a save runs
-# neither starts another, from either button or the desktop app's native
-# menu. Passes against the code before the action registry (4.0-development
+# neither starts another, from either button, the desktop app's native menu
+# or Ctrl+S. Passes against the code before the action registry (4.0-development
 # 19c66f7) and after it. Every `eval` is one physical line.
 
 open
@@ -28,6 +28,7 @@ expect pair() === 'Saving…|false|true ~ Saving…|false|true'
 jsclick #btn-save
 jsclick #wr-save
 eval D.runMenuCommand('save'); true
+key ctrl KeyS
 sleep 300
 expect window.__writes === 1
 expect same()
