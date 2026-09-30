@@ -84,7 +84,11 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       icon: "i-search",
       keys: ["mod+k"],
       words: "command palette search run",
-      availability: () => (commandMenuOpen() ? { enabled: true } : availableUnless(["loading", "prompter", "writer", "dialog", "tour"], screenNow())),
+      availability: (source) => {
+        if (commandMenuOpen()) return { enabled: true };
+        const screen = availableUnless(["loading", "prompter", "writer", "dialog", "tour"], screenNow());
+        return !screen.enabled && source === "button" ? { enabled: false, reason: "" } : screen;
+      },
       run: (source) => {
         if (!commandMenuOpen()) openCommandMenu();
         else if (source === "shortcut") closeCommandMenu();

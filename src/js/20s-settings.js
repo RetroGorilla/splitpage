@@ -27,7 +27,7 @@ import { escapeHtml } from "./02-state.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments } from "./10-comments.js";
-import { invokeFrom, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   COLLAB_SERVER_KEY,
   DEFAULT_COLLAB_SERVER,
@@ -42,7 +42,7 @@ import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, applyWriterSize, readWriterSize } fro
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
 import { TOUR_DONE_KEY } from "./20c-help.js";
-import { appDataImportShown } from "./20f-desktop.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
@@ -112,7 +112,8 @@ function clockExample(mode) {
 }
 
 function importAvailable() {
-  return appDataImportShown();
+  var view = appActions.view("import-app-data", "button");
+  return !!view && view.visible;
 }
 
 function collaborationHtml() {
@@ -356,14 +357,14 @@ function runAction(action) {
   if (action === "scale-reset") { writePref(SCRIPT_SCALE_KEY, "1"); return; }
   if (action === "tagging-help") {
     closeSettings();
-    invokeFrom("tagging-help", "button");
+    appActions.invoke("tagging-help", "button");
     announce(TAGGING_HELP_KEY);
     return;
   }
   if (action === "tour") {
     closeSettings();
     writePref(TOUR_DONE_KEY, null);
-    invokeFrom("tour", "button");
+    appActions.invoke("tour", "button");
     return;
   }
   if (action === "desktop-notice") {
@@ -378,10 +379,10 @@ function runAction(action) {
     renderSettings();
     return;
   }
-  if (action === "servers") { closeSettings(); invokeFrom("servers", "button"); return; }
-  if (action === "drive") { closeSettings(); invokeFrom("drive-open", "button"); return; }
-  if (action === "export-app-data") { closeSettings(); invokeFrom("export-app-data", "button"); return; }
-  if (action === "import-app-data") { closeSettings(); invokeFrom("import-app-data", "button"); }
+  if (action === "servers") { closeSettings(); appActions.invoke("servers", "button"); return; }
+  if (action === "drive") { closeSettings(); appActions.invoke("drive-open", "button"); return; }
+  if (action === "export-app-data") { closeSettings(); appActions.invoke("export-app-data", "button"); return; }
+  if (action === "import-app-data") { closeSettings(); appActions.invoke("import-app-data", "button"); }
 }
 
 function wireModal(m) {

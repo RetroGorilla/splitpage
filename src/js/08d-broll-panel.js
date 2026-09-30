@@ -29,13 +29,14 @@ import {
   renameBrollInScript,
   updateBrollBadge
 } from "./08c-broll.js";
-import { invokeFrom, markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
 
@@ -1219,7 +1220,7 @@ export function wireBrollPanel() {
   if (closeBtn) closeBtn.addEventListener("click", closeBrollPanel);
   var openBtn = document.getElementById("btn-broll");
   if (openBtn) openBtn.addEventListener("click", function () {
-    invokeFrom("panel-broll", "button");
+    appActions.invoke("panel-broll", "button");
   });
   document.addEventListener("mousedown", function (e) {
     if (!groupMenuOpen && !menuFor) return;

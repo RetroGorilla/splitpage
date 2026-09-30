@@ -35,7 +35,7 @@ import {
   normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, invokeFrom, markDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markDirty, showToast } from "./12-dirty-toast.js";
 import {
   linkTurnedOff,
   onServerDoc,
@@ -66,7 +66,6 @@ import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, p
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
-import { closeOnboarding } from "./20b-onboarding.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject,
@@ -743,12 +742,18 @@ export async function exportBrollList(action) {
   else await exportAs("b-roll pdf", { brollView: { filter: "all", group: "scene" } });
 }
 
+var fileMenuChoiceListeners = [];
+
+export function onFileMenuChoice(listener) {
+  fileMenuChoiceListeners.push(listener);
+}
+
 export function handleFileMenuAction(action, source) {
-  closeOnboarding();
+  fileMenuChoiceListeners.forEach(function (listener) { listener(action); });
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
-    invokeFrom(action, source || "menu");
+    appActions.invoke(action, source || "menu");
     return;
   }
   if (!S.state) {

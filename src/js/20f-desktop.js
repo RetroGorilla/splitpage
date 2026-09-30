@@ -13,14 +13,12 @@ import {
 import { hashText as historyHashText } from "./03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
-import { invokeFrom, markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { concatBytes, saveDoc, strBytes } from "./14-export.js";
-import { handleFileMenuAction, mimeForFilename, openProjectFile } from "./18-local-files.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
+import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
-import { appActions } from "../legacy/app-actions.ts";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;
@@ -91,36 +89,18 @@ export function notifyDesktopDocumentState() {
   });
 }
 
-var DESKTOP_HEADER_ACTIONS = {
-  "save": "save",
-  "toggle-production": "panel-production",
-  "toggle-gear": "panel-gear",
-  "toggle-comments": "panel-comments",
-  "write": "write",
-  "present": "present"
-};
+var menuCommandRunner = null;
 
-function fileMenuItem(id) {
-  return document.querySelector('#file-menu [data-file-action="' + cssAttr(id) + '"]');
+export function runMenuCommandsWith(runner) {
+  menuCommandRunner = runner;
+  return function () {
+    if (menuCommandRunner === runner) menuCommandRunner = null;
+  };
 }
 
 function runDesktopMenuCommand(cmd) {
-  var header = DESKTOP_HEADER_ACTIONS[cmd];
-  var id = header || cmd;
-  if (appActions.has(id)) {
-    var view = appActions.view(id, "native-menu");
-    if (view && !view.enabled && !view.reason) return;
-    if (header) {
-      invokeFrom(id, "native-menu");
-      toggleFileMenu(false);
-    } else if (fileMenuItem(id)) {
-      handleFileMenuAction(id, "native-menu");
-    } else {
-      invokeFrom(id, "native-menu");
-    }
-    return;
-  }
-  var item = fileMenuItem(cmd);
+  if (menuCommandRunner && menuCommandRunner(cmd)) return;
+  var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');
   if (item && !item.disabled) item.click();
 }
 

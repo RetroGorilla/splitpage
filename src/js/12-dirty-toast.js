@@ -16,7 +16,6 @@ import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
 import { noteEdit } from "./12a-undo.js";
-import { appActions } from "../legacy/app-actions.ts";
 
 S.saveButtonBusy = false;
 
@@ -137,16 +136,10 @@ export function updateSaveStatus() {
   }
 }
 
-function showRefusal(outcome) {
+export function showRefusal(outcome) {
   if (!outcome || outcome.kind !== "unavailable" || !outcome.reason) return;
   var text = outcome.reason;
   showToast(/[.!?…]$/.test(text) ? text : text + ".", "warn");
-}
-
-export function invokeFrom(id, source) {
-  var outcome = appActions.invoke(id, source);
-  showRefusal(outcome);
-  return outcome;
 }
 
 export function showToast(msg, kind, sticky) {

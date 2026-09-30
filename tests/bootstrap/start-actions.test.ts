@@ -56,6 +56,28 @@ test("the app's actions start, stop and start again with one key listener and no
   assert.deepEqual(registry.list().map((v) => v.id), ["test-probe"]);
 });
 
+test("while started, a refusal is shown as a toast from every surface but a shortcut, and not once stopped", () => {
+  const host = document.createElement("div");
+  host.id = "toast-host";
+  document.body.appendChild(host);
+  const registry = createActionRegistry();
+  registry.register({ id: "test-refused", label: "Refused", group: "G", availability: () => ({ enabled: false, reason: "Close the open dialog first" }), run: () => {} });
+  const toasts = (): string[] => Array.prototype.map.call(host.querySelectorAll(".toast"), (t: Element) => t.textContent ?? "") as string[];
+  try {
+    const stop = startActions(registry, new CountingTarget());
+    registry.invoke("test-refused", "button");
+    registry.invoke("test-refused", "native-menu");
+    registry.invoke("test-refused", "shortcut");
+    assert.deepEqual(toasts(), ["Close the open dialog first.", "Close the open dialog first."]);
+    stop();
+    registry.invoke("test-refused", "button");
+    assert.equal(toasts().length, 2);
+  } finally {
+    stopActions();
+    host.remove();
+  }
+});
+
 test("starting twice without stopping is refused, so no listener or action is doubled", () => {
   const registry = createActionRegistry();
   const target = new CountingTarget();

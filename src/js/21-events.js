@@ -190,7 +190,7 @@ import {
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "./11-import.js";
-import { invokeFrom, markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { caretAfterStep, configureUndo, lastUndoEntry, redo, settleAfterApply, undo } from "./12a-undo.js";
 import {
   armDriveDelete,
@@ -291,6 +291,7 @@ import {
   armServerDraftResume,
   draftRestorePending
 } from "./20g-drafts.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
@@ -1763,7 +1764,7 @@ function init() {
 }
 
 function runFromButton(id) {
-  invokeFrom(id, "button");
+  appActions.invoke(id, "button");
 }
 
 function saveFromButton() { runFromButton("save"); }
