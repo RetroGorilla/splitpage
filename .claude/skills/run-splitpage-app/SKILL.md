@@ -464,13 +464,25 @@ node tools/run-suites.mjs ../splitpage-runs/one --lanes 1 --timeout 900 '^01-cor
 
 Filter by full filename: numeric prefixes repeat (`261` and `262` each name
 two suites). Flags `--lanes` (default 6), `--port-base` (offset for a second
-runner on the same machine), `--timeout` (seconds per suite, default 600);
-`LANES`, `PORT_BASE` and `SUITE_TIMEOUT` in the environment do the same.
+runner on the same machine), `--timeout` (seconds per suite, default 600, at
+most 86400); `LANES`, `PORT_BASE` and `SUITE_TIMEOUT` in the environment do
+the same. An unknown flag is an error. Lane `n` uses HTTP port
+`18100 + base + 10n` and CDP port `19300 + base + 10n`; before starting
+anything the runner binds each of them and holds `HTTP + 1` for the whole run,
+so a second run on the same block stops with a port collision instead of
+fighting the first. Give it another `--port-base`.
 
-Its exit status is the answer: 0 only when every suite is `PASS`; 1 when any
-suite is `FAIL`, `TIMEOUT` (killed with its browser), `NO-RESULT` (the driver
-exited without a `RESULT:` line) or `LAUNCH-ERROR`; 2 when nothing matched or
-a flag is invalid. It only ever kills processes it started.
+Its exit status is the answer: 0 only when every suite is `PASS`, meaning
+exactly one `RESULT: n/n checks passed` line with `n` above zero, last on
+stdout, and exit 0. It is 1 when any suite is `FAIL`, `BAD-RESULT` (a
+malformed, zero-check, incomplete, contradictory, repeated or not-last
+`RESULT:` line), `NO-RESULT` (the driver exited without a `RESULT:` line),
+`TIMEOUT` (killed with its browser), `LEFTOVER` (something the driver started
+still held its output open after it exited) or `LAUNCH-ERROR`; 2 when nothing
+matched, a flag is invalid or a port is taken; 3 when the runner itself failed.
+It only ever kills processes it started: on Linux/macOS each driver's own
+process group, on Windows the driver's tree while the driver is alive, and
+Ctrl+C, SIGTERM or an internal error kills them before it exits.
 `tools/test-run-suites.mjs` (in `npm run test:tools`) checks each of those
 against a fake driver. `run-tests.ps1` remains the Windows runner.
 
