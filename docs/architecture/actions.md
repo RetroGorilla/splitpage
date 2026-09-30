@@ -199,12 +199,12 @@ refuses does the accelerator's command run, and refuse again with a toast.
 ## Refusals are the same on every surface
 
 Decided 30 September 2026: an action is refused under the same conditions
-whichever surface asks, and those conditions are the ones the keyboard
-shortcuts already used. Before this, the desktop app's native menu and its
-accelerators went through the File menu path, which checked only that a
-document had loaded, so they acted over an open dialog, the Writer or
-Present where the browser shortcut refused. They now refuse too, and the
-File menu path shows the reason as a toast. 3.1.x gets the same change from
+whichever surface asks (but for the setup wizard, below), and those
+conditions are the ones the keyboard shortcuts already used. Before this, the
+desktop app's native menu and its accelerators went through the File menu
+path, which checked only that a document had loaded, so they acted over an
+open dialog, the Writer or Present where the browser shortcut refused. They
+now refuse too, and the File menu path shows the reason as a toast. 3.1.x gets the same change from
 #273 (`275-menu-refused-under-overlay.txt`), which passes on this code; it is
 the only change of behavior the move to the registry keeps. As in #273, an
 open dialog is checked first, so with a dialog over the writer or Present the
@@ -212,6 +212,18 @@ toast names the dialog ("Close the open dialog first."); the writer's reason
 is "Close the writer first.". The toast that follows a link being turned off
 offers Save a copy…, which calls `saveDoc({ saveAs: true })` itself rather
 than the registry, so a dialog in front of it cannot refuse it.
+
+One order from 3.1 is kept against the rule, for the setup wizard. Choosing
+a File menu item, from the File menu or from the desktop app's native menu,
+runs the `onFileMenuChoice()` listeners (`18-local-files.js`) before the
+action is asked whether it can run, and the wizard's listener closes the
+wizard. So with the wizard open, the native menu's Open (or any other File
+menu item, Save a copy and Export among them) closes the wizard and runs,
+while Ctrl+O is refused with the wizard as the open dialog. The wizard is the
+only dialog that listens there. A native command that is not a File menu
+item (the six header commands, the script zoom commands) does not take that
+path. `280-other-surfaces.txt` pins the native Open against Ctrl+O, and
+passes against 47c0309 too.
 
 ## The desktop app's native menu
 
