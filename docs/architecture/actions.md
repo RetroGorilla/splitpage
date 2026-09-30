@@ -62,10 +62,19 @@ Until the bootstrap of milestone 7 exists, one registry instance lives in
 rethrows the error on a microtask, so a failing action still reaches the
 browser as an uncaught error, as it did before.
 
-`src/legacy/document-actions.ts`, `file-actions.ts`, `view-actions.ts` and
-`help-actions.ts` define the actions whose handlers are still in `src/js`. `src/legacy/screen.ts` names what
-can refuse an action (still loading, Present, the Writer, a dialog, the tour)
-with the reason a person is shown.
+`src/legacy/this-document-actions.ts` (the command menu's "This document"
+group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts` and
+`share-actions.ts` define the actions whose handlers are still in `src/js`.
+`src/legacy/screen.ts` names what can refuse an action (still loading,
+Present, the Writer, a dialog, the tour) with the reason a person is shown; it
+imports nothing from `src/js`, so the numbered modules can import it without
+joining their import cycle.
+
+`src/legacy/screen-state.ts` is the one bridge to the global state `S`: it
+answers `screenNow()` (still loading, Present, the Writer, the tour) and
+`inDesktopApp()`. No other file under `src/legacy/` imports `S`; an action
+file that needs to know something `S` holds asks the bridge, so the day `S`
+goes, one file changes.
 
 The command menu is itself an overlay. While it reads what to list, it asks
 through `askingFromLauncher()`, so each action is judged as it will be once

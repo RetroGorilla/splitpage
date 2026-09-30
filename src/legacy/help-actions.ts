@@ -1,5 +1,4 @@
 import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
-import { S } from "../js/_state.js";
 import { showTaggingHelp } from "../js/10-comments.js";
 import { openLongDemo } from "../js/18b-file-menu.js";
 import { showAbout } from "../js/20a-update.js";
@@ -8,9 +7,9 @@ import { openHelp, startTour } from "../js/20c-help.js";
 import { openServersDialog } from "../js/20e-connect.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
-import { screenNow } from "./document-actions.ts";
 import { menuItemAvailability, menuItemLabel } from "./menu-items.ts";
 import { availableUnless } from "./screen.ts";
+import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 function fromMenuItem(action: string): Availability {
   return menuItemAvailability(action) ?? { enabled: true };
@@ -46,7 +45,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       label: "Help",
       group: "Help",
       icon: "i-help",
-      keys: () => (S.DESKTOP ? ["F1"] : []),
+      keys: () => (inDesktopApp() ? ["F1"] : []),
       bindKeys: () => false,
       words: "guide manual docs user guide how",
       availability: () => fromMenuItem("help"),

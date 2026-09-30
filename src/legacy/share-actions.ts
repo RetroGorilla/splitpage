@@ -1,5 +1,4 @@
 import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
-import { S } from "../js/_state.js";
 import { promptForTarget } from "../js/03-sync.js";
 import { openGdocModal, openImportModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, reviewMode } from "../js/13-hosted.js";
@@ -9,9 +8,9 @@ import { saveBackToFile } from "../js/18-local-files.js";
 import { startNewScript } from "../js/18b-file-menu.js";
 import { exportAgain } from "../js/18c-export-dialog.js";
 import { openPrompterInBrowser, openPrompterInChromium } from "../js/20f-desktop.js";
-import { screenNow } from "./document-actions.ts";
 import { menuItemAvailability, menuItemLabel } from "./menu-items.ts";
 import { availableUnless } from "./screen.ts";
+import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 function loadedMenuItem(action: string): Availability {
   const screen = availableUnless(["loading"], screenNow());
@@ -24,7 +23,7 @@ function menuChecked(action: string): boolean {
 }
 
 function desktopKeys(keys: readonly string[]): () => readonly string[] {
-  return () => (S.DESKTOP ? keys : []);
+  return () => (inDesktopApp() ? keys : []);
 }
 
 function menuAction(id: string, label: string | (() => string), group: string, icon: string, words: string, run: () => void | Promise<void>): ActionDefinition {

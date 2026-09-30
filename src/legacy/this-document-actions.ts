@@ -1,19 +1,12 @@
 import type { ActionRegistry } from "../application/actions.ts";
-import { S } from "../js/_state.js";
 import { hideShotScenes, toggleHideShotScenes } from "../js/01b-hide-shot.js";
 import { openHistoryPanel } from "../js/03-sync.js";
 import { isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
 import { findOpen, openFindBar } from "../js/09-find-replace.js";
-import { writerOpen } from "../js/19-writer.js";
 import { availableUnless } from "./screen.ts";
-import type { ScreenState } from "./screen.ts";
+import { screenNow } from "./screen-state.ts";
 
-export function screenNow(): ScreenState {
-  const tour = document.getElementById("tour-overlay");
-  return { loading: !S.state, prompter: Boolean(S.prompterOpen), writer: Boolean(writerOpen), tour: Boolean(tour && !tour.hidden) };
-}
-
-export function registerDocumentActions(registry: ActionRegistry): () => void {
+export function registerThisDocumentActions(registry: ActionRegistry): () => void {
   const disposers = [
     registry.register({
       id: "toggle-hide-shot",
