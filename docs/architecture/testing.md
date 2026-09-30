@@ -65,6 +65,11 @@ eslint applies `typescript-eslint`'s strict rules to `.ts` files and
 refuses inline `eslint-disable` directives in the migrated folders and
 `tests/`.
 
+TypeScript is pinned at 6.0.3, not 7. TypeScript 7's npm package exposes its
+compiler API only under `typescript/unstable/*`, which `tools/source-scan.mjs`,
+`tools/dep-report.mjs` and `tools/typecheck.mjs` call, and typescript-eslint
+8.71 supports TypeScript below 6.1. Move to 7 when both have changed.
+
 Supported Node versions are 22 (from 22.22.2) and 24 (from 24.15.0), per
 `package.json`'s `engines`; `.nvmrc` pins the one used locally and in CI.
 
