@@ -1,5 +1,4 @@
 import { escapeHtml } from "./02-state.js";
-import { invokeFrom } from "./12-dirty-toast.js";
 import {
   IS_MAC,
   fileMenuOpen,
@@ -59,7 +58,7 @@ function exportEntry(action, words) {
 
 function actionEntry(view) {
   return {
-    cmd: { id: view.id, group: view.group, words: view.words, run: function () { invokeFrom(view.id, "command-menu"); } },
+    cmd: { id: view.id, group: view.group, words: view.words, run: function () { appActions.invoke(view.id, "command-menu"); } },
     view: {
       label: view.label,
       icon: view.icon || "i-file",

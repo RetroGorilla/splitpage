@@ -5,7 +5,7 @@ import { escapeHtml } from "./02-state.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { COMMENT_NAME_KEY, getSavedAuthorName } from "./10-comments.js";
-import { invokeFrom, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import {
   apiFetch,
   applyHealth,
@@ -30,6 +30,7 @@ import { updateFileChip } from "./18-local-files.js";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
 export var COLLAB_SERVER_KEY = "splitpage-collab-server";
@@ -903,7 +904,7 @@ export function __init() {
   var headBtn = document.getElementById("btn-collab");
   if (headBtn) {
     headBtn.addEventListener("click", function () {
-      invokeFrom("collaborate", "button");
+      appActions.invoke("collaborate", "button");
     });
     headBtn.addEventListener("pointerenter", updateCollaborateMenu);
     headBtn.addEventListener("focus", updateCollaborateMenu);

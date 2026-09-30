@@ -8,8 +8,7 @@ import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
-import { shownWhen } from "./menu-items.ts";
-import { availableUnless, firstRefusal } from "./screen.ts";
+import { availableUnless } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 export function registerHelpActions(registry: ActionRegistry): () => void {
@@ -95,7 +94,10 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Help",
       icon: "i-box",
       words: "restore move desktop app data history bookmarks",
-      availability: () => firstRefusal(availableUnless(["loading"], screenNow()), shownWhen(appDataImportShown())),
+      availability: () => {
+        const screen = availableUnless(["loading"], screenNow());
+        return appDataImportShown() ? screen : { ...screen, visible: false };
+      },
       run: () => { openImportAppData(); }
     }
   ];

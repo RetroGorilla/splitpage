@@ -56,6 +56,41 @@ test("availability can depend on the surface that asks, and a view is the comman
   assert.equal(ran, 1);
 });
 
+test("a refusal goes to the presenter the composition supplies, with the surface that asked", () => {
+  const registry = createActionRegistry();
+  let enabled = false;
+  registry.register({ id: "save", label: "Save", group: "G", availability: () => (enabled ? { enabled: true } : { enabled: false, reason: "Close the open dialog first" }), run: () => {} });
+  assert.equal(registry.invoke("save", "button").kind, "unavailable");
+  const shown: string[] = [];
+  const stop = registry.presentRefusals((refusal, source) => { shown.push(`${refusal.id}:${refusal.reason}:${source}`); });
+  assert.equal(registry.invoke("save", "menu").kind, "unavailable");
+  assert.equal(registry.invoke("save", "shortcut").kind, "unavailable");
+  registry.view("save");
+  registry.list();
+  enabled = true;
+  assert.equal(registry.invoke("save", "menu").kind, "ran");
+  assert.equal(registry.invoke("missing", "menu").kind, "unknown");
+  enabled = false;
+  stop();
+  registry.invoke("save", "menu");
+  assert.deepEqual(shown, ["save:Close the open dialog first:menu", "save:Close the open dialog first:shortcut"]);
+});
+
+test("a newer presenter replaces the one before, and a stale disposer leaves it in place", () => {
+  const registry = createActionRegistry();
+  registry.register({ id: "open", label: "Open", group: "G", availability: () => ({ enabled: false, reason: "Still loading…" }), run: () => {} });
+  const first: string[] = [];
+  const second: string[] = [];
+  const stopFirst = registry.presentRefusals((r) => { first.push(r.reason); });
+  const stopSecond = registry.presentRefusals((r) => { second.push(r.reason); });
+  stopFirst();
+  registry.invoke("open", "button");
+  stopSecond();
+  registry.invoke("open", "button");
+  assert.deepEqual(first, []);
+  assert.deepEqual(second, ["Still loading…"]);
+});
+
 test("an unknown action is reported as unknown", () => {
   assert.deepEqual(createActionRegistry().invoke("nope", "menu"), { kind: "unknown", id: "nope" });
 });

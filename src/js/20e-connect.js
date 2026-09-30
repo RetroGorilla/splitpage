@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { conn, home, setHome } from "./_home.js";
 import { escapeHtml } from "./02-state.js";
 import { render } from "./05-render.js";
-import { invokeFrom, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import {
   applyReviewMode,
   detectServer,
@@ -15,6 +15,7 @@ import {
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
 
@@ -532,7 +533,7 @@ export function __init() {
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
         else if (action === "review-copy") copyReviewLink();
-        else if (action === "collaborate") { closeServersDialog(); invokeFrom("collaborate", "button"); }
+        else if (action === "collaborate") { closeServersDialog(); appActions.invoke("collaborate", "button"); }
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");

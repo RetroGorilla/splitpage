@@ -3,12 +3,13 @@ import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { invokeFrom, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
-import { deliverFile } from "./18-local-files.js";
+import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
 import { startTour } from "./20c-help.js";
 import { addServerBookmark, joinErrorText } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var ONBOARD_KEY = "splitpage-onboarding";
 
@@ -105,7 +106,7 @@ export function openOnboarding() {
   if (closeBtn) closeBtn.focus();
 }
 
-export function closeOnboarding() {
+function closeOnboarding() {
   var modal = onboardModal();
   if (!modal || modal.hidden) return;
   modal.hidden = true;
@@ -321,8 +322,8 @@ export function __init() {
         else if (name === "host-save") saveOnboardHostCmd();
         else if (name === "join-submit") submitOnboardJoin();
         else if (name === "finish-tour") onboardFinishAndTour();
-        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); invokeFrom("servers", "button"); }
-        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); invokeFrom("help", "button"); }
+        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); appActions.invoke("servers", "button"); }
+        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); appActions.invoke("help", "button"); }
         return;
       }
       var card = e.target.closest("[data-onboard-work]");
@@ -355,6 +356,8 @@ export function __init() {
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
   })();
+
+  onFileMenuChoice(function () { closeOnboarding(); });
 
   maybeAutoShowOnboarding();
 

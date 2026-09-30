@@ -38,11 +38,19 @@ export interface ActionView {
   readonly checked: boolean | null;
 }
 
+export interface Refusal {
+  readonly kind: "unavailable";
+  readonly id: string;
+  readonly reason: string;
+}
+
 export type InvokeOutcome =
   | { readonly kind: "ran"; readonly id: string }
-  | { readonly kind: "unavailable"; readonly id: string; readonly reason: string }
+  | Refusal
   | { readonly kind: "unknown"; readonly id: string }
   | { readonly kind: "failed"; readonly id: string; readonly error: unknown };
+
+export type RefusalPresenter = (refusal: Refusal, source: ActionSource) => void;
 
 export interface ActionRegistry {
   register(definition: ActionDefinition): () => void;
@@ -51,6 +59,7 @@ export interface ActionRegistry {
   view(id: string, source?: ActionSource): ActionView | undefined;
   list(source?: ActionSource): readonly ActionView[];
   invoke(id: string, source: ActionSource): InvokeOutcome;
+  presentRefusals(presenter: RefusalPresenter): () => void;
 }
 
 export interface RegistryOptions {
@@ -108,6 +117,7 @@ function claimChords(definitions: ReadonlyMap<string, ActionDefinition>, definit
 export function createActionRegistry(options: RegistryOptions = {}): ActionRegistry {
   const definitions = new Map<string, ActionDefinition>();
   const report = (error: unknown, id: string): void => { options.report?.(error, id); };
+  let presenter: RefusalPresenter | null = null;
 
   return {
     register(definition) {
@@ -138,7 +148,11 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
       const definition = definitions.get(id);
       if (!definition) return { kind: "unknown", id };
       const a = availabilityOf(definition, source);
-      if (!a.enabled) return { kind: "unavailable", id, reason: a.reason ?? "" };
+      if (!a.enabled) {
+        const refusal: Refusal = { kind: "unavailable", id, reason: a.reason ?? "" };
+        presenter?.(refusal, source);
+        return refusal;
+      }
       try {
         const pending: unknown = definition.run(source);
         if (isThenable(pending)) pending.then(undefined, (error: unknown) => { report(error, id); });
@@ -147,6 +161,12 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
         report(error, id);
         return { kind: "failed", id, error };
       }
+    },
+    presentRefusals(next) {
+      presenter = next;
+      return () => {
+        if (presenter === next) presenter = null;
+      };
     }
   };
 }

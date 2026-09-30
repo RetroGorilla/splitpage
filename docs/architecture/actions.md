@@ -37,7 +37,7 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 | `save` | Its buttons and the native menu (which clicked the header's Save) do not wait for the document to load; Ctrl+S does |
 | `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
 | `write` | In a review session the command menu reads "Viewing only — the writer changes the script"; the button and the native menu say "Viewing only — you can comment on this script, but not change it." |
-| `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source) |
+| `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source). The header's Search button is refused without a reason, so nothing is shown, as `openCommandMenu()` returned quietly in 3.1 |
 
 Two others differ by action rather than by surface, as in 3.1: the
 Production and Gear buttons say "Still loading..." and the B-roll button does
@@ -46,18 +46,22 @@ the loading cases against the real definitions (the browser suites cannot
 reach a page that is still loading); `278-commands-as-before.txt` checks the
 rest, and passes against 3.1's code too.
 
-Each surface decides how to show a refusal. A surface that says why calls
-`invokeFrom(id, source)` (`12-dirty-toast.js`) rather than `invoke`: it
-invokes the action and shows a refusal as a toast, ending the reason with a
-full stop (a reason is written as a menu line, "Close the open dialog first",
-and a toast is a sentence). The File menu, the header and Writer buttons, the
-rundown's button, the Servers dialog's Collaborate button and a command run
-from the command menu all use it, so no refusal is dropped. The command menu
-shows a refusal greyed out with the reason before anything runs. Two
-surfaces stay silent, as they were before the registry: a shortcut leaves the
-key to the browser, and the header's Search button does nothing (in 3.1 it
-called `openCommandMenu()`, which returned quietly). A key that a focused
-control already handled (`defaultPrevented`) never reaches a global action.
+Showing a refusal is a port of the registry. `presentRefusals(presenter)`
+installs the one presenter and returns its disposer; `invoke` hands every
+refusal to it with the surface that asked, and `view`/`list` never do. The
+bootstrap installs `presentRefusal` (`src/bootstrap/actions.ts`), which shows
+a refusal as a toast through `showRefusal()` (`12-dirty-toast.js`), ending
+the reason with a full stop (a reason is written as a menu line, "Close the
+open dialog first", and a toast is a sentence), for every surface but a
+shortcut, which leaves the key to the browser. A refusal without a reason
+shows nothing. So every caller in `src/js` just calls `appActions.invoke()`
+and none of them imports the toast module for it, and no refusal is dropped:
+the File menu, the header and Writer buttons, the rundown's button, the
+Servers dialog's Collaborate button, the Settings and wizard buttons, the
+native menu and a command run from the command menu all show theirs. The
+command menu also shows a refusal greyed out with the reason before anything
+runs. A key that a focused control already handled (`defaultPrevented`)
+never reaches a global action.
 
 Two definition options shape the shortcut binding. `claimKeys` keeps the key
 from the browser even when the action is refused, so Ctrl+S and Ctrl+O never
@@ -152,12 +156,25 @@ the menu has closed to run it.
 
 ## Starting and stopping
 
-`src/bootstrap/actions.ts` owns the lifetime. `startActions(registry,
-keyTarget)` registers every group of actions and mounts the shortcuts feature
-(`mountShortcuts()` in `src/features/shortcuts/mount.ts`, one `keydown`
-listener on the target), keeps every disposer, and returns the function that
-undoes them all in reverse; `stopActions()` calls it. Starting again while
-started is refused, so neither a listener nor an action can be doubled.
+`src/bootstrap/actions.ts` owns the lifetime and the composition.
+`startActions(registry, keyTarget)` installs the refusal presenter, registers
+every group of actions, hands the desktop app's native menu its runner
+(`runMenuCommandsWith(nativeMenuRunner(registry))`) and mounts the shortcuts
+feature (`mountShortcuts()` in `src/features/shortcuts/mount.ts`, one
+`keydown` listener on the target). It keeps every disposer and returns the
+function that undoes them all in reverse; `stopActions()` calls it. Starting
+again while started is refused, so neither a listener nor an action can be
+doubled.
+
+These are supplied here, rather than imported where they are used, so that no
+numbered module gains an import inside their 60-module cycle: the toast module
+reaches the registry as its presenter, and the native menu's routing (which
+needs the File menu's close and `handleFileMenuAction`) reaches `20f-desktop.js`
+as a runner. Two more rules follow the same principle. The setup wizard closes
+when a File menu item is chosen by registering with `onFileMenuChoice()` in
+`18-local-files.js`, which it already imported. The Settings dialog shows
+Import app data when the `import-app-data` action is visible, asking the
+registry rather than `20f-desktop.js`.
 `src/js/_entry.js` calls `startActions(appActions, window)` after every
 module's `__init`. It lives in the entry because `21-events.js` is inside the
 60-module import cycle, and a migrated file imported from there would join it
@@ -193,8 +210,11 @@ the only change of behavior the move to the registry keeps.
 ## The desktop app's native menu
 
 `runDesktopMenuCommand` (`20f-desktop.js`) receives a command name from
-`desktop/main.js` and runs the action of that id with the source
-`"native-menu"`, reading no rendered state. Its six header commands
+`desktop/main.js` and hands it to the runner the bootstrap supplied,
+`nativeMenuRunner()` in `src/legacy/native-menu.ts`, which runs the action of
+that id with the source `"native-menu"`, reading no rendered state; a command
+the runner does not know (an export format) clicks its File menu item as
+before. Its six header commands
 (`save`, `toggle-production`, `toggle-gear`, `toggle-comments`, `write`,
 `present`) name the header buttons' actions and close an open File menu, as
 the click on the button they used to send did. A command that is a File menu
@@ -304,7 +324,10 @@ for it outside those files, in its own commit before the move, taught the
 native menu that a registered command which is not a File menu item runs as
 itself (every registered native command until then was a File menu item or a
 header button). The runtime import cycle shrank from 61 to 60 modules, since
-`20f-desktop.js` no longer imports `05s-script-zoom.js`.
+`20f-desktop.js` no longer imports `05s-script-zoom.js`. That routing has
+since moved out of `20f-desktop.js` into `src/legacy/native-menu.ts`, which
+the bootstrap supplies; a command added there the same way needs no edit to
+either.
 
 Tests run: `281-script-zoom-commands.txt` (new: the View menu's three
 commands, the keys, both in the Writer, and not listed; 20/20 against
