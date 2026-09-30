@@ -10,7 +10,7 @@
     "check": "node build.mjs --check",
     "test": "node --test \"src/test/*.test.mjs\"",
     "test:desktop": "node desktop/test/drafts.test.mjs && node desktop/test/ipc-table.test.mjs && node desktop/test/blob-store.test.mjs && node desktop/test/history-fs-backend.test.mjs && node desktop/test/prompter-share.test.mjs && node desktop/test/voice-helper.test.mjs && node desktop/test/voice-grace.test.mjs && node desktop/test/google-drive.test.mjs && node desktop/test/spellcheck-menu.test.mjs && node desktop/test/chromium-browsers.test.mjs && node desktop/test/verify-dist-payload.test.mjs",
-    "test:tools": "node tools/test-server.mjs && node tools/test-update.mjs",
+    "test:tools": "node tools/test-server.mjs && node tools/test-update.mjs && node tools/test-run-suites.mjs",
     "test:all": "npm test && npm run test:desktop && npm run test:tools",
     "lint": "eslint ."
   },

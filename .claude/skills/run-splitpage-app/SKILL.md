@@ -449,8 +449,28 @@ so on that line, so CI can gate on the exit code. `driver.ps1` still only
 exits non-zero for a command that throws, which is why `run-tests.ps1` greps
 for `RESULT:` and why CI runs the Node driver.
 
-`run-tests.ps1` itself is *not* ported — there is no Linux suite runner, so
-run one suite per invocation, each with its own `--port`/`--cdp-port`.
+**The Linux/macOS suite runner is `tools/run-suites.mjs`.** It runs every
+suite through `driver.mjs`, several lanes at once, each lane on its own
+`--port`/`--cdp-port`, and writes one log per suite plus `summary.txt` to the
+folder you name:
+
+```bash
+node build.mjs && node tools/run-suites.mjs ../splitpage-runs/latest            # every suite
+node tools/run-suites.mjs ../splitpage-runs/collab '^26[0-6]-'                  # a regex over full filenames
+node tools/run-suites.mjs ../splitpage-runs/one --lanes 1 --timeout 900 '^01-core'
+```
+
+Filter by full filename: numeric prefixes repeat (`261` and `262` each name
+two suites). Flags `--lanes` (default 6), `--port-base` (offset for a second
+runner on the same machine), `--timeout` (seconds per suite, default 600);
+`LANES`, `PORT_BASE` and `SUITE_TIMEOUT` in the environment do the same.
+
+Its exit status is the answer: 0 only when every suite is `PASS`; 1 when any
+suite is `FAIL`, `TIMEOUT` (killed with its browser), `NO-RESULT` (the driver
+exited without a `RESULT:` line) or `LAUNCH-ERROR`; 2 when nothing matched or
+a flag is invalid. It only ever kills processes it started.
+`tools/test-run-suites.mjs` (in `npm run test:tools`) checks each of those
+against a fake driver. `run-tests.ps1` remains the Windows runner.
 
 ### Web fonts, and why a width assertion may differ there
 
