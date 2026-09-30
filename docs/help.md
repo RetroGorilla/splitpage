@@ -12,6 +12,11 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 whoever opens it works on the same script, with nothing to install. On your
 own network you can also [host a shared session](#hosting-a-shared-session).
 
+## What's new since 3.1
+
+- Ctrl+Z right after opening writer mode closes writer instead of undoing a
+  change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+
 ## What's new in 3.1
 
 - **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
