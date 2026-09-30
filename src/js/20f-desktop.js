@@ -121,6 +121,14 @@ export function canOpenPrompterInChromium() {
   return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInChromium === "function");
 }
 
+export function driveOpenShown() {
+  return !S.DESKTOP || typeof S.DESKTOP.driveStatus === "function";
+}
+
+export function appDataImportShown() {
+  return !!S.DESKTOP;
+}
+
 var PROMPTER_BROWSER_MESSAGES = {
   NOT_SAVED: "Save this script first (Ctrl+S), then try again — the browser reads the saved copy.",
   SAVE_FAILED: "The save didn't go through, so the browser would show an older version. Save, then try again.",
@@ -384,12 +392,12 @@ export function initDesktop() {
   wireDesktopBlobs(S.DESKTOP);
 
   var driveItem = document.getElementById("menu-drive-open");
-  if (driveItem) driveItem.hidden = typeof S.DESKTOP.driveStatus !== "function";
+  if (driveItem) driveItem.hidden = !driveOpenShown();
 
   var exportAppItem = document.getElementById("menu-export-app-data");
   if (exportAppItem) exportAppItem.hidden = false;
   var importAppItem = document.getElementById("menu-import-app-data");
-  if (importAppItem) importAppItem.hidden = false;
+  if (importAppItem) importAppItem.hidden = !appDataImportShown();
 
   var intent = S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type;
   awaitingHandedDocument = intent === "open-file" || intent === "open-server";

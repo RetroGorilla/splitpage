@@ -1,18 +1,17 @@
 import type { Availability } from "../application/actions.ts";
 
-export function menuItemAvailability(action: string): Availability | null {
-  const item = document.querySelector(`#file-menu [data-file-action="${action}"]`);
-  if (!(item instanceof HTMLButtonElement)) return null;
-  const visible = !item.hidden;
-  if (!item.disabled) return visible ? null : { enabled: true, visible };
-  const why = item.querySelector(".mi-why");
-  const reason = why instanceof HTMLElement && !why.hidden ? why.textContent ?? "" : "";
-  return { enabled: false, visible, reason: reason || item.title || "" };
+export interface MenuItemState {
+  readonly hidden: boolean;
+  readonly disabled: boolean;
+  readonly reason: string;
 }
 
-export function menuItemLabel(action: string, fallback: string): string {
-  const item = document.querySelector(`#file-menu [data-file-action="${action}"]`);
-  const label = item?.querySelector(".mi-label") ?? item;
-  const text = label?.textContent?.trim() ?? "";
-  return text || fallback;
+export function itemAvailability(state: MenuItemState): Availability {
+  const visible = !state.hidden;
+  if (state.disabled) return { enabled: false, visible, reason: state.reason };
+  return visible ? { enabled: true } : { enabled: true, visible };
+}
+
+export function shownWhen(shown: boolean): Availability {
+  return shown ? { enabled: true } : { enabled: true, visible: false };
 }

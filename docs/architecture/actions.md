@@ -41,10 +41,30 @@ page leaves them alone and nothing runs twice. The command menu shows the keys
 either way. `keys` may be a function, read each time: Help shows F1 only in
 the desktop app, whose menu binds it.
 
-`src/legacy/menu-items.ts` reads a File menu item's hidden and disabled state
-(and the reason it shows), and its current label, for actions whose
-availability the menu still decides. `label` may be a function too: Servers
-shows the connected host, Save to file the imported file's name.
+An availability never reads what the page last rendered. The File menu
+repaints its items only when it opens, so a shortcut, the command menu's own
+reading or the desktop app's native menu would otherwise act on a stale
+rendering. Where the File menu shows an item hidden, greyed out with a reason
+or relabelled, one function in the module that owns that state decides it,
+and both the menu's painting and the action's availability call it:
+
+| State | Function |
+| --- | --- |
+| Paste a script, greyed out in a review session | `pasteItemState()`, `18b-file-menu.js` |
+| Open from the server, Put this script on the server | `serverOpenItemState()`, `serverPublishItemState()`, `13-hosted.js` |
+| Save to file, and its label | `saveBackItemState()`, `18-local-files.js` |
+| Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
+| The Servers label | `serversMenuLabel()`, `20e-connect.js` |
+| Present in browser, Chromium speech, Google Drive, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `driveOpenShown()`, `appDataImportShown()`, `20f-desktop.js` |
+| Autosave's switch | `autoSaveEnabled`, `14-export.js` |
+| Save while a save is running | `saveInProgress()`, `src/legacy/screen-state.ts` |
+| Collaborate | `collaborateBlockedReason()`, `13b-collaborate.js` |
+
+`src/legacy/menu-items.ts` turns such a state into an availability. `label`
+may be a function: Servers shows the connected host, Save to file the
+imported file's name. `276-availability-follows-state.txt` changes the state
+with the File menu closed and checks that the command menu and the native
+menu follow it.
 
 `visible: false` only keeps an action out of the command menu. It still runs
 from a surface that has it: the desktop app's native menu reaches items the

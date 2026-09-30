@@ -600,16 +600,22 @@ export function exportAgain() {
   runExportAction(action);
 }
 
+export function exportAgainItemState() {
+  var action = lastExportAction();
+  if (!action) return { hidden: true, disabled: false, reason: "", label: "" };
+  var why = exportActionReason(action);
+  return { hidden: false, disabled: !!why, reason: why, label: "Export again as " + EXPORT_ACTION_NAMES[action] };
+}
+
 function refreshExportAgainItem() {
   var item = el("menu-export-again");
   if (!item) return;
-  var action = lastExportAction();
-  item.hidden = !action;
-  if (!action) return;
-  setMenuItemLabel(item, "Export again as " + EXPORT_ACTION_NAMES[action]);
-  var why = exportActionReason(action);
-  item.disabled = !!why;
-  setMenuItemReason(item, why);
+  var state = exportAgainItemState();
+  item.hidden = state.hidden;
+  if (state.hidden) return;
+  setMenuItemLabel(item, state.label);
+  item.disabled = state.disabled;
+  setMenuItemReason(item, state.reason);
 }
 
 function trapTab(e) {

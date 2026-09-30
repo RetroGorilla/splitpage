@@ -10,3 +10,7 @@ export function screenNow(): ScreenState {
 export function inDesktopApp(): boolean {
   return Boolean(S.DESKTOP);
 }
+
+export function saveInProgress(): boolean {
+  return Boolean(S.saveButtonBusy);
+}

@@ -53,12 +53,16 @@ function bookmarkById(id) {
   return null;
 }
 
+export function serversMenuLabel() {
+  if (!conn.serverUrl) return "Servers…";
+  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
+  return "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")";
+}
+
 export function updateConnectMenu() {
   var item = document.getElementById("menu-servers");
   if (!item) return;
-  if (!conn.serverUrl) { setMenuItemLabel(item, "Servers…"); return; }
-  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
-  setMenuItemLabel(item, "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")");
+  setMenuItemLabel(item, serversMenuLabel());
 }
 
 export function shortHost(url) {
