@@ -17,5 +17,5 @@ from section 5 with a pointer to the ledger, so the two never disagree.
 | Plugins and SDK | Out of scope |
 | TypeScript for new folders, erasable syntax only | Decided |
 | ARM64 Windows runtime checks | A device is available; the release checklist row stands as written |
-| CI on hosted runners for PRs and the development branch | Required by the plan; the accepted minutes budget is not yet stated |
+| CI | Fast gates on hosted runners for PRs and the development branch; the full browser regression, Electron smoke, Windows and ARM64 checks run locally at milestone and release gates. Every check is a local script first |
 | Comments in workflow YAML | Covered by the no-comment rule; existing ones under the frozen baseline, new explanations go to `docs/` |

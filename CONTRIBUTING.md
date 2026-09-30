@@ -27,6 +27,8 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
    ```
    Anything you can see in the app also needs a browser suite; see
    [`.claude/skills/run-splitpage-app/SKILL.md`](.claude/skills/run-splitpage-app/SKILL.md).
+   `node tools/run-suites.mjs <out-dir> [regex]` runs them on Linux/macOS,
+   `run-tests.ps1` on Windows.
 3. If what a person sees or does changed, update
    [`docs/help.md`](docs/help.md) and add a line under **Unreleased** in
    [CHANGELOG.md](CHANGELOG.md).
