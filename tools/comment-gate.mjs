@@ -2,14 +2,14 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { REPO, commentsIn, listRepoFiles, lineOf } from "./source-scan.mjs";
+import { configCommentsIn, configKind, DOCKERFILE_PATH, COMPOSE_PATH } from "./config-comments.mjs";
 
 export const BASELINE_PATH = join(REPO, "tools", "comment-baseline.json");
 
 export const EXEMPT = [
   /(^|\/)node_modules\//,
   /^\.claude\/handoff\//,
-  /^index\.html$/,
-  /^eslint\.config\.mjs$/
+  /^index\.html$/
 ];
 
 export const COMMENT_FREE = [
@@ -20,12 +20,19 @@ export const COMMENT_FREE = [
   /^src\/features\//,
   /^src\/bootstrap\//,
   /^src\/legacy\//,
-  /^tests\//
+  /^tests\//,
+  /^\.github\//,
+  DOCKERFILE_PATH,
+  COMPOSE_PATH,
+  /^eslint\.config\.mjs$/,
+  /\.jsonc?$/
 ];
 
 export const REQUIRED_MARKERS = {
   "src/page.html": ["/*{{APP_CSS}}*/", "//{{APP_JS}}"]
 };
+
+export const DIRECTIVES = {};
 
 export function normalize(text) {
   return text.replace(/\s+/g, " ").trim();
@@ -39,25 +46,36 @@ export function commentFree(path) {
   return COMMENT_FREE.some((re) => re.test(path));
 }
 
-export function scanFile(path, text, markers = REQUIRED_MARKERS) {
-  const found = commentsIn(path, text);
+export function commentsFor(path, text) {
+  return configKind(path) ? configCommentsIn(path, text) : commentsIn(path, text);
+}
+
+export function canScan(path) {
+  return configKind(path) !== null || commentsIn(path, "") !== null;
+}
+
+export function scanFile(path, text, markers = REQUIRED_MARKERS, directives = DIRECTIVES) {
+  const found = commentsFor(path, text);
   if (found === null) return null;
   const allowed = [...(markers[path] ?? [])];
+  const allowedDirectives = [...(directives[path] ?? [])];
   const comments = [];
   for (const c of found) {
-    const i = allowed.indexOf(c.text);
+    const d = c.directive ? allowedDirectives.indexOf(c.text) : -1;
+    if (d !== -1) { allowedDirectives.splice(d, 1); continue; }
+    const i = c.directive ? -1 : allowed.indexOf(c.text);
     if (i !== -1) { allowed.splice(i, 1); continue; }
-    comments.push({ text: normalize(c.text), line: lineOf(text, c.start) });
+    comments.push({ text: normalize(c.text), line: c.line ?? lineOf(text, c.start) });
   }
   return comments;
 }
 
-export function checkComments(files, baseline, markers = REQUIRED_MARKERS) {
+export function checkComments(files, baseline, markers = REQUIRED_MARKERS, directives = DIRECTIVES) {
   const added = [];
   const current = {};
   const known = baseline.files ?? {};
   for (const { path, text } of files) {
-    const comments = scanFile(path, text, markers);
+    const comments = scanFile(path, text, markers, directives);
     if (!comments || comments.length === 0) continue;
     current[path] = comments.map((c) => c.text).sort();
     const remaining = commentFree(path) ? [] : [...(known[path] ?? [])];
@@ -82,9 +100,9 @@ export function checkComments(files, baseline, markers = REQUIRED_MARKERS) {
 export function loadFiles(repo = REPO) {
   return listRepoFiles(repo)
     .filter(isScanned)
+    .filter(canScan)
     .filter((p) => existsSync(join(repo, p)))
-    .map((path) => ({ path, text: readFileSync(join(repo, path), "utf8") }))
-    .filter((f) => commentsIn(f.path, "") !== null);
+    .map((path) => ({ path, text: readFileSync(join(repo, path), "utf8") }));
 }
 
 function readBaseline(path) {
@@ -103,7 +121,14 @@ function short(text) {
 export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", print = console.log, printError = console.error } = {}) {
   const files = loadFiles(repo);
   const baseline = readBaseline(baselinePath);
-  const { added, stale, current } = checkComments(files, baseline);
+  let result;
+  try {
+    result = checkComments(files, baseline);
+  } catch (error) {
+    printError(`comment-gate: FAILED — ${error.message}`);
+    return 1;
+  }
+  const { added, stale, current } = result;
   const total = Object.values(current).reduce((n, list) => n + list.length, 0);
 
   if (mode === "init") {
@@ -122,7 +147,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   print(`comment-gate: ${files.length} files scanned, ${total} baselined comments remain`);
   if (added.length) {
     for (const a of added) printError(`  new comment ${a.path}:${a.line} ${short(a.text)}`);
-    printError("comment-gate: FAILED — authored code carries no comments; see docs/IMPLEMENTATION-PLAN.md section 2");
+    printError("comment-gate: FAILED — authored code and configuration carry no comments; see docs/IMPLEMENTATION-PLAN.md section 2");
     return 1;
   }
   if (mode === "prune") {

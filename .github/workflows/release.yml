@@ -1,28 +1,3 @@
-# Release: build what DEPLOY.md §7 publishes, from a v* tag, on Windows.
-#
-# Until this existed every release was built by hand on one Windows PC —
-# `node package.mjs` and `npm run dist:win` — and uploaded by hand. This
-# runs the same two commands on a GitHub-hosted Windows runner, so a
-# release needs a tag and a click, not a local build:
-#
-#   1. Bump VERSION (and desktop/package.json) and merge it, as today.
-#   2. Tag that commit on main: git tag v3.0.0-beta.3 && git push origin v3.0.0-beta.3
-#   3. This builds the portable zip and both per-arch installers, runs
-#      verify-dist (the build stops there if it does not print ALL PASS),
-#      and writes SHA256SUMS.txt.
-#   4. With the SPLITPAGE_RELEASES_TOKEN secret set, it opens a DRAFT
-#      release on RetroGorilla/splitpage-releases with those four files —
-#      marked pre-release when the version has a "-" in it. Nobody is
-#      offered a draft: read it over and press Publish.
-#      Without the secret the files are left on the run as an artifact, to
-#      upload by hand.
-#
-# The secret is a fine-grained personal access token with Contents: read
-# and write on RetroGorilla/splitpage-releases and nothing else. This
-# repository's own GITHUB_TOKEN cannot write to another repository.
-#
-# Run it by hand (Actions ▸ Release ▸ Run workflow) to build from any branch
-# without releasing anything: a manual run never drafts a release.
 name: Release
 
 on:
@@ -44,8 +19,6 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     env:
-      # The installers are unsigned (#81). Without this electron-builder goes
-      # looking for a signing certificate in the runner's store.
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -54,9 +27,6 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # VERSION is the single source of truth (stage.mjs checks
-      # desktop/package.json against it). A tag that names something else
-      # would publish files whose names and update checks disagree with it.
       - name: Read VERSION and check the tag
         id: version
         shell: bash
@@ -71,7 +41,6 @@ jobs:
       - name: Install build dependencies
         run: npm ci
 
-      # Builds index.html itself first (package.mjs), then zips.
       - name: Portable zip
         run: node package.mjs
 
@@ -79,15 +48,10 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      # stage.mjs, electron-builder for x64 and arm64, then verify-dist.mjs:
-      # the architecture checks and the payload extraction that caught
-      # 2.0.1's empty ARM64 installer. A mismatch fails the job here.
       - name: Desktop installers (dist:win, with verify-dist)
         working-directory: desktop
         run: npm run dist:win
 
-      # Only the per-arch installers are published, not the combined one
-      # (DEPLOY.md §7). The sha256sum format is the one desktop/main.js reads.
       - name: Collect the release files and their checksums
         shell: bash
         run: |
