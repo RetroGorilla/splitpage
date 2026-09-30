@@ -12,7 +12,7 @@ runs the fast gates in the order CI does.
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
-| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery) |
+| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list) |
 | `npm run test:all` | All three sets |
 | `npm run verify` | lint, typecheck, check:deps, check:comments, build, test:all |
 
@@ -141,7 +141,8 @@ classed as prose.
 path filters list every file either Dockerfile copies. Job `image` builds the
 root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
 Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
-`splitpage-app` artifact into an empty folder, builds `Dockerfile.prebuilt`
+`splitpage-app` artifact into an empty folder (`tools/artifact-files.mjs`,
+which reads the list from `ci.yml`), builds `Dockerfile.prebuilt`
 there, starts it and checks `/api/health`'s version, `/` and `/sw.js` against
 `VERSION` and its HEALTHCHECK. `.github/workflows/release.yml` builds the
 Windows installers from a tag. [ci.md](ci.md) explains the settings in these

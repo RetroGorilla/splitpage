@@ -23,6 +23,7 @@ on:
       - .nvmrc
       - .github/workflows/docker.yml
       - .github/workflows/ci.yml
+      - tools/artifact-files.mjs
   push:
     branches: [main]
     paths:
@@ -46,6 +47,7 @@ on:
       - .nvmrc
       - .github/workflows/docker.yml
       - .github/workflows/ci.yml
+      - tools/artifact-files.mjs
 
 concurrency:
   group: docker-${{ github.ref }}
@@ -191,10 +193,8 @@ jobs:
 
       - name: Stage the files ci.yml uploads as the splitpage-app artifact
         run: |
-          app="$RUNNER_TEMP/splitpage-app"
-          mkdir -p "$app"
-          cp -R index.html sw.js manifest.webmanifest icon.svg icon-maskable.svg VERSION Dockerfile.prebuilt server "$app/"
-          find "$app" -type f | sort
+          node tools/artifact-files.mjs --stage "$RUNNER_TEMP/splitpage-app"
+          find "$RUNNER_TEMP/splitpage-app" -type f | sort
 
       - name: Build Dockerfile.prebuilt from the staged files alone
         working-directory: ${{ runner.temp }}/splitpage-app
