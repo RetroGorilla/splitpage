@@ -14,7 +14,7 @@ import {
   openPrompterInBrowser,
   openPrompterInChromium
 } from "../js/20f-desktop.js";
-import { itemAvailability, shownWhen } from "./menu-items.ts";
+import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { availableUnless, firstRefusal } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 
@@ -34,8 +34,8 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-save",
       words: "write back original docx csv txt",
-      availability: () => {
-        const a = loaded(itemAvailability(saveBackItemState()));
+      availability: (source) => {
+        const a = loaded(itemAvailability(saveBackItemState(), source));
         return a.enabled ? a : { ...a, visible: false };
       },
       run: async () => { await saveBackToFile(); }
@@ -64,7 +64,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-server",
       words: "server hosted shared documents",
-      availability: () => loaded(itemAvailability(serverOpenItemState())),
+      availability: (source) => loaded(itemAvailability(serverOpenItemState(), source)),
       run: () => openServerPicker()
     },
     {
@@ -73,7 +73,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-clipboard",
       words: "import revised draft text",
-      availability: () => loaded(itemAvailability(pasteItemState())),
+      availability: (source) => loaded(itemAvailability(pasteItemState(), source)),
       run: () => { openImportModal(); }
     },
     {
@@ -100,9 +100,9 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "Share",
       icon: "i-people",
       words: "collaborate share invite link url people live together send edit comment publish",
-      availability: () => {
+      availability: (source) => {
         const why = collaborateBlockedReason();
-        return loaded(why ? { enabled: false, reason: why } : { enabled: true });
+        return loaded(why ? greyedOut(why, source) : { enabled: true });
       },
       run: () => openCollaborate()
     },
@@ -112,7 +112,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "Share",
       icon: "i-cloud-up",
       words: "publish upload server hosted",
-      availability: () => loaded(itemAvailability(serverPublishItemState())),
+      availability: (source) => loaded(itemAvailability(serverPublishItemState(), source)),
       run: async () => { await publishToServer(); }
     },
     {
@@ -121,7 +121,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "Export",
       icon: "i-repeat",
       words: "export again repeat last",
-      availability: () => ({ ...loaded(itemAvailability(exportAgainItemState())), visible: false }),
+      availability: (source) => ({ ...loaded(itemAvailability(exportAgainItemState(), source)), visible: false }),
       run: () => { exportAgain(); }
     },
     {

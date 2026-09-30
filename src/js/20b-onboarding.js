@@ -3,11 +3,11 @@ import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { showToast } from "./12-dirty-toast.js";
+import { invokeFrom, showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile } from "./18-local-files.js";
-import { openHelp, startTour } from "./20c-help.js";
-import { addServerBookmark, joinErrorText, openServersDialog } from "./20e-connect.js";
+import { startTour } from "./20c-help.js";
+import { addServerBookmark, joinErrorText } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
 
 export var ONBOARD_KEY = "splitpage-onboarding";
@@ -105,7 +105,7 @@ export function openOnboarding() {
   if (closeBtn) closeBtn.focus();
 }
 
-function closeOnboarding() {
+export function closeOnboarding() {
   var modal = onboardModal();
   if (!modal || modal.hidden) return;
   modal.hidden = true;
@@ -321,8 +321,8 @@ export function __init() {
         else if (name === "host-save") saveOnboardHostCmd();
         else if (name === "join-submit") submitOnboardJoin();
         else if (name === "finish-tour") onboardFinishAndTour();
-        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); if (typeof openServersDialog === "function") openServersDialog(); }
-        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); if (typeof openHelp === "function") openHelp(); }
+        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); invokeFrom("servers", "button"); }
+        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); invokeFrom("help", "button"); }
         return;
       }
       var card = e.target.closest("[data-onboard-work]");
@@ -354,17 +354,6 @@ export function __init() {
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
-  })();
-
-  (function wireOnboardingFileMenu() {
-    var menu = document.getElementById("file-menu");
-    if (!menu) return;
-    menu.addEventListener("click", function (e) {
-      var item = e.target.closest("[data-file-action]");
-      if (!item) return;
-      var modal = onboardModal();
-      if (modal && !modal.hidden) closeOnboarding();
-    }, true);
   })();
 
   maybeAutoShowOnboarding();

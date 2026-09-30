@@ -14,12 +14,14 @@ import { hashText as historyHashText } from "./03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { runScriptZoomCommand } from "./05s-script-zoom.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { invokeFrom, markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { concatBytes, saveDoc, strBytes } from "./14-export.js";
-import { mimeForFilename, openProjectFile } from "./18-local-files.js";
+import { handleFileMenuAction, mimeForFilename, openProjectFile } from "./18-local-files.js";
+import { toggleFileMenu } from "./18b-file-menu.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;
@@ -90,21 +92,25 @@ export function notifyDesktopDocumentState() {
   });
 }
 
-var DESKTOP_HEADER_BUTTONS = {
-  "save": "btn-save",
-  "toggle-production": "btn-production",
-  "toggle-gear": "btn-gear",
-  "toggle-comments": "btn-comments",
-  "write": "btn-write",
-  "present": "btn-present"
+var DESKTOP_HEADER_ACTIONS = {
+  "save": "save",
+  "toggle-production": "panel-production",
+  "toggle-gear": "panel-gear",
+  "toggle-comments": "panel-comments",
+  "write": "write",
+  "present": "present"
 };
 
 function runDesktopMenuCommand(cmd) {
   if (runScriptZoomCommand(cmd)) return;
-  var btnId = DESKTOP_HEADER_BUTTONS[cmd];
-  if (btnId) {
-    var btn = document.getElementById(btnId);
-    if (btn && !btn.disabled) btn.click();
+  var header = DESKTOP_HEADER_ACTIONS[cmd];
+  var id = header || cmd;
+  if (appActions.has(id)) {
+    var view = appActions.view(id, "native-menu");
+    if (view && !view.enabled && !view.reason) return;
+    if (!header) { handleFileMenuAction(id, "native-menu"); return; }
+    invokeFrom(id, "native-menu");
+    toggleFileMenu(false);
     return;
   }
   var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');
