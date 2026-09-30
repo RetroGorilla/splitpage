@@ -187,7 +187,38 @@ const scopeCases = [
   ], []],
   ["a default parameter value is a reference", "src/core/document/x.ts", [
     "export function f(a = setTimeout, b: number = 1) { return [a, b]; }"
-  ], ["setTimeout:1"]]
+  ], ["setTimeout:1"]],
+  ["a parameter default does not see a var declared in the body", "src/core/document/x.ts", [
+    "export function f(a = fetch) {",
+    "  var fetch = 1;",
+    "  return [a, fetch];",
+    "}"
+  ], ["fetch:1"]],
+  ["a type parameter does not hide a global value", "src/core/document/x.ts", [
+    'export function f<URL>(u: URL) { return [u, new URL("x")]; }'
+  ], ["URL:1"]],
+  ["a type alias or an interface does not hide a global value", "src/core/document/x.ts", [
+    "type fetch = number;",
+    "interface Worker { id: number }",
+    'export const r = [fetch("/x"), new Worker("w.js")];'
+  ], ["Worker:3", "fetch:3"]],
+  ["an import type does not hide a global value", "src/core/document/x.ts", [
+    'import type { crypto } from "./types.ts";',
+    "export const id = crypto.randomUUID();"
+  ], ["crypto:2"]],
+  ["a local value does not hide a global type", "src/core/document/x.ts", [
+    "const URL = 1;",
+    "export let u: URL | undefined = undefined;",
+    "export const n = URL;"
+  ], ["URL:2"]],
+  ["a class is both a type and a value", "src/core/document/x.ts", [
+    "class Blob { size = 0; }",
+    "export const b: Blob = new Blob();"
+  ], []],
+  ["typeof reaches an import type", "src/core/document/x.ts", [
+    'import type { fetch } from "./http.ts";',
+    "export type F = typeof fetch;"
+  ], []]
 ];
 
 for (const [name, path, lines, expected] of scopeCases) eq(name, freeGlobals(path, lines), expected);

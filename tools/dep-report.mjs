@@ -49,6 +49,9 @@ const OBJECT_MUTATORS = {
 
 const MAX_STATE_PATH = 6;
 
+const TYPE_ONLY_KINDS = new Set(["type", "import-type"]);
+const VALUE_AND_TYPE_KINDS = new Set(["class", "enum", "namespace", "import", "import-equals"]);
+
 const BINDING_KINDS = new Set([
   "ImportDeclaration", "ExportDeclaration", "ImportEqualsDeclaration", "ImportType", "ExportAssignment", "VariableStatement",
   "VariableDeclarationList", "FunctionDeclaration", "FunctionExpression", "ArrowFunction", "MethodDeclaration", "Constructor",
@@ -196,6 +199,15 @@ function isReference(node) {
   return true;
 }
 
+function referenceSpace(node) {
+  const p = node.parent;
+  if (ts.isTypeReferenceNode(p) && p.typeName === node) return "type";
+  if ((ts.isQualifiedName(p) && p.left === node) || (ts.isTypeQueryNode(p) && p.exprName === node)) return "typeof";
+  if (ts.isExpressionWithTypeArguments(p) && p.expression === node && ts.isHeritageClause(p.parent)
+    && (p.parent.token === ts.SyntaxKind.ImplementsKeyword || ts.isInterfaceDeclaration(p.parent.parent))) return "type";
+  return "value";
+}
+
 function isAssignmentOperator(kind) {
   return kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
 }
@@ -243,15 +255,16 @@ function bindScopes(sf) {
   const loads = [];
   const reexports = [];
   const localExports = [];
-  const scopeOf = (parent, isFunction) => ({ parent, isFunction, names: new Map() });
+  const scopeOf = (parent, isFunction) => ({ parent, isFunction, values: new Map(), types: new Map() });
   const moduleScope = scopeOf(null, true);
   const functionScope = (s) => { while (!s.isFunction) s = s.parent; return s; };
 
   const declare = (s, id, kind, extra = {}) => {
-    const existing = s.names.get(id.text);
+    const spaces = TYPE_ONLY_KINDS.has(kind) ? [s.types] : VALUE_AND_TYPE_KINDS.has(kind) ? [s.values, s.types] : [s.values];
+    const existing = spaces[0].get(id.text);
     if (existing) { existing.reassigned = true; return existing; }
     const b = { name: id.text, kind, reassigned: false, source: null, aliasInit: null, aliasPath: null, accesses: [], ...extra };
-    s.names.set(id.text, b);
+    for (const names of spaces) names.set(id.text, b);
     bindings.push(b);
     return b;
   };
@@ -319,11 +332,12 @@ function bindScopes(sf) {
     const clause = node.importClause;
     if (!clause || spec === null) return;
     const source = (via) => ({ source: { spec, via, node, requireCallee: null } });
-    if (clause.name) declare(s, clause.name, "import", source(["default"]));
+    const kind = (typeOnly) => (clause.isTypeOnly || typeOnly ? "import-type" : "import");
+    if (clause.name) declare(s, clause.name, kind(false), source(["default"]));
     const nb = clause.namedBindings;
-    if (nb && ts.isNamespaceImport(nb)) declare(s, nb.name, "import", source([]));
+    if (nb && ts.isNamespaceImport(nb)) declare(s, nb.name, kind(false), source([]));
     if (nb && ts.isNamedImports(nb)) {
-      for (const el of nb.elements) declare(s, el.name, "import", source([(el.propertyName ?? el.name).text]));
+      for (const el of nb.elements) declare(s, el.name, kind(el.isTypeOnly), source([(el.propertyName ?? el.name).text]));
     }
   };
 
@@ -356,8 +370,9 @@ function bindScopes(sf) {
     if (node.type) walk(node.type, fs);
     const body = node.body;
     if (!body) return;
-    if (ts.isBlock(body)) for (const st of body.statements) walk(st, fs);
-    else walk(body, fs);
+    const bs = scopeOf(fs, true);
+    if (ts.isBlock(body)) for (const st of body.statements) walk(st, bs);
+    else walk(body, bs);
   };
 
   const walkClass = (node, s) => {
@@ -375,7 +390,7 @@ function bindScopes(sf) {
   function walk(node, s) {
     if (ts.isIdentifier(node)) {
       if (isReference(node)) {
-        const r = { node, scope: s, binding: null };
+        const r = { node, scope: s, space: referenceSpace(node), binding: null };
         refs.push(r);
         refOf.set(node, r);
       }
@@ -445,15 +460,17 @@ function bindScopes(sf) {
 
   walk(sf, moduleScope);
 
-  const lookup = (s, name) => {
+  const lookup = (s, name, space = "typeof") => {
     for (let c = s; c; c = c.parent) {
-      const b = c.names.get(name);
+      const b = (space === "type" ? c.types : c.values).get(name);
       if (b) return b;
+      const typeImport = space === "typeof" ? c.types.get(name) : null;
+      if (typeImport?.kind === "import-type") return typeImport;
     }
     return null;
   };
   for (const r of refs) {
-    r.binding = lookup(r.scope, r.node.text);
+    r.binding = lookup(r.scope, r.node.text, r.space);
     if (r.binding && writeKind(r.node) === "assign") r.binding.reassigned = true;
   }
   const isFree = (identifier) => !refOf.get(identifier)?.binding;
