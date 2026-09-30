@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { escapeHtml } from "./02-state.js";
+import { invokeFrom } from "./12-dirty-toast.js";
 import {
   IS_MAC,
   fileMenuOpen,
@@ -52,7 +53,7 @@ function fromAction(id) {
         state: view.checked === null ? "" : (view.checked ? "On" : "Off")
       };
     },
-    run: function () { appActions.invoke(id, "command-menu"); }
+    run: function () { invokeFrom(id, "command-menu"); }
   };
 }
 

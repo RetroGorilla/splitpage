@@ -25,12 +25,18 @@ outcome is then `ran` as soon as it starts, and a rejection reaches `report`
 with the action's id, so an asynchronous failure is reported the same way as
 a synchronous one rather than disappearing into a discarded promise.
 
-Each surface decides how to show a refusal. The File menu and the buttons
-show it as a toast through `showRefusal()` (`12-dirty-toast.js`), which ends
-the reason with a full stop: a reason is written as a menu line ("Close the
-open dialog first") and a toast is a sentence. The command menu shows it greyed out with the reason. A shortcut
-leaves the key to the browser. A key that a focused control already handled
-(`defaultPrevented`) never reaches a global action.
+Each surface decides how to show a refusal. A surface that says why calls
+`invokeFrom(id, source)` (`12-dirty-toast.js`) rather than `invoke`: it
+invokes the action and shows a refusal as a toast, ending the reason with a
+full stop (a reason is written as a menu line, "Close the open dialog first",
+and a toast is a sentence). The File menu, the header and Writer buttons, the
+rundown's button, the Servers dialog's Collaborate button and a command run
+from the command menu all use it, so no refusal is dropped. The command menu
+shows a refusal greyed out with the reason before anything runs. Two
+surfaces stay silent, as they were before the registry: a shortcut leaves the
+key to the browser, and the header's Search button does nothing (in 3.1 it
+called `openCommandMenu()`, which returned quietly). A key that a focused
+control already handled (`defaultPrevented`) never reaches a global action.
 
 Two definition options shape the shortcut binding. `claimKeys` keeps the key
 from the browser even when the action is refused, so Ctrl+S and Ctrl+O never
