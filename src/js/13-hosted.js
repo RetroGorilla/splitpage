@@ -53,7 +53,7 @@ import {
 } from "./10-comments.js";
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
-import { scheduleAutoSave } from "./14-export.js";
+import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -472,10 +472,7 @@ function flagLinkOff(kind) {
   }
   stashForReload();
   forgetLinkKey(conn.serverUrl);
-  var saveCopy = function () {
-    var item = document.querySelector('#file-menu [data-file-action="save-as"]');
-    if (item && !item.disabled) item.click();
-  };
+  var saveCopy = function () { saveDoc({ saveAs: true }); };
   showActionToast(kind === "gone"
     ? "This link no longer works — ask whoever sent it for a new one. Your changes can't be saved to it any more."
     : "The owner turned off this link. Your changes can't be saved to it any more.",
