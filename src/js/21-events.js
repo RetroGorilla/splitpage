@@ -242,7 +242,7 @@ import {
   tryResumeLastProject
 } from "./18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "./18a-local-merge.js";
-import { toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
+import { refusedUnderOverlay, toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
 import {
   applyWriterSize,
   caretTextOffset,
@@ -1572,7 +1572,7 @@ function init() {
     markDirty();
   });
 
-  document.getElementById("btn-save").addEventListener("click", function () { saveDoc(); });
+  document.getElementById("btn-save").addEventListener("click", saveFromButton);
   document.getElementById("btn-present").addEventListener("click", function () {
     if (!S.state) { showToast("Still loading…", "warn"); return; }
     openPrompter();
@@ -1748,7 +1748,7 @@ function init() {
     if (expandShotBtn) expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids"));
   });
 
-  document.getElementById("wr-save").addEventListener("click", function () { saveDoc(); });
+  document.getElementById("wr-save").addEventListener("click", saveFromButton);
 
   document.getElementById("wr-size").addEventListener("input", function (e) {
     applyWriterSize(parseInt(e.target.value, 10), true);
@@ -1803,6 +1803,11 @@ function init() {
   }
 
   if (S.DESKTOP && typeof initDesktop === "function") initDesktop();
+}
+
+function saveFromButton() {
+  if (refusedUnderOverlay("save")) return;
+  saveDoc();
 }
 
 export function __init() {
