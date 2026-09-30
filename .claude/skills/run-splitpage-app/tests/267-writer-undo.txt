@@ -92,19 +92,15 @@ jsclick #file-menu [data-file-action="new"]
 wait F.state() !== __doc && F.state().docId !== __id && F.state().rows.length === 1
 expect U.sizes().undo === 0 && U.sizes().redo === 0
 click #btn-write
-sleep 700
-expect !document.getElementById('writer').hidden
+wait !document.getElementById('writer').hidden
 key ctrl KeyZ
-sleep 300
-expect document.getElementById('writer').hidden
+wait document.getElementById('writer').hidden
 key ctrl KeyY
-sleep 500
-expect !document.getElementById('writer').hidden
+wait !document.getElementById('writer').hidden
 
 # another script: File > New after writer was closed by Ctrl+Z
 key ctrl KeyZ
-sleep 300
-expect document.getElementById('writer').hidden
+wait document.getElementById('writer').hidden
 eval (function(){ window.__doc = F.state(); window.__id = __doc.docId; return true; })()
 jsclick #btn-file
 jsclick #file-menu [data-file-action="new"]
@@ -118,11 +114,9 @@ expect U.sizes().undo === 0 && U.sizes().redo === 0
 
 # the same script opened again, same document id
 click #btn-write
-sleep 700
-expect !document.getElementById('writer').hidden
+wait !document.getElementById('writer').hidden
 key ctrl KeyZ
-sleep 300
-expect document.getElementById('writer').hidden
+wait document.getElementById('writer').hidden
 eval (function(){ window.__doc = F.state(); window.__id = __doc.docId; F.openFile(new File([F.buildSplitpage()], 'again.splitpage')); return true; })()
 wait F.state() !== __doc && F.docFile().kind === 'splitpage'
 expect F.state().docId === __id

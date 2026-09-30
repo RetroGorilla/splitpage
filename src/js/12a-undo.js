@@ -352,6 +352,7 @@ export function absorbRemoteChange() {
   if (!S.state || S.state !== tracked || !base) { restart(); return; }
   history.forget(changedBetween(base, S.state));
   base = clone(S.state);
+  lifetime++;
 }
 
 export function resetUndo() {
