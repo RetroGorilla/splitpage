@@ -104,7 +104,15 @@ test("the history's lifetime holds through ordinary edits, undo, redo, a mark, a
   assert.equal(undoLifetime(), life, "a merge keeps the history it forgets from");
   assert.equal(undoSizes().undo, 1);
 
+});
+
+test("a reload of the open file in place starts a new lifetime, while the history keeps what still applies", () => {
+  open(doc());
+  edit((s) => { s.rows[1].status = "shot"; });
+  const life = undoLifetime();
+
   S.state.rows[0].visualText = "one reloaded";
   absorbRemoteChange();
-  assert.equal(undoLifetime(), life, "a reload into the same document keeps it");
+  assert.notEqual(undoLifetime(), life, "absorbRemoteChange over the tracked document");
+  assert.equal(undoSizes().undo, 1, "the edit to another field survives the reload");
 });
