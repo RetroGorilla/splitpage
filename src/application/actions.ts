@@ -37,9 +37,15 @@ export type InvokeOutcome =
   | { readonly kind: "unknown"; readonly id: string }
   | { readonly kind: "failed"; readonly id: string; readonly error: unknown };
 
+export interface KeyedAction {
+  readonly id: string;
+  readonly keys: readonly string[];
+}
+
 export interface ActionRegistry {
   register(definition: ActionDefinition): () => void;
   has(id: string): boolean;
+  shortcuts(): readonly KeyedAction[];
   view(id: string): ActionView | undefined;
   list(): readonly ActionView[];
   invoke(id: string, source: ActionSource): InvokeOutcome;
@@ -85,6 +91,9 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
     },
     has(id) {
       return definitions.has(id);
+    },
+    shortcuts() {
+      return [...definitions.values()].filter((d) => d.keys && d.keys.length).map((d) => ({ id: d.id, keys: d.keys ?? [] }));
     },
     view(id) {
       const definition = definitions.get(id);

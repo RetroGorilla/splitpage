@@ -1,4 +1,4 @@
-import type { ActionView } from "./actions.ts";
+import type { KeyedAction } from "./actions.ts";
 
 export interface KeyChord {
   readonly key: string;
@@ -17,6 +17,7 @@ export interface KeyInput {
 }
 
 const MODIFIERS = new Set(["mod", "shift", "alt"]);
+const parsed = new Map<string, KeyChord>();
 
 export function parseChord(text: string): KeyChord {
   const parts = text.split("+").map((p) => p.trim()).filter((p) => p !== "");
@@ -35,9 +36,18 @@ export function chordMatches(chord: KeyChord, input: KeyInput): boolean {
     && input.key.toLowerCase() === chord.key;
 }
 
-export function actionForKey(actions: readonly ActionView[], input: KeyInput): string | null {
+function chordFor(text: string): KeyChord {
+  let chord = parsed.get(text);
+  if (!chord) {
+    chord = parseChord(text);
+    parsed.set(text, chord);
+  }
+  return chord;
+}
+
+export function actionForKey(actions: readonly KeyedAction[], input: KeyInput): string | null {
   for (const action of actions) {
-    if (action.keys.some((k) => chordMatches(parseChord(k), input))) return action.id;
+    if (action.keys.some((k) => chordMatches(chordFor(k), input))) return action.id;
   }
   return null;
 }

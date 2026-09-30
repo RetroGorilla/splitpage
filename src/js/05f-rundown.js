@@ -10,6 +10,7 @@ import { clearDropMarkers, moveRowTo } from "./06-rows.js";
 import { contentMemo } from "./07-production-tags.js";
 import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;
@@ -970,7 +971,7 @@ export function __init() {
   minimized = readMinFlag();
   var toggle = ensureToggle(strip);
   updateRundownMinControls();
-  toggle.addEventListener("click", function () { toggleRundownMinimized(); });
+  toggle.addEventListener("click", function () { appActions.invoke("toggle-rundown-min", "button"); });
   document.addEventListener("splitpage:pref", function (e) {
     var d = e && e.detail;
     if (!d || d.key !== MIN_KEY) return;
