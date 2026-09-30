@@ -27,12 +27,14 @@ import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
 import { truncateForPreview } from "./11-import.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoMark } from "./12a-undo.js";
 import { htmlToPlainText } from "./14-export.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
 
 export var writerOpen = false;
 var writerGutterMode = "visuals";
+var writerUndoMark = 0;
+var reopenOnRedo = null;
 S.writerLastCell = null;
 
 function writerBlockHtml(row, i) {
@@ -309,8 +311,10 @@ export function cycleWriterGutter() {
   setWriterGutter(WRITER_GUTTER_MODES[(i + 1) % WRITER_GUTTER_MODES.length]);
 }
 
-export function openWriter() {
+export function openWriter(keepMark) {
   var el = document.getElementById("writer");
+  writerUndoMark = keepMark == null ? undoMark() : keepMark;
+  reopenOnRedo = null;
   closeAllSidePanels();
   if (findOpen) closeFindBar();
   document.getElementById("writer-title").value = S.state.title || "";
@@ -348,6 +352,27 @@ export function closeWriter() {
   S.writerLastCell = null;
   hideTagGhost();
   render();
+}
+
+// Opening writer mode is itself an undo step: undo never reaches edits made before it, off screen.
+export function writerUndoStep(dir) {
+  if (writerOpen) {
+    if (dir === "redo") {
+      var next = nextRedoEntry();
+      return !next || next.n <= writerUndoMark;
+    }
+    var top = lastUndoEntry();
+    if (top && top.n > writerUndoMark) return false;
+    var mark = writerUndoMark;
+    closeWriter();
+    reopenOnRedo = { top: lastUndoEntry(), mark: mark };
+    return true;
+  }
+  var pending = reopenOnRedo;
+  reopenOnRedo = null;
+  if (!pending || dir !== "redo" || lastUndoEntry() !== pending.top) return false;
+  openWriter(pending.mark);
+  return true;
 }
 
 export function jumpFromWriterToRow(rowId) {

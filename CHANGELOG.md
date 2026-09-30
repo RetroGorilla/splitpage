@@ -4,6 +4,12 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## Unreleased
+
+### Fixed
+- Ctrl+Z right after opening writer mode closes writer instead of undoing a
+  change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+
 ## 3.1.0 — 2026-09-29
 
 ### Added
