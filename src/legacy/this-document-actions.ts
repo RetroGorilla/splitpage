@@ -42,7 +42,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       icon: "i-find",
       keys: ["mod+f", "mod+shift+f", "mod+alt+f", "mod+alt+shift+f"],
       words: "search replace look for",
-      availability: () => availableUnless(["loading", "writer", "dialog"], screenNow()),
+      availability: () => availableUnless(["loading", "dialog", "writer"], screenNow()),
       run: () => {
         const input = document.getElementById("find-input");
         if (findOpen && input instanceof HTMLInputElement) input.select();
