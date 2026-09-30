@@ -162,7 +162,7 @@ export async function claimPorts(plan) {
   const release = () => Promise.all(held.splice(0).map(closeServer));
   if (busy.length) {
     await release();
-    throw new ConfigError(`port collision: ${busy.join(", ")} already in use, by another run-suites or something else on this machine; nothing was started. Pick a free block with --port-base`);
+    throw new ConfigError(`port collision: cannot bind ${busy.join(", ")}; the port is in use by another run-suites or something else, or reserved. Nothing was started. Pick a free block with --port-base`);
   }
   return { release };
 }
