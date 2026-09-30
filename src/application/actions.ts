@@ -1,3 +1,8 @@
+import { chordKey } from "./shortcuts.ts";
+import type { KeyedAction } from "./shortcuts.ts";
+
+export type { KeyedAction } from "./shortcuts.ts";
+
 export type ActionSource = "menu" | "command-menu" | "shortcut" | "button" | "native-menu";
 
 export interface Availability {
@@ -38,12 +43,6 @@ export type InvokeOutcome =
   | { readonly kind: "unavailable"; readonly id: string; readonly reason: string }
   | { readonly kind: "unknown"; readonly id: string }
   | { readonly kind: "failed"; readonly id: string; readonly error: unknown };
-
-export interface KeyedAction {
-  readonly id: string;
-  readonly keys: readonly string[];
-  readonly claim: boolean;
-}
 
 export interface ActionRegistry {
   register(definition: ActionDefinition): () => void;
@@ -87,12 +86,26 @@ function toView(definition: ActionDefinition): ActionView {
   };
 }
 
+function claimChords(definitions: ReadonlyMap<string, ActionDefinition>, definition: ActionDefinition): void {
+  const owners = new Map<string, string>();
+  for (const other of definitions.values()) {
+    for (const k of keysOf(other)) owners.set(chordKey(k), other.id);
+  }
+  for (const k of keysOf(definition)) {
+    const chord = chordKey(k);
+    const owner = owners.get(chord);
+    if (owner !== undefined) throw new Error(`shortcut ${chord} is already bound to ${owner}`);
+    owners.set(chord, definition.id);
+  }
+}
+
 export function createActionRegistry(options: RegistryOptions = {}): ActionRegistry {
   const definitions = new Map<string, ActionDefinition>();
 
   return {
     register(definition) {
       if (definitions.has(definition.id)) throw new Error(`action ${definition.id} is already registered`);
+      claimChords(definitions, definition);
       definitions.set(definition.id, definition);
       return () => {
         if (definitions.get(definition.id) === definition) definitions.delete(definition.id);

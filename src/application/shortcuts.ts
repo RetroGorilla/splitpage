@@ -1,5 +1,3 @@
-import type { KeyedAction } from "./actions.ts";
-
 export interface KeyChord {
   readonly key: string;
   readonly mod: boolean;
@@ -8,12 +6,18 @@ export interface KeyChord {
 }
 
 export interface KeyInput {
-  readonly key: string;
+  readonly key?: string | undefined;
   readonly ctrlKey: boolean;
   readonly metaKey: boolean;
   readonly shiftKey: boolean;
   readonly altKey: boolean;
   readonly isComposing?: boolean;
+}
+
+export interface KeyedAction {
+  readonly id: string;
+  readonly keys: readonly string[];
+  readonly claim: boolean;
 }
 
 const MODIFIERS = new Set(["mod", "shift", "alt"]);
@@ -29,13 +33,6 @@ export function parseChord(text: string): KeyChord {
   return { key: key.toLowerCase(), mod: mods.has("mod"), shift: mods.has("shift"), alt: mods.has("alt") };
 }
 
-export function chordMatches(chord: KeyChord, input: KeyInput): boolean {
-  if (input.isComposing) return false;
-  const mod = input.ctrlKey || input.metaKey;
-  return mod === chord.mod && input.altKey === chord.alt && input.shiftKey === chord.shift
-    && input.key.toLowerCase() === chord.key;
-}
-
 function chordFor(text: string): KeyChord {
   let chord = parsed.get(text);
   if (!chord) {
@@ -43,6 +40,18 @@ function chordFor(text: string): KeyChord {
     parsed.set(text, chord);
   }
   return chord;
+}
+
+export function chordKey(text: string): string {
+  const chord = chordFor(text);
+  return [chord.mod ? "mod" : "", chord.alt ? "alt" : "", chord.shift ? "shift" : "", chord.key].filter((p) => p !== "").join("+");
+}
+
+export function chordMatches(chord: KeyChord, input: KeyInput): boolean {
+  if (input.isComposing) return false;
+  const key = typeof input.key === "string" ? input.key.toLowerCase() : "";
+  const mod = input.ctrlKey || input.metaKey;
+  return key !== "" && mod === chord.mod && input.altKey === chord.alt && input.shiftKey === chord.shift && key === chord.key;
 }
 
 export function actionForKey(actions: readonly KeyedAction[], input: KeyInput): KeyedAction | null {

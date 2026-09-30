@@ -82,6 +82,16 @@ test("a key a focused control already handled is left alone", () => {
   assert.deepEqual(runs, []);
 });
 
+test("a keydown without a key, as autofill sends, passes through untouched", () => {
+  const { registry, runs, target } = setup();
+  bindShortcuts(target, registry);
+  const event = new Event("keydown", { cancelable: true });
+  Object.assign(event, { ctrlKey: true, metaKey: false, shiftKey: false, altKey: true, isComposing: false });
+  target.dispatchEvent(event);
+  assert.deepEqual(runs, []);
+  assert.equal(event.defaultPrevented, false);
+});
+
 test("a claimed key is kept from the browser even when its action is refused", () => {
   const registry = createActionRegistry();
   registry.register({ id: "save", label: "Save", group: "G", keys: ["mod+s"], claimKeys: true, availability: () => ({ enabled: false, reason: "Still loading…" }), run: () => {} });
