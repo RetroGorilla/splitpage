@@ -417,16 +417,16 @@ var REFUSED_UNDER = {
   "save-as": ["modal"],
   "open": ["modal", "prompter", "writer"],
   "export": ["modal", "prompter", "writer"],
-  "command-menu": ["prompter", "writer", "dialog", "tour"],
+  "command-menu": ["dialog", "prompter", "writer", "tour"],
   "toggle-hide-shot": ["dialog"],
-  "find": ["writer", "dialog"]
+  "find": ["dialog", "writer"]
 };
 
 var REFUSAL_REASONS = {
   modal: "Close the open dialog first.",
   dialog: "Close the open dialog first.",
   prompter: "Close Present first.",
-  writer: "Close the Writer first.",
+  writer: "Close the writer first.",
   tour: "Finish or skip the tour first."
 };
 
@@ -435,8 +435,11 @@ function overlayShown(overlay) {
   if (overlay === "dialog") return !!document.querySelector(".modal-backdrop:not([hidden])");
   if (overlay === "prompter") return !!S.prompterOpen;
   if (overlay === "writer") return !!writerOpen;
-  var tour = el("tour-overlay");
-  return !!tour && !tour.hidden;
+  if (overlay === "tour") {
+    var tour = el("tour-overlay");
+    return !!tour && !tour.hidden;
+  }
+  return false;
 }
 
 export function refusedUnderOverlay(action) {
