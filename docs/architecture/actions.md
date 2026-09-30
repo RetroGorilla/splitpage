@@ -31,7 +31,12 @@ open the browser's own Save page or Open file dialogs. `bindKeys` says, at the
 moment of the key press, whether the page binds the keys at all: in the desktop
 app the native menu's accelerators own Ctrl+S, Ctrl+Shift+S and Ctrl+O, so the
 page leaves them alone and nothing runs twice. The command menu shows the keys
-either way.
+either way. `keys` may be a function, read each time: Help shows F1 only in
+the desktop app, whose menu binds it.
+
+`src/legacy/menu-items.ts` reads a File menu item's hidden and disabled state
+(and the reason it shows) for actions whose availability the menu still
+decides.
 
 `src/application/shortcuts.ts` parses chords and finds the action a key event
 names. `src/features/shortcuts/bind-shortcuts.ts` binds that to a keydown
@@ -44,8 +49,8 @@ Until the bootstrap of milestone 7 exists, one registry instance lives in
 rethrows the error on a microtask, so a failing action still reaches the
 browser as an uncaught error, as it did before.
 
-`src/legacy/document-actions.ts`, `src/legacy/file-actions.ts` and
-`src/legacy/view-actions.ts` define the actions whose handlers are still in `src/js`. `src/legacy/screen.ts` names what
+`src/legacy/document-actions.ts`, `file-actions.ts`, `view-actions.ts` and
+`help-actions.ts` define the actions whose handlers are still in `src/js`. `src/legacy/screen.ts` names what
 can refuse an action (still loading, Present, the Writer, a dialog, the tour)
 with the reason a person is shown.
 
@@ -83,10 +88,14 @@ File menu path shows the reason as a toast.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
+| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help) | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js` |
+| `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
+| `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
 
 Browser suites `268-actions-every-surface.txt`,
 `269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt` and
-`272-view-actions-every-surface.txt` check each surface, and the
+`272-view-actions-every-surface.txt` and `273-help-actions-every-surface.txt`
+check each surface, and the
 shortcut refused under a dialog. The File menu's markup (label, `data-keys`)
 is still in `src/page.html`; the command menu reads the definition.
 

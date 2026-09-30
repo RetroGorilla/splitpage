@@ -14,7 +14,7 @@ import {
 } from "./13-hosted.js";
 import { openCollaborate } from "./13b-collaborate.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
-import { setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
@@ -492,17 +492,6 @@ export function __init() {
   loadBookmarks();
 
   (function wireConnectUi() {
-    var menu = document.getElementById("file-menu");
-    if (menu) {
-      menu.addEventListener("click", function (e) {
-        var item = e.target.closest("[data-file-action]");
-        if (!item || item.disabled) return;
-        if (item.getAttribute("data-file-action") !== "servers") return;
-        e.stopPropagation();
-        toggleFileMenu(false);
-        openServersDialog();
-      }, true);
-    }
 
     var pinModal = document.getElementById("pin-modal");
     if (pinModal) {

@@ -6,7 +6,6 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile } from "./18-local-files.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
 import { openHelp, startTour } from "./20c-help.js";
 import { addServerBookmark, joinErrorText, openServersDialog } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
@@ -94,7 +93,7 @@ function renderOnboardStep() {
   if (onboardStep === 2) loadLauncherInfo();
 }
 
-function openOnboarding() {
+export function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
   closeAllSidePanels();
@@ -365,10 +364,6 @@ export function __init() {
       if (!item) return;
       var modal = onboardModal();
       if (modal && !modal.hidden) closeOnboarding();
-      if (item.getAttribute("data-file-action") !== "setup") return;
-      e.stopPropagation();
-      if (typeof toggleFileMenu === "function") toggleFileMenu(false);
-      openOnboarding();
     }, true);
   })();
 

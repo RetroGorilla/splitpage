@@ -29,7 +29,7 @@ import {
 import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
 import { brollEntries } from "./08c-broll.js";
 import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
-import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
+import { commentBodyText, commentEntries, formatTimestamp } from "./10-comments.js";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
@@ -73,7 +73,6 @@ import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, p
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
 import { exportAgain, isExportAction, rememberExport } from "./18c-export-dialog.js";
-import { showAbout } from "./20a-update.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject,
@@ -82,7 +81,6 @@ import {
 import {
   makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser, openPrompterInChromium
 } from "./20f-desktop.js";
-import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { appActions } from "../legacy/app-actions.ts";
 
@@ -751,8 +749,7 @@ export function handleFileMenuAction(action) {
     if (outcome.kind === "unavailable" && outcome.reason) showToast(outcome.reason, "warn");
     return;
   }
-  if (!S.state && action !== "tagging-help"
-      && action !== "drive-open" && action !== "about") {
+  if (!S.state && action !== "drive-open") {
     showToast("Still loading…", "warn"); return;
   }
   if (action === "new") startNewScript();
@@ -781,10 +778,6 @@ export function handleFileMenuAction(action) {
   else if (action === "collaborate") openCollaborate();
   else if (action === "prompter-open-in-browser") openPrompterInBrowser();
   else if (action === "prompter-open-in-chromium") openPrompterInChromium();
-  else if (action === "export-app-data") exportAppData();
-  else if (action === "import-app-data") openImportAppData();
-  else if (action === "tagging-help") showTaggingHelp();
-  else if (action === "about") showAbout();
 }
 
 export function __init() {}

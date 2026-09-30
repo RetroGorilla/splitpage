@@ -2,22 +2,17 @@ import type { ActionRegistry, Availability } from "../application/actions.ts";
 import { S } from "../js/_state.js";
 import { saveDoc } from "../js/14-export.js";
 import { openLocalFile } from "../js/18-local-files.js";
-import { fileMenuOpen, menuItemReason, toggleFileMenu } from "../js/18b-file-menu.js";
+import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
 import { openExportDialog } from "../js/18c-export-dialog.js";
 import { closeCommandMenu, commandMenuOpen, openCommandMenu } from "../js/18d-command-menu.js";
 import { screenNow } from "./document-actions.ts";
+import { menuItemAvailability } from "./menu-items.ts";
 import { availableUnless } from "./screen.ts";
 import type { Blocker } from "./screen.ts";
 
 function buttonAllows(id: string): Availability | null {
   const button = document.getElementById(id);
   return button instanceof HTMLButtonElement && button.disabled ? { enabled: false, reason: "" } : null;
-}
-
-function menuItemAllows(action: string): Availability | null {
-  const item = document.querySelector(`#file-menu [data-file-action="${action}"]`);
-  if (!(item instanceof HTMLButtonElement) || !item.disabled) return null;
-  return { enabled: false, reason: menuItemReason(item) || item.title || "" };
 }
 
 function pageOwnsKeys(): boolean {
@@ -52,7 +47,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "save as duplicate copy another file",
-      availability: () => unless(["loading", "dialog"], menuItemAllows("save-as")),
+      availability: () => unless(["loading", "dialog"], menuItemAvailability("save-as")),
       run: () => { void saveDoc({ saveAs: true }); }
     }),
     registry.register({
@@ -64,7 +59,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "load file document project md splitpage docx",
-      availability: () => unless(["loading", "dialog", "prompter", "writer"], menuItemAllows("open")),
+      availability: () => unless(["loading", "dialog", "prompter", "writer"], menuItemAvailability("open")),
       run: () => {
         if (fileMenuOpen()) toggleFileMenu(false);
         void openLocalFile();
