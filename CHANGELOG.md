@@ -7,6 +7,11 @@ appear in the app under **Help**. The format follows
 ## Unreleased
 
 ### Fixed
+- In the desktop app, a menu command or its shortcut no longer acts behind
+  an open dialog, the writer or Present; it says what to close first. Save,
+  Save a copy and Hide shot scenes wait for an open dialog; Open, Export and
+  Search commands for a dialog, the writer or Present; Find for a dialog or
+  the writer. The browser shortcuts already refused there.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 
