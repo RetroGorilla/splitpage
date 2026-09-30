@@ -205,7 +205,12 @@ document had loaded, so they acted over an open dialog, the Writer or
 Present where the browser shortcut refused. They now refuse too, and the
 File menu path shows the reason as a toast. 3.1.x gets the same change from
 #273 (`275-menu-refused-under-overlay.txt`), which passes on this code; it is
-the only change of behavior the move to the registry keeps.
+the only change of behavior the move to the registry keeps. As in #273, an
+open dialog is checked first, so with a dialog over the writer or Present the
+toast names the dialog ("Close the open dialog first."); the writer's reason
+is "Close the writer first.". The toast that follows a link being turned off
+offers Save a copy…, which calls `saveDoc({ saveAs: true })` itself rather
+than the registry, so a dialog in front of it cannot refuse it.
 
 ## The desktop app's native menu
 
