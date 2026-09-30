@@ -160,5 +160,12 @@ expect sessionStorage.getItem('splitpage-review-key') === null
 expect localStorage.getItem('splitpage-invites') === null
 expect __toasts().filter(function(t){ return t.indexOf('The owner turned off this link.') === 0; }).length == 1
 shot 263-link-off
+# the toast's Save a copy… still saves with a dialog open in front of it
+eval (function(){ window.__desktopTest.runMenuCommand('about'); return true; })()
+wait !document.getElementById('about-modal').hidden
 jsclick #toast-host .toast.is-sticky .toast-action
+sleep 300
+expect __toasts().every(function(t){ return t.indexOf('Close the open dialog first.') === -1; })
 wait window.__picked.length === 1
+jsclick #about-modal .modal-close
+wait document.getElementById('about-modal').hidden
