@@ -5,6 +5,7 @@ import { registerHelpActions } from "../legacy/help-actions.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
+import { registerZoomActions } from "../legacy/zoom-actions.ts";
 
 let running: (() => void) | null = null;
 
@@ -16,6 +17,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     registerViewActions(registry),
     registerHelpActions(registry),
     registerShareActions(registry),
+    registerZoomActions(registry),
     mountShortcuts({ target: keyTarget, registry })
   ];
   const stop = (): void => {

@@ -231,6 +231,7 @@ these native menu rules, against 3.1's code too.
 | `collaborate` | File menu, command menu, header Collab button, the Servers dialog's button | `18-local-files.js`, `18d-command-menu.js`, `13b-collaborate.js` and `20e-connect.js` click handlers |
 | `set-target` | Command menu | `18d-command-menu.js` |
 | `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |
+| `script-zoom-in`, `script-zoom-out`, `script-zoom-reset` | Desktop View menu, Ctrl + "+" / "-" / "0" (not listed in the command menu) | `20f-desktop.js` via `runScriptZoomCommand`, the `05s-script-zoom.js` keydown listener |
 
 The File menu's export formats (`export-pdf` and the rest) still dispatch in
 `18-local-files.js`; milestone 5's format registry takes them over. The New
@@ -252,3 +253,40 @@ is still in `src/page.html`; the command menu reads the definition.
    shortcut.
 3. Extend `268-actions-every-surface.txt`, or a suite of the feature, to run
    it from each surface.
+
+The command menu lists a new action by itself, under its `group`, unless its
+availability says `visible: false`; the desktop app's native menu runs any
+registered id it is sent; the shortcut feature binds any `keys` it declares.
+
+### Worked example: the script zoom commands
+
+The three script zoom commands were the first existing commands moved onto
+the registry after the File menu and header ones, as a check that adding an
+action needs only its own files. Before, the desktop app's View menu reached
+them through a special case at the top of `runDesktopMenuCommand`
+(`runScriptZoomCommand`), and Ctrl + "+" / "-" / "0" through
+`05s-script-zoom.js`'s own keydown listener, each calling
+`stepScriptScale()` / `resetScriptScale()` directly.
+
+Files the move touched:
+
+| File | Change |
+| --- | --- |
+| `src/legacy/zoom-actions.ts` (new) | The three definitions. Availability: the keys act only in the editor view (`scriptViewActive()`, as their listener checked); the View menu acts anywhere, as before. `visible: false`, as 3.1's command menu did not list them |
+| `src/bootstrap/actions.ts` | One line: `registerZoomActions(registry)` |
+| `src/js/05s-script-zoom.js` | Its keydown listener stays where it is (a document capture listener that matches `+`, `=`, `-`, `0` and their key codes, which a chord cannot express) but invokes the action by id and keeps the key only when it ran; `scriptViewActive()` is exported for the definitions; `runScriptZoomCommand()` is gone |
+| `src/js/20f-desktop.js` | The special case and its import are gone; the generic path runs the id |
+
+No other surface, feature or the command menu changed. The one change made
+for it outside those files, in its own commit before the move, taught the
+native menu that a registered command which is not a File menu item runs as
+itself (every registered native command until then was a File menu item or a
+header button). The runtime import cycle shrank from 61 to 60 modules, since
+`20f-desktop.js` no longer imports `05s-script-zoom.js`.
+
+Tests run: `281-script-zoom-commands.txt` (new: the View menu's three
+commands, the keys, both in the Writer, and not listed; 20/20 against
+4.0-development 19c66f7, before the move and after it), `172-script-zoom.txt`
+41/41, `134-settings.txt` 74/74, `135-settings-reload.txt` 22/22,
+`21-desktop-shim.txt` 78/78, `279-command-menu-listing.txt` 15/15,
+`174-scene-length-phone.txt` 20/20, and the unit tests.

@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { writerOpen } from "./19-writer.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var SCRIPT_SCALE_KEY = "splitpage-script-scale";
 export var SCRIPT_SCALE_MIN = 0.7;
@@ -166,7 +167,7 @@ function hideReadoutSoon() {
   }, 1800);
 }
 
-function scriptViewActive() {
+export function scriptViewActive() {
   return !!S.state && !S.prompterOpen && !writerOpen &&
     !document.documentElement.classList.contains("is-newtab-open");
 }
@@ -193,18 +194,9 @@ function zoomKey(e) {
 
 function onKeydown(e) {
   var z = zoomKey(e);
-  if (!z || !scriptViewActive()) return;
-  e.preventDefault();
-  if (z === 2) resetScriptScale();
-  else stepScriptScale(z);
-}
-
-export function runScriptZoomCommand(cmd) {
-  if (cmd === "script-zoom-in") stepScriptScale(1);
-  else if (cmd === "script-zoom-out") stepScriptScale(-1);
-  else if (cmd === "script-zoom-reset") resetScriptScale();
-  else return false;
-  return true;
+  if (!z) return;
+  var id = z === 2 ? "script-zoom-reset" : z > 0 ? "script-zoom-in" : "script-zoom-out";
+  if (appActions.invoke(id, "shortcut").kind === "ran") e.preventDefault();
 }
 
 export function __init() {
