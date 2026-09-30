@@ -57,6 +57,10 @@ sleep 200
 expect localStorage.getItem('splitpage-hide-shot') == 0
 
 # --- Ctrl+S and Ctrl+Shift+S close an open File menu -----------------------
+# on a script kept in a file, so Save writes it and Save a copy asks
+eval (function(){ var F = window.__splitpageFormats; var text = JSON.stringify({ schema: 2, title: 'Kept', rows: [{ id: 'r1', visualText: 'Wide', audioText: 'Kept words.', status: 'todo' }], comments: [] }); window.__mtime = Date.now() - 100000; window.__fh = { name: 'kept.splitpage', createWritable: async function () { window.__picked.push('write'); return { write: async function () {}, close: async function () { window.__mtime = Date.now(); } }; }, getFile: async function () { return new File([text], 'kept.splitpage', { lastModified: window.__mtime }); } }; return F.openFile(new File([text], 'kept.splitpage', { lastModified: window.__mtime }), window.__fh); })()
+wait window.__splitpageFormats.docFile().name === 'kept.splitpage'
+eval __take()
 click #btn-file
 sleep 200
 expect !document.getElementById('file-menu').hidden
@@ -70,7 +74,7 @@ expect !document.getElementById('file-menu').hidden
 key ctrl KeyS
 sleep 400
 expect document.getElementById('file-menu').hidden
-expect __take() === 'save'
+expect __take() === 'write'
 
 # --- with the command menu open ----------------------------------------------
 key ctrl KeyK
@@ -176,5 +180,5 @@ sleep 300
 expect window.__hostedTest.reviewMode() === false
 
 # nothing here edited the document
-expect document.getElementById('save-status').hidden
+expect document.getElementById('save-status').textContent !== 'Unsaved changes'
 expect document.getElementById('btn-save').textContent == Save
