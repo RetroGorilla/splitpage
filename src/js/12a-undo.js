@@ -410,7 +410,6 @@ export function lastUndoEntry() { flushEdits(); return history.top(); }
 
 export function nextRedoEntry() { flushEdits(); return history.nextRedo(); }
 
-// Entries with n above a mark were recorded after it; a view (writer mode) uses this to keep undo on screen.
 export function undoMark() { flushEdits(); history.breakCoalescing(); return history.mark(); }
 
 export function caretAfterStep(step) {

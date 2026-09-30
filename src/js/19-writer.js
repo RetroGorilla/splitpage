@@ -354,7 +354,6 @@ export function closeWriter() {
   render();
 }
 
-// Opening writer mode is itself an undo step: undo never reaches edits made before it, off screen.
 export function writerUndoStep(dir) {
   if (writerOpen) {
     if (dir === "redo") {
