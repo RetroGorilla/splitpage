@@ -4,7 +4,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
-  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, run
+  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run
 } from "./dep-report.mjs";
 
 const TOOLS = dirname(fileURLToPath(import.meta.url));
@@ -335,6 +335,11 @@ eq("each write target is described by what it does", findViolations(graph({
   "global:S[?] replaces S[?]"
 ]);
 
+eq("known false positive: an exported snapshot of a primitive member makes a bridge", stateFindings({
+  "src/js/flag.js": 'import { S } from "./_state.js";\nexport const wasDirty = S.dirty;\n',
+  "src/js/use.js": 'import { wasDirty } from "./flag.js";\nexport const w = wasDirty;\n'
+}), ["state-import src/js/flag.js global:S", "state-import src/js/use.js global:S"]);
+
 eq("export type { S } from is a bridge, as import type { S } is an importer", stateFindings({
   "src/js/types.ts": 'export type { S } from "./_state.js";\n'
 }), ["state-import src/js/types.ts global:S"]);
@@ -407,6 +412,30 @@ eq("an exported alias of an S member is a bridge its consumers write through", s
   check("a feature importing that bridge breaks the layer rule", found.includes("layer src/features/rows/view.ts src/legacy/state.ts"), found.join("\n"));
   check("and is itself a state-import", found.includes("state-import src/features/rows/view.ts global:S"), found.join("\n"));
 }
+
+console.log("\nmetrics():\n");
+
+eq("metrics() reports the informational numbers", metrics(graph({
+  ...STATE_FILE,
+  "src/js/a.js": 'import { S } from "./_state.js";\nimport "./b.js";\nS.state = {};\nS.dirty = true;\nexport function n() { return S.editSeq; }\n',
+  "src/js/b.js": 'import { S } from "./_state.js";\nimport "./a.js";\nS.state.rows.push(1);\n',
+  "src/js/bridge.js": 'export { S } from "./_state.js";\n',
+  "src/test/a.test.mjs": 'import "../js/a.js";\n'
+})), {
+  frontendModules: 4,
+  largestFrontendRuntimeCycle: 2,
+  frontendRuntimeCycles: 1,
+  runtimeCycleEdges: 2,
+  stateImporters: ["src/js/a.js", "src/js/b.js", "src/js/bridge.js"],
+  stateBridges: ["src/js/bridge.js"],
+  stateAssigners: ["src/js/a.js"],
+  stateFieldWriters: [{ path: "src/js/a.js", writes: 2, reads: 1 }],
+  stateWriters: [
+    { path: "src/js/a.js", targets: ["global:S.dirty", "global:S.state"] },
+    { path: "src/js/b.js", targets: ["global:S.state.*"] }
+  ],
+  migratedModules: 0
+});
 
 console.log("\ncycle edges:\n");
 
