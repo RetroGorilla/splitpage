@@ -24,10 +24,13 @@ does on unRAID) and starts it with the settings `deploy.sh` insists on.
 `prebuilt` builds the app, copies into an empty folder only the files
 `ci.yml` uploads as the `splitpage-app` artifact, and builds and starts
 `Dockerfile.prebuilt` from that folder, so the recipe DEPLOY.md §8 gives for
-running without a checkout is exercised on the artifact's inputs. Its file
-list in the step `Stage the files ci.yml uploads as the splitpage-app
-artifact` mirrors the `Upload the built app` step in `ci.yml`; change both
-together (a change to `ci.yml` runs this workflow for that reason).
+running without a checkout is exercised on the artifact's inputs. The job
+holds no file list of its own: `node tools/artifact-files.mjs --stage <dir>`
+reads the paths from `ci.yml`'s `Upload the built app` step and copies
+exactly those, failing on a missing file or on a glob it cannot reproduce.
+`tools/test-artifact-files.mjs` also checks that everything
+`Dockerfile.prebuilt` copies is in that list. A change to `ci.yml` or to
+the script runs this workflow.
 
 ## `.github/workflows/release.yml`
 
