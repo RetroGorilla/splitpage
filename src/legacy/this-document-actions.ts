@@ -43,9 +43,9 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       keys: ["mod+f", "mod+shift+f", "mod+alt+f", "mod+alt+shift+f"],
       words: "search replace look for",
       availability: () => availableUnless(["loading", "dialog", "writer"], screenNow()),
-      run: () => {
+      run: (source) => {
         const input = document.getElementById("find-input");
-        if (findOpen && input instanceof HTMLInputElement) input.select();
+        if (source === "shortcut" && findOpen && input instanceof HTMLInputElement) input.select();
         else openFindBar();
       }
     })

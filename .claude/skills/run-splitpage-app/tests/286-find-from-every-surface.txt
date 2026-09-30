@@ -1,0 +1,62 @@
+# Find & replace with the bar already open (4.0 milestone 1). Ctrl+F only
+# puts the focus back in the bar and selects what is in it; choosing Find &
+# replace from the File menu, the command menu or the desktop app's Edit
+# menu opens the bar again, which takes the words selected in the script as
+# the new query, as it did before the action registry. Passes against
+# 4.0-development 47c0309, before the registry, and after it. Every `eval`
+# is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.D = window.__desktopTest; var doc = { schema: 2, title: 'Find surfaces', rows: [ { id: 'r1', visualText: 'Wide', audioText: 'Apple banana cherry', status: 'todo' }, { id: 'r2', visualText: 'Close', audioText: 'The zzz mark and a banana', status: 'todo' } ], comments: [] }; window.__loaded = F.state(); F.openFile(new File([JSON.stringify(doc)], 'find-surfaces.splitpage')); return true; })()
+wait F.state() !== __loaded && F.state().title === 'Find surfaces' && !!document.querySelector('#rows .row[data-id="r2"]')
+eval (function(){ window.__query = function () { return document.getElementById('find-input').value; }; window.__setQuery = function (q) { var i = document.getElementById('find-input'); i.value = q; i.dispatchEvent(new Event('input', { bubbles: true })); return true; }; window.__pick = function () { var el = document.querySelector('#rows .row[data-id="r1"] .audio-cell .cell-editable'); el.focus(); var n = el.firstChild; var r = document.createRange(); r.setStart(n, 6); r.setEnd(n, 12); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); }; return true; })()
+
+# --- the bar open on "zzz" ------------------------------------------------------
+key ctrl KeyF
+sleep 200
+expect !document.getElementById('findbar').hidden
+eval __setQuery('zzz')
+sleep 200
+expect __query() == zzz
+
+# --- Ctrl+F with words selected: the bar keeps its query -------------------------
+expect __pick() == banana
+key ctrl KeyF
+sleep 200
+expect __query() == zzz
+expect document.activeElement.id == find-input
+
+# --- File ▸ Find & replace takes the selection ------------------------------------
+expect __pick() == banana
+jsclick #btn-file
+jsclick #file-menu [data-file-action="find"]
+sleep 300
+expect __query() == banana
+expect document.activeElement.id == find-input
+expect document.getElementById('file-menu').hidden
+
+# --- the command menu's Find & replace takes it too -------------------------------
+eval __setQuery('zzz')
+expect __pick() == banana
+key ctrl KeyK
+sleep 300
+type find
+sleep 200
+eval (function(){ var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="find"]'); if (it) it.click(); return !!it; })()
+sleep 300
+expect document.getElementById('cmdk').hidden
+expect __query() == banana
+expect document.activeElement.id == find-input
+
+# --- and the desktop app's Edit ▸ Find & replace ------------------------------------
+eval __setQuery('zzz')
+expect __pick() == banana
+eval D.runMenuCommand('find'); true
+sleep 300
+expect __query() == banana
+expect document.activeElement.id == find-input
+
+key Escape
+sleep 200
+expect document.getElementById('findbar').hidden
