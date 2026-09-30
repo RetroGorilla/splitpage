@@ -10,6 +10,14 @@ on:
       - .env.example
       - server/**
       - build.mjs
+      - VERSION
+      - sw.js
+      - src/**
+      - shared/**
+      - docs/help.md
+      - manifest.webmanifest
+      - icon.svg
+      - icon-maskable.svg
       - package.json
       - package-lock.json
       - .github/workflows/docker.yml
@@ -23,6 +31,14 @@ on:
       - .env.example
       - server/**
       - build.mjs
+      - VERSION
+      - sw.js
+      - src/**
+      - shared/**
+      - docs/help.md
+      - manifest.webmanifest
+      - icon.svg
+      - icon-maskable.svg
       - package.json
       - package-lock.json
       - .github/workflows/docker.yml

@@ -1,34 +1,11 @@
-# CI (issue #58).
-#
-# Fifty pull requests merged with nothing gating them. This runs what a
-# contributor would run before pushing: the build, the unit tests that
-# exist, the two Node test scripts, and one browser suite driven through
-# driver.mjs under Playwright's Chromium.
-#
-# driver.ps1 is not run here. It is Windows and Edge only, and since #57 the
-# Node driver's exit code agrees with its own RESULT line, which is what lets
-# a job gate on it at all.
 name: CI
 
-# The repository is private, so every minute here is billed. CI runs only
-# on merge (push to main), never on pull requests. A change that touches
-# only prose does not run at all: markdown is not built or read by any
-# check, except docs/help.md, which build.mjs renders into the app's Help.
-# .claude/ is session notes and skills, except the run-splitpage-app driver
-# and suites the browser steps execute. Order matters: a later pattern
-# overrides an earlier one.
 on:
+  pull_request:
+    branches: [main, 4.0-development]
   push:
-    branches: [main]
-    paths:
-      - '**'
-      - '!**/*.md'
-      - 'docs/help.md'
-      - '!.claude/**'
-      - '.claude/skills/run-splitpage-app/**'
-      - '!.github/ISSUE_TEMPLATE/**'
+    branches: [main, 4.0-development]
 
-# A second push to the same branch makes the first run's answer worthless.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -37,24 +14,39 @@ permissions:
   contents: read
 
 env:
-  # One place to bump the Chromium the suites run against. Unpinned, a new
-  # Playwright release could change the browser under a green branch.
   PLAYWRIGHT_VERSION: '1.63.0'
 
 jobs:
-  checks:
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Classify the change
+        id: classify
+        run: node tools/ci-changes.mjs "$BASE" "$HEAD"
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+  checks:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
-      # Not /opt: the runner user cannot write there. driver.mjs reads this
-      # variable to find a chromium-* directory before it falls back to PATH.
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
-      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
-      # which is what Chromium's sandbox needs to start. Without this the
-      # browser launches, dies before it listens, and every suite fails with
-      # "no CDP page target" — the same symptom as picking the wrong binary.
-      # Safe here and nowhere else: a throwaway runner loading only this
-      # repo's own files. driver.mjs passes these straight to the browser.
+      # Ubuntu 24.04's AppArmor blocks the user namespaces Chromium's sandbox
+      # needs; without these flags the browser dies before opening a CDP port.
       SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
       - uses: actions/checkout@v4
@@ -63,33 +55,24 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # build.mjs bundles src/js with esbuild since #66, so there is a
-      # devDependency to install before anything can build or check.
-      - name: Install build dependencies
+      - name: Install tooling
         run: npm ci
 
-      # eslint over every source tree in the repo (#68): src/js, src/test,
-      # server/, desktop/, sw.js and the .mjs tooling at the root. It runs
-      # before the build because it is the fastest thing here and
-      # because a `no-undef` in src/js is more useful read as itself than as
-      # whatever the browser suite turns it into four steps later.
       - name: Lint
         run: npm run lint
 
-      # index.html is generated and no longer committed (#80), so there is
-      # nothing here to check it against — CI is where it gets built. Every
-      # step below this one (the browser suites especially) runs against the
-      # index.html this produces, and the artifact at the end of the job is
-      # the same file.
+      - name: Types
+        run: npm run typecheck
+
+      - name: Layers and dependencies
+        run: npm run check:deps
+
+      - name: No new comments
+        run: npm run check:comments
+
       - name: Build index.html and stamp sw.js
         run: node build.mjs
 
-      # sw.js IS committed — it cannot be inlined into the page, so it is the
-      # file you edit as well as the file that ships, and the build only
-      # stamps its cache name from VERSION. The build above has just rewritten
-      # the working copy, so a diff here means the committed sw.js was stale:
-      # a version bump that never got rebuilt, which is exactly the deploy
-      # that would reuse the previous release's cache (#79).
       - name: sw.js is committed with the current VERSION stamp
         run: |
           git diff --exit-code -- sw.js || {
@@ -97,58 +80,37 @@ jobs:
             exit 1
           }
 
-      # The pure cores (mergeStates, migrateRows, the .splitpage and .md
-      # round-trips, deriveDocId, planHistoryEviction) are unit-tested
-      # directly since #67, instead of through backdoors in a booted browser.
-      - name: Unit tests over src/js
-        run: npm test
+      - name: Unit, desktop and tool tests
+        run: npm run test:all
 
-      # Everything that runs without a browser or Electron, from one place
-      # (package.json's test:all): src/test (already run above), the desktop
-      # modules' unit tests, the document server and the updater. A test file
-      # added to one of those lists is in CI the same day; before this each
-      # was a step here, and four of them had been left out.
-      - name: Desktop, server and updater tests
-        run: npm run test:desktop && npm run test:tools
-
-      # The browser suites need a Chromium. driver.mjs can find Playwright's
-      # on its own, but "found the wrong one" fails as a wall of CDP errors
-      # that names no cause — the runner's /usr/bin/chromium is a snap that
-      # starts and never opens a debugging port. So resolve it here instead,
-      # fail loudly with a directory listing if it is not where expected, and
-      # hand the exact path to the driver. Only the browser is installed, not
-      # the test runner: nothing in this repo imports Playwright.
+      # The runner's /usr/bin/chromium is a snap that never opens a debugging
+      # port, so the Playwright build is resolved here and handed to the driver.
       - name: Install Chromium
         run: |
           npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
           if [ -z "$exe" ]; then
-            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH — Playwright's layout may have changed again"
+            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
             ls -R "$PLAYWRIGHT_BROWSERS_PATH" | head -60
             exit 1
           fi
-          echo "using $exe"
           echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
 
       - name: Desktop tab strip width (headless Chromium)
         run: node desktop/test/tabstrip-width.mjs
 
-      # Suite 01 is the boot-and-type path everything else rests on: if this
-      # fails the app does not start. The rest of the suites are a full
-      # regression run and belong on a machine somebody is watching, not on
-      # every pull request — see the skill's own notes.
-      - name: Browser suite 01 (core)
-        run: node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
+      - name: Browser suites 01 (core) and 52 (content security policy)
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2
 
-      # The policy is only worth having if it is actually enforcing, and the
-      # hash in it is computed at build time from the app's own inline script
-      # — so a source change that forgets to rebuild shows up here as an app
-      # that does not boot at all (#65).
-      - name: Browser suite 52 (content security policy)
-        run: node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/52-csp.txt
+      - name: Upload the suite logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-logs
+          path: ${{ runner.temp }}/suites
+          if-no-files-found: ignore
+          retention-days: 7
 
-      # Last, deliberately: a run whose tests failed uploads nothing, so an
-      # artifact that exists is one every check above it passed.
       - name: Upload the built app
         uses: actions/upload-artifact@v4
         with:
@@ -165,32 +127,48 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # The desktop shell, driven for real (#89). desktop/test/smoke.mjs is the
-  # only thing that executes main.js and preload.js — every other desktop
-  # check in this file reads source text — and until #89 it could only run on
-  # the Windows machine, so changes to the IPC table, the preloads and the
-  # shared policy modules were landing from Linux against a suite nobody could
-  # execute where the change was made.
-  #
-  # Its own job, not a step in `checks`: it launches ~60 real Electron
-  # processes and takes far longer than everything above put together, and a
-  # failure here should be readable as "the desktop shell broke", separately
-  # from lint or the browser suites. Budget an hour: a full dev-target run
-  # took 6.3 minutes on a Windows 11 x64 machine but ~55 on a slow shared
-  # container — it is mostly waiting (each case boots, drives and tears down
-  # a real app, and several deliberately crash one and relaunch). The
-  # concurrency group above already cancels a superseded run, so a branch
-  # being pushed to repeatedly does not stack these up.
-  #
-  # Only the `dev` target runs. The packaged targets are Windows .exe trees
-  # that nothing on this runner builds, and smoke.mjs does not look for them
-  # off Windows. It exits 1 when it finds NO target at all, so this step
-  # cannot quietly pass by testing nothing — the failure mode #89 was about.
-  # Its summary ends with a SKIPPED list naming every check this platform
-  # could not run (today: the one MainWindowHandle probe).
-  #
-  # Runs on the push to main, like `checks`.
+  node-24:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Clean install on Node 24
+        run: npm ci
+
+      - name: Fast gates on Node 24
+        run: npm run verify
+
+  gate:
+    needs: [changes, checks, node-24]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every required job passed, or the change was prose only
+        run: |
+          echo "changes=$CHANGES code=$CODE checks=$CHECKS node-24=$NODE24"
+          [ "$CHANGES" = success ] || exit 1
+          if [ "$CODE" = true ]; then
+            [ "$CHECKS" = success ] && [ "$NODE24" = success ]
+          else
+            [ "$CHECKS" = skipped ] && [ "$NODE24" = skipped ]
+          fi
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          CHECKS: ${{ needs.checks.result }}
+          NODE24: ${{ needs.node-24.result }}
+
   desktop-smoke:
+    needs: changes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -200,8 +178,6 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      # main.js serves index.html out of APP_ROOT, and it is not committed
-      # (#80) — so the app has nothing to load until the root build has run.
       - name: Install build dependencies
         run: npm ci
 
@@ -212,55 +188,25 @@ jobs:
         run: npm ci
         working-directory: desktop
         env:
-          # desktop/.npmrc pins arch=arm64 for the Windows-on-ARM dev
-          # machine. Left alone it would also decide which cpu-gated
-          # optional packages npm resolves here, so the runner's own
-          # architecture wins instead — an npm_config_* env var outranks a
-          # project .npmrc.
+          # desktop/.npmrc pins arch=arm64 for the Windows-on-ARM machine; an
+          # npm_config_* variable outranks it so the runner's own arch wins.
           npm_config_arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
 
-      # Electron 44 has no postinstall: the binary is fetched lazily, so ask
-      # for it explicitly rather than let the first launch inside the suite
-      # race a ~100 MB download against its own 30s CDP timeout.
-      #
-      # Run through node, NOT npm/npx. desktop/.npmrc pins `arch=arm64` for
-      # the Windows-on-ARM dev machine, and anything going through npm turns
-      # that into npm_config_arch — which this x64 runner would then obey and
-      # download a binary it cannot execute. Invoked directly, install.js
-      # falls back to process.arch, which is the right answer here.
+      # Through node, not npm: npm would turn desktop/.npmrc's arch=arm64 into
+      # npm_config_arch and fetch a binary this x64 runner cannot execute.
       - name: Fetch the dev Electron binary
         run: node node_modules/electron/install.js
         working-directory: desktop
 
-      # Electron is Chromium: it needs the same shared libraries and, having
-      # no headless mode of its own for a real BrowserWindow, a display.
-      # Playwright's dependency installer knows the package names for
-      # whatever Ubuntu the runner image is on, which a hand-written apt list
-      # here would have to keep in step with.
       - name: Xvfb and Chromium's shared libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb
           npx --yes playwright@${PLAYWRIGHT_VERSION} install-deps chromium
 
-      # Xvfb started by hand rather than `xvfb-run`, which is what a person
-      # runs locally. xvfb-run returns its own exit status when its temp-dir
-      # cleanup fails, and it does so intermittently here — measured once in
-      # two full runs — which would turn a green suite red for a reason that
-      # has nothing to do with the app. Owning the display makes this step's
-      # exit code the suite's own.
-      #
-      # The suite adds --no-sandbox for the Linux dev target itself
-      # (node_modules' chrome-sandbox is not setuid and the runner has no
-      # user namespaces to fall back on); it is scoped to that target and
-      # never reaches a packaged build.
-      #
-      # Xvfb's keymap compiler (xkbcomp) knows fewer keysyms than the
-      # runner's xkeyboard-config names, so each time a window connects it
-      # prints a screenful of "Could not resolve keysym XF86..." warnings
-      # (about 1,700 lines a run). They are harmless —
-      # nothing here presses those keys — so only that noise is filtered;
-      # any other Xvfb error still reaches the log.
+      # Xvfb is started by hand because xvfb-run intermittently returns its own
+      # cleanup failure as the exit status. The grep drops xkbcomp's harmless
+      # unknown-keysym warnings (about 1,700 lines a run).
       - name: Desktop smoke (dev target)
         working-directory: desktop
         run: |
