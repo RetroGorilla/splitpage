@@ -20,7 +20,9 @@ on:
       - icon-maskable.svg
       - package.json
       - package-lock.json
+      - .nvmrc
       - .github/workflows/docker.yml
+      - .github/workflows/ci.yml
   push:
     branches: [main]
     paths:
@@ -41,7 +43,9 @@ on:
       - icon-maskable.svg
       - package.json
       - package-lock.json
+      - .nvmrc
       - .github/workflows/docker.yml
+      - .github/workflows/ci.yml
 
 concurrency:
   group: docker-${{ github.ref }}
@@ -169,3 +173,77 @@ jobs:
       - name: Container log
         if: always()
         run: docker logs --tail 80 splitpage-ci 2>&1 || true
+
+  prebuilt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Build the app
+        run: |
+          npm ci
+          node build.mjs
+
+      - name: Stage the files ci.yml uploads as the splitpage-app artifact
+        run: |
+          app="$RUNNER_TEMP/splitpage-app"
+          mkdir -p "$app"
+          cp -R index.html sw.js manifest.webmanifest icon.svg icon-maskable.svg VERSION Dockerfile.prebuilt server "$app/"
+          find "$app" -type f | sort
+
+      - name: Build Dockerfile.prebuilt from the staged files alone
+        working-directory: ${{ runner.temp }}/splitpage-app
+        run: docker build -f Dockerfile.prebuilt --label "splitpage.commit=${GITHUB_SHA::7}" -t splitpage-prebuilt .
+
+      - name: Start it the way DEPLOY.md section 8 does, and check it
+        run: |
+          fail() { echo "::error::$1"; docker logs --tail 60 splitpage-prebuilt || true; exit 1; }
+          version="$(tr -d '[:space:]' < VERSION)"
+
+          data="$RUNNER_TEMP/splitpage-data"
+          mkdir -p "$data"
+          sudo chown 99:100 "$data"
+          pin="ci$(openssl rand -hex 16)"
+          echo "::add-mask::$pin"
+          printf 'JOIN_PIN=%s\n' "$pin" > "$RUNNER_TEMP/prebuilt.env"
+
+          docker run -d --name splitpage-prebuilt \
+            --user 99:100 \
+            -p 127.0.0.1:8791:8791 \
+            --env-file "$RUNNER_TEMP/prebuilt.env" \
+            -v "$data:/data" \
+            --health-interval 2s \
+            splitpage-prebuilt
+
+          for _ in $(seq 1 30); do
+            curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8791/api/health && break
+            sleep 1
+          done
+          health="$(curl -fsS --max-time 2 http://127.0.0.1:8791/api/health)" || fail "no answer from /api/health within 30s"
+          echo "/api/health: $health"
+          jq -e --arg v "$version" '.version == $v' <<<"$health" >/dev/null \
+            || fail "/api/health does not report the built VERSION ($version)"
+          jq -e '.authRequired == true' <<<"$health" >/dev/null \
+            || fail "/api/health says no owner key is required, with JOIN_PIN set"
+
+          curl -fsS http://127.0.0.1:8791/ | grep -q "<meta name=\"splitpage-version\" content=\"$version\">" \
+            || fail "/ does not serve the app built from this VERSION"
+          curl -fsS http://127.0.0.1:8791/sw.js | grep -qF "var CACHE = \"splitpage-$version\";" \
+            || fail "/sw.js is not the copy the build stamped with VERSION"
+
+          for _ in $(seq 1 30); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' splitpage-prebuilt)"
+            [ "$status" = healthy ] && break
+            sleep 1
+          done
+          [ "$status" = healthy ] \
+            || fail "the image's HEALTHCHECK says '$status': $(docker inspect -f '{{json .State.Health}}' splitpage-prebuilt)"
+
+      - name: Container log
+        if: always()
+        run: docker logs --tail 80 splitpage-prebuilt 2>&1 || true
