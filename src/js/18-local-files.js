@@ -35,7 +35,7 @@ import {
   normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markDirty, showRefusal, showToast } from "./12-dirty-toast.js";
+import { clearDirty, invokeFrom, markDirty, showToast } from "./12-dirty-toast.js";
 import {
   linkTurnedOff,
   onServerDoc,
@@ -746,7 +746,7 @@ export function handleFileMenuAction(action) {
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
-    showRefusal(appActions.invoke(action, "menu"));
+    invokeFrom(action, "menu");
     return;
   }
   if (!S.state) {
