@@ -179,6 +179,7 @@ function projectionOf(html) {
 
 export function createUndoHistory() {
   var done = [], undone = [];
+  var serial = 0;
 
   function record(steps, now) {
     if (!steps.length) return;
@@ -195,7 +196,7 @@ export function createUndoHistory() {
         return;
       }
     }
-    done.push({ steps: steps, at: now, cell: cell, endsInSpace: cell ? /\s$/.test(insertedText(steps[0])) : false });
+    done.push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: cell ? /\s$/.test(insertedText(steps[0])) : false });
     if (done.length > MAX_ENTRIES) done.shift();
   }
 
@@ -257,7 +258,9 @@ export function createUndoHistory() {
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
     clear: function () { done.length = 0; undone.length = 0; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
-    top: function () { return done[done.length - 1] || null; }
+    top: function () { return done[done.length - 1] || null; },
+    nextRedo: function () { return undone[undone.length - 1] || null; },
+    mark: function () { return serial; }
   };
 }
 
@@ -404,6 +407,11 @@ export function breakUndoCoalescing() {
 export function undoSizes() { return history.sizes(); }
 
 export function lastUndoEntry() { flushEdits(); return history.top(); }
+
+export function nextRedoEntry() { flushEdits(); return history.nextRedo(); }
+
+// Entries with n above a mark were recorded after it; a view (writer mode) uses this to keep undo on screen.
+export function undoMark() { flushEdits(); history.breakCoalescing(); return history.mark(); }
 
 export function caretAfterStep(step) {
   function domChars(h) {
