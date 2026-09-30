@@ -12,7 +12,6 @@ const LINE_LIMIT = 4096;
 const PORT_STRIDE = 10;
 const HTTP_BASE = 18100;
 const CDP_BASE = 19300;
-const PORT_MIN = 1024;
 const PORT_MAX = 65535;
 const TIMEOUT_MAX = 86400;
 const FLAGS = ["lanes", "port-base", "timeout", "suites", "driver", "node"];
@@ -43,10 +42,12 @@ function wholeNumber(name, raw, fallback, min, max) {
   return n;
 }
 
-const PORT_LABEL = { http: "HTTP port", cdp: "CDP port", reserve: "reservation port" };
+const PORT_KINDS = ["http", "cdp", "httpReserve", "cdpReserve"];
+const RESERVED = new Set(["httpReserve", "cdpReserve"]);
+const PORT_LABEL = { http: "HTTP port", cdp: "CDP port", httpReserve: "HTTP reservation port", cdpReserve: "CDP reservation port" };
 
 export function portPlan(portBase, lanes) {
-  const highest = CDP_BASE + portBase + (lanes - 1) * PORT_STRIDE;
+  const highest = CDP_BASE + portBase + (lanes - 1) * PORT_STRIDE + 1;
   if (highest > PORT_MAX) {
     throw new ConfigError(`--port-base ${portBase} with ${lanes} lanes needs ports up to ${highest}; the highest port is ${PORT_MAX}`);
   }
@@ -54,14 +55,13 @@ export function portPlan(portBase, lanes) {
   const plan = [];
   for (let lane = 0; lane < lanes; lane++) {
     const http = HTTP_BASE + portBase + lane * PORT_STRIDE;
-    const entry = { lane, http, cdp: CDP_BASE + portBase + lane * PORT_STRIDE, reserve: http + 1 };
-    for (const kind of ["http", "cdp", "reserve"]) {
-      const port = entry[kind];
+    const cdp = CDP_BASE + portBase + lane * PORT_STRIDE;
+    const entry = { lane, http, cdp, httpReserve: http + 1, cdpReserve: cdp + 1 };
+    for (const kind of PORT_KINDS) {
       const label = `lane ${lane}'s ${PORT_LABEL[kind]}`;
-      if (port < PORT_MIN || port > PORT_MAX) throw new ConfigError(`${label} would be ${port}, outside ${PORT_MIN}-${PORT_MAX}`);
-      const other = owners.get(port);
-      if (other) throw new ConfigError(`port ${port} would be both ${other} and ${label}; use fewer --lanes`);
-      owners.set(port, label);
+      const other = owners.get(entry[kind]);
+      if (other) throw new ConfigError(`port ${entry[kind]} would be both ${other} and ${label}; use fewer --lanes`);
+      owners.set(entry[kind], label);
     }
     plan.push(entry);
   }
@@ -100,13 +100,15 @@ export function parseArgs(argv, env = {}) {
   }
   const lanes = wholeNumber("--lanes (LANES)", flags.lanes ?? env.LANES, 6, 1, PORT_MAX);
   const portBase = wholeNumber("--port-base (PORT_BASE)", flags["port-base"] ?? env.PORT_BASE, 0, 0, PORT_MAX);
+  if (portBase % PORT_STRIDE !== 0) {
+    throw new ConfigError(`--port-base (PORT_BASE) must be a multiple of ${PORT_STRIDE}, got ${portBase}: each lane owns a block of ${PORT_STRIDE} ports`);
+  }
   const timeoutSec = wholeNumber("--timeout (SUITE_TIMEOUT)", flags.timeout ?? env.SUITE_TIMEOUT, 600, 1, TIMEOUT_MAX);
   return {
     out: resolve(positional[0] || "../splitpage-runs/latest"),
     filter,
     lanes,
     portBase,
-    ports: portPlan(portBase, lanes),
     timeoutMs: timeoutSec * 1000,
     suiteDir: resolve(flags.suites ?? env.SPLITPAGE_SUITE_DIR ?? join(SKILL_DIR, "tests")),
     driver: resolve(flags.driver ?? env.SPLITPAGE_SUITE_DRIVER ?? join(SKILL_DIR, "driver.mjs")),
@@ -122,13 +124,12 @@ export function discoverSuites(suiteDir, filter) {
 }
 
 export function driverCommand(config, file, lane) {
-  const port = HTTP_BASE + config.portBase + lane * PORT_STRIDE;
-  const cdp = CDP_BASE + config.portBase + lane * PORT_STRIDE;
+  const { http, cdp } = config.ports[lane];
   return {
     cmd: config.node,
     args: [
       config.driver,
-      "--port", String(port),
+      "--port", String(http),
       "--cdp-port", String(cdp),
       "--script", join(config.suiteDir, file),
       "--shot-dir", join(config.out, "shots")
@@ -138,7 +139,7 @@ export function driverCommand(config, file, lane) {
 
 function bindPort(port) {
   return new Promise((resolveBind) => {
-    const server = createServer();
+    const server = createServer((socket) => socket.destroy());
     server.once("error", (e) => resolveBind({ server: null, code: e.code ?? e.message }));
     server.listen(port, "127.0.0.1", () => resolveBind({ server, code: null }));
   });
@@ -152,17 +153,17 @@ export async function claimPorts(plan) {
   const held = [];
   const busy = [];
   for (const entry of plan) {
-    for (const kind of ["reserve", "http", "cdp"]) {
+    for (const kind of PORT_KINDS) {
       const { server, code } = await bindPort(entry[kind]);
       if (!server) { busy.push(`${entry[kind]} (lane ${entry.lane}'s ${PORT_LABEL[kind]}, ${code})`); continue; }
-      if (kind === "reserve") held.push(server);
+      if (RESERVED.has(kind)) held.push(server);
       else await closeServer(server);
     }
   }
   const release = () => Promise.all(held.splice(0).map(closeServer));
   if (busy.length) {
     await release();
-    throw new ConfigError(`port collision: cannot bind ${busy.join(", ")}; the port is in use by another run-suites or something else, or reserved. Nothing was started. Pick a free block with --port-base`);
+    throw new ConfigError(`port collision: cannot bind ${busy.join(", ")}; the port is in use by another run-suites or something else, or reserved. Nothing was started. Pick a --port-base at least 10 x lanes away from any other run's`);
   }
   return { release };
 }
@@ -375,9 +376,13 @@ export function exitCodeFor(results) {
 
 export async function runSuites(config, files, { print = console.log, owned = new Set() } = {}) {
   if (files.length === 0) throw new ConfigError("no suites matched");
+  if (!existsSync(config.driver)) throw new ConfigError(`driver not found: ${config.driver}`);
   const laneCount = Math.min(config.lanes, files.length);
-  const ports = await claimPorts((config.ports ?? portPlan(config.portBase, config.lanes)).slice(0, laneCount));
+  const ports = portPlan(config.portBase, laneCount);
+  const claim = await claimPorts(ports);
+  const lanesConfig = { ...config, ports };
   try {
+    print(`${files.length} suites in ${config.suiteDir}, ${laneCount} lanes on HTTP ${ports[0]?.http}+ and CDP ${ports[0]?.cdp}+, logs in ${config.out}`);
     mkdirSync(config.out, { recursive: true });
     const results = [];
     let next = 0;
@@ -385,7 +390,7 @@ export async function runSuites(config, files, { print = console.log, owned = ne
     async function lane(i) {
       while (failure === null && next < files.length) {
         const file = files[next++];
-        const r = await runOne(config, file, i, owned);
+        const r = await runOne(lanesConfig, file, i, owned);
         if (failure !== null) return;
         writeFileSync(join(config.out, `${file}.log`), r.log);
         results.push(r);
@@ -405,7 +410,7 @@ export async function runSuites(config, files, { print = console.log, owned = ne
     print(`${results.length} of ${files.length} suites ran, ${results.length - failed.length} passed`);
     return { results, exitCode: exitCodeFor(results) };
   } finally {
-    await ports.release();
+    await claim.release();
   }
 }
 
@@ -424,11 +429,6 @@ export async function main(argv, env) {
   try {
     const config = parseArgs(argv, env);
     const files = discoverSuites(config.suiteDir, config.filter);
-    if (files.length === 0) throw new ConfigError("no suites matched");
-    if (!existsSync(config.driver)) throw new ConfigError(`driver not found: ${config.driver}`);
-    const laneCount = Math.min(config.lanes, files.length);
-    const first = config.ports[0];
-    console.log(`${files.length} suites in ${config.suiteDir}, ${laneCount} lanes on HTTP ${first?.http}+ and CDP ${first?.cdp}+, logs in ${config.out}`);
     const { exitCode } = await runSuites(config, files, { owned });
     return exitCode;
   } catch (e) {
