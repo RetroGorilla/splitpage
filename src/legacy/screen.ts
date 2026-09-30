@@ -12,7 +12,7 @@ export interface ScreenState {
 const REASONS: Readonly<Record<Blocker, string>> = {
   loading: "Still loading…",
   prompter: "Close Present first",
-  writer: "Close the Writer first",
+  writer: "Close the writer first",
   dialog: "Close the open dialog first",
   launcher: "Close the open dialog first",
   tour: "Finish or skip the tour first"

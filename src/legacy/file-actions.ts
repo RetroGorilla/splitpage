@@ -86,7 +86,7 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       words: "command palette search run",
       availability: (source) => {
         if (commandMenuOpen()) return { enabled: true };
-        const screen = availableUnless(["loading", "prompter", "writer", "dialog", "tour"], screenNow());
+        const screen = availableUnless(["loading", "dialog", "prompter", "writer", "tour"], screenNow());
         return !screen.enabled && source === "button" ? { enabled: false, reason: "" } : screen;
       },
       run: (source) => {
