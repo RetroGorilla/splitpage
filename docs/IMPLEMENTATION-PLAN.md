@@ -1,12 +1,24 @@
-# Splitpage 4.0 — implementation plan for Claude
+# Splitpage 4.0 — implementation plan
 
 **Objective:** Make ordinary changes local, understandable and independently testable. Give each document operation, feature and platform resource an explicit owner. Preserve the app's current behavior and distribution model.
 
 **Scope decision:** Plugins, a plugin SDK, a plugin host and an isolated extension runtime are out of scope. Internal action and format registries remain because they simplify application development.
 
-**Authority:** This replaces the implementation milestones in `REFACTOR-ROADMAP.md` and the previous architecture plan. Preserve their compatible product invariants; this document controls sequencing, scope and acceptance. Prepared on 2026-09-30 UTC.
+**Authority:** This is the plan for 4.0. It supersedes the September 2026 architecture plan and the interim roadmap; their compatible product invariants are preserved, and this document controls sequencing, scope and acceptance. It lives on `4.0-development` and is amended there by PR when a decision changes.
 
-**Source baseline:** Reviewed upload `splitpage-main(1).zip`, version 3.1.0, archive commit `80500f6ef6b8f32b68a22c95210dcb962a989fc3`. Recheck the actual implementation branch before editing. This is a plan, not a claim that the refactor is implemented.
+**Source baseline:** Version 3.1.0, `main` at `80500f6ef6b8f32b68a22c95210dcb962a989fc3`. Recheck the implementation branch before editing. This is a plan, not a claim that the refactor is implemented.
+
+## 0. Decisions
+
+| Decision | Outcome |
+| --- | --- |
+| Release | 4.0, from `4.0-development` (created from `main`); `main` merged in at least weekly |
+| Plugins, SDK, extension runtime | Out of scope |
+| Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
+| Comments | None in authored code; workflow and configuration files may carry a comment that records a constraint, never narration (section 2) |
+| CI | Fast gates on hosted runners for PRs and the development branch; the full browser regression, Electron smoke and Windows x64/ARM64 checks run locally at milestone and release gates (section 4) |
+| ARM64 | A Windows ARM64 device is available; runtime checks run on it and the release row stands as written |
+| Invariants | Ledger in `docs/architecture/invariants.md`; `HANDOFF.md` section 5 stays in step with it (milestone 0) |
 
 ## 1. Outcome and release boundaries
 
@@ -47,9 +59,11 @@ Do not split a foundational interface across multiple simultaneous implementatio
 
 ### No comments in authored code
 
-Add no inline, block, documentation, TODO/FIXME or lint/type suppression comments to authored code, tests, CSS, HTML, scripts or workflow/configuration files. Write contracts and rationale in `docs/architecture/`, `docs/decisions/`, types, names and tests.
+Add no inline, block, documentation, TODO/FIXME or lint/type suppression comments to authored code, tests, CSS, HTML or scripts. Write contracts and rationale in `docs/architecture/`, `docs/decisions/`, types, names and tests.
 
-A parser-aware check must distinguish actual comments from URLs, regexes and strings. Preserve interpreter directives and exact required build-template markers through file-specific configuration. Move the existing `build.mjs` lint suppression into narrowly scoped configuration in milestone 0. Do not introduce broad exclusions for whole workflow files or new folders. Existing unmigrated comments may have an exact, frozen baseline; no new comments are allowed, and migrated areas have none. Preserve attribution in LICENSE/NOTICE and third-party metadata; generated/vendor content is outside the authored-source check.
+Workflow and configuration files (`.github/workflows/*.yml`, `eslint.config.mjs`, `tsconfig*.json`, `docker-compose.yml`, `Dockerfile*`) are the one exception. A comment there is allowed only where it records a constraint a reader cannot recover from the file itself or from the docs: why a flag exists, what breaks without it, which external behavior forced it. A comment that restates what the next line does, or explains something already documented, is removed in review. When in doubt, put it in `docs/` and leave the file bare.
+
+A parser-aware check must distinguish actual comments from URLs, regexes and strings. Preserve interpreter directives and exact required build-template markers through file-specific configuration. Move the two `build.mjs` lint suppressions, and the other inline `eslint-disable` directives across the repository (sixteen at the baseline), into narrowly scoped configuration as their files are touched; milestone 0 handles `build.mjs`. Do not introduce broad exclusions for new folders. Existing unmigrated comments have an exact, frozen baseline; no new comments are allowed, and migrated areas have none. Preserve attribution in LICENSE/NOTICE and third-party metadata; generated/vendor content is outside the authored-source check.
 
 ### Engineering constraints
 
@@ -101,15 +115,15 @@ The reviewed snapshot has 77 frontend modules, a 63-module runtime import cycle,
 
 Previous source checks passed build/lint, all 63 frontend test files, available desktop module/payload checks, 618 server checks and 23 updater tests. The Windows speech grace check was skipped. Full browser suites, real Electron smoke, Docker images and installed Windows targets were not executed in that review. Start implementation with a clean baseline; do not present prior results as validation of new changes.
 
-### Required CI policy
+### CI policy
 
-Configure fast checks for PRs targeting `main` and `4.0-development`, plus pushes to the development branch. Main-only post-merge checks are insufficient. Each job calls the same documented local scripts used by developers.
+Every check is a local script first (`package.json` scripts and `tools/`); CI jobs call those scripts and nothing else, so a run on a workstation and a run on a hosted runner are the same check.
 
-Fast checks cover lint, types, comment/layer/dependency gates, tool/core/application/adapter tests, build, and selected browser smoke/CSP/persistence flows. Required status checks must complete on documentation-only PRs through a cheap gate rather than remaining pending behind path filters.
+**Hosted, on every PR targeting `main` or `4.0-development` and every push to `4.0-development`:** the fast gates. Lint, types, the comment/layer/dependency gates, every discovered unit/application/adapter/tool test, the build, and the selected browser smoke/CSP/persistence suites already in `ci.yml`. Linux runners only. A documentation-only PR completes the required check through a cheap gate rather than staying pending behind path filters. Workflow path filters include new folders and every actual build input.
 
-Run the full browser regression and real Electron smoke on a scheduled/manual workflow and before each milestone is declared complete. Run impacted suites during feature PRs. Release requires the full platform/distribution matrix below. Workflow path filters must include new folders and every actual build input.
+**Local, at milestone and release gates:** the full browser regression on Linux (`tools/run-suites.mjs`) and on Windows (`run-tests.ps1`), real Electron smoke, and the Windows x64 and ARM64 packaged checks on the maintainer's x64 and ARM64 devices. Run impacted suites locally during feature PRs. A milestone is declared complete, and a release cut, only with the recorded output of those runs (`summary.txt`, the smoke log, the platform check logs) attached to the closing PR. A scheduled hosted full run is optional and does not replace the local gate.
 
-Use hosted Linux runners by default. Windows checks can run on hosted Windows or a dedicated restricted Windows CI environment. Do not attach an ordinary workstation containing production credentials to automatically executed PR workflows. If self-hosting is chosen, use explicit OS/architecture/repository labels, controlled triggers, minimal credentials and a clean isolated environment. Document the operating cost without weakening the verification gate.
+The workstation is never registered as a self-hosted runner for automatically triggered PR workflows. Local gate runs are started by hand.
 
 ### Minimum test evidence
 
@@ -138,9 +152,9 @@ Each milestone usually contains several PRs. Finish its gate before expanding mi
 3. Test the real orchestrator with controlled child commands: pass, fail, missing result, zero tests, timeout and launch error. Assert parent exit status and reports, not just printed text.
 4. Add `tools/dep-report.mjs`, `tools/dep-baseline.json`, layer checks and the parser-aware no-comment gate. Keep informational metrics separate from the exception baseline. Tests must prove a new forbidden edge fails even when total counts do not increase.
 5. Add TypeScript-aware lint/type/test discovery and documented local verification scripts. Add a failing-then-passing discovery probe so an omitted `.ts` test cannot go unnoticed.
-6. Configure the PR/development CI policy and retain existing smoke/Docker/release jobs. Commit locked tooling dependencies; run a clean install on Node 22 and 24.
-7. Audit the current 62 `HANDOFF.md` invariants into `docs/architecture/invariants.md`: ID, behavior, test coverage, owner, target milestone, keep/absorb/practice classification, replacement mechanism and acceptance test. Keep behavior tests for absorbed rules; documentation getting shorter is not a quality metric.
-8. Record representative typing, row edit, bulk operation and export performance on short/long fixtures, with machine/browser/font conditions. Preserve bounded/coalesced per-keystroke work; investigate material regression rather than optimizing from file size.
+6. Configure the CI policy of section 4 and retain existing smoke/Docker/release jobs. Commit locked tooling dependencies; run a clean install on Node 22 and 24.
+7. Audit the current 62 `HANDOFF.md` invariants into `docs/architecture/invariants.md`: ID, behavior, test coverage, owner, target milestone, keep/absorb/practice classification, replacement mechanism and acceptance test. Keep behavior tests for absorbed rules; documentation getting shorter is not a quality metric. When a later milestone absorbs a rule into code, its `HANDOFF.md` entry is replaced by a one-line pointer to the ledger in the same PR, so the two never disagree.
+8. Record representative typing, row edit, bulk operation and export performance on short/long fixtures, with machine/browser/font conditions, as one script run once. Preserve bounded/coalesced per-keystroke work; investigate material regression rather than optimizing from file size. This item does not gate the other milestone 0 work.
 
 **Gate:** Deliberately failing/empty tooling runs fail locally and in CI; all old/new test locations are discovered; prohibited imports/comments are rejected; baseline constraints and platform skips are recorded. Capture a full Linux/Windows browser baseline or explicit platform blockers before moving behavior.
 
@@ -257,7 +271,7 @@ These are architectural contracts, not optional tests or comments to add to sour
 
 - Fast gates pass on the final branch: lint, types, comments, layers/dependencies, all discovered unit/application/adapter/tool tests, build and selected critical browser tests.
 - Every existing browser suite is discovered by full filename and passes on Linux and Windows where supported. Genuine platform-only checks run on their supported platform; remaining skips are named and cannot be counted as passed. An unresolved missing release check blocks the release-readiness claim.
-- Real Electron smoke runs; Windows packaged x64/ARM64 payload/install/runtime checks and native checks are reported with actual execution evidence. Building an ARM64 artifact on x64 alone is not an ARM64 runtime check.
+- Real Electron smoke runs; Windows packaged x64/ARM64 payload/install/runtime checks and native checks are reported with actual execution evidence from the x64 and ARM64 devices. Building an ARM64 artifact on x64 alone is not an ARM64 runtime check.
 - Both Docker paths and the portable distribution start with fresh data and representative existing data, without importing unshipped source. Persistent sign-ins/links, permissions, offline app behavior and worker upgrade remain correct.
 - Test 4.0 client against the unchanged 3.1 server, and supported 3.1/4.0 project exchanges. If backend code changed, add old-client/new-server coverage. Keep existing IPC shapes and native capability checks.
 - No migrated frontend feature accesses global `S` or mutates live state. Forbidden edge sets shrink and contain no new violations; completed areas contain no cycles, including cycles through bridges. An increase in legitimate imports/module count is not automatically a defect.
@@ -286,11 +300,11 @@ Extract tabs/session registry and file service first, then IPC composition, host
 
 Replace unconditional `desktop/.npmrc` ARM64 installation assumptions with runner-aware settings. Retain a single IPC contract source and verify any emitted CommonJS/preload code and runtime resources. Real Electron security/lifecycle and installed-target checks remain the gate; source-text tests alone do not establish behavior.
 
-## 9. First assignment to Claude
+## 9. Starting instruction
 
-Use the following as the starting instruction with this file attached:
+Use the following as the starting instruction for a session on `4.0-development`, with this file attached:
 
-> Implement this plan on `4.0-development` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions. Start with milestone 0: repair and test the browser-suite orchestrator's exit/discovery/cleanup contract; establish explicit layer/exception baselines; configure strict TypeScript, lint and test discovery; enable PR/development checks; and produce the invariant ownership/coverage ledger. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as the first focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
+> Implement `docs/IMPLEMENTATION-PLAN.md` on `4.0-development` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions; a workflow or configuration file may carry a comment only where section 2 allows it. Read section 0 for the decisions already made and do not reopen them. Continue milestone 0 from where the branch is: check which of its eight items have landed, then complete the rest in order: layer/exception baselines, strict TypeScript, lint and test discovery, the section 4 CI policy, the invariant ledger, the performance record. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
 
 The first deliverable is working verification and an accurate baseline, not an empty folder scaffold or a renamed `21-events.js`.
 
