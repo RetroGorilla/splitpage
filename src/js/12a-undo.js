@@ -287,6 +287,7 @@ export function changedBetween(prev, next) {
 }
 
 var history = createUndoHistory();
+var lifetime = 0;
 var base = null;
 var tracked = null;
 var flushQueued = false;
@@ -302,6 +303,7 @@ export function configureUndo(opts) {
 
 function restart() {
   history.clear();
+  lifetime++;
   tracked = S.state || null;
   base = tracked ? clone(tracked) : null;
 }
@@ -316,7 +318,7 @@ export function flushEdits() {
   var reported = flushQueued;
   flushQueued = false;
   if (applying) return;
-  if (!S.state) { tracked = null; base = null; history.clear(); return; }
+  if (!S.state) { restart(); return; }
   if (S.state !== tracked || !base) { restart(); return; }
   var skip = {};
   if (commentsAreSent()) skip.comments = true;
@@ -350,6 +352,7 @@ export function absorbRemoteChange() {
   if (!S.state || S.state !== tracked || !base) { restart(); return; }
   history.forget(changedBetween(base, S.state));
   base = clone(S.state);
+  lifetime++;
 }
 
 export function resetUndo() {
@@ -409,6 +412,8 @@ export function undoSizes() { return history.sizes(); }
 export function lastUndoEntry() { flushEdits(); return history.top(); }
 
 export function nextRedoEntry() { flushEdits(); return history.nextRedo(); }
+
+export function undoLifetime() { flushEdits(); return lifetime; }
 
 // Entries with n above a mark were recorded after it; a view (writer mode) uses this to keep undo on screen.
 export function undoMark() { flushEdits(); history.breakCoalescing(); return history.mark(); }
