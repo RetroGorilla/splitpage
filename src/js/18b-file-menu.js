@@ -412,6 +412,40 @@ export function modalIsOpen() {
   return !!document.querySelector(".modal-backdrop:not([hidden]), .cmdk-backdrop:not([hidden])");
 }
 
+var REFUSED_UNDER = {
+  "save": ["modal"],
+  "save-as": ["modal"],
+  "open": ["modal", "prompter", "writer"],
+  "export": ["modal", "prompter", "writer"],
+  "command-menu": ["prompter", "writer", "dialog", "tour"],
+  "toggle-hide-shot": ["dialog"],
+  "find": ["writer", "dialog"]
+};
+
+var REFUSAL_REASONS = {
+  modal: "Close the open dialog first.",
+  dialog: "Close the open dialog first.",
+  prompter: "Close Present first.",
+  writer: "Close the Writer first.",
+  tour: "Finish or skip the tour first."
+};
+
+function overlayShown(overlay) {
+  if (overlay === "modal") return modalIsOpen();
+  if (overlay === "dialog") return !!document.querySelector(".modal-backdrop:not([hidden])");
+  if (overlay === "prompter") return !!S.prompterOpen;
+  if (overlay === "writer") return !!writerOpen;
+  var tour = el("tour-overlay");
+  return !!tour && !tour.hidden;
+}
+
+export function refusedUnderOverlay(action) {
+  var overlay = (REFUSED_UNDER[action] || []).find(overlayShown);
+  if (!overlay) return false;
+  showToast(REFUSAL_REASONS[overlay], "warn");
+  return true;
+}
+
 function onShortcutKeydown(e) {
   if (e.defaultPrevented || e.isComposing) return;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
