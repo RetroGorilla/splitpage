@@ -1,0 +1,60 @@
+# Every export of one fixed script, as it is written today (4.0 milestone 1,
+# pinned before milestone 5 makes the formats read one captured projection of
+# the document): the file names and types of fourteen exports, the text of
+# the six text formats in full (the date line, the comment's time and ISO
+# dates read as DATE, STAMP and YMD, since they follow the clock and the time
+# zone), and three facts a captured export must keep: exporting changes
+# nothing in the document, its undo or its save state; the same export twice
+# gives the same bytes (Markdown, SplitShare, the PDFs; the zipped formats
+# carry a time); and what the view is doing (Hide shot scenes, the Writer)
+# does not change the Markdown. Passes against the code before the action
+# registry (4.0-development 19c66f7) and after it. Every `eval` is one
+# physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ localStorage.removeItem('splitpage-hide-shot'); window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = { schema: 2, title: 'Export fixture', wordsPerMinute: 150, rows: [ { id: 'r1', visualText: 'Wide of the <span class="tag-anchor" data-tag-cat="location" data-tag-name="harbour">harbour</span>', audioText: 'The <strong>tide</strong> comes in with a <span class="tag-anchor" data-tag-cat="prop" data-tag-name="lantern">lantern</span>.', status: 'shot' }, { id: 'r2', visualText: 'B-roll: gulls over the pier', audioText: 'Nobody <em>waits</em> for the boats.', status: 'todo' }, { id: 'r3', visualText: 'Close on hands', audioText: 'Rope, salt, <span class="cmt-anchor" data-cmt="c1">cold fingers</span>.', status: 'ready' } ], comments: [ { id: 'c1', rowId: 'r3', field: 'audioText', anchorId: 'c1', quotedText: 'cold fingers', author: 'Ann', body: 'Hold this longer', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [] } ] }; window.__loaded = F.state(); F.openFile(new File([JSON.stringify(doc)], 'export-fixture.splitpage')); return true; })()
+wait F.state() !== __loaded && F.state().title === 'Export fixture' && !!document.querySelector('#rows .row[data-id="r3"]')
+eval (function(){ window.__files = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function (b) { window.__files.push({ blob: b, name: null }); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { var f = window.__files[window.__files.length - 1]; if (f && !f.name) f.name = this.download; return; } return c.apply(this, arguments); }; window.__norm = function (t) { return String(t).replace(/(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}/g, 'DATE').replace(/[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s?[AP]M/g, 'STAMP').replace(/\d{4}-\d{2}-\d{2}/g, 'YMD'); }; window.__export = async function (action) { var n = window.__files.length; document.querySelector('#file-menu [data-file-action="' + action + '"]').click(); for (var i = 0; i < 100 && window.__files.length === n; i++) await new Promise(function (r) { setTimeout(r, 50); }); var f = window.__files[window.__files.length - 1]; var buf = new Uint8Array(await f.blob.arrayBuffer()); var h = 2166136261; for (var j = 0; j < buf.length; j++) { h ^= buf[j]; h = Math.imul(h, 16777619); } return { name: f.name, type: f.blob.type, hash: (h >>> 0).toString(16), text: /^text|csv|markdown|html/.test(f.blob.type) ? await f.blob.text() : null }; }; window.__live = function () { U.flush(); return JSON.stringify([F.state(), U.sizes(), document.getElementById('btn-save').textContent, document.getElementById('save-status').textContent]); }; return true; })()
+# let the opened document settle before taking its measure
+sleep 600
+eval (function(){ window.__settled = __live(); return true; })()
+sleep 300
+expect __live() === __settled
+
+# --- fourteen exports, and nothing in the document moved -----------------------
+eval (async function(){ window.__out = {}; var acts = ['export-md', 'export-md-table', 'export-csv', 'export-breakdown', 'export-narration-txt', 'export-broll-csv', 'export-html', 'export-docx', 'export-pdf', 'export-xlsx', 'export-narration-docx', 'export-breakdown-xlsx', 'export-broll-pdf', 'export-packing-prop']; for (var i = 0; i < acts.length; i++) window.__out[acts[i]] = await __export(acts[i]); window.__done = true; return true; })()
+wait window.__done === true
+expect __live() === __settled
+expect Object.keys(__out).map(function (k) { return __out[k].name; }).join('|') == export-fixture.md|export-fixture - two column.md|export-fixture.csv|export-fixture - breakdown.csv|export-fixture - narration.txt|export-fixture - b-roll shot list.csv|export-fixture - SplitShare.html|export-fixture.docx|export-fixture.pdf|export-fixture.xlsx|export-fixture - narration.docx|export-fixture - breakdown.xlsx|export-fixture - b-roll shot list.pdf|export-fixture - Prop packing list.pdf
+expect Object.keys(__out).map(function (k) { return __out[k].type.replace('application/vnd.openxmlformats-officedocument.', ''); }).join('|') == text/markdown|text/markdown|text/csv|text/csv|text/plain|text/csv|text/html|wordprocessingml.document|application/pdf|spreadsheetml.sheet|wordprocessingml.document|spreadsheetml.sheet|application/pdf|application/pdf
+
+# --- the text formats, in full ------------------------------------------------------
+expect __norm(__out['export-md'].text) === "# Export fixture\n\n_3 scenes · 0:06 running time · 1 of 3 shot · DATE_\n\n### Scene 01 · 00:00\n\n**Shot** · Read 0:03\n\n*Visual —* Wide of the harbour\n\nThe **tide** comes in with a lantern.\n\n---\n\n### Scene 02 · 00:03\n\n**To do** · Read 0:02\n\n*Visual —* B-roll: gulls over the pier\n\nNobody *waits* for the boats.\n\n---\n\n### Scene 03 · 00:05\n\n**Ready** · Read 0:02\n\n*Visual —* Close on hands\n\nRope, salt, cold fingers<sup>1</sup>.\n\n---\n\n## Production breakdown\n\n### Props & set dressing (1)\n\n| Item | Status | Scenes | Assigned to | Notes |\n| --- | --- | --- | --- | --- |\n| lantern | Needed | 01 | — |  |\n\n### Locations & shots (1)\n\n| Item | Status | Scenes | Assigned to | Notes |\n| --- | --- | --- | --- | --- |\n| harbour | Needed | 01 | — |  |\n\n## B-roll shot list\n\n_0 of 1 shot_\n\n**Scene 02** · 00:03 · 0/1 shot\n\n- [ ] gulls over the pier\n\n## Comments\n\n**1 · Scene 03 · Audio** — Ann · STAMP\n\n> cold fingers\n\nHold this longer\n\n---\n"
+expect __norm(__out['export-md-table'].text) === "# Export fixture\n\n_3 scenes · 0:06 running time · 1 of 3 shot · DATE_\n\n| # | Start | Status | Visual | Audio | Read |\n| --- | --- | --- | --- | --- | --- |\n| 01 | 00:00 | Shot | Wide of the harbour | The **tide** comes in with a lantern. | 0:03 |\n| 02 | 00:03 | To do | B-roll: gulls over the pier | Nobody *waits* for the boats. | 0:02 |\n| 03 | 00:05 | Ready | Close on hands | Rope, salt, cold fingers. | 0:02 |\n\n## Production breakdown\n\n### Props & set dressing (1)\n\n| Item | Status | Scenes | Assigned to | Notes |\n| --- | --- | --- | --- | --- |\n| lantern | Needed | 01 | — |  |\n\n### Locations & shots (1)\n\n| Item | Status | Scenes | Assigned to | Notes |\n| --- | --- | --- | --- | --- |\n| harbour | Needed | 01 | — |  |\n\n## B-roll shot list\n\n_0 of 1 shot_\n\n**Scene 02** · 00:03 · 0/1 shot\n\n- [ ] gulls over the pier\n\n## Comments\n\n**1 · Scene 03 · Audio** — Ann · STAMP\n\n> cold fingers\n\nHold this longer\n\n---\n"
+expect __norm(__out['export-csv'].text) === "Scene,Start,Status,Read,Read set by hand,Visual,Audio,Tags,B-roll,Open comments\r\n01,00:00,Shot,0:03,,Wide of the harbour,The tide comes in with a lantern.,Prop: lantern; Location: harbour,,\r\n02,00:03,To do,0:02,,B-roll: gulls over the pier,Nobody waits for the boats.,,gulls over the pier (to shoot),\r\n03,00:05,Ready,0:02,,Close on hands,\"Rope, salt, cold fingers.\",,,1\r\nTotal,,1 of 3 shot,0:06,,,,,,\r\n\r\nComments\r\nNo.,Location,Status,Assigned to,Author,Date,Quoted text,Comment\r\n1,Scene 03 · Audio,Open,,Ann,\"STAMP\",cold fingers,Hold this longer"
+expect __norm(__out['export-breakdown'].text) === "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group\r\nProp,lantern,Needed,,1,01,yes,,,00:00,Props & set dressing\r\nLocation,harbour,Needed,,1,01,yes,,,00:00,Locations & shots"
+expect __norm(__out['export-narration-txt'].text) === "Export fixture\n\nThe tide comes in with a lantern.\n\nNobody waits for the boats.\n\nRope, salt, cold fingers.\n"
+expect __norm(__out['export-broll-csv'].text) === "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start\r\n02,gulls over the pier,To shoot,,,,Nobody waits for the boats.,,,,00:03"
+expect __out['export-html'].text.indexOf('<!doctype html>') === 0
+expect __out['export-html'].text.indexOf('Export fixture') !== -1
+
+# --- the same export twice gives the same bytes ----------------------------------
+eval (async function(){ window.__same = []; var acts = ['export-md', 'export-md-table', 'export-csv', 'export-html', 'export-pdf', 'export-broll-pdf', 'export-packing-prop']; for (var i = 0; i < acts.length; i++) { var r = await __export(acts[i]); if (r.hash === __out[acts[i]].hash) window.__same.push(acts[i]); } window.__done2 = true; return true; })()
+wait window.__done2 === true
+expect __same.join(',') == export-md,export-md-table,export-csv,export-html,export-pdf,export-broll-pdf,export-packing-prop
+expect __live() === __settled
+
+# --- what the view is doing does not reach the Markdown ---------------------------
+eval (async function(){ document.querySelector('#file-menu [data-file-action="toggle-hide-shot"]').click(); await new Promise(function (r) { setTimeout(r, 300); }); var r = await __export('export-md'); window.__hidden = [localStorage.getItem('splitpage-hide-shot'), r.hash === __out['export-md'].hash].join(','); document.querySelector('#file-menu [data-file-action="toggle-hide-shot"]').click(); return true; })()
+wait !!window.__hidden
+expect __hidden == 1,true
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+eval (async function(){ var r = await __export('export-md'); window.__inWriter = r.hash === __out['export-md'].hash; return true; })()
+wait window.__inWriter !== undefined
+expect __inWriter === true
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
