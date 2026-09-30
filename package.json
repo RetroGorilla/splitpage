@@ -10,9 +10,11 @@
     "check": "node build.mjs --check",
     "test": "node --test \"src/test/*.test.mjs\"",
     "test:desktop": "node desktop/test/drafts.test.mjs && node desktop/test/ipc-table.test.mjs && node desktop/test/blob-store.test.mjs && node desktop/test/history-fs-backend.test.mjs && node desktop/test/prompter-share.test.mjs && node desktop/test/voice-helper.test.mjs && node desktop/test/voice-grace.test.mjs && node desktop/test/google-drive.test.mjs && node desktop/test/spellcheck-menu.test.mjs && node desktop/test/chromium-browsers.test.mjs && node desktop/test/verify-dist-payload.test.mjs",
-    "test:tools": "node tools/test-server.mjs && node tools/test-update.mjs && node tools/test-run-suites.mjs",
+    "test:tools": "node tools/test-server.mjs && node tools/test-update.mjs && node tools/test-run-suites.mjs && node tools/test-dep-report.mjs && node tools/test-comment-gate.mjs",
     "test:all": "npm test && npm run test:desktop && npm run test:tools",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:deps": "node tools/dep-report.mjs",
+    "check:comments": "node tools/comment-gate.mjs"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
@@ -23,6 +25,8 @@
     "eslint": "10.11.0",
     "fake-indexeddb": "6.2.5",
     "globals": "17.12.0",
-    "jsdom": "30.1.1"
+    "jsdom": "30.1.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
   }
 }

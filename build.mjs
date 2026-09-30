@@ -81,9 +81,6 @@ function mdInline(text) {
   text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   text = text.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
   text = text.replace(/&lt;kbd&gt;/g, "<kbd>").replace(/&lt;\/kbd&gt;/g, "</kbd>");
-  /* eslint-disable-next-line no-control-regex -- the NUL is the sentinel the
-     code-span pass at the top of this function wrote; it is chosen precisely
-     because the guide's prose can never contain one. */
   text = text.replace(/\u0000CODE(\d+)\u0000/g, (_, i) => "<code>" + codeSpans[i] + "</code>");
   return text;
 }
@@ -257,8 +254,6 @@ const CSP_DIRECTIVES = (scriptHash) => [
 const APP_SCRIPT_OPEN = '<script id="app-logic">';
 
 function asParsed(text) {
-  /* eslint-disable-next-line no-control-regex -- matching a NUL is the entire
-     point: this is the rewrite the HTML parser makes, reproduced. */
   return text.replace(/\r\n?/g, "\n").replace(/\u0000/g, "\uFFFD");
 }
 
