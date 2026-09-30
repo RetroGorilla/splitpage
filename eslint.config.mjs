@@ -93,5 +93,10 @@ export default [
       sourceType: "module",
       globals: globals.node
     }
+  },
+
+  {
+    files: ["build.mjs"],
+    rules: { "no-control-regex": "off" }
   }
 ];
