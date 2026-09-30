@@ -14,7 +14,7 @@ runs the fast gates in the order CI does.
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
 | `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list) |
 | `npm run test:all` | All three sets |
-| `npm run verify` | lint, typecheck, check:deps, check:comments, build, test:all |
+| `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
 
 The full browser regression and the desktop smoke run by hand at milestone
 and release gates: `node tools/run-suites.mjs <out-dir> [regex]` on
@@ -40,8 +40,11 @@ narrows to the test files a change touched; `--only` is a local tool.
 | Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
 | Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `tools/run-suites.mjs` on Linux and `run-tests.ps1` on Windows, the Electron smoke, the Windows x64 and ARM64 packaged checks; `summary.txt` and the logs attached to the closing pull request |
 
-`npm run verify` before pushing is cheap and runs what CI's fast gate runs,
-browser suites aside.
+`npm run verify` before pushing is cheap and runs CI's fast gate apart from
+the checks that need a browser: the tab strip width
+(`node desktop/test/tabstrip-width.mjs`) and the browser suites. Its `sw.js`
+check compares the stamped file with the one git has, so an edit to `sw.js`
+you have not staged or committed fails it; `git add sw.js` settles that.
 
 `node tools/perf-record.mjs [report.md]` drives the built app in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
