@@ -33,8 +33,12 @@ export function dialogOpen(): boolean {
   return document.querySelector(".modal-backdrop:not([hidden])") !== null;
 }
 
+export function launcherShown(): boolean {
+  return document.querySelector(".cmdk-backdrop:not([hidden])") !== null;
+}
+
 function launcherOpen(): boolean {
-  return !launcherAsking && document.querySelector(".cmdk-backdrop:not([hidden])") !== null;
+  return !launcherAsking && launcherShown();
 }
 
 function blocked(blocker: Blocker, screen: ScreenState): boolean {
