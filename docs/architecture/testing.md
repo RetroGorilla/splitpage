@@ -77,9 +77,11 @@ only; CI always runs `npm run test:all` unfiltered.
 
 `tools/test-run-tests.mjs` links the repository's `node_modules` into a
 temporary repository to type-check it. On Windows the link is a directory
-junction, which needs neither administrator rights nor Developer Mode; if the
-link still cannot be made, the typecheck cases print `SKIP` with the reason
-and the summary counts them as skipped, not passed.
+junction, which needs neither administrator rights nor Developer Mode. If the
+link still cannot be made on a Windows workstation, the typecheck cases print
+`SKIP` with the reason and the summary counts them as skipped, not passed.
+Anywhere else, and on Windows when `CI` is set, a link that cannot be made
+fails the run.
 
 ## TypeScript
 

@@ -205,9 +205,11 @@ const typed = typedRepo({
   "src/core/text/runs.test.ts": 'import { test } from "node:test";\nimport { double } from "./runs.ts";\ntest("d", () => { double(1); });\n'
 });
 
-if (typed.problem) {
+if (typed.problem && process.platform === "win32" && !process.env.CI) {
   skipped.push(`typecheck() over a temporary repository — node_modules could not be linked into it (${typed.problem})`);
   console.log("  SKIP typecheck() — node_modules could not be linked into a temporary repository: " + typed.problem);
+} else if (typed.problem) {
+  check("node_modules can be linked into a temporary repository (a skip is allowed only on Windows outside CI)", false, typed.problem);
 } else {
   const { repo } = typed;
   const clean = checkTypes(repo);
