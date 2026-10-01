@@ -244,14 +244,6 @@
     "shared/video-embed.js": [
       "/* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */"
     ],
-    "src/js/02c-blobs.js": [
-      "// eslint-disable-line no-control-regex"
-    ],
-    "src/js/02d-gallery.js": [
-      "/* eslint-disable-next-line no-control-regex -- a file name is one line */",
-      "/* eslint-disable-next-line no-control-regex -- a file name is one line */",
-      "/* eslint-disable-next-line no-control-regex -- controls are what goes */"
-    ],
     "src/js/04c-doc-model.js": [
       "/* eslint-disable-next-line no-control-regex -- C0 controls are exactly what cell text must not carry. */"
     ],
