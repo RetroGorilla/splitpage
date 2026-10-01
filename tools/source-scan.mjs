@@ -144,10 +144,11 @@ const WORD_BREAK = new Set([" ", "\t", "\n", "\r", ";", "&", "|", "(", ")"]);
 const PS_WORD_BREAK = new Set([...WORD_BREAK, "{", "}"]);
 
 function arithmeticEnd(text, from) {
-  let depth = 2;
+  let depth = 1;
   for (let i = from + 2; i < text.length; i++) {
+    if (text[i] === "\n") return -1;
     if (text[i] === "(") depth++;
-    else if (text[i] === ")" && --depth === 0) return text[i - 1] === ")" ? i + 1 : -1;
+    else if (text[i] === ")" && --depth === 0) return text[i + 1] === ")" ? i + 2 : -1;
   }
   return -1;
 }
