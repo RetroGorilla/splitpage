@@ -22,6 +22,14 @@ test("a closing mark after a left-out direction pulls the words together", () =>
   assert.ok(!OMIT_CLOSES.test(" ."));
 });
 
+test("closing the gap a left-out direction leaves takes NBSP for a space", () => {
+  assert.equal(spokenText([T("Hi" + NBSP), T("aside", { dir: true }), T(". there")]), "Hi. there");
+  assert.equal(toPlainText([T("Hi " + NBSP), T("aside", { dir: true }), T("! there")], { directions: "omit" }), "Hi! there");
+  assert.equal(spokenText([T("Hi "), T("aside", { dir: true }), T(NBSP + "there")]), "Hi there");
+  assert.equal(spokenText([T("Hi" + NBSP), T("aside", { dir: true }), T(NBSP + " there")]), "Hi there");
+  assert.equal(spokenText([T("Hi"), T("aside", { dir: true }), T(NBSP + "there")]), "Hi there");
+});
+
 test("spoken text leaves out cue lines and directions", () => {
   assert.equal(spokenText(normalizeCell([T("MUSIC: theme", { cue: true }), T("\nGo "), T("loudly", { dir: true }), T(" now.")])), "Go now.");
   assert.equal(spokenText([T("aside", { dir: true })]), "");
