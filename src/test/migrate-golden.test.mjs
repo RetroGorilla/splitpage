@@ -84,7 +84,8 @@ function schemaOneDocument() {
         visualImage: "https://evil.test/x.png",
         imageRef: "junk",
         lengthSeconds: 30.6,
-        audioText: "~~cut~~ <mark>hi</mark> [link](https://e.x/) *a* **b** <em>c</em>"
+        audioText: "~~cut~~ <mark>hi</mark> [link](https://e.x/) *a* **b** <em>c</em> " +
+          '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Kettle">kettle</span>'
       }
     ],
     comments: [
@@ -181,6 +182,32 @@ function cellsDocument() {
   };
 }
 
+const tagAnchor = (cat, name, text) => `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${text}</span>`;
+
+function beforeTheRegistry() {
+  return {
+    schema: 2,
+    title: "Tagged before the registry",
+    rows: [
+      {
+        id: "r1",
+        visualText: tagAnchor("vfx", "Lens flare", "flare") + " over " + tagAnchor("gear", "Tripod", "the tripod"),
+        audioText: "Pick up the " + tagAnchor("prop", "Red mug", "red mug") + " in " + tagAnchor("location", "Kitchen", "the kitchen") +
+          " with " + tagAnchor("cast", "Ann", "Ann") + "."
+      },
+      {
+        id: "r2",
+        visualText: tagAnchor("weapon", "Sword", "a sword") + " and " + tagAnchor("prop", "  ", "nothing"),
+        audioText: '<span class="audio-cue">Music: ' + tagAnchor("sound", "Theme", "Theme") + '</span><br><span class="audio-cue">SFX: door slam</span><br>' +
+          "the " + tagAnchor("prop", "red MUG", "mug") + " again, and " + tagAnchor("location", "Kitchen", "back") + " to the kitchen"
+      }
+    ],
+    comments: [],
+    people: [{ id: "p1", name: "Ann" }],
+    brollShots: [{ id: "b1", name: "Kitchen pan", props: [{ name: "red mug" }, { name: "Tripod" }] }]
+  };
+}
+
 function oddShapes() {
   return {
     title: 42, schema: "2", rows: "x", comments: {}, people: 5, productionTags: "y", brollShots: null,
@@ -195,6 +222,7 @@ function legacyFileWithPicture() {
 const SCENARIOS = [
   { name: "schema 1 document", images: Object.values(S1), mintedDocId: true, migrate: () => migrateRows(schemaOneDocument()) },
   { name: "media in cells", images: Object.values(S2), mintedDocId: false, migrate: () => migrateRows(cellsDocument()) },
+  { name: "schema 2 document saved before the tag registry", images: [], mintedDocId: true, migrate: () => migrateRows(beforeTheRegistry()) },
   { name: "seed", images: [], mintedDocId: true, migrate: () => migrateRows(JSON.parse(SEED_TEXT)) },
   { name: "odd shapes", images: [], mintedDocId: true, migrate: () => migrateRows(oddShapes()) },
   { name: "null document", images: [], mintedDocId: true, migrate: () => migrateRows(null) },
@@ -319,6 +347,15 @@ test("every minted id has its prefix, seven random base-36 digits at most, and a
   for (const [, r] of results) {
     for (const m of r.minted) assert.match(m.value, new RegExp("^" + m.prefix + "[0-9a-z]{0,7}[0-9a-z]{8}$"));
   }
+});
+
+test("a file saved before the tag registry gets entries collected from its script, keys in the order the collector writes them", () => {
+  const out = migrateRows(beforeTheRegistry());
+  assert.deepEqual(out.productionTags.map((t) => t.cat + ":" + t.name),
+    ["vfx:Lens flare", "gear:Tripod", "prop:Red mug", "location:Kitchen", "cast:Ann", "sound:Theme", "sound:door slam"]);
+  for (const t of out.productionTags) assert.deepEqual(Object.keys(t), ["cat", "name", "status", "owner", "notes", "id"], t.name);
+  const healed = migrateRows(Object.assign(beforeTheRegistry(), { productionTags: [] }));
+  for (const t of healed.productionTags) assert.deepEqual(Object.keys(t), ["cat", "name", "owner", "notes", "status", "id"], "healed " + t.name);
 });
 
 test("golden: migrateDocument's docIds", () => {
