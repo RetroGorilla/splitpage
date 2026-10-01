@@ -109,6 +109,32 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - `mediaCommentId`.
   - 02c's base64 helpers, `rowImage*` and the data-URL decode, which go to `media.ts`.
 
+## 2.1b as built
+
+- **`src/core/document/`, new files.**
+  - `fields.ts`: `SCHEMA_VERSION`; `STRATEGY_IDS` and the `StrategyId` type; `STATE_FIELDS` as data, each `{ key, def?, normalize?, merge, undo }`; `ROW_FIELDS`, `GALLERY_FIELDS` and `missingStateFields`.
+  - `timing.ts`: the row status ids, `rowStatusId`, `nextRowStatus`, `DEFAULT_WPM`, `SCENE_LENGTH_MAX`, `hasSetLength`, `normalizeSceneLength`, `parseSceneLength`, `normalizeTargetLength`, `targetLengthOf`.
+  - `person-colors.ts`: the palette, `paletteColor`, `personKey`, `normalizePersonColors` with its `__proto__`/`constructor`/`prototype` guard, `lookupByName`, `mergePersonColors`.
+  - `media.ts`: the base64 helpers; `imageRecordOf` (sniffed type, size and hash of some bytes), `imageDataUrlBytes` and `decodeImageDataUrl`; `createImageIngestion`; `rowImage`, `rowImageKey`, `rowImageShas`; `mediaComments`, which is `moveMediaOutOfCell` after decoding.
+  - `gallery.ts`: the normalisers, slot read models and slot operations, `mergeGalleryField` and `galleryFieldKey`. `migrateGallery(row, images)` takes an `ImageSource`.
+  - `comments.ts`: the filter predicates and the position and recent orders.
+- **Additions.** `text-policy.ts` gains `escapeHtml` and `legacyMdToHtml`; `ids.ts` gains `mediaCommentId` and `withPageHead`.
+- **Shims.**
+  - `02-state.js` re-exports `escapeHtml`, `legacyMdToHtml`, `mediaCommentId` and `missingStateFields`. Its `STATE_FIELDS` is core's table copied entry by entry, with `mergeList` attached for `people`, `productionTags` and `brollShots` exactly as before, so `12a-undo.js`, `03-sync.js` and `state-fields.test.mjs` are unchanged. The entries also carry `undo`.
+  - `01-scene-status.js` and `00p-prefs.js` re-export what moved. `ROW_STATUSES` is built from the core ids, with labels, classes and colours keyed by id, as 2.1a did for tags.
+  - `02c-blobs.js` re-exports the `rowImage*` helpers and interns through `imageRecordOf` and `imageDataUrlBytes`. It exports `registryImages`, the legacy `ImageSource`: `known` is `recordFor`, and `fromDataUrl` interns, then queues persistence.
+  - `02d-gallery.js` re-exports the gallery and passes `registryImages` to `migrateGallery`. `pictureBytes`, `videoLinkText` and `videoLinkLabel` stay: the first reads the registry, the others are display text.
+  - `02-state.js`'s `moveMediaOutOfCell` still decodes and re-encodes the cell, then calls `mediaComments` with `registryImages` and a function that returns the video card's HTML, which needs the DOM until 2.4.
+  - `02b-doc-id.js` re-exports `withPageHead`, `00-prelude.js` re-exports `SCHEMA_VERSION`, and `10-comments.js` uses the core predicates and orders.
+- **`undo`.** `undo: true` means an edit to the field is recorded as a `docField` step. `rows` is `false`: an edit to a scene is recorded row by row, not as a document field. So the keys with `undo: false` are exactly `SKIP_DOC_KEYS` in `12a-undo.js`. `tests/core/document/fields.test.ts` checks the flags against the undo golden. 2.3 derives the skip list.
+- **`normalize`.** The type has it, but no entry sets it yet. `migrateRows` normalises each field differently: `personColors` is removed when the normaliser returns `null`, `targetSeconds` when it returns `undefined`, and `wordsPerMinute` falls back to the default. 2.5 decides the contract when it composes the migration.
+- **Image ingestion.** `createImageIngestion(known)` decodes data URLs purely. `pending()` lists every picture decoded in the pass once, in the order first met, including those the registry already holds, because the legacy path queues persistence for each of them. `known()` checks the pending set before the registry. Nothing calls it yet; 2.5 wires it.
+- **`ROW_FIELDS` and `GALLERY_FIELDS`.** `03-sync.js` keeps its own copies until 2.3 imports core's.
+- **Comments.** `commentMatchesAssigneeFilter` takes the saved author name as a function, so it is still read only for the "me" filter. The filter modes and their stored preference stay in `10-comments.js`.
+- **Control characters.** `eslint.config.mjs` also turns `no-control-regex` off for `gallery.ts`, `media.ts` and `person-colors.ts`. Five inline disables left the comment baseline with the code they covered.
+- **Dependency baseline.** No entry was added or removed. Frontend modules went from 100 to 106 and migrated modules from 23 to 29. The cycle stayed at 56 modules and 492 edges, `S` importers at 57 and `S` writers at 34: every shim this step owns still imports other modules in the cycle.
+- **Left for later.** 33 imports in `src/js` name only functions that now live in core or the identity adapter, mostly `escapeHtml` and `makeId` from `02-state.js`. Pointed there instead, in a scratch copy, they removed 31 cycle edges (492 to 461) and took `03c-history-idb.js` out of the cycle (56 to 55 modules). They are spread over 31 modules, including `03-sync.js`, `07-production-tags.js` and `08c-broll.js`, which other lanes own, so this step leaves them for a later one.
+
 ## Characterisation (2.0)
 
 Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that, and `npm test` refuses to run while `GOLDEN_UPDATE` is set. Goldens are regenerated only on `4.0-development`, in a dedicated commit that changes nothing else, never inside a lane that moves code: a moving lane keeps every golden passing unchanged.
