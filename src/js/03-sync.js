@@ -1,15 +1,16 @@
 import { S } from "./_state.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
-import { DEFAULT_WPM } from "./01-scene-status.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
 import { noteRemoteChange } from "./12a-undo.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
+import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { byId } from "../core/merge/rows.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
   normalizeDocId,
@@ -30,7 +31,6 @@ import {
   sidePanelOpening
 } from "./03b-side-panels.js";
 import { safeId } from "./04-richtext.js";
-import { fromHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
 import { resetProductionPanelState } from "./07-production-tags.js";

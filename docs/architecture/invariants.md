@@ -96,8 +96,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Behaviour:** Content reaches a script cell only through `fromHtml()` or a model edit, both of which produce canonical, sanitised cells. `syncFieldFromDom()` stores each keystroke that way. Anything else rebuilt from HTML, such as a comment body, passes `sanitizeHtml()` before it re-enters state.
 - **Tests:** `src/test/doc-model.test.mjs` ("toHtml writes the sanitiser's own markup: a fixed point of sanitizeHtml", "round trip: fromHtml(toHtml(c)) is normalizeCell(c)"); `src/test/clipboard.test.mjs` ("a paste is sanitised, keeps formatting and tags, and drops pictures and video cards"); `src/test/migrate-rows.test.mjs` ("comments: bodies and replies are sanitised, authors are plain text"); `tests/adapters/richtext/golden.test.ts` ("INV-10: the sanitiser's output is its own fixed point over the corpus", "toHtml(decode(x)) is already in stored form over the corpus", through the adapter on jsdom's parser with no DOM globals); browser `52-csp.txt`.
 - **Owner:** `src/adapters/richtext` · **Milestone:** 2 · **Class:** absorb
-- **Replacement:** the HTML adapter in `src/adapters/richtext/` becomes the only decoder from HTML to cells (M2), and DocumentSession commands accept normalised runs, not HTML (M3).
-- **Acceptance:** HTML adapter tests on a real parser (M2 gate) show every decoded cell is a fixed point of the sanitiser. A dependency check finds no module outside `src/adapters/richtext/` that builds cells from HTML.
+- **Replacement:** the HTML adapter in `src/adapters/richtext/` becomes the only decoder from HTML to cells (M2), and DocumentSession commands accept normalised runs, not HTML (M3). Done in 2.4: `fromHtml`, `cellOf`, `sanitizeHtml` and `storedHtmlFromDom` in `04c-doc-model.js` and `04-richtext.js` are the adapter's functions, handed out through `src/legacy/richtext.ts`.
+- **Acceptance:** HTML adapter tests on a real parser (M2 gate) show every decoded cell is a fixed point of the sanitiser; met in 2.4. A dependency check finds no module outside `src/adapters/richtext/` that builds cells from HTML; not yet written.
 
 ### INV-11 — Controls in a tag card head take precedence over expand
 
@@ -133,7 +133,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
   Its hues keep clear of the Visual blue and the Audio amber and meet contrast.
 - **Tests:** `src/test/palette.test.mjs` (all tests), `src/test/export-colours.test.mjs`; browser `217-tag-icons.txt`, `217b-tag-icons-boot.txt`, `145-export-colours.txt`.
-- **Owner:** `src/core/production` (category definitions, now in `07-production-tags.js`), with tokens in feature styles · **Milestone:** 2 · **Class:** keep
+- **Owner:** `src/core/document` (category ids, in `tags.ts`), `07-production-tags.js` (`TAG_CATEGORIES`: labels, colours and icons, keyed by id), with tokens in feature styles · **Milestone:** 2 · **Class:** keep
 - **Replacement:** — (`TAG_PRINT_COLORS` stays a deliberate second copy, held to `:root` by `palette.test.mjs`).
 - **Acceptance:** `palette.test.mjs` passes, reading the token files produced when CSS is split (M6).
 
@@ -211,11 +211,11 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-24 — Export comment order ignores the panel's sort
 
-- **Behaviour:** Exports always order comments by `commentPositionCompare()`: row, then Visual before Audio, then post time. The panel's sort mode is a reader preference kept in `localStorage`, not document data, and never changes an export.
+- **Behaviour:** Exports always order comments by `commentPositionCompare()` in `10-comments.js`, which passes `findRowIndex` to `compareCommentPositions` in `src/core/document/comments.ts`: row, then Visual before Audio, then post time. The panel's sort mode is a reader preference kept in `localStorage`, not document data, and never changes an export.
 - **Tests:** partial. Browser `11-comments-sort-persist.txt` (the sort is a reader preference). No test checks export order under a non-default panel sort.
 - **Owner:** `src/core/document` (comment read model), consumed by `src/adapters/formats` · **Milestone:** 5 · **Class:** absorb
 - **Replacement:** one frozen `ExportDocument` projection built from the session and the export options. Writers cannot read live UI state such as the panel's sort (M5).
-- **Acceptance:** unit test: the `ExportDocument`'s comment order is the same with the panel sort set to `position` and to `recent`, and it matches `commentPositionCompare`.
+- **Acceptance:** unit test: the `ExportDocument`'s comment order is the same with the panel sort set to `position` and to `recent`, and it matches `compareCommentPositions`.
 
 ### INV-25 — Tag cards have one event path
 
