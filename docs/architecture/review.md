@@ -119,7 +119,7 @@ Merge with `gh pr merge N --merge --match-head-commit <sha>`.
 - The runs required by [section 4 of the implementation plan](../IMPLEMENTATION-PLAN.md#4-verification-baseline-and-ci-policy), on the exact merged tree:
   - full browser regression on Windows; on Linux too at the 4.0 release gate only
   - real Electron smoke
-  - Windows x64 and ARM64 packaged checks
+  - Windows x64 packaged check; the native ARM64 one too at the 4.0 release gate only
 
   Their recorded output is attached to the closing PR. A run that can't be done here is recorded as a blocker, and Adam decides whether the milestone closes without it.
 - **External review** of the integrated milestone: by a different model or a person where possible, otherwise by a fresh agent not involved in building or reviewing it. The review states which kind it was. It covers the integrated architecture, behavior across modules, and the milestone's requirements in the plan. Its findings are handled under §6.
