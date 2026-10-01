@@ -511,8 +511,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - **Stored:** a shot's `props` hold only props added by hand, as `[{id, name}]` keyed by registry id. Props tagged on the shot's own lines are read from the script each time.
   - **Renames and merges:** a rename carries through by id, and folding onto another entry's name re-points the shot in the same edit. Merging is a base-aware set per shot.
   - **Pasting:** a pasted copy of a shot's line gets no props.
-  - **New fields:** a new shot field must be kept by `migrateRows`, `mergeBrollShots` and `newBrollRecord`.
-- **Tests:** `src/test/broll-model.test.mjs`; `tests/core/production/broll.test.ts` ("INV-56: …", two tests); `src/test/merge-states.test.mjs` ("b-roll props: …"); `src/test/migrate-rows.test.mjs` ("brollShots props: …"); `src/test/state-fields.test.mjs` ("a b-roll shot keeps every field it has — props too — through a merge and a save"); `src/test/formats.test.mjs` (props round trips); browser `95-broll-props.txt`.
+  - **New fields:** a new shot field must be kept by `migrateRows` and `mergeBrollShots`, and added to both shot builders, `newBrollRecord` in `08c-broll.js` and `newBrollShot` in `src/core/production/broll.ts`, at the same place in each.
+- **Tests:** `src/test/broll-model.test.mjs`; `tests/core/production/broll.test.ts` ("INV-56: …", two tests); `src/test/production-shims.test.mjs` ("a shot the core plan creates and one newBrollRecord stores serialise alike, keys in the same order"); `src/test/merge-states.test.mjs` ("b-roll props: …"); `src/test/migrate-rows.test.mjs` ("brollShots props: …"); `src/test/state-fields.test.mjs` ("a b-roll shot keeps every field it has — props too — through a merge and a save"); `src/test/formats.test.mjs` (props round trips); browser `95-broll-props.txt`.
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** — (the field-list clause can join the M2 field policy; the props rules stay explicit).
 - **Acceptance:** the named tests pass. New unit test: a field added to the shot record's policy survives migration, merge and save without edits to `mergeBrollShots`.
