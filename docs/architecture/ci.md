@@ -49,6 +49,13 @@ drafts a release; the `draft` job runs only for a tag.
 | `build` job, step `Collect the release files and their checksums` | Only the per-arch installers are published, not the combined one (DEPLOY.md §7). The `sha256sum` output format is the one `desktop/main.js` reads to check a downloaded update. |
 | `draft` job, `SPLITPAGE_RELEASES_TOKEN` | A fine-grained personal access token with Contents read and write on `RetroGorilla/splitpage-releases` and nothing else. This repository's own `GITHUB_TOKEN` cannot write to another repository. Without the secret the job leaves the files on the run as an artifact and says so. |
 
+## Desktop packaging (`desktop/electron-builder.yml`)
+
+The configuration that `dist:win` hands to electron-builder is explained,
+setting by setting, in [desktop-build.md](desktop-build.md): what goes into the
+asar and what is staged beside it, why both architectures are pinned, and why
+the NSIS payload is a ZIP with differential packaging off.
+
 ## `.github/dependabot.yml`
 
 Dependency updates arrive as pull requests, so they run through the same CI

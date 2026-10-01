@@ -9,7 +9,7 @@ import {
 
 const TOOLS = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(TOOLS);
-const CLI_FILES = ["dep-report.mjs", "source-scan.mjs"];
+const CLI_FILES = ["dep-report.mjs", "source-scan.mjs", "main-module.mjs"];
 
 let passed = 0;
 const failures = [];

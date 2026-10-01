@@ -141,12 +141,25 @@ export function htmlComments(text) {
 }
 
 const WORD_BREAK = new Set([" ", "\t", "\n", "\r", ";", "&", "|", "(", ")"]);
+const PS_WORD_BREAK = new Set([...WORD_BREAK, "{", "}"]);
+
+function arithmeticEnd(text, from) {
+  let depth = 1;
+  for (let i = from + 2; i < text.length; i++) {
+    if (text[i] === "\n") return -1;
+    if (text[i] === "(") depth++;
+    else if (text[i] === ")" && --depth === 0) return text[i + 1] === ")" ? i + 2 : -1;
+  }
+  return -1;
+}
 
 export function shellComments(text, dialect = "sh") {
   const ps = dialect === "ps1";
   const escape = ps ? "`" : "\\";
+  const breaks = ps ? PS_WORD_BREAK : WORD_BREAK;
   const comments = [];
   const heredocs = [];
+  let afterVariable = -1;
   let i = 0;
   if (!ps && text.startsWith("#!")) i = text.indexOf("\n") === -1 ? text.length : text.indexOf("\n");
   while (i < text.length) {
@@ -170,6 +183,23 @@ export function shellComments(text, dialect = "sh") {
       i = close === -1 ? text.length : close + 3;
       continue;
     }
+    if (ps && c === "$" && text[i + 1] === "{") {
+      i += 2;
+      while (i < text.length && text[i] !== "}") i += text[i] === "`" ? 2 : 1;
+      i++;
+      afterVariable = i;
+      continue;
+    }
+    if (!ps && c === "$" && text[i + 1] === "'") {
+      i += 2;
+      while (i < text.length && text[i] !== "'") i += text[i] === "\\" ? 2 : 1;
+      i++;
+      continue;
+    }
+    if (!ps && c === "(" && text[i + 1] === "(" && (text[i - 1] === "$" || i === 0 || WORD_BREAK.has(text[i - 1]))) {
+      const end = arithmeticEnd(text, i);
+      if (end !== -1) { i = end; continue; }
+    }
     if (c === "'") {
       const close = text.indexOf("'", i + 1);
       i = close === -1 ? text.length : close + 1;
@@ -181,7 +211,8 @@ export function shellComments(text, dialect = "sh") {
       i++;
       continue;
     }
-    if (!ps && c === "<" && text[i + 1] === "<" && text[i + 2] !== "<") {
+    if (!ps && text.startsWith("<<<", i)) { i += 3; continue; }
+    if (!ps && c === "<" && text[i + 1] === "<") {
       const m = /^<<(-?)\s*(?:'([^']+)'|"([^"]+)"|\\?([A-Za-z_][A-Za-z0-9_]*))/.exec(text.slice(i, i + 128));
       if (m) {
         heredocs.push({ tag: m[2] ?? m[3] ?? m[4], strip: m[1] === "-" });
@@ -196,7 +227,7 @@ export function shellComments(text, dialect = "sh") {
       i = end;
       continue;
     }
-    if (c === "#" && (i === 0 || WORD_BREAK.has(text[i - 1]))) {
+    if (c === "#" && i !== afterVariable && (i === 0 || breaks.has(text[i - 1]))) {
       const eol = text.indexOf("\n", i);
       const end = eol === -1 ? text.length : eol;
       comments.push({ start: i, end, text: text.slice(i, end).replace(/\r$/, "") });

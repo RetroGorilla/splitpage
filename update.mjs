@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -69,7 +69,16 @@ export async function check() {
   return { current, release, newer };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
   try {
     const { current, release, newer } = await check();
     if (JSON_OUT) {

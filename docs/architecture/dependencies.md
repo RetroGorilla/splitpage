@@ -301,10 +301,10 @@ except `node_modules/`, `.claude/handoff/` and the generated `index.html`:
 | --- | --- | --- |
 | `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `eslint.config.mjs` included | TypeScript (`tools/source-scan.mjs`) | `//` and `/* */` outside strings, templates and regexes |
 | `.css`, `.html` (inline `<style>` and script too) | `tools/source-scan.mjs` | `/* */`, `<!-- -->` |
-| `.sh`, `.ps1`, `.bat`, `.cmd` | `tools/source-scan.mjs` | `#` at a word start outside quotes and heredocs, `<# #>`, `rem`/`::` |
+| `.sh`, `.ps1`, `.bat`, `.cmd` | `tools/source-scan.mjs` | `#` at a word start (in PowerShell also straight after a `{` or `}`, but never inside a `${…}` variable or straight after one, which misses only `${a}#b` opening a statement) outside quotes (`$'…'` included), arithmetic (`$(( ))`, `(( ))`) and heredocs, `<# #>`, `rem`/`::`; a `<<` inside arithmetic or a `<<<` here-string starts no heredoc. As in bash, `((` is arithmetic only when its inner parenthesis closes straight into `))`; otherwise (`((cd a) | (wc))`) it is two subshells, read as shell. The scanner also requires that close on the same line, so a multi-line `(( ))` is read as shell, where a `#` in it would count |
 | `.yml`, `.yaml` | the `yaml` package's CST (`tools/config-comments.mjs`) | every YAML comment token; `#` in a quoted scalar, a URL or a block scalar's content is not one |
-| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:`, else `defaults.run.shell`, else the runner's: `pwsh` when a `runs-on` label (a group's `labels:` included) names Windows, `bash` when one names Ubuntu, Linux or macOS. When none says (an expression such as `${{ matrix.os }}`, a group without labels, a self-hosted runner without an OS label), the step is read both ways; if the two readings differ the gate fails and asks for `shell:` | a `#` comment inside the script, whole-line or trailing; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it |
-| `Dockerfile`, `Dockerfile.*`, `Dockerfile-*`, `Dockerfile_*`, `*.dockerfile` (any case; not `.md` or `.txt`) | `tools/config-comments.mjs` | whole-line `#` (inside a continuation too), a trailing shell comment in a shell-form `RUN`/`CMD`/`ENTRYPOINT`/`HEALTHCHECK CMD`, and comments in a `RUN` heredoc's script; a `COPY`/`ADD` heredoc is file content |
+| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:`, else `defaults.run.shell`, else the runner's: `pwsh` when a `runs-on` label (a group's `labels:` included) names Windows, `bash` when one names Ubuntu, Linux or macOS. When none says (an expression such as `${{ matrix.os }}`, a group without labels, a self-hosted runner without an OS label), the step is read both ways; if the two readings differ the gate fails and asks for `shell:`. A `shell: node` step, and the `script:` input of an `actions/github-script` step, are read as JavaScript (TypeScript's parser, as above). A `run:`, `shell:`, `script:`, `defaults:` or `runs-on:` (or a label in it) given as a YAML alias is read from its anchor, wherever the anchor is | a `#` comment inside the script, whole-line or trailing, or `//` and `/* */` in JavaScript; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it. Each is reported at its own source line, folded (`>`) and quoted multi-line scalars included |
+| `Dockerfile`, `Dockerfile.*`, `Dockerfile-*`, `Dockerfile_*`, `*.dockerfile` (any case; not `.md` or `.txt`) | `tools/config-comments.mjs` | whole-line `#` (inside a continuation too), a trailing shell comment in a shell-form `RUN`/`CMD`/`ENTRYPOINT`/`HEALTHCHECK CMD`, and comments in a `RUN` heredoc's script, all read in the dialect the last `SHELL` names (`pwsh`/`powershell`, `cmd`, `node` as JavaScript, anything else as sh); a `COPY`/`ADD` heredoc is file content |
 | `.json`, `.jsonc` (`tsconfig*.json` included) | TypeScript's scanner | `//` and `/* */` outside strings |
 
 The baseline stores each file's comments as whitespace-normalised text, so a
@@ -315,10 +315,10 @@ Dockerfile, every compose file (`docker-compose*.yml`, `compose*.yaml`),
 `eslint.config.mjs` and every JSON file can never carry a baselined comment;
 all of them have none. The Dockerfile and compose names come from one pair of
 patterns in `tools/config-comments.mjs` (`DOCKERFILE_PATH`, `COMPOSE_PATH`),
-used both to pick the parser and to mark the file comment-free. The one YAML file
-still on the baseline is `desktop/electron-builder.yml` (66 comment lines at
-the time the gate learned YAML), which is desktop packaging and moves to docs
-when that file is next changed.
+used both to pick the parser and to mark the file comment-free. No YAML file
+is on the baseline: `desktop/electron-builder.yml` had 66 comment lines when
+the gate learned YAML, and their rationale is now in
+[desktop-build.md](desktop-build.md).
 
 Not comments: an interpreter directive (`#!`) on the first line of a script,
 and the build markers `/*{{APP_CSS}}*/` and `//{{APP_JS}}` in `src/page.html`,
@@ -329,13 +329,21 @@ anything else in the file) is a comment unless `DIRECTIVES` in
 today. A file that does not parse (a broken YAML file) fails the gate, and so
 does a workflow step whose shell cannot be told (above).
 
-Not scanned yet, because no parser covers them: `.gitignore`,
-`.gitattributes`, `.dockerignore`, `.npmrc`, `.env.example` and other
-dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. Inside
-workflows, JavaScript run through `shell: node {0}` or an
-`actions/github-script` `script:` is not scanned as JavaScript, and a `run:`
-given as a YAML alias (`run: *name`) is not read as a script unless its anchor
-is itself a step's `run:`.
+Not scanned yet, because no parser covers them: dotfiles, NSIS scripts and
+Markdown. The configuration files among them that the no-comment rule covers,
+with the comments each held on 30 September 2026:
+
+| File | Comment lines |
+| --- | --- |
+| `.gitignore` | 31 |
+| `.gitattributes` | 5 |
+| `desktop/.npmrc` | 3 (why `arch=arm64` is pinned; [ci.md](ci.md) explains how CI overrides it) |
+| `.env.example` | 85, five of them commented-out optional settings. These are setup instructions for the person filling in `.env` on the server, so moving them out of the file is the owner's decision, not a mechanical cleanup |
+| `desktop/build/installer.nsh` | 178: 167 whole-line `;` comments and 11 trailing ones saying what each register saved by a `Push` holds |
+| `.dockerignore`, `.editorconfig`, `.nvmrc`, `desktop/.gitignore` | none |
+
+A workflow step run by another interpreter (`shell: python {0}`) is read with
+the shell rules.
 
 ## Baseline at the start of 4.0
 

@@ -76,6 +76,70 @@ eq("PowerShell block, line and here-string handling", texts("a.ps1", [
   "\"@",
   "Write-Host `# escaped"
 ].join("\n")), ["<# block\n#>", "# yes"]);
+eq("an arithmetic shift is not a heredoc", texts("a.sh", [
+  "echo $((1<<x)) # one",
+  "(( y = 2 << z )) # two",
+  "echo $((16#ff)) ${x}#not $(( (1 << 2) + 1 )) # three",
+  "# four"
+].join("\n")), ["# one", "# two", "# three", "# four"]);
+eq("nested subshells opened with (( are not arithmetic", texts("a.sh", [
+  "((cd a # one",
+  ") | (wc))",
+  "x=$((cd b # two",
+  ") | wc)",
+  "(( (1 << 2) == 4 )) # three",
+  "# four"
+].join("\n")), ["# one", "# two", "# three", "# four"]);
+eq("a here-string is not a heredoc", texts("a.sh", ['jq . <<<"$health" # one', "cat <<< x", "# two"].join("\n")), ["# one", "# two"]);
+eq("ANSI-C quoting closes on its unescaped quote", texts("a.sh", [
+  "echo $'it\\'s # not' # one",
+  "echo $'a\\\\' # two",
+  "# three"
+].join("\n")), ["# one", "# two", "# three"]);
+eq("a PowerShell comment right after a brace is found", texts("a.ps1", [
+  "if ($x) { a }#one",
+  "function f {#two",
+  "$h = @{a=1}#three",
+  "Write-Host a#b"
+].join("\n")), ["#one", "#two", "#three"]);
+
+{
+  const PS_CASES = [
+    ["if ($x) { a }#note", ["#note"]],
+    ["function f {#two", ["#two"]],
+    ["$h = @{a=1}#three", ["#three"]],
+    ["$s = { a }#d", ["#d"]],
+    ["foreach ($i in 1) {#f", ["#f"]],
+    ["Write-Host a}#b", ["#b"]],
+    ["Write-Host a#b", []],
+    ["${#weird} = 1", []],
+    ["Write-Host ${x}#c", []],
+    ["echo ${#ARR[@]}", []],
+    ["url=${base}#anchor", []],
+    ["x ${a`}b}#c", []],
+    ["$x = ${a} #ok", ["#ok"]]
+  ];
+  for (const [line, expected] of PS_CASES) eq(`PowerShell: ${line}`, texts("a.ps1", line), expected);
+  const tokenize = () => {
+    const dir = mkdtempSync(join(tmpdir(), "splitpage-ps-oracle-"));
+    const file = join(dir, "cases.txt");
+    writeFileSync(file, PS_CASES.map(([l]) => l).join("\n"));
+    const script = [
+      "$lines = [IO.File]::ReadAllText($env:PS_CASES_FILE) -split \"`n\"",
+      "foreach ($l in $lines) { $e = $null; $t = [System.Management.Automation.PSParser]::Tokenize($l, [ref]$e); [Console]::WriteLine((($t | Where-Object { $_.Type -eq 'Comment' } | ForEach-Object { $_.Content }) -join \"`t\")) }"
+    ].join("; ");
+    const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", env: { ...process.env, PS_CASES_FILE: file }, timeout: 60000 });
+    rmSync(dir, { recursive: true, force: true });
+    return r;
+  };
+  const oracle = process.platform === "win32" ? tokenize() : null;
+  if (!oracle || oracle.error || oracle.status !== 0) {
+    console.log(`  SKIP the PowerShell tokenizer oracle — ${oracle ? `powershell.exe did not run (${oracle.error?.message ?? `exit ${oracle.status}: ${oracle.stderr}`})` : "powershell.exe is Windows only"}; the cases above stay as fixed expectations`);
+  } else {
+    const told = oracle.stdout.replace(/\r/g, "").split("\n").slice(0, PS_CASES.length).map((l) => (l ? l.split("\t") : []));
+    eq("PowerShell's own tokenizer agrees with every expectation above", told, PS_CASES.map(([, e]) => e));
+  }
+}
 eq("batch REM and :: lines", texts("a.bat", "@echo off\nrem one\n:: two\necho rem not\nREM\n"), ["rem one", ":: two", "REM"]);
 
 const found = (path, text) => commentsFor(path, text).map((c) => c.text);
@@ -158,6 +222,101 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
   eq("the step's shell, else the job's runner, picks the dialect", found(".github/workflows/w.yml", windows), ["# powershell", "<# block #>", "rem batch"]);
   const defaults = "defaults:\n  run:\n    shell: pwsh\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          cat <<EOF\n          # not a heredoc in PowerShell\n          EOF\n";
   eq("defaults.run.shell applies to every step", found(".github/workflows/d.yml", defaults), ["# not a heredoc in PowerShell"]);
+  const shifts = "jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo $((1<<x)) $'it\\'s'\n          # after a shift\n";
+  eq("a step's arithmetic shift and ANSI-C string do not hide the comments after them", found(".github/workflows/s.yml", shifts), ["# after a shift"]);
+}
+
+{
+  const steps = (...lines) => ["jobs:", "  a:", "    runs-on: ubuntu-latest", ...lines, ""].join("\n");
+  const viaEnv = steps(
+    "    env:",
+    "      SCRIPT: &script |",
+    "        make",
+    "        # via an alias",
+    "    steps:",
+    "      - run: *script"
+  );
+  eq("a run: given as an alias is read as the step's script, at the anchor's line", located(".github/workflows/alias.yml", viaEnv), ["7 # via an alias"]);
+  const twice = steps(
+    "    steps:",
+    "      - run: &build 'make # once'",
+    "      - run: *build"
+  );
+  eq("an anchored run: used again by an alias is reported once", located(".github/workflows/alias.yml", twice), ["5 # once"]);
+  const shellAlias = steps(
+    "    steps:",
+    "      - shell: &ps pwsh",
+    "        run: Write-Host a",
+    "      - shell: *ps",
+    "        run: |",
+    "          <# block #>"
+  );
+  eq("a shell: given as an alias picks the dialect", found(".github/workflows/alias.yml", shellAlias), ["<# block #>"]);
+
+  const node = steps(
+    "    steps:",
+    "      - shell: node {0}",
+    "        run: |",
+    "          const u = \"https://x.test/#a\"; // js line",
+    "          /* js block */",
+    "          console.log('# not', `# not ${u}`);",
+    "      - shell: node",
+    "        run: process.exit(0) // short"
+  );
+  eq("a shell: node step is read as JavaScript, with its lines", located(".github/workflows/js.yml", node), ["7 // js line", "8 /* js block */", "11 // short"]);
+  const script = steps(
+    "    steps:",
+    "      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+    "        with:",
+    "          script: |",
+    "            // why",
+    "            const { owner } = context.repo; /* block */",
+    "            core.info(\"# not\" + `${{ github.sha }}`);",
+    "      - uses: actions/github-script@v7",
+    "        with:",
+    "          script: return 1 // inline",
+    "      - uses: some/other-action@v1",
+    "        with:",
+    "          script: |",
+    "            // not JavaScript we run"
+  );
+  eq("an actions/github-script script: is read as JavaScript, with its lines", located(".github/workflows/js.yml", script), ["8 // why", "9 /* block */", "13 // inline"]);
+
+  const folded = steps(
+    "    steps:",
+    "      - run: >",
+    "          echo one",
+    "          echo two",
+    "",
+    "          # folded comment",
+    "      - run: \"echo a",
+    "          # double-quoted comment\"",
+    "      - run: 'echo ''a''",
+    "          # single-quoted comment'",
+    "      - run: \"echo \\\"x\\\"",
+    "          make # after an escape\"",
+    "      - run: 'echo a",
+    "          ''x'' # single after a leading escape'",
+    "      - run: \"echo a",
+    "          \\\\x # double after a leading escape\""
+  );
+  eq("comments in folded and quoted multi-line run: scalars are reported at their own lines", located(".github/workflows/fold.yml", folded), [
+    "9 # folded comment",
+    "11 # double-quoted comment",
+    "13 # single-quoted comment",
+    "15 # after an escape",
+    "17 # single after a leading escape",
+    "19 # double after a leading escape"
+  ]);
+
+  const attempt = (path, text) => { try { return found(path, text); } catch (e) { return e.message; } };
+  const psBlock = ["    steps:", "      - run: |", "          <# it's a PowerShell block #>"];
+  const aliasDefaults = ["jobs:", "  a:", "    runs-on: ubuntu-latest", "    defaults: &d", "      run:", "        shell: pwsh", "    steps:", "      - run: Write-Host a", "  b:", "    runs-on: ${{ matrix.os }}", "    defaults: *d", ...psBlock, ""].join("\n");
+  eq("defaults: given as an alias picks the dialect", attempt(".github/workflows/alias.yml", aliasDefaults), ["<# it's a PowerShell block #>"]);
+  const anchoredRunner = ["jobs:", "  a:", "    runs-on: &l [windows-2022]", "    steps:", "      - run: Write-Host a", "  b:"];
+  eq("runs-on labels given as an alias pick the dialect", attempt(".github/workflows/alias.yml", [...anchoredRunner, "    runs-on: { group: big, labels: *l }", ...psBlock, ""].join("\n")), ["<# it's a PowerShell block #>"]);
+  eq("a runs-on given as an alias picks the dialect", attempt(".github/workflows/alias.yml", [...anchoredRunner, "    runs-on: *l", ...psBlock, ""].join("\n")), ["<# it's a PowerShell block #>"]);
+  eq("a runs-on label given as an alias picks the dialect", attempt(".github/workflows/alias.yml", ["jobs:", "  a:", "    runs-on: [self-hosted, &w windows]", "    steps:", "      - run: Write-Host a", "  b:", "    runs-on: [self-hosted, *w]", ...psBlock, ""].join("\n")), ["<# it's a PowerShell block #>"]);
 }
 
 {
@@ -175,7 +334,8 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
   check("an expression runner with PowerShell-only syntax and no shell: is refused, not read as bash", matrix.includes(".github/workflows/m.yml:6: cannot tell whether this run: step is bash or PowerShell"), matrix);
   eq("the same step with shell: pwsh is read as PowerShell", found(".github/workflows/m.yml", job("${{ matrix.os }}", [...blockThenComment, "        shell: pwsh"])), ["<# it's a PowerShell block #>", "# after"]);
   eq("an expression runner whose script reads the same either way is scanned", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci # why"])), ["# why"]);
-  eq("an expression runner with no comment at all passes", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci"])), []);
+  eq("an expression runner reads ${#x} and ${x}#y the same as bash and PowerShell", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: |", "          echo ${#ARR[@]}", "          url=${base}#anchor"])), []);
+  eq("an expression runner with no comment at all passes",found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci"])), []);
   eq("a runner group's labels are read", found(".github/workflows/m.yml", job("{ group: big, labels: [windows-2022] }", ["      - run: '<# block #>'"])), ["<# block #>"]);
   check("a runner group with no labels is unknown", shellError(job("{ group: big }", blockThenComment)).includes("cannot tell"));
   eq("a self-hosted Linux runner is bash", found(".github/workflows/m.yml", job("[self-hosted, linux]", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])), []);
@@ -224,6 +384,7 @@ console.log("\nDockerfiles:\n");
   eq("a directive passes only where it is configured for that file", scanFile("Dockerfile", "# syntax=docker/dockerfile:1\nFROM x\n", REQUIRED_MARKERS, { Dockerfile: ["# syntax=docker/dockerfile:1"] }), []);
   eq("and not for another file", scanFile("Dockerfile.prebuilt", "# syntax=docker/dockerfile:1\nFROM x\n", REQUIRED_MARKERS, { Dockerfile: ["# syntax=docker/dockerfile:1"] }).length, 1);
   eq("the same text further down is a comment even when configured", scanFile("Dockerfile", "FROM x\n# syntax=docker/dockerfile:1\n", REQUIRED_MARKERS, { Dockerfile: ["# syntax=docker/dockerfile:1"] }).length, 1);
+  eq("a RUN after SHELL [\"node\", ...] is read as JavaScript", found("Dockerfile", 'FROM node:22\nSHELL ["node", "-e"]\nRUN console.log("# not") // js\n'), ["// js"]);
   eq("Dockerfile.prebuilt and x.dockerfile are Dockerfiles", [found("Dockerfile.prebuilt", "# a\nFROM x\n"), found("web.dockerfile", "# b\nFROM x\n")], [["# a"], ["# b"]]);
 }
 
