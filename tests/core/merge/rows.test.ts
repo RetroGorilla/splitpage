@@ -227,6 +227,23 @@ test("comments: on an updatedAt tie my copy is kept, while on a resolvedAt tie t
   assert.equal(created.body, "Mine", "the tie falls back to createdAt, and still keeps mine");
 });
 
+test("comments: the replies of a comment both sides hold are the input objects themselves, not copies (pinned until 2.5)", () => {
+  const mineShared = reply("rp1", at(2)), mineOwn = reply("rpM", at(3));
+  const theirsShared = reply("rp1", at(2)), theirsOwn = reply("rpT", at(4));
+  const onlyMine = reply("rpX", at(5));
+  const mine = { rows: [], comments: [cm("c1", { replies: [mineShared, mineOwn] }), cm("c2", { replies: [onlyMine] })] };
+  const theirs = { rows: [], comments: [cm("c1", { replies: [theirsShared, theirsOwn] })] };
+  const out = mergeComments(null, mine, theirs);
+  const both = (out[0] as MergeComment).replies || [];
+  assert.equal(both.length, 3);
+  assert.equal(both[0], theirsShared, "theirs replaces a reply id both hold, by reference");
+  assert.equal(both[1], mineOwn);
+  assert.equal(both[2], theirsOwn);
+  const one = (out[1] as MergeComment).replies || [];
+  assert.notEqual(one[0], onlyMine, "a comment only one side holds is copied whole");
+  assert.deepEqual(one[0], onlyMine);
+});
+
 test("comments with Object.prototype ids are dropped, and a reply id of __proto__ is lost, as today (#278)", () => {
   const base = { rows: [], comments: [cm("constructor"), cm("toString"), cm("c1", { replies: [reply("constructor", at(3)), reply("__proto__", at(3))] })] };
   const mine = jsonCopy(base);
