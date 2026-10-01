@@ -29,7 +29,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-02 — Script cells change only through the document model
 
-- **Behaviour:** Every change to a script cell is a document-model edit (`editCell()` at the selection, or the edits in `04c-doc-model.js`), written back with `toHtml()`. No path edits cell HTML with a regex, and nothing uses `execCommand`, in script cells or in comment and reply boxes.
+- **Behaviour:** Every change to a script cell is a document-model edit (`editCell()` at the selection, or the edits in `src/core/text/edits.ts`, which `04c-doc-model.js` re-exports), written back with `toHtml()`. No path edits cell HTML with a regex, and nothing uses `execCommand`, in script cells or in comment and reply boxes.
 - **Tests:** `src/test/doc-model.test.mjs`, `src/test/cell-edit.test.mjs`; browser `75-format-model.txt`, `76-tags-model.txt`, `77-clipboard-model.txt`, `78-split-join-model.txt`, `81-draft-edit.txt`. No test asserts that `execCommand` is absent from the source.
 - **Owner:** `src/core/text` (edits), `src/application` (commands), `src/features/editor` (bindings) · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** DocumentSession commands become the only write path (M3). Migrated editor features receive named operations and no writable document (M6; plan §6: "a view or selector never changes document content").
@@ -165,7 +165,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, then calls `syncCommentAnchors(state)` in the same undo entry, which points each comment at the first cell holding its mark. A comment whose words are gone keeps its last position. `migrateRows()` runs the same pass on every load and merge.
 - **Tests:** `src/test/comment-anchors.test.mjs`; browser `78-split-join-model.txt`, `77-clipboard-model.txt`, `20-comment-drift.txt`, `246-scene-delete-comments.txt`.
-- **Owner:** `src/application` (transaction), with `syncCommentAnchors` in `src/core/document` · **Milestone:** 3 · **Class:** absorb
+- **Owner:** `src/application` (transaction), with `syncCommentAnchors` in `src/core/text` · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** every accepted DocumentSession transaction reconciles dependent anchors (M3; plan §6: "every accepted user transaction includes its dependent anchor/record reconciliation").
 - **Acceptance:** application test: split, join and cut-then-paste commands that do not call `syncCommentAnchors` themselves still leave every anchored comment's `rowId` and `field` equal to what reconciliation computes, in one undo entry. `comment-anchors.test.mjs` stays.
 
