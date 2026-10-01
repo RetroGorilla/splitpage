@@ -74,7 +74,11 @@ gates, every unit/desktop/tool test and the smoke, CSP and persistence suites
 on every pull request, so a focused run is feedback, not the gate. The full
 browser regression below, on Linux and Windows, is run at milestone and
 release gates (plan section 4) and its `summary.txt` attached to the closing
-PR. **Rebuild first** whichever you run, or you will be testing the previous
+PR. A few kinds of pull request also need one before merge (every 3.1.x fix,
+`02-state.js`, `build.mjs`, the harness); those, and the rest of how a pull
+request is reviewed and merged, are in
+[docs/architecture/review.md](../../../docs/architecture/review.md).
+**Rebuild first** whichever you run, or you will be testing the previous
 version of the app.
 
 ## Run the full regression (milestone and release gates)
