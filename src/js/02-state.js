@@ -5,7 +5,6 @@ import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor, registryImages } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
-import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
   buildVideoCardEl,
   plainName,
@@ -21,6 +20,7 @@ import { mediaComments } from "../core/document/media.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
 import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
 import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
+import { LIST_MERGERS } from "../core/merge/lists.ts";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,
@@ -43,12 +43,6 @@ function defaultState() {
     return { title: "Untitled Script", rows: [] };
   }
 }
-
-var LIST_MERGERS = {
-  people: function (b, m, t) { return mergePeople(b, m, t); },
-  productionTags: function (b, m, t) { return mergeProductionTags(b, m, t); },
-  brollShots: function (b, m, t) { return mergeBrollShots(b, m, t); }
-};
 
 export var STATE_FIELDS = FIELD_POLICIES.map(function (f) {
   var entry = Object.assign({}, f);

@@ -104,6 +104,7 @@ expect stateClean()
 expect (function(){ var md = F.buildMarkdown(); return [C1SHA, R1SHA].every(function(s){ return md.indexOf(B.dataUrlForSync(s)) !== -1; }) && md.indexOf('data-blob') === -1; })()
 
 # ---- 5. the stash carries refs across a real reload; IndexedDB has the bytes
+wait (function(){ var shas = JSON.stringify(F.state()).match(/[0-9a-f]{64}/g) || []; return shas.some(function(s){ return B.has(s); }) && shas.every(function(s){ return !B.has(s) || B.isDurableSync(s); }); })()
 eval (function(){ window.__stashed = F.stash(); var st = JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')); st.base = JSON.parse(sessionStorage.getItem('seed69')); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify(st)); sessionStorage.setItem('shas69', JSON.stringify([C1SHA, R1SHA])); return JSON.stringify({ ok: __stashed, blobs: !!st.blobs }); })()
 expect __stashed === true
 expect !JSON.parse(sessionStorage.getItem('splitpage-conflict-stash')).blobs

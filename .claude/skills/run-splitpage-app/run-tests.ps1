@@ -2,7 +2,6 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 #   ... -Only 02            run just the suite whose filename starts with 02
-#   ... -Parallel 1         one suite at a time (default is 4 lanes)
 #   ... -Headed             watch it happen in a real Edge window (forces -Parallel 1)
 #   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
 #
@@ -23,7 +22,7 @@ param(
   [int]$Port = 0,
   [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
-  [int]$Parallel = 4,
+  [int]$Parallel,
   [switch]$Headed
 )
 
@@ -33,6 +32,15 @@ $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if ($Headed) { $Parallel = 1 }
+elseif (-not $PSBoundParameters.ContainsKey('Parallel')) {
+  try {
+    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId
+    $otherRuns = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
+      Where-Object { $_.ProcessId -ne $PID -and $_.ProcessId -ne $parentId -and $_.CommandLine -match 'run-tests\.ps1' }).Count
+  } catch { $otherRuns = 0 }
+  $Parallel = [Math]::Floor([Environment]::ProcessorCount * 9 / 16 / ($otherRuns + 1))
+  if ($otherRuns) { Write-Host ("{0} other run-tests.ps1 run(s) on this machine; this run takes {1} lanes" -f $otherRuns, [Math]::Max(1, $Parallel)) }
+}
 if ($Parallel -lt 1) { $Parallel = 1 }
 
 # Start-Process returns Edge's launcher, which hands off to a process tree and

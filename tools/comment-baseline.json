@@ -134,7 +134,6 @@
       "# -cmatch, not -match: PowerShell's -match is case-insensitive, so the",
       "# ... -Headed watch it happen in a real Edge window (forces -Parallel 1)",
       "# ... -Only 02 run just the suite whose filename starts with 02",
-      "# ... -Parallel 1 one suite at a time (default is 4 lanes)",
       "# ... -Port 9601 -CdpPort 10201 pin the port bases instead of auto-picking",
       "# 100 until the whole block is free on both ranges at once. An explicit",
       "# 20000..29900",

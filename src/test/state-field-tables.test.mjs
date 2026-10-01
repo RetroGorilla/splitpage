@@ -5,6 +5,7 @@ import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js
 import { GALLERY_FIELDS as SYNC_GALLERY_FIELDS, ROW_FIELDS as SYNC_ROW_FIELDS } from "../js/03-sync.js";
 import { changedBetween } from "../js/12a-undo.js";
 import { GALLERY_FIELDS, ROW_FIELDS, STATE_FIELDS as CORE_FIELDS } from "../core/document/fields.ts";
+import { LIST_MERGERS } from "../core/merge/lists.ts";
 
 function withProbe(field, run) {
   STATE_FIELDS.push(field);
@@ -32,7 +33,7 @@ test("a field added without a default is never reported missing", () => {
   });
 });
 
-test("02-state's STATE_FIELDS is a thawed copy of core's frozen table, with the list mergers attached", () => {
+test("02-state's STATE_FIELDS is a thawed copy of core's frozen table, with core's list mergers attached", () => {
   assert.ok(Object.isFrozen(CORE_FIELDS));
   assert.equal(Object.isFrozen(STATE_FIELDS), false);
   assert.equal(STATE_FIELDS.length, CORE_FIELDS.length);
@@ -43,15 +44,16 @@ test("02-state's STATE_FIELDS is a thawed copy of core's frozen table, with the 
     const { mergeList, ...rest } = f;
     assert.deepEqual(rest, { ...core }, f.key);
     assert.equal(typeof mergeList === "function", ["people", "productionTags", "brollShots"].includes(f.key), f.key);
+    if (mergeList) assert.equal(mergeList, LIST_MERGERS[f.key], f.key);
   });
 });
 
-test("until 2.3 imports core's, 03-sync's ROW_FIELDS and GALLERY_FIELDS equal core's", () => {
-  assert.deepEqual([...SYNC_ROW_FIELDS], [...ROW_FIELDS]);
-  assert.deepEqual({ ...SYNC_GALLERY_FIELDS }, { ...GALLERY_FIELDS });
+test("03-sync's ROW_FIELDS and GALLERY_FIELDS are core's tables, not copies", () => {
+  assert.equal(SYNC_ROW_FIELDS, ROW_FIELDS);
+  assert.equal(SYNC_GALLERY_FIELDS, GALLERY_FIELDS);
 });
 
-test("until 2.3 derives it from undo, 12a-undo skips exactly the fields core marks undo: false", () => {
+test("12a-undo skips exactly the fields core marks undo: false", () => {
   const every = Object.fromEntries(CORE_FIELDS.map((f) => [f.key, []]));
   const touched = changedBetween({}, every);
   assert.deepEqual(Object.keys(touched.doc), CORE_FIELDS.filter((f) => f.undo).map((f) => f.key));
