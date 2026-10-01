@@ -162,6 +162,41 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - A cue line split before its colon leaves neither half reading as a cue, so both lose the mark, and joining them does not bring it back. Split after the colon, the left half keeps the cue and a join restores it on the whole line.
 - **Left for 2.7.** `09-find-replace.js` keeps a baselined lint comment saying `cleanText()` lives in `04c-doc-model.js`. It is now in `src/core/text/runs.ts`, but the comment gate allows no new comment text, so the pointer changes when that comment's rule moves to configuration.
 
+## 2.3 as built
+
+- **`src/core/merge/`, new files.** Inside the folder, imports run one way: `text-field` imports `lists` and `cells`; `rows` imports `text-field`; `scalars` imports a type from `rows`; `states` imports `lists`, `rows`, `scalars` and `text-field`. `lists` imports nothing from core/merge or core/text, only core/document.
+  - `text-field.ts`: `textMergeContext(decode, base, mine, theirs, mergedTags?)` and `mergeTextField(base, mine, theirs, ctx)`. The context carries the decoder as `ctx.decode`, so `mergeTextField` keeps its four arguments and `18a-local-merge.js` calls it unchanged.
+  - `lists.ts`: `mergePeople`, `mergeProductionTags`, `mergeBrollShots`, `mergeBrollProps` and `LIST_MERGERS`, which is frozen and keyed by the three `list-union-with-base` fields: `people`, `productionTags`, `brollShots`. `mergeBrollProps` merges a shot's `props` inside `mergeBrollShots`; no state field holds props, so it is exported but not in the table.
+  - `rows.ts`: `byId`, `rowFieldKey`, `rowContentEqual`, `commentContentEqual`, `mergeRows` (with `mergeRow` inside it, as before), `mergeComments` and `conflictComment`, which builds one conflict card from the `ids`, `clock` and `editor` ports.
+  - `scalars.ts`: `mergeTitle`, which pushes the title conflict as before, `mergeChangedSideWins`, `mergeMaxPlusOne`, `mergeTheirsWins` and `mergeTargetLength`.
+  - `states.ts`: `mergeStateFields(base, mine, theirs, { decode, ids, clock, editor, fields? })` returns `{ merged, conflicts, stats }`, with `merged` not yet migrated. The strategies are a table typed `Record<StrategyId, FieldStrategy>`, so a missing strategy is a compile error. A strategy the table does not hold as its own property still throws `no merge strategy for state field <key>`, so `constructor` or `__proto__` as a strategy throws, as the `switch` did. `fields` defaults to core's `STATE_FIELDS`.
+  - No `gallery.ts`: `mergeGalleryField` and `galleryFieldKey` were already in `core/document/gallery.ts`, and `mergeRow` calls them in the same ten lines as before.
+- **Port change.** `CellDecoder` in `src/core/text/ports.ts` takes an optional `DecodeOptions`, because the merge decodes each side with that side's tag ids and needs to know when a cell holds media. A decoder that ignores the options, like the map in `anchors.test.ts`, still fits the type.
+- **List mergers.** The `list-union-with-base` strategy finds its merger in `LIST_MERGERS` by the field's key, not through `f.mergeList`. `02-state.js` attaches the same functions, so the result is the same for every table the app has.
+- **Translation.** It stays literal: `{}` maps, so ids named like `Object.prototype` members behave as before (#278); the same `||` defaults; the same order of work (tags, rows, comments, title, conflict cards, field loop), and so the same order of clock, editor and id calls. `(tagStatus(x) || TAG_STATUSES[0]).id` became `tagStatusId(x) || TAG_STATUS_IDS[0]`: the same list in the same order. The mergers' `cloneState` calls became a local JSON copy, `var` became `let` and `const`, and `delete out[f]` became `Reflect.deleteProperty`.
+- **`cloneState` stays.** The plan's table moves it to core, but the merge no longer calls it, and the ten legacy modules that do import it from `03-sync.js`, so it stays there.
+- **Shims.**
+  - `03-sync.js` keeps `mergeStates`, which calls `mergeStateFields` with legacy ports, then `migrateRows`, as before. The ports are `fromHtml` from `04c-doc-model.js`, `randomIds` (whose `id` is the `makeId` that `02-state.js` re-exports), `systemClock` (the `nowIso` that `10-comments.js` re-exports), `getEditorName`, and `02-state.js`'s `STATE_FIELDS`. That last one keeps a probe pushed onto the legacy table in the merge, as the merge golden's throwing test needs. Its `textMergeContext(base, mine, theirs, mergedTags)` passes `fromHtml`.
+  - `03-sync.js` re-exports `byId`, `rowFieldKey`, `rowContentEqual`, `mergeTextField`, the three list mergers and `mergeTargetLength` from core, and `ROW_FIELDS` and `GALLERY_FIELDS` from `core/document/fields.ts`, so its copies are gone. It exports the same names as before, so no importer changed. It no longer imports `00-prelude.js`, `02d-gallery.js` or `08c-broll.js`, or the names only the merge used from the modules it still imports.
+  - `02-state.js` attaches `mergeList` from core's `LIST_MERGERS` and no longer imports `03-sync.js`.
+  - `12a-undo.js` builds `SKIP_DOC_KEYS` from the `undo: false` entries of core's `STATE_FIELDS` when it loads. It reads core's table, not `02-state.js`'s copy, because core is outside the cycle and so has always loaded by then.
+- **The drift test.** `src/test/state-field-tables.test.mjs` now checks the shims rather than copies: `03-sync.js`'s `ROW_FIELDS` and `GALLERY_FIELDS` are core's objects, each `mergeList` in `02-state.js` is core's `LIST_MERGERS` entry, and `changedBetween` still skips exactly the `undo: false` fields.
+- **Tests.** `tests/core/merge/` runs without a DOM. `fakes.ts` holds a decoder that maps `toHtml` output back to cells, maps default tag ids through `tagId` and reports media for cells marked as holding it, plus counting ids, a fixed clock and a fixed editor. The tests cover:
+  - every strategy over one three-way merge, with keys in table order, and person colours and a target length that no side has leaving no key;
+  - a deterministic merge with fake ports, conflict cards included, and the ports as the only source of time, ids and the editor's name;
+  - an unknown strategy throwing, prototype names included;
+  - INV-04: a copy of the table with added fields, one for each per-key strategy, merging with no other edit;
+  - `LIST_MERGERS` reproducing all 46 stored list-merger golden cases, key order included;
+  - text outcomes, mark conflicts, media cells, tag refits and which cells are decoded;
+  - row placement, deletes, stamps, pictures, status, length, gallery lists, comments and conflict cards;
+  - today's prototype-id collisions in rows, comments, replies, people, tags and shots.
+- **Dependencies.** `--prune` removed two `cycle-edge` entries, `02-state.js → 03-sync.js` and `03-sync.js → 08c-broll.js`; nothing was accepted. `--metrics`: frontend modules 117 to 122, migrated modules 40 to 45, runtime cycle edges 492 to 490. The cycle stays at 56 modules, and `S` importers (57), `S.state` assigners (9) and `S` writers (34) are unchanged.
+- **Found, not fixed.**
+  - A `list-union-with-base` field with no entry in `LIST_MERGERS` throws a `TypeError`, not the "no merge strategy" error. That is as before, when its `mergeList` was missing.
+  - A table without a `productionTags` field throws, because the text merge needs the merged registry. That is also as before.
+  - For a row whose id is an `Object.prototype` name and that one side lacks, `mergeRow` reads that side's row as the inherited member, and the merged row's `status` can come out `undefined` until `migrateRows` resets it. This is part of #278.
+- **Left for 2.5.** INV-04's test here covers the merge only. The same added field surviving `migrateRows` and a `.splitpage` round trip comes when `core/migrate.ts` and `core/merge-states.ts` compose them at the core root.
+
 ## Characterisation (2.0)
 
 Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that, and `npm test` refuses to run while `GOLDEN_UPDATE` is set. Goldens are regenerated only on `4.0-development`, in a dedicated commit that changes nothing else, never inside a lane that moves code: a moving lane keeps every golden passing unchanged.
