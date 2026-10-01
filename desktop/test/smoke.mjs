@@ -1009,6 +1009,19 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
     const afterConflictBytes = fs.readFileSync(fixturePath);
     record(tag + ": conflicted file is left unchanged on disk", beforeConflictBytes.equals(afterConflictBytes));
 
+    const dialogsBeforeRefusal = await dialogsSeen(cdp);
+    await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
+    const refusalToast = await toastContaining(cdp, "Close the open dialog first.", 5000);
+    await sleep(500);
+    record(tag + ": Save As is refused behind the open conflict dialog, with a toast saying why",
+      !!refusalToast && (await dialogsSeen(cdp)) === dialogsBeforeRefusal && !fs.existsSync(newSplitpagePath),
+      "toast=" + JSON.stringify(refusalToast));
+
+    await evalPage(cdp, "document.getElementById('file-conflict-cancel').click()");
+    const conflictClosed = await poll(cdp, "document.getElementById('file-conflict-modal').hidden === true", 5000).catch(() => false);
+    record(tag + ": cancelling the conflict dialog closes it", !!conflictClosed);
+    await poll(cdp, "document.querySelectorAll('.toast.error, .toast.warn').length === 0", 8000).catch(() => null);
+
     await evalPage(cdp, "window.__desktopTest.runMenuCommand('save-as')", { awaitPromise: false });
     let saveAsOk = false;
     for (let i = 0; i < 30 && !saveAsOk; i++) {
