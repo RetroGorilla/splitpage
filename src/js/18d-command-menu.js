@@ -1,4 +1,3 @@
-import { escapeHtml } from "./02-state.js";
 import {
   IS_MAC,
   fileMenuOpen,
@@ -8,6 +7,7 @@ import {
   toggleFileMenu
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { askingFromLauncher, launcherShown } from "../legacy/screen.ts";
 

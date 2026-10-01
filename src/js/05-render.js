@@ -10,29 +10,10 @@ import {
   updateScriptStats
 } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import {
-  breakLine,
-  cellLength,
-  cueShortcut,
-  directionRangeAt,
-  directionShortcut,
-  directionToggleRange,
-  fromHtml,
-  insertText,
-  insideDirection,
-  markThroughout,
-  projection,
-  setMark,
-  toHtml,
-  toggleDirection,
-  toggleMark,
-  typingMarks
-} from "./04c-doc-model.js";
 import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
@@ -62,7 +43,23 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
+import { cueShortcut } from "../core/text/cues.ts";
+import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../core/text/directions.ts";
+import {
+  breakLine,
+  insertText,
+  insideDirection,
+  markThroughout,
+  setMark,
+  toggleMark,
+  typingMarks
+} from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { cellLength, projection } from "../core/text/runs.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 export { pad2 };
 
 var LINK_POPOVER_HTML =

@@ -2,8 +2,6 @@ import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
-import { gallerySize, rowSlots, setRowSlots } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
@@ -30,6 +28,8 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark } from "./12a-undo.js";
 import { htmlToPlainText } from "./14-export.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
+import { gallerySize, rowSlots, setRowSlots } from "../core/document/gallery.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 export var writerOpen = false;
 var writerGutterMode = "visuals";

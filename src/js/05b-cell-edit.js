@@ -1,10 +1,11 @@
 import { S } from "./_state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { ensureTrailingCaretSpot } from "./04-richtext.js";
-import { fromHtml, toHtml } from "./04c-doc-model.js";
 import { syncFieldFromDom } from "./05-render.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
+import { toHtml } from "../core/text/html.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 
 var ATOM_SELECTOR = ".broll-key, .video-embed-card";
 

@@ -1,18 +1,8 @@
-import { inertBody, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import {
-  cellLength,
-  deleteRange,
-  fromHtml,
-  insertText,
-  joinCells,
-  markThroughout,
-  normalizeCell,
-  projection,
-  setMark,
-  sliceCell,
-  toHtml
-} from "./04c-doc-model.js";
 import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
+import { deleteRange, insertText, joinCells, markThroughout, setMark, sliceCell } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
+import { fromHtml, inertBody, sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
 
 var PUA_FIRST = 0xE000;
 var PUA_LAST = 0xF8FF;

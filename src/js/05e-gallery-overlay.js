@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { PREF_EVENT, VIDEO_THUMBS_KEY } from "./00p-prefs.js";
-import { escapeHtml } from "./02-state.js";
 import {
   annotateGallerySlot,
   moveGallerySlot,
@@ -26,6 +25,7 @@ import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js"
 import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 var view = null;
 var returnFocus = null;

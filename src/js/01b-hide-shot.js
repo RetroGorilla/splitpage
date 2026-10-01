@@ -1,9 +1,9 @@
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
-import { escapeHtml } from "./02-state.js";
 import { findRowIndex } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 export var hideShotScenes;
 

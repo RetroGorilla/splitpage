@@ -1,9 +1,5 @@
 import { S } from "./_state.js";
-import { makeId } from "./02-state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import {
-  addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
-} from "./02d-gallery.js";
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
 import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
 import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
@@ -11,11 +7,14 @@ import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from ".
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection } from "./05b-cell-edit.js";
-import { nowIso } from "./10-comments.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";
+import { makeId, nowIso } from "../adapters/identity/ids.ts";
+import {
+  addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
+} from "../core/document/gallery.ts";
 
 export function addRow(afterId) {
   var row = { id: makeId(), visualText: "", imageRef: null, audioText: "",

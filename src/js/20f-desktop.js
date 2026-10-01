@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
-import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
 import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import {
@@ -19,6 +18,7 @@ import { concatBytes, saveDoc, strBytes } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;

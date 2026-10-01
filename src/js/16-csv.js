@@ -1,9 +1,11 @@
 import { S } from "./_state.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentBodyText } from "./10-comments.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { toPlainText } from "../core/text/projections.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export function csvEscape(v) {
   var s = String(v == null ? "" : v);
