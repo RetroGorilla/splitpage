@@ -158,6 +158,7 @@ export function shellComments(text, dialect = "sh") {
   const breaks = ps ? PS_WORD_BREAK : WORD_BREAK;
   const comments = [];
   const heredocs = [];
+  let afterVariable = -1;
   let i = 0;
   if (!ps && text.startsWith("#!")) i = text.indexOf("\n") === -1 ? text.length : text.indexOf("\n");
   while (i < text.length) {
@@ -179,6 +180,13 @@ export function shellComments(text, dialect = "sh") {
     if (ps && c === "@" && (text[i + 1] === '"' || text[i + 1] === "'") && (text[i + 2] === "\n" || text[i + 2] === "\r")) {
       const close = text.indexOf("\n" + text[i + 1] + "@", i + 2);
       i = close === -1 ? text.length : close + 3;
+      continue;
+    }
+    if (ps && c === "$" && text[i + 1] === "{") {
+      i += 2;
+      while (i < text.length && text[i] !== "}") i += text[i] === "`" ? 2 : 1;
+      i++;
+      afterVariable = i;
       continue;
     }
     if (!ps && c === "$" && text[i + 1] === "'") {
@@ -218,7 +226,7 @@ export function shellComments(text, dialect = "sh") {
       i = end;
       continue;
     }
-    if (c === "#" && (i === 0 || breaks.has(text[i - 1]))) {
+    if (c === "#" && i !== afterVariable && (i === 0 || breaks.has(text[i - 1]))) {
       const eol = text.indexOf("\n", i);
       const end = eol === -1 ? text.length : eol;
       comments.push({ start: i, end, text: text.slice(i, end).replace(/\r$/, "") });

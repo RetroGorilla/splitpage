@@ -94,6 +94,44 @@ eq("a PowerShell comment right after a brace is found", texts("a.ps1", [
   "$h = @{a=1}#three",
   "Write-Host a#b"
 ].join("\n")), ["#one", "#two", "#three"]);
+
+{
+  const PS_CASES = [
+    ["if ($x) { a }#note", ["#note"]],
+    ["function f {#two", ["#two"]],
+    ["$h = @{a=1}#three", ["#three"]],
+    ["$s = { a }#d", ["#d"]],
+    ["foreach ($i in 1) {#f", ["#f"]],
+    ["Write-Host a}#b", ["#b"]],
+    ["Write-Host a#b", []],
+    ["${#weird} = 1", []],
+    ["Write-Host ${x}#c", []],
+    ["echo ${#ARR[@]}", []],
+    ["url=${base}#anchor", []],
+    ["x ${a`}b}#c", []],
+    ["$x = ${a} #ok", ["#ok"]]
+  ];
+  for (const [line, expected] of PS_CASES) eq(`PowerShell: ${line}`, texts("a.ps1", line), expected);
+  const tokenize = () => {
+    const dir = mkdtempSync(join(tmpdir(), "splitpage-ps-oracle-"));
+    const file = join(dir, "cases.txt");
+    writeFileSync(file, PS_CASES.map(([l]) => l).join("\n"));
+    const script = [
+      "$lines = [IO.File]::ReadAllText($env:PS_CASES_FILE) -split \"`n\"",
+      "foreach ($l in $lines) { $e = $null; $t = [System.Management.Automation.PSParser]::Tokenize($l, [ref]$e); [Console]::WriteLine((($t | Where-Object { $_.Type -eq 'Comment' } | ForEach-Object { $_.Content }) -join \"`t\")) }"
+    ].join("; ");
+    const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", env: { ...process.env, PS_CASES_FILE: file }, timeout: 60000 });
+    rmSync(dir, { recursive: true, force: true });
+    return r;
+  };
+  const oracle = process.platform === "win32" ? tokenize() : null;
+  if (!oracle || oracle.error || oracle.status !== 0) {
+    console.log(`  SKIP the PowerShell tokenizer oracle — ${oracle ? `powershell.exe did not run (${oracle.error?.message ?? `exit ${oracle.status}: ${oracle.stderr}`})` : "powershell.exe is Windows only"}; the cases above stay as fixed expectations`);
+  } else {
+    const told = oracle.stdout.replace(/\r/g, "").split("\n").slice(0, PS_CASES.length).map((l) => (l ? l.split("\t") : []));
+    eq("PowerShell's own tokenizer agrees with every expectation above", told, PS_CASES.map(([, e]) => e));
+  }
+}
 eq("batch REM and :: lines", texts("a.bat", "@echo off\nrem one\n:: two\necho rem not\nREM\n"), ["rem one", ":: two", "REM"]);
 
 const found = (path, text) => commentsFor(path, text).map((c) => c.text);
@@ -273,7 +311,8 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
   check("an expression runner with PowerShell-only syntax and no shell: is refused, not read as bash", matrix.includes(".github/workflows/m.yml:6: cannot tell whether this run: step is bash or PowerShell"), matrix);
   eq("the same step with shell: pwsh is read as PowerShell", found(".github/workflows/m.yml", job("${{ matrix.os }}", [...blockThenComment, "        shell: pwsh"])), ["<# it's a PowerShell block #>", "# after"]);
   eq("an expression runner whose script reads the same either way is scanned", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci # why"])), ["# why"]);
-  eq("an expression runner with no comment at all passes", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci"])), []);
+  eq("an expression runner reads ${#x} and ${x}#y the same as bash and PowerShell", found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: |", "          echo ${#ARR[@]}", "          url=${base}#anchor"])), []);
+  eq("an expression runner with no comment at all passes",found(".github/workflows/m.yml", job("${{ matrix.os }}", ["      - run: npm ci"])), []);
   eq("a runner group's labels are read", found(".github/workflows/m.yml", job("{ group: big, labels: [windows-2022] }", ["      - run: '<# block #>'"])), ["<# block #>"]);
   check("a runner group with no labels is unknown", shellError(job("{ group: big }", blockThenComment)).includes("cannot tell"));
   eq("a self-hosted Linux runner is bash", found(".github/workflows/m.yml", job("[self-hosted, linux]", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])), []);
