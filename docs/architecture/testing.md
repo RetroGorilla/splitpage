@@ -69,26 +69,50 @@ node src/test/golden-helpers.mjs --update all
 
 The command runs the named golden tests with `GOLDEN_UPDATE` set to those
 names, and a golden test writes its fixture only when that variable names it
-(or `all`). Nothing else sets it.
+(or `all`). `tools/run-tests.mjs`, and with it `npm test` and
+`npm run verify`, exits 2 while `GOLDEN_UPDATE` is set at all, so a variable
+left in a shell cannot rewrite every fixture and pass; the helper starts
+`node --test` itself and is not affected.
 
-Fixtures are compared as JSON text, so key order counts. Minted ids appear as
-`{minted:<prefix>:<n>}` (`n` counts first appearances, so a reused id keeps
-its number) and a random docId as `{minted:docId}`. Only a value in the
-minting format is masked (the prefix, at most seven random base-36 digits and
-an eight-digit base-36 time stamp from the run), so a change of format fails
-the golden instead of being hidden.
+Goldens are regenerated only on `4.0-development`, in a commit of their own
+that changes nothing else, and never inside a lane that moves code: such a
+lane keeps every golden passing unchanged.
+
+Fixtures are compared as JSON text, so key order counts. Values that differ
+from run to run are masked in one of two ways.
+
+- `richtext` and `migrate` (`createIdMasker`) do not fix the clock or the
+  random source. An id minted by `makeId` appears as
+  `{minted:<prefix>:<n>}`, numbered per prefix by first appearance (a reused
+  id keeps its number), and a random docId as `{minted:docId}`. Only a value
+  in the exact minting format is masked: the prefix, at most seven random
+  base-36 digits, and an eight-digit base-36 time stamp that falls within the
+  run. A separate test in each file collects every id the outputs add (those
+  the input did not carry, as written or as `safeId` cleans them), requires
+  each to have that format and to be masked, and requires every masked value
+  to be one of them.
+- `merge` and `production` (`maskTokens`) run with the clock fixed at
+  `FIXED_ISO` and `Math.random` seeded, and replace tokens that are new in the
+  output (conflict-card ids, minted b-roll shot ids, a minted docId) with
+  `<label-n>`, numbered by where each first appears in the serialised output.
+  The format check is loose: `^c[0-9a-z]+$`, `^bs[0-9a-z]+$` (production
+  first finds shot ids with `bs[0-9a-z]{6,}`) and `^d[0-9a-f]{32}$`, with no
+  upper length and no time stamp. Because the numbering
+  follows position in the output rather than the order of minting, which id
+  was minted first is not observable.
 
 | Golden | Pins |
 | --- | --- |
 | `richtext` | `sanitizeHtml`, `fromHtml` and its media, `toHtml(fromHtml(x))`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML over a corpus; asserts INV-10 and that `toHtml` output is already in stored form |
-| `migrate` | `migrateRows`/`migrateDocument` JSON, the registry's records, the shas queued for persistence (through `setBackend`), idempotence and docIds; the file runs in its own process, so the registry starts empty |
+| `migrate` | `migrateRows`/`migrateDocument` JSON, the registry's records, the shas queued for persistence (through `setBackend`), idempotence and docIds, including a file saved before the tag registry; the file runs in its own process, so the registry starts empty |
+| `normalisers` | One table per normaliser that moves to core (`normalisers-<table>.json`), every case at a limit, one past it and one short of it: people names, the `migrateRows` field limits, `plainText`'s control characters, `plainName`, `safeId`, `safeHref`, `safeImageSrc`, the image size attributes, `DIRECTION_MAX` and `importDirections`, `normalizePersonColors`, `withPageHead`, scene and target lengths, gallery limits and b-roll props. Long repetitive strings are stored as runs, long lists and maps as a count with their first and last entries |
 | `merge` | `mergeStates` over 58 cases, one fixture each (`merge-<case>.json`), each storing its three inputs and the result: every `STATE_FIELDS` key changed by each side, rows, text and conflict cards, comments, tags, b-roll, people, colours, gallery, docIds. The clock is fixed at `FIXED_ISO` and `Math.random` is seeded; conflict-card ids are masked after their shape is checked |
 | `production` | `productionEntries`, `brollEntries` read and repair, `healTagRegistry` writes and cue retitling, over the long demo (as shipped, registry emptied, shots dropped) and crafted documents; reads are asserted not to change the document |
 
-A fixture's name starts with its golden (`merge-…`, `production-…`), and
-`--update merge` rewrites only those. The merge and production updates write
-only fixtures whose text changed; a fixture left without a case fails the
-fixture-set test, so remove it by hand.
+A fixture's name starts with its golden (`merge-…`, `production-…`,
+`normalisers-…`), and `--update merge` rewrites only those. The merge,
+production and normalisers updates write only fixtures whose text changed; a
+fixture left without a case fails the fixture-set test, so remove it by hand.
 
 `sha256-utf8.test.mjs` has no fixture: `node:crypto` is its oracle for
 `sha256Hex` with `TextEncoder` and with the hand-written UTF-8 encoder it
