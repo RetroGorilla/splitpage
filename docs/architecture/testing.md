@@ -38,7 +38,7 @@ narrows to the test files a change touched; `--only` is a local tool.
 | Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`, `249-save-as-hosted.txt`, `265-browser-drafts.txt`, the collaboration suites `26[0-4]-collaborate-*.txt`) |
 | Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
 | Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
-| Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `tools/run-suites.mjs` on Linux and `run-tests.ps1` on Windows, the Electron smoke, the Windows x64 and ARM64 packaged checks; `summary.txt` and the logs attached to the closing pull request |
+| Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 and ARM64 packaged checks; `summary.txt` and the logs attached to the closing pull request |
 
 `npm run verify` before pushing is cheap and runs CI's fast gate apart from
 the checks that need a browser: the tab strip width

@@ -83,7 +83,7 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 | 2.4 | `adapters/richtext` and `legacy/richtext.ts` | 2.2 | 2.3, 2.6 |
 | 2.6 | `core/production` | 2.2 | 2.3, 2.4 |
 | 2.5 | `core/migrate.ts`, `core/merge-states.ts`, `legacy/document-ports.ts`; 02-state becomes a shim | 2.3, 2.4, 2.6 | — |
-| 2.7 | Docs, invariant rows, metrics, performance record, and the full Linux and Windows regression (the milestone gate) | 2.5 | — |
+| 2.7 | Docs, invariant rows, metrics, performance record, and the full Windows regression (the milestone gate; Linux waits for the 4.0 release gate) | 2.5 | — |
 
 Each PR names its impacted browser suites and runs them along with `npm run verify`. Lanes run `--prune` after merging the base.
 
@@ -308,8 +308,8 @@ Fixtures are generated once from the current code and committed. Tests compare a
 - **Key order and in-place mutation.** `migrateRows` mutates and returns the same object, and key order sets the `.splitpage` and `.md` bytes. Don't rebuild objects, and don't delete and re-add keys. `hadTagRegistry` is read before defaults are filled in.
 - **Identity.** Keep the #82 seed order and the frozen SHA vectors, and write the manual encoder into a `Uint8Array`. The sanitiser mints ids for anchor and b-roll key spans that lack them.
 - **Translate literally.** Keep `{}` maps, `||` defaults and `var` semantics, and keep the throwing default of the merge strategy switch.
-- **Latent defect found, not fixed during the move.** Ids like `__proto__` or `constructor` survive `safeId` and collide in the id maps. Fix it on 3.1.x first.
-- **Forward merges.** Expect 3.1.x conflicts in 02-state, 03-sync and 04c. Land lanes quickly, and port fixes into core during the merge.
+- **Latent defect found, not fixed during the move.** Ids like `__proto__` or `constructor` survive `safeId` and collide in the id maps (#278). It is fixed on 4.0 after the move, in core.
+- **Pinned bugs after the milestone.** #274, #276, #278, #280–#283 and #290 are fixed on 4.0 once milestone 2 closes, each in the module that now owns the code, with the goldens that pin it regenerated in a dedicated commit. The closed 3.1.x branches hold the fixes and their fail-first tests to port from.
 
 **What stays legacy behind a documented bridge after this milestone:**
 - DOM edits of cells that hold media;
