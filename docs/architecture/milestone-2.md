@@ -197,7 +197,9 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - A `list-union-with-base` field with no entry in `LIST_MERGERS` throws a `TypeError`, not the "no merge strategy" error. That is as before, when its `mergeList` was missing.
   - A table without a `productionTags` field throws, because the text merge needs the merged registry. That is also as before.
   - For a row whose id is an `Object.prototype` name and that one side lacks, `mergeRow` reads that side's row as the inherited member, and the merged row's `status` can come out `undefined` until `migrateRows` resets it. This is part of #278.
-- **Left for 2.5.** INV-04's test here covers the merge only. The same added field surviving `migrateRows` and a `.splitpage` round trip comes when `core/migrate.ts` and `core/merge-states.ts` compose them at the core root.
+- **Left for 2.5.**
+  - INV-04's test here covers the merge only. The same added field surviving `migrateRows` and a `.splitpage` round trip comes when `core/migrate.ts` and `core/merge-states.ts` compose them at the core root.
+  - **Reply aliasing: 2.5 must change this.** For a comment both sides hold, `mergeComments` puts the input reply objects into its output by reference, not copies. `migrateRows` then writes into them (`id`, `body`, `author`), so `mergeStates` changes its own `mine` and `theirs` arguments. The review's fuzzing saw it in 2,830 of 25,000 cases, the same on the code before the move, so 2.3 keeps it. When `core/merge-states.ts` composes migrate and merge, the merge must clone the replies, or the migration must stop mutating its input. Two tests pin today's behaviour and must change on purpose then: `tests/core/merge/rows.test.ts` ("the input objects themselves, not copies") and `src/test/merge-states.test.mjs` ("pinned until 2.5").
 
 ## 2.4 as built
 
