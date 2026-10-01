@@ -82,6 +82,13 @@ the golden instead of being hidden.
 | --- | --- |
 | `richtext` | `sanitizeHtml`, `fromHtml` and its media, `toHtml(fromHtml(x))`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML over a corpus; asserts INV-10 and that `toHtml` output is already in stored form |
 | `migrate` | `migrateRows`/`migrateDocument` JSON, the registry's records, the shas queued for persistence (through `setBackend`), idempotence and docIds; the file runs in its own process, so the registry starts empty |
+| `merge` | `mergeStates` over 58 cases, one fixture each (`merge-<case>.json`), each storing its three inputs and the result: every `STATE_FIELDS` key changed by each side, rows, text and conflict cards, comments, tags, b-roll, people, colours, gallery, docIds. The clock is fixed at `FIXED_ISO` and `Math.random` is seeded; conflict-card ids are masked after their shape is checked |
+| `production` | `productionEntries`, `brollEntries` read and repair, `healTagRegistry` writes and cue retitling, over the long demo (as shipped, registry emptied, shots dropped) and crafted documents; reads are asserted not to change the document |
+
+A fixture's name starts with its golden (`merge-…`, `production-…`), and
+`--update merge` rewrites only those. The merge and production updates write
+only fixtures whose text changed; a fixture left without a case fails the
+fixture-set test, so remove it by hand.
 
 `sha256-utf8.test.mjs` has no fixture: `node:crypto` is its oracle for
 `sha256Hex` with `TextEncoder` and with the hand-written UTF-8 encoder it
