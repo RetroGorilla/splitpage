@@ -182,7 +182,8 @@ test("applying a step copies its values in: changing the step or the state later
     { op: "docField", key: "people", after: people },
     { op: "insertRow", index: 1, row: row }
   ];
-  const state = applySteps({ rows: [{ id: "r1", status: "todo" }] }, steps);
+  const start: StepState = { rows: [{ id: "r1", status: "todo" }] };
+  const state = applySteps(start, steps);
   const frozenState = JSON.stringify(state);
   const frozenSteps = JSON.stringify(steps);
   status.label = "changed";
