@@ -162,6 +162,41 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - A cue line split before its colon leaves neither half reading as a cue, so both lose the mark, and joining them does not bring it back. Split after the colon, the left half keeps the cue and a join restores it on the whole line.
 - **Left for 2.7.** `09-find-replace.js` keeps a baselined lint comment saying `cleanText()` lives in `04c-doc-model.js`. It is now in `src/core/text/runs.ts`, but the comment gate allows no new comment text, so the pointer changes when that comment's rule moves to configuration.
 
+## 2.4 as built
+
+- **`src/adapters/richtext/`.** `createRichText({ DOMParser, images, ids })` takes a `DOMParser` constructor and core/document's `ImageSource` and `IdSource`; no new port type was needed. It returns `inertBody`, `sanitize`, `decode` (`fromHtml`), `createCellReader`, `storedHtmlFromDom`, `htmlToMarkdown`, `videoCardElement`, `videoCardHtml` and `imageRefOf`. Every node is built through the parsed body's `ownerDocument`. The only platform global it names is `URL`, for the video card's host.
+  - `sanitize.ts`: `walkSanitize`, `imageRefOf`, the stored image element and the video card. `imageRefOf` asks `images.known(sha)` for a valid `data-blob` and `images.fromDataUrl(src)` for a safe data URL, so interning then queueing persistence is the port's job. Ids go through core's `safeId(id, prefix, ids)`. Lookups, ingestion and minting happen in document order, as before.
+  - `decode.ts`: the walk over sanitised HTML, ending in `normalizeCell(runs, opts)`, and `createCellReader(decode)`. That is `cellOf`'s cache: a `Map` cleared whole when, before a new entry, it holds more than 2,000,000 characters. Each reader has its own cache.
+  - `markdown.ts`: the Markdown walk. `richtext.ts`: the factory.
+- **One stored image tag.** `text-policy.ts` gains `StoredImageRef` (an `ImageRef` whose size and type may be missing) and `storedImageAttributes(ref)`: `class`, `data-blob`, then `data-w`, `data-h` and `data-mime` only when all three are set. It now exports `storedImageMarkup`, which writes the tag from that list, and the adapter sets the same list with `setAttribute`.
+  - The adapter does not parse core's string, so a record a port returns is escaped by the DOM rather than spliced into markup. A test hands back a `mime` holding `" onerror="` and finds no new attribute.
+  - `mediaComments`' tag for a picture known only by its sha is `storedImageMarkup({ sha256 })`, not a third copy.
+  - The bytes are unchanged; the richtext and migrate goldens pass as they were.
+- **`src/legacy/richtext.ts`.** It composes the adapter with the page's `DOMParser`, `registryImages` from `02c-blobs.js` and `randomIds`. It builds the adapter on first use, so the `DOMParser` global is read when something is first parsed, as `inertBody` read it before. It exports `inertBody`, `sanitizeHtml`, `imageRefOf`, `storedHtmlFromDom`, `htmlToMarkdown`, `buildVideoCardEl`, `videoCardHtml`, `fromHtml` and `cellOf`.
+- **Shims.**
+  - `04-richtext.js` re-exports the first six. It keeps `safeId` (with `randomIds`), `cssAttr` and `ensureTrailingCaretSpot`. The last appends a caret text node to a live cell through the page's `document`; it is editor code, not sanitising, and moves with the editor in milestone 6.
+  - `04c-doc-model.js` re-exports `fromHtml` and `cellOf`, keeps `syncCommentAnchors(state)`, and no longer imports `04-richtext.js`.
+  - No importer of either module changed.
+- **Where nodes live.** The sanitiser builds its output in the parser's inert document instead of the page's, and `buildVideoCardEl` builds its card in a fresh inert document. Every caller of `buildVideoCardEl` (`05-render.js`, `02-state.js`, the golden) only reads its `outerHTML`.
+- **Import graph.**
+  - `04-richtext.js` no longer imports `02c-blobs.js`, `shared/blob-policy.js`, or core's `broll.ts` and `tags.ts`.
+  - `04c-doc-model.js` no longer imports 04.
+  - Both import `src/legacy/richtext.ts`, which imports the two adapters and `02c-blobs.js`; 02c imports only core and shared. So neither 04 nor 04c gains an edge back into the legacy cycle, and no cycle runs through a migrated folder.
+- **Dependencies.** No baseline change: `--prune` found nothing, and nothing was accepted. `--metrics` counts 5 more frontend modules (117 to 122) and 5 more migrated ones (40 to 45). The cycle (56 modules, 492 edges) and every `S` figure are unchanged.
+- **Translation.**
+  - `Array.prototype.slice.call` and `forEach.call` over node lists became `Array.from` and `NodeList.forEach`, and a text node's value is read as `data`.
+  - `parseInt(weight, 10)` became `parseInt(String(weight), 10)`, still `NaN` for a missing style, and an unused `catch` binding went.
+  - `STORED_IMG_ATTRS` stays a `{}` map. Sanitised output always carries both attributes of a tag anchor, so the decoder hands them to `tagId` as strings.
+- **Tests.**
+  - `tests/adapters/richtext/` builds the adapter with jsdom's `DOMParser` in a process with no DOM globals. The parser comes from `jsdom.mjs`, because jsdom has no types.
+  - `golden.test.ts` replays the 83 cases and 11 video cards of `richtext-golden.json` byte for byte. Its fake `ImageSource` holds the golden's known picture and decodes data URLs with core, and its fake `IdSource`'s ids are masked as the golden masks minted ones. It asserts INV-10, that `toHtml(decode(x))` is in stored form, that decoding asks the ports exactly what sanitising asks, in the same order, and that Markdown and stored-form reads ask nothing.
+  - `ports.test.ts` pins the order of lookups, ingestion and minting, a dropped picture, a bad `data-blob` falling back to its `src`, the decode options, the cell reader's cache and eviction at the budget, and the video card.
+  - `tests/legacy/richtext.test.ts`: 04 and 04c hand out the bridge's functions; the bridge parses with the page's `DOMParser`; a pasted picture is interned at once and persisted after; a held `data-blob` takes the registry's record; minted ids are `makeId`'s; `cellOf` keeps what it read.
+  - `tests/core/document/text-policy.test.ts` checks the attribute list and the markup. INV-10's tests name the adapter's.
+  - Browser suites, all passing: `01-core` (20), `10-comments-panel` (17), `20-comment-drift` (43), `52-csp` (22), `65-blobs` (49), `66-hosted-blobs` (84), `68-images` (31), `69-html-images` (54), `77-clipboard-model` (51), `86-gdocs-paste-bold` (5), `92-paste-into-gallery` (102), `160-gallery-video` (127). The bundle has no `eval` or `new Function`.
+- **Found, not fixed.** `storedHtmlFromDom` keeps an image attribute named `constructor` or `__proto__`, because `STORED_IMG_ATTRS` is a `{}` map. HTML lower-cases attribute names, so no other `Object.prototype` name matches. Neither can carry script, and sanitising drops both.
+- **Left for 2.5.** `02-state.js`'s `moveMediaOutOfCell` still makes the video card's HTML with `buildVideoCardEl(href).outerHTML`; the bridge's `videoCardHtml` is the same string. INV-10's acceptance also asks for a check that no module outside the adapter builds cells from HTML; it is not written yet.
+
 ## Characterisation (2.0)
 
 Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that, and `npm test` refuses to run while `GOLDEN_UPDATE` is set. Goldens are regenerated only on `4.0-development`, in a dedicated commit that changes nothing else, never inside a lane that moves code: a moving lane keeps every golden passing unchanged.
