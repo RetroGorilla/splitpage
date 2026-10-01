@@ -832,25 +832,35 @@ export async function finishServerDetect() {
   });
 }
 
-export function updateServerMenu() {
-  ["menu-server-open", "menu-server-new"].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (el) el.hidden = !S.serverMode.available;
-  });
+export function serverOpenItemState() {
   var guest = isLinkGuest();
-  var openBtn = document.getElementById("menu-server-open");
-  if (openBtn) {
-    openBtn.disabled = guest;
-    setMenuItemReason(openBtn, guest ? "Your link opens this one script" : "");
-  }
-  var newBtn = document.getElementById("menu-server-new");
-  if (newBtn) {
-    newBtn.disabled = S.serverMode.readOnly || conn.role === "review" || guest;
-    setMenuItemReason(newBtn, !newBtn.disabled ? ""
+  return { hidden: !S.serverMode.available, disabled: guest, reason: guest ? "Your link opens this one script" : "" };
+}
+
+export function serverPublishItemState() {
+  var guest = isLinkGuest();
+  var disabled = !!(S.serverMode.readOnly || conn.role === "review" || guest);
+  return {
+    hidden: !S.serverMode.available,
+    disabled: disabled,
+    reason: !disabled ? ""
       : guest ? "Your link opens this one script"
       : conn.role === "review" ? "Viewing only — publishing needs the editing code"
-      : "This server is read-only");
-  }
+      : "This server is read-only"
+  };
+}
+
+function paintServerItem(id, state) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.hidden = state.hidden;
+  el.disabled = state.disabled;
+  setMenuItemReason(el, state.reason);
+}
+
+export function updateServerMenu() {
+  paintServerItem("menu-server-open", serverOpenItemState());
+  paintServerItem("menu-server-new", serverPublishItemState());
   updateCollaborateMenu();
 }
 
@@ -863,9 +873,11 @@ export function applyReviewMode() {
   if (title) title.readOnly = on;
 }
 
+export var VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
+
 export function reviewBlocked() {
   if (!reviewMode()) return false;
-  showToast("Viewing only — you can comment on this script, but not change it.", "warn");
+  showToast(VIEWING_ONLY, "warn");
   return true;
 }
 

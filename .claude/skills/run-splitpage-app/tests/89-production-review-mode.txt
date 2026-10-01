@@ -203,9 +203,11 @@ jsclick #gear-close
 # and named from its <a download>, whose click is swallowed so nothing
 # actually downloads.
 eval (function(){ window.__blobs = []; window.__names = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function(b){ window.__blobs.push(b); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function(){ if (this.download) { window.__names.push(this.download); return; } return c.apply(this, arguments); }; window.__state0 = JSON.stringify(F.state()); return true; })()
+eval (function(){ window.__box = null; window.__settled = function(sel){ var el = document.querySelector(sel); if (!el) return false; var p = el.closest('.comments-panel'); if (p && p.getAnimations().some(function(a){ return a.playState === 'running'; })) { window.__box = null; return false; } var r = el.getBoundingClientRect(), k = [r.left, r.top, r.width, r.height].join(); var same = window.__box === k && r.width > 0; window.__box = k; return same; }; return true; })()
 jsclick #btn-production
 wait !document.getElementById('production-panel').hidden && document.querySelectorAll('#production-list .tag-entity').length === 6
 expect untoast()
+wait __settled('#production-panel [data-action="export-breakdown"]')
 click #production-panel [data-action="export-breakdown"]
 wait window.__blobs.length === 1
 expect !toasted()
@@ -221,6 +223,8 @@ jsclick #production-close
 jsclick #btn-gear
 wait !document.getElementById('gear-panel').hidden && document.querySelectorAll('#gear-list .tag-entity').length === 2
 expect untoast()
+eval (function(){ window.__box = null; return true; })()
+wait __settled('#gear-panel [data-action="export-packing-gear"]')
 click #gear-panel [data-action="export-packing-gear"]
 wait window.__blobs.length === 2
 expect !toasted()

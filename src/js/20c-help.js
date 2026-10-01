@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
 
 function scrollHelpTo(id) {
   var body = document.getElementById("help-body");
@@ -280,19 +279,6 @@ export function __init() {
       var target = document.getElementById("help-close");
       if (target) target.focus();
     });
-  })();
-
-  (function wireHelpFileMenuItems() {
-    var menu = document.getElementById("file-menu");
-    if (!menu) return;
-    menu.addEventListener("click", function (e) {
-      var item = e.target.closest('[data-file-action="help"], [data-file-action="tour"]');
-      if (!item) return;
-      e.stopPropagation();
-      if (typeof toggleFileMenu === "function") toggleFileMenu(false);
-      if (item.getAttribute("data-file-action") === "help") openHelp();
-      else startTour();
-    }, true);
   })();
 
   (function wireTour() {

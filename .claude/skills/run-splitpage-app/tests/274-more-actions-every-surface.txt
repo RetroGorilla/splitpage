@@ -1,0 +1,131 @@
+# The rest of the File menu from the File menu and the command menu (4.0
+# milestone 1): New script, the three imports, Autosave, Collaborate (also
+# the header's Collab button) and Set target reach the same thing from each
+# surface; items the menu hides are not offered in the command menu. Run
+# against the code before and after these moved onto the action registry.
+
+open
+viewport 1400 900
+eval (function(){ window.F = window.__splitpageFormats; window.C = window.__commandTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__run = function (id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; window.__offered = function (q, id) { return C.results(q).some(function (g) { return g.items.some(function (i) { return i.id === id; }); }); }; window.__item = function (q, id) { var hit = null; C.results(q).forEach(function (g) { g.items.forEach(function (i) { if (i.id === id) hit = i; }); }); return hit; }; return true; })()
+
+# --- hidden in the menu, not offered -------------------------------------------
+expect __offered('server', 'server-open') === false
+expect __offered('server', 'server-publish') === false
+expect __offered('browser', 'prompter-open-in-browser') === false
+expect __offered('chromium', 'prompter-open-in-chromium') === false
+expect __offered('save file', 'save-back') === false
+expect __offered('import', 'paste') === true
+expect __item('import paste', 'paste').label == Import: paste a script…
+expect __item('collaborate', 'collaborate').label == Collaborate…
+expect __item('new script', 'new').label == New script
+expect __item('target', 'set-target').label == Set target length…
+
+# --- Paste a script, Google Doc link, Google Drive ---------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="paste"]
+wait __shown('import-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('import-modal')
+key ctrl KeyK
+sleep 200
+type paste a script
+sleep 200
+eval __run('paste')
+wait __shown('import-modal')
+key Escape
+wait !__shown('import-modal')
+
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="gdoc-import"]
+wait __shown('gdoc-modal')
+key Escape
+wait !__shown('gdoc-modal')
+key ctrl KeyK
+sleep 200
+type google doc
+sleep 200
+eval __run('gdoc-import')
+wait __shown('gdoc-modal')
+key Escape
+wait !__shown('gdoc-modal')
+
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="drive-open"]
+wait __shown('drive-modal')
+key Escape
+wait !__shown('drive-modal')
+key ctrl KeyK
+sleep 200
+type google drive
+sleep 200
+eval __run('drive-open')
+wait __shown('drive-modal')
+key Escape
+wait !__shown('drive-modal')
+
+# --- Autosave: a switch; the menu stays open; the command menu says On/Off ----
+eval window.__auto0 = document.getElementById('menu-autosave').getAttribute('aria-checked'); true
+click #btn-file
+sleep 200
+jsclick #menu-autosave
+sleep 200
+expect document.getElementById('menu-autosave').getAttribute('aria-checked') !== window.__auto0
+expect !document.getElementById('file-menu').hidden
+jsclick #file-menu-close
+sleep 200
+key ctrl KeyK
+sleep 200
+type autosave
+sleep 200
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="autosave"]').textContent.indexOf(window.__auto0 === 'true' ? 'Off' : 'On') !== -1
+eval __run('autosave')
+sleep 300
+expect document.getElementById('menu-autosave').getAttribute('aria-checked') === window.__auto0
+
+# --- Set target: the command menu opens the clock popover --------------------
+key ctrl KeyK
+sleep 200
+type target
+sleep 200
+eval __run('set-target')
+wait !!document.getElementById('wpm-editor')
+key Escape
+sleep 300
+
+# --- Collaborate: header button, File menu, command menu ---------------------
+jsclick #btn-collab
+wait __shown('collab-modal')
+key Escape
+wait !__shown('collab-modal')
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="collaborate"]
+wait __shown('collab-modal')
+key Escape
+wait !__shown('collab-modal')
+key ctrl KeyK
+sleep 200
+type collaborate
+sleep 200
+eval __run('collaborate')
+wait __shown('collab-modal')
+key Escape
+wait !__shown('collab-modal')
+
+# --- New script: File menu and command menu each start a fresh untitled one ---
+eval window.__id0 = F.state().docId; true
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="new"]
+wait F.state().docId !== window.__id0
+eval window.__id1 = F.state().docId; true
+key ctrl KeyK
+sleep 200
+type new script
+sleep 200
+eval __run('new')
+wait F.state().docId !== window.__id1

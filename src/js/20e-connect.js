@@ -12,10 +12,10 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
-import { openCollaborate } from "./13b-collaborate.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
-import { setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
 
@@ -53,12 +53,16 @@ function bookmarkById(id) {
   return null;
 }
 
+export function serversMenuLabel() {
+  if (!conn.serverUrl) return "Servers…";
+  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
+  return "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")";
+}
+
 export function updateConnectMenu() {
   var item = document.getElementById("menu-servers");
   if (!item) return;
-  if (!conn.serverUrl) { setMenuItemLabel(item, "Servers…"); return; }
-  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
-  setMenuItemLabel(item, "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")");
+  setMenuItemLabel(item, serversMenuLabel());
 }
 
 export function shortHost(url) {
@@ -492,17 +496,6 @@ export function __init() {
   loadBookmarks();
 
   (function wireConnectUi() {
-    var menu = document.getElementById("file-menu");
-    if (menu) {
-      menu.addEventListener("click", function (e) {
-        var item = e.target.closest("[data-file-action]");
-        if (!item || item.disabled) return;
-        if (item.getAttribute("data-file-action") !== "servers") return;
-        e.stopPropagation();
-        toggleFileMenu(false);
-        openServersDialog();
-      }, true);
-    }
 
     var pinModal = document.getElementById("pin-modal");
     if (pinModal) {
@@ -540,7 +533,7 @@ export function __init() {
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
         else if (action === "review-copy") copyReviewLink();
-        else if (action === "collaborate") { closeServersDialog(); openCollaborate(); }
+        else if (action === "collaborate") { closeServersDialog(); appActions.invoke("collaborate", "button"); }
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");

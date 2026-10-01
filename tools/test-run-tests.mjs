@@ -42,12 +42,17 @@ console.log("\ndiscover():\n");
   eq("tests/ is found", groupFiles(found, "tests"), ["tests/application/session.test.ts"]);
   eq("desktop scripts that are not tests are left alone", groupFiles(found, "desktop"), ["desktop/test/drafts.test.mjs"]);
   eq("nothing is orphaned", found.orphans, []);
-  eq("migrated TypeScript source makes the source group required", groupRequired(found, "source"), true);
 }
 
 {
   const found = discover(["src/test/a.test.mjs", "src/test/b.test.ts", "server/api.test.mjs"]);
   eq("a test file no group runs is an orphan", found.orphans, ["server/api.test.mjs", "src/test/b.test.ts"]);
+}
+
+{
+  const found = discover(["src/test/a.test.mjs", "src/core/text/runs.ts", "tests/core/runs.test.ts"]);
+  eq("tests under tests/ satisfy migrated source", groupRequired(found, "source"), false);
+  eq("migrated source with no test anywhere requires the source group", groupRequired(discover(["src/test/a.test.mjs", "src/core/text/runs.ts"]), "source"), true);
 }
 
 {

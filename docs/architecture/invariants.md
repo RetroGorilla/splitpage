@@ -180,9 +180,9 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-20 — Two Save buttons, one save state
 
 - **Behaviour:** The header Save and the Writer's Save always show the same label, dirty mark and disabled state, taken from one save state (`setSaveButtons()`, `mirrorFileChipToWriter()`).
-- **Tests:** browser `06-writer.txt` ("you can save from in here": `#wr-save` label and dirty mark).
+- **Tests:** browser `06-writer.txt` ("you can save from in here": `#wr-save` label and dirty mark); `285-save-buttons-one-state.txt` (the acceptance below: after an edit, during a save, after a failed save and after one that went through, both buttons show the same text, dirty mark and disabled state, and neither button, the native menu nor Ctrl+S starts a second save while one runs; passes against 4.0-development 47c0309 too); `283-save-status-by-destination.txt` (what the header says for each destination).
 - **Owner:** `src/application` (save status), `src/features/writer` · **Milestone:** 4 · **Class:** absorb
-- **Replacement:** one Save action in the action registry (M1), plus one destination-specific save-status selector from the save coordinator (M4) that every Save control renders.
+- **Replacement:** one Save action in the action registry (M1, done: both buttons, Ctrl+S, the command menu and the native menu invoke `save`; `docs/architecture/actions.md`), plus one destination-specific save-status selector from the save coordinator (M4) that every Save control renders.
 - **Acceptance:** browser: during a save, after a failed save and after an edit, both Save buttons show the same text, dirty mark and disabled state. `06-writer.txt` passes.
 
 ### INV-21 — One place splits a field

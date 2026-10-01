@@ -68,6 +68,8 @@ import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { __init as init_20k_phone_bar } from "./20k-phone-bar.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { __init as init_21_events } from "./21-events.js";
+import { appActions } from "../legacy/app-actions.ts";
+import { startActions } from "../bootstrap/actions.ts";
 
 init_00_prelude();
 init_00p_prefs();
@@ -139,3 +141,4 @@ init_20j_newtab();
 init_20k_phone_bar();
 init_20s_settings();
 init_21_events();
+startActions(appActions, window);

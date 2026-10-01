@@ -9,7 +9,6 @@ import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
-import { writerOpen } from "./19-writer.js";
 import {
   canOpenPrompterInBrowser,
   canOpenPrompterInChromium,
@@ -159,6 +158,11 @@ function recentsSupported() {
   return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
 }
 
+export function pasteItemState() {
+  var viewing = reviewMode();
+  return { hidden: false, disabled: viewing, reason: viewing ? "Viewing only — you can comment, but not change the script" : "" };
+}
+
 export function refreshFileMenu() {
   var presentBrowser = el("menu-present-browser");
   if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
@@ -170,9 +174,9 @@ export function refreshFileMenu() {
 
   var paste = document.querySelector('#file-menu [data-file-action="paste"]');
   if (paste) {
-    var viewing = reviewMode();
-    paste.disabled = viewing;
-    setMenuItemReason(paste, viewing ? "Viewing only — you can comment, but not change the script" : "");
+    var pasteState = pasteItemState();
+    paste.disabled = pasteState.disabled;
+    setMenuItemReason(paste, pasteState.reason);
   }
 
   refreshFileCard();
@@ -402,74 +406,6 @@ function onMenuKeydown(e) {
   }
 }
 
-function runMenuItem(action) {
-  var item = document.querySelector('#file-menu [data-file-action="' + action + '"]');
-  if (item && !item.disabled) item.click();
-  return !!item && !item.disabled;
-}
-
-export function modalIsOpen() {
-  return !!document.querySelector(".modal-backdrop:not([hidden]), .cmdk-backdrop:not([hidden])");
-}
-
-var REFUSED_UNDER = {
-  "save": ["modal"],
-  "save-as": ["modal"],
-  "open": ["modal", "prompter", "writer"],
-  "export": ["modal", "prompter", "writer"],
-  "command-menu": ["dialog", "prompter", "writer", "tour"],
-  "toggle-hide-shot": ["dialog"],
-  "find": ["dialog", "writer"]
-};
-
-var REFUSAL_REASONS = {
-  modal: "Close the open dialog first.",
-  dialog: "Close the open dialog first.",
-  prompter: "Close Present first.",
-  writer: "Close the writer first.",
-  tour: "Finish or skip the tour first."
-};
-
-function overlayShown(overlay) {
-  if (overlay === "modal") return modalIsOpen();
-  if (overlay === "dialog") return !!document.querySelector(".modal-backdrop:not([hidden])");
-  if (overlay === "prompter") return !!S.prompterOpen;
-  if (overlay === "writer") return !!writerOpen;
-  if (overlay === "tour") {
-    var tour = el("tour-overlay");
-    return !!tour && !tour.hidden;
-  }
-  return false;
-}
-
-export function refusedUnderOverlay(action) {
-  var overlay = (REFUSED_UNDER[action] || []).find(overlayShown);
-  if (!overlay) return false;
-  showToast(REFUSAL_REASONS[overlay], "warn");
-  return true;
-}
-
-function onShortcutKeydown(e) {
-  if (e.defaultPrevented || e.isComposing) return;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  if (S.DESKTOP) return;
-  var k = String(e.key || "").toLowerCase();
-  if (k === "s") {
-    e.preventDefault();
-    if (modalIsOpen() || !S.state) return;
-    if (e.shiftKey) runMenuItem("save-as");
-    else {
-      var save = el("btn-save");
-      if (save && !save.disabled) save.click();
-    }
-  } else if (k === "o" && !e.shiftKey) {
-    e.preventDefault();
-    if (modalIsOpen() || S.prompterOpen || writerOpen || !S.state) return;
-    toggleFileMenu(false);
-    runMenuItem("open");
-  }
-}
-
 export function __init() {
   var menu = el("file-menu");
   var btn = el("btn-file");
@@ -492,7 +428,6 @@ export function __init() {
     });
   }
   window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
-  window.addEventListener("keydown", onShortcutKeydown);
   renderKeyChips(menu);
   var search = el("btn-command");
   if (search && search.parentElement) renderKeyChips(search.parentElement);

@@ -5,11 +5,11 @@ import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
-import { deliverFile } from "./18-local-files.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
-import { openHelp, startTour } from "./20c-help.js";
-import { addServerBookmark, joinErrorText, openServersDialog } from "./20e-connect.js";
+import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
+import { startTour } from "./20c-help.js";
+import { addServerBookmark, joinErrorText } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 export var ONBOARD_KEY = "splitpage-onboarding";
 
@@ -94,7 +94,7 @@ function renderOnboardStep() {
   if (onboardStep === 2) loadLauncherInfo();
 }
 
-function openOnboarding() {
+export function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
   closeAllSidePanels();
@@ -322,8 +322,8 @@ export function __init() {
         else if (name === "host-save") saveOnboardHostCmd();
         else if (name === "join-submit") submitOnboardJoin();
         else if (name === "finish-tour") onboardFinishAndTour();
-        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); if (typeof openServersDialog === "function") openServersDialog(); }
-        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); if (typeof openHelp === "function") openHelp(); }
+        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); appActions.invoke("servers", "button"); }
+        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); appActions.invoke("help", "button"); }
         return;
       }
       var card = e.target.closest("[data-onboard-work]");
@@ -357,20 +357,7 @@ export function __init() {
     });
   })();
 
-  (function wireOnboardingFileMenu() {
-    var menu = document.getElementById("file-menu");
-    if (!menu) return;
-    menu.addEventListener("click", function (e) {
-      var item = e.target.closest("[data-file-action]");
-      if (!item) return;
-      var modal = onboardModal();
-      if (modal && !modal.hidden) closeOnboarding();
-      if (item.getAttribute("data-file-action") !== "setup") return;
-      e.stopPropagation();
-      if (typeof toggleFileMenu === "function") toggleFileMenu(false);
-      openOnboarding();
-    }, true);
-  })();
+  onFileMenuChoice(function () { closeOnboarding(); });
 
   maybeAutoShowOnboarding();
 
