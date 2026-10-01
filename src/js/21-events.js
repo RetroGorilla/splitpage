@@ -1806,6 +1806,7 @@ function init() {
 }
 
 function saveFromButton() {
+  if (!S.state) { showToast("Still loading…", "warn"); return; }
   if (refusedUnderOverlay("save")) return;
   saveDoc();
 }

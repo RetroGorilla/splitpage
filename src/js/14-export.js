@@ -79,6 +79,7 @@ function settleDerivedRecords() {
 }
 
 export async function saveDoc(opts) {
+  if (!S.state) return;
   opts = opts || {};
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
