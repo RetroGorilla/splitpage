@@ -43,7 +43,8 @@ function randomSteps(r: () => number, start: Doc, count: number): Step[] {
   let fresh = 0;
   for (let k = 0; k < count; k++) {
     const rows = (state.rows || []) as StepRow[];
-    const kind = rows.length ? Math.floor(r() * 6) : 3;
+    let kind = rows.length ? Math.floor(r() * 6) : 3;
+    if (kind === 5 && rows.length < 2) kind = 3;
     let step: Step;
     if (kind === 0 || kind === 1) {
       const row = pick(r, rows);
@@ -56,6 +57,8 @@ function randomSteps(r: () => number, start: Doc, count: number): Step[] {
         const next = editCell(r, cell);
         start.cells.set(row.id + " " + key, next);
         after = toHtml(next);
+      } else if (before !== undefined && String(row.id).charAt(0) === "r" && r() < 0.6) {
+        after = undefined;
       } else {
         after = pick(r, ["todo", "shot", "cut", { nested: [1, 2] }]);
       }
@@ -69,7 +72,8 @@ function randomSteps(r: () => number, start: Doc, count: number): Step[] {
       const index = Math.floor(r() * rows.length);
       step = { op: "deleteRow", index: index, row: rows[index] as StepRow };
     } else {
-      step = { op: "moveRow", from: Math.floor(r() * rows.length), to: Math.floor(r() * rows.length) };
+      const from = Math.floor(r() * rows.length);
+      step = { op: "moveRow", from: from, to: (from + 1 + Math.floor(r() * (rows.length - 1))) % rows.length };
     }
     steps.push(step);
     state = applySteps(state, [step]);
@@ -77,19 +81,41 @@ function randomSteps(r: () => number, start: Doc, count: number): Step[] {
   return steps;
 }
 
-test("apply, then apply the inverse, is the identity over seeded random edits", () => {
+test("apply, then apply the inverse, is the identity over seeded random edits, fields removed from the starting rows included", () => {
   const r = rng(2024);
+  const seen = { removals: 0, moves: 0, stillMoves: 0 };
   for (let n = 0; n < 200; n++) {
     const start = doc(r);
     const before = start.state;
     const frozen = JSON.stringify(before);
     const steps = randomSteps(r, start, 1 + Math.floor(r() * 8));
+    for (const s of steps) {
+      if (s.op === "rowField" && s.before !== undefined && s.after === undefined) seen.removals++;
+      if (s.op === "moveRow") { seen.moves++; if (s.from === s.to) seen.stillMoves++; }
+    }
     const after = applySteps(before, steps);
     assert.equal(JSON.stringify(before), frozen, "the state handed in is not touched");
     const back = applySteps(after, invertSteps(steps));
     assert.deepEqual(back, before);
     assert.deepEqual(invertSteps(invertSteps(steps)), steps);
   }
+  assert.ok(seen.removals >= 20, JSON.stringify(seen));
+  assert.ok(seen.moves >= 50, JSON.stringify(seen));
+  assert.equal(seen.stillMoves, 0);
+});
+
+test("today the inverse of an insertRow is refused once a field removed from that row has been put back, last", () => {
+  const steps: Step[] = [
+    { op: "insertRow", index: 0, row: { id: "r1", a: 1, b: 2 } },
+    { op: "rowField", rowId: "r1", key: "a", before: 1 }
+  ];
+  const after = applySteps({ rows: [] }, steps);
+  assert.deepEqual(after, { rows: [{ id: "r1", b: 2 }] });
+  const inverse = invertSteps(steps);
+  const restored = applySteps(after, inverse.slice(0, 1));
+  assert.deepEqual(Object.keys((restored.rows || [])[0] || {}), ["id", "b", "a"]);
+  assert.throws(() => applySteps(after, inverse),
+    (e: Error & { code?: string }) => e.code === "STEP_REFUSED" && e.message === "step does not apply: deleteRow (row has changed)");
 });
 
 test("each step's inverse undoes it alone, in reverse order", () => {
