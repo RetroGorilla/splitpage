@@ -370,7 +370,13 @@ function newBrollShot(fields: BrollSeedFields): NewBrollShot {
   };
 }
 
-export function brollEntries(state: BrollState, readers: ProductionReaders, ids: IdSource, plainTextOf: FieldText): BrollRead {
+export function brollEntries(
+  state: BrollState,
+  readers: ProductionReaders,
+  ids: IdSource,
+  plainTextOf: FieldText,
+  repair: boolean
+): BrollRead {
   const shots = state.brollShots;
   const live = collectBrollFromRows(state.rows, readers);
   const claimed: Record<string, boolean> = Object.create(null);
@@ -391,6 +397,7 @@ export function brollEntries(state: BrollState, readers: ProductionReaders, ids:
         audioRef: brollSeedRef(row, plainTextOf),
         location: brollSeedLocation(row, readers)
       };
+      if (repair) ids.id("bs");
       const seed: BrollSeed = Object.assign({ status: BROLL_STATUS_IDS[0], props: [], origin: "script" }, fields);
       plan.create.push({ entry: entries.length, shot: newBrollShot(fields) });
       rec = seed;
