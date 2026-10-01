@@ -1,0 +1,902 @@
+[
+  {
+    "case": "199",
+    "input": {
+      "length": 199,
+      "runs": [
+        [
+          "x",
+          199
+        ]
+      ]
+    },
+    "output": {
+      "pictureName": {
+        "length": 199,
+        "runs": [
+          [
+            "x",
+            199
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "case": "200, the limit",
+    "input": {
+      "length": 200,
+      "runs": [
+        [
+          "x",
+          200
+        ]
+      ]
+    },
+    "output": {
+      "pictureName": {
+        "length": 200,
+        "runs": [
+          [
+            "x",
+            200
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "case": "201",
+    "input": {
+      "length": 201,
+      "runs": [
+        [
+          "x",
+          201
+        ]
+      ]
+    },
+    "output": {
+      "pictureName": {
+        "length": 200,
+        "runs": [
+          [
+            "x",
+            200
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "case": "200 inside spaces",
+    "input": {
+      "length": 202,
+      "runs": [
+        [
+          " ",
+          1
+        ],
+        [
+          "x",
+          200
+        ],
+        [
+          " ",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "pictureName": {
+        "length": 200,
+        "runs": [
+          [
+            "x",
+            200
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "case": "controls become spaces",
+    "input": "a\u0001\u0002b\nc",
+    "output": {
+      "pictureName": "ab c"
+    }
+  },
+  {
+    "case": "markup stripped",
+    "input": "<b>n</b>.png",
+    "output": {
+      "pictureName": "n.png"
+    }
+  },
+  {
+    "case": "not a string",
+    "input": 5,
+    "output": {
+      "pictureName": ""
+    }
+  },
+  {
+    "case": "2048 characters, the limit",
+    "input": {
+      "length": 2048,
+      "runs": [
+        [
+          "h",
+          1
+        ],
+        [
+          "t",
+          2
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "s",
+          1
+        ],
+        [
+          ":",
+          1
+        ],
+        [
+          "/",
+          2
+        ],
+        [
+          "e",
+          1
+        ],
+        [
+          ".",
+          1
+        ],
+        [
+          "x",
+          1
+        ],
+        [
+          "/",
+          1
+        ],
+        [
+          "x",
+          2036
+        ]
+      ]
+    },
+    "output": {
+      "videoLink": {
+        "href": {
+          "length": 2048,
+          "runs": [
+            [
+              "h",
+              1
+            ],
+            [
+              "t",
+              2
+            ],
+            [
+              "p",
+              1
+            ],
+            [
+              "s",
+              1
+            ],
+            [
+              ":",
+              1
+            ],
+            [
+              "/",
+              2
+            ],
+            [
+              "e",
+              1
+            ],
+            [
+              ".",
+              1
+            ],
+            [
+              "x",
+              1
+            ],
+            [
+              "/",
+              1
+            ],
+            [
+              "x",
+              2036
+            ]
+          ]
+        }
+      }
+    }
+  },
+  {
+    "case": "2049 characters",
+    "input": {
+      "length": 2049,
+      "runs": [
+        [
+          "h",
+          1
+        ],
+        [
+          "t",
+          2
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "s",
+          1
+        ],
+        [
+          ":",
+          1
+        ],
+        [
+          "/",
+          2
+        ],
+        [
+          "e",
+          1
+        ],
+        [
+          ".",
+          1
+        ],
+        [
+          "x",
+          1
+        ],
+        [
+          "/",
+          1
+        ],
+        [
+          "x",
+          2037
+        ]
+      ]
+    },
+    "output": {
+      "videoLink": null
+    }
+  },
+  {
+    "case": "mailto is not a video link",
+    "input": "mailto:a@e.x",
+    "output": {
+      "videoLink": null
+    }
+  },
+  {
+    "case": "javascript",
+    "input": "javascript:x",
+    "output": {
+      "videoLink": null
+    }
+  },
+  {
+    "case": "upper-case scheme",
+    "input": "HTTPS://E.X/v",
+    "output": {
+      "videoLink": {
+        "href": "HTTPS://E.X/v"
+      }
+    }
+  },
+  {
+    "case": "file name 200",
+    "input": {
+      "name": {
+        "length": 200,
+        "runs": [
+          [
+            "x",
+            200
+          ]
+        ]
+      }
+    },
+    "output": {
+      "videoLink": {
+        "name": {
+          "length": 200,
+          "runs": [
+            [
+              "x",
+              200
+            ]
+          ]
+        }
+      }
+    }
+  },
+  {
+    "case": "file name 201",
+    "input": {
+      "name": {
+        "length": 201,
+        "runs": [
+          [
+            "x",
+            201
+          ]
+        ]
+      }
+    },
+    "output": {
+      "videoLink": {
+        "name": {
+          "length": 200,
+          "runs": [
+            [
+              "x",
+              200
+            ]
+          ]
+        }
+      }
+    }
+  },
+  {
+    "case": "file name of controls",
+    "input": {
+      "name": "\u0001"
+    },
+    "output": {
+      "videoLink": null
+    }
+  },
+  {
+    "case": "size rounded down",
+    "input": {
+      "name": "a.mp4",
+      "size": 10.9
+    },
+    "output": {
+      "videoLink": {
+        "name": "a.mp4",
+        "size": 10
+      }
+    }
+  },
+  {
+    "case": "negative size",
+    "input": {
+      "name": "a.mp4",
+      "size": -1
+    },
+    "output": {
+      "videoLink": {
+        "name": "a.mp4"
+      }
+    }
+  },
+  {
+    "case": "size as a string",
+    "input": {
+      "name": "a.mp4",
+      "size": "5"
+    },
+    "output": {
+      "videoLink": {
+        "name": "a.mp4"
+      }
+    }
+  },
+  {
+    "case": "duration 0",
+    "input": {
+      "href": "https://e.x/",
+      "duration": 0
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/"
+      }
+    }
+  },
+  {
+    "case": "duration 0.05",
+    "input": {
+      "href": "https://e.x/",
+      "duration": 0.05
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/",
+        "duration": 0.1
+      }
+    }
+  },
+  {
+    "case": "duration just under 1e7",
+    "input": {
+      "href": "https://e.x/",
+      "duration": 9999999.96
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/",
+        "duration": 10000000
+      }
+    }
+  },
+  {
+    "case": "duration 1e7",
+    "input": {
+      "href": "https://e.x/",
+      "duration": 10000000
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/"
+      }
+    }
+  },
+  {
+    "case": "poster must be true",
+    "input": {
+      "href": "https://e.x/",
+      "poster": "true"
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/"
+      }
+    }
+  },
+  {
+    "case": "href and name: href wins",
+    "input": {
+      "href": "https://e.x/",
+      "name": "a.mp4"
+    },
+    "output": {
+      "videoLink": {
+        "href": "https://e.x/"
+      }
+    }
+  },
+  {
+    "case": "neither",
+    "input": {
+      "size": 5
+    },
+    "output": {
+      "videoLink": null
+    }
+  },
+  {
+    "case": "20 links, the limit",
+    "input": 20,
+    "output": {
+      "videoLinks": 20
+    }
+  },
+  {
+    "case": "21 links",
+    "input": 21,
+    "output": {
+      "videoLinks": 20
+    }
+  },
+  {
+    "case": "a duplicate and a second poster",
+    "input": [
+      {
+        "href": "https://e.x/a",
+        "poster": true
+      },
+      {
+        "href": "https://e.x/a"
+      },
+      {
+        "href": "https://e.x/b",
+        "poster": true
+      }
+    ],
+    "output": {
+      "videoLinks": [
+        {
+          "href": "https://e.x/a",
+          "poster": true
+        },
+        {
+          "href": "https://e.x/b"
+        }
+      ]
+    }
+  },
+  {
+    "case": "499 marks",
+    "input": 499,
+    "output": {
+      "marks": 499
+    }
+  },
+  {
+    "case": "500 marks, the limit",
+    "input": 500,
+    "output": {
+      "marks": 500
+    }
+  },
+  {
+    "case": "501 marks",
+    "input": 501,
+    "output": {
+      "marks": 500
+    }
+  },
+  {
+    "case": "3999 point numbers",
+    "input": 3999,
+    "output": {
+      "points": 3998
+    }
+  },
+  {
+    "case": "4000 point numbers, the limit",
+    "input": 4000,
+    "output": {
+      "points": 4000
+    }
+  },
+  {
+    "case": "4002 point numbers",
+    "input": 4002,
+    "output": {
+      "points": 4000
+    }
+  },
+  {
+    "case": "one point",
+    "input": 2,
+    "output": {
+      "points": 2
+    }
+  },
+  {
+    "case": "an odd count",
+    "input": 5,
+    "output": {
+      "points": 4
+    }
+  },
+  {
+    "case": "width below the floor",
+    "input": {
+      "width": 0.0001
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "pen",
+          "color": "#e5383b",
+          "width": 0.001,
+          "points": [
+            0,
+            0.1,
+            0.2,
+            0.3
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "width above the ceiling",
+    "input": {
+      "width": 0.25
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "pen",
+          "color": "#e5383b",
+          "width": 0.2,
+          "points": [
+            0,
+            0.1,
+            0.2,
+            0.3
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "a colour in capitals",
+    "input": {
+      "color": "#E5383B"
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "pen",
+          "color": "#e5383b",
+          "width": 0.01,
+          "points": [
+            0,
+            0.1,
+            0.2,
+            0.3
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "a colour outside the palette",
+    "input": {
+      "color": "#123456"
+    },
+    "output": {
+      "marks": []
+    }
+  },
+  {
+    "case": "a point outside the picture",
+    "input": {
+      "points": [
+        -1,
+        2,
+        0.5,
+        0.5
+      ]
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "pen",
+          "color": "#e5383b",
+          "width": 0.01,
+          "points": [
+            0,
+            1,
+            0.5,
+            0.5
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "a point that is not a number",
+    "input": {
+      "points": [
+        0,
+        "1",
+        0,
+        0
+      ]
+    },
+    "output": {
+      "marks": []
+    }
+  },
+  {
+    "case": "text 500, the limit",
+    "input": {
+      "kind": "text",
+      "color": "#111111",
+      "size": 0.05,
+      "x": 0.5,
+      "y": 0.5,
+      "text": {
+        "length": 500,
+        "runs": [
+          [
+            "x",
+            500
+          ]
+        ]
+      }
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "text",
+          "color": "#111111",
+          "size": 0.05,
+          "x": 0.5,
+          "y": 0.5,
+          "text": {
+            "length": 500,
+            "runs": [
+              [
+                "x",
+                500
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "case": "text 501",
+    "input": {
+      "kind": "text",
+      "color": "#111111",
+      "size": 0.05,
+      "x": 0.5,
+      "y": 0.5,
+      "text": {
+        "length": 501,
+        "runs": [
+          [
+            "x",
+            501
+          ]
+        ]
+      }
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "text",
+          "color": "#111111",
+          "size": 0.05,
+          "x": 0.5,
+          "y": 0.5,
+          "text": {
+            "length": 500,
+            "runs": [
+              [
+                "x",
+                500
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "case": "text of spaces",
+    "input": {
+      "kind": "text",
+      "color": "#111111",
+      "size": 0.05,
+      "x": 0.5,
+      "y": 0.5,
+      "text": "   "
+    },
+    "output": {
+      "marks": []
+    }
+  },
+  {
+    "case": "text with controls and CRLF",
+    "input": {
+      "kind": "text",
+      "color": "#111111",
+      "size": 0.05,
+      "x": 0.5,
+      "y": 0.5,
+      "text": "a\r\nb\u0001\u0002c"
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "text",
+          "color": "#111111",
+          "size": 0.05,
+          "x": 0.5,
+          "y": 0.5,
+          "text": "a\nb c "
+        }
+      ]
+    }
+  },
+  {
+    "case": "size above the ceiling",
+    "input": {
+      "kind": "text",
+      "color": "#111111",
+      "size": 0.5,
+      "x": 0.5,
+      "y": 0.5,
+      "text": "t"
+    },
+    "output": {
+      "marks": [
+        {
+          "kind": "text",
+          "color": "#111111",
+          "size": 0.3,
+          "x": 0.5,
+          "y": 0.5,
+          "text": "t"
+        }
+      ]
+    }
+  },
+  {
+    "case": "text that is not a string",
+    "input": {
+      "kind": "text",
+      "color": "#111111",
+      "size": 0.05,
+      "x": 0.5,
+      "y": 0.5,
+      "text": 5
+    },
+    "output": {
+      "marks": []
+    }
+  },
+  {
+    "case": "59 more pictures beside the first",
+    "input": [
+      true,
+      59
+    ],
+    "output": {
+      "gallery": {
+        "first": "270f",
+        "more": 59
+      }
+    }
+  },
+  {
+    "case": "60, the limit",
+    "input": [
+      true,
+      60
+    ],
+    "output": {
+      "gallery": {
+        "first": "270f",
+        "more": 60
+      }
+    }
+  },
+  {
+    "case": "61",
+    "input": [
+      true,
+      61
+    ],
+    "output": {
+      "gallery": {
+        "first": "270f",
+        "more": 60
+      }
+    }
+  },
+  {
+    "case": "62 with no first picture: one moves up",
+    "input": [
+      false,
+      62
+    ],
+    "output": {
+      "gallery": {
+        "first": "1",
+        "more": 59
+      }
+    }
+  }
+]

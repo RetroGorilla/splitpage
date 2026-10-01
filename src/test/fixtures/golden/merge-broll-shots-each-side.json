@@ -1,0 +1,388 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [
+        {
+          "id": "p1",
+          "name": "Sam"
+        }
+      ],
+      "productionTags": [
+        {
+          "id": "t_kettle",
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "",
+          "notes": "",
+          "status": "needed"
+        },
+        {
+          "id": "t_ladder",
+          "cat": "prop",
+          "name": "Ladder",
+          "owner": "",
+          "notes": "",
+          "status": "needed"
+        }
+      ],
+      "brollShots": [
+        {
+          "id": "b1",
+          "name": "Gulls",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [
+            {
+              "id": "t_kettle",
+              "name": "Kettle"
+            }
+          ],
+          "origin": "script"
+        },
+        {
+          "id": "b2",
+          "name": "Pier",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        },
+        {
+          "id": "b3",
+          "name": "Drone",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        }
+      ],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [
+        {
+          "id": "p1",
+          "name": "Sam"
+        }
+      ],
+      "productionTags": [
+        {
+          "id": "t_kettle",
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "",
+          "notes": "",
+          "status": "needed"
+        },
+        {
+          "id": "t_ladder",
+          "cat": "prop",
+          "name": "Ladder",
+          "owner": "",
+          "notes": "",
+          "status": "needed"
+        }
+      ],
+      "brollShots": [
+        {
+          "id": "b1",
+          "name": "Gulls",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "wide",
+          "owner": "p1",
+          "audioRef": "",
+          "location": "Harbour",
+          "props": [
+            {
+              "id": "t_kettle",
+              "name": "Kettle"
+            },
+            {
+              "id": "t_ladder",
+              "name": "Ladder"
+            }
+          ],
+          "origin": "script"
+        },
+        {
+          "id": "b3",
+          "name": "Drone",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "at dusk",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        },
+        {
+          "id": "b4",
+          "name": "Mine shot",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [],
+          "origin": "list"
+        }
+      ],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [
+        {
+          "id": "p1",
+          "name": "Sam"
+        }
+      ],
+      "productionTags": [
+        {
+          "id": "t_kettle",
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "",
+          "notes": "",
+          "status": "needed"
+        },
+        {
+          "id": "t_ladder",
+          "cat": "prop",
+          "name": "Ladder",
+          "owner": "",
+          "notes": "",
+          "status": "needed"
+        }
+      ],
+      "brollShots": [
+        {
+          "id": "b1",
+          "name": "Gulls",
+          "desc": "",
+          "status": "shot",
+          "reshoot": true,
+          "notes": "",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        },
+        {
+          "id": "b2",
+          "name": "Pier",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        },
+        {
+          "id": "b5",
+          "name": "Their shot",
+          "desc": "",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "Waves.",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        }
+      ],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Hello there.",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      }
+    ],
+    "comments": [],
+    "people": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "productionTags": [
+      {
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_kettle"
+      },
+      {
+        "cat": "prop",
+        "name": "Ladder",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_ladder"
+      }
+    ],
+    "brollShots": [
+      {
+        "id": "b1",
+        "name": "Gulls",
+        "desc": "",
+        "status": "shot",
+        "reshoot": true,
+        "notes": "wide",
+        "owner": "p1",
+        "audioRef": "",
+        "location": "Harbour",
+        "props": [
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      },
+      {
+        "id": "b5",
+        "name": "Their shot",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "Waves.",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b3",
+        "name": "Drone",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "at dusk",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b4",
+        "name": "Mine shot",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "list"
+      }
+    ],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 0,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

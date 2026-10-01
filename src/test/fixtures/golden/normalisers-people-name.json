@@ -1,0 +1,103 @@
+[
+  {
+    "case": "59 characters",
+    "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "case": "60 characters, the limit",
+    "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "case": "61 characters",
+    "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "case": "60 characters inside spaces: trimmed before the cut",
+    "input": " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ",
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "case": "61 characters, the last two a space and a letter",
+    "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx "
+  },
+  {
+    "case": "markup is stripped before the cut",
+    "input": {
+      "length": 67,
+      "runs": [
+        [
+          "<",
+          1
+        ],
+        [
+          "b",
+          1
+        ],
+        [
+          ">",
+          1
+        ],
+        [
+          "x",
+          60
+        ],
+        [
+          "<",
+          1
+        ],
+        [
+          "/",
+          1
+        ],
+        [
+          "b",
+          1
+        ],
+        [
+          ">",
+          1
+        ]
+      ]
+    },
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "case": "an astral character across the cut",
+    "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx😀",
+    "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\ud83d"
+  },
+  {
+    "case": "controls are stripped, tab and newline kept",
+    "input": "a\u0001b\tc\nd",
+    "output": "ab\tc\nd"
+  },
+  {
+    "case": "spaces only: dropped",
+    "input": "   ",
+    "output": null
+  },
+  {
+    "case": "markup only: dropped",
+    "input": "<b></b>",
+    "output": null
+  },
+  {
+    "case": "a number",
+    "input": 42,
+    "output": "42"
+  },
+  {
+    "case": "null: dropped",
+    "input": null,
+    "output": null
+  },
+  {
+    "case": "missing: dropped",
+    "input": "<undefined>",
+    "output": null
+  }
+]

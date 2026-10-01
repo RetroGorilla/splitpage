@@ -1,0 +1,778 @@
+{
+  "tagStatuses": [
+    "needed",
+    "sourcing",
+    "have",
+    "returned"
+  ],
+  "tagCategories": [
+    "prop",
+    "location",
+    "cast",
+    "vfx",
+    "sound",
+    "gear"
+  ],
+  "statuses": [
+    {
+      "id": "needed",
+      "tagStatus": "needed",
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": "sourcing",
+      "tagStatus": "sourcing",
+      "rank": 1,
+      "next": "have"
+    },
+    {
+      "id": "have",
+      "tagStatus": "have",
+      "rank": 2,
+      "next": "returned"
+    },
+    {
+      "id": "returned",
+      "tagStatus": "returned",
+      "rank": 3,
+      "next": "needed"
+    },
+    {
+      "id": "Needed",
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": "",
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": null,
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": "(undefined)",
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": "bogus",
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": "constructor",
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": "toString",
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": 0,
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    },
+    {
+      "id": 1,
+      "tagStatus": null,
+      "rank": 0,
+      "next": "sourcing"
+    }
+  ],
+  "categories": [
+    {
+      "id": "prop",
+      "tagCategory": "prop"
+    },
+    {
+      "id": "gear",
+      "tagCategory": "gear"
+    },
+    {
+      "id": "Prop",
+      "tagCategory": null
+    },
+    {
+      "id": "",
+      "tagCategory": null
+    },
+    {
+      "id": null,
+      "tagCategory": null
+    },
+    {
+      "id": "bogus",
+      "tagCategory": null
+    },
+    {
+      "id": "constructor",
+      "tagCategory": null
+    }
+  ],
+  "tagNames": [
+    {
+      "name": null,
+      "normalized": "",
+      "registryKey": "prop ",
+      "tagKey": "gear "
+    },
+    {
+      "name": "(undefined)",
+      "normalized": "",
+      "registryKey": "prop ",
+      "tagKey": "gear "
+    },
+    {
+      "name": "",
+      "normalized": "",
+      "registryKey": "prop ",
+      "tagKey": "gear "
+    },
+    {
+      "name": "   ",
+      "normalized": "",
+      "registryKey": "prop ",
+      "tagKey": "gear "
+    },
+    {
+      "name": "Kettle",
+      "normalized": "kettle",
+      "registryKey": "prop kettle",
+      "tagKey": "gear kettle"
+    },
+    {
+      "name": "  Red   Mug  ",
+      "normalized": "red mug",
+      "registryKey": "prop red mug",
+      "tagKey": "gear red mug"
+    },
+    {
+      "name": "Red\tMug",
+      "normalized": "red mug",
+      "registryKey": "prop red mug",
+      "tagKey": "gear red mug"
+    },
+    {
+      "name": "a b",
+      "normalized": "a b",
+      "registryKey": "prop a b",
+      "tagKey": "gear a b"
+    },
+    {
+      "name": "A\nB",
+      "normalized": "a b",
+      "registryKey": "prop a b",
+      "tagKey": "gear a b"
+    },
+    {
+      "name": "İstanbul",
+      "normalized": "i̇stanbul",
+      "registryKey": "prop i̇stanbul",
+      "tagKey": "gear i̇stanbul"
+    },
+    {
+      "name": "STRASSE",
+      "normalized": "strasse",
+      "registryKey": "prop strasse",
+      "tagKey": "gear strasse"
+    },
+    {
+      "name": "Straße",
+      "normalized": "straße",
+      "registryKey": "prop straße",
+      "tagKey": "gear straße"
+    },
+    {
+      "name": 42,
+      "normalized": "42",
+      "registryKey": "prop 42",
+      "tagKey": "gear 42"
+    },
+    {
+      "name": 0,
+      "normalized": "0",
+      "registryKey": "prop 0",
+      "tagKey": "gear 0"
+    },
+    {
+      "name": false,
+      "normalized": "false",
+      "registryKey": "prop false",
+      "tagKey": "gear false"
+    }
+  ],
+  "cueNames": [
+    {
+      "case": "79",
+      "nameLength": 79,
+      "read": [
+        {
+          "length": 79,
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "case": "80",
+      "nameLength": 80,
+      "read": [
+        {
+          "length": 80,
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "case": "81",
+      "nameLength": 81,
+      "read": [
+        {
+          "length": 80,
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "case": "79 then a space and more",
+      "nameLength": 82,
+      "read": [
+        {
+          "length": 79,
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    },
+    {
+      "case": "spaces across the cut",
+      "nameLength": 86,
+      "read": [
+        {
+          "length": 80,
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bb"
+        }
+      ]
+    },
+    {
+      "case": "leading spaces",
+      "nameLength": 83,
+      "read": [
+        {
+          "length": 80,
+          "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    }
+  ],
+  "cueRetitleWithALongName": [
+    {
+      "step": "open and heal",
+      "healed": 0,
+      "sound": [
+        {
+          "id": "t_79km2u8yc2sb",
+          "length": 80,
+          "name": "slow a xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "status": "needed"
+        }
+      ]
+    },
+    {
+      "step": "marked Have it",
+      "healed": null,
+      "sound": [
+        {
+          "id": "t_79km2u8yc2sb",
+          "length": 80,
+          "name": "slow a xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "status": "have"
+        }
+      ]
+    },
+    {
+      "step": "a word inside the first 80 characters edited",
+      "healed": 1,
+      "sound": [
+        {
+          "id": "t_79km2u8yc2sb",
+          "length": 80,
+          "name": "slow b xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "status": "have"
+        }
+      ]
+    },
+    {
+      "step": "only characters past 80 edited",
+      "healed": 0,
+      "sound": [
+        {
+          "id": "t_79km2u8yc2sb",
+          "length": 80,
+          "name": "slow b xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "status": "have"
+        }
+      ]
+    }
+  ],
+  "brollStatuses": [
+    "unshot",
+    "shot"
+  ],
+  "brollStatus": [
+    {
+      "id": "unshot",
+      "brollStatus": "unshot"
+    },
+    {
+      "id": "shot",
+      "brollStatus": "shot"
+    },
+    {
+      "id": "Shot",
+      "brollStatus": null
+    },
+    {
+      "id": "",
+      "brollStatus": null
+    },
+    {
+      "id": null,
+      "brollStatus": null
+    },
+    {
+      "id": "(undefined)",
+      "brollStatus": null
+    },
+    {
+      "id": "bogus",
+      "brollStatus": null
+    },
+    {
+      "id": "constructor",
+      "brollStatus": null
+    }
+  ],
+  "brollLimits": {
+    "BROLL_NAME_MAX": 200,
+    "BROLL_TEXT_MAX": 2000,
+    "BROLL_PROPS_MAX": 40
+  },
+  "brollCells": [
+    {
+      "case": "name 199",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 199,
+          "name": "aaaaaaaaaaaa",
+          "descLength": 0
+        }
+      ]
+    },
+    {
+      "case": "name 200",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 200,
+          "name": "aaaaaaaaaaaa",
+          "descLength": 0
+        }
+      ]
+    },
+    {
+      "case": "name 201",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 200,
+          "name": "aaaaaaaaaaaa",
+          "descLength": 0
+        }
+      ]
+    },
+    {
+      "case": "desc 1999",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "n",
+          "descLength": 1999
+        }
+      ]
+    },
+    {
+      "case": "desc 2000",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "n",
+          "descLength": 2000
+        }
+      ]
+    },
+    {
+      "case": "desc 2001",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "n",
+          "descLength": 2000
+        }
+      ]
+    },
+    {
+      "case": "markers",
+      "read": [
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "a",
+          "descLength": 0
+        },
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "b",
+          "descLength": 0
+        },
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "c",
+          "descLength": 0
+        },
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "d",
+          "descLength": 0
+        },
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "e",
+          "descLength": 0
+        },
+        {
+          "id": "",
+          "nameLength": 1,
+          "name": "f",
+          "descLength": 41
+        },
+        {
+          "id": "",
+          "nameLength": 0,
+          "name": "",
+          "descLength": 0
+        }
+      ]
+    }
+  ],
+  "propKeys": [
+    {
+      "id": "t_kettle",
+      "name": "Anything",
+      "key": "t_kettle"
+    },
+    {
+      "id": "",
+      "name": "Kettle",
+      "key": "n:kettle"
+    },
+    {
+      "id": "",
+      "name": "  RED   mug ",
+      "key": "n:red mug"
+    },
+    {
+      "id": "(undefined)",
+      "name": "Lamp",
+      "key": "n:lamp"
+    },
+    {
+      "id": "",
+      "name": "",
+      "key": "n:"
+    },
+    {
+      "id": null,
+      "name": null,
+      "key": "n:"
+    }
+  ],
+  "props": [
+    {
+      "case": "no list",
+      "count": 0,
+      "props": []
+    },
+    {
+      "case": "a string, not a list",
+      "count": 0,
+      "props": []
+    },
+    {
+      "case": "names as strings",
+      "count": 2,
+      "props": [
+        {
+          "id": "t_kettle",
+          "name": "Kettle"
+        },
+        {
+          "id": "",
+          "name": "Ladder"
+        }
+      ]
+    },
+    {
+      "case": "a number for a name",
+      "count": 1,
+      "props": [
+        {
+          "id": "",
+          "name": "7"
+        }
+      ]
+    },
+    {
+      "case": "entries with nothing usable",
+      "count": 0,
+      "props": []
+    },
+    {
+      "case": "a known id with no name",
+      "count": 1,
+      "props": [
+        {
+          "id": "t_kettle",
+          "name": "Kettle"
+        }
+      ]
+    },
+    {
+      "case": "a known id with a stale name",
+      "count": 1,
+      "props": [
+        {
+          "id": "t_lamp",
+          "name": "Lamp"
+        }
+      ]
+    },
+    {
+      "case": "an id of the right shape that nothing holds",
+      "count": 1,
+      "props": [
+        {
+          "id": "t_unknown1",
+          "name": "Ghost"
+        }
+      ]
+    },
+    {
+      "case": "an id of the wrong shape",
+      "count": 2,
+      "props": [
+        {
+          "id": "",
+          "name": "Ladder"
+        },
+        {
+          "id": "",
+          "name": "Rope"
+        }
+      ]
+    },
+    {
+      "case": "a name a gear entry holds",
+      "count": 1,
+      "props": [
+        {
+          "id": "",
+          "name": "tripod"
+        }
+      ]
+    },
+    {
+      "case": "a name in markup",
+      "count": 1,
+      "props": [
+        {
+          "id": "t_lamp",
+          "name": "Lamp"
+        }
+      ]
+    },
+    {
+      "case": "a name two prop entries hold",
+      "count": 1,
+      "props": [
+        {
+          "id": "t_kettle",
+          "name": "Kettle"
+        }
+      ]
+    },
+    {
+      "case": "names of 79, 80 and 81 characters",
+      "count": 3,
+      "props": [
+        {
+          "id": "",
+          "name": "ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"
+        },
+        {
+          "id": "",
+          "name": "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+        },
+        {
+          "id": "",
+          "name": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+        }
+      ]
+    },
+    {
+      "case": "39 props",
+      "count": 39,
+      "props": [
+        {
+          "id": "",
+          "name": "Prop 1"
+        },
+        {
+          "id": "",
+          "name": "Prop 39"
+        }
+      ]
+    },
+    {
+      "case": "40 props",
+      "count": 40,
+      "props": [
+        {
+          "id": "",
+          "name": "Prop 1"
+        },
+        {
+          "id": "",
+          "name": "Prop 40"
+        }
+      ]
+    },
+    {
+      "case": "41 props",
+      "count": 40,
+      "props": [
+        {
+          "id": "",
+          "name": "Prop 1"
+        },
+        {
+          "id": "",
+          "name": "Prop 40"
+        }
+      ]
+    },
+    {
+      "case": "repeats by id and by name",
+      "count": 3,
+      "props": [
+        {
+          "id": "t_kettle",
+          "name": "Kettle"
+        },
+        {
+          "id": "t_lamp",
+          "name": "Lamp"
+        },
+        {
+          "id": "",
+          "name": "Rope"
+        }
+      ]
+    }
+  ],
+  "seeds": [
+    {
+      "rowId": "r1",
+      "name": "shot 1",
+      "location": "Harbour",
+      "locationLength": 7,
+      "audioRefLength": 4
+    },
+    {
+      "rowId": "r2",
+      "name": "shot 2",
+      "location": "Pier",
+      "locationLength": 4,
+      "audioRefLength": 13
+    },
+    {
+      "rowId": "r3",
+      "name": "shot 3",
+      "location": "",
+      "locationLength": 0,
+      "audioRefLength": 11
+    },
+    {
+      "rowId": "r4",
+      "name": "shot 4",
+      "location": "lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+      "locationLength": 79,
+      "audioRefLength": 79
+    },
+    {
+      "rowId": "r5",
+      "name": "shot 5",
+      "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+      "locationLength": 80,
+      "audioRefLength": 80
+    },
+    {
+      "rowId": "r6",
+      "name": "shot 6",
+      "location": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+      "locationLength": 80,
+      "audioRefLength": 81
+    },
+    {
+      "rowId": "r7",
+      "name": "shot 7",
+      "location": "",
+      "locationLength": 0,
+      "audioRefLength": 1999
+    },
+    {
+      "rowId": "r8",
+      "name": "shot 8",
+      "location": "",
+      "locationLength": 0,
+      "audioRefLength": 2000
+    },
+    {
+      "rowId": "r9",
+      "name": "shot 9",
+      "location": "",
+      "locationLength": 0,
+      "audioRefLength": 2000
+    }
+  ]
+}

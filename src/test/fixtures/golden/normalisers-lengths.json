@@ -1,0 +1,177 @@
+[
+  {
+    "case": "-0.1",
+    "input": -0.1,
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "-0",
+    "input": "<-0>",
+    "output": {
+      "sceneLength": "<-0>"
+    }
+  },
+  {
+    "case": "0",
+    "input": 0,
+    "output": {
+      "sceneLength": 0
+    }
+  },
+  {
+    "case": "0.4",
+    "input": 0.4,
+    "output": {
+      "sceneLength": 0
+    }
+  },
+  {
+    "case": "0.5",
+    "input": 0.5,
+    "output": {
+      "sceneLength": 1
+    }
+  },
+  {
+    "case": "86399.5",
+    "input": 86399.5,
+    "output": {
+      "sceneLength": 86400
+    }
+  },
+  {
+    "case": "86400",
+    "input": 86400,
+    "output": {
+      "sceneLength": 86400
+    }
+  },
+  {
+    "case": "86400.4: checked before rounding",
+    "input": 86400.4,
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "86401",
+    "input": 86401,
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "NaN",
+    "input": "<NaN>",
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "Infinity",
+    "input": "<Infinity>",
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "a numeric string",
+    "input": "5",
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "null",
+    "input": null,
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "true",
+    "input": true,
+    "output": {
+      "sceneLength": "<undefined>"
+    }
+  },
+  {
+    "case": "0.4",
+    "input": 0.4,
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  },
+  {
+    "case": "0.5: rounded up to one",
+    "input": 0.5,
+    "output": {
+      "targetLength": 1
+    }
+  },
+  {
+    "case": "1",
+    "input": 1,
+    "output": {
+      "targetLength": 1
+    }
+  },
+  {
+    "case": "86400",
+    "input": 86400,
+    "output": {
+      "targetLength": 86400
+    }
+  },
+  {
+    "case": "86400.4: checked after rounding",
+    "input": 86400.4,
+    "output": {
+      "targetLength": 86400
+    }
+  },
+  {
+    "case": "86400.5",
+    "input": 86400.5,
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  },
+  {
+    "case": "86401",
+    "input": 86401,
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  },
+  {
+    "case": "-1",
+    "input": -1,
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  },
+  {
+    "case": "a numeric string",
+    "input": "5",
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  },
+  {
+    "case": "NaN",
+    "input": "<NaN>",
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  },
+  {
+    "case": "Infinity",
+    "input": "<Infinity>",
+    "output": {
+      "targetLength": "<undefined>"
+    }
+  }
+]

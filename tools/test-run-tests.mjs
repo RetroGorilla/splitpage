@@ -212,6 +212,28 @@ check("an unknown flag is a usage error", Boolean(parseArgs(["--changed"]).error
   eq("--list with --only prints the selection and runs nothing", [listed.code, listed.calls.length, listed.out.includes("selects 2 of 5")], [0, 0, true]);
 }
 
+console.log("\na stray GOLDEN_UPDATE:\n");
+
+{
+  const run = (env, extra = {}) => {
+    const err = [];
+    const calls = [];
+    const code = runTests({ repo: REPO, sets: ["unit"], files: ["src/test/a.test.mjs"], env, print: () => {}, printError: (l) => err.push(l), spawn: (cmd, args) => { calls.push(args); return { status: 0 }; }, ...extra });
+    return { code, err: err.join("\n"), calls };
+  };
+  const stray = run({ GOLDEN_UPDATE: "all" });
+  eq("GOLDEN_UPDATE in the environment refuses the run", stray.code, 2);
+  eq("and runs nothing", stray.calls, []);
+  check("and says how to regenerate fixtures on purpose", stray.err.includes("node src/test/golden-helpers.mjs --update"), stray.err);
+  eq("an empty GOLDEN_UPDATE is refused too", run({ GOLDEN_UPDATE: "" }).code, 2);
+  eq("a focused run is refused too", run({ GOLDEN_UPDATE: "richtext" }, { only: ["src/test/a"] }).code, 2);
+  eq("so is --list", run({ GOLDEN_UPDATE: "richtext" }, { listOnly: true }).code, 2);
+  eq("without it the same run goes ahead", run({}).code, 0);
+  const cli = spawnSync(process.execPath, [join(REPO, "tools", "run-tests.mjs"), "unit", "--list"], { cwd: REPO, encoding: "utf8", env: { ...process.env, GOLDEN_UPDATE: "all" } });
+  eq("npm test reads it from the real environment and exits 2", cli.status, 2);
+  check("with the same advice", (cli.stderr ?? "").includes("node src/test/golden-helpers.mjs --update"), cli.stderr);
+}
+
 console.log("\ntypecheck():\n");
 
 function linkNodeModules(repo) {
