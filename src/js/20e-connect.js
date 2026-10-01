@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { conn, home, setHome } from "./_home.js";
-import { escapeHtml } from "./02-state.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
 import {
@@ -15,6 +14,7 @@ import {
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";

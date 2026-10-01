@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { conn, fileHome, home, importHome, setHome } from "./_home.js";
-import { SCHEMA_VERSION } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, persist } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
@@ -23,6 +22,7 @@ import {
   updateFileChip
 } from "./18-local-files.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import { SCHEMA_VERSION } from "../core/document/fields.ts";
 
 export var draftRestorePending;
 var draftOnDisk;

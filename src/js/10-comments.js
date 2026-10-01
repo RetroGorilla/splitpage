@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
 import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import {
@@ -21,18 +20,19 @@ import {
 } from "./04-richtext.js";
 import { editableCellHtml, pad2, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
-import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
-import { nowIso } from "../adapters/identity/ids.ts";
+import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import {
   commentMatchesFilterMode,
   commentMatchesAssigneeFilter as matchesAssignee,
   commentRecentOrder,
   compareCommentPositions
 } from "../core/document/comments.ts";
+import { normalizeTagName } from "../core/document/tags.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 export { nowIso };
 
 var commentFilter;

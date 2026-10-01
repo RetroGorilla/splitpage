@@ -1,7 +1,11 @@
 import { S } from "./_state.js";
 import { STATE_FIELDS } from "./02-state.js";
-import { applySteps, fromHtml, invertSteps, mergeCells, normalizeCell, toHtml } from "./04c-doc-model.js";
 import { STATE_FIELDS as FIELD_POLICIES } from "../core/document/fields.ts";
+import { mergeCells } from "../core/merge/cells.ts";
+import { toHtml } from "../core/text/html.ts";
+import { normalizeCell } from "../core/text/runs.ts";
+import { applySteps, invertSteps } from "../core/text/steps.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 
 var SKIP_DOC_KEYS = {};
 FIELD_POLICIES.forEach(function (f) { if (!f.undo) SKIP_DOC_KEYS[f.key] = true; });

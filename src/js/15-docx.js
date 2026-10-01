@@ -1,25 +1,9 @@
 import { S } from "./_state.js";
 import { readPref, writePref } from "./00p-prefs.js";
 import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { morePictureRefs, pictureBytes, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
-import { inertBody, safeHref } from "./04-richtext.js";
-import {
-  OMIT_CLOSES,
-  cellLength,
-  cellOf,
-  fromHtml,
-  importCues,
-  importDirections,
-  setMark,
-  flattenCues,
-  toDocxRuns,
-  toHtml,
-  toPlainText,
-  withoutCues
-} from "./04c-doc-model.js";
 import { pad2 } from "./05-render.js";
 import {
   htmlToPlainText,
@@ -42,6 +26,15 @@ import {
   exportSummaryParts,
   sceneFacts
 } from "./14b-export-kit.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { escapeHtml, safeHref } from "../core/document/text-policy.ts";
+import { flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
+import { importDirections } from "../core/text/directions.ts";
+import { setMark } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { OMIT_CLOSES, toDocxRuns, toPlainText } from "../core/text/projections.ts";
+import { cellLength } from "../core/text/runs.ts";
+import { cellOf, fromHtml, inertBody } from "../legacy/richtext.ts";
 
 var DOCX_CATEGORY_DOT = "● ";
 

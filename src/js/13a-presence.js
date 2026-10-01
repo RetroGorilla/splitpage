@@ -7,7 +7,6 @@ import {
   readMyColor,
   resolvePersonColor
 } from "./00p-prefs.js";
-import { escapeHtml } from "./02-state.js";
 import { cssAttr } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { paintRundownPresence } from "./05p-rundown-presence.js";
@@ -20,6 +19,7 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 var presenceLastActive;
 

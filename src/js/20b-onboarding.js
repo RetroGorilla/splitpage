@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
-import { escapeHtml } from "./02-state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
@@ -9,6 +8,7 @@ import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
 import { startTour } from "./20c-help.js";
 import { addServerBookmark, joinErrorText } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 export var ONBOARD_KEY = "splitpage-onboarding";
