@@ -181,6 +181,84 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
 }
 
 {
+  const steps = (...lines) => ["jobs:", "  a:", "    runs-on: ubuntu-latest", ...lines, ""].join("\n");
+  const viaEnv = steps(
+    "    env:",
+    "      SCRIPT: &script |",
+    "        make",
+    "        # via an alias",
+    "    steps:",
+    "      - run: *script"
+  );
+  eq("a run: given as an alias is read as the step's script, at the anchor's line", located(".github/workflows/alias.yml", viaEnv), ["7 # via an alias"]);
+  const twice = steps(
+    "    steps:",
+    "      - run: &build 'make # once'",
+    "      - run: *build"
+  );
+  eq("an anchored run: used again by an alias is reported once", located(".github/workflows/alias.yml", twice), ["5 # once"]);
+  const shellAlias = steps(
+    "    steps:",
+    "      - shell: &ps pwsh",
+    "        run: Write-Host a",
+    "      - shell: *ps",
+    "        run: |",
+    "          <# block #>"
+  );
+  eq("a shell: given as an alias picks the dialect", found(".github/workflows/alias.yml", shellAlias), ["<# block #>"]);
+
+  const node = steps(
+    "    steps:",
+    "      - shell: node {0}",
+    "        run: |",
+    "          const u = \"https://x.test/#a\"; // js line",
+    "          /* js block */",
+    "          console.log('# not', `# not ${u}`);",
+    "      - shell: node",
+    "        run: process.exit(0) // short"
+  );
+  eq("a shell: node step is read as JavaScript, with its lines", located(".github/workflows/js.yml", node), ["7 // js line", "8 /* js block */", "11 // short"]);
+  const script = steps(
+    "    steps:",
+    "      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
+    "        with:",
+    "          script: |",
+    "            // why",
+    "            const { owner } = context.repo; /* block */",
+    "            core.info(\"# not\" + `${{ github.sha }}`);",
+    "      - uses: actions/github-script@v7",
+    "        with:",
+    "          script: return 1 // inline",
+    "      - uses: some/other-action@v1",
+    "        with:",
+    "          script: |",
+    "            // not JavaScript we run"
+  );
+  eq("an actions/github-script script: is read as JavaScript, with its lines", located(".github/workflows/js.yml", script), ["8 // why", "9 /* block */", "13 // inline"]);
+
+  const folded = steps(
+    "    steps:",
+    "      - run: >",
+    "          echo one",
+    "          echo two",
+    "",
+    "          # folded comment",
+    "      - run: \"echo a",
+    "          # double-quoted comment\"",
+    "      - run: 'echo ''a''",
+    "          # single-quoted comment'",
+    "      - run: \"echo \\\"x\\\"",
+    "          make # after an escape\""
+  );
+  eq("comments in folded and quoted multi-line run: scalars are reported at their own lines", located(".github/workflows/fold.yml", folded), [
+    "9 # folded comment",
+    "11 # double-quoted comment",
+    "13 # single-quoted comment",
+    "15 # after an escape"
+  ]);
+}
+
+{
   let threw = "";
   try { commentsFor(".github/workflows/bad.yml", "a: [1, 2\nb: c\n"); } catch (e) { threw = e.message; }
   check("a YAML file that does not parse is an error, not a pass", threw.startsWith("cannot parse .github/workflows/bad.yml:"), threw);

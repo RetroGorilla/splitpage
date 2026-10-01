@@ -303,7 +303,7 @@ except `node_modules/`, `.claude/handoff/` and the generated `index.html`:
 | `.css`, `.html` (inline `<style>` and script too) | `tools/source-scan.mjs` | `/* */`, `<!-- -->` |
 | `.sh`, `.ps1`, `.bat`, `.cmd` | `tools/source-scan.mjs` | `#` at a word start (in PowerShell also straight after `{` or `}`) outside quotes (`$'…'` included), arithmetic (`$(( ))`, `(( ))`) and heredocs, `<# #>`, `rem`/`::`; a `<<` inside arithmetic or a `<<<` here-string starts no heredoc |
 | `.yml`, `.yaml` | the `yaml` package's CST (`tools/config-comments.mjs`) | every YAML comment token; `#` in a quoted scalar, a URL or a block scalar's content is not one |
-| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:`, else `defaults.run.shell`, else the runner's: `pwsh` when a `runs-on` label (a group's `labels:` included) names Windows, `bash` when one names Ubuntu, Linux or macOS. When none says (an expression such as `${{ matrix.os }}`, a group without labels, a self-hosted runner without an OS label), the step is read both ways; if the two readings differ the gate fails and asks for `shell:` | a `#` comment inside the script, whole-line or trailing; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it |
+| `run:` of a step in `.github/workflows/*.yml` or an `action.yml` | the shell rules above, in the step's `shell:`, else `defaults.run.shell`, else the runner's: `pwsh` when a `runs-on` label (a group's `labels:` included) names Windows, `bash` when one names Ubuntu, Linux or macOS. When none says (an expression such as `${{ matrix.os }}`, a group without labels, a self-hosted runner without an OS label), the step is read both ways; if the two readings differ the gate fails and asks for `shell:`. A `shell: node` step, and the `script:` input of an `actions/github-script` step, are read as JavaScript (TypeScript's parser, as above). A `run:`, `shell:` or `script:` given as a YAML alias is read from its anchor, wherever the anchor is | a `#` comment inside the script, whole-line or trailing, or `//` and `/* */` in JavaScript; `$#`, `${#x}`, `'#'`, heredoc bodies and `<<<` here-strings are not; a `#!` line is, because the runner ignores it. Each is reported at its own source line, folded (`>`) and quoted multi-line scalars included |
 | `Dockerfile`, `Dockerfile.*`, `Dockerfile-*`, `Dockerfile_*`, `*.dockerfile` (any case; not `.md` or `.txt`) | `tools/config-comments.mjs` | whole-line `#` (inside a continuation too), a trailing shell comment in a shell-form `RUN`/`CMD`/`ENTRYPOINT`/`HEALTHCHECK CMD`, and comments in a `RUN` heredoc's script; a `COPY`/`ADD` heredoc is file content |
 | `.json`, `.jsonc` (`tsconfig*.json` included) | TypeScript's scanner | `//` and `/* */` outside strings |
 
@@ -331,11 +331,9 @@ does a workflow step whose shell cannot be told (above).
 
 Not scanned yet, because no parser covers them: `.gitignore`,
 `.gitattributes`, `.dockerignore`, `.npmrc`, `.env.example` and other
-dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. Inside
-workflows, JavaScript run through `shell: node {0}` or an
-`actions/github-script` `script:` is not scanned as JavaScript, and a `run:`
-given as a YAML alias (`run: *name`) is not read as a script unless its anchor
-is itself a step's `run:`.
+dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. A
+workflow step run by another interpreter (`shell: python {0}`) is read with
+the shell rules.
 
 ## Baseline at the start of 4.0
 
