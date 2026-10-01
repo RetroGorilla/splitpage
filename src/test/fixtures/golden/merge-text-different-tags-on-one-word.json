@@ -1,0 +1,170 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "pour the mug out now",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "pour the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> out now",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [
+        {
+          "cat": "prop",
+          "name": "Mug",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_1okou1ndmeusp"
+        }
+      ],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "pour the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Cup\" contenteditable=\"false\">mug</span> out now",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [
+        {
+          "cat": "prop",
+          "name": "Cup",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_omzgqc181rmzb"
+        }
+      ],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "pour the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Cup\" contenteditable=\"false\">mug</span> out now",
+        "imageRef": null,
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer"
+      }
+    ],
+    "comments": [
+      {
+        "id": "<minted-comment-id-1>",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "<minted-comment-id-1>",
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "pour the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> out now",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Audio",
+        "emptyValue": false,
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      }
+    ],
+    "people": [],
+    "productionTags": [
+      {
+        "cat": "prop",
+        "name": "Cup",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_omzgqc181rmzb"
+      },
+      {
+        "cat": "prop",
+        "name": "Mug",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_1okou1ndmeusp"
+      }
+    ],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [
+    {
+      "rowId": "r1",
+      "field": "audioText",
+      "mine": "pour the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> out now",
+      "theirs": "pour the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Cup\" contenteditable=\"false\">mug</span> out now"
+    }
+  ],
+  "stats": {
+    "rowsFromThem": 1,
+    "rowsFromMe": 0,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}
