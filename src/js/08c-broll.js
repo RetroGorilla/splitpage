@@ -199,7 +199,7 @@ function applyBrollPlan(read) {
 }
 
 export function brollEntries(readOnly) {
-  var read = readBrollEntries(S.state, productionReaders, randomIds, htmlToPlainText);
+  var read = readBrollEntries(S.state, productionReaders, randomIds, htmlToPlainText, !readOnly);
   if (!readOnly) applyBrollPlan(read);
   return read.entries;
 }
