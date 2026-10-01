@@ -8,7 +8,9 @@ import {
   safeHref,
   safeId,
   safeImageSrc,
-  storedImageHtml
+  storedImageAttributes,
+  storedImageHtml,
+  storedImageMarkup
 } from "../../../src/core/document/text-policy.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
 
@@ -94,6 +96,17 @@ test("storedImageHtml is the stored image tag of a valid reference, and nothing 
   assert.equal(storedImageHtml({ sha256: SHA, width: 640, height: 480, mime: "image/svg+xml" }), "");
   assert.equal(storedImageHtml(null), "");
   assert.equal(storedImageHtml([SHA]), "");
+});
+
+test("the stored image tag is written from one attribute list, with the size only when all of it is there", () => {
+  const full = { sha256: SHA, width: 640, height: 480, mime: "image/png" };
+  assert.deepEqual(storedImageAttributes(full),
+    [["class", "comment-img"], ["data-blob", SHA], ["data-w", "640"], ["data-h", "480"], ["data-mime", "image/png"]]);
+  assert.equal(storedImageMarkup(full), storedImageHtml(full));
+  assert.deepEqual(storedImageAttributes({ sha256: SHA }), [["class", "comment-img"], ["data-blob", SHA]]);
+  assert.equal(storedImageMarkup({ sha256: SHA }), '<img class="comment-img" data-blob="' + SHA + '">');
+  assert.equal(storedImageMarkup({ sha256: SHA, width: 640, mime: "image/png" }), storedImageMarkup({ sha256: SHA }));
+  assert.equal(storedImageMarkup({ sha256: SHA, width: 0, height: 480, mime: "image/png" }), storedImageMarkup({ sha256: SHA }));
 });
 
 test("escapeHtml escapes the four characters an attribute or text needs, and nothing else", () => {
