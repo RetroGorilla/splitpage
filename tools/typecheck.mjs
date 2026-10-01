@@ -1,8 +1,8 @@
 import { join, relative } from "node:path";
 import { existsSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import ts from "typescript";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
+import { isMain } from "./main-module.mjs";
 
 export const CONFIGS = ["tsconfig.core.json", "tsconfig.web.json", "tsconfig.test.json"];
 
@@ -60,6 +60,6 @@ export function typecheck({ repo = REPO, configs = CONFIGS, files = listRepoFile
   return failed ? 1 : 0;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   process.exitCode = typecheck();
 }

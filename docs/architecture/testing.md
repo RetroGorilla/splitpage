@@ -12,7 +12,7 @@ runs the fast gates in the order CI does.
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
-| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list) |
+| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list, each tool's entry check) |
 | `npm run test:all` | All three sets |
 | `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
 
@@ -85,6 +85,12 @@ link still cannot be made on a Windows workstation, the typecheck cases print
 `SKIP` with the reason and the summary counts them as skipped, not passed.
 Anywhere else, and on Windows when `CI` is set, a link that cannot be made
 fails the run.
+
+A tool runs its command only when it is the script Node was started with,
+which `isMain` in `tools/main-module.mjs` decides by comparing the real paths
+of both, so a checkout reached through a junction or symlink still runs the
+gates instead of exiting 0 having done nothing. `tools/test-main-module.mjs`
+starts every tool through such a link, with the same skip rule.
 
 ## TypeScript
 

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { REPO, commentsIn, listRepoFiles, lineOf } from "./source-scan.mjs";
+import { isMain } from "./main-module.mjs";
 import { configCommentsIn, configKind, DOCKERFILE_PATH, COMPOSE_PATH } from "./config-comments.mjs";
 
 export const BASELINE_PATH = join(REPO, "tools", "comment-baseline.json");
@@ -164,7 +164,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   return 0;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   const flag = process.argv[2];
   const mode = { "--init": "init", "--prune": "prune" }[flag] ?? (flag ? null : "check");
   if (mode === null) {
