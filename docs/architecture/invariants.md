@@ -46,10 +46,10 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-04 — Every top-level field survives migration and merge
 
 - **Behaviour:** `migrateRows()` and `mergeStates()` both keep every top-level state field. A field that one of them misses is silently dropped on load or merge.
-- **Tests:** `src/test/state-fields.test.mjs` (all tests), `src/test/migrate-rows.test.mjs`, `src/test/merge-states.test.mjs`.
+- **Tests:** `src/test/state-fields.test.mjs` (all tests, among them "INV-04: a field added to STATE_FIELDS survives migrateRows, mergeStates and a .splitpage save, with no other edit", through `02-state.js`'s table and the real `.splitpage` codec), `src/test/migrate-rows.test.mjs`, `src/test/merge-states.test.mjs`; `tests/core/merge-states.test.ts` ("INV-04: a field added to the table survives migrateRows, mergeStates and a .splitpage round trip, with no other edit"); `tests/core/merge/states.test.ts` (the merge alone); `tests/core/migrate.test.ts` ("normalize comes from the table…").
 - **Owner:** `src/core/document` · **Milestone:** 2 · **Class:** absorb
-- **Replacement:** a single `STATE_FIELDS` policy, with no callbacks into UI modules, that `migrateRows` and `mergeStates` both consume (M2 gate: "a new field policy does not require duplicating merge/schema field lists"). Both functions already iterate the registry in `02-state.js`, so the `HANDOFF.md` wording is partly out of date.
-- **Acceptance:** new unit test: a field added to `STATE_FIELDS` round-trips through `migrateRows`, `mergeStates` and a `.splitpage` save without edits to either function. `state-fields.test.mjs` stays.
+- **Replacement:** a single `STATE_FIELDS` policy in `src/core/document/fields.ts`, with no callbacks into UI modules: each entry's default, `normalize` and merge strategy are data that `migrateRows` (`src/core/migrate.ts`) and `mergeStates` (`src/core/merge-states.ts`) both read (M2 gate: "a new field policy does not require duplicating merge/schema field lists"). Done in milestone 2.5; `02-state.js` keeps a thawed copy of the table with `mergeList` attached, and passes it to both.
+- **Acceptance:** met in 2.5 by the two INV-04 tests above: a field added to `STATE_FIELDS` round-trips through `migrateRows`, `mergeStates` and a `.splitpage` save without edits to either function. `state-fields.test.mjs` stays.
 
 ### INV-05 — Script-only behaviour stays out of comment boxes
 
@@ -163,7 +163,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-18 — A comment is anchored by its mark
 
-- **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, then calls `syncCommentAnchors(state)` in the same undo entry, which points each comment at the first cell holding its mark. A comment whose words are gone keeps its last position. `migrateRows()` runs the same pass on every load and merge.
+- **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, then calls `syncCommentAnchors(state)` in the same undo entry, which points each comment at the first cell holding its mark. A comment whose words are gone keeps its last position. `migrateRows()` (`src/core/migrate.ts`, reading cells through its `readers` port) runs the same pass on every load and merge.
 - **Tests:** `src/test/comment-anchors.test.mjs`; browser `78-split-join-model.txt`, `77-clipboard-model.txt`, `20-comment-drift.txt`, `246-scene-delete-comments.txt`.
 - **Owner:** `src/application` (transaction), with `syncCommentAnchors` in `src/core/text` · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** every accepted DocumentSession transaction reconciles dependent anchors (M3; plan §6: "every accepted user transaction includes its dependent anchor/record reconciliation").
@@ -280,7 +280,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-31 — A `.splitpage` file is the migrated state, pictures inline
 
 - **Behaviour:** A `.splitpage` file is exactly `inlineBlobs(migrateRows(state))`: every picture's bytes are inline, with no envelope and no renamed or added fields. A reader gets image refs back through `migrateRows()`.
-- **Tests:** `src/test/formats.test.mjs` (".splitpage has no envelope…", ".splitpage round-trips the whole document, byte for byte", "buildSplitpage never writes an unmigrated document", ".splitpage carries its pictures inline…"); `src/test/state-fields.test.mjs` ("a .splitpage save carries every registry field").
+- **Tests:** `src/test/formats.test.mjs` (".splitpage has no envelope…", ".splitpage round-trips the whole document, byte for byte", "buildSplitpage never writes an unmigrated document", ".splitpage carries its pictures inline…"); `src/test/state-fields.test.mjs` ("a .splitpage save carries every registry field", "INV-04: a field added to STATE_FIELDS survives…"); `tests/legacy/document-ports.test.ts` ("a save straight after a load finds every picture the load decoded").
 - **Owner:** `src/adapters/formats` · **Milestone:** 5 · **Class:** keep
 - **Replacement:** — (plan §6: format compatibility is held by fixtures).
 - **Acceptance:** the named tests pass against the registered `.splitpage` codec, and 3.1 project fixtures open unchanged.

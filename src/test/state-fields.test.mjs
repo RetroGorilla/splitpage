@@ -62,6 +62,34 @@ test("missingStateFields names what is actually absent", () => {
     STATE_FIELDS.filter((f) => f.def).map((f) => f.key).sort());
 });
 
+test("INV-04: a field added to STATE_FIELDS survives migrateRows, mergeStates and a .splitpage save, with no other edit", () => {
+  STATE_FIELDS.push({
+    key: "probe",
+    def: () => "start",
+    normalize: (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined),
+    merge: "changed-side-wins",
+    undo: true
+  });
+  try {
+    const doc = () => migrateRows(JSON.parse(JSON.stringify(SEED)));
+    const base = doc();
+    assert.equal(base.probe, "start");
+    const mine = JSON.parse(JSON.stringify(base));
+    mine.probe = "  mine  ";
+    const merged = mergeStates(base, mine, JSON.parse(JSON.stringify(base))).merged;
+    assert.equal(merged.probe, "mine");
+    const file = buildSplitpageFile(merged);
+    assert.equal(JSON.parse(file).probe, "mine");
+    const round = migrateRows(parseSplitpageFile(file));
+    assert.equal(round.probe, "mine");
+    assert.deepEqual(Object.keys(round), Object.keys(merged));
+    assert.equal("probe" in migrateRows({ probe: "   " }), false, "its normaliser decides what is kept");
+  } finally {
+    STATE_FIELDS.pop();
+  }
+  assert.equal(STATE_FIELDS.some((f) => f.key === "probe"), false);
+});
+
 test("a b-roll shot keeps every field it has — props too — through a merge and a save", () => {
   const doc = () => migrateRows({
     productionTags: [{ cat: "prop", name: "Kettle" }],

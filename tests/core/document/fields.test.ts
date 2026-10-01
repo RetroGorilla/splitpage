@@ -65,6 +65,20 @@ test("defaults are fresh values, and only the fields a document always has carry
   assert.notEqual(rows?.def?.(), rows?.def?.());
 });
 
+test("normalize: three fields carry one, and undefined from it means the field goes", () => {
+  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key), ["wordsPerMinute", "personColors", "targetSeconds"]);
+  const norm = (key: string, v: unknown) => (STATE_FIELDS.find((f) => f.key === key)?.normalize as (v: unknown) => unknown)(v);
+  assert.equal(norm("wordsPerMinute", "212.5"), 213);
+  assert.equal(norm("wordsPerMinute", undefined), DEFAULT_WPM);
+  assert.equal(norm("wordsPerMinute", 401), DEFAULT_WPM);
+  assert.deepEqual(norm("personColors", { Ann: "#80bdfb" }), { Ann: "#80BDFB" });
+  assert.equal(norm("personColors", { Ann: "red" }), undefined);
+  assert.equal(norm("personColors", null), undefined);
+  assert.equal(norm("targetSeconds", 59.6), 60);
+  assert.equal(norm("targetSeconds", 0), undefined);
+  assert.equal(norm("targetSeconds", "60"), undefined);
+});
+
 test("a field is undone as a document field exactly when the undo golden records a step for it", () => {
   const recorded = new Set(UNDO_GOLDEN.edits.flatMap((e) => e.steps.filter((s) => s === "docField:" + e.key).map(() => e.key)));
   assert.deepEqual(STATE_FIELDS.filter((f) => f.undo).map((f) => f.key), KEYS.filter((k) => recorded.has(k)));

@@ -8,6 +8,7 @@ import {
   nextRowStatus,
   normalizeSceneLength,
   normalizeTargetLength,
+  normalizeWordsPerMinute,
   parseSceneLength,
   rowStatusId,
   targetLengthOf
@@ -27,6 +28,15 @@ test("a scene's status is to do, ready or shot, and cycles in that order", () =>
 test("the reading speed and the longest length", () => {
   assert.equal(DEFAULT_WPM, 150);
   assert.equal(SCENE_LENGTH_MAX, 86400);
+});
+
+test("a stored reading speed is a whole number from 60 to 400, else the default", () => {
+  const cases: [unknown, number][] = [
+    [60, 60], [400, 400], [59.9, DEFAULT_WPM], [400.1, DEFAULT_WPM], [59.5, DEFAULT_WPM], [60.4, 60], [399.6, 400],
+    ["180", 180], [" 200 ", 200], ["", DEFAULT_WPM], [null, DEFAULT_WPM], [undefined, DEFAULT_WPM], [true, DEFAULT_WPM],
+    [NaN, DEFAULT_WPM], [Infinity, DEFAULT_WPM], ["abc", DEFAULT_WPM], [[200], 200], [{}, DEFAULT_WPM]
+  ];
+  for (const [input, want] of cases) assert.equal(normalizeWordsPerMinute(input), want, String(input));
 });
 
 test("a scene has a set length only when it holds a whole day or less", () => {
