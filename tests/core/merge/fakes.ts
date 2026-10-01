@@ -1,7 +1,8 @@
 import type { Clock, IdSource } from "../../../src/core/document/ports.ts";
 import type { MergePorts } from "../../../src/core/merge/states.ts";
+import type { MergeDecoder } from "../../../src/core/merge/text-field.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
-import type { CellDecoder, DecodeOptions, DecodedMedia } from "../../../src/core/text/ports.ts";
+import type { DecodeOptions, DecodedMedia } from "../../../src/core/text/ports.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 
@@ -16,7 +17,7 @@ export function picture(ch: string): DecodedMedia {
   return { kind: "image", ref: { sha256: ch.repeat(64), width: 10, height: 10, mime: "image/png" } };
 }
 
-export function fakeDecoder(cells: readonly (Run[] | KnownCell)[]): { decode: CellDecoder; calls: string[] } {
+export function fakeDecoder(cells: readonly (Run[] | KnownCell)[]): { decode: MergeDecoder; calls: string[] } {
   const known = new Map<string, KnownCell>();
   known.set("", { html: "", cell: [] });
   for (const c of cells) {
@@ -54,7 +55,7 @@ export function countingIds(): IdSource & { minted: string[] } {
 
 export const fixedClock: Clock = { nowIso: function () { return FIXED_ISO; } };
 
-export function fakePorts(decode: CellDecoder, over?: Partial<MergePorts>): MergePorts {
+export function fakePorts(decode: MergeDecoder, over?: Partial<MergePorts>): MergePorts {
   return Object.assign({ decode: decode, ids: countingIds(), clock: fixedClock, editor: function () { return EDITOR; } }, over || {});
 }
 

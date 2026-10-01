@@ -3,13 +3,13 @@ import type { StateField, StrategyId } from "../document/fields.ts";
 import { mergedDocId } from "../document/ids.ts";
 import { mergePersonColors } from "../document/person-colors.ts";
 import type { Clock, IdSource } from "../document/ports.ts";
-import type { CellDecoder } from "../text/ports.ts";
 import { LIST_MERGERS } from "./lists.ts";
 import type { ListMerger, TagEntry, TagList } from "./lists.ts";
 import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
 import { textMergeContext } from "./text-field.ts";
+import type { MergeDecoder } from "./text-field.ts";
 
 export interface MergeDoc extends RowSide {
   title?: unknown;
@@ -20,7 +20,7 @@ export interface MergeDoc extends RowSide {
 }
 
 export interface MergePorts {
-  decode: CellDecoder;
+  decode: MergeDecoder;
   ids: IdSource;
   clock: Clock;
   editor: () => string;

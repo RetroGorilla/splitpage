@@ -1,12 +1,14 @@
 import { ensureTagIds, registryTagHooks } from "../document/tags.ts";
 import type { TagHooks, TagName, TagRecord } from "../document/tags.ts";
 import { toHtml } from "../text/html.ts";
-import type { CellDecoder } from "../text/ports.ts";
+import type { DecodeOptions } from "../text/ports.ts";
 import { sameCell } from "../text/runs.ts";
 import type { Run } from "../text/runs.ts";
 import { mergeCells } from "./cells.ts";
 import { mergeProductionTags } from "./lists.ts";
 import type { TagInput, TagList } from "./lists.ts";
+
+export type MergeDecoder = (html: string, opts: DecodeOptions) => readonly Run[];
 
 export interface TagSide {
   productionTags?: TagList;
@@ -24,7 +26,7 @@ export interface TextMergeContext {
     tagOf: (id: unknown) => TagName | null;
   };
   refit: { mine: boolean; theirs: boolean };
-  decode: CellDecoder;
+  decode: MergeDecoder;
 }
 
 export type TextOutcome = "same" | "mine" | "theirs" | "merged" | "conflict";
@@ -59,7 +61,7 @@ function registryRenamed(sideTags: TagList, mergedTags: Registry): boolean {
   });
 }
 
-export function textMergeContext(decode: CellDecoder, base: TagSide | null | undefined, mine: TagSide, theirs: TagSide, mergedTags?: Registry): TextMergeContext {
+export function textMergeContext(decode: MergeDecoder, base: TagSide | null | undefined, mine: TagSide, theirs: TagSide, mergedTags?: Registry): TextMergeContext {
   const baseTags = base && base.productionTags;
   if (mergedTags === undefined) mergedTags = mergeProductionTags(baseTags, mine.productionTags, theirs.productionTags);
   const hb = tagHooksFor(baseTags), hm = tagHooksFor(mine.productionTags), ht = tagHooksFor(theirs.productionTags);
@@ -81,7 +83,7 @@ export function textMergeContext(decode: CellDecoder, base: TagSide | null | und
   };
 }
 
-function readCell(html: string, hooks: TagHooks, decode: CellDecoder): CellRead {
+function readCell(html: string, hooks: TagHooks, decode: MergeDecoder): CellRead {
   let media = false;
   const cell = decode(html, { tagId: hooks.tagId, onMedia: function () { media = true; } });
   return { cell: cell, media: media };
