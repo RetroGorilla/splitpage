@@ -43,6 +43,24 @@ test("Markdown: links escape their brackets, blank lines collapse, and the ends 
   assert.equal(toMarkdown([B("bs1"), T(" drone", { hl: true })]), "B-roll: <mark>drone</mark>");
 });
 
+test("Markdown's rule of three: two delimiter runs whose lengths are both multiples of three may still pair", () => {
+  assert.equal(toMarkdown([T(".", { b: true, i: true }), T("(")]), "***.***(");
+  assert.equal(toMarkdown([T("a", { b: true, i: true }), T("a")]), "***a***a");
+  assert.equal(toMarkdown([T("x "), T("a", { b: true, i: true }), T(" y")]), "x ***a*** y");
+});
+
+test("Markdown's rule of three: with one run a multiple of three and the other not, their sum is not one, so the rule never applies", () => {
+  assert.equal(toMarkdown([T("a", { b: true, i: true }), T("b", { i: true }), T("c")]), "***a**b*c");
+  assert.equal(toMarkdown([T("a", { b: true, i: true }), T("b", { b: true }), T("c")]), "***a*b**c");
+});
+
+test("Markdown's rule of three: runs of one and two that can both open and close do not pair, so plain delimiters are safe", () => {
+  assert.equal(toMarkdown([T("a", { b: true }), T("a", { b: true, i: true })]), "**a*a***");
+  assert.equal(toMarkdown([T("a", { i: true }), T("a", { b: true, i: true })]), "*a**a***");
+  assert.equal(toMarkdown([T(".", { b: true }), T(".", { b: true, i: true })]), "**.*.***");
+  assert.equal(toMarkdown([T("a"), T("b", { i: true }), T("c", { b: true, i: true })]), "a*b**c***");
+});
+
 test("Word runs carry formatting; annotated, they carry the tag, comments and b-roll key too", () => {
   const cell = [T("a", { tag: "t:prop:X", cmt: ["c1"], b: true }), B("bs1", "B-roll:", { cmt: ["c1"] }), T("b" + NBSP + "c", { dir: true, href: "https://e.x/" })];
   const base = { b: false, i: false, u: false, s: false, mark: false, href: null };
