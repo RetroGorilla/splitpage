@@ -258,6 +258,7 @@ function walkToMd(node) {
     else if (tag === "U") out += "<u>" + inner + "</u>";
     else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
     else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
+    else if (tag === "A" && !child.getAttribute("href")) out += inner;
     else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + child.getAttribute("href") + ")";
     else if (tag === "BR") out += "\n";
     else if (tag === "SPAN" && child.classList && child.classList.contains("stage-dir")) out += "((" + inner + "))";

@@ -163,6 +163,67 @@ test("markdown: a cell htmlToMarkdown wrote without a flaw is written the same",
   }
 });
 
+test("markdown: a link with no href writes its text alone, on both paths (#281)", () => {
+  for (const [html, md] of [
+    ["see <a>this</a> here", "see this here"],
+    ['see <a href="">this</a> here', "see this here"],
+    ["<a><strong>bold</strong> (aside)</a>", "**bold** (aside)"]
+  ]) {
+    assert.equal(htmlToMarkdown(html), md, html);
+    assert.equal(toMarkdown(cellOf(html)), md, html);
+  }
+  assert.equal(htmlToMarkdown('<a href="https://e.x/">li]nk</a>'), "[li\\]nk](https://e.x/)", "a link with an href is unchanged");
+});
+
+function seeded(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+const HREFLESS = ["<a>", '<a href="">', '<a target="_blank">'];
+function hreflessCase(r) {
+  const pick = (xs) => xs[Math.floor(r() * xs.length)];
+  const words = ["see", "a (b)", "x]y", "[z", "**", "tail ", " ", "é", "&amp;", "\"q\""];
+  function frag(depth, inLink) {
+    let html = "", bare = "";
+    const n = 1 + Math.floor(r() * 4);
+    for (let i = 0; i < n; i++) {
+      const k = r();
+      if (depth > 2 || k < 0.35) { const w = pick(words); html += w; bare += w; continue; }
+      if (k < 0.45) { html += "<br>"; bare += "<br>"; continue; }
+      const inner = frag(depth + 1, inLink || k >= 0.75);
+      if (k < 0.75) {
+        const t = pick(["strong", "em", "s", "u", "mark"]);
+        html += "<" + t + ">" + inner.html + "</" + t + ">";
+        bare += "<" + t + ">" + inner.bare + "</" + t + ">";
+      } else if (inLink) {
+        html += inner.html; bare += inner.bare;
+      } else if (k < 0.85) {
+        html += '<a href="https://e.x/' + i + '">' + inner.html + "</a>";
+        bare += '<a href="https://e.x/' + i + '">' + inner.bare + "</a>";
+      } else {
+        html += pick(HREFLESS) + inner.html + "</a>";
+        bare += inner.bare;
+      }
+    }
+    return { html, bare };
+  }
+  return frag(0, false);
+}
+
+test("markdown, seeded: a link with no href writes what its contents alone write, on both paths (#281)", () => {
+  const r = seeded(281);
+  let hrefless = 0;
+  for (let i = 0; i < 600; i++) {
+    const { html, bare } = hreflessCase(r);
+    if (html !== bare) hrefless++;
+    const label = JSON.stringify(html);
+    assert.equal(htmlToMarkdown(html), htmlToMarkdown(bare), label);
+    assert.equal(toMarkdown(cellOf(html)), toMarkdown(cellOf(bare)), label);
+    assert.ok(!/\]\((?:null)?\)/.test(htmlToMarkdown(html)), label);
+  }
+  assert.ok(hrefless > 200, "the generator does make links with no href: " + hrefless);
+});
+
 function oldTagsInField(html) {
   return [...inertBody(html).querySelectorAll(".tag-anchor")].map((el) => ({
     catId: el.getAttribute("data-tag-cat"),
