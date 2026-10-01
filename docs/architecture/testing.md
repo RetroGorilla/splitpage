@@ -60,13 +60,28 @@ them, and prints how many ran in each group.
 | Group | Files | Runner | Must be non-empty |
 | --- | --- | --- | --- |
 | `frontend` | `src/test/*.test.mjs` | `node --test` | always |
-| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated folder holds TypeScript source and `tests/` has no test for it |
+| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated area (below) holds TypeScript source and its `tests/` folder has no test |
 | `tests` | `tests/**/*.test.*` | `node --test` | once `tests/` holds TypeScript |
 | `desktop` | `desktop/test/*.test.mjs` | `node <file>`, one at a time | always |
 | `tools` | `tools/test-*.mjs` | `node <file>`, one at a time | always |
 
 A file named like a test that no group runs (`src/test/x.test.ts`,
 `server/x.test.mjs`) fails the run, as does a file two groups claim.
+
+Every migrated area that holds TypeScript source needs at least one test,
+beside its source or in its `tests/` folder; a unit run names each area that
+has none and fails. A test in one area's folder does not cover another.
+
+| Area | Its `tests/` folder |
+| --- | --- |
+| each `src/core/<folder>` | `tests/core` |
+| `src/application` | `tests/application` |
+| `src/contracts` | `tests/contracts` |
+| `src/adapters` | `tests/adapters` |
+| each `src/features/<folder>` | `tests/features` |
+| `src/bootstrap` | `tests/bootstrap` |
+| `src/legacy` | `tests/legacy` |
+
 `node tools/run-tests.mjs --list [unit|desktop|tools|all]` prints discovery
 without running anything.
 

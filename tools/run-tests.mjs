@@ -6,7 +6,40 @@ import { isMain } from "./main-module.mjs";
 
 const TS_SOURCE = /\.(?:ts|mts|cts)$/;
 const TEST_FILE = /\.test\.(?:ts|mts|cts|js|mjs|cjs)$/;
-const MIGRATED_ROOTS = ["src/core/", "src/application/", "src/contracts/", "src/adapters/", "src/features/", "src/bootstrap/", "src/legacy/"];
+const AREAS = [
+  { root: "src/core/", perFolder: true, tests: "tests/core/" },
+  { root: "src/application/", perFolder: false, tests: "tests/application/" },
+  { root: "src/contracts/", perFolder: false, tests: "tests/contracts/" },
+  { root: "src/adapters/", perFolder: false, tests: "tests/adapters/" },
+  { root: "src/features/", perFolder: true, tests: "tests/features/" },
+  { root: "src/bootstrap/", perFolder: false, tests: "tests/bootstrap/" },
+  { root: "src/legacy/", perFolder: false, tests: "tests/legacy/" }
+];
+
+function areaOf(path) {
+  const spec = AREAS.find((a) => path.startsWith(a.root));
+  if (!spec) return null;
+  const rest = path.slice(spec.root.length).split("/");
+  const area = spec.perFolder && rest.length > 1 ? spec.root + rest[0] : spec.root.slice(0, -1);
+  return { area, tests: spec.tests };
+}
+
+function migratedAreas(files) {
+  const areas = new Map();
+  for (const p of files) {
+    if (!TS_SOURCE.test(p) || TEST_FILE.test(p)) continue;
+    const a = areaOf(p);
+    if (a) areas.set(a.area, a);
+  }
+  return [...areas.values()].sort((x, y) => (x.area < y.area ? -1 : x.area > y.area ? 1 : 0));
+}
+
+const isTest = (p) => TEST_FILE.test(p);
+const hasTestUnder = (files, prefix) => files.some((p) => p.startsWith(prefix) && isTest(p));
+
+export function untestedAreas(files) {
+  return migratedAreas(files).filter((a) => !hasTestUnder(files, a.area + "/") && !hasTestUnder(files, a.tests));
+}
 
 export const GROUPS = [
   {
@@ -21,8 +54,7 @@ export const GROUPS = [
     set: "unit",
     runner: "node-test",
     matches: (p) => p.startsWith("src/") && !p.startsWith("src/test/") && TEST_FILE.test(p),
-    requiredWhen: (files) => files.some((p) => MIGRATED_ROOTS.some((r) => p.startsWith(r)) && TS_SOURCE.test(p) && !TEST_FILE.test(p))
-      && !files.some((p) => p.startsWith("tests/") && TEST_FILE.test(p))
+    requiredWhen: (files) => migratedAreas(files).some((a) => !hasTestUnder(files, a.tests))
   },
   {
     name: "tests",
@@ -58,7 +90,7 @@ export function discover(files, groups = GROUPS) {
   });
   const overlaps = [...claimed].filter(([, names]) => names.length > 1).map(([p, names]) => `${p} (${names.join(", ")})`);
   const orphans = files.filter((p) => TEST_FILE.test(p) && !claimed.has(p) && !/(^|\/)node_modules\//.test(p)).sort();
-  return { groups: result, overlaps, orphans };
+  return { groups: result, overlaps, orphans, untested: untestedAreas(files) };
 }
 
 export function normalizePattern(pattern) {
@@ -102,7 +134,7 @@ export function runTests({
   listOnly = false,
   only = []
 } = {}) {
-  const { groups: found, overlaps, orphans } = discover(files, groups);
+  const { groups: found, overlaps, orphans, untested } = discover(files, groups);
   const focused = only.length > 0;
   const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only) }));
   let failed = false;
@@ -113,6 +145,9 @@ export function runTests({
   }
   for (const o of overlaps) { failed = true; printError(`run-tests: ${o} is claimed by more than one group`); }
   for (const o of orphans) { failed = true; printError(`run-tests: ${o} looks like a test but no group runs it`); }
+  if (sets.includes("unit")) {
+    for (const u of untested) { failed = true; printError(`run-tests: ${u.area} holds TypeScript source but has no test beside it or under ${u.tests}`); }
+  }
   for (const e of chosen) {
     if (e.required && e.files.length === 0) { failed = true; printError(`run-tests: group ${e.group.name} found no test files`); }
   }
