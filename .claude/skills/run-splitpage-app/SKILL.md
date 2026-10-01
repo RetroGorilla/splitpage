@@ -93,7 +93,7 @@ Runs every suite in `tests/` (162 today) and ends with
 Linux half is `node tools/run-suites.mjs <out-dir>` (below). Options:
 
 - `-Only 265-browser-drafts` — run just the suites whose filename starts with that (a PowerShell wildcard; numeric prefixes repeat, so `-Only 261` runs two suites)
-- `-Parallel N` — how many suites run at once (default 4; each has its own ports, Edge profile and log)
+- `-Parallel N` — how many suites run at once; each has its own ports, Edge profile and log. The default is 9 lanes for every 16 logical processors, rounded down and at least 1: 18 on a 32-thread PC, 4 on an 8-thread one. On a 32-thread Ryzen that ran all 181 suites clean in 4.0 min (4 lanes took about 12, 12 lanes 4.5), while 24 lanes was faster still but failed a toast count in `24-history.txt` that passes alone. When another run shares the machine, split the lanes between them with an explicit `-Parallel`.
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
 - `-Port` / `-CdpPort` — pin the port bases instead of auto-picking (below)
