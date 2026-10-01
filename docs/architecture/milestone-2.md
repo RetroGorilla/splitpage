@@ -109,6 +109,32 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - `mediaCommentId`.
   - 02c's base64 helpers, `rowImage*` and the data-URL decode, which go to `media.ts`.
 
+## 2.2 as built
+
+- **`src/core/text/`.** Imports run one way. `edits` imports `runs`; `directions` and `cues` import both; `tree` imports `runs`, and `html` imports `tree`; `projections` imports `runs`, `cues` and `tree`. `steps.ts` imports nothing. `ports.ts` imports types from `runs.ts`, and `anchors.ts` imports `commentIds` from `runs.ts` and the `CellDecoder` type from `ports.ts`.
+  - `runs.ts`: the run and mark types, `normalizeCell` with `cleanText`, `cleanMarks` and `settleCues`, `CUE_LINE_RE`, the default tag ids (`tagNameOf`, `namedTagId`), `projection`, `cellLength`, `commentIds`, `tagIds` and `sameCell`.
+  - `edits.ts`: the character model (`explode`, `implode`, `clamp`) and every edit, `typingMarks` and `insideDirection` among them.
+  - `directions.ts`: `DIRECTION_MAX`, and the direction range, toggle, `((…))` shortcut, import and flatten.
+  - `cues.ts`: `cueLines`, `cuesInCell`, `withoutCues`, and the cue shortcut, import, edit and flatten.
+  - `tree.ts`: the element tree that `toHtml` and `toDocxRuns` both walk. `html.ts`: `toHtml`.
+  - `projections.ts`: `toPlainText`, `spokenText`, `OMIT_CLOSES`, `toMarkdown` and `toDocxRuns`.
+  - `steps.ts`: `applySteps`, `invertSteps` and `touchedCells`.
+  - `anchors.ts`: `syncCommentAnchors(state, cellOf)`. `ports.ts`: `CellDecoder`, and `DecodeOptions` with the media `fromHtml` reports.
+- **`src/core/merge/cells.ts`.** `mergeCells` and `mergeMarks`, over `explode` and `implode` from core/text.
+- **Where the split differs from the plan's order.** `normalizeCell` ends with `settleCues`, so `CUE_LINE_RE` and the cue-run test live in `runs.ts`. `typingMarks`, which `insertText`, `replaceText` and `breakLine` call, needs `insideDirection`, so that stays in `edits.ts`. `projection` and `cellLength` are in `runs.ts` because every position is clamped to them.
+- **Shim.** `04c-doc-model.js` re-exports the 52 names that moved and keeps `fromHtml`, `cellOf` and `syncCommentAnchors(state)`, which hands `cellOf` to core. Its 56 exports are the same names as before, so none of the 25 importers changed. It takes `normalizeCell` and the default tag id from core and no longer imports `safeHref`; core reads it from `text-policy.ts`.
+- **Translation.** `var` became `let` and `const` as in 2.1a. A `delete` through a computed key is `Reflect.deleteProperty`, because typescript-eslint's strict rules refuse a dynamic `delete`, and `push.apply` is a spread. The source keeps 04c's escapes, and its two literal U+FFFC characters in the direction patterns.
+- **Lint.** `eslint.config.mjs` turns `no-control-regex` off for `src/core/text/runs.ts` alone, for `cleanText`. 04c's inline disable went with the function, so the comment baseline loses that entry.
+- **Dependencies.** No baseline change: 04c had already left the cycle in 2.1a, and `--prune` found nothing. `--metrics` counts 11 more frontend modules (100 to 111) and 11 more migrated ones (23 to 34); the cycle (56 modules, 492 edges) and every `S` figure are unchanged.
+- **Invariants.** INV-02 names `src/core/text/edits.ts` as where the edits live, and INV-18 puts `syncCommentAnchors` in `src/core/text`, not `src/core/document`.
+- **Tests.** `tests/core/text/` and `tests/core/merge/` run without a DOM. They build cells from runs, and `anchors.test.ts` decodes through a map from `toHtml` output to cells. They cover b-roll keys and tags as units, comments over keys, Unicode (astral characters, combining marks, ZWJ sequences, U+FFFC never entering text), step inversion over seeded random edits, `mergeCells` and `mergeMarks`, and the cue and direction edges.
+- **Review follow-ups.** Core tests now pin the Markdown rule of three and its exception for two runs that are both multiples of three, NBSP in the gap a left-out direction leaves, that `applySteps` and `invertSteps` copy every value they take from a step, `replaceText` keeping the first replaced character's marks, and a blank line dropping Markdown marks. `FORMAT_MARKS`, which `cleanMarks`, the tree and the merge all read, is frozen.
+- **Found, not fixed.**
+  - Positions count UTF-16 code units, so an edit inside a surrogate pair splits it.
+  - `applySteps` compares rows as JSON, so key order counts. An inverse step that restores a removed row field puts it last, and the inverse `deleteRow` of that row is then refused. A test pins this, so a fix shows up as a deliberate change. `12a-undo.js` uses `applySteps` only to move its base forward, and falls back to a copy of the state.
+  - A cue line split before its colon leaves neither half reading as a cue, so both lose the mark, and joining them does not bring it back. Split after the colon, the left half keeps the cue and a join restores it on the whole line.
+- **Left for 2.7.** `09-find-replace.js` keeps a baselined lint comment saying `cleanText()` lives in `04c-doc-model.js`. It is now in `src/core/text/runs.ts`, but the comment gate allows no new comment text, so the pointer changes when that comment's rule moves to configuration.
+
 ## Characterisation (2.0)
 
 Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that, and `npm test` refuses to run while `GOLDEN_UPDATE` is set. Goldens are regenerated only on `4.0-development`, in a dedicated commit that changes nothing else, never inside a lane that moves code: a moving lane keeps every golden passing unchanged.

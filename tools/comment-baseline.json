@@ -255,9 +255,6 @@
       "/* eslint-disable-next-line no-control-regex -- a file name is one line */",
       "/* eslint-disable-next-line no-control-regex -- controls are what goes */"
     ],
-    "src/js/04c-doc-model.js": [
-      "/* eslint-disable-next-line no-control-regex -- C0 controls are exactly what cell text must not carry. */"
-    ],
     "src/js/09-find-replace.js": [
       "/* eslint-disable-next-line no-control-regex -- the characters cleanText() (04c-doc-model.js) drops. */",
       "/* eslint-disable-next-line no-control-regex -- the same set, for a whole string. */"
