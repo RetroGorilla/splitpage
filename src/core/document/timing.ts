@@ -26,6 +26,11 @@ export function nextRowStatus(id: unknown): RowStatusId {
 
 export const DEFAULT_WPM = 150;
 
+export function normalizeWordsPerMinute(v: unknown): number {
+  const wpm = Number(v);
+  return (isFinite(wpm) && wpm >= 60 && wpm <= 400) ? Math.round(wpm) : DEFAULT_WPM;
+}
+
 export const SCENE_LENGTH_MAX = 24 * 3600;
 
 export function hasSetLength(row: LengthHolder | null | undefined): row is LengthHolder & { lengthSeconds: number } {

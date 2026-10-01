@@ -6,9 +6,10 @@ import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
 import { noteRemoteChange } from "./12a-undo.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
+import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { byId } from "../core/merge/rows.ts";
-import { mergeStateFields } from "../core/merge/states.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
+import { withDocumentPorts } from "../legacy/document-ports.ts";
 import {
   adoptRestoredState,
   normalizeDocId,
@@ -197,18 +198,16 @@ export function textMergeContext(base, mine, theirs, mergedTags) {
 }
 
 export function mergeStates(base, mine, theirs) {
-  var r = mergeStateFields(base, mine, theirs, {
-    decode: fromHtml,
-    ids: randomIds,
-    clock: systemClock,
-    editor: getEditorName,
-    fields: STATE_FIELDS
+  return withDocumentPorts(STATE_FIELDS, function (migrate) {
+    return mergeStatesWith(base, mine, theirs, {
+      decode: fromHtml,
+      ids: randomIds,
+      clock: systemClock,
+      editor: getEditorName,
+      fields: STATE_FIELDS,
+      migrate: migrate
+    });
   });
-  return {
-    merged: migrateRows(r.merged),
-    conflicts: r.conflicts,
-    stats: r.stats
-  };
 }
 
 function stashBlobsFor(docs) {

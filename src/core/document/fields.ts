@@ -1,4 +1,5 @@
-import { DEFAULT_WPM } from "./timing.ts";
+import { normalizePersonColors } from "./person-colors.ts";
+import { DEFAULT_WPM, normalizeTargetLength, normalizeWordsPerMinute } from "./timing.ts";
 
 export const SCHEMA_VERSION = 2;
 
@@ -34,12 +35,12 @@ const FIELDS: StateField[] = [
   { key: "people",         def: function () { return []; }, merge: "list-union-with-base", undo: true },
   { key: "productionTags", def: function () { return []; }, merge: "list-union-with-base", undo: true },
   { key: "brollShots",     def: function () { return []; }, merge: "list-union-with-base", undo: true },
-  { key: "wordsPerMinute", def: function () { return DEFAULT_WPM; }, merge: "changed-side-wins", undo: true },
+  { key: "wordsPerMinute", def: function () { return DEFAULT_WPM; }, normalize: normalizeWordsPerMinute, merge: "changed-side-wins", undo: true },
   { key: "rev",            def: function () { return 0; }, merge: "max-plus-one", undo: false },
   { key: "lastEditedBy",   merge: "theirs-wins", undo: false },
   { key: "lastEditedAt",   merge: "theirs-wins", undo: false },
-  { key: "personColors",   merge: "person-colors", undo: false },
-  { key: "targetSeconds",  merge: "target-length", undo: true },
+  { key: "personColors",   normalize: function (v) { return normalizePersonColors(v) || undefined; }, merge: "person-colors", undo: false },
+  { key: "targetSeconds",  normalize: normalizeTargetLength, merge: "target-length", undo: true },
   { key: "schema",         merge: "constant", undo: false }
 ];
 

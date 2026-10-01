@@ -7,8 +7,7 @@ import {
   revealRow,
   updateHideShotMenu
 } from "./01b-hide-shot.js";
-import { loadInitialState } from "./02-state.js";
-import { initDocIdentityChannel, syncDocIdentity } from "./02b-doc-id.js";
+import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
 import {
   SNAPSHOT_KEY,
