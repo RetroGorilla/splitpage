@@ -31,6 +31,32 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
+import { contentMemo } from "../core/document/memo.ts";
+import {
+  TAG_CATEGORY_IDS,
+  TAG_STATUS_IDS,
+  ensureTagIds,
+  isTagId,
+  mintTagId,
+  nextTagStatus,
+  normalizeTagName,
+  registryKey,
+  registryTagHooks,
+  tagKey,
+  tagStatusRank
+} from "../core/document/tags.ts";
+export {
+  contentMemo,
+  ensureTagIds,
+  isTagId,
+  mintTagId,
+  nextTagStatus,
+  normalizeTagName,
+  registryKey,
+  registryTagHooks,
+  tagKey,
+  tagStatusRank
+};
 
 var TAG_SHORTCUT_CHARS;
 
@@ -43,14 +69,19 @@ var TAG_ICON_PATHS = {
   gear: '<rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/>'
 };
 
-export var TAG_CATEGORIES = [
-  { id: "prop",     label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)",     icon: TAG_ICON_PATHS.prop },
-  { id: "location", label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)", icon: TAG_ICON_PATHS.location },
-  { id: "cast",     label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)",     icon: TAG_ICON_PATHS.cast },
-  { id: "vfx",      label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)",      icon: TAG_ICON_PATHS.vfx },
-  { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)",    icon: TAG_ICON_PATHS.sound },
-  { id: "gear",     label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)",     icon: TAG_ICON_PATHS.gear }
-];
+var TAG_CATEGORY_LOOKS = {
+  prop:     { label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)",     icon: TAG_ICON_PATHS.prop },
+  location: { label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)", icon: TAG_ICON_PATHS.location },
+  cast:     { label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)",     icon: TAG_ICON_PATHS.cast },
+  vfx:      { label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)",      icon: TAG_ICON_PATHS.vfx },
+  sound:    { label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)",    icon: TAG_ICON_PATHS.sound },
+  gear:     { label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)",     icon: TAG_ICON_PATHS.gear }
+};
+
+export var TAG_CATEGORIES = TAG_CATEGORY_IDS.map(function (id) {
+  var look = TAG_CATEGORY_LOOKS[id];
+  return { id: id, label: look.label, plural: look.plural, color: look.color, icon: look.icon };
+});
 
 export function tagIconSvg(cat) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" ' +
@@ -63,12 +94,17 @@ export function tagIconCss() {
   }).join("\n");
 }
 
-export var TAG_STATUSES = [
-  { id: "needed",   label: "Needed",   color: "var(--text-faint)" },
-  { id: "sourcing", label: "Sourcing", color: "var(--audio)" },
-  { id: "have",     label: "Have it",  color: "var(--text)" },
-  { id: "returned", label: "Returned", color: "var(--text-faint)" }
-];
+var TAG_STATUS_LOOKS = {
+  needed:   { label: "Needed",   color: "var(--text-faint)" },
+  sourcing: { label: "Sourcing", color: "var(--audio)" },
+  have:     { label: "Have it",  color: "var(--text)" },
+  returned: { label: "Returned", color: "var(--text-faint)" }
+};
+
+export var TAG_STATUSES = TAG_STATUS_IDS.map(function (id) {
+  var look = TAG_STATUS_LOOKS[id];
+  return { id: id, label: look.label, color: look.color };
+});
 
 export function tagStatusLampHtml(id) {
   var st = tagStatus(id) || TAG_STATUSES[0];
@@ -83,17 +119,6 @@ export function tagStatus(id) {
     if (TAG_STATUSES[i].id === id) return TAG_STATUSES[i];
   }
   return null;
-}
-
-export function tagStatusRank(id) {
-  for (var i = 0; i < TAG_STATUSES.length; i++) {
-    if (TAG_STATUSES[i].id === id) return i;
-  }
-  return 0;
-}
-
-export function nextTagStatus(id) {
-  return TAG_STATUSES[(tagStatusRank(id) + 1) % TAG_STATUSES.length].id;
 }
 
 var TAG_SHORTCUTS = [
@@ -117,33 +142,8 @@ export function tagCategory(id) {
   return null;
 }
 
-export function normalizeTagName(name) {
-  return String(name == null ? "" : name).trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-export function tagKey(cat, name) {
-  return cat + " " + normalizeTagName(name);
-}
-
 export function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
-}
-
-var MEMO_CHAR_BUDGET = 2000000;
-
-export function contentMemo(compute) {
-  var cache = new Map();
-  var chars = 0;
-  return function (html) {
-    var key = html || "";
-    var hit = cache.get(key);
-    if (hit !== undefined) return hit;
-    var val = compute(key);
-    if (chars > MEMO_CHAR_BUDGET) { cache.clear(); chars = 0; }
-    cache.set(key, val);
-    chars += key.length;
-    return val;
-  };
 }
 
 export var tagsInField = contentMemo(function (html) {
@@ -197,10 +197,6 @@ function collectTags() {
   return collectTagsFromRows(S.state.rows);
 }
 
-export function registryKey(cat, name) {
-  return cat + " " + normalizeTagName(name);
-}
-
 export function registryEntry(cat, name) {
   var key = registryKey(cat, name);
   for (var i = 0; i < S.state.productionTags.length; i++) {
@@ -217,72 +213,12 @@ export function registerProductionTag(cat, name) {
                                 owner: "", notes: "", status: TAG_STATUSES[0].id });
 }
 
-var TAG_ID_RE = /^t_[a-z0-9]{1,16}(-[0-9]{1,6})?$/;
-
-export function isTagId(id) {
-  return typeof id === "string" && TAG_ID_RE.test(id);
-}
-
-function tagKeyHash(key) {
-  var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
-  for (var i = 0; i < key.length; i++) {
-    var c = key.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193);
-    b = Math.imul(b ^ c, 0x01000193) ^ (b >>> 15);
-  }
-  return (a >>> 0).toString(36) + (b >>> 0).toString(36);
-}
-
-export function mintTagId(cat, name, taken) {
-  var used = Object.create(null);
-  (taken || []).forEach(function (t) { if (t && t.id) used[t.id] = true; });
-  var base = "t_" + tagKeyHash(registryKey(cat, name)).slice(0, 16);
-  if (!used[base]) return base;
-  for (var n = 2; ; n++) if (!used[base + "-" + n]) return base + "-" + n;
-}
-
-export function ensureTagIds(registry) {
-  var seen = Object.create(null);
-  var need = [];
-  (registry || []).forEach(function (t) {
-    if (!t) return;
-    if (isTagId(t.id) && !seen[t.id]) { seen[t.id] = true; return; }
-    need.push(t);
-  });
-  need.forEach(function (t) {
-    t.id = mintTagId(t.cat, t.name, registry);
-  });
-  return registry;
-}
-
 export function registryEntryById(id) {
   for (var i = 0; i < S.state.productionTags.length; i++) {
     var t = S.state.productionTags[i];
     if (t && t.id === id) return t;
   }
   return null;
-}
-
-export function registryTagHooks(registry) {
-  var byKey = Object.create(null), byId = Object.create(null);
-  (registry || []).forEach(function (t) {
-    if (!t || !t.id || !t.name) return;
-    var k = registryKey(t.cat, t.name);
-    if (!byKey[k]) byKey[k] = t;
-    byId[t.id] = t;
-  });
-  return {
-    tagId: function (cat, name) {
-      var t = byKey[registryKey(cat, name)];
-      return t ? t.id : "t:" + cat + ":" + name;
-    },
-    tagOf: function (id) {
-      var t = byId[id];
-      if (t) return { cat: t.cat, name: t.name };
-      var m = /^t:([a-z]+):([\s\S]+)$/.exec(String(id));
-      return m ? { cat: m[1], name: m[2] } : null;
-    }
-  };
 }
 
 export function personById(id) {
