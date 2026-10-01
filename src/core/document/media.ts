@@ -1,7 +1,7 @@
 import { imageDims, isSha256Hex, normalizeImageRef, sniffImageMime } from "../../../shared/blob-policy.js";
 import { mediaCommentId, sha256Bytes } from "./ids.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
-import { safeHref, safeImageSrc, storedImageHtml } from "./text-policy.ts";
+import { safeHref, safeImageSrc, storedImageHtml, storedImageMarkup } from "./text-policy.ts";
 
 export interface RowImage {
   ref: ImageRef | null;
@@ -193,7 +193,7 @@ export function mediaComments(row: MediaRow, field: MediaField, found: readonly 
       if (!isSha256Hex(sha)) return;
       key = "img:" + (sha as string);
       const rec = images.known(sha as string) || normalizeImageRef(m.ref);
-      media = rec ? storedImageHtml(rec) : '<img class="comment-img" data-blob="' + (sha as string) + '">';
+      media = rec ? storedImageHtml(rec) : storedImageMarkup({ sha256: sha as string });
     } else {
       const href = safeHref(m.href || "");
       if (!href) return;
