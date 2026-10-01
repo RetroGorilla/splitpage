@@ -315,10 +315,10 @@ Dockerfile, every compose file (`docker-compose*.yml`, `compose*.yaml`),
 `eslint.config.mjs` and every JSON file can never carry a baselined comment;
 all of them have none. The Dockerfile and compose names come from one pair of
 patterns in `tools/config-comments.mjs` (`DOCKERFILE_PATH`, `COMPOSE_PATH`),
-used both to pick the parser and to mark the file comment-free. The one YAML file
-still on the baseline is `desktop/electron-builder.yml` (66 comment lines at
-the time the gate learned YAML), which is desktop packaging and moves to docs
-when that file is next changed.
+used both to pick the parser and to mark the file comment-free. No YAML file
+is on the baseline: `desktop/electron-builder.yml` had 66 comment lines when
+the gate learned YAML, and their rationale is now in
+[desktop-build.md](desktop-build.md).
 
 Not comments: an interpreter directive (`#!`) on the first line of a script,
 and the build markers `/*{{APP_CSS}}*/` and `//{{APP_JS}}` in `src/page.html`,
@@ -329,10 +329,20 @@ anything else in the file) is a comment unless `DIRECTIVES` in
 today. A file that does not parse (a broken YAML file) fails the gate, and so
 does a workflow step whose shell cannot be told (above).
 
-Not scanned yet, because no parser covers them: `.gitignore`,
-`.gitattributes`, `.dockerignore`, `.npmrc`, `.env.example` and other
-dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. A
-workflow step run by another interpreter (`shell: python {0}`) is read with
+Not scanned yet, because no parser covers them: dotfiles, NSIS scripts and
+Markdown. The configuration files among them that the no-comment rule covers,
+with the comments each held on 30 September 2026:
+
+| File | Comment lines |
+| --- | --- |
+| `.gitignore` | 31 |
+| `.gitattributes` | 5 |
+| `desktop/.npmrc` | 3 (why `arch=arm64` is pinned; [ci.md](ci.md) explains how CI overrides it) |
+| `.env.example` | 85, five of them commented-out optional settings. These are setup instructions for the person filling in `.env` on the server, so moving them out of the file is the owner's decision, not a mechanical cleanup |
+| `desktop/build/installer.nsh` | 178: 167 whole-line `;` comments and 11 trailing ones saying what each register saved by a `Push` holds |
+| `.dockerignore`, `.editorconfig`, `.nvmrc`, `desktop/.gitignore` | none |
+
+A workflow step run by another interpreter (`shell: python {0}`) is read with
 the shell rules.
 
 ## Baseline at the start of 4.0
