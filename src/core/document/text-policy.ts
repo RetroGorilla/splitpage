@@ -73,7 +73,7 @@ export function storedImageAttributes(ref: StoredImageRef): StoredImageAttribute
 export function storedImageMarkup(ref: StoredImageRef): string {
   let html = "<img";
   storedImageAttributes(ref).forEach(function (attr) {
-    html += " " + attr[0] + '="' + attr[1] + '"';
+    html += " " + attr[0] + '="' + escapeHtml(attr[1]) + '"';
   });
   return html + ">";
 }
