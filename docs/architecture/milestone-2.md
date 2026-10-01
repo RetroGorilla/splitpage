@@ -135,6 +135,7 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
 - **Control characters.** `eslint.config.mjs` also turns `no-control-regex` off for `gallery.ts`, `media.ts` and `person-colors.ts`. Five inline disables left the comment baseline with the code they covered.
 - **Dependency baseline.** No entry was added or removed. Frontend modules went from 100 to 106 and migrated modules from 23 to 29. The cycle stayed at 56 modules and 492 edges, `S` importers at 57 and `S` writers at 34: every shim this step owns still imports other modules in the cycle.
 - **Left for later.** 33 imports in `src/js` name only functions that now live in core or the identity adapter, mostly `escapeHtml` and `makeId` from `02-state.js`. Pointed there instead, in a scratch copy, they removed 31 cycle edges (492 to 461) and took `03c-history-idb.js` out of the cycle (56 to 55 modules). They are spread over 31 modules, including `03-sync.js`, `07-production-tags.js` and `08c-broll.js`, which other lanes own, so this step leaves them for a later one.
+  - Done in 2.7: 2.7a (#310) re-pointed them, with the ones 2.2 to 2.6 added, in every module the other lanes did not own, and the closing step re-pointed the rest. See [2.7 as built](#27-as-built).
 
 ## 2.2 as built
 
@@ -161,6 +162,7 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - `applySteps` compares rows as JSON, so key order counts. An inverse step that restores a removed row field puts it last, and the inverse `deleteRow` of that row is then refused. A test pins this, so a fix shows up as a deliberate change. `12a-undo.js` uses `applySteps` only to move its base forward, and falls back to a copy of the state.
   - A cue line split before its colon leaves neither half reading as a cue, so both lose the mark, and joining them does not bring it back. Split after the colon, the left half keeps the cue and a join restores it on the whole line.
 - **Left for 2.7.** `09-find-replace.js` keeps a baselined lint comment saying `cleanText()` lives in `04c-doc-model.js`. It is now in `src/core/text/runs.ts`, but the comment gate allows no new comment text, so the pointer changes when that comment's rule moves to configuration.
+  - Done in 2.7: `eslint.config.mjs` turns `no-control-regex` off for `src/js/09-find-replace.js`, beside `src/core/text/runs.ts`, and both disable comments are gone. See [2.7 as built](#27-as-built).
 
 ## 2.3 as built
 
@@ -323,6 +325,54 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - Reply aliasing (#303). 2.3 left it for 2.5 to change: for a comment both sides hold, `mergeComments` puts the input reply objects into its output, and `migrateRows` then writes into them, so `mergeStates` changes its own `mine` and `theirs`. 2.5 keeps it: it predates the move, and changing it here would also change what the differential test compares. It is fixed on 4.0 after milestone 2 (there are no 3.1.x releases before 4.0). Both pinned tests stay, renamed, and `tests/core/merge-states.test.ts` pins it on core.
   - `mergeStates` throws a `TypeError` (#304) when an unmigrated side holds a list that is not an array (`(theirTags || []).forEach is not a function`, `theirs.rows.forEach …`) or a shot or comment that is a string. The fuzz saw it on both sides alike. The app migrates `mine` and `base` before merging; `theirs` arrives from a server or a file. It is fixed on 4.0 after milestone 2.
 - **Left for 2.7.** INV-10's check that no module outside the adapter builds cells from HTML. `cloneState` stays in `03-sync.js`, as 2.3 decided.
+  - 2.7 did not write the INV-10 check; it stays open (see 2.7 as built). `cloneState` stayed in `03-sync.js`.
+
+## 2.7 as built
+
+2.7 closed the milestone in two parts: 2.7a (#310) ran early, between 2.6 and 2.5, and the closing step ran after 2.5. Neither changes behaviour or any core, adapter or legacy `.ts` file.
+
+- **2.7a (#310): re-pointing.** 71 imports in 41 `src/js` modules named only names that a legacy shim re-exports unchanged from `src/core`, `src/adapters/identity` or `src/legacy/richtext.ts`. Each now imports from the file the shim takes the name from, with an explicit `.ts` extension, as the shims themselves do. Cycle edges went from 490 to 450 (`--prune` removed 40 `cycle-edge` entries, none was added), the largest cycle from 56 to 55 modules (`03c-history-idb.js` left it) and every `S` figure stayed.
+  - An import was re-pointed only when every name in it is a plain re-export, either `export { x } from` or an `import { x }` followed by `export { x }`.
+  - It skipped the files that 2.5 was rewriting (`02-state.js`, `02b-doc-id.js`, `03-sync.js`, `07-production-tags.js`, `21-events.js`), and left the rest for this step.
+- **The closing step: the rest.** After 2.5, the search (`analyze2.mjs`, which resolves each imported name through the shims to its first non-shim origin) found five more imports, in the three files 2.5 had held back:
+  - `02b-doc-id.js`: `plainText` now from `core/document/text-policy.ts`;
+  - `03-sync.js`: `DEFAULT_WPM` from `core/document/timing.ts` and `fromHtml` from `legacy/richtext.ts`;
+  - `07-production-tags.js`: `makeId` from the identity adapter, `escapeHtml` from `text-policy.ts`, `replaceWithTag` from `core/text/edits.ts`, `namedTagId` and `projection` from `core/text/runs.ts`, and `cellOf` from `legacy/richtext.ts`.
+
+  `--prune` removed one `cycle-edge` entry and none was added: edges 416 to 415, the cycle still 53 modules. Re-exports that 2.5 added to `02-state.js`, `02b-doc-id.js` and `03-sync.js` gave no other candidate.
+- **Wrappers stay.** `04-richtext.js`'s `safeId` (it passes `randomIds`), `02d-gallery.js`'s `migrateGallery` (it passes `registryImages`) and `04c-doc-model.js`'s `syncCommentAnchors(state)` (it passes `cellOf`) are not plain re-exports, so no import of them was changed.
+- **Imports left as they are.**
+  - **Mixed imports.** 75 imports in 33 modules sit beside names the shim defines itself (for example `render` from `05-render.js` next to `pad2`, or `ROW_STATUSES` from `01-scene-status.js` next to `formatDuration`). Splitting one would keep its edge to the shim and add a second import, so they are not split. By shim: `04-richtext.js` 12, `01-scene-status.js` 11, `07-production-tags.js` 8, `02-state.js` 7, `02b-doc-id.js` 7, `02d-gallery.js` 6, `05-render.js` 5, `04c-doc-model.js` 4, and 3 or fewer each for `10-comments.js`, `08c-broll.js`, `02c-blobs.js`, `00-prelude.js`, `00p-prefs.js`, `03a-history-store.js` and `03-sync.js`.
+  - **Origin in `shared/`.** `03a-history-store.js` and `18a-local-merge.js` import `normalizeDocId` through `02b-doc-id.js`, which re-exports it from `shared/doc-id-policy.js`; `03a-history-store.js` also takes `mintDocId` and `sha256Bytes` that way. `shared/` is not core or an adapter, and these are the only imports of plain re-exports whose origin is not, so they are left.
+- **The `09-find-replace.js` pointer.** It carried two baselined `eslint-disable-next-line no-control-regex` comments; the first said `cleanText()` lives in `04c-doc-model.js`. The comment gate allows no new comment text, so the pointer could not be reworded. `eslint.config.mjs` now turns `no-control-regex` off for that file, as it does for `src/core/text/runs.ts` and the other core files with control-character patterns, and both comments are gone. `--prune` on the comment baseline removed the two entries, and no comment text was added. The rule is off for the whole file rather than for two lines; those two patterns are the only ones in it that name control characters.
+- **Invariants.** The ledger rows that cite code that moved say where it lives now: INV-10 (the decoder and what its dependency check still lacks), INV-14 (category ids in `core/document/tags.ts`, presentation in `07-production-tags.js`) and INV-24 (`compareCommentPositions` in `core/document/comments.ts`, behind `commentPositionCompare()`). INV-02, INV-04, INV-18, INV-26 and INV-56 were corrected by 2.2, 2.5 and 2.6.
+- **Performance.** `node tools/perf-record.mjs` was run once more, on Windows; the record is the "After milestone 2" section of [performance-record.md](performance-record.md). No long task fired in any case. The Linux starting-point record is kept as it was; the two machines differ, so the numbers are not compared with each other.
+- **Gate evidence.** The full Windows browser regression on the final head of the closing PR (`run-tests.ps1`, default lanes) is recorded in that PR, with the path of its `summary.txt`.
+- **Left open.**
+  - INV-10's dependency check: no module outside `src/adapters/richtext/` builds cells from HTML. It is not written.
+  - #303 (reply aliasing in `mergeStates`) and #304 (a `TypeError` on a malformed unmigrated side), which 2.5 found, and the pinned bugs listed under Risks, are fixed on 4.0 after the milestone closes, each in its own PR.
+  - The rest of plan section 4's milestone gate is not part of this step: the real Electron smoke, the Windows x64 and ARM64 packaged checks, and the external review of the integrated milestone.
+
+## Milestone 2 outcome
+
+Measured with `node tools/dep-report.mjs --metrics`, at d18adde, where the plan above was derived (the tree 2.0 started from), and at the head of the closing PR.
+
+| | Start (d18adde) | End (closing PR) |
+| --- | --- | --- |
+| Frontend modules | 93 | 135 |
+| Migrated modules | 16 | 58 |
+| Largest runtime import cycle (modules) | 60 | 53 |
+| Runtime cycle edges | 594 | 415 |
+| `S` importers | 57 | 56 |
+| `S` writers | 34 | 33 |
+| `S` field writers | 27 | 26 |
+| `S.state` assigners | 9 | 9 |
+| `S` bridges | 0 | 0 |
+| Dependency baseline entries | 820 | 639 |
+
+- **Against the plan's expectation.** The plan expected 594 to fall to about 433 cycle edges. 2.1a to 2.6 reached 432, so the expectation held. The re-pointing of 2.7a and the closing step took it to 415, 18 below the plan's figure. The expectation also named 02-state's `S` import and its `docIdWrittenOut` write: both are gone (2.5 pruned them), so `S` importers fell by one and `S` writers by one.
+- **The steps.** Cycle edges: 594, 492 (2.1a), 490 (2.3), 432 (2.5 with 2.6), 416 (2.5 with 2.7a), 415 (closing step). The cycle's size: 60 modules, 56 (2.1a), 54 (2.5), 53 (2.5 with 2.7a).
+- **`S` stays.** As the plan said, `S` access barely moves in this milestone. It falls in milestones 3 to 6, and `S.state` is still assigned by the same nine modules.
 
 ## Characterisation (2.0)
 
