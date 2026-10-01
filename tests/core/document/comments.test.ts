@@ -4,8 +4,8 @@ import {
   commentLastActivity,
   commentMatchesAssigneeFilter,
   commentMatchesFilterMode,
-  commentPositionOrder,
-  commentRecentOrder
+  commentRecentOrder,
+  compareCommentPositions
 } from "../../../src/core/document/comments.ts";
 import type { PlacedComment } from "../../../src/core/document/comments.ts";
 
@@ -34,7 +34,7 @@ test("the assignee filter: everyone, unassigned, me, or a name in any case", () 
 
 test("comments sort by scene, then visual before audio, then when they were made; lost scenes go last", () => {
   const order = ["r1", "r2"];
-  const compare = commentPositionOrder((id) => order.indexOf(id as string));
+  const compare = (a: PlacedComment, b: PlacedComment) => compareCommentPositions(a, b, (id) => order.indexOf(id as string));
   const list: (PlacedComment & { n: number })[] = [
     { n: 1, rowId: "gone", field: "visualText", createdAt: "2026-01-01" },
     { n: 2, rowId: "r2", field: "audioText", createdAt: "2026-01-01" },
@@ -46,8 +46,15 @@ test("comments sort by scene, then visual before audio, then when they were made
   assert.deepEqual(list.slice().sort(compare).map((c) => c.n), [5, 4, 6, 3, 2, 1]);
 });
 
+test("comparing two comments asks for the first one's scene, then the second's, each once", () => {
+  const asked: unknown[] = [];
+  const rowIndex = (id: string | null | undefined) => { asked.push(id); return id === "r1" ? 0 : 1; };
+  assert.ok(compareCommentPositions({ rowId: "r2" }, { rowId: "r1" }, rowIndex) > 0);
+  assert.deepEqual(asked, ["r2", "r1"]);
+});
+
 test("a comment on a lost scene sorts after one on a kept scene, whichever is compared first", () => {
-  const compare = commentPositionOrder((id) => (id === "r1" ? 0 : -1));
+  const compare = (a: PlacedComment, b: PlacedComment) => compareCommentPositions(a, b, (id) => (id === "r1" ? 0 : -1));
   const lost = { rowId: "gone", field: "visualText", createdAt: "2026-01-01" };
   const kept = { rowId: "r1", field: "audioText", createdAt: "2026-01-09" };
   const title = { rowId: null, field: "title", createdAt: "2026-01-01" };

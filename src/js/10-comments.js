@@ -30,8 +30,8 @@ import { nowIso } from "../adapters/identity/ids.ts";
 import {
   commentMatchesFilterMode,
   commentMatchesAssigneeFilter as matchesAssignee,
-  commentPositionOrder,
-  commentRecentOrder
+  commentRecentOrder,
+  compareCommentPositions
 } from "../core/document/comments.ts";
 export { nowIso };
 
@@ -402,7 +402,9 @@ function formatTimestampAbsolute(iso) {
   } catch (e) { return ""; }
 }
 
-var commentPositionCompare = commentPositionOrder(function (rowId) { return findRowIndex(rowId); });
+function commentPositionCompare(a, b) {
+  return compareCommentPositions(a, b, findRowIndex);
+}
 
 export function commentEntries(opts) {
   var pieces = !!(opts && opts.pieces);

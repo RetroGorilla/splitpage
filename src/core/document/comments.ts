@@ -36,15 +36,13 @@ export function commentMatchesAssigneeFilter(c: FilterableComment, assignee: str
   return normalizeTagName(c.assignee || "") === normalizeTagName(assignee);
 }
 
-export function commentPositionOrder(rowIndex: (rowId: string | null | undefined) => number): (a: PlacedComment, b: PlacedComment) => number {
-  return function (a, b) {
-    let ai = rowIndex(a.rowId); if (ai === -1) ai = Infinity;
-    let bi = rowIndex(b.rowId); if (bi === -1) bi = Infinity;
-    if (ai !== bi) return ai - bi;
-    const af = a.field === "audioText" ? 1 : 0, bf = b.field === "audioText" ? 1 : 0;
-    if (af !== bf) return af - bf;
-    return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
-  };
+export function compareCommentPositions(a: PlacedComment, b: PlacedComment, rowIndex: (rowId: string | null | undefined) => number): number {
+  let ai = rowIndex(a.rowId); if (ai === -1) ai = Infinity;
+  let bi = rowIndex(b.rowId); if (bi === -1) bi = Infinity;
+  if (ai !== bi) return ai - bi;
+  const af = a.field === "audioText" ? 1 : 0, bf = b.field === "audioText" ? 1 : 0;
+  if (af !== bf) return af - bf;
+  return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
 }
 
 export function commentLastActivity(c: ActiveComment): string {
