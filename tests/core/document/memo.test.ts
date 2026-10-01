@@ -29,20 +29,19 @@ test("an undefined result is not kept", () => {
   assert.equal(calls, 2);
 });
 
-test("the cache empties once it holds more than two million characters", () => {
+test("the cache empties before storing once it holds more than two million characters, not at two million", () => {
   let calls = 0;
   const memo = contentMemo((html) => { calls++; return html.length; });
-  const big = "x".repeat(1000001);
+  const budget = "x".repeat(2000000);
+  memo(budget);
   memo("a");
-  memo(big);
-  memo(big + "y");
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
+  memo(budget);
   memo("a");
-  assert.equal(calls, 3, "still cached while the count is under the budget when it is checked");
+  assert.equal(calls, 2, "holding exactly two million characters, storing one more cleared nothing");
   memo("b");
-  assert.equal(calls, 4);
-  memo("a");
-  assert.equal(calls, 5, "storing past the budget cleared what was there");
   memo("b");
-  assert.equal(calls, 5, "and kept the value stored after the clearing");
+  assert.equal(calls, 3, "holding one past the budget, storing cleared the cache first and kept the new value");
+  memo(budget);
+  assert.equal(calls, 4, "what was there before is gone");
 });
