@@ -50,7 +50,7 @@ console.log("\ndiscover():\n");
 }
 
 {
-  const found = discover(["src/test/a.test.mjs", "src/core/text/runs.ts", "tests/core/runs.test.ts"]);
+  const found = discover(["src/test/a.test.mjs", "src/core/text/runs.ts", "tests/core/text/runs.test.ts"]);
   eq("tests under tests/ satisfy migrated source", groupRequired(found, "source"), false);
   eq("migrated source with no test anywhere requires the source group", groupRequired(discover(["src/test/a.test.mjs", "src/core/text/runs.ts"]), "source"), true);
 }
@@ -66,13 +66,21 @@ console.log("\nevery migrated area has a test:\n");
 {
   const untested = (files) => (discover(files).untested ?? null)?.map((u) => `${u.area} ${u.tests}`) ?? null;
   eq("today's tree has a test for every area", untested(listRepoFiles(REPO)), []);
-  eq("a test under tests/ for one area does not cover another", untested(["src/core/text/runs.ts", "src/application/a.ts", "tests/application/a.test.ts"]), ["src/core/text tests/core/"]);
+  eq("a test under tests/ for one area does not cover another", untested(["src/core/text/runs.ts", "src/application/a.ts", "tests/application/a.test.ts"]), ["src/core/text tests/core/text/"]);
   eq("and the source group is then required", groupRequired(discover(["src/core/text/runs.ts", "src/application/a.ts", "tests/application/a.test.ts"]), "source"), true);
   eq("a test beside the source covers its area", untested(["src/core/text/runs.ts", "src/core/text/runs.test.ts"]), []);
-  eq("each core folder is its own area", untested(["src/core/text/a.ts", "src/core/text/a.test.ts", "src/core/merge/b.ts"]), ["src/core/merge tests/core/"]);
-  eq("a test under tests/core covers every core folder", untested(["src/core/text/a.ts", "src/core/merge/b.ts", "tests/core/x.test.ts"]), []);
-  eq("each feature folder is its own area, covered by tests/features", untested(["src/features/rows/v.ts", "src/features/menu/m.ts", "src/features/menu/m.test.ts", "tests/legacy/x.test.ts"]), ["src/features/rows tests/features/"]);
-  eq("tests/features covers a feature", untested(["src/features/rows/v.ts", "tests/features/rows.test.ts"]), []);
+  eq("each core folder is its own area", untested(["src/core/text/a.ts", "src/core/text/a.test.ts", "src/core/merge/b.ts"]), ["src/core/merge tests/core/merge/"]);
+  eq("a test under tests/core/<folder> covers only that folder", untested(["src/core/text/a.ts", "src/core/merge/b.ts", "tests/core/text/x.test.ts"]), ["src/core/merge tests/core/merge/"]);
+  eq("a test directly under tests/core covers no core folder", untested(["src/core/text/a.ts", "tests/core/x.test.ts"]), ["src/core/text tests/core/text/"]);
+  eq("each feature folder is its own area", untested(["src/features/rows/v.ts", "src/features/menu/m.ts", "src/features/menu/m.test.ts", "tests/legacy/x.test.ts"]), ["src/features/rows tests/features/rows/"]);
+  eq("one feature's tests do not cover another feature", untested(["src/features/rows/view.ts", "src/features/shortcuts/mount.ts", "tests/features/shortcuts/mount.test.ts"]), ["src/features/rows tests/features/rows/"]);
+  eq("tests/features/<folder> covers that feature", untested(["src/features/rows/v.ts", "tests/features/rows/v.test.ts"]), []);
+  eq("a test directly under tests/features covers no feature", untested(["src/features/rows/v.ts", "tests/features/rows.test.ts"]), ["src/features/rows tests/features/rows/"]);
+  eq("declaration files alone do not make an area", untested(["src/core/text/types.d.ts", "src/contracts/api.d.mts"]), []);
+  eq("a file directly in src/core is an area of its own", untested(["src/core/a.ts", "src/core/text/a.test.ts", "tests/core/text/b.test.ts"]), ["src/core tests/core/"]);
+  eq("covered by a test beside it in src/core", untested(["src/core/a.ts", "src/core/a.test.ts"]), []);
+  eq("or directly under tests/core", untested(["src/core/a.ts", "tests/core/a.test.ts"]), []);
+  eq("and that root test covers no core folder", untested(["src/core/a.ts", "src/core/text/b.ts", "tests/core/a.test.ts"]), ["src/core/text tests/core/text/"]);
   eq("nested folders belong to their top-level area", untested(["src/bootstrap/start/a.ts", "src/contracts/x/c.mts", "src/adapters/idb/a.cts", "tests/contracts/c.test.ts"]), ["src/adapters tests/adapters/", "src/bootstrap tests/bootstrap/"]);
   eq("a test in the wrong tests/ folder does not count", untested(["src/legacy/a.ts", "tests/legacy-old/a.test.ts", "tests/application/a.test.ts"]), ["src/legacy tests/legacy/"]);
   eq("JavaScript and test files alone do not make an area", untested(["src/legacy/a.js", "src/core/text/a.test.ts"]), []);

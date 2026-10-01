@@ -195,7 +195,7 @@ module's `__init`. It lives in the entry because `21-events.js` is inside the
 60-module import cycle, and a migrated file imported from there would join it
 (`npm run check:deps` refuses that). `tests/bootstrap/start-actions.test.ts`
 starts, stops and starts again on the real definitions and finds one listener
-and no leftover action each time; `tests/features/mount-shortcuts.test.ts`
+and no leftover action each time; `tests/features/shortcuts/mount-shortcuts.test.ts`
 does the same for the feature alone.
 
 No listener left in `src/js` handles a chord the shortcuts feature binds:

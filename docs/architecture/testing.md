@@ -68,17 +68,20 @@ them, and prints how many ran in each group.
 A file named like a test that no group runs (`src/test/x.test.ts`,
 `server/x.test.mjs`) fails the run, as does a file two groups claim.
 
-Every migrated area that holds TypeScript source needs at least one test,
-beside its source or in its `tests/` folder; a unit run names each area that
-has none and fails. A test in one area's folder does not cover another.
+Every migrated area that holds TypeScript source (declaration files aside)
+needs at least one test, beside its source (anywhere inside the area) or in
+its `tests/` folder; a unit run names each area that has none and fails. A
+test in one area's folder does not cover another.
 
 | Area | Its `tests/` folder |
 | --- | --- |
-| each `src/core/<folder>` | `tests/core` |
+| each `src/core/<folder>` | `tests/core/<folder>` |
+| files directly in `src/core` | directly in `tests/core`, or directly in `src/core` |
 | `src/application` | `tests/application` |
 | `src/contracts` | `tests/contracts` |
 | `src/adapters` | `tests/adapters` |
-| each `src/features/<folder>` | `tests/features` |
+| each `src/features/<folder>` | `tests/features/<folder>` |
+| files directly in `src/features` | directly in `tests/features`, or directly in `src/features` |
 | `src/bootstrap` | `tests/bootstrap` |
 | `src/legacy` | `tests/legacy` |
 
