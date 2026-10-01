@@ -147,6 +147,52 @@ test("a step that no longer applies is refused, and an unknown one too", () => {
   assert.throws(() => invertSteps([{ op: "splitRow" }] as unknown as Step[]), (e: Error & { code?: string }) => e.code === "STEP_REFUSED");
 });
 
+test("applying a step copies its values in: changing the step or the state later never reaches the other", () => {
+  const status = { label: "shot", list: [1] };
+  const people = ["Ada"];
+  const row = { id: "r2", tags: ["x"] };
+  const steps: Step[] = [
+    { op: "rowField", rowId: "r1", key: "status", before: "todo", after: status },
+    { op: "docField", key: "people", after: people },
+    { op: "insertRow", index: 1, row: row }
+  ];
+  const state = applySteps({ rows: [{ id: "r1", status: "todo" }] }, steps);
+  const frozenState = JSON.stringify(state);
+  const frozenSteps = JSON.stringify(steps);
+  status.label = "changed";
+  status.list.push(2);
+  people.push("Bo");
+  row.tags.push("y");
+  row.id = "zz";
+  assert.equal(JSON.stringify(state), frozenState);
+  row.id = "r2";
+  row.tags.pop();
+  people.pop();
+  status.list.pop();
+  status.label = "shot";
+  const rows = state.rows as StepRow[];
+  ((rows[0] as StepRow).status as { list: number[] }).list.push(3);
+  (state.people as string[]).push("Cy");
+  ((rows[1] as StepRow).tags as string[]).push("z");
+  assert.equal(JSON.stringify(steps), frozenSteps);
+});
+
+test("inverting copies the values too: the inverse and the steps share nothing", () => {
+  const before = { a: [1] }, after = { a: [2] }, row = { id: "r1", list: [1] };
+  const steps: Step[] = [
+    { op: "rowField", rowId: "r1", key: "k", before: before, after: after },
+    { op: "docField", key: "d", before: before, after: after },
+    { op: "insertRow", index: 0, row: row },
+    { op: "deleteRow", index: 0, row: row }
+  ];
+  const inverse = invertSteps(steps);
+  const frozen = JSON.stringify(inverse);
+  before.a.push(9);
+  after.a.push(9);
+  row.list.push(9);
+  assert.equal(JSON.stringify(inverse), frozen);
+});
+
 test("a field set to undefined is removed, and the inverse puts it back", () => {
   const state: StepState = { title: "T", rows: [{ id: "r1", note: "n", text: "a" }] };
   const steps: Step[] = [{ op: "rowField", rowId: "r1", key: "note", before: "n" }, { op: "docField", key: "title", before: "T" }];
