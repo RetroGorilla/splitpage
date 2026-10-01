@@ -114,6 +114,11 @@ export default [
     rules: { "no-control-regex": "off" }
   },
 
+  {
+    files: ["src/core/document/text-policy.ts"],
+    rules: { "no-control-regex": "off" }
+  },
+
   ...tseslint.configs.strict.map((config) => ({ ...config, files: typescriptFiles })),
 
   {
