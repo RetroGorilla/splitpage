@@ -21,6 +21,9 @@ appear in the app under **Help**. The format follows
   special word such as `constructor` or `__proto__`, and could blank a
   scene's text. Only a hand-edited or damaged file has such ids. They now
   merge like any other, and files that have them open unchanged.
+- Pasted or imported text with a link inside another link could lose a
+  link the next time it was saved, merged or pasted. The inner link now
+  becomes part of the outer one as soon as the text comes in, and stays so.
 
 ## 3.1.0 — 2026-09-29
 

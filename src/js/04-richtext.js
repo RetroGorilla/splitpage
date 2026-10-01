@@ -112,6 +112,13 @@ function wrapNodes(nodesArr, tagName) {
   return [w];
 }
 
+function insideSafeLink(node) {
+  for (var p = node.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+    if (p.tagName === "A" && safeHref(p.getAttribute("href") || "")) return true;
+  }
+  return false;
+}
+
 function walkSanitize(srcParent, destParent) {
   var kids = Array.prototype.slice.call(srcParent.childNodes);
   kids.forEach(function (node) {
@@ -149,6 +156,7 @@ function walkSanitize(srcParent, destParent) {
       if (ref) destParent.appendChild(storedImageEl(ref));
       return;
     }
+    if (tag === "A" && insideSafeLink(node)) { walkSanitize(node, destParent); return; }
     if (tag === "A" && node.classList && node.classList.contains("video-embed-card")) {
       var vhref = safeHref(node.getAttribute("href") || "");
       if (vhref) destParent.appendChild(buildVideoCardEl(vhref));
