@@ -53,7 +53,7 @@ test("03-sync's ROW_FIELDS and GALLERY_FIELDS are core's tables, not copies", ()
   assert.equal(SYNC_GALLERY_FIELDS, GALLERY_FIELDS);
 });
 
-test("until 2.3 derives it from undo, 12a-undo skips exactly the fields core marks undo: false", () => {
+test("12a-undo skips exactly the fields core marks undo: false", () => {
   const every = Object.fromEntries(CORE_FIELDS.map((f) => [f.key, []]));
   const touched = changedBetween({}, every);
   assert.deepEqual(Object.keys(touched.doc), CORE_FIELDS.filter((f) => f.undo).map((f) => f.key));
