@@ -2,13 +2,16 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
 import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex, withPageHead } from "../core/document/ids.ts";
-import { buildPublishHtml, migrateRows } from "./02-state.js";
+import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
+import { withDocumentPorts } from "../legacy/document-ports.ts";
+import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "./02c-blobs.js";
 import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import { plainText } from "./04-richtext.js";
 import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
+import { seedCheckPasses } from "./20b-onboarding.js";
 import {
   decideDuplicateLoser,
   docIdFromSha256Hex,
@@ -21,23 +24,23 @@ export { deriveDocId, docIdEmbeddedIn, mergedDocId, mintDocId, randomHexBytes, s
 var PAGE_NONCE;
 
 export function migrateDocument(raw, origin) {
-  origin = origin || { kind: "fresh" };
-  var embedded = docIdEmbeddedIn(raw);
-  var seed = "";
-  if (!embedded) {
-    try { seed = String(JSON.stringify(raw)); } catch (e) { seed = ""; }
+  return withDocumentPorts(STATE_FIELDS, function (ports) {
+    return migrateDocumentWith(raw, origin, ports);
+  });
+}
+
+export async function loadInitialState() {
+  var raw = null;
+  var pristine = seedCheckPasses();
+  if (!pristine) {
+    try { raw = JSON.parse(document.getElementById("state-data").textContent); } catch (e) { raw = null; }
   }
-  var s = migrateRows(raw);
-  if (embedded) return s;
-  if (origin.kind === "file") {
-    s.docId = deriveDocId("splitpage-file", seed);
-  } else if (origin.kind === "server") {
-    var serverId = origin.serverId == null ? "" : String(origin.serverId);
-    var fallback = normalizeDocId(origin.fallbackId);
-    if (fallback) s.docId = fallback;
-    else if (serverId) s.docId = deriveDocId("splitpage-server-doc", serverId);
+  if (pristine || !raw || typeof raw !== "object" || (!raw.rev && !raw.lastEditedBy)) {
+    S.docIdWrittenOut = false;
+    return migrateRows(defaultState());
   }
-  return s;
+  S.docIdWrittenOut = true;
+  return migrateDocument(raw, { kind: "file" });
 }
 
 export function noteMergedDocId(prevId) {
