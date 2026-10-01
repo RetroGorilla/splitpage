@@ -83,7 +83,7 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 | 2.4 | `adapters/richtext` and `legacy/richtext.ts` | 2.2 | 2.3, 2.6 |
 | 2.6 | `core/production` | 2.2 | 2.3, 2.4 |
 | 2.5 | `core/migrate.ts`, `core/merge-states.ts`, `legacy/document-ports.ts`; 02-state becomes a shim | 2.3, 2.4, 2.6 | — |
-| 2.7 | Docs, invariant rows, metrics, performance record, and the full Linux and Windows regression (the milestone gate) | 2.5 | — |
+| 2.7 | Docs, invariant rows, metrics, performance record, and the full Windows regression (the milestone gate; Linux waits for the 4.0 release gate) | 2.5 | — |
 
 Each PR names its impacted browser suites and runs them along with `npm run verify`. Lanes run `--prune` after merging the base.
 

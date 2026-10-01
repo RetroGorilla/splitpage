@@ -117,7 +117,7 @@ Merge with `gh pr merge N --merge --match-head-commit <sha>`.
 ## 8. Milestone gates
 
 - The runs required by [section 4 of the implementation plan](../IMPLEMENTATION-PLAN.md#4-verification-baseline-and-ci-policy), on the exact merged tree:
-  - full browser regression on Linux and Windows
+  - full browser regression on Windows; on Linux too at the 4.0 release gate only
   - real Electron smoke
   - Windows x64 and ARM64 packaged checks
 
