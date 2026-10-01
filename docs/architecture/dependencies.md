@@ -315,10 +315,10 @@ Dockerfile, every compose file (`docker-compose*.yml`, `compose*.yaml`),
 `eslint.config.mjs` and every JSON file can never carry a baselined comment;
 all of them have none. The Dockerfile and compose names come from one pair of
 patterns in `tools/config-comments.mjs` (`DOCKERFILE_PATH`, `COMPOSE_PATH`),
-used both to pick the parser and to mark the file comment-free. The one YAML file
-still on the baseline is `desktop/electron-builder.yml` (66 comment lines at
-the time the gate learned YAML), which is desktop packaging and moves to docs
-when that file is next changed.
+used both to pick the parser and to mark the file comment-free. No YAML file
+is on the baseline: `desktop/electron-builder.yml` had 66 comment lines when
+the gate learned YAML, and their rationale is now in
+[desktop-build.md](desktop-build.md).
 
 Not comments: an interpreter directive (`#!`) on the first line of a script,
 and the build markers `/*{{APP_CSS}}*/` and `//{{APP_JS}}` in `src/page.html`,
