@@ -14,25 +14,22 @@ import {
   insertText,
   projection,
   replaceWithBrollKey,
-  tagNameOf,
   toHtml
 } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import {
-  TAG_STATUSES,
-  contentMemo,
   isInsideTagOrLink,
   normalizeTagName,
+  productionReaders,
   registerProductionTag,
   registryEntry,
-  scheduleIdleRefresh,
-  tagStatus,
-  tagsInField
+  scheduleIdleRefresh
 } from "./07-production-tags.js";
 import { renderBrollViews } from "./08d-broll-panel.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { htmlToPlainText } from "./14-export.js";
+import { randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
   BROLL_MARKER_RE,
@@ -44,10 +41,32 @@ import {
   brollPropKey,
   normalizeBrollProps
 } from "../core/document/broll.ts";
-export { BROLL_MARKER_RE, BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_TEXT_MAX, brollPropKey, normalizeBrollProps };
+import {
+  anchorBrollCell,
+  brollAnchorTodo,
+  brollEntries as readBrollEntries,
+  brollInCell,
+  brollMarkerLines,
+  brollPropsInCell,
+  brollPropsRenamed as renamedBrollProps,
+  brollSeedLocation,
+  brollSeedRef,
+  brollSortedForList,
+  planBrollAnchors
+} from "../core/production/broll.ts";
+import { holdsMedia } from "../core/production/tags.ts";
+export {
+  BROLL_MARKER_RE,
+  BROLL_NAME_MAX,
+  BROLL_PROPS_MAX,
+  BROLL_TEXT_MAX,
+  brollInCell,
+  brollPropKey,
+  brollPropsInCell,
+  brollSortedForList,
+  normalizeBrollProps
+};
 
-var brollInField;
-var brollPropsInField;
 var brollAnchorDeclined;
 
 var BROLL_STATUS_LOOKS = {
@@ -65,105 +84,6 @@ export function brollStatus(id) {
     if (BROLL_STATUSES[i].id === id) return BROLL_STATUSES[i];
   }
   return null;
-}
-
-function brollCellLines(cell) {
-  var lines = [{ start: 0, end: 0, items: [] }];
-  var pos = 0;
-  cell.forEach(function (r) {
-    if (r.atom) {
-      lines[lines.length - 1].items.push({ atom: r, text: r.text, marks: r.marks, pos: pos });
-      pos++;
-      return;
-    }
-    r.text.split("\n").forEach(function (part, i) {
-      if (i > 0) {
-        lines[lines.length - 1].end = pos;
-        pos++;
-        lines.push({ start: pos, end: pos, items: [] });
-      }
-      if (part) {
-        lines[lines.length - 1].items.push({ text: part, marks: r.marks, pos: pos });
-        pos += part.length;
-      }
-    });
-  });
-  lines[lines.length - 1].end = pos;
-  return lines;
-}
-
-function brollLineText(items) {
-  return items.map(function (it) { return it.text; }).join("");
-}
-
-function hasNoMarks(marks) {
-  return !marks || !Object.keys(marks).length;
-}
-
-function brollLineMarker(items) {
-  for (var i = 0; i < items.length; i++) {
-    var it = items[i];
-    if (!it.atom && hasNoMarks(it.marks) && !it.text.trim()) continue;
-    if (it.atom && hasNoMarks(it.marks)) return { id: it.atom.id || "", key: it, rest: items.slice(i + 1) };
-    break;
-  }
-  var m = BROLL_MARKER_RE.exec(brollLineText(items));
-  return m ? { id: "", key: null, rest: null, strip: m[0].length } : null;
-}
-
-export function brollInCell(cell) {
-  var out = [], open = null;
-  brollCellLines(cell).forEach(function (line) {
-    var marker = brollLineMarker(line.items);
-    if (marker) {
-      var name = marker.rest
-        ? brollLineText(marker.rest)
-        : brollLineText(line.items).slice(marker.strip);
-      open = { id: marker.id, name: name.trim().slice(0, BROLL_NAME_MAX), desc: [] };
-      out.push(open);
-      return;
-    }
-    if (open) open.desc.push(brollLineText(line.items));
-  });
-  out.forEach(function (item) {
-    item.desc = item.desc.join("\n").replace(/\s+$/, "").slice(0, BROLL_TEXT_MAX);
-  });
-  return out;
-}
-
-export function brollPropsInCell(cell) {
-  var out = [], open = null, seen = null;
-  brollCellLines(cell).forEach(function (line) {
-    if (brollLineMarker(line.items)) {
-      open = [];
-      seen = Object.create(null);
-      out.push(open);
-    }
-    if (!open) return;
-    line.items.forEach(function (it) {
-      var t = !it.atom && it.marks && it.marks.tag ? tagNameOf(it.marks.tag) : null;
-      if (!t || t.cat !== "prop") return;
-      var name = t.name.trim().slice(0, BROLL_PROP_NAME_MAX);
-      var key = normalizeTagName(name);
-      if (!name || seen[key]) return;
-      seen[key] = true;
-      open.push(name);
-    });
-  });
-  return out;
-}
-
-function brollMarkerLines(cell) {
-  var out = [];
-  brollCellLines(cell).forEach(function (line, index) {
-    var marker = brollLineMarker(line.items);
-    if (marker) out.push({ line: line, index: index, marker: marker });
-  });
-  return out;
-}
-
-function holdsMedia(html) {
-  return /<img[\s>]|video-embed-card/i.test(html || "");
 }
 
 function brollHtmlLines(body) {
@@ -205,36 +125,8 @@ function brollHtmlLineText(nodes) {
   return nodes.map(function (n) { return n.textContent || ""; }).join("");
 }
 
-function collectBrollFromRows(rows) {
-  var out = [];
-  var seen = Object.create(null);
-  (rows || []).forEach(function (row, rowIndex) {
-    var props = brollPropsField(row.visualText);
-    brollField(row.visualText).forEach(function (found, ordinal) {
-      var id = found.id && !seen[found.id] ? found.id : "";
-      if (id) seen[id] = true;
-      out.push({
-        id: id, name: found.name, desc: found.desc,
-        rowId: row.id, rowIndex: rowIndex, ordinal: ordinal,
-        autoProps: props[ordinal] || []
-      });
-    });
-  });
-  return out;
-}
-
-function brollField(html) {
-  if (!brollInField) brollInField = contentMemo(function (h) { return brollInCell(cellOf(h)); });
-  return brollInField(html);
-}
-
 export function brollCountInRow(row) {
-  return row && row.visualText ? brollField(row.visualText).length : 0;
-}
-
-function brollPropsField(html) {
-  if (!brollPropsInField) brollPropsInField = contentMemo(function (h) { return brollPropsInCell(cellOf(h)); });
-  return brollPropsInField(html);
+  return row && row.visualText ? productionReaders.brollInField(row.visualText).length : 0;
 }
 
 function brollRow(rowId) {
@@ -242,19 +134,12 @@ function brollRow(rowId) {
   return i === -1 ? null : S.state.rows[i];
 }
 
-function brollSeedRef(row) {
-  return row ? htmlToPlainText(row.audioText).trim().slice(0, BROLL_TEXT_MAX) : "";
+function seedRef(row) {
+  return brollSeedRef(row, htmlToPlainText);
 }
 
-function brollSeedLocation(row) {
-  if (!row) return "";
-  var found = "";
-  ["visualText", "audioText"].forEach(function (field) {
-    tagsInField(row[field]).forEach(function (t) {
-      if (!found && t.catId === "location") found = t.name;
-    });
-  });
-  return found.slice(0, 80);
+function seedLocation(row) {
+  return brollSeedLocation(row, productionReaders);
 }
 
 export function brollRecord(id) {
@@ -290,7 +175,7 @@ export function recordPastedBroll(rowId, cell, ids) {
     if (!found.id || ids.indexOf(found.id) === -1 || brollRecord(found.id)) return;
     newBrollRecord({
       id: found.id, name: found.name, desc: found.desc,
-      audioRef: brollSeedRef(row), location: brollSeedLocation(row)
+      audioRef: seedRef(row), location: seedLocation(row)
     });
   });
 }
@@ -301,118 +186,22 @@ export function deleteBrollRecord(id) {
   return before !== S.state.brollShots.length;
 }
 
-function brollMatchRecord(found, claimed, byId, held) {
-  var rec = found.id ? byId[found.id] : null;
-  if (rec && !claimed[rec.id]) return rec;
-  var norm = normalizeTagName(found.name);
-  for (var i = 0; i < S.state.brollShots.length && norm; i++) {
-    var cand = S.state.brollShots[i];
-    if (claimed[cand.id] || held[cand.id]) continue;
-    if (normalizeTagName(cand.name) !== norm) continue;
-    return cand;
-  }
-  return null;
-}
-
-function brollHeldIds(live) {
-  var held = Object.create(null);
-  live.forEach(function (found) { if (found.id) held[found.id] = true; });
-  return held;
+function applyBrollPlan(read) {
+  read.plan.create.forEach(function (c) {
+    S.state.brollShots.push(c.shot);
+    read.entries[c.entry].rec = c.shot;
+  });
+  read.plan.rename.forEach(function (r) {
+    var rec = S.state.brollShots[r.at];
+    rec.name = r.name;
+    rec.desc = r.desc;
+  });
 }
 
 export function brollEntries(readOnly) {
-  var live = collectBrollFromRows(S.state.rows);
-  var claimed = Object.create(null);
-  var byId = Object.create(null);
-  var held = brollHeldIds(live);
-  S.state.brollShots.forEach(function (r) { byId[r.id] = r; });
-  var out = [];
-
-  live.forEach(function (found) {
-    var rec = brollMatchRecord(found, claimed, byId, held);
-    if (!rec) {
-      var row = brollRow(found.rowId);
-      var fields = {
-        id: found.id || makeId("bs"),
-        name: found.name,
-        desc: found.desc,
-        audioRef: brollSeedRef(row),
-        location: brollSeedLocation(row)
-      };
-      rec = readOnly ? Object.assign({ status: BROLL_STATUSES[0].id, props: [], origin: "script" }, fields)
-        : newBrollRecord(fields);
-    }
-    claimed[rec.id] = true;
-    if (!readOnly) {
-      rec.name = found.name;
-      rec.desc = found.desc;
-    }
-    out.push(brollEntryFrom(rec, found));
-  });
-
-  S.state.brollShots.forEach(function (rec) {
-    if (!claimed[rec.id]) out.push(brollEntryFrom(rec, null));
-  });
-
-  return out;
-}
-
-function brollEntryFrom(rec, found) {
-  return {
-    rec: rec,
-    id: rec.id,
-    name: found ? found.name : rec.name,
-    desc: found ? found.desc : (rec.desc || ""),
-    rowId: found ? found.rowId : null,
-    rowIndex: found ? found.rowIndex : -1,
-    ordinal: found ? found.ordinal : -1,
-    markerless: !!found && !found.id,
-    orphaned: !found && rec.origin === "script",
-    status: brollStatus(rec.status) ? rec.status : BROLL_STATUSES[0].id,
-    reshoot: !!rec.reshoot,
-    notes: rec.notes || "",
-    owner: rec.owner || "",
-    audioRef: rec.audioRef || "",
-    location: rec.location || "",
-    props: brollEntryProps(rec, found),
-    origin: rec.origin
-  };
-}
-
-function brollPropEntry(p) {
-  if (!S.state) return null;
-  if (p.id) {
-    for (var i = 0; i < S.state.productionTags.length; i++) {
-      if (S.state.productionTags[i].id === p.id) return S.state.productionTags[i];
-    }
-  }
-  return registryEntry("prop", p.name);
-}
-
-function brollEntryProps(rec, found) {
-  var out = [], byKey = Object.create(null);
-  function add(entry, name, ref) {
-    var shown = entry ? entry.name : name;
-    var key = entry ? "t:" + entry.id : "n:" + normalizeTagName(shown);
-    var had = byKey[key];
-    if (had) {
-      if (ref) { had.hand = true; had.ref = had.ref || ref; } else had.auto = true;
-      return;
-    }
-    byKey[key] = {
-      key: key, id: entry ? entry.id : "", name: shown,
-      status: entry ? (tagStatus(entry.status) || TAG_STATUSES[0]).id : "",
-      auto: !ref, hand: !!ref, tracked: !!entry, ref: ref
-    };
-    out.push(byKey[key]);
-  }
-  ((found && found.autoProps) || []).forEach(function (name) {
-    add(registryEntry("prop", name), name, "");
-  });
-  (rec.props || []).forEach(function (p) {
-    if (p && p.name) add(brollPropEntry(p), p.name, brollPropKey(p.id, p.name));
-  });
-  return out;
+  var read = readBrollEntries(S.state, productionReaders, randomIds, htmlToPlainText);
+  if (!readOnly) applyBrollPlan(read);
+  return read.entries;
 }
 
 export function addBrollProp(shotId, rawName) {
@@ -444,20 +233,8 @@ export function removeBrollProp(shotId, ref) {
 }
 
 export function brollPropsRenamed(fromId, oldName, toId, toName) {
-  if (!S.state || !Array.isArray(S.state.brollShots)) return;
-  var oldNorm = normalizeTagName(oldName);
-  S.state.brollShots.forEach(function (rec) {
-    if (!Array.isArray(rec.props) || !rec.props.length) return;
-    var changed = false;
-    rec.props.forEach(function (p) {
-      if (!p) return;
-      if ((fromId && p.id === fromId) || (oldNorm && !p.id && normalizeTagName(p.name) === oldNorm)) {
-        p.id = toId || p.id;
-        p.name = toName;
-        changed = true;
-      }
-    });
-    if (changed) rec.props = normalizeBrollProps(rec.props, S.state.productionTags);
+  renamedBrollProps(S.state, fromId, oldName, toId, toName).forEach(function (c) {
+    S.state.brollShots[c.at].props = c.props;
   });
 }
 
@@ -519,7 +296,7 @@ export function maybeCaptureBroll(e, cellEl) {
     if (projection(cell).slice(from, to) !== head.replace(/\u200B/g, "")) return null;
     var r = replaceWithBrollKey(cell, from, to, id, keyText);
     var row = brollRow(cellEl.getAttribute("data-id"));
-    newBrollRecord({ id: id, audioRef: brollSeedRef(row), location: brollSeedLocation(row) });
+    newBrollRecord({ id: id, audioRef: seedRef(row), location: seedLocation(row) });
     return { cell: r.cell, sel: { from: r.end, to: r.end } };
   });
   scheduleBrollRefresh();
@@ -528,26 +305,6 @@ export function maybeCaptureBroll(e, cellEl) {
 function brollKeyHtml(id, text) {
   return '<span class="broll-key" data-broll-id="' + escapeHtml(id) +
     '" contenteditable="false">' + escapeHtml(text) + '</span>';
-}
-
-function brollAnchorLine(cell, line, id) {
-  var m = BROLL_MARKER_RE.exec(brollLineText(line.items));
-  if (!m) return null;
-  var left = m[0].length, to = line.start;
-  for (var i = 0; i < line.items.length && left > 0; i++) {
-    var it = line.items[i];
-    if (it.atom) {
-      if (it.text.length > left) return null;
-      left -= it.text.length;
-      to = it.pos + 1;
-    } else {
-      var take = Math.min(left, it.text.length);
-      left -= take;
-      to = it.pos + take;
-    }
-  }
-  var r = replaceWithBrollKey(cell, line.start, to, id, m[1] + m[2]);
-  return insertText(r.cell, r.end, " ", {});
 }
 
 function brollLineTextNodes(nodes) {
@@ -598,11 +355,6 @@ function brollWrapHtmlLine(body, line, id) {
   return true;
 }
 
-function brollRekeyLine(cell, key, id) {
-  var next = deleteRange(cell, key.pos, key.pos + 1);
-  return insertBrollKey(next, key.pos, id, key.text, {});
-}
-
 function brollRekeyHtmlLine(line, id) {
   for (var i = 0; i < line.nodes.length; i++) {
     var n = line.nodes[i];
@@ -613,42 +365,19 @@ function brollRekeyHtmlLine(line, id) {
   return false;
 }
 
-function brollAnchorPlan() {
-  var claimed = Object.create(null);
-  var byId = Object.create(null);
-  S.state.brollShots.forEach(function (r) { byId[r.id] = r; });
-  var plan = Object.create(null);
-  var live = collectBrollFromRows(S.state.rows);
-  var held = brollHeldIds(live);
-  live.forEach(function (found) {
-    var rec = brollMatchRecord(found, claimed, byId, held);
-    if (rec) claimed[rec.id] = true;
-    if (!found.id) plan[brollLineKey(found.rowId, found.ordinal)] = rec ? rec.id : makeId("bs");
-  });
-  return plan;
-}
-
-function brollLineKey(rowId, ordinal) {
-  return rowId + "\u0000" + ordinal;
-}
-
 export function declineBrollAnchoring(rows) {
   (rows || []).forEach(function (row) { brollAnchorDeclined[row.id] = true; });
 }
 
 export function anchorBrollInRows(rows) {
   if (!S.state || !rows || !rows.length) return 0;
-  var plan = brollAnchorPlan();
+  var plan = planBrollAnchors(S.state, productionReaders, randomIds);
   var total = 0;
   rows.forEach(function (row) {
     if (brollAnchorDeclined[row.id]) return;
     var html = row.visualText;
     var cell = cellOf(html);
-    var todo = [];
-    brollMarkerLines(cell).forEach(function (found, ordinal) {
-      var id = plan[brollLineKey(row.id, ordinal)];
-      if (id) todo.push({ found: found, id: id });
-    });
+    var todo = brollAnchorTodo(cell, row.id, plan);
     if (!todo.length) return;
     var n = 0;
     if (holdsMedia(html)) {
@@ -661,14 +390,9 @@ export function anchorBrollInRows(rows) {
       });
       if (n) row.visualText = sanitizeHtml(body.innerHTML);
     } else {
-      for (var i = todo.length - 1; i >= 0; i--) {
-        var t = todo[i];
-        var next = t.found.marker.key
-          ? brollRekeyLine(cell, t.found.marker.key, t.id)
-          : brollAnchorLine(cell, t.found.line, t.id);
-        if (next) { cell = next; n++; }
-      }
-      if (n) row.visualText = toHtml(cell);
+      var anchored = anchorBrollCell(cell, todo);
+      n = anchored.anchored;
+      if (n) row.visualText = toHtml(anchored.cell);
     }
     total += n;
   });
@@ -730,16 +454,6 @@ export function renameBrollInScript(entry, newName) {
   cell = insertText(cell, at + 1, " " + newName, {});
   row.visualText = toHtml(cell);
   return true;
-}
-
-export function brollSortedForList(entries) {
-  return entries.slice().sort(function (a, b) {
-    var an = a.rowIndex === -1, bn = b.rowIndex === -1;
-    if (an !== bn) return an ? 1 : -1;
-    if (an) return (a.name || "").localeCompare(b.name || "");
-    if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
-    return a.ordinal - b.ordinal;
-  });
 }
 
 export function updateBrollBadge() {
