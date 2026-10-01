@@ -46,9 +46,9 @@ test("02-state's STATE_FIELDS is a thawed copy of core's frozen table, with the 
   });
 });
 
-test("until 2.3 imports core's, 03-sync's ROW_FIELDS and GALLERY_FIELDS equal core's", () => {
-  assert.deepEqual([...SYNC_ROW_FIELDS], [...ROW_FIELDS]);
-  assert.deepEqual({ ...SYNC_GALLERY_FIELDS }, { ...GALLERY_FIELDS });
+test("03-sync's ROW_FIELDS and GALLERY_FIELDS are core's tables, not copies", () => {
+  assert.equal(SYNC_ROW_FIELDS, ROW_FIELDS);
+  assert.equal(SYNC_GALLERY_FIELDS, GALLERY_FIELDS);
 });
 
 test("until 2.3 derives it from undo, 12a-undo skips exactly the fields core marks undo: false", () => {
