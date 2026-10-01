@@ -1,8 +1,8 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
-import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex } from "../core/document/ids.ts";
-import { buildPublishHtml, escapeHtml, migrateRows } from "./02-state.js";
+import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex, withPageHead } from "../core/document/ids.ts";
+import { buildPublishHtml, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "./02c-blobs.js";
 import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
@@ -16,7 +16,7 @@ import {
   normalizeDocId
 } from "../../shared/doc-id-policy.js";
 export { decideDuplicateLoser, normalizeDocId };
-export { deriveDocId, docIdEmbeddedIn, mergedDocId, mintDocId, randomHexBytes, sha256Bytes, sha256Hex };
+export { deriveDocId, docIdEmbeddedIn, mergedDocId, mintDocId, randomHexBytes, sha256Bytes, sha256Hex, withPageHead };
 
 var PAGE_NONCE;
 
@@ -195,25 +195,6 @@ export function standaloneHtmlFor(s, head) {
   delete copy.docId;
   var html = buildPublishHtml(JSON.stringify(copy));
   return head ? withPageHead(html, head) : html;
-}
-
-export function withPageHead(html, head) {
-  function oneLine(v) { return escapeHtml(String(v).replace(/\s+/g, " ").trim()); }
-  var headEnd = html.search(/<\/head>/i);
-  if (headEnd === -1) return html;
-  var top = html.slice(0, headEnd), rest = html.slice(headEnd);
-  if (head.title) {
-    top = top.replace(/<title>[^<]*<\/title>/i, function () {
-      return "<title>" + oneLine(head.title) + "</title>";
-    });
-  }
-  if (head.description) {
-    var meta = '<meta name="description" content="' + oneLine(head.description) + '">';
-    var had = false;
-    top = top.replace(/<meta name="description" content="[^"]*">/i, function () { had = true; return meta; });
-    if (!had) top = top.replace(/<\/title>/i, function (m) { return m + "\n" + meta; });
-  }
-  return top + rest;
 }
 
 export function __init() {
