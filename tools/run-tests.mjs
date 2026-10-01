@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
+import { isMain } from "./main-module.mjs";
 
 const TS_SOURCE = /\.(?:ts|mts|cts)$/;
 const TEST_FILE = /\.test\.(?:ts|mts|cts|js|mjs|cjs)$/;
@@ -167,7 +167,7 @@ export function parseArgs(args) {
   return { sets, listOnly, only };
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.error) {
     console.error(`run-tests: ${parsed.error}`);

@@ -24,6 +24,7 @@ on:
       - .github/workflows/docker.yml
       - .github/workflows/ci.yml
       - tools/artifact-files.mjs
+      - tools/main-module.mjs
   push:
     branches: [main]
     paths:
@@ -48,6 +49,7 @@ on:
       - .github/workflows/docker.yml
       - .github/workflows/ci.yml
       - tools/artifact-files.mjs
+      - tools/main-module.mjs
 
 concurrency:
   group: docker-${{ github.ref }}

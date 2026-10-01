@@ -2,7 +2,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { isMain } from "./main-module.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const SKILL_DIR = join(REPO, ".claude", "skills", "run-splitpage-app");
@@ -490,6 +491,6 @@ export async function main(argv, env) {
   }
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), process.env);
 }
