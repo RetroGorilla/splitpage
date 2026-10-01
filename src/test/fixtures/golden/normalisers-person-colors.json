@@ -1,0 +1,353 @@
+[
+  {
+    "case": "null",
+    "input": null,
+    "output": null
+  },
+  {
+    "case": "a string",
+    "input": "Sam",
+    "output": null
+  },
+  {
+    "case": "an array",
+    "input": [
+      [
+        "Sam",
+        "#80BDFB"
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "empty",
+    "input": {},
+    "output": null
+  },
+  {
+    "case": "one name",
+    "input": {
+      "Sam": "#80bdfb"
+    },
+    "output": {
+      "Sam": "#80BDFB"
+    }
+  },
+  {
+    "case": "a colour with spaces, in lower case",
+    "input": {
+      "Sam": "  #80bdfb "
+    },
+    "output": {
+      "Sam": "#80BDFB"
+    }
+  },
+  {
+    "case": "a colour outside the palette",
+    "input": {
+      "Sam": "#000000"
+    },
+    "output": null
+  },
+  {
+    "case": "a colour that is not a string",
+    "input": {
+      "Sam": 5
+    },
+    "output": null
+  },
+  {
+    "case": "controls and DEL are stripped from a name",
+    "input": {
+      "\u0000Sam\u001f": "#80BDFB"
+    },
+    "output": {
+      "Sam": "#80BDFB"
+    }
+  },
+  {
+    "case": "C1 controls are not",
+    "input": {
+      "Sam": "#80BDFB"
+    },
+    "output": {
+      "Sam": "#80BDFB"
+    }
+  },
+  {
+    "case": "a name of controls only",
+    "input": {
+      "\u0001\u0002": "#80BDFB"
+    },
+    "output": null
+  },
+  {
+    "case": "79 characters",
+    "input": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    },
+    "output": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    }
+  },
+  {
+    "case": "80 characters, the limit",
+    "input": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    },
+    "output": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    }
+  },
+  {
+    "case": "81 characters",
+    "input": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    },
+    "output": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    }
+  },
+  {
+    "case": "80 inside spaces",
+    "input": {
+      " xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ": "#80BDFB"
+    },
+    "output": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": "#80BDFB"
+    }
+  },
+  {
+    "case": "an astral character across the cut",
+    "input": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx😀": "#80BDFB"
+    },
+    "output": {
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\ud83d": "#80BDFB"
+    }
+  },
+  {
+    "case": "the same name in other case and spacing: the first wins",
+    "input": {
+      "Sam": "#80BDFB",
+      "SAM": "#F9B64F",
+      " sam ": "#CBA1FA"
+    },
+    "output": {
+      "Sam": "#80BDFB"
+    }
+  },
+  {
+    "case": "__proto__ alone",
+    "input": {
+      "__proto__": "#80BDFB"
+    },
+    "output": null
+  },
+  {
+    "case": "__proto__ beside a name",
+    "input": {
+      "__proto__": "#80BDFB",
+      "Sam": "#80BDFB"
+    },
+    "output": {
+      "Sam": "#80BDFB"
+    }
+  },
+  {
+    "case": "constructor",
+    "input": {
+      "constructor": "#80BDFB"
+    },
+    "output": null
+  },
+  {
+    "case": "prototype",
+    "input": {
+      "prototype": "#80BDFB"
+    },
+    "output": null
+  },
+  {
+    "case": "guarded names after trimming",
+    "input": {
+      " constructor ": "#80BDFB",
+      "\u0000prototype": "#80BDFB"
+    },
+    "output": null
+  },
+  {
+    "case": "guarded names in other case are names",
+    "input": {
+      "Constructor": "#80BDFB",
+      "__PROTO__": "#80BDFB",
+      "PROTOTYPE": "#80BDFB"
+    },
+    "output": {
+      "Constructor": "#80BDFB",
+      "__PROTO__": "#80BDFB",
+      "PROTOTYPE": "#80BDFB"
+    }
+  },
+  {
+    "case": "names of Object.prototype methods",
+    "input": {
+      "toString": "#80BDFB",
+      "hasOwnProperty": "#80BDFB"
+    },
+    "output": {
+      "toString": "#80BDFB",
+      "hasOwnProperty": "#80BDFB"
+    }
+  },
+  {
+    "case": "199 names",
+    "input": {
+      "keys": 199,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p198",
+        "#80BDFB"
+      ]
+    },
+    "output": {
+      "keys": 199,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p198",
+        "#80BDFB"
+      ]
+    }
+  },
+  {
+    "case": "200 names, the limit",
+    "input": {
+      "keys": 200,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    },
+    "output": {
+      "keys": 200,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    }
+  },
+  {
+    "case": "201 names",
+    "input": {
+      "keys": 201,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p200",
+        "#80BDFB"
+      ]
+    },
+    "output": {
+      "keys": 200,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    }
+  },
+  {
+    "case": "__proto__ and then 200 names",
+    "input": {
+      "keys": 201,
+      "first": [
+        "__proto__",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    },
+    "output": {
+      "keys": 200,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    }
+  },
+  {
+    "case": "prototype and then 200 names",
+    "input": {
+      "keys": 201,
+      "first": [
+        "prototype",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    },
+    "output": {
+      "keys": 200,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    }
+  },
+  {
+    "case": "an invalid colour and then 200 names",
+    "input": {
+      "keys": 201,
+      "first": [
+        "Bad",
+        "#000000"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    },
+    "output": {
+      "keys": 200,
+      "first": [
+        "p000",
+        "#80BDFB"
+      ],
+      "last": [
+        "p199",
+        "#80BDFB"
+      ]
+    }
+  }
+]

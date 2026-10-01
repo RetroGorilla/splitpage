@@ -134,8 +134,14 @@ export function runTests({
   printError = console.error,
   spawn = spawnSync,
   listOnly = false,
-  only = []
+  only = [],
+  env = process.env
 } = {}) {
+  if (env.GOLDEN_UPDATE !== undefined) {
+    printError(`run-tests: GOLDEN_UPDATE is set (${JSON.stringify(env.GOLDEN_UPDATE)}), which would make the golden tests rewrite their fixtures instead of checking them.`);
+    printError("run-tests: unset it; to regenerate fixtures on purpose run: node src/test/golden-helpers.mjs --update <name>[,<name>...] | all");
+    return 2;
+  }
   const { groups: found, overlaps, orphans, untested } = discover(files, groups);
   const focused = only.length > 0;
   const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only) }));

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { buildVideoCardEl, htmlToMarkdown, sanitizeHtml, storedHtmlFromDom } from "../js/04-richtext.js";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
 import { intern } from "../js/02c-blobs.js";
-import { createIdMasker, goldenText, image, settleGolden } from "./golden-helpers.mjs";
+import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";
 
 const KNOWN = image("png", 7, 5);
 const PNG = image("png", 71, 13);
@@ -180,7 +180,9 @@ function runCase(input) {
   const cell = fromHtml(input, { onMedia: (m) => media.push(m) });
   const rendered = toHtml(cell);
   return {
-    raw: { sanitized, rendered },
+    input,
+    started,
+    raw: { sanitized, rendered, cell: JSON.parse(JSON.stringify(cell)) },
     golden: {
       input,
       sanitized: masker.html(sanitized),
@@ -191,8 +193,31 @@ function runCase(input) {
       markdownOfInput: htmlToMarkdown(input),
       storedFromDom: storedHtmlFromDom(input)
     },
-    minted: masker.minted
+    minted: masker.minted,
+    ended: Date.now()
   };
+}
+
+function idsTheInputCarries(input) {
+  const known = new Set();
+  if (typeof input !== "string") return known;
+  const body = new DOMParser().parseFromString(input, "text/html").body;
+  for (const el of body.querySelectorAll("[data-cmt], [data-broll-id]")) {
+    for (const v of [el.getAttribute("data-cmt"), el.getAttribute("data-broll-id")]) {
+      if (v !== null) known.add(v).add(v.replace(/[^A-Za-z0-9_-]/g, ""));
+    }
+  }
+  return known;
+}
+
+function idsTheOutputsAdd(r) {
+  const known = idsTheInputCarries(r.input);
+  const found = [...idsInHtml(r.raw.sanitized), ...idsInHtml(r.raw.rendered)];
+  for (const run of r.raw.cell) {
+    if (run.atom === "broll") found.push({ prefix: "bs", value: run.id });
+    for (const id of run.marks.cmt || []) found.push({ prefix: "c", value: id });
+  }
+  return found.filter((f) => !known.has(f.value));
 }
 
 intern(KNOWN.bytes);
@@ -224,10 +249,20 @@ test("golden: video card HTML", () => {
   assert.equal(goldenText(actual.videoCards), goldenText(expected.value.videoCards));
 });
 
-test("every minted id has its prefix, seven random base-36 digits at most, and a time stamp from this run", () => {
-  for (const [, r] of results) {
-    for (const m of r.minted) assert.match(m.value, new RegExp("^" + m.prefix + "[0-9a-z]{0,7}[0-9a-z]{8}$"));
+test("every id the outputs add is minted in this run's format and masked; no id the input carried is masked", () => {
+  let added = 0;
+  for (const [name, r] of results) {
+    const ids = idsTheOutputsAdd(r);
+    const golden = goldenText(r.golden);
+    for (const a of ids) {
+      assert.ok(mintedId(a.value, a.prefix, r.started, r.ended),
+        `${name}: ${a.value} is not ${a.prefix} plus seven base-36 digits at most and a base-36 time stamp from this run`);
+      assert.ok(!golden.includes(a.value), `${name}: ${a.value} is left unmasked`);
+    }
+    for (const m of r.minted) assert.ok(ids.some((a) => a.value === m.value), `${name}: ${m.value} was masked, yet the input carried it`);
+    added += ids.length;
   }
+  assert.ok(added > 0, "the corpus has anchors and b-roll keys without ids");
 });
 
 test("INV-10: the sanitiser's output is its own fixed point over the corpus", () => {

@@ -1,6 +1,6 @@
 # Milestone 2: pure policies and document/text/merge operations
 
-This is the working plan for milestone 2 of [the implementation plan](../IMPLEMENTATION-PLAN.md#2--extract-pure-policies-and-documenttextmerge-operations). It was derived from the source at `4.0-development` d18adde. Line numbers below refer to that commit.
+This is the working plan for milestone 2 of [the implementation plan](../IMPLEMENTATION-PLAN.md#2--extract-pure-policies-and-documenttextmerge-operations). It was derived from the source at `4.0-development` d18adde, and it names functions rather than lines; the two line numbers it does cite are at that commit.
 
 ## What moves, and what cannot yet
 
@@ -20,7 +20,7 @@ Three kinds of function:
 | `04-richtext.js` | `safeImageSrc`, `safeHref`, `plainText`, `plainName`, `safeId`, `storedImageHtml` (as a string) | `inertBody`, `sanitizeHtml`, `storedHtmlFromDom`, `htmlToMarkdown`, `buildVideoCardEl` go to `adapters/richtext` |
 | `04c-doc-model.js` | Everything except decoding: runs, `toHtml` (a pure encoder), projections, edits, cues, steps, `mergeCells`, anchors | `fromHtml`/`cellOf` decode through the rich-text adapter |
 | `07-production-tags.js` | Status/category ids and ranks, `normalizeTagName`, registry keys, tag ids, `contentMemo`, the readers, `collectTagsFromRows`, `missingRegistryTags`, `tagOccurrences`, the healing and quick-add *plans* | Presentation (labels, colours, icons), the `S` mutators, DOM retagging of cells that hold media, the idle refresh |
-| `08c-broll.js` | Statuses, marker, limits, cell line readers, prop policies, anchor edits, the `brollEntries` read model returning a plan | Capture, record writes (apply the plan), badges, the DOM path for media cells |
+| `08c-broll.js` | To `core/document/broll.ts`: status ids, limits, the marker regex and the prop policy (`normalizeBrollProps`, `brollPropKey`). To `core/production/broll.ts`, because they need core/text: the cell line readers (they call `tagNameOf`), the anchor edits (`insertBrollKey`, `deleteRange`) and the `brollEntries` read model returning a plan | Capture, record writes (apply the plan), badges, the DOM path for media cells |
 | `01-scene-status.js`, `00p-prefs.js` | Scene-length and target-length normalisers, person colours | Rendering |
 
 What `fromHtml` and `toHtml` actually need:
@@ -33,10 +33,10 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 
 `tools/dep-report.mjs`'s `CORE_DEPENDENCIES` sets the order: `document` ← `text` ← `merge`/`production`, and core/merge may not import core/production. `migrateRows` needs text, production and the sanitiser, and `mergeStates` ends by calling it. So both are composed at the core root, which may import every core folder.
 
-- `src/core/document/`: `ports.ts`, `text-policy.ts`, `ids.ts`, `tags.ts`, `broll.ts`, `timing.ts`, `person-colors.ts`, `media.ts`, `gallery.ts`, `memo.ts`, `fields.ts`, `comments.ts`.
+- `src/core/document/`: `ports.ts`, `text-policy.ts`, `ids.ts`, `tags.ts`, `broll.ts`, `timing.ts`, `person-colors.ts`, `media.ts`, `gallery.ts`, `memo.ts`, `fields.ts`, `comments.ts`. Its `broll.ts` holds only what needs nothing from core/text: status ids, limits, the marker regex and the prop policy.
 - `src/core/text/`: `runs.ts`, `edits.ts`, `directions.ts`, `cues.ts`, `tree.ts`, `html.ts` (`toHtml`), `projections.ts`, `steps.ts`, `anchors.ts`, `ports.ts` (`CellDecoder`).
 - `src/core/merge/`: `cells.ts`, `text-field.ts`, `lists.ts`, `rows.ts`, `gallery.ts`, `scalars.ts`, `states.ts` (`mergeStateFields`).
-- `src/core/production/`: `readers.ts`, `tags.ts`, `broll.ts`, `timing.ts`.
+- `src/core/production/`: `readers.ts`, `tags.ts`, `broll.ts`, `timing.ts`. Its `broll.ts` takes the parts of 08c that depend on core/text: the cell line readers, the anchor edits and the `brollEntries` plan.
 - `src/core/migrate.ts` and `src/core/merge-states.ts` (core root).
 - `src/adapters/richtext/`: `createRichText({ DOMParser, images, ids })`. It builds nodes through `body.ownerDocument`, never the global `document`.
 - `src/adapters/identity/ids.ts`: `makeId`, `randomHexBytes`, `mintDocId`, `nowIso`.
@@ -49,6 +49,8 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 - `CellDecoder`.
 
 **Image ingestion is an explicit effect.** Core decodes data URLs purely. `createImageIngestion` records what is pending, and its `known()` checks the pending set first. A legacy conflict card's picture is found later in the same pass today, and this keeps that. The caller then interns the pending bytes and queues persistence.
+
+**Ingestion order that lane 2.5 must keep.** In `migrateRows`, a comment's `c.body = sanitizeHtml(c.body)` (02-state.js line 213) runs before the image conflict card looks its picture up with `recordFor` (line 221). Sanitising interns the body's data-URL picture, so the lookup finds it in the same pass, even in a fresh process with an empty registry. `core/migrate.ts` must decode and record a comment body's pictures before it resolves that comment's `imageValue`, and resolve it through `known()`, which sees the pending set.
 
 **One field policy source.** Each `STATE_FIELDS` entry is `{ key, def?, normalize?, merge: StrategyId, undo: boolean }`, with no callbacks into UI modules. Merge strategies come from a table typed `Record<StrategyId, …>`, so a field with no strategy is a compile error. `12a-undo.js`'s skip list is derived from `undo`. A test adds a field and checks that it survives `migrateRows`, `mergeStates` and a `.splitpage` round trip without any other edit (INV-04).
 
@@ -87,7 +89,7 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
 
 ## Characterisation (2.0)
 
-Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that.
+Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that, and `npm test` refuses to run while `GOLDEN_UPDATE` is set. Goldens are regenerated only on `4.0-development`, in a dedicated commit that changes nothing else, never inside a lane that moves code: a moving lane keeps every golden passing unchanged.
 
 - **`richtext-golden`:** `sanitizeHtml`, `fromHtml`, `toHtml(fromHtml)`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML, over a corpus:
   - pasted HTML: style spans, `b` with normal weight, empty blocks;
@@ -97,12 +99,13 @@ Fixtures are generated once from the current code and committed. Tests compare a
   - `javascript:` and `data:` links;
   - astral characters, NBSP, U+FFFC, U+200B, CRLF.
 - **`migrate-golden`:** run in a fresh process, so the registry starts empty.
-  - Inputs: schema-1 documents; inline images in cells, comments, replies, conflict cards, `visualImage`, gallery items and annotations; video cards in cells.
+  - Inputs: schema-1 documents; inline images in cells, comments, replies, conflict cards, `visualImage`, gallery items and annotations; video cards in cells; a schema 2 document with tag anchors and no `productionTags` key, whose derived entries pin the `hadTagRegistry` order.
   - Asserts: the JSON (ids masked), key order, the registry's shas, the shas queued for persistence, and idempotence.
-  - This closes a real gap: `migrate-rows.test.mjs` passes its conflict-card case only because an earlier test in the same file already interned the picture.
+  - The conflict-card picture is used nowhere else in its document, so the golden shows it is found within one pass from an empty registry, by the ingestion order above. (`migrate-rows.test.mjs` does not depend on earlier tests for this either: its body is sanitised, and the picture interned, before the lookup.)
+- **`normalisers-golden`:** one table per normaliser that moves, with every case at a limit, one past it and one short of it: people names, the `migrateRows` field limits, `plainText`'s control characters, `plainName`, `safeId`, `safeHref`, `safeImageSrc`, the image size attributes, `DIRECTION_MAX`, `normalizePersonColors` and its name guard, `withPageHead`, scene and target lengths, gallery limits and b-roll props.
 - **`merge-golden`:** `mergeStates` fixtures with ids and timestamps masked, including the fields `12a-undo.js` skips.
 - **`production-golden`:** `productionEntries`, `brollEntries` (read and repair), the records that `healTagRegistry` writes, and cue retitling (today only browser suite 241 covers it).
-- **`sha256-utf8`:** the manual UTF-8 encoder equals `TextEncoder`, including lone surrogates.
+- **`sha256-utf8`:** `sha256Hex` over `TextEncoder` and over the hand-written UTF-8 encoder (with `TextEncoder` removed) equals `node:crypto`, lone surrogates included; it is the oracle for 2.1a's manual encoder.
 
 ## Risks
 
