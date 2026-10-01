@@ -34,6 +34,8 @@ const PLATFORM_GLOBALS = new Set([
 
 const COMMONJS_GLOBALS = new Set(["require", "module", "exports"]);
 
+const CLOCK_FREE_DATE_MEMBERS = new Set(["parse", "UTC"]);
+
 export const MUTATING_METHODS = new Set(["push", "pop", "splice", "shift", "unshift", "sort", "reverse", "fill", "copyWithin"]);
 
 const ELEMENT_CALLBACKS = new Map([
@@ -197,6 +199,21 @@ function isReference(node) {
   if (ts.isLabeledStatement(p) || ts.isBreakStatement(p) || ts.isContinueStatement(p)) return false;
   if (p.name === node && NAMED_DECLARATIONS.some((is) => is(p))) return false;
   return true;
+}
+
+function clockOrRandomUse(node) {
+  const name = node.text;
+  if (name !== "Date" && name !== "Math") return null;
+  const n = outermost(node);
+  const p = n.parent;
+  let member = null;
+  if (ts.isPropertyAccessExpression(p) && p.expression === n) member = p.name.text;
+  else if (ts.isElementAccessExpression(p) && p.expression === n) member = keyOf(p.argumentExpression);
+  if (name === "Math") return member !== null && member !== "*" && member !== "random" ? null : "Math.random";
+  if (member !== null) return CLOCK_FREE_DATE_MEMBERS.has(member) ? null : "Date";
+  if (ts.isNewExpression(p) && p.expression === n) return (p.arguments ?? []).some((a) => !ts.isSpreadElement(a)) ? null : "Date";
+  if (ts.isBinaryExpression(p) && p.right === n && p.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) return null;
+  return "Date";
 }
 
 function referenceSpace(node) {
@@ -534,8 +551,10 @@ export function analyzeScript(path, text) {
 
   const globals = new Map();
   for (const r of refs) {
-    const name = r.node.text;
-    if (r.binding || !PLATFORM_GLOBALS.has(name) || (commonjs && COMMONJS_GLOBALS.has(name))) continue;
+    if (r.binding) continue;
+    const text = r.node.text;
+    const name = PLATFORM_GLOBALS.has(text) ? text : r.space === "value" ? clockOrRandomUse(r.node) : null;
+    if (!name || (commonjs && COMMONJS_GLOBALS.has(name))) continue;
     const line = at(r.node);
     if (!globals.has(name) || globals.get(name) > line) globals.set(name, line);
   }
