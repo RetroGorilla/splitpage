@@ -23,7 +23,6 @@ import {
   writePref
 } from "./00p-prefs.js";
 import { setHideShotScenes } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments } from "./10-comments.js";
@@ -42,6 +41,7 @@ import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, applyWriterSize, readWriterSize } fro
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
 import { TOUR_DONE_KEY } from "./20c-help.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 var SETTINGS_ID = "settings-modal";

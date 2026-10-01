@@ -1,10 +1,6 @@
 import { S } from "./_state.js";
-import { makeId } from "./02-state.js";
-import { randomHexBytes } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import { addGalleryPicture, addGalleryVideo } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { imageRefOf, inertBody, safeHref, storedHtmlFromDom } from "./04-richtext.js";
 import {
   cellLength,
   cellOf,
@@ -25,6 +21,10 @@ import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { recordPastedBroll } from "./08c-broll.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
+import { makeId, randomHexBytes } from "../adapters/identity/ids.ts";
+import { addGalleryPicture, addGalleryVideo } from "../core/document/gallery.ts";
+import { safeHref } from "../core/document/text-policy.ts";
+import { imageRefOf, inertBody, storedHtmlFromDom } from "../legacy/richtext.ts";
 
 var CUT_ATTR = "data-splitpage-cut";
 

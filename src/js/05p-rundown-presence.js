@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
-import { pad2 } from "./05-render.js";
 import { goToScene, rundownEdge } from "./05f-rundown.js";
 import { presenceShown } from "./13a-presence.js";
+import { pad2 } from "../core/production/timing.ts";
 
 export var RUNDOWN_IDLE_MS = 60 * 1000;
 var DOT_PX = 10;
