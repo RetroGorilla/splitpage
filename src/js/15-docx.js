@@ -4,7 +4,6 @@ import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
 import { morePictureRefs, pictureBytes, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
-import { pad2 } from "./05-render.js";
 import {
   htmlToPlainText,
   strBytes,
@@ -28,6 +27,7 @@ import {
 } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml, safeHref } from "../core/document/text-policy.ts";
+import { pad2 } from "../core/production/timing.ts";
 import { flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
 import { importDirections } from "../core/text/directions.ts";
 import { setMark } from "../core/text/edits.ts";

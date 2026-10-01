@@ -29,7 +29,6 @@ import {
   readStash,
   setBaseState
 } from "./03-sync.js";
-import { pad2 } from "./05-render.js";
 import { healTagRegistry } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { brollEntries } from "./08c-broll.js";
@@ -67,6 +66,7 @@ import {
 } from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
+import { pad2 } from "../core/production/timing.ts";
 import { toMarkdown } from "../core/text/projections.ts";
 import { cellOf, htmlToMarkdown, inertBody } from "../legacy/richtext.ts";
 

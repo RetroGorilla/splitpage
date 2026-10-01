@@ -1,5 +1,4 @@
 import { S } from "./_state.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { findRowIndex } from "./03-sync.js";
 import {
   ensureTrailingCaretSpot,
@@ -7,15 +6,6 @@ import {
   plainText,
   sanitizeHtml
 } from "./04-richtext.js";
-import {
-  cellOf,
-  deleteRange,
-  insertBrollKey,
-  insertText,
-  projection,
-  replaceWithBrollKey,
-  toHtml
-} from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import {
@@ -29,7 +19,7 @@ import {
 import { renderBrollViews } from "./08d-broll-panel.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { htmlToPlainText } from "./14-export.js";
-import { randomIds } from "../adapters/identity/ids.ts";
+import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
   BROLL_MARKER_RE,
@@ -41,6 +31,7 @@ import {
   brollPropKey,
   normalizeBrollProps
 } from "../core/document/broll.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import {
   anchorBrollCell,
   brollAnchorTodo,
@@ -55,6 +46,10 @@ import {
   planBrollAnchors
 } from "../core/production/broll.ts";
 import { holdsMedia } from "../core/production/tags.ts";
+import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { projection } from "../core/text/runs.ts";
+import { cellOf } from "../legacy/richtext.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_NAME_MAX,

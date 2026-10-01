@@ -5,7 +5,6 @@ import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { pad2 } from "./05-render.js";
 import {
   addPersonForTag,
   renderProduction,
@@ -29,6 +28,7 @@ import {
 import { closeNewTabPage } from "./20j-newtab.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
 import { onRootClick } from "./21-events.js";
+import { pad2 } from "../core/production/timing.ts";
 import { withoutCues } from "../core/text/cues.ts";
 import { sliceCell } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";

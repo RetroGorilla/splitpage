@@ -11,13 +11,13 @@ import {
   targetLengthOf,
   wordCount
 } from "./01-scene-status.js";
-import { pad2 } from "./05-render.js";
 import { TAG_CATEGORIES } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { brollEntries, brollSortedForList } from "./08c-broll.js";
 import { shotRecordForFile } from "./08d-broll-panel.js";
 import { commentEntries } from "./10-comments.js";
 import { tagPrintColor } from "./14-export.js";
+import { pad2 } from "../core/production/timing.ts";
 import { toHtml } from "../core/text/html.ts";
 import { toDocxRuns } from "../core/text/projections.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
