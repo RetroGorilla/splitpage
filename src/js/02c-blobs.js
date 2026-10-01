@@ -1,6 +1,14 @@
-import { sha256Bytes } from "../core/document/ids.ts";
-import { safeImageSrc } from "../core/document/text-policy.ts";
+import {
+  base64Encode,
+  forgivingBase64Decode,
+  imageDataUrlBytes,
+  imageRecordOf,
+  rowImage,
+  rowImageKey,
+  rowImageShas
+} from "../core/document/media.ts";
 import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
+export { rowImage, rowImageKey, rowImageShas };
 
 var BLOB_DB_NAME = "splitpage-blobs";
 var BLOB_DB_VERSION = 1;
@@ -40,69 +48,30 @@ function uniqueStrings(list) {
   return out;
 }
 
-var B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-var B64_LOOKUP = null;
-
-function forgivingBase64Decode(text) {
-  var s = text.replace(/[\t\n\f\r ]/g, "");
-  if (s.length % 4 === 0) s = s.replace(/={1,2}$/, "");
-  if (s.length % 4 === 1 || /[^A-Za-z0-9+/]/.test(s)) return null;
-  if (!B64_LOOKUP) {
-    B64_LOOKUP = new Uint8Array(128);
-    for (var k = 0; k < 64; k++) B64_LOOKUP[B64_ALPHABET.charCodeAt(k)] = k;
-  }
-  var out = new Uint8Array(Math.floor(s.length * 3 / 4));
-  var buf = 0, bits = 0, o = 0;
-  for (var i = 0; i < s.length; i++) {
-    buf = ((buf << 6) | B64_LOOKUP[s.charCodeAt(i)]) & 0xffffff;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out[o++] = (buf >> bits) & 0xff;
-    }
-  }
-  return out;
-}
-
-function base64Encode(bytes) {
-  var parts = [], chunk = "", i, n, a, b, c;
-  for (i = 0; i + 2 < bytes.length; i += 3) {
-    n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
-    chunk += B64_ALPHABET.charAt(n >> 18) + B64_ALPHABET.charAt((n >> 12) & 63) +
-      B64_ALPHABET.charAt((n >> 6) & 63) + B64_ALPHABET.charAt(n & 63);
-    if (chunk.length >= 8192) { parts.push(chunk); chunk = ""; }
-  }
-  if (i < bytes.length) {
-    a = bytes[i]; b = i + 1 < bytes.length ? bytes[i + 1] : 0; c = 0;
-    n = (a << 16) | (b << 8) | c;
-    chunk += B64_ALPHABET.charAt(n >> 18) + B64_ALPHABET.charAt((n >> 12) & 63) +
-      (i + 1 < bytes.length ? B64_ALPHABET.charAt((n >> 6) & 63) : "=") + "=";
-  }
-  parts.push(chunk);
-  return parts.join("");
-}
-
 export function intern(bytes) {
   if (bytes instanceof ArrayBuffer) bytes = new Uint8Array(bytes);
   if (!bytes || typeof bytes.length !== "number" || typeof bytes.byteLength !== "number") return null;
-  var mime = sniffImageMime(bytes);
-  var size = mime ? imageDims(bytes) : null;
-  if (!mime || !size) return null;
-  var sha = sha256Bytes(bytes);
-  var have = blobEntries[sha];
+  var record = imageRecordOf(bytes);
+  if (!record) return null;
+  var have = blobEntries[record.sha256];
   if (have) return freshRecord(have.record);
-  var record = { sha256: sha, width: size.width, height: size.height, mime: mime };
-  blobEntries[sha] = { record: record, bytes: new Uint8Array(bytes), url: null };
+  blobEntries[record.sha256] = { record: record, bytes: new Uint8Array(bytes), url: null };
   return freshRecord(record);
 }
 
 export function internDataUrl(dataUrl) {
-  if (typeof dataUrl !== "string" || !safeImageSrc(dataUrl)) return null;
-  var url = dataUrl.replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, "").replace(/[\t\n\r]/g, ""); // eslint-disable-line no-control-regex
-  var bytes = forgivingBase64Decode(url.slice(url.indexOf(",") + 1));
+  var bytes = imageDataUrlBytes(dataUrl);
   return bytes ? intern(bytes) : null;
 }
+
+export var registryImages = {
+  known: recordFor,
+  fromDataUrl: function (dataUrl) {
+    var rec = internDataUrl(dataUrl);
+    if (rec) queuePersist([rec.sha256]);
+    return rec;
+  }
+};
 
 export function has(sha) {
   return isSha256Hex(sha) && !!blobEntries[sha];
@@ -149,28 +118,10 @@ export function isDurableSync(sha) {
   return has(sha) && !!blobDurable[sha] && !!(blobBackend && blobBackend.persistent);
 }
 
-function legacyImageSrc(row) {
-  var v = row.visualImage;
-  return typeof v === "string" && v.slice(0, 11) === "data:image/" ? v : null;
-}
-
-export function rowImage(row) {
-  if (!row || typeof row !== "object") return null;
-  var legacy = legacyImageSrc(row);
-  if (legacy) return { ref: null, dataUrl: legacy };
-  var ref = normalizeImageRef(row.imageRef);
-  return ref ? { ref: ref, dataUrl: null } : null;
-}
-
 export function rowImageUrl(row) {
   var img = rowImage(row);
   if (!img) return null;
   return img.dataUrl || urlForSync(img.ref.sha256);
-}
-
-export function rowImageKey(row) {
-  var img = rowImage(row);
-  return img ? (img.ref ? img.ref.sha256 : img.dataUrl) : null;
 }
 
 export function rowImageDataUrl(row) {
@@ -197,17 +148,6 @@ export function rowImageBytes(row) {
     width: dims ? dims.width : 0,
     height: dims ? dims.height : 0
   };
-}
-
-export function rowImageShas(rows) {
-  var out = [], seen = {};
-  (Array.isArray(rows) ? rows : []).forEach(function (row) {
-    var img = rowImage(row);
-    if (!img || !img.ref || seen[img.ref.sha256]) return;
-    seen[img.ref.sha256] = true;
-    out.push(img.ref.sha256);
-  });
-  return out;
 }
 
 export function blobImgHtml(ref, cls) {

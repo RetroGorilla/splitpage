@@ -1,22 +1,26 @@
 import { S } from "./_state.js";
-import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
-import { normalizePersonColors } from "./00p-prefs.js";
-import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength, rowStatus } from "./01-scene-status.js";
-import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
-import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
+import { PAGE_SHELL } from "./00-prelude.js";
+import { rowStatus } from "./01-scene-status.js";
+import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
+import { internDataUrl, queuePersist, recordFor, registryImages } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
-import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
   buildVideoCardEl,
   plainName,
   plainText,
-  safeHref,
   safeId,
   safeImageSrc,
   sanitizeHtml,
   storedImageHtml
 } from "./04-richtext.js";
+import { SCHEMA_VERSION, STATE_FIELDS as FIELD_POLICIES, missingStateFields as missingFieldsIn } from "../core/document/fields.ts";
+import { mediaCommentId } from "../core/document/ids.ts";
+import { mediaComments } from "../core/document/media.ts";
+import { normalizePersonColors } from "../core/document/person-colors.ts";
+import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
+import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,
@@ -30,6 +34,7 @@ import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus, normalizeBrollProps } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 export { makeId } from "../adapters/identity/ids.ts";
+export { escapeHtml, legacyMdToHtml, mediaCommentId };
 
 function defaultState() {
   try {
@@ -39,111 +44,31 @@ function defaultState() {
   }
 }
 
-export var STATE_FIELDS = [
-  { key: "title",          merge: "title",  def: function () { return ""; } },
-  { key: "docId",          merge: "doc-id" },
-  { key: "rows",           merge: "rows",     def: function () { return []; } },
-  { key: "comments",       merge: "comments", def: function () { return []; } },
-  { key: "people",         merge: "list-union-with-base", def: function () { return []; },
-    mergeList: function (b, m, t) { return mergePeople(b, m, t); } },
-  { key: "productionTags", merge: "list-union-with-base", def: function () { return []; },
-    mergeList: function (b, m, t) { return mergeProductionTags(b, m, t); } },
-  { key: "brollShots",     merge: "list-union-with-base", def: function () { return []; },
-    mergeList: function (b, m, t) { return mergeBrollShots(b, m, t); } },
-  { key: "wordsPerMinute", merge: "changed-side-wins", def: function () { return DEFAULT_WPM; } },
-  { key: "rev",            merge: "max-plus-one", def: function () { return 0; } },
-  { key: "lastEditedBy",   merge: "theirs-wins" },
-  { key: "lastEditedAt",   merge: "theirs-wins" },
-  { key: "personColors",   merge: "person-colors" },
-  { key: "targetSeconds",  merge: "target-length" },
-  { key: "schema",         merge: "constant" }
-];
-
-export function missingStateFields(s) {
-  return STATE_FIELDS.filter(function (f) {
-    return f.def && (!s || !(f.key in s));
-  }).map(function (f) { return f.key; });
-}
-
-export function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-export function legacyMdToHtml(text) {
-  if (typeof text !== "string") return "";
-  var out = escapeHtml(text);
-  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-  out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
-  out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
-  out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
-  ["strong", "em", "s"].forEach(function (tag) {
-    out = out.replace(new RegExp("&lt;" + tag + "&gt;([\\s\\S]*?)&lt;\\/" + tag + "&gt;", "gi"), "<" + tag + ">$1</" + tag + ">");
-  });
-  out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
-  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
-    var safe = safeHref(url);
-    return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : m;
-  });
-  out = out.replace(/\n/g, "<br>");
-  return out;
-}
-
-var MEDIA_COMMENT_NOTE = {
-  visualText: "This was in the scene's visual column. Pictures and videos go in comments now:",
-  audioText: "This was in the scene's audio column. Pictures and videos go in comments now:"
+var LIST_MERGERS = {
+  people: function (b, m, t) { return mergePeople(b, m, t); },
+  productionTags: function (b, m, t) { return mergeProductionTags(b, m, t); },
+  brollShots: function (b, m, t) { return mergeBrollShots(b, m, t); }
 };
 
-export function mediaCommentId(rowId, field, key) {
-  return "cm" + sha256Hex("splitpage-cell-media\n" + rowId + "\n" + field + "\n" + key).slice(0, 24);
+export var STATE_FIELDS = FIELD_POLICIES.map(function (f) {
+  var entry = Object.assign({}, f);
+  if (LIST_MERGERS[f.key]) entry.mergeList = LIST_MERGERS[f.key];
+  return entry;
+});
+
+export function missingStateFields(s) {
+  return missingFieldsIn(s, STATE_FIELDS);
+}
+
+function videoCardHtml(href) {
+  return buildVideoCardEl(href).outerHTML;
 }
 
 function moveMediaOutOfCell(row, field) {
   var found = [];
   var cell = fromHtml(row[field], { onMedia: function (m) { found.push(m); } });
   row[field] = toHtml(cell);
-  var out = [];
-  var seen = Object.create(null);
-  found.forEach(function (m) {
-    var key, media;
-    if (m.kind === "image") {
-      var sha = m.ref && m.ref.sha256;
-      if (!isSha256Hex(sha)) return;
-      key = "img:" + sha;
-      var rec = recordFor(sha) || normalizeImageRef(m.ref);
-      media = rec ? storedImageHtml(rec) : '<img class="comment-img" data-blob="' + sha + '">';
-    } else {
-      var href = safeHref(m.href || "");
-      if (!href) return;
-      key = "video:" + href;
-      media = buildVideoCardEl(href).outerHTML;
-    }
-    var id = mediaCommentId(row.id, field, key);
-    if (seen[id]) return;
-    seen[id] = true;
-    out.push({
-      id: id,
-      rowId: row.id,
-      field: field,
-      anchorId: null,
-      quotedText: "",
-      author: "Splitpage",
-      body: MEDIA_COMMENT_NOTE[field] + "<br>" + media,
-      resolved: false,
-      resolvedBy: null,
-      resolvedAt: null,
-      assignee: "",
-      createdAt: row.updatedAt || "",
-      updatedAt: row.updatedAt || "",
-      kind: "anchor",
-      replies: []
-    });
-  });
-  return out;
+  return mediaComments(row, field, found, registryImages, videoCardHtml);
 }
 
 export function migrateRows(s) {

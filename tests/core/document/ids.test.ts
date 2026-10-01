@@ -1,7 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex, utf8Bytes } from "../../../src/core/document/ids.ts";
+import {
+  deriveDocId,
+  docIdEmbeddedIn,
+  mediaCommentId,
+  mergedDocId,
+  sha256Bytes,
+  sha256Hex,
+  utf8Bytes,
+  withPageHead
+} from "../../../src/core/document/ids.ts";
 
 const ID_A = "d" + "1".repeat(32);
 const ID_B = "d" + "2".repeat(32);
@@ -107,4 +116,29 @@ test("mergedDocId: the side that changed the id wins, theirs when both did", () 
   assert.equal(mergedDocId(doc(ID_A), doc("bad"), doc(ID_A)), ID_A);
   assert.equal(mergedDocId(doc(ID_A), doc("bad"), doc("worse")), "");
   assert.equal(mergedDocId(doc(ID_A), null, undefined), "");
+});
+
+test("mediaCommentId hashes the row, the field and the media key into a stable comment id", () => {
+  const want = "cm" + createHash("sha256").update("splitpage-cell-media\nr1\nvisualText\nimg:" + "a".repeat(64), "utf8").digest("hex").slice(0, 24);
+  assert.equal(mediaCommentId("r1", "visualText", "img:" + "a".repeat(64)), want);
+  assert.match(want, /^cm[0-9a-f]{24}$/);
+  assert.notEqual(mediaCommentId("r1", "audioText", "video:https://x.test"), mediaCommentId("r1", "visualText", "video:https://x.test"));
+});
+
+const SHELL = "<!doctype html><html><head>\n<title>Splitpage</title>\n" +
+  '<meta name="description" content="old">\n</head><body><title>not this</title></body></html>';
+
+test("withPageHead sets the page title and description on one escaped line, inside the head only", () => {
+  assert.equal(withPageHead(SHELL, { title: "  A <b>\n script ", description: 'Says "hi" & more' }),
+    "<!doctype html><html><head>\n<title>A &lt;b&gt; script</title>\n" +
+    '<meta name="description" content="Says &quot;hi&quot; &amp; more">\n</head><body><title>not this</title></body></html>');
+  assert.equal(withPageHead(SHELL, {}), SHELL);
+  assert.equal(withPageHead(SHELL, { title: "", description: "" }), SHELL);
+  assert.equal(withPageHead("<p>no head</p>", { title: "x" }), "<p>no head</p>");
+});
+
+test("withPageHead adds a description after the title when the page has none", () => {
+  const bare = "<html><HEAD><TITLE>t</TITLE></HEAD></html>";
+  assert.equal(withPageHead(bare, { description: "d" }), '<html><HEAD><TITLE>t</TITLE>\n<meta name="description" content="d"></HEAD></html>');
+  assert.equal(withPageHead(bare, { title: "$& $1" }), "<html><HEAD><title>$&amp; $1</title></HEAD></html>");
 });
