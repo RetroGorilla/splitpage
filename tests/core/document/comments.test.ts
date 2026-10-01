@@ -46,6 +46,20 @@ test("comments sort by scene, then visual before audio, then when they were made
   assert.deepEqual(list.slice().sort(compare).map((c) => c.n), [5, 4, 6, 3, 2, 1]);
 });
 
+test("a comment on a lost scene sorts after one on a kept scene, whichever is compared first", () => {
+  const compare = commentPositionOrder((id) => (id === "r1" ? 0 : -1));
+  const lost = { rowId: "gone", field: "visualText", createdAt: "2026-01-01" };
+  const kept = { rowId: "r1", field: "audioText", createdAt: "2026-01-09" };
+  const title = { rowId: null, field: "title", createdAt: "2026-01-01" };
+  assert.ok(compare(lost, kept) > 0);
+  assert.ok(compare(kept, lost) < 0);
+  assert.ok(compare(title, kept) > 0);
+  assert.ok(compare(kept, title) < 0);
+  const laterLost = { rowId: "gone too", field: "visualText", createdAt: "2026-01-02" };
+  assert.ok(compare(lost, laterLost) < 0, "two lost scenes fall back to field and time");
+  assert.ok(compare(laterLost, lost) > 0);
+});
+
 test("a thread's last activity is its latest reply, or when it was made", () => {
   assert.equal(commentLastActivity({ createdAt: "2026-01-02", replies: [{ createdAt: "2026-01-01" }, { createdAt: "2026-01-05" }, {}] }), "2026-01-05");
   assert.equal(commentLastActivity({ createdAt: "2026-01-02", replies: [{ createdAt: null }] }), "2026-01-02");
