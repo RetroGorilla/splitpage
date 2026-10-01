@@ -1,6 +1,6 @@
 # Splitpage review policy
 
-This applies to every PR into `4.0-development` and `3.1.x-development`.
+This applies to every PR into `4.0-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on 4.0 under §2.
 
 **Fast path.** Two kinds of PR get the automated checks and a quick read instead of the full process:
 - docs-only PRs (CI's change classifier marks them as prose)
@@ -21,18 +21,17 @@ Every other PR goes through the full process below.
 
 | The bug… | Fix it |
 |---|---|
-| exists on 3.1.x (reproduce it there to decide) | on 3.1.x first, with a regression test written to fail first, then forward-port |
-| exists only on 4.0 | directly on 4.0 |
 | was introduced by the current PR | inside that PR, before merge |
+| already existed, in code a pending PR or milestone step is moving | after the move lands, in its own PR on 4.0, in the module that now owns the code, with a regression test written to fail first |
+| already existed, in code nothing is moving | in its own PR on 4.0, with a regression test written to fail first |
 
-If 4.0 has already moved the affected code, the forward merge ports the fix into the new module and its tests. It doesn't just resolve the conflict in the legacy file.
+A PR that moves code keeps the bugs it moves. Each one is filed as an issue and fixed by a later PR, never folded into the move.
 
 ## 3. Automated checks
 
 - **CI on PRs into 4.0 and main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core, content-security-policy and persistence browser suites, and a Node 24 run of `verify`. `docker.yml` runs when app or server inputs change.
 - **Locally before review:** the browser suites for the affected areas, chosen with the change table in [testing.md](testing.md#what-to-run-for-which-change).
 - **Full browser run before merge** for:
-  - every 3.1.x fix
   - changes to `02-state.js` or its shim, `build.mjs`, or the test harness or driver
   - any change where the affected suites can't be chosen with confidence
 - **Desktop smoke locally** when `desktop/` or main-process code changes.
@@ -98,9 +97,7 @@ The lane that wrote the code fixes the findings. The reviewer then re-checks the
 **Merge when:**
 - blockers are fixed and concerns are closed
 - the final changes have been reviewed
-- the evidence matches the combined state being merged:
-  - on 4.0, the CI `gate` is green on the latest head
-  - on 3.1.x (which has no PR CI today), there is a full local run on the exact revision
+- the evidence matches the combined state being merged: the CI `gate` is green on the latest head
 - a short PR comment records:
   - the findings and how each was closed
   - the verification, with counts
@@ -120,7 +117,7 @@ Merge with `gh pr merge N --merge --match-head-commit <sha>`.
 ## 8. Milestone gates
 
 - The runs required by [section 4 of the implementation plan](../IMPLEMENTATION-PLAN.md#4-verification-baseline-and-ci-policy), on the exact merged tree:
-  - full browser regression on Linux and Windows
+  - full browser regression on Windows; on Linux too at the 4.0 release gate only
   - real Electron smoke
   - Windows x64 and ARM64 packaged checks
 
