@@ -10,16 +10,9 @@ import {
 } from "./04-richtext.js";
 import {
   cellOf,
-  cuesInCell,
-  editCues,
   namedTagId,
   projection,
-  replaceWithTag,
-  retag,
-  setMark,
-  tagIds,
-  tagNameOf,
-  toHtml
+  replaceWithTag
 } from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
@@ -45,6 +38,22 @@ import {
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
+import { createProductionReaders } from "../core/production/readers.ts";
+import {
+  bulkTagCell as bulkTagCellWith,
+  collectTagsFromRows as collectTagGroups,
+  deriveProductionIndex,
+  holdsMedia,
+  missingRegistryTags as missingRegistryTagsIn,
+  newRegistryTag,
+  planRegistryHealing,
+  productionIndexFresh,
+  registryEntry as registryEntryIn,
+  registrySignature,
+  retagCell,
+  tagFieldOccurrences as tagFieldOccurrencesWith,
+  tagOccurrences
+} from "../core/production/tags.ts";
 export {
   contentMemo,
   ensureTagIds,
@@ -55,6 +64,7 @@ export {
   registryKey,
   registryTagHooks,
   tagKey,
+  tagOccurrences,
   tagStatusRank
 };
 
@@ -146,71 +156,27 @@ export function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
-export var tagsInField = contentMemo(function (html) {
-  var out = [];
-  var last = null;
-  cellOf(html).forEach(function (r) {
-    var id = r.atom ? null : r.marks.tag;
-    if (id && last && last.id === id) { last.text += r.text; return; }
-    last = null;
-    var t = id ? tagNameOf(id) : null;
-    var name = t ? t.name.trim() : "";
-    if (!name) return;
-    last = { id: id, catId: t.cat, name: name, text: r.text };
-    out.push(last);
-  });
-  var found = out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
-  if (html.indexOf("audio-cue") !== -1) {
-    cuesInCell(cellOf(html)).forEach(function (c) {
-      var name = c.name.slice(0, 80).trim();
-      if (name) found.push({ catId: "sound", name: name, text: c.text });
-    });
-  }
-  return found;
-});
+export var productionReaders = createProductionReaders(cellOf);
+
+export var tagsInField = productionReaders.tagsInField;
 
 export function collectTagsFromRows(rows) {
-  var groups = {}, order = [];
-  (rows || []).forEach(function (row, rowIndex) {
-    ["visualText", "audioText"].forEach(function (field) {
-      tagsInField(row[field]).forEach(function (found) {
-        var cat = tagCategory(found.catId);
-        if (!cat) return;
-        var key = tagKey(cat.id, found.name);
-        if (!groups[key]) {
-          groups[key] = { key: key, cat: cat, name: found.name, mentions: [] };
-          order.push(key);
-        }
-        groups[key].mentions.push({
-          rowId: row.id,
-          rowIndex: rowIndex,
-          field: field,
-          text: found.text
-        });
-      });
-    });
+  return collectTagGroups(rows, productionReaders).map(function (g) {
+    return { key: g.key, cat: tagCategory(g.catId), name: g.name, mentions: g.mentions };
   });
-  return order.map(function (k) { return groups[k]; });
-}
-
-function collectTags() {
-  return collectTagsFromRows(S.state.rows);
 }
 
 export function registryEntry(cat, name) {
-  var key = registryKey(cat, name);
-  for (var i = 0; i < S.state.productionTags.length; i++) {
-    if (registryKey(S.state.productionTags[i].cat, S.state.productionTags[i].name) === key) {
-      return S.state.productionTags[i];
-    }
-  }
-  return null;
+  return registryEntryIn(S.state.productionTags, cat, name);
 }
 
 export function registerProductionTag(cat, name) {
-  if (registryEntry(cat, name)) return;
-  S.state.productionTags.push({ id: mintTagId(cat, name, S.state.productionTags), cat: cat, name: name,
-                                owner: "", notes: "", status: TAG_STATUSES[0].id });
+  var rec = newRegistryTag(S.state.productionTags, cat, name);
+  if (rec) S.state.productionTags.push(rec);
+}
+
+export function addRegistryTags(records) {
+  records.forEach(function (t) { S.state.productionTags.push(t); });
 }
 
 export function registryEntryById(id) {
@@ -256,115 +222,27 @@ export function deleteProductionTagEntry(cat, name) {
 var prodIndex = null;
 var prodIndexDerived = 0;
 
-function registrySignature(tags) {
-  var sig = [];
-  tags.forEach(function (t) {
-    if (!t) { sig.push(null, null, null, null, null, null); return; }
-    sig.push(t.cat, t.name, t.owner, t.notes, t.status, t.id);
-  });
-  return sig;
-}
-
-function sameFieldTags(a, b) {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i].catId !== b[i].catId || a[i].name !== b[i].name || a[i].text !== b[i].text) return false;
-  }
-  return true;
-}
-
-var ROW_SIG_SLOTS = 5;
-
-function prodIndexFresh(ix) {
-  var rows = S.state.rows, tags = S.state.productionTags;
-  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 6) return false;
-  var rs = ix.rowSig;
-  for (var i = 0, j = 0; i < rows.length; i++, j += ROW_SIG_SLOTS) {
-    var r = rows[i];
-    if (rs[j] !== r.id) return false;
-    if (rs[j + 1] !== r.visualText) {
-      var vTags = tagsInField(r.visualText);
-      if (!sameFieldTags(rs[j + 3], vTags)) return false;
-      rs[j + 1] = r.visualText;
-      rs[j + 3] = vTags;
-    }
-    if (rs[j + 2] !== r.audioText) {
-      var aTags = tagsInField(r.audioText);
-      if (!sameFieldTags(rs[j + 4], aTags)) return false;
-      rs[j + 2] = r.audioText;
-      rs[j + 4] = aTags;
-    }
-  }
-  var ts = ix.tagSig;
-  for (i = 0, j = 0; i < tags.length; i++, j += 6) {
-    var t = tags[i];
-    if (!t) { if (ts[j] !== null) return false; continue; }
-    if (ts[j] !== t.cat || ts[j + 1] !== t.name || ts[j + 2] !== t.owner ||
-        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id) return false;
-  }
-  return true;
-}
-
-function deriveProductionIndex() {
-  var rows = S.state.rows;
-  var live = collectTags();
-  var liveByKey = {};
-  live.forEach(function (t) { liveByKey[registryKey(t.cat.id, t.name)] = t; });
-
-  var seen = {}, out = [], unregistered = [];
-  S.state.productionTags.forEach(function (t) {
-    if (!t) return;
-    var cat = tagCategory(t.cat);
-    if (!cat) return;
-    var key = registryKey(cat.id, t.name);
-    if (seen[key]) return;
-    seen[key] = true;
-    var liveMatch = liveByKey[key];
-    out.push({
-      key: key,
-      id: t.id || null,
-      cat: cat,
-      name: liveMatch ? liveMatch.name : t.name,
-      mentions: liveMatch ? liveMatch.mentions : [],
-      orphaned: !liveMatch,
-      owner: t.owner || "",
-      notes: t.notes || "",
-      status: (tagStatus(t.status) || TAG_STATUSES[0]).id
-    });
-  });
-  live.forEach(function (t) {
-    var key = registryKey(t.cat.id, t.name);
-    if (seen[key]) return;
-    seen[key] = true;
-    unregistered.push(t);
-    out.push({ key: key, id: null, cat: t.cat, name: t.name, mentions: t.mentions,
-               orphaned: false, owner: "", notes: "", status: TAG_STATUSES[0].id });
-  });
-
-  var rowSig = new Array(rows.length * ROW_SIG_SLOTS);
-  rows.forEach(function (r, i) {
-    var j = i * ROW_SIG_SLOTS;
-    rowSig[j] = r.id;
-    rowSig[j + 1] = r.visualText;
-    rowSig[j + 2] = r.audioText;
-    rowSig[j + 3] = tagsInField(r.visualText);
-    rowSig[j + 4] = tagsInField(r.audioText);
-  });
+function presentEntry(e) {
   return {
-    entries: out,
-    unregistered: unregistered,
-    rowCount: rows.length,
-    rowSig: rowSig,
-    tagSig: registrySignature(S.state.productionTags)
+    key: e.key,
+    id: e.id,
+    cat: tagCategory(e.catId),
+    name: e.name,
+    mentions: e.mentions,
+    orphaned: e.orphaned,
+    owner: e.owner,
+    notes: e.notes,
+    status: e.status
   };
 }
 
 function productionIndex() {
-  if (prodIndex && prodIndex.state === S.state && prodIndexFresh(prodIndex)) return prodIndex;
+  if (prodIndex && prodIndex.state === S.state && productionIndexFresh(prodIndex.core, S.state, productionReaders)) {
+    return prodIndex;
+  }
   prodIndexDerived++;
-  prodIndex = deriveProductionIndex();
-  prodIndex.state = S.state;
+  var core = deriveProductionIndex(S.state, productionReaders);
+  prodIndex = { core: core, entries: core.entries.map(presentEntry), state: S.state };
   return prodIndex;
 }
 
@@ -372,80 +250,32 @@ export function productionEntries() {
   return productionIndex().entries.slice();
 }
 
+export function currentProductionIndex() {
+  return productionIndex().core;
+}
+
 export function healTagRegistry() {
   if (!S.state) return 0;
   var ix = productionIndex();
-  var cuesWere = cueSnapshot;
-  cueSnapshot = snapshotCues();
-  if (!ix.unregistered.length) return 0;
-  var n = ix.unregistered.length;
-  var retitled = retitleEditedCues(cuesWere, cueSnapshot, ix);
-  ix.unregistered.forEach(function (t) {
-    registerProductionTag(t.cat.id, t.name);
-    var reg = registryEntry(t.cat.id, t.name);
-    ix.entries.forEach(function (e) { if (e.key === registryKey(t.cat.id, t.name) && reg) e.id = reg.id; });
+  var plan = planRegistryHealing(S.state, productionReaders, cueSnapshot, ix.core);
+  cueSnapshot = plan.cues;
+  if (!plan.count) return 0;
+  plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
+  addRegistryTags(plan.register);
+  ix.core.unregistered.forEach(function (t) {
+    var reg = registryEntry(t.catId, t.name);
+    ix.entries.forEach(function (e) { if (e.key === registryKey(t.catId, t.name) && reg) e.id = reg.id; });
   });
-  ix.unregistered = [];
-  ix.tagSig = registrySignature(S.state.productionTags);
-  if (retitled) prodIndex = null;
-  return n;
+  ix.core.unregistered = [];
+  ix.core.tagSig = registrySignature(S.state.productionTags);
+  if (plan.retitle.length) prodIndex = null;
+  return plan.count;
 }
 
 var cueSnapshot = null;
 
-var cueNamesInField = contentMemo(function (html) {
-  if (html.indexOf("audio-cue") === -1) return [];
-  return cuesInCell(cellOf(html)).map(function (c) { return c.name.slice(0, 80).trim(); }).filter(Boolean);
-});
-
-function snapshotCues() {
-  var cells = {};
-  S.state.rows.forEach(function (r) {
-    var names = cueNamesInField(r.audioText);
-    if (names.length) cells[r.id] = names;
-  });
-  return { docId: S.state.docId, cells: cells };
-}
-
-function retitleEditedCues(was, now, ix) {
-  if (!was || was.docId !== now.docId) return 0;
-  var fresh = {}, orphan = {};
-  ix.unregistered.forEach(function (t) { if (t.cat.id === "sound") fresh[registryKey("sound", t.name)] = true; });
-  ix.entries.forEach(function (e) { if (e.orphaned && e.cat.id === "sound") orphan[e.key] = true; });
-  var n = 0;
-  Object.keys(now.cells).forEach(function (rowId) {
-    var before = was.cells[rowId];
-    if (!before) return;
-    var after = now.cells[rowId];
-    var gone = before.filter(function (name) { return after.indexOf(name) === -1; });
-    var came = after.filter(function (name) { return before.indexOf(name) === -1; });
-    for (var i = 0; i < gone.length && i < came.length; i++) {
-      var oldKey = registryKey("sound", gone[i]), newKey = registryKey("sound", came[i]);
-      if (!fresh[newKey] || !orphan[oldKey]) continue;
-      var entry = registryEntry("sound", gone[i]);
-      if (!entry) continue;
-      entry.name = came[i];
-      delete fresh[newKey];
-      delete orphan[oldKey];
-      n++;
-    }
-  });
-  return n;
-}
-
 export function missingRegistryTags(rows, registry) {
-  var have = Object.create(null);
-  (registry || []).forEach(function (t) { if (t && t.name) have[registryKey(t.cat, t.name)] = true; });
-  var out = [];
-  collectTagsFromRows(rows).forEach(function (t) {
-    var name = plainText(t.name).trim().slice(0, 80);
-    if (!name) return;
-    var key = registryKey(t.cat.id, name);
-    if (have[key]) return;
-    have[key] = true;
-    out.push({ cat: t.cat.id, name: name, owner: "", notes: "", status: TAG_STATUSES[0].id });
-  });
-  return out;
+  return missingRegistryTagsIn(rows, registry, productionReaders);
 }
 
 export function productionIndexStats() {
@@ -816,55 +646,6 @@ export function acceptUntaggedMention() {
   return true;
 }
 
-var TAG_WORD_CHAR_RE = /[\p{L}\p{N}]/u;
-
-function foldCaseKeepLength(s) {
-  var lower = s.toLowerCase();
-  if (lower.length === s.length) return lower;
-  var out = "";
-  for (var i = 0; i < s.length; i++) {
-    var c = s.charAt(i).toLowerCase();
-    out += c.length === 1 ? c : s.charAt(i);
-  }
-  return out;
-}
-
-function sameCmt(a, b) {
-  return (a || []).join("\u0000") === (b || []).join("\u0000");
-}
-
-export function tagOccurrences(cell, phrase) {
-  var needle = foldCaseKeepLength(String(phrase == null ? "" : phrase));
-  var out = [];
-  if (!needle) return out;
-  var text = "", marks = [];
-  (cell || []).forEach(function (r) {
-    if (r.atom) { text += "￼"; marks.push(null); return; }
-    text += r.text;
-    for (var i = 0; i < r.text.length; i++) marks.push(r.marks);
-  });
-  var hay = foldCaseKeepLength(text);
-  var at = hay.indexOf(needle);
-  while (at !== -1) {
-    var end = at + needle.length;
-    var ok = true;
-    for (var i = at; i < end && ok; i++) {
-      var m = marks[i];
-      ok = !!m && !m.tag && !m.href && text.charAt(i) !== "\n" && sameCmt(m.cmt, marks[at].cmt);
-    }
-    if (!ok) { at = hay.indexOf(needle, at + 1); continue; }
-    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
-      out.push({ from: at, to: end });
-    }
-    at = hay.indexOf(needle, end);
-  }
-  return out;
-}
-
-function holdsMedia(html) {
-  return /<img[\s>]|video-embed-card/i.test(html || "");
-}
-
 function wrapTagInHtml(html, cell, found, cat, name) {
   var body = inertBody(html);
   var doc = body.ownerDocument;
@@ -886,70 +667,11 @@ function wrapTagInHtml(html, cell, found, cat, name) {
 }
 
 export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccurrence) {
-  var cell = cellOf(html);
-  var found = tagOccurrences(cell, phrase);
-  if (countOnly) return { hits: found.length, html: html };
-  if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence]] : [];
-  return writeTags(html, cell, found, cat, name);
-}
-
-function writeTags(html, cell, found, cat, name) {
-  if (!found.length) return { hits: 0, html: html };
-  var clean = plainText(name).trim().slice(0, 80);
-  if (holdsMedia(html)) {
-    var wrapped = wrapTagInHtml(html, cell, found, cat, clean);
-    return wrapped === null ? { hits: 0, html: html } : { hits: found.length, html: wrapped };
-  }
-  var id = namedTagId(cat, clean);
-  found.forEach(function (m) { cell = setMark(cell, m.from, m.to, "tag", id); });
-  return { hits: found.length, html: toHtml(cell) };
-}
-
-function wholeWordHits(text, needle, matchCase) {
-  var hay = matchCase ? text : foldCaseKeepLength(text);
-  var find = matchCase ? needle : foldCaseKeepLength(needle);
-  var out = [];
-  if (!find) return out;
-  var at = hay.indexOf(find);
-  while (at !== -1) {
-    var end = at + find.length;
-    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
-      out.push({ from: at, to: end });
-      at = hay.indexOf(find, end);
-    } else {
-      at = hay.indexOf(find, at + 1);
-    }
-  }
-  return out;
+  return tagFieldOccurrencesWith(html, phrase, cat, name, countOnly, onlyOccurrence, productionReaders, wrapTagInHtml);
 }
 
 export function bulkTagCell(html, phrase, cat, name, matchCase, countOnly) {
-  var needle = String(phrase == null ? "" : phrase).trim();
-  var none = { hits: 0, inTags: 0, skipped: 0, html: html };
-  if (!needle) return none;
-  var cell = cellOf(html);
-  var text = "", tagged = [];
-  cell.forEach(function (r) {
-    if (r.atom) { text += "\uFFFC"; tagged.push(false); return; }
-    text += r.text;
-    for (var i = 0; i < r.text.length; i++) tagged.push(!!r.marks.tag);
-  });
-  var found = tagOccurrences(cell, needle).filter(function (m) {
-    return !matchCase || text.slice(m.from, m.to) === needle;
-  });
-  var taking = {};
-  found.forEach(function (m) { taking[m.from] = true; });
-  var inTags = 0, skipped = 0;
-  wholeWordHits(text, needle, matchCase).forEach(function (h) {
-    if (taking[h.from]) return;
-    if (tagged.slice(h.from, h.to).indexOf(true) !== -1) inTags++;
-    else skipped++;
-  });
-  if (countOnly || !found.length) {
-    return { hits: found.length, inTags: inTags, skipped: skipped, html: html };
-  }
-  var res = writeTags(html, cell, found, cat, name);
-  return { hits: res.hits, inTags: inTags, skipped: skipped + found.length - res.hits, html: res.html };
+  return bulkTagCellWith(html, phrase, cat, name, matchCase, countOnly, productionReaders, wrapTagInHtml);
 }
 
 export function bulkTagRows(rows, phrase, cat, name, matchCase, countOnly) {
@@ -1008,24 +730,13 @@ function eachTaggedField(cat, name, toName) {
       }).length;
       if (!mentions) return;
       changed += mentions;
-      row[field] = holdsMedia(html) ? retagInHtml(html, cat, target, toName) : retagCell(html, cat, target, toId);
+      row[field] = holdsMedia(html)
+        ? retagInHtml(html, cat, target, toName)
+        : retagCell(html, cat, target, toId, productionReaders);
       stampRow(row);
     });
   });
   return changed;
-}
-
-function retagCell(html, cat, target, toId) {
-  var cell = cellOf(html);
-  tagIds(cell).forEach(function (id) {
-    var t = tagNameOf(id);
-    if (t && t.cat === cat && normalizeTagName(t.name) === target) cell = retag(cell, id, toId);
-  });
-  if (cat === "sound" && html.indexOf("audio-cue") !== -1) {
-    cell = editCues(cell, function (name) { return normalizeTagName(name.slice(0, 80)) === target; },
-      toId === null ? null : tagNameOf(toId).name);
-  }
-  return toHtml(cell);
 }
 
 function retagInHtml(html, cat, target, toName) {
