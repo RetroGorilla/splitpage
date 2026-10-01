@@ -5,40 +5,42 @@ import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 
 const TS_SOURCE = /\.(?:ts|mts|cts)$/;
+const DECLARATION = /\.d\.(?:ts|mts|cts)$/;
 const TEST_FILE = /\.test\.(?:ts|mts|cts|js|mjs|cjs)$/;
 const AREAS = [
-  { root: "src/core/", perFolder: true, tests: "tests/core/" },
-  { root: "src/application/", perFolder: false, tests: "tests/application/" },
-  { root: "src/contracts/", perFolder: false, tests: "tests/contracts/" },
-  { root: "src/adapters/", perFolder: false, tests: "tests/adapters/" },
-  { root: "src/features/", perFolder: true, tests: "tests/features/" },
-  { root: "src/bootstrap/", perFolder: false, tests: "tests/bootstrap/" },
-  { root: "src/legacy/", perFolder: false, tests: "tests/legacy/" }
+  { root: "core", perFolder: true },
+  { root: "application", perFolder: false },
+  { root: "contracts", perFolder: false },
+  { root: "adapters", perFolder: false },
+  { root: "features", perFolder: true },
+  { root: "bootstrap", perFolder: false },
+  { root: "legacy", perFolder: false }
 ];
 
 function areaOf(path) {
-  const spec = AREAS.find((a) => path.startsWith(a.root));
+  const spec = AREAS.find((a) => path.startsWith(`src/${a.root}/`));
   if (!spec) return null;
-  const rest = path.slice(spec.root.length).split("/");
-  const area = spec.perFolder && rest.length > 1 ? spec.root + rest[0] : spec.root.slice(0, -1);
-  return { area, tests: spec.tests };
+  const rest = path.slice(`src/${spec.root}/`.length).split("/");
+  if (spec.perFolder && rest.length > 1) {
+    return { area: `src/${spec.root}/${rest[0]}`, tests: `tests/${spec.root}/${rest[0]}/`, flat: false };
+  }
+  return { area: `src/${spec.root}`, tests: `tests/${spec.root}/`, flat: spec.perFolder };
 }
 
 function migratedAreas(files) {
   const areas = new Map();
   for (const p of files) {
-    if (!TS_SOURCE.test(p) || TEST_FILE.test(p)) continue;
+    if (!TS_SOURCE.test(p) || DECLARATION.test(p) || TEST_FILE.test(p)) continue;
     const a = areaOf(p);
     if (a) areas.set(a.area, a);
   }
   return [...areas.values()].sort((x, y) => (x.area < y.area ? -1 : x.area > y.area ? 1 : 0));
 }
 
-const isTest = (p) => TEST_FILE.test(p);
-const hasTestUnder = (files, prefix) => files.some((p) => p.startsWith(prefix) && isTest(p));
+const hasTestIn = (files, prefix, flat) => files.some((p) => p.startsWith(prefix) && TEST_FILE.test(p) && !(flat && p.slice(prefix.length).includes("/")));
 
 export function untestedAreas(files) {
-  return migratedAreas(files).filter((a) => !hasTestUnder(files, a.area + "/") && !hasTestUnder(files, a.tests));
+  return migratedAreas(files).filter((a) => !hasTestIn(files, a.area + "/", a.flat) && !hasTestIn(files, a.tests, a.flat));
 }
 
 export const GROUPS = [
@@ -54,7 +56,7 @@ export const GROUPS = [
     set: "unit",
     runner: "node-test",
     matches: (p) => p.startsWith("src/") && !p.startsWith("src/test/") && TEST_FILE.test(p),
-    requiredWhen: (files) => migratedAreas(files).some((a) => !hasTestUnder(files, a.tests))
+    requiredWhen: (files) => migratedAreas(files).some((a) => !hasTestIn(files, a.tests, a.flat))
   },
   {
     name: "tests",
@@ -146,7 +148,7 @@ export function runTests({
   for (const o of overlaps) { failed = true; printError(`run-tests: ${o} is claimed by more than one group`); }
   for (const o of orphans) { failed = true; printError(`run-tests: ${o} looks like a test but no group runs it`); }
   if (sets.includes("unit")) {
-    for (const u of untested) { failed = true; printError(`run-tests: ${u.area} holds TypeScript source but has no test beside it or under ${u.tests}`); }
+    for (const u of untested) { failed = true; printError(`run-tests: ${u.area} holds TypeScript source but has no test beside it or ${u.flat ? "directly " : ""}under ${u.tests}`); }
   }
   for (const e of chosen) {
     if (e.required && e.files.length === 0) { failed = true; printError(`run-tests: group ${e.group.name} found no test files`); }
