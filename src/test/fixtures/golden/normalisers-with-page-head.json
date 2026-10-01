@@ -1,0 +1,201 @@
+[
+  {
+    "case": "a title",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": "New"
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>New</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a title's whitespace collapsed and trimmed",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": " New \n\t title  "
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>New title</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "NBSP and a line separator count as whitespace",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": " New title "
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>New title</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a title escaped",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": "<b>&\"'"
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>&lt;b&gt;&amp;&quot;'</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "replacement patterns are literal",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": "$&$1$$"
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>$&amp;$1$$</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "an empty title changes nothing",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": ""
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a title of spaces empties it",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": "   "
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title></title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a number",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": 0
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a description replaces the old one",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "description": " A  new\ndescription "
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"A new description\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a description escaped",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "description": "\"quoted\" & <b>"
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"&quot;quoted&quot; &amp; &lt;b&gt;\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "both",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {
+        "title": "T",
+        "description": "D"
+      }
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>T</title><meta name=\"description\" content=\"D\"></head><body><p>x</p></body></html>"
+  },
+  {
+    "case": "a description inserted after the title",
+    "input": [
+      "<html><head><title>Old</title></head></html>",
+      {
+        "description": "D"
+      }
+    ],
+    "output": "<html><head><title>Old</title>\n<meta name=\"description\" content=\"D\"></head></html>"
+  },
+  {
+    "case": "no title, no description: nothing inserted",
+    "input": [
+      "<html><head></head></html>",
+      {
+        "description": "D"
+      }
+    ],
+    "output": "<html><head></head></html>"
+  },
+  {
+    "case": "a description meta of another shape gets a second one",
+    "input": [
+      "<html><head><title>Old</title><meta content='x' name='description'></head></html>",
+      {
+        "description": "D"
+      }
+    ],
+    "output": "<html><head><title>Old</title>\n<meta name=\"description\" content=\"D\"><meta content='x' name='description'></head></html>"
+  },
+  {
+    "case": "a title in capitals",
+    "input": [
+      "<html><HEAD><TITLE>Old</TITLE></HEAD></html>",
+      {
+        "title": "New"
+      }
+    ],
+    "output": "<html><HEAD><title>New</title></HEAD></html>"
+  },
+  {
+    "case": "two titles: the first",
+    "input": [
+      "<head><title>A</title><title>B</title></head>",
+      {
+        "title": "New"
+      }
+    ],
+    "output": "<head><title>New</title><title>B</title></head>"
+  },
+  {
+    "case": "a title holding markup is not matched",
+    "input": [
+      "<head><title>A<b>b</b></title></head>",
+      {
+        "title": "New"
+      }
+    ],
+    "output": "<head><title>A<b>b</b></title></head>"
+  },
+  {
+    "case": "a title after the head is left alone",
+    "input": [
+      "<head></head><body><title>A</title></body>",
+      {
+        "title": "New"
+      }
+    ],
+    "output": "<head></head><body><title>A</title></body>"
+  },
+  {
+    "case": "no head",
+    "input": [
+      "<title>Old</title>",
+      {
+        "title": "New"
+      }
+    ],
+    "output": "<title>Old</title>"
+  },
+  {
+    "case": "an empty head object",
+    "input": [
+      "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>",
+      {}
+    ],
+    "output": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Old</title><meta name=\"description\" content=\"old\"></head><body><p>x</p></body></html>"
+  }
+]

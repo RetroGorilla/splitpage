@@ -1,0 +1,298 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/one"
+            },
+            {
+              "href": "https://video.example/two"
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Two.",
+          "imageRef": {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Three.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/three",
+              "poster": true
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/two"
+            },
+            {
+              "href": "https://video.example/mine"
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Two.",
+          "imageRef": {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/mine-two"
+            }
+          ]
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Three.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/three",
+              "poster": true
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/one"
+            },
+            {
+              "href": "https://video.example/two"
+            },
+            {
+              "href": "https://video.example/theirs"
+            }
+          ]
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Two.",
+          "imageRef": {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Three.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer",
+          "imageLinks": [
+            {
+              "href": "https://video.example/three",
+              "poster": true
+            },
+            {
+              "href": "https://video.example/extra"
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "One.",
+        "imageRef": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor",
+        "imageLinks": [
+          {
+            "href": "https://video.example/two"
+          },
+          {
+            "href": "https://video.example/theirs"
+          },
+          {
+            "href": "https://video.example/mine"
+          }
+        ]
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Two.",
+        "imageRef": {
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor",
+        "imageLinks": [
+          {
+            "href": "https://video.example/mine-two"
+          }
+        ]
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Three.",
+        "imageRef": null,
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer",
+        "imageLinks": [
+          {
+            "href": "https://video.example/three",
+            "poster": true
+          },
+          {
+            "href": "https://video.example/extra"
+          }
+        ]
+      }
+    ],
+    "comments": [],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 1,
+    "rowsFromMe": 2,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}
