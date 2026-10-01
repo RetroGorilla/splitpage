@@ -16,8 +16,8 @@
 | Plugins, SDK, extension runtime | Out of scope |
 | Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
 | Comments | None in authored code, tests, CSS, HTML, scripts or workflow/configuration files; rationale lives in `docs/` (section 2) |
-| CI | Fast gates on hosted runners for PRs and the development branch; the full browser regression, Electron smoke and Windows x64/ARM64 checks run locally at milestone and release gates (section 4) |
-| ARM64 | A Windows ARM64 device is available; runtime checks run on it and the release row stands as written |
+| CI | Fast gates on hosted runners for PRs and the development branch; the full browser regression, Electron smoke and Windows x64 checks run locally at milestone and release gates; the Linux full run and the native ARM64 packaged checks run at the 4.0 release gate only (section 4) |
+| ARM64 | A Windows ARM64 device is available; native ARM64 runtime checks run on it at the 4.0 release gate and the release row stands as written |
 | Invariants | Ledger in `docs/architecture/invariants.md`; `HANDOFF.md` section 5 stays in step with it (milestone 0) |
 
 ## 1. Outcome and release boundaries
@@ -120,7 +120,7 @@ Every check is a local script first (`package.json` scripts and `tools/`); CI jo
 
 **Hosted, on every PR targeting `main` or `4.0-development` and every push to `4.0-development`:** the fast gates. Lint, types, the comment/layer/dependency gates, every discovered unit/application/adapter/tool test, the build, and the selected browser smoke/CSP/persistence suites already in `ci.yml`. Linux runners only. A documentation-only PR completes the required check through a cheap gate rather than staying pending behind path filters. Workflow path filters include new folders and every actual build input.
 
-**Local, at milestone and release gates:** the full browser regression on Windows (`run-tests.ps1`) at every gate, and on Linux (`tools/run-suites.mjs`) at the 4.0 release gate only (Adam, 2026-10-01: Linux support waits for the 4.0 release; hosted CI still runs on Linux), real Electron smoke, and the Windows x64 and ARM64 packaged checks on the maintainer's x64 and ARM64 devices. Run impacted tests and suites locally during feature PRs, chosen by the change table in `docs/architecture/testing.md`; the hosted fast gates still run every discovered test and never narrow to the test files a change touched. A milestone is declared complete, and a release cut, only with the recorded output of those runs (`summary.txt`, the smoke log, the platform check logs) attached to the closing PR. A scheduled hosted full run is optional and does not replace the local gate.
+**Local, at milestone and release gates:** the full browser regression on Windows (`run-tests.ps1`) at every gate, and on Linux (`tools/run-suites.mjs`) at the 4.0 release gate only (Adam, 2026-10-01: Linux support waits for the 4.0 release; hosted CI still runs on Linux), real Electron smoke, the Windows x64 packaged check on the maintainer's x64 device at every gate, and the native Windows ARM64 packaged check on the ARM64 device at the 4.0 release gate only (Adam, 2026-10-01: Windows on ARM can run the x64 build under emulation until then). Run impacted tests and suites locally during feature PRs, chosen by the change table in `docs/architecture/testing.md`; the hosted fast gates still run every discovered test and never narrow to the test files a change touched. A milestone is declared complete, and a release cut, only with the recorded output of those runs (`summary.txt`, the smoke log, the platform check logs) attached to the closing PR. A scheduled hosted full run is optional and does not replace the local gate.
 
 The workstation is never registered as a self-hosted runner for automatically triggered PR workflows. Local gate runs are started by hand.
 
