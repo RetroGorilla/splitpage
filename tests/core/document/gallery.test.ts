@@ -106,6 +106,54 @@ test("a picture name is one line of plain text", () => {
   assert.equal(normalizePictureName(42), "");
 });
 
+function textOf(text: string): string | null {
+  const mark = normalizeMarks([{ kind: "text", color: RED, size: 0.1, x: 0, y: 0, text }])[0];
+  return mark && mark.kind === "text" ? mark.text : null;
+}
+
+test("a text mark turns each run of control characters, tab included, into one space, and keeps its line breaks", () => {
+  assert.equal(textOf("a\tb"), "a b");
+  assert.equal(textOf("a\u0008\u0009\u000Bb"), "a b");
+  assert.equal(textOf("a\nb\rc\r\nd"), "a\nb\nc\nd");
+  assert.equal(textOf("a\u001Fb\u007Fc d~e"), "a b c d~e");
+  assert.equal(textOf("\t\u0001"), null, "nothing but controls is no text");
+});
+
+test("a text mark keeps five hundred characters", () => {
+  assert.equal(textOf("x".repeat(500)), "x".repeat(500));
+  assert.equal(textOf("x".repeat(501)), "x".repeat(500));
+});
+
+test("a video address is kept up to 2048 characters", () => {
+  const at = "https://x.test/" + "a".repeat(2048 - "https://x.test/".length);
+  assert.equal(at.length, 2048);
+  assert.deepEqual(normalizeVideoLink({ href: at }), { href: at });
+  assert.equal(normalizeVideoLink({ href: at + "a" }), null);
+  assert.deepEqual(normalizeVideoLink({ href: " " + at + " " }), { href: at }, "measured after trimming");
+});
+
+test("a video's duration must be under ten million seconds", () => {
+  assert.deepEqual(normalizeVideoLink({ href: "https://x.test/v", duration: 9999999.94 }), { href: "https://x.test/v", duration: 9999999.9 });
+  assert.deepEqual(normalizeVideoLink({ href: "https://x.test/v", duration: 1e7 }), { href: "https://x.test/v" });
+});
+
+test("a row keeps sixty extra pictures; a repeat takes no place, and the limit counts before a promotion", () => {
+  const distinct = (i: number) => ({ imageRef: { sha256: (i + 1).toString(16).padStart(64, "0"), width: 1, height: 1, mime: "image/png" } });
+  const atLimit: GalleryRow = { imageRef: A, moreImages: Array.from({ length: 60 }, (_, i) => distinct(i)) };
+  migrateGallery(atLimit, recordingImages({}));
+  assert.equal((atLimit.moreImages as unknown[]).length, 60);
+  const over: GalleryRow = { imageRef: A, moreImages: [{ imageRef: A }, ...Array.from({ length: 61 }, (_, i) => distinct(i))] };
+  migrateGallery(over, recordingImages({}));
+  const kept = over.moreImages as { imageRef: ImageRef }[];
+  assert.equal(kept.length, 60);
+  assert.equal(kept[59]?.imageRef.sha256, distinct(59).imageRef.sha256);
+  assert.equal(kept.some((it) => it.imageRef.sha256 === distinct(60).imageRef.sha256), false);
+  const promoted: GalleryRow = { imageRef: null, moreImages: Array.from({ length: 61 }, (_, i) => distinct(i)) };
+  migrateGallery(promoted, recordingImages({}));
+  assert.deepEqual(promoted.imageRef, distinct(0).imageRef);
+  assert.equal((promoted.moreImages as unknown[]).length, 59);
+});
+
 test("migrating a gallery interns legacy pictures through the port, in document order", () => {
   const urls = { "data:image/png;base64,QQ==": A, "data:image/png;base64,Qg==": B, "data:image/png;base64,Qw==": C };
   const images = recordingImages(urls);
