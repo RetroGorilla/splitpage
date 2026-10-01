@@ -1,13 +1,13 @@
 import { S } from "./_state.js";
-import { SCHEMA_VERSION } from "./00-prelude.js";
 import { makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, queuePersist } from "./02c-blobs.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
-import { inertBody } from "./04-richtext.js";
 import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";
 import { collectTagsFromRows, mintTagId, normalizeTagName, registryKey } from "./07-production-tags.js";
 import { normalizeBrollProps, recordPastedBroll } from "./08c-broll.js";
+import { SCHEMA_VERSION } from "../core/document/fields.ts";
+import { inertBody } from "../legacy/richtext.ts";
 
 export var SCENES_MIME = "application/x-splitpage-scenes";
 export var SCENES_ATTR = "data-splitpage-scenes";

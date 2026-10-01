@@ -1,16 +1,17 @@
 import { S } from "./_state.js";
 import { ROW_STATUSES, formatDuration, rowSeconds, rowStatus } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
 import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
 import { clearDropMarkers, moveRowTo } from "./06-rows.js";
-import { contentMemo } from "./07-production-tags.js";
 import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
+import { contentMemo } from "../core/document/memo.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { pad2 } from "../core/production/timing.ts";
+import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;

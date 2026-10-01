@@ -1,5 +1,4 @@
 import { S } from "./_state.js";
-import { randomHexBytes } from "./02b-doc-id.js";
 import { ensureBytes } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
@@ -20,6 +19,7 @@ import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
+import { randomHexBytes } from "../adapters/identity/ids.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
