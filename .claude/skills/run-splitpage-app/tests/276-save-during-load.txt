@@ -3,8 +3,9 @@
 # but the header's Save, the writer's Save and the desktop app's native Save
 # (D.runMenuCommand('save'), which clicks the header's Save) went straight to
 # saveDoc(), which read S.state.docId and threw — an unhandled rejection, no
-# word to the user. Each is now refused with the File menu's toast, nothing is
-# picked or written and the Save buttons are left as they were. The in-page
+# word to the user. Each is now refused with the File menu's toast, shown as
+# a warning, nothing is picked or written and the Save buttons are left as
+# they were. The in-page
 # Ctrl+S and Ctrl+Shift+S still refuse silently. The loading window is a few
 # microtasks at boot, too short to click into, so the suite holds it open with
 # __splitpageFormats.holdLoadingForTest(), which takes the document away and
@@ -29,6 +30,7 @@ expect __hold()
 click #btn-save
 wait document.querySelectorAll('#toast-host .toast').length > 0
 sleep 300
+expect !!document.querySelector('#toast-host .toast.warn') && document.querySelectorAll('#toast-host .toast:not(.warn)').length === 0
 expect __toasts() === 'Still loading…'
 expect __take() === ''
 expect __buttons() === 'Save,Save'
@@ -39,10 +41,12 @@ expect __errs.join(' / ') === ''
 eval __run('save')
 wait document.querySelectorAll('#toast-host .toast').length > 0
 sleep 300
+expect !!document.querySelector('#toast-host .toast.warn') && document.querySelectorAll('#toast-host .toast:not(.warn)').length === 0
 expect __toasts() === 'Still loading…'
 eval __run('save-as')
 wait document.querySelectorAll('#toast-host .toast').length > 0
 sleep 300
+expect !!document.querySelector('#toast-host .toast.warn') && document.querySelectorAll('#toast-host .toast:not(.warn)').length === 0
 expect __toasts() === 'Still loading…'
 expect __take() === ''
 expect __buttons() === 'Save,Save'
@@ -63,10 +67,12 @@ expect __hold()
 eval __run('save')
 wait document.querySelectorAll('#toast-host .toast').length > 0
 sleep 300
+expect !!document.querySelector('#toast-host .toast.warn') && document.querySelectorAll('#toast-host .toast:not(.warn)').length === 0
 expect __toasts() === 'Still loading…'
 eval __run('save-as')
 wait document.querySelectorAll('#toast-host .toast').length > 0
 sleep 300
+expect !!document.querySelector('#toast-host .toast.warn') && document.querySelectorAll('#toast-host .toast:not(.warn)').length === 0
 expect __toasts() === 'Still loading…'
 expect __take() === ''
 expect __buttons() === 'Save,Save'
@@ -87,6 +93,7 @@ expect __hold()
 jsclick #wr-save
 wait document.querySelectorAll('#toast-host .toast').length > 0
 sleep 300
+expect !!document.querySelector('#toast-host .toast.warn') && document.querySelectorAll('#toast-host .toast:not(.warn)').length === 0
 expect __toasts() === 'Still loading…'
 expect __take() === ''
 expect __buttons() === 'Save,Save'
