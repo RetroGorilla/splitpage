@@ -1,0 +1,1172 @@
+[
+  {
+    "field": "title",
+    "case": "299",
+    "input": {
+      "length": 299,
+      "runs": [
+        [
+          "x",
+          299
+        ]
+      ]
+    },
+    "output": {
+      "length": 299,
+      "runs": [
+        [
+          "x",
+          299
+        ]
+      ]
+    }
+  },
+  {
+    "field": "title",
+    "case": "300, the limit",
+    "input": {
+      "length": 300,
+      "runs": [
+        [
+          "x",
+          300
+        ]
+      ]
+    },
+    "output": {
+      "length": 300,
+      "runs": [
+        [
+          "x",
+          300
+        ]
+      ]
+    }
+  },
+  {
+    "field": "title",
+    "case": "301",
+    "input": {
+      "length": 301,
+      "runs": [
+        [
+          "x",
+          301
+        ]
+      ]
+    },
+    "output": {
+      "length": 300,
+      "runs": [
+        [
+          "x",
+          300
+        ]
+      ]
+    }
+  },
+  {
+    "field": "title",
+    "case": "not trimmed",
+    "input": "  T  ",
+    "output": "  T  "
+  },
+  {
+    "field": "title",
+    "case": "markup stripped first",
+    "input": {
+      "length": 307,
+      "runs": [
+        [
+          "<",
+          1
+        ],
+        [
+          "b",
+          1
+        ],
+        [
+          ">",
+          1
+        ],
+        [
+          "x",
+          300
+        ],
+        [
+          "<",
+          1
+        ],
+        [
+          "/",
+          1
+        ],
+        [
+          "b",
+          1
+        ],
+        [
+          ">",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 300,
+      "runs": [
+        [
+          "x",
+          300
+        ]
+      ]
+    }
+  },
+  {
+    "field": "title",
+    "case": "a number",
+    "input": 42,
+    "output": "42"
+  },
+  {
+    "field": "title",
+    "case": "null",
+    "input": null,
+    "output": ""
+  },
+  {
+    "field": "productionTags name",
+    "case": "79",
+    "input": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    },
+    "output": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags name",
+    "case": "80, the limit",
+    "input": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags name",
+    "case": "81",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags name",
+    "case": "80 inside spaces",
+    "input": {
+      "length": 82,
+      "runs": [
+        [
+          " ",
+          1
+        ],
+        [
+          "x",
+          80
+        ],
+        [
+          " ",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags name",
+    "case": "spaces only: the tag is dropped",
+    "input": "   ",
+    "output": null
+  },
+  {
+    "field": "productionTags notes",
+    "case": "1999",
+    "input": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    },
+    "output": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags notes",
+    "case": "2000, the limit",
+    "input": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags notes",
+    "case": "2001",
+    "input": {
+      "length": 2001,
+      "runs": [
+        [
+          "x",
+          2001
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "productionTags notes",
+    "case": "not trimmed",
+    "input": "  n  ",
+    "output": "  n  "
+  },
+  {
+    "field": "brollShots name",
+    "case": "199",
+    "input": {
+      "length": 199,
+      "runs": [
+        [
+          "x",
+          199
+        ]
+      ]
+    },
+    "output": {
+      "length": 199,
+      "runs": [
+        [
+          "x",
+          199
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots name",
+    "case": "200, the limit",
+    "input": {
+      "length": 200,
+      "runs": [
+        [
+          "x",
+          200
+        ]
+      ]
+    },
+    "output": {
+      "length": 200,
+      "runs": [
+        [
+          "x",
+          200
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots name",
+    "case": "201",
+    "input": {
+      "length": 201,
+      "runs": [
+        [
+          "x",
+          201
+        ]
+      ]
+    },
+    "output": {
+      "length": 200,
+      "runs": [
+        [
+          "x",
+          200
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots name",
+    "case": "200 inside spaces",
+    "input": {
+      "length": 202,
+      "runs": [
+        [
+          " ",
+          1
+        ],
+        [
+          "x",
+          200
+        ],
+        [
+          " ",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 200,
+      "runs": [
+        [
+          "x",
+          200
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots name",
+    "case": "spaces only: the shot is dropped",
+    "input": "   ",
+    "output": null
+  },
+  {
+    "field": "brollShots desc",
+    "case": "1999",
+    "input": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    },
+    "output": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots desc",
+    "case": "2000, the limit",
+    "input": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots desc",
+    "case": "2001",
+    "input": {
+      "length": 2001,
+      "runs": [
+        [
+          "x",
+          2001
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots desc",
+    "case": "not trimmed",
+    "input": "  d  ",
+    "output": "  d  "
+  },
+  {
+    "field": "brollShots notes",
+    "case": "1999",
+    "input": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    },
+    "output": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots notes",
+    "case": "2000, the limit",
+    "input": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots notes",
+    "case": "2001",
+    "input": {
+      "length": 2001,
+      "runs": [
+        [
+          "x",
+          2001
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots notes",
+    "case": "not trimmed",
+    "input": "  d  ",
+    "output": "  d  "
+  },
+  {
+    "field": "brollShots audioRef",
+    "case": "1999",
+    "input": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    },
+    "output": {
+      "length": 1999,
+      "runs": [
+        [
+          "x",
+          1999
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots audioRef",
+    "case": "2000, the limit",
+    "input": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots audioRef",
+    "case": "2001",
+    "input": {
+      "length": 2001,
+      "runs": [
+        [
+          "x",
+          2001
+        ]
+      ]
+    },
+    "output": {
+      "length": 2000,
+      "runs": [
+        [
+          "x",
+          2000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots audioRef",
+    "case": "not trimmed",
+    "input": "  d  ",
+    "output": "  d  "
+  },
+  {
+    "field": "brollShots location",
+    "case": "79",
+    "input": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    },
+    "output": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots location",
+    "case": "80, the limit",
+    "input": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots location",
+    "case": "81",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "brollShots location",
+    "case": "80 inside spaces",
+    "input": {
+      "length": 82,
+      "runs": [
+        [
+          " ",
+          1
+        ],
+        [
+          "x",
+          80
+        ],
+        [
+          " ",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment resolvedBy",
+    "case": "79",
+    "input": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    },
+    "output": [
+      {
+        "length": 79,
+        "runs": [
+          [
+            "x",
+            79
+          ]
+        ]
+      },
+      "2026-01-01"
+    ]
+  },
+  {
+    "field": "comment resolvedBy",
+    "case": "80, the limit",
+    "input": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    },
+    "output": [
+      {
+        "length": 80,
+        "runs": [
+          [
+            "x",
+            80
+          ]
+        ]
+      },
+      "2026-01-01"
+    ]
+  },
+  {
+    "field": "comment resolvedBy",
+    "case": "81",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": [
+      {
+        "length": 80,
+        "runs": [
+          [
+            "x",
+            80
+          ]
+        ]
+      },
+      "2026-01-01"
+    ]
+  },
+  {
+    "field": "comment resolvedBy",
+    "case": "spaces only",
+    "input": "   ",
+    "output": [
+      null,
+      null
+    ]
+  },
+  {
+    "field": "comment assignee",
+    "case": "79",
+    "input": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    },
+    "output": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment assignee",
+    "case": "80, the limit",
+    "input": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment assignee",
+    "case": "81",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment assignee",
+    "case": "80 inside spaces",
+    "input": {
+      "length": 82,
+      "runs": [
+        [
+          " ",
+          1
+        ],
+        [
+          "x",
+          80
+        ],
+        [
+          " ",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment assignee",
+    "case": "null",
+    "input": null,
+    "output": ""
+  },
+  {
+    "field": "comment author",
+    "case": "80, the limit",
+    "input": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment author",
+    "case": "81",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment author",
+    "case": "spaces only",
+    "input": "   ",
+    "output": "Anonymous"
+  },
+  {
+    "field": "comment quotedText",
+    "case": "no limit",
+    "input": {
+      "length": 5000,
+      "runs": [
+        [
+          "x",
+          5000
+        ]
+      ]
+    },
+    "output": {
+      "length": 5000,
+      "runs": [
+        [
+          "x",
+          5000
+        ]
+      ]
+    }
+  },
+  {
+    "field": "comment quotedText",
+    "case": "markup and controls",
+    "input": "<i>q</i>\u0001",
+    "output": "q"
+  },
+  {
+    "field": "row updatedBy",
+    "case": "empty",
+    "input": "",
+    "output": null
+  },
+  {
+    "field": "row updatedBy",
+    "case": "spaces only",
+    "input": "   ",
+    "output": "Anonymous"
+  },
+  {
+    "field": "row updatedBy",
+    "case": "markup only",
+    "input": "<b></b>",
+    "output": "Anonymous"
+  },
+  {
+    "field": "row updatedBy",
+    "case": "81",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "field": "row updatedBy",
+    "case": "null",
+    "input": null,
+    "output": null
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "59",
+    "input": 59,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "59.5",
+    "input": 59.5,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "60",
+    "input": 60,
+    "output": 60
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "60.4",
+    "input": 60.4,
+    "output": 60
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "399.6",
+    "input": 399.6,
+    "output": 400
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "400",
+    "input": 400,
+    "output": 400
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "400.4",
+    "input": 400.4,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "400.5",
+    "input": 400.5,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "401",
+    "input": 401,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "a numeric string",
+    "input": "175",
+    "output": 175
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "an exponent string",
+    "input": "1e2",
+    "output": 100
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "empty string",
+    "input": "",
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "null",
+    "input": null,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "missing",
+    "input": "<undefined>",
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "true",
+    "input": true,
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "NaN",
+    "input": "<NaN>",
+    "output": 150
+  },
+  {
+    "field": "wordsPerMinute",
+    "case": "Infinity",
+    "input": "<Infinity>",
+    "output": 150
+  },
+  {
+    "field": "rev",
+    "case": "0",
+    "input": 0,
+    "output": 0
+  },
+  {
+    "field": "rev",
+    "case": "a numeric string",
+    "input": "3",
+    "output": 0
+  },
+  {
+    "field": "rev",
+    "case": "NaN",
+    "input": "<NaN>",
+    "output": "<NaN>"
+  },
+  {
+    "field": "rev",
+    "case": "-1",
+    "input": -1,
+    "output": -1
+  },
+  {
+    "field": "rev",
+    "case": "1.5",
+    "input": 1.5,
+    "output": 1.5
+  },
+  {
+    "field": "rev",
+    "case": "missing",
+    "input": "<undefined>",
+    "output": 0
+  }
+]

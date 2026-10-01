@@ -1,0 +1,124 @@
+[
+  {
+    "case": "png",
+    "input": "data:image/png;base64,AAAA",
+    "output": "data:image/png;base64,AAAA"
+  },
+  {
+    "case": "jpeg",
+    "input": "data:image/jpeg;base64,AAAA",
+    "output": "data:image/jpeg;base64,AAAA"
+  },
+  {
+    "case": "jpg",
+    "input": "data:image/jpg;base64,AAAA",
+    "output": "data:image/jpg;base64,AAAA"
+  },
+  {
+    "case": "gif",
+    "input": "data:image/gif;base64,AAAA",
+    "output": "data:image/gif;base64,AAAA"
+  },
+  {
+    "case": "webp",
+    "input": "data:image/webp;base64,AAAA",
+    "output": "data:image/webp;base64,AAAA"
+  },
+  {
+    "case": "svg+xml",
+    "input": "data:image/svg+xml;base64,AAAA",
+    "output": null
+  },
+  {
+    "case": "bmp",
+    "input": "data:image/bmp;base64,AAAA",
+    "output": null
+  },
+  {
+    "case": "an upper-case type",
+    "input": "data:image/PNG;base64,AAAA",
+    "output": null
+  },
+  {
+    "case": "an upper-case scheme",
+    "input": "DATA:image/png;base64,AAAA",
+    "output": null
+  },
+  {
+    "case": "a space before",
+    "input": " data:image/png;base64,AAAA",
+    "output": null
+  },
+  {
+    "case": "a newline after",
+    "input": "data:image/png;base64,AAAA\n",
+    "output": "data:image/png;base64,AAAA\n"
+  },
+  {
+    "case": "a space inside the payload",
+    "input": "data:image/png;base64,AA AA",
+    "output": "data:image/png;base64,AA AA"
+  },
+  {
+    "case": "NBSP inside the payload",
+    "input": "data:image/png;base64,AA AA",
+    "output": "data:image/png;base64,AA AA"
+  },
+  {
+    "case": "padding anywhere",
+    "input": "data:image/png;base64,A=A=",
+    "output": "data:image/png;base64,A=A="
+  },
+  {
+    "case": "base64url characters",
+    "input": "data:image/png;base64,AA-_",
+    "output": null
+  },
+  {
+    "case": "a percent escape",
+    "input": "data:image/png;base64,AAAA%3D",
+    "output": null
+  },
+  {
+    "case": "an empty payload",
+    "input": "data:image/png;base64,",
+    "output": "data:image/png;base64,"
+  },
+  {
+    "case": "not base64",
+    "input": "data:image/png,AAAA",
+    "output": null
+  },
+  {
+    "case": "a parameter before base64",
+    "input": "data:image/png;charset=utf-8;base64,AAAA",
+    "output": null
+  },
+  {
+    "case": "a remote URL",
+    "input": "https://e.x/a.png",
+    "output": null
+  },
+  {
+    "case": "null",
+    "input": null,
+    "output": null
+  },
+  {
+    "case": "undefined",
+    "input": "<undefined>",
+    "output": null
+  },
+  {
+    "case": "a number",
+    "input": 5,
+    "output": null
+  },
+  {
+    "case": "an object that prints as a data URL",
+    "input": {
+      "toString": "<function>"
+    },
+    "output": null
+  }
+]

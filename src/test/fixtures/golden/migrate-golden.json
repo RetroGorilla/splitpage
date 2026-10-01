@@ -144,7 +144,7 @@
             "id": "r4",
             "imageRef": null,
             "lengthSeconds": 31,
-            "audioText": "<s>cut</s> <mark>hi</mark> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">link</a> <em>a</em> <strong>b</strong> <em>c</em>",
+            "audioText": "<s>cut</s> <mark>hi</mark> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">link</a> <em>a</em> <strong>b</strong> <em>c</em> &lt;span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\"&gt;kettle&lt;/span&gt;",
             "status": "todo",
             "visualText": "",
             "updatedAt": "",
@@ -619,6 +619,126 @@
         "52246fae7597a2f34ffb46ead38307876bc08bf6c11f0b0412054dbdddabe1bf",
         "97708e1eee5df5718173706dfc2e47ef4655b4fe2643e90574bd69009cd4b98c"
       ]
+    },
+    "schema 2 document saved before the tag registry": {
+      "output": {
+        "schema": 2,
+        "title": "Tagged before the registry",
+        "rows": [
+          {
+            "id": "r1",
+            "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lens flare\" contenteditable=\"false\">flare</span> over <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\">the tripod</span>",
+            "audioText": "Pick up the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red mug</span> in <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Kitchen\" contenteditable=\"false\">the kitchen</span> with <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Ann\" contenteditable=\"false\">Ann</span>.",
+            "status": "todo",
+            "imageRef": null,
+            "updatedAt": "",
+            "updatedBy": null
+          },
+          {
+            "id": "r2",
+            "visualText": "a sword and nothing",
+            "audioText": "<span class=\"audio-cue\">Music: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Theme\" contenteditable=\"false\">Theme</span></span><br><span class=\"audio-cue\">SFX: door slam</span><br>the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"red MUG\" contenteditable=\"false\">mug</span> again, and <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Kitchen\" contenteditable=\"false\">back</span> to the kitchen",
+            "status": "todo",
+            "imageRef": null,
+            "updatedAt": "",
+            "updatedBy": null
+          }
+        ],
+        "comments": [],
+        "people": [
+          {
+            "id": "p1",
+            "name": "Ann"
+          }
+        ],
+        "brollShots": [
+          {
+            "id": "b1",
+            "name": "Kitchen pan",
+            "props": [
+              {
+                "id": "t_13ff9pk7vdcv3",
+                "name": "Red mug"
+              },
+              {
+                "id": "",
+                "name": "Tripod"
+              }
+            ],
+            "desc": "",
+            "status": "unshot",
+            "reshoot": false,
+            "notes": "",
+            "audioRef": "",
+            "location": "",
+            "owner": "",
+            "origin": "script"
+          }
+        ],
+        "productionTags": [
+          {
+            "cat": "vfx",
+            "name": "Lens flare",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_1ze28d1g34ry6"
+          },
+          {
+            "cat": "gear",
+            "name": "Tripod",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_1equb9e3b9un"
+          },
+          {
+            "cat": "prop",
+            "name": "Red mug",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_13ff9pk7vdcv3"
+          },
+          {
+            "cat": "location",
+            "name": "Kitchen",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_13mj2fucx4sa4"
+          },
+          {
+            "cat": "cast",
+            "name": "Ann",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_1e7qqm11g079u9"
+          },
+          {
+            "cat": "sound",
+            "name": "Theme",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_1108x2110dth6z"
+          },
+          {
+            "cat": "sound",
+            "name": "door slam",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_1opaishvqv40e"
+          }
+        ],
+        "wordsPerMinute": 150,
+        "rev": 0,
+        "docId": "{minted:docId}"
+      },
+      "registry": {},
+      "persisted": []
     },
     "seed": {
       "output": {
