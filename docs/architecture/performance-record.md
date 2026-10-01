@@ -2,7 +2,7 @@
 
 Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe this machine and browser; compare a later run only under the same conditions.
 
-## Conditions
+## Conditions (Linux)
 
 - Machine: linux 6.18.44-fc-v50 x64, Intel(R) Xeon(R) Processor @ 2.80GHz x4, 15.7 GB, Node v22.22.2
 - Browser: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36, headless, viewport 1400x900 at 1x
@@ -10,7 +10,7 @@ Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe 
 - Fixtures: short is the seed script (2 scenes); long is the long demo (30 scenes)
 - Typing: 55 characters, one real key event every 60 ms, into scene 2's audio cell; latency is key-down to the frame after it
 
-## Input latency (ms)
+## Input latency (Linux, ms)
 
 | Case | Keys | p50 | p95 | Max | Long tasks | Long-task ms |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -23,7 +23,7 @@ Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe 
 | long delete every scene | 1 | 37.8 | 37.8 | 37.8 | 0 | 0 |
 | long undo the delete | 1 | 92.2 | 92.2 | 92.2 | 1 | 69 |
 
-## Export (median of 5 runs, ms)
+## Export (Linux, median of 5 runs, ms)
 
 | Fixture | .splitpage | .md project | Standalone HTML |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@ Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe 
 
 ## After milestone 2 (Windows)
 
-Recorded 2026-10-01 by `node tools/perf-record.mjs`, once, on 4.0-development with milestone 2 merged (`m2/close`, built with `node build.mjs`). It is a different machine from the record above, so the two are not comparable: the numbers below say whether milestone 2 left typing, row edits and exports within the same order of cost on a fast desktop, not how much each changed against the Linux container. A comparison against the starting point needs a run on the starting commit under these same conditions.
+Recorded 2026-10-01 by `node tools/perf-record.mjs`, once, on 4.0-development with milestone 2 merged (`m2/close`, built with `node build.mjs`). It is a different machine from the Linux record above, and there is no baseline on this machine, so the two are not comparable and nothing here says how much milestone 2 changed. The numbers show only what typing, row edits and exports cost on this machine after the milestone: no long task fired in any case. A comparison against the starting point needs a run on the starting commit under these same conditions.
 
 ### Conditions
 
@@ -64,4 +64,4 @@ Recorded 2026-10-01 by `node tools/perf-record.mjs`, once, on 4.0-development wi
 | short | 0.4 | 0.7 | 0.3 |
 | long | 1.6 | 4.7 | 2.9 |
 
-No long task fired in any case, so per-keystroke work stays bounded and coalesced on both fixtures.
+No long task fired in any case on either fixture.
