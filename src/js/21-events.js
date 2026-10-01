@@ -242,7 +242,7 @@ import {
   tryResumeLastProject
 } from "./18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "./18a-local-merge.js";
-import { refusedUnderOverlay, toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
+import { overlayRefusing, refusedUnderOverlay, toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
 import {
   applyWriterSize,
   caretTextOffset,
@@ -1241,8 +1241,7 @@ function init() {
   window.addEventListener("keydown", function (e) {
     if (!(e.ctrlKey || e.metaKey) || (e.key !== "f" && e.key !== "F")) return;
     if (!S.state) return;
-    if (writerOpen) return;
-    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
+    if (overlayRefusing("find")) return;
     e.preventDefault();
     if (findOpen) { document.getElementById("find-input").select(); }
     else openFindBar();

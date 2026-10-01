@@ -9,13 +9,12 @@ import {
   keyChipsHtml,
   keysWorkHere,
   menuItemReason,
-  modalIsOpen,
+  overlayRefusing,
   refreshFileMenu,
   openLongDemo,
   toggleFileMenu
 } from "./18b-file-menu.js";
 import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
-import { writerOpen } from "./19-writer.js";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
@@ -328,12 +327,7 @@ export function commandMenuOpen() {
 
 function blockedNow() {
   if (!S.state) return "loading";
-  if (S.prompterOpen) return "prompter";
-  if (writerOpen) return "writer";
-  if (modalIsOpen()) return "modal";
-  var tour = el("tour-overlay");
-  if (tour && !tour.hidden) return "tour";
-  return "";
+  return overlayRefusing("command-menu");
 }
 
 export function openCommandMenu() {

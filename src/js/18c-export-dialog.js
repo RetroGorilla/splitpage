@@ -11,8 +11,7 @@ import {
 } from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
-import { modalIsOpen, onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
-import { writerOpen } from "./19-writer.js";
+import { onFileMenuRefresh, overlayRefusing, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
 
 var LAST_EXPORT_KEY = "splitpage-last-export";
 
@@ -661,7 +660,7 @@ export function __init() {
     if (e.defaultPrevented || e.isComposing) return;
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
     if (String(e.key || "").toLowerCase() !== "e") return;
-    if (!S.state || modalIsOpen() || S.prompterOpen || writerOpen) return;
+    if (!S.state || overlayRefusing("export")) return;
     e.preventDefault();
     var menu = el("file-menu");
     if (menu && !menu.hidden) menu.querySelector('[data-file-action="export"]').click();
