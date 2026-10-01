@@ -13,11 +13,14 @@ import {
   BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_STATUSES, BROLL_TEXT_MAX, __init as initBroll, anchorBrollInRows, brollEntries,
   brollInCell, brollPropKey, brollShotsByProp, brollStatus, normalizeBrollProps
 } from "../js/08c-broll.js";
+import { __init as initHistory } from "../js/03a-history-store.js";
+import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 
 freezeClockAndRandom(0x70726f64);
 initBroll();
+initHistory();
 
 const MINTED_SHOT = /\bbs[0-9a-z]{6,}\b/g;
 
@@ -478,6 +481,74 @@ SCENARIOS.push({
       rowId: e.rowId, name: e.name, location: e.location, locationLength: e.location.length, audioRefLength: e.audioRef.length
     }));
     return masked(out, input);
+  }
+});
+
+function gearElements() {
+  let box = document.getElementById("gear-quickadd-input");
+  if (!box) {
+    box = document.createElement("textarea");
+    box.id = "gear-quickadd-input";
+    document.body.appendChild(box);
+  }
+  let host = document.getElementById("toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toast-host";
+    document.body.appendChild(host);
+  }
+  return { box, host };
+}
+
+function quickAdd(label, lines, eol) {
+  const { box, host } = gearElements();
+  host.innerHTML = "";
+  const text = lines.join(eol || "\n");
+  box.value = text;
+  S.dirty = false;
+  const others = jsonCopy(S.state.productionTags.filter((t) => t.cat !== "gear"));
+  applyGearQuickAdd();
+  return {
+    step: label, typed: text,
+    gear: S.state.productionTags.filter((t) => t.cat === "gear").map((t) => [t.id, t.name, t.status, t.notes]),
+    otherTagsUntouched: JSON.stringify(others) === JSON.stringify(S.state.productionTags.filter((t) => t.cat !== "gear")),
+    toasts: Array.from(host.children).map((el) => el.textContent),
+    boxAfter: box.value,
+    dirty: !!S.dirty,
+    personColors: S.state.personColors === undefined ? null : jsonCopy(S.state.personColors)
+  };
+}
+
+const gearDoc = (docId, registry) => ({
+  schema: 2, title: "Gear", docId,
+  rows: [row("r1", "", "Wide on " + tag("gear", "Tripod", "the tripod") + " and " + tag("gear", "Slider"))],
+  productionTags: registry
+});
+
+SCENARIOS.push({
+  name: "gear-quick-add",
+  run() {
+    const out = {};
+    out.input = load(gearDoc("d" + "4".repeat(31) + "c", [
+      tagEntry("t_tripod", "gear", "Tripod", { status: "have" }), tagEntry("t_slider", "gear", "Slider"),
+      tagEntry("t_oldlens", "gear", "Old lens", { notes: "sold" }), tagEntry("t_gimbal", "gear", "Gimbal"),
+      tagEntry("t_ctor", "gear", "constructor"), tagEntry("t_proto", "gear", "__proto__"),
+      tagEntry("t_kettle", "prop", "Kettle")
+    ]));
+    const lines = ["tripod", "  Lav mic  ", "Gimbal", "constructor", "__proto__", "toString", "hasOwnProperty", letters(81, "x"),
+      "<b>Boom</b> pole", "", "   ", "Lav Mic"];
+    out.steps = [
+      quickAdd("a list with every kind of line, CRLF", lines, "\r\n"),
+      quickAdd("the same list again, LF", lines, "\n"),
+      quickAdd("the same list, CR", lines, "\r"),
+      quickAdd("a list leaving out everything not in the script", ["Tripod", "Slider"])
+    ];
+    load(gearDoc("d" + "5".repeat(31) + "c", [
+      tagEntry("t_tripod", "gear", "Tripod"), tagEntry("t_spare", "gear", "Spare battery")
+    ]));
+    out.steps.push(quickAdd("lines named after Object's own properties, none tracked yet", ["constructor", "__proto__", "Tripod", "toString"]));
+    out.steps.push(quickAdd("an empty list", [""]));
+    return out;
   }
 });
 
