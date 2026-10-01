@@ -63,7 +63,7 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 - **Bundling.** esbuild bundles `.ts` imported from `src/js` with an explicit `.ts` extension, as `_entry.js` already does for `src/legacy/*.ts`. Node 22.22+ strips types natively, so `src/test/*.test.mjs` keep testing through the shims.
 - **New tests.** They go in `tests/core/<area>/`, `tests/core/` for the root files, and `tests/adapters/<area>/`, as the per-area rule requires.
   - Core tests never load `src/test/_dom.mjs`. They decode through maps built with `toHtml`, or through the adapter with an injected parser.
-  - `tests/core/environment.test.ts` imports every core module and asserts that no DOM globals exist.
+  - `tests/core/environment.test.ts` imports every script under `src/core`, whatever its extension, checks that loading them adds no globals, and runs core's policies in a process that loads no DOM. Keeping platform globals, the clock and `Math.random` out of core is the dependency gate's job.
 - **Shared policies.** `shared/*.js` stay CommonJS and remain the single source. Confirm that `tsc` with NodeNext accepts named imports from them before relying on it.
 - **Lint.** Core files with control-character regexes get a file-scoped rule in `eslint.config.mjs`; no inline disables.
 - **Dependency baseline.**
