@@ -18,6 +18,9 @@ appear in the app under **Help**. The format follows
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 - Markdown export wrote `[text](null)` for a link with no address. It now
   writes the text alone.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
 
 ## 3.1.0 — 2026-09-29
 
