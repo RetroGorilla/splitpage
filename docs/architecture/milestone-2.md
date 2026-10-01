@@ -177,7 +177,7 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - `04-richtext.js` re-exports the first six. It keeps `safeId` (with `randomIds`), `cssAttr` and `ensureTrailingCaretSpot`. The last appends a caret text node to a live cell through the page's `document`; it is editor code, not sanitising, and moves with the editor in milestone 6.
   - `04c-doc-model.js` re-exports `fromHtml` and `cellOf`, keeps `syncCommentAnchors(state)`, and no longer imports `04-richtext.js`.
   - No importer of either module changed.
-- **Where nodes live.** The sanitiser builds its output in the parser's inert document instead of the page's, and `buildVideoCardEl` builds its card in a fresh inert document. Every caller of `buildVideoCardEl` (`05-render.js`, `02-state.js`, the golden) only reads its `outerHTML`.
+- **Where nodes live.** The sanitiser builds its output in the parser's inert document instead of the page's, and `buildVideoCardEl` builds its card in an inert document the adapter parses on its first card and reuses. Every caller of `buildVideoCardEl` (`05-render.js`, `02-state.js`, the golden) only reads its `outerHTML`.
 - **Import graph.**
   - `04-richtext.js` no longer imports `02c-blobs.js`, `shared/blob-policy.js`, or core's `broll.ts` and `tags.ts`.
   - `04c-doc-model.js` no longer imports 04.
@@ -195,6 +195,11 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - `tests/core/document/text-policy.test.ts` checks the attribute list and the markup. INV-10's tests name the adapter's.
   - Browser suites, all passing: `01-core` (20), `10-comments-panel` (17), `20-comment-drift` (43), `52-csp` (22), `65-blobs` (49), `66-hosted-blobs` (84), `68-images` (31), `69-html-images` (54), `77-clipboard-model` (51), `86-gdocs-paste-bold` (5), `92-paste-into-gallery` (102), `160-gallery-video` (127). The bundle has no `eval` or `new Function`.
 - **Found, not fixed.** `storedHtmlFromDom` keeps an image attribute named `constructor` or `__proto__`, because `STORED_IMG_ATTRS` is a `{}` map. HTML lower-cases attribute names, so no other `Object.prototype` name matches. Neither can carry script, and sanitising drops both.
+- **Review follow-ups (PR #287).**
+  - `storedImageMarkup`, now exported, escapes every attribute value with `escapeHtml`, so a record nobody validated cannot open an attribute through its `sha256`, `width`, `height` or `mime`. A valid record's values need no escaping, so every stored tag and golden is unchanged. Core tests put `"`, `<`, `&` and `'` in each field; an adapter test parses the markup back to exactly its five attributes.
+  - `tests/adapters/richtext/stored-form.test.ts` pins `storedHtmlFromDom`'s allow-list: event handlers in odd capitalisation and quoting, twenty other attributes, and pictures nested in other markup. A mutant that kept `on*` attributes passed every test before; it fails all three now.
+  - Video cards come from one inert document per adapter instead of a fresh parse per card.
+  - Two quirks of stored form, neither reachable from a cell: `storedHtmlFromDom` looks for `data-blob` case-sensitively before parsing, so markup spelling it `DATA-BLOB` passes through untouched, and an `is` attribute removed from a picture comes back on serialisation, because the DOM writes an element's `is` value out. Every caller passes a live cell's `innerHTML`, which writes attribute names in lower case, and the sanitiser builds fresh elements that have no `is` value.
 - **Left for 2.5.** `02-state.js`'s `moveMediaOutOfCell` still makes the video card's HTML with `buildVideoCardEl(href).outerHTML`; the bridge's `videoCardHtml` is the same string. INV-10's acceptance also asks for a check that no module outside the adapter builds cells from HTML; it is not written yet.
 
 ## Characterisation (2.0)
