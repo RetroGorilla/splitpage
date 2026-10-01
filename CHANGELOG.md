@@ -20,6 +20,13 @@ appear in the app under **Help**. The format follows
   markup, as a script or paste from elsewhere can carry them, kept the tag
   but lost the comment's highlight, leaving its card "No longer in script".
   Both are now kept.
+- Deleting one SFX: or Music: cue and editing another in the same cell at
+  once could hand the deleted cue's Production item, with its status and
+  notes, to the edited cue, and leave the edited cue's own item "Not in
+  script". The edited cue now keeps its own item when its new words are
+  close to its old ones and to no other cue that went. When that can't be
+  told, it gets a new item at Needed and both old items stay, "Not in
+  script", rather than the wrong one being renamed.
 
 ## 3.1.0 — 2026-09-29
 
