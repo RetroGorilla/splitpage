@@ -26,7 +26,7 @@ export interface StateField {
   undo: boolean;
 }
 
-export const STATE_FIELDS: readonly StateField[] = [
+const FIELDS: StateField[] = [
   { key: "title",          def: function () { return ""; }, merge: "title", undo: true },
   { key: "docId",          merge: "doc-id", undo: false },
   { key: "rows",           def: function () { return []; }, merge: "rows", undo: false },
@@ -43,12 +43,14 @@ export const STATE_FIELDS: readonly StateField[] = [
   { key: "schema",         merge: "constant", undo: false }
 ];
 
-export const ROW_FIELDS: readonly string[] = ["visualText", "imageRef", "audioText", "imageLinks", "moreImages"];
+export const STATE_FIELDS: readonly StateField[] = Object.freeze(FIELDS.map(function (f) { return Object.freeze(f); }));
 
-export const GALLERY_FIELDS: Readonly<Record<string, boolean>> = { imageLinks: true, moreImages: true };
+export const ROW_FIELDS: readonly string[] = Object.freeze(["visualText", "imageRef", "audioText", "imageLinks", "moreImages"]);
 
-export function missingStateFields(s: unknown): string[] {
-  return STATE_FIELDS.filter(function (f) {
+export const GALLERY_FIELDS: Readonly<Record<string, boolean>> = Object.freeze({ imageLinks: true, moreImages: true });
+
+export function missingStateFields(s: unknown, fields: readonly StateField[] = STATE_FIELDS): string[] {
+  return fields.filter(function (f) {
     return f.def && (!s || !(f.key in (s as object)));
   }).map(function (f) { return f.key; });
 }

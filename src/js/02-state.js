@@ -15,7 +15,7 @@ import {
   sanitizeHtml,
   storedImageHtml
 } from "./04-richtext.js";
-import { SCHEMA_VERSION, STATE_FIELDS as FIELD_POLICIES, missingStateFields } from "../core/document/fields.ts";
+import { SCHEMA_VERSION, STATE_FIELDS as FIELD_POLICIES, missingStateFields as missingFieldsIn } from "../core/document/fields.ts";
 import { mediaCommentId } from "../core/document/ids.ts";
 import { mediaComments } from "../core/document/media.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
@@ -34,7 +34,7 @@ import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus, normalizeBrollProps } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 export { makeId } from "../adapters/identity/ids.ts";
-export { escapeHtml, legacyMdToHtml, mediaCommentId, missingStateFields };
+export { escapeHtml, legacyMdToHtml, mediaCommentId };
 
 function defaultState() {
   try {
@@ -55,6 +55,10 @@ export var STATE_FIELDS = FIELD_POLICIES.map(function (f) {
   if (LIST_MERGERS[f.key]) entry.mergeList = LIST_MERGERS[f.key];
   return entry;
 });
+
+export function missingStateFields(s) {
+  return missingFieldsIn(s, STATE_FIELDS);
+}
 
 function videoCardHtml(href) {
   return buildVideoCardEl(href).outerHTML;
