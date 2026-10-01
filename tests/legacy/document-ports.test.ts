@@ -78,6 +78,21 @@ test("a save straight after a load finds every picture the load decoded", async 
   assert.deepEqual((await settled()).map((p) => p.sha), [row.sha256, body.sha256, card.sha256]);
 });
 
+test("a pass looks a picture it did not decode up in the registry: a conflict card for a held picture takes its record", async () => {
+  const held = image("png", 97, 3);
+  migrateRows({ rows: [{ id: "r1", visualImage: held.dataUrl }] });
+  await settled();
+  const doc = migrateRows({
+    schema: 2,
+    rows: [],
+    comments: [{ id: "c1", kind: "conflict", field: "visualImage", body: '<img class="comment-img" data-blob="' + held.sha256 + '">' }]
+  });
+  const card = (doc.comments as Item[])[0] as Item;
+  assert.deepEqual(card.imageValue, held.record);
+  assert.match(card.body as string, new RegExp('data-w="97" data-h="3" data-mime="image/png"'));
+  assert.deepEqual(await settled(), []);
+});
+
 test("07 hands out the one productionReaders the document ports read tags through", () => {
   assert.equal(tags.productionReaders, productionReaders);
   assert.equal(tags.tagsInField, productionReaders.tagsInField);
@@ -124,6 +139,12 @@ test("loadInitialState lives in 02b: a saved page opens as its file, a pristine 
   assert.equal(pristine.title, "Saved");
   assert.notEqual(pristine.docId, deriveDocId("splitpage-file", saved), "a pristine copy is not the file it came from");
   assert.equal(S.docIdWrittenOut, false);
+
+  const editedOnly = JSON.stringify({ title: "Edited", lastEditedBy: "Ann", rows: [] });
+  pageWith(editedOnly, null);
+  const edited = await loadInitialState() as Doc;
+  assert.equal(edited.docId, deriveDocId("splitpage-file", editedOnly), "a page someone edited is a saved file even at rev 0");
+  assert.equal(S.docIdWrittenOut, true);
 
   const unsaved = JSON.stringify({ title: "Seed", rows: [] });
   pageWith(unsaved, null);
