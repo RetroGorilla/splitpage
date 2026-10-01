@@ -69,3 +69,14 @@ test("a thread's last activity is its latest reply, or when it was made", () => 
   const c = { n: "c", createdAt: "2026-01-07" };
   assert.deepEqual([b, a, c].sort(commentRecentOrder).map((x) => x.n), ["a", "c", "b"]);
 });
+
+test("a thread with no timestamps has the empty string as its last activity, never null", () => {
+  assert.equal(commentLastActivity({ createdAt: "", replies: [{ createdAt: null }] }), "");
+  assert.equal(commentLastActivity({ createdAt: null, replies: [{ createdAt: "" }, {}] }), "");
+  assert.equal(commentLastActivity({ createdAt: undefined, replies: null }), "");
+  assert.equal(commentLastActivity({ createdAt: "2026-01-01", replies: [{ createdAt: "2026-01-01" }] }), "2026-01-01");
+  const bare = { createdAt: "", replies: [{ createdAt: null }] };
+  assert.equal(commentRecentOrder(bare, { createdAt: null }), 0);
+  assert.equal(commentRecentOrder({ createdAt: null }, bare), 0);
+  assert.ok(commentRecentOrder(bare, { createdAt: "2026-01-01" }) > 0);
+});
