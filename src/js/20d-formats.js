@@ -269,6 +269,11 @@ export function __init() {
     stash: stashLocalWork,
     clone: cloneState,
     state: function () { return S.state; },
+    holdLoadingForTest: function () {
+      var held = S.state;
+      S.state = null;
+      return function () { if (S.state === null) S.state = held; return S.state === held; };
+    },
     docFile: function () {
       var f = fileHome();
       return { name: f && f.handle ? f.handle.name : null, kind: f ? f.format : null,

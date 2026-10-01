@@ -1,0 +1,110 @@
+# Save while the page is still loading (#276). Until the document has loaded
+# S.state is null; the File menu's commands already said "Still loading…",
+# but the header's Save, the writer's Save and the desktop app's native Save
+# (D.runMenuCommand('save'), which clicks the header's Save) went straight to
+# saveDoc(), which read S.state.docId and threw — an unhandled rejection, no
+# word to the user. Each is now refused with the File menu's toast, nothing is
+# picked or written and the Save buttons are left as they were. The in-page
+# Ctrl+S and Ctrl+Shift+S still refuse silently. The loading window is a few
+# microtasks at boot, too short to click into, so the suite holds it open with
+# __splitpageFormats.holdLoadingForTest(), which takes the document away and
+# hands back a function that puts it back.
+
+open
+viewport 1400 900
+eval (function(){ window.D = window.__desktopTest; window.F = window.__splitpageFormats; window.__errs = []; window.addEventListener('unhandledrejection', function (e) { window.__errs.push('rejection: ' + (e.reason && e.reason.message || e.reason)); }); window.addEventListener('error', function (e) { window.__errs.push('error: ' + e.message); }); window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__run = function (cmd) { D.runMenuCommand(cmd); return true; }; window.__hold = function () { window.__release = F.holdLoadingForTest(); return F.state() === null; }; window.__buttons = function () { return ['btn-save', 'wr-save'].map(function (id) { var b = document.getElementById(id); return b.textContent + (b.disabled ? ':disabled' : ''); }).join(','); }; return !!(D && D.runMenuCommand && F && F.holdLoadingForTest); })()
+wait window.__splitpageFormats.state() && window.__splitpageFormats.state().rows.length > 0
+eval __toasts()
+expect __buttons() === 'Save,Save'
+
+# --- control: with the document loaded, the header's Save acts ---------------
+click #btn-save
+wait __picked.length === 1
+expect __take() === 'save'
+wait !document.getElementById('btn-save').disabled
+expect __toasts().indexOf('Still loading') === -1
+
+# --- still loading: the header's Save is refused ----------------------------
+expect __hold()
+click #btn-save
+wait document.querySelectorAll('#toast-host .toast').length > 0
+sleep 300
+expect __toasts() === 'Still loading…'
+expect __take() === ''
+expect __buttons() === 'Save,Save'
+expect F.state() === null
+expect __errs.join(' / ') === ''
+
+# --- still loading: the desktop app's menu Save and Save a copy --------------
+eval __run('save')
+wait document.querySelectorAll('#toast-host .toast').length > 0
+sleep 300
+expect __toasts() === 'Still loading…'
+eval __run('save-as')
+wait document.querySelectorAll('#toast-host .toast').length > 0
+sleep 300
+expect __toasts() === 'Still loading…'
+expect __take() === ''
+expect __buttons() === 'Save,Save'
+expect __errs.join(' / ') === ''
+
+# --- still loading: the in-page shortcuts refuse and say nothing -------------
+key ctrl KeyS
+key ctrl+shift KeyS
+sleep 400
+expect __take() === ''
+expect __toasts() === ''
+expect __errs.join(' / ') === ''
+expect __release()
+
+# --- the desktop app: its menu Save never reaches the save dialog ------------
+eval (function(){ window.__fake = D.makeFakeBackend(); var pick = window.__fake.saveFileDialog; window.__fake.saveFileDialog = function (o) { window.__picked.push('desktop'); this._cancelNextSave = true; return pick.call(this, o); }; D.setBackend(window.__fake); return true; })()
+expect __hold()
+eval __run('save')
+wait document.querySelectorAll('#toast-host .toast').length > 0
+sleep 300
+expect __toasts() === 'Still loading…'
+eval __run('save-as')
+wait document.querySelectorAll('#toast-host .toast').length > 0
+sleep 300
+expect __toasts() === 'Still loading…'
+expect __take() === ''
+expect __buttons() === 'Save,Save'
+expect __errs.join(' / ') === ''
+expect __release()
+eval __run('save')
+wait __picked.length === 1
+expect __take() === 'desktop'
+wait !document.getElementById('btn-save').disabled
+eval D.restoreBackend()
+eval __toasts()
+
+# --- still loading: the writer's Save is refused ----------------------------
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect __hold()
+jsclick #wr-save
+wait document.querySelectorAll('#toast-host .toast').length > 0
+sleep 300
+expect __toasts() === 'Still loading…'
+expect __take() === ''
+expect __buttons() === 'Save,Save'
+expect __errs.join(' / ') === ''
+expect __release()
+jsclick #wr-save
+wait __picked.length === 1
+expect __take() === 'save'
+wait !document.getElementById('wr-save').disabled
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 300
+
+# --- loaded again: the header's Save acts as before --------------------------
+eval __toasts()
+click #btn-save
+wait __picked.length === 1
+expect __take() === 'save'
+expect __toasts().indexOf('Still loading') === -1
+expect __errs.join(' / ') === ''
+expect document.getElementById('save-status').hidden
