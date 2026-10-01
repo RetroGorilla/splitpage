@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   inertBody,
@@ -8,12 +7,6 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import {
-  cellOf,
-  namedTagId,
-  projection,
-  replaceWithTag
-} from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
@@ -24,6 +17,7 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
+import { makeId } from "../adapters/identity/ids.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import {
   TAG_CATEGORY_IDS,
@@ -38,6 +32,7 @@ import {
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -53,7 +48,10 @@ import {
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
 } from "../core/production/tags.ts";
+import { replaceWithTag } from "../core/text/edits.ts";
+import { namedTagId, projection } from "../core/text/runs.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
+import { cellOf } from "../legacy/richtext.ts";
 export {
   contentMemo,
   ensureTagIds,
