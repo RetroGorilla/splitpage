@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ImageRef } from "../../../src/core/document/ports.ts";
-import { storedImageMarkup } from "../../../src/core/document/text-policy.ts";
+import { storedImageAttributes, storedImageMarkup } from "../../../src/core/document/text-policy.ts";
+import type { StoredImageRef } from "../../../src/core/document/text-policy.ts";
 import type { DecodedMedia } from "../../../src/core/text/ports.ts";
 import { image } from "../../../src/test/golden-helpers.mjs";
 import { adapterWith, fakePorts } from "./fakes.ts";
@@ -49,6 +50,19 @@ test("a record the image source hands back is written attribute by attribute, so
   assert.equal(img.hasAttribute("onerror"), false);
   assert.equal(img.getAttribute("data-mime"), odd.mime);
   assert.deepEqual(Array.from(img.attributes, (a) => a.name), ["class", "data-blob", "data-w", "data-h", "data-mime"]);
+});
+
+test("core's stored image markup parses back to exactly its attributes, whatever the record holds", () => {
+  const rt = adapterWith(fakePorts());
+  const hostile = `x" onerror="alert('1')" <b>&amp;`;
+  for (const field of ["sha256", "width", "height", "mime"] as const) {
+    const ref = { sha256: UNKNOWN, width: 4, height: 3, mime: "image/png", [field]: hostile } as unknown as StoredImageRef;
+    const body = rt.inertBody(storedImageMarkup(ref) + "after");
+    assert.equal(body.childNodes.length, 2, field);
+    const img = body.firstElementChild;
+    assert.ok(img, field);
+    assert.deepEqual(Array.from(img.attributes, (a) => [a.name, a.value]), storedImageAttributes(ref), field);
+  }
 });
 
 test("ids are minted through the IdSource for anchors and b-roll keys that lack one, interleaved with pictures in document order", () => {
