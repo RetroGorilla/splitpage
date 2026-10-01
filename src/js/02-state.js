@@ -2,21 +2,21 @@ import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
-import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
+import { internDataUrl, queuePersist, recordFor, registryImages } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
-import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "./03-sync.js";
 import {
   buildVideoCardEl,
   plainName,
   plainText,
-  safeHref,
   safeId,
   safeImageSrc,
   sanitizeHtml,
   storedImageHtml
 } from "./04-richtext.js";
 import { mediaCommentId } from "../core/document/ids.ts";
+import { mediaComments } from "../core/document/media.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
 import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
 import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
@@ -69,53 +69,15 @@ export function missingStateFields(s) {
   }).map(function (f) { return f.key; });
 }
 
-var MEDIA_COMMENT_NOTE = {
-  visualText: "This was in the scene's visual column. Pictures and videos go in comments now:",
-  audioText: "This was in the scene's audio column. Pictures and videos go in comments now:"
-};
+function videoCardHtml(href) {
+  return buildVideoCardEl(href).outerHTML;
+}
 
 function moveMediaOutOfCell(row, field) {
   var found = [];
   var cell = fromHtml(row[field], { onMedia: function (m) { found.push(m); } });
   row[field] = toHtml(cell);
-  var out = [];
-  var seen = Object.create(null);
-  found.forEach(function (m) {
-    var key, media;
-    if (m.kind === "image") {
-      var sha = m.ref && m.ref.sha256;
-      if (!isSha256Hex(sha)) return;
-      key = "img:" + sha;
-      var rec = recordFor(sha) || normalizeImageRef(m.ref);
-      media = rec ? storedImageHtml(rec) : '<img class="comment-img" data-blob="' + sha + '">';
-    } else {
-      var href = safeHref(m.href || "");
-      if (!href) return;
-      key = "video:" + href;
-      media = buildVideoCardEl(href).outerHTML;
-    }
-    var id = mediaCommentId(row.id, field, key);
-    if (seen[id]) return;
-    seen[id] = true;
-    out.push({
-      id: id,
-      rowId: row.id,
-      field: field,
-      anchorId: null,
-      quotedText: "",
-      author: "Splitpage",
-      body: MEDIA_COMMENT_NOTE[field] + "<br>" + media,
-      resolved: false,
-      resolvedBy: null,
-      resolvedAt: null,
-      assignee: "",
-      createdAt: row.updatedAt || "",
-      updatedAt: row.updatedAt || "",
-      kind: "anchor",
-      replies: []
-    });
-  });
-  return out;
+  return mediaComments(row, field, found, registryImages, videoCardHtml);
 }
 
 export function migrateRows(s) {

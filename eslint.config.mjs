@@ -116,6 +116,8 @@ export default [
 
   {
     files: [
+      "src/core/document/gallery.ts",
+      "src/core/document/media.ts",
       "src/core/document/person-colors.ts",
       "src/core/document/text-policy.ts"
     ],
