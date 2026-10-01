@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
-import { normalizePersonColors } from "./00p-prefs.js";
-import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength, rowStatus } from "./01-scene-status.js";
+import { rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
@@ -18,7 +17,9 @@ import {
   storedImageHtml
 } from "./04-richtext.js";
 import { mediaCommentId } from "../core/document/ids.ts";
+import { normalizePersonColors } from "../core/document/person-colors.ts";
 import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
+import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,

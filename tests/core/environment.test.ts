@@ -9,11 +9,14 @@ const globalsBefore = new Set(Reflect.ownKeys(globalThis));
 
 const modules: Record<string, Record<string, unknown>> = {
   "document/broll.ts": await import("../../src/core/document/broll.ts"),
+  "document/comments.ts": await import("../../src/core/document/comments.ts"),
   "document/ids.ts": await import("../../src/core/document/ids.ts"),
   "document/memo.ts": await import("../../src/core/document/memo.ts"),
+  "document/person-colors.ts": await import("../../src/core/document/person-colors.ts"),
   "document/ports.ts": await import("../../src/core/document/ports.ts"),
   "document/tags.ts": await import("../../src/core/document/tags.ts"),
-  "document/text-policy.ts": await import("../../src/core/document/text-policy.ts")
+  "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
+  "document/timing.ts": await import("../../src/core/document/timing.ts")
 };
 
 const globalsAfter = new Set(Reflect.ownKeys(globalThis));
@@ -37,8 +40,10 @@ test("core's policies run in this process", async () => {
   const { sha256Hex } = await import("../../src/core/document/ids.ts");
   const { plainText, safeHref } = await import("../../src/core/document/text-policy.ts");
   const { normalizeBrollProps } = await import("../../src/core/document/broll.ts");
+  const { parseSceneLength } = await import("../../src/core/document/timing.ts");
   assert.equal(sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   assert.equal(plainText("<b>x</b>"), "x");
   assert.equal(safeHref("javascript:x"), null);
   assert.deepEqual(normalizeBrollProps(["Mug"], []), [{ id: "", name: "Mug" }]);
+  assert.equal(parseSceneLength("1:30"), 90);
 });

@@ -115,7 +115,10 @@ export default [
   },
 
   {
-    files: ["src/core/document/text-policy.ts"],
+    files: [
+      "src/core/document/person-colors.ts",
+      "src/core/document/text-policy.ts"
+    ],
     rules: { "no-control-regex": "off" }
   },
 
