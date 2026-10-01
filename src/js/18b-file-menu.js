@@ -6,9 +6,11 @@ import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
+import { brollPageOpen } from "./08d-broll-panel.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
+import { isExportAction } from "./18c-export-dialog.js";
 import { writerOpen } from "./19-writer.js";
 import {
   canOpenPrompterInBrowser,
@@ -412,14 +414,26 @@ export function modalIsOpen() {
   return !!document.querySelector(".modal-backdrop:not([hidden]), .cmdk-backdrop:not([hidden])");
 }
 
+var UNDER_PAGES = ["modal", "prompter", "writer", "shotlist", "tour"];
+
 var REFUSED_UNDER = {
   "save": ["modal"],
   "save-as": ["modal"],
-  "open": ["modal", "prompter", "writer"],
-  "export": ["modal", "prompter", "writer"],
-  "command-menu": ["dialog", "prompter", "writer", "tour"],
+  "save-back": ["modal"],
+  "server-publish": ["modal"],
+  "prompter-open-in-browser": ["modal"],
+  "prompter-open-in-chromium": ["modal"],
+  "open": UNDER_PAGES,
+  "export": UNDER_PAGES,
+  "history": UNDER_PAGES,
+  "toggle-production": UNDER_PAGES,
+  "toggle-gear": UNDER_PAGES,
+  "toggle-comments": UNDER_PAGES,
+  "present": ["modal", "writer", "shotlist", "tour"],
+  "write": ["modal", "prompter", "shotlist", "tour"],
+  "command-menu": ["dialog", "prompter", "writer", "shotlist", "tour"],
   "toggle-hide-shot": ["dialog"],
-  "find": ["dialog", "writer"]
+  "find": ["dialog", "prompter", "writer", "shotlist", "tour"]
 };
 
 var REFUSAL_REASONS = {
@@ -427,6 +441,7 @@ var REFUSAL_REASONS = {
   dialog: "Close the open dialog first.",
   prompter: "Close Present first.",
   writer: "Close the writer first.",
+  shotlist: "Close the shot list first.",
   tour: "Finish or skip the tour first."
 };
 
@@ -435,6 +450,7 @@ function overlayShown(overlay) {
   if (overlay === "dialog") return !!document.querySelector(".modal-backdrop:not([hidden])");
   if (overlay === "prompter") return !!S.prompterOpen;
   if (overlay === "writer") return !!writerOpen;
+  if (overlay === "shotlist") return brollPageOpen();
   if (overlay === "tour") {
     var tour = el("tour-overlay");
     return !!tour && !tour.hidden;
@@ -442,8 +458,17 @@ function overlayShown(overlay) {
   return false;
 }
 
+function refusedUnder(action) {
+  if (isExportAction(action)) return ["modal"];
+  return REFUSED_UNDER[action] || [];
+}
+
+export function overlayRefusing(action) {
+  return refusedUnder(action).find(overlayShown) || "";
+}
+
 export function refusedUnderOverlay(action) {
-  var overlay = (REFUSED_UNDER[action] || []).find(overlayShown);
+  var overlay = overlayRefusing(action);
   if (!overlay) return false;
   showToast(REFUSAL_REASONS[overlay], "warn");
   return true;
@@ -464,7 +489,7 @@ function onShortcutKeydown(e) {
     }
   } else if (k === "o" && !e.shiftKey) {
     e.preventDefault();
-    if (modalIsOpen() || S.prompterOpen || writerOpen || !S.state) return;
+    if (overlayRefusing("open") || !S.state) return;
     toggleFileMenu(false);
     runMenuItem("open");
   }

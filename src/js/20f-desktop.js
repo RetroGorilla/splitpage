@@ -18,6 +18,7 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { concatBytes, saveDoc, strBytes } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
+import { refusedUnderOverlay } from "./18b-file-menu.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
 
@@ -104,7 +105,7 @@ function runDesktopMenuCommand(cmd) {
   var btnId = DESKTOP_HEADER_BUTTONS[cmd];
   if (btnId) {
     var btn = document.getElementById(btnId);
-    if (btn && !btn.disabled) btn.click();
+    if (btn && !btn.disabled && !refusedUnderOverlay(cmd)) btn.click();
     return;
   }
   var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');

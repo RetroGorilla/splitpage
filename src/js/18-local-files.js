@@ -750,12 +750,13 @@ export async function exportBrollList(action) {
 
 export function handleFileMenuAction(action) {
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
-  if (isExportAction(action)) rememberExport(action);
   if (!S.state && action !== "history" && action !== "tagging-help"
       && action !== "drive-open" && action !== "about") {
+    if (isExportAction(action)) rememberExport(action);
     showToast("Still loading…", "warn"); return;
   }
   if (refusedUnderOverlay(action)) return;
+  if (isExportAction(action)) rememberExport(action);
   if (action === "save-as") saveDoc({ saveAs: true });
   else if (action === "new") startNewScript();
   else if (action === "export") openExportDialog();
