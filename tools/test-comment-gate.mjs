@@ -76,6 +76,24 @@ eq("PowerShell block, line and here-string handling", texts("a.ps1", [
   "\"@",
   "Write-Host `# escaped"
 ].join("\n")), ["<# block\n#>", "# yes"]);
+eq("an arithmetic shift is not a heredoc", texts("a.sh", [
+  "echo $((1<<x)) # one",
+  "(( y = 2 << z )) # two",
+  "echo $((16#ff)) ${x}#not $(( (1 << 2) + 1 )) # three",
+  "# four"
+].join("\n")), ["# one", "# two", "# three", "# four"]);
+eq("a here-string is not a heredoc", texts("a.sh", ['jq . <<<"$health" # one', "cat <<< x", "# two"].join("\n")), ["# one", "# two"]);
+eq("ANSI-C quoting closes on its unescaped quote", texts("a.sh", [
+  "echo $'it\\'s # not' # one",
+  "echo $'a\\\\' # two",
+  "# three"
+].join("\n")), ["# one", "# two", "# three"]);
+eq("a PowerShell comment right after a brace is found", texts("a.ps1", [
+  "if ($x) { a }#one",
+  "function f {#two",
+  "$h = @{a=1}#three",
+  "Write-Host a#b"
+].join("\n")), ["#one", "#two", "#three"]);
 eq("batch REM and :: lines", texts("a.bat", "@echo off\nrem one\n:: two\necho rem not\nREM\n"), ["rem one", ":: two", "REM"]);
 
 const found = (path, text) => commentsFor(path, text).map((c) => c.text);
@@ -158,6 +176,8 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
   eq("the step's shell, else the job's runner, picks the dialect", found(".github/workflows/w.yml", windows), ["# powershell", "<# block #>", "rem batch"]);
   const defaults = "defaults:\n  run:\n    shell: pwsh\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          cat <<EOF\n          # not a heredoc in PowerShell\n          EOF\n";
   eq("defaults.run.shell applies to every step", found(".github/workflows/d.yml", defaults), ["# not a heredoc in PowerShell"]);
+  const shifts = "jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          echo $((1<<x)) $'it\\'s'\n          # after a shift\n";
+  eq("a step's arithmetic shift and ANSI-C string do not hide the comments after them", found(".github/workflows/s.yml", shifts), ["# after a shift"]);
 }
 
 {

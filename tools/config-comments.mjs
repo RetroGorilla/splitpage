@@ -33,7 +33,6 @@ export function scriptComments(script, dialect, { shebang = false } = {}) {
     comments.push({ start: 0, end, text: body.slice(0, end).replace(/\r$/, "") });
     body = " ".repeat(end) + body.slice(end);
   }
-  if (dialect === "sh") body = body.replace(/<<</g, "   ");
   return [...comments, ...shellComments(body, dialect)];
 }
 
