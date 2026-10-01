@@ -13,7 +13,6 @@ import {
 } from "./02b-doc-id.js";
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "./02c-blobs.js";
 import { cloneState, setBaseState, stashLocalWork } from "./03-sync.js";
-import { plainText, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
 import { audioDirectionsHtml } from "./15-docx.js";
@@ -31,6 +30,8 @@ import {
   toggleAutoSave
 } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
+import { plainText, safeImageSrc } from "../core/document/text-policy.ts";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 
 export function fileStateFor(s) {
   var copy = migrateRows(cloneState(s || S.state));

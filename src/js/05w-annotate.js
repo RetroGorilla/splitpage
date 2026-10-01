@@ -1,11 +1,11 @@
 import { S } from "./_state.js";
 import { ensureBytes, intern, persist, urlForSync } from "./02c-blobs.js";
-import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "./02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { slotPoster } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
+import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
 var SIZES = {

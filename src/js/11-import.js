@@ -1,5 +1,4 @@
 import { S } from "./_state.js";
-import { escapeHtml, legacyMdToHtml, makeId } from "./02-state.js";
 import { internDataUrl, queuePersist } from "./02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
@@ -10,6 +9,8 @@ import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { fileKindFromName } from "./18-local-files.js";
 import { MD_IMAGE_PREFIX_RE } from "./20d-formats.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
 
 S.importModeTouched = false;
 

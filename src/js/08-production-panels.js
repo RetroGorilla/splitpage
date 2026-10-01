@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { ROW_STATUSES, formatDuration, rowSeconds, rowStatus } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
 import { pad2, render } from "./05-render.js";
@@ -40,6 +39,7 @@ import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 export var IS_TOUCH;
 

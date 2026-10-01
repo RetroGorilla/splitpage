@@ -1,12 +1,12 @@
 import { S } from "./_state.js";
 import { videoThumbsOn } from "./00p-prefs.js";
 import { intern, persist } from "./02c-blobs.js";
-import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "./02d-gallery.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { render, renderRow } from "./05-render.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
+import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 
 var testHooks = { fetch: null, bases: null, protocol: null };
 

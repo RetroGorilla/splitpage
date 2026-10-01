@@ -6,7 +6,6 @@ import { normalizeDocId } from "./02b-doc-id.js";
 import { blobImgHtml, rowImage, rowImageKey } from "./02c-blobs.js";
 import { videoLinkLabel } from "./02d-gallery.js";
 import { GALLERY_FIELDS, ROW_FIELDS, byId, cloneState, mergeTextField, rowContentEqual, rowFieldKey, textMergeContext } from "./03-sync.js";
-import { safeImageSrc } from "./04-richtext.js";
 import { pad2 } from "./05-render.js";
 import {
   normalizeTagName,
@@ -16,6 +15,7 @@ import {
 } from "./07-production-tags.js";
 import { applyStashedWork, htmlToPlainText } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
+import { safeImageSrc } from "../core/document/text-policy.ts";
 
 var mergeCandidate = null;
 var mergeProbeToken = 0;

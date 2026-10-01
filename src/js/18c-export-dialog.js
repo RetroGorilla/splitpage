@@ -1,7 +1,4 @@
 import { S } from "./_state.js";
-import { escapeHtml } from "./02-state.js";
-import { rowImage } from "./02c-blobs.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
 import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
@@ -12,6 +9,10 @@ import {
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
+import { rowImage } from "../core/document/media.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { toPlainText } from "../core/text/projections.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 var LAST_EXPORT_KEY = "splitpage-last-export";
 
