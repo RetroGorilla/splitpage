@@ -10,7 +10,7 @@ import {
 } from "../js/07-production-tags.js";
 import { __init as initBroll, anchorBrollInRows, brollEntries, brollShotsByProp } from "../js/08c-broll.js";
 import { LONG_DEMO } from "../js/_starters.js";
-import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers-b.mjs";
+import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 
 freezeClockAndRandom(0x70726f64);
 initBroll();

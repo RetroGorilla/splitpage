@@ -7,7 +7,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { saveAuthorName } from "../js/10-comments.js";
 import {
   FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, readGolden, updatingGoldens
-} from "./golden-helpers-b.mjs";
+} from "./golden-helpers.mjs";
 
 freezeClockAndRandom(0x6d657267);
 
@@ -641,7 +641,7 @@ for (const c of CASES) {
   test("merge golden: " + c.name, () => {
     const name = "merge-" + c.name;
     const built = inputsOf(c);
-    if (updatingGoldens()) {
+    if (updatingGoldens("merge")) {
       assertGolden(name, produce(c, built));
       return;
     }
