@@ -1,0 +1,754 @@
+{
+  "scenarios": {
+    "schema 1 document": {
+      "output": {
+        "schema": 2,
+        "title": "Legacy script",
+        "rows": [
+          {
+            "id": "r1",
+            "status": "shot",
+            "lengthSeconds": 12,
+            "visualText": "<strong>Wide</strong> shot of <em>the</em> <s>old</s> house<br>with <u>care</u> &amp; &lt;b&gt;raw&lt;/b&gt; tags",
+            "audioText": "Say <a href=\"https://example.com/?a=1&amp;b=2\" target=\"_blank\" rel=\"noopener\">hello</a> and [bad](javascript:alert(1)) <mark>now</mark><br>B-roll: drone",
+            "imageName": "house.png",
+            "imageLinks": [
+              {
+                "href": "https://youtu.be/x",
+                "duration": 12.3,
+                "poster": true
+              },
+              {
+                "name": "clip.mp4",
+                "size": 10
+              },
+              {
+                "href": "https://youtu.be/y"
+              }
+            ],
+            "imageAnnotation": {
+              "imageRef": {
+                "sha256": "0db0559e33215bf0cae3008208681e3671a71b2a64dbe898d51f718d53ef9ab4",
+                "width": 62,
+                "height": 7,
+                "mime": "image/jpeg"
+              },
+              "marks": [
+                {
+                  "kind": "pen",
+                  "color": "#e5383b",
+                  "width": 0.01,
+                  "points": [
+                    0.1,
+                    0.2,
+                    0.3,
+                    0.4568
+                  ]
+                },
+                {
+                  "kind": "text",
+                  "color": "#ffffff",
+                  "size": 0.05,
+                  "x": 0.5,
+                  "y": 1,
+                  "text": "Hi\nthere !"
+                },
+                {
+                  "kind": "pen",
+                  "color": "#111111",
+                  "width": 0.2,
+                  "points": [
+                    0.5,
+                    0.5
+                  ]
+                }
+              ]
+            },
+            "moreImages": [
+              {
+                "imageRef": {
+                  "sha256": "6a6b53b623659f6fd748c3cc909627d25fb7b521500dd686215ffb79327b943f",
+                  "width": 63,
+                  "height": 7,
+                  "mime": "image/gif"
+                },
+                "name": "gif one",
+                "links": [
+                  {
+                    "name": "clip.mp4",
+                    "size": 1234,
+                    "duration": 3.1
+                  }
+                ],
+                "annotation": {
+                  "imageRef": {
+                    "sha256": "fc1360f155593a2dc2496386c36f1cc4e5435db4d9563f8fa51f074b436695bb",
+                    "width": 64,
+                    "height": 7,
+                    "mime": "image/webp"
+                  },
+                  "marks": [
+                    {
+                      "kind": "text",
+                      "color": "#ffffff",
+                      "size": 0.05,
+                      "x": 0.5,
+                      "y": 1,
+                      "text": "Hi\nthere !"
+                    }
+                  ]
+                }
+              },
+              {
+                "imageRef": {
+                  "sha256": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+                  "width": 3,
+                  "height": 4,
+                  "mime": "image/png"
+                },
+                "name": "kept by reference"
+              },
+              {
+                "links": [
+                  {
+                    "href": "https://youtu.be/p",
+                    "poster": true
+                  }
+                ]
+              }
+            ],
+            "imageRef": {
+              "sha256": "ba5b89d514024deaf79fce3cab8dd8a6eb1e43877ba87306ae3c16e069ccf5bf",
+              "width": 61,
+              "height": 7,
+              "mime": "image/png"
+            },
+            "updatedAt": "",
+            "updatedBy": null
+          },
+          {
+            "status": "todo",
+            "visualText": "no id row<br>second line",
+            "audioText": "plain <em>em</em> <strong>b</strong>",
+            "updatedBy": "Ann",
+            "updatedAt": "2026-01-02T03:04:05.000Z",
+            "id": "{minted:r:1}",
+            "imageRef": {
+              "sha256": "a8cd45483a3289d21ad77cd26dbbc6c7aefb41b6e67bb462d611151603d61ad0",
+              "width": 68,
+              "height": 7,
+              "mime": "image/jpeg"
+            }
+          },
+          {
+            "id": "r4",
+            "imageRef": null,
+            "lengthSeconds": 31,
+            "audioText": "<s>cut</s> <mark>hi</mark> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">link</a> <em>a</em> <strong>b</strong> <em>c</em>",
+            "status": "todo",
+            "visualText": "",
+            "updatedAt": "",
+            "updatedBy": null
+          }
+        ],
+        "comments": [
+          {
+            "id": "c1",
+            "rowId": "r1",
+            "field": "visualText",
+            "author": "Sam",
+            "body": "look <img class=\"comment-img\" data-blob=\"7f05915b01c81f434bc8c2dd8631eed8f5648681f45d19bf887eee8f519cb90e\" data-w=\"65\" data-h=\"7\" data-mime=\"image/png\">",
+            "quotedText": "Wide",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "replies": [
+              {
+                "id": "rp1",
+                "body": "and <img class=\"comment-img\" data-blob=\"202fe7f1dfc498bdabffb2ab9d12dfe71e9b8db76a20f3958e6004e46004d917\" data-w=\"66\" data-h=\"7\" data-mime=\"image/jpeg\">",
+                "author": "Anonymous"
+              },
+              {
+                "body": "no id reply",
+                "author": "Kim",
+                "id": "{minted:rp:1}"
+              }
+            ],
+            "anchorId": "c1",
+            "resolved": false,
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "kind": "anchor",
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": ""
+          },
+          {
+            "rowId": "r1",
+            "field": "visualImage",
+            "kind": "conflict",
+            "conflictField": "Visual image",
+            "createdAt": "2026-01-03T00:00:00.000Z",
+            "body": "<img class=\"comment-img\" data-blob=\"9b35f1667533dcfa894190d5ac75ceb4eff2e536c45bd5ec36aa27d0d6abede8\" data-w=\"67\" data-h=\"7\" data-mime=\"image/png\">",
+            "id": "{minted:c:1}",
+            "anchorId": "{minted:c:1}",
+            "replies": [],
+            "quotedText": "",
+            "resolved": false,
+            "author": "Anonymous",
+            "updatedAt": "2026-01-03T00:00:00.000Z",
+            "imageValue": {
+              "sha256": "9b35f1667533dcfa894190d5ac75ceb4eff2e536c45bd5ec36aa27d0d6abede8",
+              "width": 67,
+              "height": 7,
+              "mime": "image/png"
+            },
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": ""
+          },
+          {
+            "id": "c3",
+            "field": "title",
+            "kind": "conflict",
+            "body": "Old <strong>title</strong>",
+            "rowId": null,
+            "anchorId": null,
+            "replies": [],
+            "quotedText": "",
+            "resolved": false,
+            "author": "Anonymous",
+            "updatedAt": null,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": ""
+          },
+          {
+            "id": "c4",
+            "rowId": "r1",
+            "field": "audioText",
+            "resolved": true,
+            "resolvedBy": "Kim",
+            "resolvedAt": "2026-02-02T00:00:00.000Z",
+            "assignee": "Lee",
+            "anchorId": "c4",
+            "replies": [],
+            "body": "",
+            "quotedText": "",
+            "author": "Anonymous",
+            "updatedAt": null,
+            "kind": "anchor"
+          },
+          {
+            "id": "c5",
+            "rowId": "r1",
+            "resolved": false,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "kind": "anchor",
+            "anchorId": "c5",
+            "field": "audioText",
+            "replies": [],
+            "body": "",
+            "quotedText": "",
+            "author": "Anonymous",
+            "updatedAt": null,
+            "assignee": ""
+          }
+        ],
+        "people": [
+          {
+            "id": "p1",
+            "name": "Sam"
+          },
+          {
+            "name": "No Id",
+            "id": "{minted:p:1}"
+          }
+        ],
+        "wordsPerMinute": 175,
+        "productionTags": [],
+        "brollShots": [],
+        "rev": 0,
+        "docId": "{minted:docId}"
+      },
+      "registry": {
+        "ba5b89d514024deaf79fce3cab8dd8a6eb1e43877ba87306ae3c16e069ccf5bf": {
+          "sha256": "ba5b89d514024deaf79fce3cab8dd8a6eb1e43877ba87306ae3c16e069ccf5bf",
+          "width": 61,
+          "height": 7,
+          "mime": "image/png"
+        },
+        "0db0559e33215bf0cae3008208681e3671a71b2a64dbe898d51f718d53ef9ab4": {
+          "sha256": "0db0559e33215bf0cae3008208681e3671a71b2a64dbe898d51f718d53ef9ab4",
+          "width": 62,
+          "height": 7,
+          "mime": "image/jpeg"
+        },
+        "6a6b53b623659f6fd748c3cc909627d25fb7b521500dd686215ffb79327b943f": {
+          "sha256": "6a6b53b623659f6fd748c3cc909627d25fb7b521500dd686215ffb79327b943f",
+          "width": 63,
+          "height": 7,
+          "mime": "image/gif"
+        },
+        "fc1360f155593a2dc2496386c36f1cc4e5435db4d9563f8fa51f074b436695bb": {
+          "sha256": "fc1360f155593a2dc2496386c36f1cc4e5435db4d9563f8fa51f074b436695bb",
+          "width": 64,
+          "height": 7,
+          "mime": "image/webp"
+        },
+        "7f05915b01c81f434bc8c2dd8631eed8f5648681f45d19bf887eee8f519cb90e": {
+          "sha256": "7f05915b01c81f434bc8c2dd8631eed8f5648681f45d19bf887eee8f519cb90e",
+          "width": 65,
+          "height": 7,
+          "mime": "image/png"
+        },
+        "202fe7f1dfc498bdabffb2ab9d12dfe71e9b8db76a20f3958e6004e46004d917": {
+          "sha256": "202fe7f1dfc498bdabffb2ab9d12dfe71e9b8db76a20f3958e6004e46004d917",
+          "width": 66,
+          "height": 7,
+          "mime": "image/jpeg"
+        },
+        "9b35f1667533dcfa894190d5ac75ceb4eff2e536c45bd5ec36aa27d0d6abede8": {
+          "sha256": "9b35f1667533dcfa894190d5ac75ceb4eff2e536c45bd5ec36aa27d0d6abede8",
+          "width": 67,
+          "height": 7,
+          "mime": "image/png"
+        },
+        "a8cd45483a3289d21ad77cd26dbbc6c7aefb41b6e67bb462d611151603d61ad0": {
+          "sha256": "a8cd45483a3289d21ad77cd26dbbc6c7aefb41b6e67bb462d611151603d61ad0",
+          "width": 68,
+          "height": 7,
+          "mime": "image/jpeg"
+        },
+        "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2": null
+      },
+      "persisted": [
+        "ba5b89d514024deaf79fce3cab8dd8a6eb1e43877ba87306ae3c16e069ccf5bf",
+        "0db0559e33215bf0cae3008208681e3671a71b2a64dbe898d51f718d53ef9ab4",
+        "6a6b53b623659f6fd748c3cc909627d25fb7b521500dd686215ffb79327b943f",
+        "fc1360f155593a2dc2496386c36f1cc4e5435db4d9563f8fa51f074b436695bb",
+        "a8cd45483a3289d21ad77cd26dbbc6c7aefb41b6e67bb462d611151603d61ad0",
+        "202fe7f1dfc498bdabffb2ab9d12dfe71e9b8db76a20f3958e6004e46004d917",
+        "7f05915b01c81f434bc8c2dd8631eed8f5648681f45d19bf887eee8f519cb90e",
+        "9b35f1667533dcfa894190d5ac75ceb4eff2e536c45bd5ec36aa27d0d6abede8"
+      ]
+    },
+    "media in cells": {
+      "output": {
+        "schema": 2,
+        "docId": "d0123456789abcdef0123456789abcdef",
+        "title": "Cells xxxxxxxxxxy",
+        "rows": [
+          {
+            "id": "r1",
+            "updatedAt": "2026-05-01T10:00:00.000Z",
+            "updatedBy": "Sam",
+            "visualText": "wide  shot  end",
+            "audioText": "watch  this  and ",
+            "status": "todo",
+            "imageRef": null
+          },
+          {
+            "id": "r2",
+            "status": "shot",
+            "lengthSeconds": 45,
+            "visualText": " known",
+            "audioText": "<span class=\"cmt-anchor\" data-cmt=\"{minted:c:1}\">anchor without id</span> and <span class=\"broll-key\" data-broll-id=\"{minted:bs:1}\" contenteditable=\"false\">B-roll:</span> city <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"gaffer tape\" contenteditable=\"false\">gaffer tape</span> <span class=\"audio-cue\">SFX: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Thunder\" contenteditable=\"false\">Thunder</span></span>",
+            "imageRef": {
+              "sha256": "b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3",
+              "width": 10,
+              "height": 20,
+              "mime": "image/jpeg"
+            },
+            "imageName": "picname.jpg",
+            "updatedAt": "",
+            "updatedBy": null
+          },
+          {
+            "id": "rows",
+            "visualText": "",
+            "audioText": "<span class=\"cmt-anchor\" data-cmt=\"c9\">anchored</span>",
+            "status": "todo",
+            "imageRef": null,
+            "updatedAt": "",
+            "updatedBy": null
+          }
+        ],
+        "comments": [
+          {
+            "id": "c9",
+            "rowId": "rows",
+            "field": "audioText",
+            "author": "Sam",
+            "createdAt": "2026-05-01T09:00:00.000Z",
+            "body": "a note <img class=\"comment-img\" data-blob=\"52246fae7597a2f34ffb46ead38307876bc08bf6c11f0b0412054dbdddabe1bf\" data-w=\"72\" data-h=\"9\" data-mime=\"image/gif\">",
+            "replies": [],
+            "anchorId": "c9",
+            "quotedText": "",
+            "resolved": false,
+            "updatedAt": "2026-05-01T09:00:00.000Z",
+            "kind": "anchor",
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": ""
+          },
+          {
+            "id": "c10",
+            "rowId": "r2",
+            "field": "visualText",
+            "author": "Ann",
+            "body": "para<br>block<br>",
+            "replies": [
+              {
+                "id": "rp9",
+                "author": "Anonymous",
+                "body": "<img class=\"comment-img\" data-blob=\"97708e1eee5df5718173706dfc2e47ef4655b4fe2643e90574bd69009cd4b98c\" data-w=\"73\" data-h=\"9\" data-mime=\"image/webp\">j"
+              }
+            ],
+            "anchorId": "c10",
+            "quotedText": "",
+            "resolved": false,
+            "updatedAt": null,
+            "kind": "anchor",
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": ""
+          },
+          {
+            "id": "cma33a33c33c6aad236323f263",
+            "rowId": "r1",
+            "field": "visualText",
+            "anchorId": "cma33a33c33c6aad236323f263",
+            "quotedText": "",
+            "author": "Splitpage",
+            "body": "This was in the scene's visual column. Pictures and videos go in comments now:<br><img class=\"comment-img\" data-blob=\"25514e4eb625c08187400415466bb7877773e7e337ef1529513666f68a1b28fd\" data-w=\"71\" data-h=\"9\" data-mime=\"image/png\">",
+            "resolved": false,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": "",
+            "createdAt": "2026-05-01T10:00:00.000Z",
+            "updatedAt": "2026-05-01T10:00:00.000Z",
+            "kind": "anchor",
+            "replies": []
+          },
+          {
+            "id": "cmf7068cec097c66522c32d118",
+            "rowId": "r1",
+            "field": "visualText",
+            "anchorId": "cmf7068cec097c66522c32d118",
+            "quotedText": "",
+            "author": "Splitpage",
+            "body": "This was in the scene's visual column. Pictures and videos go in comments now:<br><img class=\"comment-img\" data-blob=\"b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4\" data-w=\"4\" data-h=\"3\" data-mime=\"image/png\">",
+            "resolved": false,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": "",
+            "createdAt": "2026-05-01T10:00:00.000Z",
+            "updatedAt": "2026-05-01T10:00:00.000Z",
+            "kind": "anchor",
+            "replies": []
+          },
+          {
+            "id": "cm8f575cc33142b825b2563c0f",
+            "rowId": "r1",
+            "field": "audioText",
+            "anchorId": "cm8f575cc33142b825b2563c0f",
+            "quotedText": "",
+            "author": "Splitpage",
+            "body": "This was in the scene's audio column. Pictures and videos go in comments now:<br><a class=\"video-embed-card\" href=\"https://www.youtube.com/watch?v=abc\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· youtube.com</span></a>",
+            "resolved": false,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": "",
+            "createdAt": "2026-05-01T10:00:00.000Z",
+            "updatedAt": "2026-05-01T10:00:00.000Z",
+            "kind": "anchor",
+            "replies": []
+          },
+          {
+            "id": "cm19291b58b0a9904cd8405a65",
+            "rowId": "r1",
+            "field": "audioText",
+            "anchorId": "cm19291b58b0a9904cd8405a65",
+            "quotedText": "",
+            "author": "Splitpage",
+            "body": "This was in the scene's audio column. Pictures and videos go in comments now:<br><a class=\"video-embed-card\" href=\"https://vimeo.com/1\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· vimeo.com</span></a>",
+            "resolved": false,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": "",
+            "createdAt": "2026-05-01T10:00:00.000Z",
+            "updatedAt": "2026-05-01T10:00:00.000Z",
+            "kind": "anchor",
+            "replies": []
+          },
+          {
+            "id": "cmd3088a82ed2c3d5d1fbe7ac2",
+            "rowId": "r2",
+            "field": "visualText",
+            "anchorId": "cmd3088a82ed2c3d5d1fbe7ac2",
+            "quotedText": "",
+            "author": "Splitpage",
+            "body": "This was in the scene's visual column. Pictures and videos go in comments now:<br><img class=\"comment-img\" data-blob=\"25514e4eb625c08187400415466bb7877773e7e337ef1529513666f68a1b28fd\" data-w=\"71\" data-h=\"9\" data-mime=\"image/png\">",
+            "resolved": false,
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": "",
+            "createdAt": "",
+            "updatedAt": null,
+            "kind": "anchor",
+            "replies": []
+          }
+        ],
+        "productionTags": [
+          {
+            "cat": "prop",
+            "name": "Kettle",
+            "owner": "p1",
+            "status": "have",
+            "notes": "n",
+            "id": "t_o3zvjjzm6qwq"
+          },
+          {
+            "cat": "prop",
+            "name": "X",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_kpodw01tm9gbh"
+          },
+          {
+            "cat": "prop",
+            "name": "Gaffer Tape",
+            "status": "needed",
+            "owner": "",
+            "notes": "",
+            "id": "t_1tjpyjprcfkhp"
+          },
+          {
+            "cat": "sound",
+            "name": "Thunder",
+            "owner": "",
+            "notes": "",
+            "status": "needed",
+            "id": "t_slyu1i4m7brv"
+          }
+        ],
+        "people": [
+          {
+            "id": "p1",
+            "name": "Sam"
+          }
+        ],
+        "brollShots": [
+          {
+            "id": "b1",
+            "name": "Rooftop",
+            "status": "unshot",
+            "reshoot": false,
+            "origin": "list",
+            "owner": "",
+            "location": "roof",
+            "desc": "d",
+            "notes": "n",
+            "audioRef": "a",
+            "props": [
+              {
+                "id": "t_o3zvjjzm6qwq",
+                "name": "Kettle"
+              },
+              {
+                "id": "",
+                "name": "Rope"
+              },
+              {
+                "id": "t_zzzz",
+                "name": "Tarp"
+              }
+            ]
+          },
+          {
+            "name": "Alley",
+            "owner": "p1",
+            "reshoot": true,
+            "id": "{minted:bs:2}",
+            "desc": "",
+            "status": "unshot",
+            "notes": "",
+            "audioRef": "",
+            "location": "",
+            "origin": "script",
+            "props": []
+          }
+        ],
+        "personColors": {
+          "Sam": "#80BDFB",
+          "Ann": "#CBA1FA"
+        },
+        "targetSeconds": 300,
+        "wordsPerMinute": 150,
+        "rev": 0,
+        "lastEditedBy": "Sam",
+        "lastEditedAt": "2026-05-02T00:00:00.000Z",
+        "unknownField": {
+          "kept": true
+        }
+      },
+      "registry": {
+        "25514e4eb625c08187400415466bb7877773e7e337ef1529513666f68a1b28fd": {
+          "sha256": "25514e4eb625c08187400415466bb7877773e7e337ef1529513666f68a1b28fd",
+          "width": 71,
+          "height": 9,
+          "mime": "image/png"
+        },
+        "52246fae7597a2f34ffb46ead38307876bc08bf6c11f0b0412054dbdddabe1bf": {
+          "sha256": "52246fae7597a2f34ffb46ead38307876bc08bf6c11f0b0412054dbdddabe1bf",
+          "width": 72,
+          "height": 9,
+          "mime": "image/gif"
+        },
+        "97708e1eee5df5718173706dfc2e47ef4655b4fe2643e90574bd69009cd4b98c": {
+          "sha256": "97708e1eee5df5718173706dfc2e47ef4655b4fe2643e90574bd69009cd4b98c",
+          "width": 73,
+          "height": 9,
+          "mime": "image/webp"
+        },
+        "b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3": null,
+        "b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4": null
+      },
+      "persisted": [
+        "25514e4eb625c08187400415466bb7877773e7e337ef1529513666f68a1b28fd",
+        "52246fae7597a2f34ffb46ead38307876bc08bf6c11f0b0412054dbdddabe1bf",
+        "97708e1eee5df5718173706dfc2e47ef4655b4fe2643e90574bd69009cd4b98c"
+      ]
+    },
+    "seed": {
+      "output": {
+        "schema": 2,
+        "title": "Untitled Script",
+        "rows": [
+          {
+            "id": "r1",
+            "visualText": "Host on camera, medium shot, warm key light. Logo bug bottom-right.",
+            "audioText": "Hey — welcome back. If you have been following the channel, you know we have been building this out in public. Today I want to show you exactly how it works.",
+            "status": "todo",
+            "imageRef": null,
+            "updatedAt": "",
+            "updatedBy": null
+          },
+          {
+            "id": "r2",
+            "visualText": "Cut to a screen recording: the editor open, cursor moving between the two <em>columns</em>.",
+            "audioText": "On the left, what the viewer sees. On the right, <strong>exactly</strong> what gets said — <span class=\"cmt-anchor\" data-cmt=\"c1\"><mark>word for word</mark></span>, ready for the <u>teleprompter</u>. (This sentence shows off <a href=\"https://example.com\" target=\"_blank\" rel=\"noopener\">a link</a>, too.)",
+            "status": "todo",
+            "imageRef": null,
+            "updatedAt": "",
+            "updatedBy": null
+          }
+        ],
+        "comments": [
+          {
+            "id": "c1",
+            "rowId": "r2",
+            "field": "audioText",
+            "anchorId": "c1",
+            "quotedText": "word for word",
+            "author": "Priya (reviewer)",
+            "body": "Can we soften this a little? Maybe just <em>word for word</em> without the extra emphasis.",
+            "resolved": false,
+            "createdAt": "2026-08-20T15:04:00.000Z",
+            "replies": [],
+            "updatedAt": "2026-08-20T15:04:00.000Z",
+            "kind": "anchor",
+            "resolvedBy": null,
+            "resolvedAt": null,
+            "assignee": ""
+          }
+        ],
+        "people": [],
+        "productionTags": [],
+        "brollShots": [],
+        "wordsPerMinute": 150,
+        "rev": 0,
+        "docId": "{minted:docId}"
+      },
+      "registry": {},
+      "persisted": []
+    },
+    "odd shapes": {
+      "output": {
+        "title": "42",
+        "schema": 2,
+        "rows": [],
+        "comments": [],
+        "people": [],
+        "productionTags": [],
+        "brollShots": [],
+        "wordsPerMinute": 150,
+        "rev": 0,
+        "docId": "{minted:docId}"
+      },
+      "registry": {},
+      "persisted": []
+    },
+    "null document": {
+      "output": {
+        "title": "Untitled Script",
+        "rows": [],
+        "comments": [],
+        "people": [],
+        "productionTags": [],
+        "brollShots": [],
+        "wordsPerMinute": 150,
+        "rev": 0,
+        "docId": "{minted:docId}",
+        "schema": 2
+      },
+      "registry": {},
+      "persisted": []
+    },
+    "legacy file with a picture": {
+      "output": {
+        "title": "Legacy",
+        "rows": [
+          {
+            "id": "r1",
+            "audioText": "one",
+            "status": "todo",
+            "visualText": "",
+            "imageRef": {
+              "sha256": "9359ea4274b68e9ad9a16976de25e982716fe6c8bb5c1f391c470c60226786eb",
+              "width": 81,
+              "height": 3,
+              "mime": "image/png"
+            },
+            "updatedAt": "",
+            "updatedBy": null
+          }
+        ],
+        "comments": [],
+        "people": [],
+        "productionTags": [],
+        "brollShots": [],
+        "wordsPerMinute": 150,
+        "rev": 0,
+        "docId": "d8a05e953bc1b23e2783d5244f6801b26",
+        "schema": 2
+      },
+      "registry": {
+        "9359ea4274b68e9ad9a16976de25e982716fe6c8bb5c1f391c470c60226786eb": {
+          "sha256": "9359ea4274b68e9ad9a16976de25e982716fe6c8bb5c1f391c470c60226786eb",
+          "width": 81,
+          "height": 3,
+          "mime": "image/png"
+        }
+      },
+      "persisted": [
+        "9359ea4274b68e9ad9a16976de25e982716fe6c8bb5c1f391c470c60226786eb"
+      ]
+    }
+  },
+  "docIds": {
+    "seed, opened as a file": "ddd87c1824aefba8e2f5cddbab1697de8",
+    "seed, opened from the server": "d99236e687ea5c3bf5341051f1fc8a6b2",
+    "legacy file with a picture, opened as a file": "d8a05e953bc1b23e2783d5244f6801b26"
+  }
+}
