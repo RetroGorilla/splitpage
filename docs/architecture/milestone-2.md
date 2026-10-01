@@ -63,7 +63,7 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 - **Bundling.** esbuild bundles `.ts` imported from `src/js` with an explicit `.ts` extension, as `_entry.js` already does for `src/legacy/*.ts`. Node 22.22+ strips types natively, so `src/test/*.test.mjs` keep testing through the shims.
 - **New tests.** They go in `tests/core/<area>/`, `tests/core/` for the root files, and `tests/adapters/<area>/`, as the per-area rule requires.
   - Core tests never load `src/test/_dom.mjs`. They decode through maps built with `toHtml`, or through the adapter with an injected parser.
-  - `tests/core/environment.test.ts` imports every core module and asserts that no DOM globals exist.
+  - `tests/core/environment.test.ts` imports every script under `src/core`, whatever its extension, checks that loading them adds no globals, and runs core's policies in a process that loads no DOM. Keeping platform globals, the clock and `Math.random` out of core is the dependency gate's job.
 - **Shared policies.** `shared/*.js` stay CommonJS and remain the single source. Confirm that `tsc` with NodeNext accepts named imports from them before relying on it.
 - **Lint.** Core files with control-character regexes get a file-scoped rule in `eslint.config.mjs`; no inline disables.
 - **Dependency baseline.**
@@ -86,6 +86,28 @@ Persisted content stays HTML. Core functions that decode today receive the decod
 | 2.7 | Docs, invariant rows, metrics, performance record, and the full Linux and Windows regression (the milestone gate) | 2.5 | — |
 
 Each PR names its impacted browser suites and runs them along with `npm run verify`. Lanes run `--prune` after merging the base.
+
+## 2.1a as built
+
+- **`src/core/document/`.**
+  - `ports.ts`: `ImageRef`, `IdSource`, `ImageSource`, `Clock`.
+  - `text-policy.ts`: `safeImageSrc`, `safeHref`, `plainText`, `plainName`, `safeId(id, prefix, ids)` and `storedImageHtml`, which builds the tag as a string.
+  - `ids.ts`: `utf8Bytes`, `sha256Bytes`, `sha256Hex`, `deriveDocId`, `docIdEmbeddedIn`, `mergedDocId`.
+  - `tags.ts`: the category and status ids, `tagCategoryId`, `tagStatusId`, `tagStatusRank`, `nextTagStatus`, `normalizeTagName`, `tagKey`, `registryKey`, `isTagId`, `mintTagId`, `ensureTagIds` and `registryTagHooks` (pure, and core/merge needs it).
+  - `broll.ts`: the status ids, `brollStatusId`, `BROLL_MARKER_RE`, `BROLL_CLOSERS`, the limits, `normalizeBrollProps`, `brollPropKey`.
+  - `memo.ts`: `contentMemo`.
+- **`src/adapters/identity/ids.ts`.** `makeId`, `randomHexBytes`, `mintDocId`, `nowIso`, and `randomIds` and `systemClock`, which implement `IdSource` and `Clock`.
+- **Shims.**
+  - `04-richtext.js`, `02b-doc-id.js`, `07-production-tags.js` and `08c-broll.js` re-export what moved. `04-richtext.js`'s `safeId` passes `randomIds`.
+  - `02c-blobs.js`, `04-richtext.js` and `04c-doc-model.js` import from core and the adapter instead of from modules in the cycle. That takes 02c, 02d, 04 and 04c out of it: 60 modules become 56, and 102 `cycle-edge` entries were pruned, none added.
+  - `07` builds `TAG_CATEGORIES` and `TAG_STATUSES`, and `08c` builds `BROLL_STATUSES`, from the core ids; their labels, colours and icons are keyed by id.
+  - `02-state.js`'s `makeId` and `10-comments.js`'s `nowIso` re-export the adapter's, so each has one implementation.
+- **Control characters.** `safeHref` strips C0 controls and the space before it looks for a scheme, because a browser resolves `java\0script:` as `javascript:`. `plainText` drops the C0 controls other than tab, line feed and carriage return, which a plain-text field must not carry. So `eslint.config.mjs` turns `no-control-regex` off for `src/core/document/text-policy.ts` alone.
+- **Hashing.** The app's `sha256Hex` is now core's, which always encodes UTF-8 by hand; `sha256-utf8.test.mjs` shows its bytes are `TextEncoder`'s.
+- **Left for 2.1b.**
+  - `withPageHead`: it needs `escapeHtml`, which stays in `02-state.js` until that module's pure parts move, and no file in the layout names it.
+  - `mediaCommentId`.
+  - 02c's base64 helpers, `rowImage*` and the data-URL decode, which go to `media.ts`.
 
 ## Characterisation (2.0)
 

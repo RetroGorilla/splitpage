@@ -29,6 +29,7 @@ import {
 import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus, normalizeBrollProps } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
+export { makeId } from "../adapters/identity/ids.ts";
 
 function defaultState() {
   try {
@@ -62,10 +63,6 @@ export function missingStateFields(s) {
   return STATE_FIELDS.filter(function (f) {
     return f.def && (!s || !(f.key in s));
   }).map(function (f) { return f.key; });
-}
-
-export function makeId(prefix) {
-  return (prefix || "r") + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 }
 
 export function escapeHtml(s) {

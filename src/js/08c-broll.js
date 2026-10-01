@@ -23,7 +23,6 @@ import {
   TAG_STATUSES,
   contentMemo,
   isInsideTagOrLink,
-  isTagId,
   normalizeTagName,
   registerProductionTag,
   registryEntry,
@@ -34,15 +33,32 @@ import {
 import { renderBrollViews } from "./08d-broll-panel.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { htmlToPlainText } from "./14-export.js";
+import {
+  BROLL_CLOSERS,
+  BROLL_MARKER_RE,
+  BROLL_NAME_MAX,
+  BROLL_PROP_NAME_MAX,
+  BROLL_PROPS_MAX,
+  BROLL_STATUS_IDS,
+  BROLL_TEXT_MAX,
+  brollPropKey,
+  normalizeBrollProps
+} from "../core/document/broll.ts";
+export { BROLL_MARKER_RE, BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_TEXT_MAX, brollPropKey, normalizeBrollProps };
 
 var brollInField;
 var brollPropsInField;
 var brollAnchorDeclined;
 
-export var BROLL_STATUSES = [
-  { id: "unshot", label: "To shoot", color: "var(--text-dim)" },
-  { id: "shot",   label: "Shot",     color: "var(--ok)" }
-];
+var BROLL_STATUS_LOOKS = {
+  unshot: { label: "To shoot", color: "var(--text-dim)" },
+  shot:   { label: "Shot",     color: "var(--ok)" }
+};
+
+export var BROLL_STATUSES = BROLL_STATUS_IDS.map(function (id) {
+  var look = BROLL_STATUS_LOOKS[id];
+  return { id: id, label: look.label, color: look.color };
+});
 
 export function brollStatus(id) {
   for (var i = 0; i < BROLL_STATUSES.length; i++) {
@@ -50,14 +66,6 @@ export function brollStatus(id) {
   }
   return null;
 }
-
-export var BROLL_MARKER_RE = /^[ \t]*(b[ \t]?-?[ \t]?roll)[ \t]*([:—–-])[ \t]*/i;
-var BROLL_CLOSERS = ":—–-";
-
-export var BROLL_NAME_MAX = 200;
-export var BROLL_TEXT_MAX = 2000;
-var BROLL_PROP_NAME_MAX = 80;
-export var BROLL_PROPS_MAX = 40;
 
 function brollCellLines(cell) {
   var lines = [{ start: 0, end: 0, items: [] }];
@@ -369,36 +377,6 @@ function brollEntryFrom(rec, found) {
     props: brollEntryProps(rec, found),
     origin: rec.origin
   };
-}
-
-export function normalizeBrollProps(list, registry) {
-  var byId = Object.create(null), byName = Object.create(null);
-  (registry || []).forEach(function (t) {
-    if (!t || !t.id || !t.name) return;
-    byId[t.id] = t;
-    if (t.cat === "prop" && !byName[normalizeTagName(t.name)]) byName[normalizeTagName(t.name)] = t;
-  });
-  var out = [], seen = Object.create(null);
-  (Array.isArray(list) ? list : []).forEach(function (p) {
-    if (out.length >= BROLL_PROPS_MAX) return;
-    if (typeof p === "string") p = { name: p };
-    if (!p || typeof p !== "object") return;
-    var id = isTagId(p.id) ? p.id : "";
-    var name = typeof p.name === "string" || typeof p.name === "number" ? plainText(p.name).trim() : "";
-    if (!id && name && byName[normalizeTagName(name)]) id = byName[normalizeTagName(name)].id;
-    if (id && byId[id]) name = byId[id].name;
-    name = name.slice(0, BROLL_PROP_NAME_MAX);
-    if (!name) return;
-    var key = brollPropKey(id, name);
-    if (seen[key]) return;
-    seen[key] = true;
-    out.push({ id: id, name: name });
-  });
-  return out;
-}
-
-export function brollPropKey(id, name) {
-  return id ? id : "n:" + normalizeTagName(name);
 }
 
 function brollPropEntry(p) {

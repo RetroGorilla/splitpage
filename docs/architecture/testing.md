@@ -116,8 +116,12 @@ production and normalisers updates write only fixtures whose text changed; a
 fixture left without a case fails the fixture-set test, so remove it by hand.
 
 `sha256-utf8.test.mjs` has no fixture: `node:crypto` is its oracle for
-`sha256Hex` with `TextEncoder` and with the hand-written UTF-8 encoder it
-falls back on, lone surrogates and megabyte strings included.
+`sha256Hex`, lone surrogates and megabyte strings included. Since 2.1a the
+function is core's (`src/core/document/ids.ts`), which always encodes UTF-8 by
+hand into a `Uint8Array` because `TextEncoder` is a platform global core may
+not use; the test checks the encoder's bytes against `TextEncoder`'s, the hash
+with `TextEncoder` present and removed, and that `02b-doc-id.js` hands out the
+core function.
 
 ## Test discovery
 

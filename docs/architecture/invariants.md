@@ -331,7 +331,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-37 — `sha256Hex` and `deriveDocId` are frozen
 
 - **Behaviour:** `sha256Hex`, `deriveDocId` and the duplicate-replacement id derived from them always give the same output. Any change would re-identify legacy files and split their history.
-- **Tests:** `src/test/doc-id.test.mjs` ("SHA-256 vectors (FROZEN, HANDOFF invariant #37)", "deriveDocId is the frozen, domain-separated wrapper"); `src/test/doc-id-policy.test.mjs` ("the derived replacement id is FROZEN (invariant #37)").
+- **Tests:** `src/test/doc-id.test.mjs` ("SHA-256 vectors (FROZEN, HANDOFF invariant #37)", "deriveDocId is the frozen, domain-separated wrapper"); `src/test/doc-id-policy.test.mjs` ("the derived replacement id is FROZEN (invariant #37)"); `tests/core/document/ids.test.ts` ("the frozen SHA-256 vectors hold for strings and bytes", "deriveDocId is the frozen, domain-separated id").
 - **Owner:** `src/core/document`, `shared/` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the golden vectors pass unchanged after the move and are never regenerated.
