@@ -33,9 +33,11 @@ $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if ($Headed) { $Parallel = 1 }
 elseif (-not $PSBoundParameters.ContainsKey('Parallel')) {
-  $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId
-  $otherRuns = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
-    Where-Object { $_.ProcessId -ne $PID -and $_.ProcessId -ne $parentId -and $_.CommandLine -match 'run-tests\.ps1' }).Count
+  try {
+    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId
+    $otherRuns = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
+      Where-Object { $_.ProcessId -ne $PID -and $_.ProcessId -ne $parentId -and $_.CommandLine -match 'run-tests\.ps1' }).Count
+  } catch { $otherRuns = 0 }
   $Parallel = [Math]::Floor([Environment]::ProcessorCount * 9 / 16 / ($otherRuns + 1))
   if ($otherRuns) { Write-Host ("{0} other run-tests.ps1 run(s) on this machine; this run takes {1} lanes" -f $otherRuns, [Math]::Max(1, $Parallel)) }
 }
