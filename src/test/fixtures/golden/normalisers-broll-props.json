@@ -1,0 +1,410 @@
+[
+  {
+    "case": "39 props",
+    "input": {
+      "items": 39,
+      "first": {
+        "name": "Prop 0"
+      },
+      "last": {
+        "name": "Prop 38"
+      }
+    },
+    "output": {
+      "items": 39,
+      "first": {
+        "id": "",
+        "name": "Prop 0"
+      },
+      "last": {
+        "id": "",
+        "name": "Prop 38"
+      }
+    }
+  },
+  {
+    "case": "40 props, the limit",
+    "input": {
+      "items": 40,
+      "first": {
+        "name": "Prop 0"
+      },
+      "last": {
+        "name": "Prop 39"
+      }
+    },
+    "output": {
+      "items": 40,
+      "first": {
+        "id": "",
+        "name": "Prop 0"
+      },
+      "last": {
+        "id": "",
+        "name": "Prop 39"
+      }
+    }
+  },
+  {
+    "case": "41 props",
+    "input": {
+      "items": 41,
+      "first": {
+        "name": "Prop 0"
+      },
+      "last": {
+        "name": "Prop 40"
+      }
+    },
+    "output": {
+      "items": 40,
+      "first": {
+        "id": "",
+        "name": "Prop 0"
+      },
+      "last": {
+        "id": "",
+        "name": "Prop 39"
+      }
+    }
+  },
+  {
+    "case": "a name of 80",
+    "input": [
+      {
+        "name": {
+          "length": 80,
+          "runs": [
+            [
+              "x",
+              80
+            ]
+          ]
+        }
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": {
+          "length": 80,
+          "runs": [
+            [
+              "x",
+              80
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "case": "a name of 81",
+    "input": [
+      {
+        "name": {
+          "length": 81,
+          "runs": [
+            [
+              "x",
+              81
+            ]
+          ]
+        }
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": {
+          "length": 80,
+          "runs": [
+            [
+              "x",
+              80
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "case": "a name of 81 inside spaces",
+    "input": [
+      {
+        "name": {
+          "length": 83,
+          "runs": [
+            [
+              " ",
+              1
+            ],
+            [
+              "x",
+              81
+            ],
+            [
+              " ",
+              1
+            ]
+          ]
+        }
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": {
+          "length": 80,
+          "runs": [
+            [
+              "x",
+              80
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "case": "a number as a name",
+    "input": [
+      {
+        "name": 42
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": "42"
+      }
+    ]
+  },
+  {
+    "case": "a boolean as a name",
+    "input": [
+      {
+        "name": true
+      }
+    ],
+    "output": []
+  },
+  {
+    "case": "a string entry",
+    "input": [
+      "Red mug"
+    ],
+    "output": [
+      {
+        "id": "t_mug",
+        "name": "Red mug"
+      }
+    ]
+  },
+  {
+    "case": "markup in a name",
+    "input": [
+      {
+        "name": "<b>Rope</b>"
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": "Rope"
+      }
+    ]
+  },
+  {
+    "case": "a known prop by name, in other case",
+    "input": [
+      {
+        "name": "red MUG"
+      }
+    ],
+    "output": [
+      {
+        "id": "t_mug",
+        "name": "Red mug"
+      }
+    ]
+  },
+  {
+    "case": "the first of two props that share a name",
+    "input": [
+      {
+        "name": "Lamp"
+      }
+    ],
+    "output": [
+      {
+        "id": "t_lamp",
+        "name": "lamp"
+      }
+    ]
+  },
+  {
+    "case": "a known name outside the prop category",
+    "input": [
+      {
+        "name": "tripod"
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": "tripod"
+      }
+    ]
+  },
+  {
+    "case": "a known id takes the registry's name",
+    "input": [
+      {
+        "id": "t_mug",
+        "name": "old name"
+      }
+    ],
+    "output": [
+      {
+        "id": "t_mug",
+        "name": "Red mug"
+      }
+    ]
+  },
+  {
+    "case": "an unknown id with its own name",
+    "input": [
+      {
+        "id": "t_gone",
+        "name": "Gone"
+      }
+    ],
+    "output": [
+      {
+        "id": "t_gone",
+        "name": "Gone"
+      }
+    ]
+  },
+  {
+    "case": "an unknown id with no name",
+    "input": [
+      {
+        "id": "t_gone"
+      }
+    ],
+    "output": []
+  },
+  {
+    "case": "an id that is not a tag id",
+    "input": [
+      {
+        "id": "x_1",
+        "name": "Rope"
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": "Rope"
+      }
+    ]
+  },
+  {
+    "case": "a tag id of 16 characters",
+    "input": [
+      {
+        "id": "t_aaaaaaaaaaaaaaaa",
+        "name": "A"
+      }
+    ],
+    "output": [
+      {
+        "id": "t_aaaaaaaaaaaaaaaa",
+        "name": "A"
+      }
+    ]
+  },
+  {
+    "case": "a tag id of 17 characters",
+    "input": [
+      {
+        "id": "t_aaaaaaaaaaaaaaaaa",
+        "name": "A"
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": "A"
+      }
+    ]
+  },
+  {
+    "case": "a tag id with a counter",
+    "input": [
+      {
+        "id": "t_a-123456",
+        "name": "A"
+      },
+      {
+        "id": "t_a-1234567",
+        "name": "B"
+      }
+    ],
+    "output": [
+      {
+        "id": "t_a-123456",
+        "name": "A"
+      },
+      {
+        "id": "",
+        "name": "B"
+      }
+    ]
+  },
+  {
+    "case": "duplicates by id and by name",
+    "input": [
+      {
+        "name": "Rope"
+      },
+      {
+        "name": " rope "
+      },
+      {
+        "id": "t_mug"
+      },
+      {
+        "name": "Red mug"
+      }
+    ],
+    "output": [
+      {
+        "id": "",
+        "name": "Rope"
+      },
+      {
+        "id": "t_mug",
+        "name": "Red mug"
+      }
+    ]
+  },
+  {
+    "case": "null, an array and an empty name",
+    "input": [
+      null,
+      [],
+      {
+        "name": ""
+      }
+    ],
+    "output": []
+  },
+  {
+    "case": "not a list",
+    "input": "Rope",
+    "output": []
+  }
+]

@@ -1,0 +1,215 @@
+[
+  {
+    "case": "width \"1\"",
+    "input": "1",
+    "output": {
+      "data-w": "1",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"9\"",
+    "input": "9",
+    "output": {
+      "data-w": "9",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"10\"",
+    "input": "10",
+    "output": {
+      "data-w": "10",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"999999\"",
+    "input": "999999",
+    "output": {
+      "data-w": "999999",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"1000000\"",
+    "input": "1000000",
+    "output": {
+      "data-w": "1000000",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"1048575\"",
+    "input": "1048575",
+    "output": {
+      "data-w": "1048575",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"1048576\"",
+    "input": "1048576",
+    "output": {
+      "data-w": "1048576",
+      "data-h": "2",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "width \"1048577\"",
+    "input": "1048577",
+    "output": {}
+  },
+  {
+    "case": "width \"9999999\"",
+    "input": "9999999",
+    "output": {}
+  },
+  {
+    "case": "width \"10000000\"",
+    "input": "10000000",
+    "output": {}
+  },
+  {
+    "case": "width \"0\"",
+    "input": "0",
+    "output": {}
+  },
+  {
+    "case": "width \"01\"",
+    "input": "01",
+    "output": {}
+  },
+  {
+    "case": "width \"-1\"",
+    "input": "-1",
+    "output": {}
+  },
+  {
+    "case": "width \"+1\"",
+    "input": "+1",
+    "output": {}
+  },
+  {
+    "case": "width \"1.0\"",
+    "input": "1.0",
+    "output": {}
+  },
+  {
+    "case": "width \"1e3\"",
+    "input": "1e3",
+    "output": {}
+  },
+  {
+    "case": "width \" 1\"",
+    "input": " 1",
+    "output": {}
+  },
+  {
+    "case": "width \"1 \"",
+    "input": "1 ",
+    "output": {}
+  },
+  {
+    "case": "width \"\"",
+    "input": "",
+    "output": {}
+  },
+  {
+    "case": "width \"abc\"",
+    "input": "abc",
+    "output": {}
+  },
+  {
+    "case": "width \"٣\"",
+    "input": "٣",
+    "output": {}
+  },
+  {
+    "case": "height 1048576",
+    "input": "1048576",
+    "output": {
+      "data-w": "2",
+      "data-h": "1048576",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "height 1048577",
+    "input": "1048577",
+    "output": {}
+  },
+  {
+    "case": "height 0",
+    "input": "0",
+    "output": {}
+  },
+  {
+    "case": "no height",
+    "input": "<undefined>",
+    "output": {}
+  },
+  {
+    "case": "mime image/png",
+    "input": "image/png",
+    "output": {
+      "data-w": "2",
+      "data-h": "3",
+      "data-mime": "image/png"
+    }
+  },
+  {
+    "case": "mime image/jpeg",
+    "input": "image/jpeg",
+    "output": {
+      "data-w": "2",
+      "data-h": "3",
+      "data-mime": "image/jpeg"
+    }
+  },
+  {
+    "case": "mime image/gif",
+    "input": "image/gif",
+    "output": {
+      "data-w": "2",
+      "data-h": "3",
+      "data-mime": "image/gif"
+    }
+  },
+  {
+    "case": "mime image/webp",
+    "input": "image/webp",
+    "output": {
+      "data-w": "2",
+      "data-h": "3",
+      "data-mime": "image/webp"
+    }
+  },
+  {
+    "case": "mime image/svg+xml",
+    "input": "image/svg+xml",
+    "output": {}
+  },
+  {
+    "case": "mime IMAGE/PNG",
+    "input": "IMAGE/PNG",
+    "output": {}
+  },
+  {
+    "case": "mime image/jpg",
+    "input": "image/jpg",
+    "output": {}
+  },
+  {
+    "case": "mime undefined",
+    "input": "<undefined>",
+    "output": {}
+  }
+]
