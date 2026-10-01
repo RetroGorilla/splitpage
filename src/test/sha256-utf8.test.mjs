@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { sha256Bytes, sha256Hex } from "../js/02b-doc-id.js";
+import { sha256Bytes as coreSha256Bytes, sha256Hex as coreSha256Hex, utf8Bytes } from "../core/document/ids.ts";
 
 const oracle = (s) => createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
 
@@ -110,4 +111,31 @@ test("sha256Bytes over raw bytes equals node:crypto, a megabyte included", () =>
     const bytes = new Uint8Array(n).map(() => next() & 255);
     assert.equal(sha256Bytes(bytes), createHash("sha256").update(bytes).digest("hex"), "length " + n);
   }
+});
+
+test("core's UTF-8 encoder writes exactly TextEncoder's bytes into a Uint8Array", () => {
+  for (const [name, s] of ALL) {
+    const bytes = utf8Bytes(s);
+    assert.ok(bytes instanceof Uint8Array, name);
+    assert.deepEqual(bytes, new TextEncoder().encode(s), name);
+  }
+});
+
+test("core's sha256Hex equals node:crypto, with TextEncoder present and removed", () => {
+  for (const [name, s] of ALL) assert.equal(coreSha256Hex(s), oracle(s), name);
+  const got = withoutTextEncoder(() => ALL.map(([name, s]) => [name, coreSha256Hex(s)]));
+  for (const [name, hex] of got) assert.equal(hex, oracle(ALL.find(([n]) => n === name)[1]), name);
+});
+
+test("core's sha256Bytes over raw bytes equals node:crypto", () => {
+  const next = lcg(2101);
+  for (const n of [0, 1, 55, 56, 63, 64, 65, 1000, (1 << 20) + 3]) {
+    const bytes = new Uint8Array(n).map(() => next() & 255);
+    assert.equal(coreSha256Bytes(bytes), createHash("sha256").update(bytes).digest("hex"), "length " + n);
+  }
+});
+
+test("02b-doc-id.js hands out core's functions, so the app hashes through the manual encoder", () => {
+  assert.equal(sha256Hex, coreSha256Hex);
+  assert.equal(sha256Bytes, coreSha256Bytes);
 });

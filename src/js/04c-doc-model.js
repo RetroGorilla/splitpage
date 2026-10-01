@@ -1,5 +1,5 @@
 import { inertBody, safeHref, sanitizeHtml } from "./04-richtext.js";
-import { BROLL_MARKER_RE } from "./08c-broll.js";
+import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 
 var FORMAT_MARKS = ["hl", "b", "i", "u", "s"];
 var OBJ = "\uFFFC";

@@ -1,5 +1,5 @@
-import { sha256Bytes } from "./02b-doc-id.js";
-import { safeImageSrc } from "./04-richtext.js";
+import { sha256Bytes } from "../core/document/ids.ts";
+import { safeImageSrc } from "../core/document/text-policy.ts";
 import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 
 var BLOB_DB_NAME = "splitpage-blobs";
