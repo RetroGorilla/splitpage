@@ -6,14 +6,21 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
 import {
-  bulkTagCell, bulkTagRows, healTagRegistry, productionEntries, tagCategory, tagOccurrences, tagsByCategory
+  TAG_CATEGORIES, TAG_STATUSES, bulkTagCell, bulkTagRows, healTagRegistry, nextTagStatus, normalizeTagName, productionEntries,
+  registryKey, tagCategory, tagKey, tagOccurrences, tagStatus, tagStatusRank, tagsByCategory, tagsInField
 } from "../js/07-production-tags.js";
-import { __init as initBroll, anchorBrollInRows, brollEntries, brollShotsByProp } from "../js/08c-broll.js";
+import {
+  BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_STATUSES, BROLL_TEXT_MAX, __init as initBroll, anchorBrollInRows, brollEntries,
+  brollInCell, brollPropKey, brollShotsByProp, brollStatus, normalizeBrollProps
+} from "../js/08c-broll.js";
+import { __init as initHistory } from "../js/03a-history-store.js";
+import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 
 freezeClockAndRandom(0x70726f64);
 initBroll();
+initHistory();
 
 const MINTED_SHOT = /\bbs[0-9a-z]{6,}\b/g;
 
@@ -351,6 +358,197 @@ SCENARIOS.push({
         tagged: bulkTagCell(html, phrase, "prop", "Kettle", false, false)
       };
     });
+  }
+});
+
+const shown = (v) => (v === undefined ? "(undefined)" : v);
+const letters = (n, ch) => (ch || "a").repeat(n);
+const lengthsOf = (list) => list.map((x) => ({ length: x.length, text: x }));
+
+function cueLimitRows() {
+  const cases = [
+    ["79", letters(79)], ["80", letters(80)], ["81", letters(81)], ["79 then a space and more", letters(79) + " bb"],
+    ["spaces across the cut", letters(77) + "    " + letters(5, "b")], ["leading spaces", "   " + letters(80)]
+  ];
+  return cases.map(([label, name]) => {
+    const html = cue("Music: " + name);
+    return { case: label, nameLength: name.length, read: lengthsOf(tagsInField(html).map((t) => t.name)) };
+  });
+}
+
+function cueLimitRetitle() {
+  const long = (ch) => "slow " + ch + " " + letters(80, "x");
+  load(cueDoc("d" + "2".repeat(31) + "c", [row("r1", "Intro.<br>" + cue("Music: " + long("a"))), row("r2", "")]));
+  const sounds = () => S.state.productionTags.filter((t) => t.cat === "sound")
+    .map((t) => ({ id: t.id, length: t.name.length, name: t.name, status: t.status }));
+  return [
+    ["open and heal", () => healTagRegistry()],
+    ["marked Have it", () => { S.state.productionTags.find((t) => t.cat === "sound").status = "have"; }],
+    ["a word inside the first 80 characters edited", setAudio("r1", "Intro.<br>" + cue("Music: " + long("b")))],
+    ["only characters past 80 edited", setAudio("r1", "Intro.<br>" + cue("Music: " + long("b") + "zz"))]
+  ].map(([label, fn]) => {
+    const healed = fn();
+    return { step: label, healed: healed === undefined ? null : healed, sound: sounds() };
+  });
+}
+
+function seedRows() {
+  const loc = (name) => tag("location", name);
+  const marker = (n) => "B-roll: shot " + n;
+  return [
+    row("r1", loc("Pier"), marker(1) + "<br>" + loc("Harbour") + " then " + loc("Quay")),
+    row("r2", loc("Pier") + " and " + loc("Quay"), marker(2)),
+    row("r3", tag("prop", "Kettle") + " only", marker(3)),
+    row("r4", loc(letters(79, "l")), marker(4)),
+    row("r5", loc(letters(80, "l")), marker(5)),
+    row("r6", loc(letters(81, "l")), marker(6)),
+    row("r7", letters(1999, "w"), marker(7)),
+    row("r8", letters(2000, "w"), marker(8)),
+    row("r9", letters(2001, "w"), marker(9))
+  ];
+}
+
+function brollLimitCells() {
+  const cells = [
+    ["name 199", "B-roll: " + letters(199)], ["name 200", "B-roll: " + letters(200)], ["name 201", "B-roll: " + letters(201)],
+    ["desc 1999", "B-roll: n<br>" + letters(1999)], ["desc 2000", "B-roll: n<br>" + letters(2000)],
+    ["desc 2001", "B-roll: n<br>" + letters(2001)],
+    ["markers", ["B-roll: a", "b roll - b", "B-Roll — c", "broll: d", "B roll– e", "  b-roll : f", "Brolls: g", "B--roll: h",
+      "x B-roll: i", "B-roll j", "B-roll:"].join("<br>")]
+  ];
+  return cells.map(([label, html]) => ({
+    case: label,
+    read: brollInCell(cellOf(html)).map((b) => ({ id: b.id, nameLength: b.name.length, name: b.name.slice(0, 12), descLength: b.desc.length }))
+  }));
+}
+
+function propLimitRows() {
+  const registry = [
+    tagEntry("t_kettle", "prop", "Kettle"), tagEntry("t_tripod", "gear", "Tripod"), tagEntry("t_lamp", "prop", "Lamp"),
+    tagEntry("t_spare", "prop", "Kettle")
+  ];
+  const named = (n) => Array.from({ length: n }, (_, i) => ({ id: "", name: "Prop " + (i + 1) }));
+  const cases = [
+    ["no list", null], ["a string, not a list", "Kettle"], ["names as strings", ["Kettle", "kettle ", "Ladder"]],
+    ["a number for a name", [42, { name: 7 }]], ["entries with nothing usable", [{}, null, true, { name: "   " }, { id: "", name: "" }]],
+    ["a known id with no name", [{ id: "t_kettle" }]], ["a known id with a stale name", [{ id: "t_lamp", name: "Old lamp" }]],
+    ["an id of the right shape that nothing holds", [{ id: "t_unknown1", name: "Ghost" }]],
+    ["an id of the wrong shape", [{ id: "bogus id", name: "Ladder" }, { id: "constructor", name: "Rope" }]],
+    ["a name a gear entry holds", [{ name: "tripod" }]], ["a name in markup", [{ name: "<b>Lamp</b>" }]],
+    ["a name two prop entries hold", [{ name: "KETTLE" }]],
+    ["names of 79, 80 and 81 characters", [{ name: letters(79, "p") }, { name: letters(80, "q") }, { name: letters(81, "r") }]],
+    ["39 props", named(39)], ["40 props", named(40)], ["41 props", named(41)],
+    ["repeats by id and by name", [{ id: "t_kettle", name: "x" }, { name: "kettle" }, { name: "Lamp" }, { name: "LAMP" }, { name: "Rope" }, { name: "rope " }]]
+  ];
+  return cases.map(([label, list]) => {
+    const out = normalizeBrollProps(jsonCopy(list), registry);
+    return { case: label, count: out.length, props: out.length > 6 ? [out[0], out[out.length - 1]] : out };
+  });
+}
+
+SCENARIOS.push({
+  name: "limits",
+  run() {
+    const ids = TAG_STATUSES.map((s) => s.id).concat(["Needed", "", null, undefined, "bogus", "constructor", "toString", 0, 1]);
+    const out = {
+      tagStatuses: TAG_STATUSES.map((s) => s.id),
+      tagCategories: TAG_CATEGORIES.map((c) => c.id),
+      statuses: ids.map((id) => ({
+        id: shown(id), tagStatus: tagStatus(id) ? tagStatus(id).id : null, rank: tagStatusRank(id), next: nextTagStatus(id)
+      })),
+      categories: ["prop", "gear", "Prop", "", null, "bogus", "constructor"].map((id) => ({
+        id, tagCategory: tagCategory(id) ? tagCategory(id).id : null
+      })),
+      tagNames: [null, undefined, "", "   ", "Kettle", "  Red   Mug  ", "Red\tMug", "a b", "A\nB", "İstanbul", "STRASSE",
+        "Straße", 42, 0, false].map((v) => ({
+        name: shown(v), normalized: normalizeTagName(v), registryKey: registryKey("prop", v), tagKey: tagKey("gear", v)
+      })),
+      cueNames: cueLimitRows(),
+      cueRetitleWithALongName: cueLimitRetitle(),
+      brollStatuses: BROLL_STATUSES.map((s) => s.id),
+      brollStatus: ["unshot", "shot", "Shot", "", null, undefined, "bogus", "constructor"].map((id) => ({
+        id: shown(id), brollStatus: brollStatus(id) ? brollStatus(id).id : null
+      })),
+      brollLimits: { BROLL_NAME_MAX, BROLL_TEXT_MAX, BROLL_PROPS_MAX },
+      brollCells: brollLimitCells(),
+      propKeys: [["t_kettle", "Anything"], ["", "Kettle"], ["", "  RED   mug "], [undefined, "Lamp"], ["", ""], [null, null]]
+        .map(([id, name]) => ({ id: shown(id), name: shown(name), key: brollPropKey(id, name) })),
+      props: propLimitRows()
+    };
+    const input = load({ schema: 2, title: "Seeds", docId: "d" + "3".repeat(31) + "c", rows: [] });
+    S.state.rows = seedRows();
+    out.seeds = brollEntries(true).map((e) => ({
+      rowId: e.rowId, name: e.name, location: e.location, locationLength: e.location.length, audioRefLength: e.audioRef.length
+    }));
+    return masked(out, input);
+  }
+});
+
+function gearElements() {
+  let box = document.getElementById("gear-quickadd-input");
+  if (!box) {
+    box = document.createElement("textarea");
+    box.id = "gear-quickadd-input";
+    document.body.appendChild(box);
+  }
+  let host = document.getElementById("toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toast-host";
+    document.body.appendChild(host);
+  }
+  return { box, host };
+}
+
+function quickAdd(label, lines, eol) {
+  const { box, host } = gearElements();
+  host.innerHTML = "";
+  const text = lines.join(eol || "\n");
+  box.value = text;
+  S.dirty = false;
+  const others = jsonCopy(S.state.productionTags.filter((t) => t.cat !== "gear"));
+  applyGearQuickAdd();
+  return {
+    step: label, typed: text,
+    gear: S.state.productionTags.filter((t) => t.cat === "gear").map((t) => [t.id, t.name, t.status, t.notes]),
+    otherTagsUntouched: JSON.stringify(others) === JSON.stringify(S.state.productionTags.filter((t) => t.cat !== "gear")),
+    toasts: Array.from(host.children).map((el) => el.textContent),
+    boxAfter: box.value,
+    dirty: !!S.dirty,
+    personColors: S.state.personColors === undefined ? null : jsonCopy(S.state.personColors)
+  };
+}
+
+const gearDoc = (docId, registry) => ({
+  schema: 2, title: "Gear", docId,
+  rows: [row("r1", "", "Wide on " + tag("gear", "Tripod", "the tripod") + " and " + tag("gear", "Slider"))],
+  productionTags: registry
+});
+
+SCENARIOS.push({
+  name: "gear-quick-add",
+  run() {
+    const out = {};
+    out.input = load(gearDoc("d" + "4".repeat(31) + "c", [
+      tagEntry("t_tripod", "gear", "Tripod", { status: "have" }), tagEntry("t_slider", "gear", "Slider"),
+      tagEntry("t_oldlens", "gear", "Old lens", { notes: "sold" }), tagEntry("t_gimbal", "gear", "Gimbal"),
+      tagEntry("t_ctor", "gear", "constructor"), tagEntry("t_proto", "gear", "__proto__"),
+      tagEntry("t_kettle", "prop", "Kettle")
+    ]));
+    const lines = ["tripod", "  Lav mic  ", "Gimbal", "constructor", "__proto__", "toString", "hasOwnProperty", letters(81, "x"),
+      "<b>Boom</b> pole", "", "   ", "Lav Mic"];
+    out.steps = [
+      quickAdd("a list with every kind of line, CRLF", lines, "\r\n"),
+      quickAdd("the same list again, LF", lines, "\n"),
+      quickAdd("the same list, CR", lines, "\r"),
+      quickAdd("a list leaving out everything not in the script", ["Tripod", "Slider"])
+    ];
+    load(gearDoc("d" + "5".repeat(31) + "c", [
+      tagEntry("t_tripod", "gear", "Tripod"), tagEntry("t_spare", "gear", "Spare battery")
+    ]));
+    out.steps.push(quickAdd("lines named after Object's own properties, none tracked yet", ["constructor", "__proto__", "Tripod", "toString"]));
+    out.steps.push(quickAdd("an empty list", [""]));
+    return out;
   }
 });
 
