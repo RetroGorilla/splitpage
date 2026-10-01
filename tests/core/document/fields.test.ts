@@ -9,6 +9,7 @@ import {
   STRATEGY_IDS,
   missingStateFields
 } from "../../../src/core/document/fields.ts";
+import type { StateField } from "../../../src/core/document/fields.ts";
 import { DEFAULT_WPM } from "../../../src/core/document/timing.ts";
 
 interface UndoGolden {
@@ -27,6 +28,20 @@ const KEYS = [
 test("the document is schema 2, with its fields in their saved order", () => {
   assert.equal(SCHEMA_VERSION, 2);
   assert.deepEqual(STATE_FIELDS.map((f) => f.key), KEYS);
+});
+
+test("the field table and its entries are frozen at run time, not only in their type", () => {
+  assert.ok(Object.isFrozen(STATE_FIELDS));
+  assert.ok(STATE_FIELDS.every((f) => Object.isFrozen(f)));
+  const table = STATE_FIELDS as StateField[];
+  assert.throws(() => table.push({ key: "probe", merge: "constant", undo: false }), TypeError);
+  assert.throws(() => { (table[0] as StateField).undo = false; }, TypeError);
+  assert.throws(() => { delete (table[0] as StateField).def; }, TypeError);
+  assert.equal(STATE_FIELDS.length, KEYS.length);
+  assert.equal(STATE_FIELDS[0]?.undo, true);
+  assert.equal(typeof STATE_FIELDS[0]?.def, "function");
+  assert.ok(Object.isFrozen(ROW_FIELDS));
+  assert.ok(Object.isFrozen(GALLERY_FIELDS));
 });
 
 test("every field names a merge strategy from the closed list", () => {
@@ -81,4 +96,14 @@ test("missingStateFields names the defaulted fields a document lacks", () => {
   assert.deepEqual(missingStateFields(holed), ["people", "rev"]);
   assert.deepEqual(missingStateFields({ ...whole, docId: undefined }), []);
   assert.throws(() => missingStateFields("a string"), TypeError);
+});
+
+test("missingStateFields reads the table it is given, core's by default", () => {
+  const probe: StateField = { key: "probe", def: () => 0, merge: "constant", undo: false };
+  const plain: StateField = { key: "plain", merge: "constant", undo: false };
+  const table = [...STATE_FIELDS, probe, plain];
+  assert.deepEqual(missingStateFields({}, table), [...missingStateFields({}), "probe"]);
+  assert.deepEqual(missingStateFields({ probe: undefined }, [probe, plain]), []);
+  assert.deepEqual(missingStateFields(null, [probe, plain]), ["probe"]);
+  assert.deepEqual(missingStateFields({}, []), []);
 });
