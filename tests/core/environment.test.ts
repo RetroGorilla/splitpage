@@ -19,7 +19,18 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/ports.ts": await import("../../src/core/document/ports.ts"),
   "document/tags.ts": await import("../../src/core/document/tags.ts"),
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
-  "document/timing.ts": await import("../../src/core/document/timing.ts")
+  "document/timing.ts": await import("../../src/core/document/timing.ts"),
+  "merge/cells.ts": await import("../../src/core/merge/cells.ts"),
+  "text/anchors.ts": await import("../../src/core/text/anchors.ts"),
+  "text/cues.ts": await import("../../src/core/text/cues.ts"),
+  "text/directions.ts": await import("../../src/core/text/directions.ts"),
+  "text/edits.ts": await import("../../src/core/text/edits.ts"),
+  "text/html.ts": await import("../../src/core/text/html.ts"),
+  "text/ports.ts": await import("../../src/core/text/ports.ts"),
+  "text/projections.ts": await import("../../src/core/text/projections.ts"),
+  "text/runs.ts": await import("../../src/core/text/runs.ts"),
+  "text/steps.ts": await import("../../src/core/text/steps.ts"),
+  "text/tree.ts": await import("../../src/core/text/tree.ts")
 };
 
 const globalsAfter = new Set(Reflect.ownKeys(globalThis));

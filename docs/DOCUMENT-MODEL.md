@@ -279,8 +279,12 @@ is special. **It is the only atom.**
 
 ## 4. Operations
 
-Nothing outside one module writes a cell. `src/js/04c-doc-model.js`
-(pure, unit-tested under `node --test` like the other pure cores) exports:
+Nothing outside the document model writes a cell. Its pure operations live
+in `src/core/text/` (typed, and unit-tested under `node --test` without a
+DOM): the edits in `edits.ts`, `toHtml` in `html.ts`, the readers in
+`projections.ts`, the steps in `steps.ts`, and `mergeCells` in
+`src/core/merge/cells.ts`. `src/js/04c-doc-model.js` exports all of them,
+with `fromHtml` and `cellOf`, which still decode through the sanitiser:
 
 - **Constructors and converters**
   - `fromHtml(html)` parses a sanitised HTML cell into runs. This is the
