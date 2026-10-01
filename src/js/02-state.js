@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
+import { PAGE_SHELL } from "./00-prelude.js";
 import { rowStatus } from "./01-scene-status.js";
 import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor, registryImages } from "./02c-blobs.js";
@@ -15,6 +15,7 @@ import {
   sanitizeHtml,
   storedImageHtml
 } from "./04-richtext.js";
+import { SCHEMA_VERSION, STATE_FIELDS as FIELD_POLICIES, missingStateFields } from "../core/document/fields.ts";
 import { mediaCommentId } from "../core/document/ids.ts";
 import { mediaComments } from "../core/document/media.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
@@ -33,7 +34,7 @@ import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus, normalizeBrollProps } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 export { makeId } from "../adapters/identity/ids.ts";
-export { escapeHtml, legacyMdToHtml, mediaCommentId };
+export { escapeHtml, legacyMdToHtml, mediaCommentId, missingStateFields };
 
 function defaultState() {
   try {
@@ -43,31 +44,17 @@ function defaultState() {
   }
 }
 
-export var STATE_FIELDS = [
-  { key: "title",          merge: "title",  def: function () { return ""; } },
-  { key: "docId",          merge: "doc-id" },
-  { key: "rows",           merge: "rows",     def: function () { return []; } },
-  { key: "comments",       merge: "comments", def: function () { return []; } },
-  { key: "people",         merge: "list-union-with-base", def: function () { return []; },
-    mergeList: function (b, m, t) { return mergePeople(b, m, t); } },
-  { key: "productionTags", merge: "list-union-with-base", def: function () { return []; },
-    mergeList: function (b, m, t) { return mergeProductionTags(b, m, t); } },
-  { key: "brollShots",     merge: "list-union-with-base", def: function () { return []; },
-    mergeList: function (b, m, t) { return mergeBrollShots(b, m, t); } },
-  { key: "wordsPerMinute", merge: "changed-side-wins", def: function () { return DEFAULT_WPM; } },
-  { key: "rev",            merge: "max-plus-one", def: function () { return 0; } },
-  { key: "lastEditedBy",   merge: "theirs-wins" },
-  { key: "lastEditedAt",   merge: "theirs-wins" },
-  { key: "personColors",   merge: "person-colors" },
-  { key: "targetSeconds",  merge: "target-length" },
-  { key: "schema",         merge: "constant" }
-];
+var LIST_MERGERS = {
+  people: function (b, m, t) { return mergePeople(b, m, t); },
+  productionTags: function (b, m, t) { return mergeProductionTags(b, m, t); },
+  brollShots: function (b, m, t) { return mergeBrollShots(b, m, t); }
+};
 
-export function missingStateFields(s) {
-  return STATE_FIELDS.filter(function (f) {
-    return f.def && (!s || !(f.key in s));
-  }).map(function (f) { return f.key; });
-}
+export var STATE_FIELDS = FIELD_POLICIES.map(function (f) {
+  var entry = Object.assign({}, f);
+  if (LIST_MERGERS[f.key]) entry.mergeList = LIST_MERGERS[f.key];
+  return entry;
+});
 
 function videoCardHtml(href) {
   return buildVideoCardEl(href).outerHTML;

@@ -10,6 +10,7 @@ const globalsBefore = new Set(Reflect.ownKeys(globalThis));
 const modules: Record<string, Record<string, unknown>> = {
   "document/broll.ts": await import("../../src/core/document/broll.ts"),
   "document/comments.ts": await import("../../src/core/document/comments.ts"),
+  "document/fields.ts": await import("../../src/core/document/fields.ts"),
   "document/gallery.ts": await import("../../src/core/document/gallery.ts"),
   "document/ids.ts": await import("../../src/core/document/ids.ts"),
   "document/media.ts": await import("../../src/core/document/media.ts"),
