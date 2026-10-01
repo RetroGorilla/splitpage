@@ -55,6 +55,19 @@ Node built-in or a package (`platform-import`). Core, `contracts`,
 (`platform-global`); CommonJS `require`, `module` and `exports` are allowed in
 CommonJS files.
 
+Those layers may not read the clock or draw random numbers either; time and
+randomness reach them through ports (`Clock`, `IdSource`). Both are reported
+under `platform-global`:
+
+- `global:Date`: `Date.now`, `Date()`, `new Date` with no argument (or only a
+  spread), any member of `Date` but `parse` and `UTC`, and `Date` used as a
+  value (`const D = Date`, `f(Date)`), which could reach the clock.
+  `Date.parse`, `Date.UTC`, `new Date(x)`, `instanceof Date` and `Date` as a
+  type read no clock and pass.
+- `global:Math.random`: `Math.random`, and `Math` reached any way but through
+  a named member other than `random` (`Math["random"]`, `Math[key]`,
+  `const M = Math`).
+
 A name is a global only where no binding for it is in scope. The report walks
 the lexical scopes of each file: module, function parameters, function body,
 block, loop head, `catch` clause and class. `var` and function declarations
