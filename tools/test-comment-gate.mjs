@@ -340,6 +340,9 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
   check("a runner group with no labels is unknown", shellError(job("{ group: big }", blockThenComment)).includes("cannot tell"));
   eq("a self-hosted Linux runner is bash", found(".github/workflows/m.yml", job("[self-hosted, linux]", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])), []);
   check("a self-hosted runner with no OS label and a bash heredoc is refused", shellError(job("[self-hosted, x64]", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])).includes("cannot tell"));
+  eq("an expression runner whose literals all name Linux is bash", found(".github/workflows/m.yml", job("${{ vars.CI_RUNNER || 'ubuntu-latest' }}", ["      - run: |", "          cat <<EOF", "          # heredoc text", "          EOF"])), []);
+  check("an expression runner whose literals name Windows and Linux is unknown", shellError(job("${{ inputs.win && 'windows-latest' || 'ubuntu-latest' }}", blockThenComment)).includes("cannot tell"));
+  check("an expression runner with a literal naming no OS is unknown", shellError(job("${{ vars.CI_RUNNER || 'big-box' }}", blockThenComment)).includes("cannot tell"));
   eq("defaults.run.shell settles an expression runner", found(".github/workflows/m.yml", "defaults:\n  run:\n    shell: pwsh\n" + job("${{ matrix.os }}", blockThenComment)), ["<# it's a PowerShell block #>", "# after"]);
 }
 
