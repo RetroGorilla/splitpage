@@ -38,7 +38,6 @@ import {
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
-import { createProductionReaders } from "../core/production/readers.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -54,6 +53,7 @@ import {
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
 } from "../core/production/tags.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 export {
   contentMemo,
   ensureTagIds,
@@ -156,7 +156,7 @@ export function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
-export var productionReaders = createProductionReaders(cellOf);
+export { productionReaders };
 
 export var tagsInField = productionReaders.tagsInField;
 
