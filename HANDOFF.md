@@ -1509,8 +1509,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 3. **Never touch text inside a tag** (§3.3): the model's edits keep a
    comment or link over all of a tag or none of it, and find/replace never
    matches inside one.
-4. **New top-level state field ⇒ update `migrateRows()` *and* `mergeStates()`**
-   (§3.2).
+4. Absorbed in milestone 2.5: see INV-04 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-04--every-top-level-field-survives-migration-and-merge).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
 6. **Don't run document-wide scans per keystroke.** Wire expensive refreshes
    through the one idle refresh (`scheduleIdleRefresh()` and its four
