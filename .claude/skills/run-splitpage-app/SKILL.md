@@ -72,10 +72,11 @@ the unit tests of the area (`npm test -- --only <path>`), and the browser
 suites for its input, focus, saving or export paths. CI runs lint, types, the
 gates, every unit/desktop/tool test and the smoke, CSP and persistence suites
 on every pull request, so a focused run is feedback, not the gate. The full
-browser regression below, on Linux and Windows, is run at milestone and
-release gates (plan section 4) and its `summary.txt` attached to the closing
-PR. A few kinds of pull request also need one before merge (every 3.1.x fix,
-`02-state.js`, `build.mjs`, the harness); those, and the rest of how a pull
+browser regression below is run on Windows at milestone and release gates,
+and on Linux at the 4.0 release gate (plan section 4); its `summary.txt` is
+attached to the closing
+PR. A few kinds of pull request also need one before merge (`02-state.js`,
+`build.mjs`, the harness); those, and the rest of how a pull
 request is reviewed and merged, are in
 [docs/architecture/review.md](../../../docs/architecture/review.md).
 **Rebuild first** whichever you run, or you will be testing the previous
