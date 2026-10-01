@@ -104,7 +104,7 @@ function readAll(doc: Doc, ids: IdSource): Out {
   const before = JSON.stringify(doc);
   const out: Out = {
     entries: entriesView(deriveProductionIndex(doc, readers).entries),
-    brollRead: brollView(doc, brollEntries(doc, readers, ids, plainTextOf).entries)
+    brollRead: brollView(doc, brollEntries(doc, readers, ids, plainTextOf, false).entries)
   };
   out.readsWroteNothing = JSON.stringify(doc) === before;
   return out;
@@ -141,7 +141,7 @@ function repairAll(doc: Doc, out: Out, ids: IdSource): Out {
   applyHealing(doc, again);
   out.healedAgain = again.count;
   const shotsBefore = jsonCopy(doc.brollShots);
-  const read = planned(doc, () => brollEntries(doc, readers, ids, plainTextOf));
+  const read = planned(doc, () => brollEntries(doc, readers, ids, plainTextOf, true));
   applyBroll(doc, read);
   const repair = brollView(doc, read.entries);
   out.brollRepair = sameAsOr("brollRead", out.brollRead, repair);
@@ -149,7 +149,7 @@ function repairAll(doc: Doc, out: Out, ids: IdSource): Out {
   const rowsBefore = jsonCopy(doc.rows.map((r) => r.visualText));
   out.anchored = anchorAll(doc, ids);
   out.visualAfterAnchoring = unchangedOr(rowsBefore, doc.rows.map((r) => r.visualText));
-  out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(doc, brollEntries(doc, readers, ids, plainTextOf).entries));
+  out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(doc, brollEntries(doc, readers, ids, plainTextOf, false).entries));
   return out;
 }
 
