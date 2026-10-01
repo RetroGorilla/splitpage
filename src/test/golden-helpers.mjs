@@ -42,6 +42,19 @@ export function settleGolden(name, file, value) {
   return { text, value: JSON.parse(text) };
 }
 
+export function mintedId(value, prefix, from, to) {
+  if (typeof value !== "string" || !value.startsWith(prefix)) return false;
+  const rest = value.slice(prefix.length);
+  if (!/^[0-9a-z]{8,15}$/.test(rest)) return false;
+  const at = parseInt(rest.slice(-8), 36);
+  return at >= from && at <= to;
+}
+
+export function idsInHtml(html) {
+  if (typeof html !== "string") return [];
+  return [...html.matchAll(/data-(cmt|broll-id)="([^"]*)"/g)].map((m) => ({ prefix: m[1] === "cmt" ? "c" : "bs", value: m[2] }));
+}
+
 export function createIdMasker(from, to) {
   const placeholders = new Map();
   const counts = new Map();
@@ -49,11 +62,7 @@ export function createIdMasker(from, to) {
   function id(value, prefix) {
     if (typeof value !== "string") return value;
     if (placeholders.has(value)) return placeholders.get(value);
-    if (!value.startsWith(prefix)) return value;
-    const rest = value.slice(prefix.length);
-    if (!/^[0-9a-z]{8,15}$/.test(rest)) return value;
-    const at = parseInt(rest.slice(-8), 36);
-    if (!(at >= from() && at <= to())) return value;
+    if (!mintedId(value, prefix, from(), to())) return value;
     const n = (counts.get(prefix) ?? 0) + 1;
     counts.set(prefix, n);
     const ph = `{minted:${prefix}:${n}}`;
@@ -63,9 +72,7 @@ export function createIdMasker(from, to) {
   }
   function html(text) {
     if (typeof text !== "string") return text;
-    return text
-      .replace(/(data-cmt=")([^"]*)(")/g, (m, a, v, b) => a + id(v, "c") + b)
-      .replace(/(data-broll-id=")([^"]*)(")/g, (m, a, v, b) => a + id(v, "bs") + b);
+    return text.replace(/(data-(cmt|broll-id)=")([^"]*)(")/g, (m, a, kind, v, b) => a + id(v, kind === "cmt" ? "c" : "bs") + b);
   }
   return { id, html, minted };
 }
