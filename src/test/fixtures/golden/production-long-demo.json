@@ -1,0 +1,1457 @@
+{
+  "demoSha256": "d3c94c07da54fa4864bd386fb1637168976a1800258790be6950325e5a8e1205",
+  "entries": [
+    {
+      "key": "prop pentax k1000",
+      "id": "t_nehw781hawtqy",
+      "cat": "prop",
+      "name": "Pentax K1000",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "visualText",
+          "text": "Pentax K1000"
+        },
+        {
+          "rowId": "r28",
+          "rowIndex": 27,
+          "field": "visualText",
+          "text": "Pentax K1000"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_sam",
+      "notes": "The $40 flea-market body. Keep the lens cap on between setups.",
+      "status": "have"
+    },
+    {
+      "key": "prop light seal kit",
+      "id": "t_qnnurt1s7dc0c",
+      "cat": "prop",
+      "name": "light seal kit",
+      "mentions": [
+        {
+          "rowId": "r5",
+          "rowIndex": 4,
+          "field": "visualText",
+          "text": "light seal kit"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_sam",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "prop toothpick",
+      "id": "t_11e2rcn1t3j38i",
+      "cat": "prop",
+      "name": "toothpick",
+      "mentions": [
+        {
+          "rowId": "r5",
+          "rowIndex": 4,
+          "field": "visualText",
+          "text": "toothpick"
+        },
+        {
+          "rowId": "r7",
+          "rowIndex": 6,
+          "field": "visualText",
+          "text": "toothpick"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "prop naphtha",
+      "id": "t_14n9qt01hbph00",
+      "cat": "prop",
+      "name": "naphtha",
+      "mentions": [
+        {
+          "rowId": "r5",
+          "rowIndex": 4,
+          "field": "visualText",
+          "text": "naphtha"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "Zippo fluid is fine.",
+      "status": "have"
+    },
+    {
+      "key": "prop button cell battery",
+      "id": "t_9r0rolan06ud",
+      "cat": "prop",
+      "name": "button cell battery",
+      "mentions": [
+        {
+          "rowId": "r13",
+          "rowIndex": 12,
+          "field": "visualText",
+          "text": "button cell battery"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_sam",
+      "notes": "SR44 silver oxide.",
+      "status": "sourcing"
+    },
+    {
+      "key": "prop portra 400",
+      "id": "t_10lgz0ydng2aw",
+      "cat": "prop",
+      "name": "Portra 400",
+      "mentions": [
+        {
+          "rowId": "r18",
+          "rowIndex": 17,
+          "field": "visualText",
+          "text": "Portra 400"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "Two rolls, from Rita.",
+      "status": "have"
+    },
+    {
+      "key": "location workbench",
+      "id": "t_d8cff78x066r",
+      "cat": "location",
+      "name": "workbench",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "visualText",
+          "text": "workbench"
+        },
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "workbench"
+        },
+        {
+          "rowId": "r9",
+          "rowIndex": 8,
+          "field": "visualText",
+          "text": "workbench"
+        },
+        {
+          "rowId": "r20",
+          "rowIndex": 19,
+          "field": "visualText",
+          "text": "workbench"
+        },
+        {
+          "rowId": "r28",
+          "rowIndex": 27,
+          "field": "visualText",
+          "text": "workbench"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "location kitchen table",
+      "id": "t_wr8s2q9gognr",
+      "cat": "location",
+      "name": "Kitchen table",
+      "mentions": [
+        {
+          "rowId": "r13",
+          "rowIndex": 12,
+          "field": "visualText",
+          "text": "Kitchen table"
+        },
+        {
+          "rowId": "r15",
+          "rowIndex": 14,
+          "field": "visualText",
+          "text": "kitchen table"
+        },
+        {
+          "rowId": "r26",
+          "rowIndex": 25,
+          "field": "visualText",
+          "text": "Kitchen table"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "location camera shop",
+      "id": "t_quf5kfv0pqer",
+      "cat": "location",
+      "name": "Camera shop",
+      "mentions": [
+        {
+          "rowId": "r16",
+          "rowIndex": 15,
+          "field": "visualText",
+          "text": "Camera shop"
+        },
+        {
+          "rowId": "r17",
+          "rowIndex": 16,
+          "field": "visualText",
+          "text": "camera shop"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_sam",
+      "notes": "Frame & Grain, weekday mornings only.",
+      "status": "have"
+    },
+    {
+      "key": "location riverside park",
+      "id": "t_1vjgyvd1bug7nf",
+      "cat": "location",
+      "name": "Riverside park",
+      "mentions": [
+        {
+          "rowId": "r22",
+          "rowIndex": 21,
+          "field": "visualText",
+          "text": "Riverside park"
+        },
+        {
+          "rowId": "r23",
+          "rowIndex": 22,
+          "field": "visualText",
+          "text": "Riverside park"
+        },
+        {
+          "rowId": "r24",
+          "rowIndex": 23,
+          "field": "visualText",
+          "text": "Riverside park"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "Golden hour, check the forecast.",
+      "status": "needed"
+    },
+    {
+      "key": "cast sam",
+      "id": "t_1bamaxl13emujz",
+      "cat": "cast",
+      "name": "Sam",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r8",
+          "rowIndex": 7,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r9",
+          "rowIndex": 8,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r11",
+          "rowIndex": 10,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r13",
+          "rowIndex": 12,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r22",
+          "rowIndex": 21,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r23",
+          "rowIndex": 22,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r24",
+          "rowIndex": 23,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r26",
+          "rowIndex": 25,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r29",
+          "rowIndex": 28,
+          "field": "visualText",
+          "text": "Sam"
+        },
+        {
+          "rowId": "r30",
+          "rowIndex": 29,
+          "field": "visualText",
+          "text": "Sam"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "cast rita",
+      "id": "t_17ikyzw17ary8p",
+      "cat": "cast",
+      "name": "Rita",
+      "mentions": [
+        {
+          "rowId": "r17",
+          "rowIndex": 16,
+          "field": "visualText",
+          "text": "Rita"
+        },
+        {
+          "rowId": "r18",
+          "rowIndex": 17,
+          "field": "visualText",
+          "text": "Rita"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_sam",
+      "notes": "Release form signed.",
+      "status": "have"
+    },
+    {
+      "key": "gear lav mic",
+      "id": "t_nzo4b69nw035",
+      "cat": "gear",
+      "name": "lav mic",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "lav mic"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "gear overhead rig",
+      "id": "t_o7uezk1k8kjrc",
+      "cat": "gear",
+      "name": "overhead rig",
+      "mentions": [
+        {
+          "rowId": "r5",
+          "rowIndex": 4,
+          "field": "visualText",
+          "text": "overhead rig"
+        },
+        {
+          "rowId": "r6",
+          "rowIndex": 5,
+          "field": "visualText",
+          "text": "overhead rig"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "gear gimbal",
+      "id": "t_1fijg281r3calw",
+      "cat": "gear",
+      "name": "gimbal",
+      "mentions": [
+        {
+          "rowId": "r16",
+          "rowIndex": 15,
+          "field": "visualText",
+          "text": "gimbal"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "Borrowed for the shop day.",
+      "status": "returned"
+    },
+    {
+      "key": "vfx title card",
+      "id": "t_1qo6uv9fbawg8",
+      "cat": "vfx",
+      "name": "Title card",
+      "mentions": [
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "visualText",
+          "text": "Title card"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "vfx lower third",
+      "id": "t_1mi4te71e9svzw",
+      "cat": "vfx",
+      "name": "Lower third",
+      "mentions": [
+        {
+          "rowId": "r4",
+          "rowIndex": 3,
+          "field": "visualText",
+          "text": "Lower third"
+        },
+        {
+          "rowId": "r9",
+          "rowIndex": 8,
+          "field": "visualText",
+          "text": "Lower third"
+        },
+        {
+          "rowId": "r13",
+          "rowIndex": 12,
+          "field": "visualText",
+          "text": "Lower third"
+        },
+        {
+          "rowId": "r18",
+          "rowIndex": 17,
+          "field": "visualText",
+          "text": "Lower third"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "One template for all of them.",
+      "status": "sourcing"
+    },
+    {
+      "key": "vfx split screen",
+      "id": "t_9z2kfp10c2v9g",
+      "cat": "vfx",
+      "name": "Split screen",
+      "mentions": [
+        {
+          "rowId": "r12",
+          "rowIndex": 11,
+          "field": "visualText",
+          "text": "Split screen"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx price counter",
+      "id": "t_1apazg61s8b7j6",
+      "cat": "vfx",
+      "name": "Price counter",
+      "mentions": [
+        {
+          "rowId": "r19",
+          "rowIndex": 18,
+          "field": "visualText",
+          "text": "Price counter"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx end screen",
+      "id": "t_11fjge21hkwctz",
+      "cat": "vfx",
+      "name": "End screen",
+      "mentions": [
+        {
+          "rowId": "r29",
+          "rowIndex": 28,
+          "field": "visualText",
+          "text": "End screen"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "sound intro sting",
+      "id": "t_469hj710bzits",
+      "cat": "sound",
+      "name": "intro sting",
+      "mentions": [
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "visualText",
+          "text": "intro sting"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "sound lo-fi bed",
+      "id": "t_1xhcwde1yyojue",
+      "cat": "sound",
+      "name": "lo-fi bed",
+      "mentions": [
+        {
+          "rowId": "r6",
+          "rowIndex": 5,
+          "field": "visualText",
+          "text": "lo-fi bed"
+        },
+        {
+          "rowId": "r22",
+          "rowIndex": 21,
+          "field": "visualText",
+          "text": "lo-fi bed"
+        },
+        {
+          "rowId": "r25",
+          "rowIndex": 24,
+          "field": "visualText",
+          "text": "lo-fi bed"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p_ld_jo",
+      "notes": "Licensed track, not the free one.",
+      "status": "sourcing"
+    },
+    {
+      "key": "sound shutter click",
+      "id": "t_iqukx9dfz9w5",
+      "cat": "sound",
+      "name": "shutter click",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "visualText",
+          "text": "shutter click"
+        },
+        {
+          "rowId": "r11",
+          "rowIndex": 10,
+          "field": "visualText",
+          "text": "shutter click"
+        },
+        {
+          "rowId": "r23",
+          "rowIndex": 22,
+          "field": "visualText",
+          "text": "shutter click"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "Record the real one, close up.",
+      "status": "have"
+    },
+    {
+      "key": "vfx arrow callout",
+      "id": "t_785ak21at6lqu",
+      "cat": "vfx",
+      "name": "Arrow callout",
+      "mentions": [
+        {
+          "rowId": "r10",
+          "rowIndex": 9,
+          "field": "visualText",
+          "text": "Arrow callout"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx counter",
+      "id": "t_1m7l0u38jc16r",
+      "cat": "vfx",
+      "name": "Counter",
+      "mentions": [
+        {
+          "rowId": "r11",
+          "rowIndex": 10,
+          "field": "visualText",
+          "text": "Counter"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx viewfinder overlay",
+      "id": "t_97xrfs19hoxli",
+      "cat": "vfx",
+      "name": "Viewfinder overlay",
+      "mentions": [
+        {
+          "rowId": "r15",
+          "rowIndex": 14,
+          "field": "visualText",
+          "text": "Viewfinder overlay"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "sound shop door bell",
+      "id": "t_1or5715nwmi6s",
+      "cat": "sound",
+      "name": "shop door bell",
+      "mentions": [
+        {
+          "rowId": "r17",
+          "rowIndex": 16,
+          "field": "visualText",
+          "text": "shop door bell"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "sound cash register ding",
+      "id": "t_sxhdgs1rnslhr",
+      "cat": "sound",
+      "name": "cash register ding",
+      "mentions": [
+        {
+          "rowId": "r19",
+          "rowIndex": 18,
+          "field": "visualText",
+          "text": "cash register ding"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx screen recording",
+      "id": "t_1riido6bii3lu",
+      "cat": "vfx",
+      "name": "Screen recording",
+      "mentions": [
+        {
+          "rowId": "r26",
+          "rowIndex": 25,
+          "field": "visualText",
+          "text": "Screen recording"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx ken burns",
+      "id": "t_bft6rv1dy6xrm",
+      "cat": "vfx",
+      "name": "Ken Burns",
+      "mentions": [
+        {
+          "rowId": "r27",
+          "rowIndex": 26,
+          "field": "visualText",
+          "text": "Ken Burns"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "sound outro sting",
+      "id": "t_267c7em1dtvg",
+      "cat": "sound",
+      "name": "outro sting",
+      "mentions": [
+        {
+          "rowId": "r29",
+          "rowIndex": 28,
+          "field": "visualText",
+          "text": "outro sting"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    }
+  ],
+  "byCategory": [
+    {
+      "cat": "prop",
+      "items": [
+        "prop pentax k1000",
+        "prop toothpick",
+        "prop button cell battery",
+        "prop light seal kit",
+        "prop naphtha",
+        "prop portra 400"
+      ]
+    },
+    {
+      "cat": "location",
+      "items": [
+        "location workbench",
+        "location kitchen table",
+        "location riverside park",
+        "location camera shop"
+      ]
+    },
+    {
+      "cat": "cast",
+      "items": [
+        "cast sam",
+        "cast rita"
+      ]
+    },
+    {
+      "cat": "vfx",
+      "items": [
+        "vfx lower third",
+        "vfx arrow callout",
+        "vfx counter",
+        "vfx end screen",
+        "vfx ken burns",
+        "vfx price counter",
+        "vfx screen recording",
+        "vfx split screen",
+        "vfx title card",
+        "vfx viewfinder overlay"
+      ]
+    },
+    {
+      "cat": "sound",
+      "items": [
+        "sound lo-fi bed",
+        "sound shutter click",
+        "sound cash register ding",
+        "sound intro sting",
+        "sound outro sting",
+        "sound shop door bell"
+      ]
+    },
+    {
+      "cat": "gear",
+      "items": [
+        "gear overhead rig",
+        "gear gimbal",
+        "gear lav mic"
+      ]
+    }
+  ],
+  "brollRead": [
+    {
+      "rec": {
+        "stored": 0
+      },
+      "id": "bs_ld_01",
+      "name": "fingertip pushing on the sticky old foam",
+      "desc": "",
+      "rowId": "r4",
+      "rowIndex": 3,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "shot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "First problem. These little foam strips keep light from leaking in round the back door. After forty years they turn into black goo. If you shoot with them like this, every frame gets a red stripe down one side. And you won't find out until the film comes back from the lab, weeks later, which is a very specific kind of heartbreak. There's a second strip up by the hinge, and a thin one under the mirror that stops it slapping the top of the chamber. Those three are the whole job.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 1
+      },
+      "id": "bs_ld_02",
+      "name": "the toothpick lifting a long strand of goo",
+      "desc": "",
+      "rowId": "r6",
+      "rowIndex": 5,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "shot",
+      "reshoot": true,
+      "notes": "Soft focus — grab it again on the macro day.",
+      "owner": "",
+      "audioRef": "This part takes about forty minutes and it is genuinely the worst forty minutes in camera repair. Go slowly. If you scratch the channel, the new seal won't sit flat. Soak a cotton bud, let it sit for a minute, and the old foam lifts out in long sticky strings. Keep a paper towel under the camera, because it drips, and keep the naphtha well away from the lens and the mirror. When the channel is clean, it should be bare shiny metal from end to end.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 2
+      },
+      "id": "bs_ld_03",
+      "name": "slow-motion shutter firing at one second",
+      "desc": "",
+      "rowId": "r10",
+      "rowIndex": 9,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "The fix everyone suggests is to exercise it. Fire it at every speed, fifty times each, and a lot of the time the old oil loosens up on its own. It's boring, but it's free, and it doesn't involve opening anything. Start at the fastest speed, a thousandth of a second, and work your way down. The fast speeds barely touch the mechanism that's sticking, but they get everything moving. By the time you reach the slow speeds, where the gears actually do the timing, the old oil has warmed up and started to spread.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 3
+      },
+      "id": "bs_ld_04",
+      "name": "battery dropping into the base plate",
+      "desc": "",
+      "rowId": "r14",
+      "rowIndex": 13,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Battery in. And the needle moves.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 4
+      },
+      "id": "bs_ld_05",
+      "name": "shop sign and window display",
+      "desc": "",
+      "rowId": "r16",
+      "rowIndex": 15,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "shot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Next stop: film.",
+      "location": "Camera shop",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 5
+      },
+      "id": "bs_ld_06",
+      "name": "sprocket holes catching on the teeth",
+      "desc": "",
+      "rowId": "r20",
+      "rowIndex": 19,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Loading a manual camera for the first time is the moment everyone gets nervous. Pull the leader across, hook it into the slot, and wind on until both sets of sprocket holes are caught. Then, and this is the important bit, watch the rewind knob turn as you advance. If it doesn't turn, the film isn't moving. You'll shoot thirty-six frames onto the same patch of film, or onto nothing at all, and you'll only find out when you try to rewind and there's no tension. Ask me how I know. Close the back, fire two blank frames to get past the part you fogged while loading, and the counter should sit on one.",
+      "location": "workbench",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 6
+      },
+      "id": "bs_ld_07",
+      "name": "feet on the gravel path, low angle",
+      "desc": "",
+      "rowId": "r22",
+      "rowIndex": 21,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Then I took it for a walk. The whole point of a camera like this is that it slows you down. There's no screen to check. You look at the needle, you turn the rings, and you commit. I set the camera for the light at the start of the walk, and then only changed it when the needle told me to. That meant I spent most of the hour just looking at things, which, honestly, I don't do enough of with a phone in my pocket. By the time I reached the river, I'd only taken four pictures, and I was fine with that.",
+      "location": "Riverside park",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 7
+      },
+      "id": "bs_ld_08",
+      "name": "the heron taking off",
+      "desc": "",
+      "rowId": "r23",
+      "rowIndex": 22,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "I shot all thirty-six frames in about an hour. Some of them I thought about for a long time. Some of them I just took, because the light was doing something and I didn't want to miss it. The heron stood in the shallows for nearly ten minutes while I crept closer, and then took off the moment I lifted the camera, which I'm told is what herons are for. The bike on the rail was the last frame. I stood there a long time deciding whether it was worth it, and then took it anyway, because it was frame thirty-six.",
+      "location": "Riverside park",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 8
+      },
+      "id": "bs_ld_09",
+      "name": "prints laid out on the table, overhead",
+      "desc": "",
+      "rowId": "r27",
+      "rowIndex": 26,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "And I'm really happy with them. The meter held up. There's no light leak anywhere, not even on the first frame. Two frames are soft because I missed focus, and that's entirely on me. The heron is out of focus too. The heron was always going to be out of focus. The colours are what got me. Portra does this warm, soft thing with late light that I've spent years trying to get out of a phone with filters, and here it is, straight out of the scanner, no editing at all. Rita was right. It forgave me for everything.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    }
+  ],
+  "shotsByProp": {},
+  "readsWroteNothing": true,
+  "occurrences": [
+    {
+      "cat": "prop",
+      "name": "Pentax K1000",
+      "hits": [
+        {
+          "rowId": "r3",
+          "field": "audioText",
+          "ranges": [
+            [
+              218,
+              230
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "prop",
+      "name": "light seal kit",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "prop",
+      "name": "toothpick",
+      "hits": [
+        {
+          "rowId": "r5",
+          "field": "audioText",
+          "ranges": [
+            [
+              62,
+              71
+            ]
+          ]
+        },
+        {
+          "rowId": "r6",
+          "field": "visualText",
+          "ranges": [
+            [
+              103,
+              112
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 1,
+        "inTags": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "prop",
+      "name": "naphtha",
+      "hits": [
+        {
+          "rowId": "r6",
+          "field": "audioText",
+          "ranges": [
+            [
+              329,
+              336
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "prop",
+      "name": "button cell battery",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "prop",
+      "name": "Portra 400",
+      "hits": [
+        {
+          "rowId": "r18",
+          "field": "audioText",
+          "ranges": [
+            [
+              17,
+              27
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "location",
+      "name": "workbench",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 5,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "location",
+      "name": "Kitchen table",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 3,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "location",
+      "name": "Camera shop",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "location",
+      "name": "Riverside park",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 3,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "cast",
+      "name": "Sam",
+      "hits": [
+        {
+          "rowId": "r3",
+          "field": "audioText",
+          "ranges": [
+            [
+              8,
+              11
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 11,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "cast",
+      "name": "Rita",
+      "hits": [
+        {
+          "rowId": "r17",
+          "field": "audioText",
+          "ranges": [
+            [
+              8,
+              12
+            ]
+          ]
+        },
+        {
+          "rowId": "r18",
+          "field": "visualText",
+          "ranges": [
+            [
+              61,
+              65
+            ]
+          ]
+        },
+        {
+          "rowId": "r18",
+          "field": "audioText",
+          "ranges": [
+            [
+              0,
+              4
+            ]
+          ]
+        },
+        {
+          "rowId": "r27",
+          "field": "audioText",
+          "ranges": [
+            [
+              469,
+              473
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 1,
+        "inTags": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "gear",
+      "name": "lav mic",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "gear",
+      "name": "overhead rig",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "gear",
+      "name": "gimbal",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Title card",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Lower third",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 4,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Split screen",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Price counter",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "End screen",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "intro sting",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "lo-fi bed",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 3,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "shutter click",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 3,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Arrow callout",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Counter",
+      "hits": [
+        {
+          "rowId": "r17",
+          "field": "visualText",
+          "ranges": [
+            [
+              40,
+              47
+            ]
+          ]
+        },
+        {
+          "rowId": "r19",
+          "field": "visualText",
+          "ranges": [
+            [
+              30,
+              37
+            ]
+          ]
+        },
+        {
+          "rowId": "r20",
+          "field": "audioText",
+          "ranges": [
+            [
+              576,
+              583
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 2,
+        "inTags": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Viewfinder overlay",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "shop door bell",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "cash register ding",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Screen recording",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "vfx",
+      "name": "Ken Burns",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "outro sting",
+      "hits": [],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    }
+  ],
+  "healed": 0,
+  "registryAfterHeal": "unchanged",
+  "entriesAfterHeal": "same as entries",
+  "healedAgain": 0,
+  "brollRepair": "same as brollRead",
+  "shotsAfterRepair": "unchanged",
+  "anchored": 0,
+  "visualAfterAnchoring": "unchanged",
+  "brollAfterAnchoring": "same as brollRepair"
+}
