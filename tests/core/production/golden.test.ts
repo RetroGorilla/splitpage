@@ -162,7 +162,11 @@ function masked(out: Out, input: unknown): Out {
 function matchesGolden(name: string, mine: Out): void {
   const golden = fixture(name);
   assert.deepEqual(Object.keys(mine), Object.keys(golden).filter((k) => PRESENTATION_ONLY.indexOf(k) === -1));
-  Object.keys(mine).forEach((k) => assert.deepEqual(mine[k], golden[k], name + ": " + k));
+  Object.keys(mine).forEach((k) => sameText(mine[k], golden[k], name + ": " + k));
+}
+
+function sameText(mine: unknown, golden: unknown, label: string): void {
+  assert.equal(JSON.stringify(mine, null, 2), JSON.stringify(golden, null, 2), label);
 }
 
 test("every long demo cell is in stored form, so the stored reader decodes it as the app does", () => {
@@ -331,7 +335,7 @@ test("cue retitling: the healing plans, applied step by step, match every legacy
     }]
   ]);
 
-  assert.deepEqual(out, fixture("cue-retitle"));
+  sameText(out, fixture("cue-retitle"), "cue-retitle");
 });
 
 test("the Gear quick add: each plan, applied as the panel applies it, leaves the registry the legacy apply left", () => {
@@ -385,6 +389,6 @@ test("the Gear quick add: each plan, applied as the panel applies it, leaves the
   mine.forEach((step, i) => {
     const want = Object.assign({}, golden[i]);
     Reflect.deleteProperty(want, "personColors");
-    assert.deepEqual(step, want, String(step.step));
+    sameText(step, want, String(step.step));
   });
 });
