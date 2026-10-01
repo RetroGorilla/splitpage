@@ -329,10 +329,20 @@ anything else in the file) is a comment unless `DIRECTIVES` in
 today. A file that does not parse (a broken YAML file) fails the gate, and so
 does a workflow step whose shell cannot be told (above).
 
-Not scanned yet, because no parser covers them: `.gitignore`,
-`.gitattributes`, `.dockerignore`, `.npmrc`, `.env.example` and other
-dotfiles, NSIS scripts (`desktop/build/installer.nsh`), and Markdown. Inside
-workflows, JavaScript run through `shell: node {0}` or an
+Not scanned yet, because no parser covers them: dotfiles, NSIS scripts and
+Markdown. The configuration files among them that the no-comment rule covers,
+with the comments each held on 30 September 2026:
+
+| File | Comment lines |
+| --- | --- |
+| `.gitignore` | 31 |
+| `.gitattributes` | 5 |
+| `desktop/.npmrc` | 3 (why `arch=arm64` is pinned; [ci.md](ci.md) explains how CI overrides it) |
+| `.env.example` | 85, five of them commented-out optional settings. These are setup instructions for the person filling in `.env` on the server, so moving them out of the file is the owner's decision, not a mechanical cleanup |
+| `desktop/build/installer.nsh` | 178: 167 whole-line `;` comments and 11 trailing ones saying what each register saved by a `Push` holds |
+| `.dockerignore`, `.editorconfig`, `.nvmrc`, `desktop/.gitignore` | none |
+
+Inside workflows, JavaScript run through `shell: node {0}` or an
 `actions/github-script` `script:` is not scanned as JavaScript, and a `run:`
 given as a YAML alias (`run: *name`) is not read as a script unless its anchor
 is itself a step's `run:`.
