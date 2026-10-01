@@ -144,6 +144,18 @@ test("imageRefOf reads a node through the image source", () => {
   assert.deepEqual(ports.log, [["known", KNOWN.sha256], ["fromDataUrl", GIF.dataUrl]]);
 });
 
+test("an adapter builds every video card in one inert document of its own, which stays empty", () => {
+  const rt = adapterWith(fakePorts());
+  const a = rt.videoCardElement("https://youtu.be/a");
+  const b = rt.videoCardElement("https://youtu.be/b");
+  assert.equal(rt.videoCardHtml("https://youtu.be/c"), rt.videoCardElement("https://youtu.be/c").outerHTML);
+  assert.equal(a.ownerDocument, b.ownerDocument);
+  assert.notEqual(a, b);
+  assert.equal(a.ownerDocument.body.childNodes.length, 0);
+  assert.notEqual(rt.inertBody("x").ownerDocument, a.ownerDocument);
+  assert.notEqual(adapterWith(fakePorts()).videoCardElement("https://youtu.be/a").ownerDocument, a.ownerDocument);
+});
+
 test("a video card's HTML is its element's, and survives sanitising unchanged", () => {
   const ports = fakePorts();
   const rt = adapterWith(ports);

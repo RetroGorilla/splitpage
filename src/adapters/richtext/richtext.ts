@@ -70,8 +70,11 @@ export function createRichText(ports: RichTextPorts): RichText {
     return walkToMd(inertBody(html)).replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  let cardDoc: Document | null = null;
+
   function cardElement(href: string): HTMLAnchorElement {
-    return videoCardElement(inertBody("").ownerDocument, href);
+    if (!cardDoc) cardDoc = inertBody("").ownerDocument;
+    return videoCardElement(cardDoc, href);
   }
 
   return {
