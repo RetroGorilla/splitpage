@@ -1,0 +1,91 @@
+import type { IdSource, ImageSource } from "../../core/document/ports.ts";
+import type { StoredImageRef } from "../../core/document/text-policy.ts";
+import type { DecodeOptions } from "../../core/text/ports.ts";
+import type { Run } from "../../core/text/runs.ts";
+import { createCellReader, decodeBody } from "./decode.ts";
+import type { CellReader } from "./decode.ts";
+import { walkToMd } from "./markdown.ts";
+import { imageRefOf, videoCardElement, walkSanitize } from "./sanitize.ts";
+
+export type { CellReader } from "./decode.ts";
+
+export interface RichTextPorts {
+  readonly DOMParser: new () => DOMParser;
+  readonly images: ImageSource;
+  readonly ids: IdSource;
+}
+
+export interface RichText {
+  inertBody(html: unknown): HTMLElement;
+  sanitize(html: unknown): string;
+  decode(html: unknown, opts?: DecodeOptions | null): Run[];
+  createCellReader(): CellReader;
+  storedHtmlFromDom<T>(html: T): T | string;
+  htmlToMarkdown(html: unknown): string;
+  videoCardElement(href: string): HTMLAnchorElement;
+  videoCardHtml(href: string): string;
+  imageRefOf(node: Element): StoredImageRef | null;
+}
+
+const STORED_IMG_ATTRS: Record<string, boolean> = { "class": true, "data-blob": true, "data-w": true, "data-h": true, "data-mime": true };
+
+export function createRichText(ports: RichTextPorts): RichText {
+  const Parser = ports.DOMParser;
+  const images = ports.images;
+  const ids = ports.ids;
+
+  function inertBody(html: unknown): HTMLElement {
+    const doc = new Parser().parseFromString(
+      "<!doctype html><body>" + (html == null ? "" : String(html)), "text/html");
+    return doc.body;
+  }
+
+  function sanitize(html: unknown): string {
+    const body = inertBody(html);
+    const doc = body.ownerDocument;
+    const out = doc.createElement("div");
+    walkSanitize(body, out, { doc: doc, images: images, ids: ids });
+    return out.innerHTML;
+  }
+
+  function decode(html: unknown, opts?: DecodeOptions | null): Run[] {
+    return decodeBody(inertBody(sanitize(html == null ? "" : String(html))), opts);
+  }
+
+  function storedHtmlFromDom<T>(html: T): T | string {
+    if (typeof html !== "string" || html.indexOf("data-blob") === -1) return html;
+    const body = inertBody(html);
+    const imgs = body.querySelectorAll("img[data-blob]");
+    if (!imgs.length) return html;
+    imgs.forEach(function (img) {
+      Array.from(img.attributes).forEach(function (a) {
+        if (!STORED_IMG_ATTRS[a.name]) img.removeAttribute(a.name);
+      });
+    });
+    return body.innerHTML;
+  }
+
+  function htmlToMarkdown(html: unknown): string {
+    if (!html) return "";
+    return walkToMd(inertBody(html)).replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  let cardDoc: Document | null = null;
+
+  function cardElement(href: string): HTMLAnchorElement {
+    if (!cardDoc) cardDoc = inertBody("").ownerDocument;
+    return videoCardElement(cardDoc, href);
+  }
+
+  return {
+    inertBody: inertBody,
+    sanitize: sanitize,
+    decode: decode,
+    createCellReader: function () { return createCellReader(decode); },
+    storedHtmlFromDom: storedHtmlFromDom,
+    htmlToMarkdown: htmlToMarkdown,
+    videoCardElement: cardElement,
+    videoCardHtml: function (href) { return cardElement(href).outerHTML; },
+    imageRefOf: function (node) { return imageRefOf(node, images); }
+  };
+}

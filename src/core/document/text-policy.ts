@@ -58,11 +58,23 @@ export function safeId(id: unknown, prefix: string, ids: IdSource): string {
   return clean || ids.id(prefix);
 }
 
-function storedImageMarkup(ref: ImageRef): string {
-  let html = '<img class="comment-img" data-blob="' + ref.sha256 + '"';
+export type StoredImageRef = Pick<ImageRef, "sha256"> & Partial<Omit<ImageRef, "sha256">>;
+
+export type StoredImageAttribute = readonly [name: string, value: string];
+
+export function storedImageAttributes(ref: StoredImageRef): StoredImageAttribute[] {
+  const attrs: StoredImageAttribute[] = [["class", "comment-img"], ["data-blob", ref.sha256]];
   if (ref.width && ref.height && ref.mime) {
-    html += ' data-w="' + String(ref.width) + '" data-h="' + String(ref.height) + '" data-mime="' + ref.mime + '"';
+    attrs.push(["data-w", String(ref.width)], ["data-h", String(ref.height)], ["data-mime", ref.mime]);
   }
+  return attrs;
+}
+
+export function storedImageMarkup(ref: StoredImageRef): string {
+  let html = "<img";
+  storedImageAttributes(ref).forEach(function (attr) {
+    html += " " + attr[0] + '="' + escapeHtml(attr[1]) + '"';
+  });
   return html + ">";
 }
 

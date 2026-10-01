@@ -8,8 +8,11 @@ import {
   safeHref,
   safeId,
   safeImageSrc,
-  storedImageHtml
+  storedImageAttributes,
+  storedImageHtml,
+  storedImageMarkup
 } from "../../../src/core/document/text-policy.ts";
+import type { StoredImageRef } from "../../../src/core/document/text-policy.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
 
 const SHA = "ab".repeat(32);
@@ -94,6 +97,31 @@ test("storedImageHtml is the stored image tag of a valid reference, and nothing 
   assert.equal(storedImageHtml({ sha256: SHA, width: 640, height: 480, mime: "image/svg+xml" }), "");
   assert.equal(storedImageHtml(null), "");
   assert.equal(storedImageHtml([SHA]), "");
+});
+
+test("the stored image tag is written from one attribute list, with the size only when all of it is there", () => {
+  const full = { sha256: SHA, width: 640, height: 480, mime: "image/png" };
+  assert.deepEqual(storedImageAttributes(full),
+    [["class", "comment-img"], ["data-blob", SHA], ["data-w", "640"], ["data-h", "480"], ["data-mime", "image/png"]]);
+  assert.equal(storedImageMarkup(full), storedImageHtml(full));
+  assert.deepEqual(storedImageAttributes({ sha256: SHA }), [["class", "comment-img"], ["data-blob", SHA]]);
+  assert.equal(storedImageMarkup({ sha256: SHA }), '<img class="comment-img" data-blob="' + SHA + '">');
+  assert.equal(storedImageMarkup({ sha256: SHA, width: 640, mime: "image/png" }), storedImageMarkup({ sha256: SHA }));
+  assert.equal(storedImageMarkup({ sha256: SHA, width: 0, height: 480, mime: "image/png" }), storedImageMarkup({ sha256: SHA }));
+});
+
+test("storedImageMarkup escapes every attribute value, so no field can open an attribute or a tag", () => {
+  const hostile = `x" onerror="alert('1')" <b>&amp;`;
+  const escaped = "x&quot; onerror=&quot;alert('1')&quot; &lt;b&gt;&amp;amp;";
+  for (const field of ["sha256", "width", "height", "mime"] as const) {
+    const ref = { sha256: SHA, width: 640, height: 480, mime: "image/png", [field]: hostile } as unknown as StoredImageRef;
+    const v = { sha256: SHA, width: "640", height: "480", mime: "image/png", [field]: escaped };
+    assert.equal(storedImageMarkup(ref),
+      '<img class="comment-img" data-blob="' + v.sha256 + '" data-w="' + v.width + '" data-h="' + v.height + '" data-mime="' + v.mime + '">', field);
+    assert.equal(storedImageMarkup(ref).split('"').length, 11, field);
+    assert.ok(storedImageAttributes(ref).some(([, value]) => value === hostile), field + " stays raw in the attribute list");
+  }
+  assert.equal(storedImageMarkup({ sha256: hostile }), '<img class="comment-img" data-blob="' + escaped + '">');
 });
 
 test("escapeHtml escapes the four characters an attribute or text needs, and nothing else", () => {
