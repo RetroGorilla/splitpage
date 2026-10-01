@@ -1,11 +1,10 @@
 import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { pad2, paintRowTimes, render, renderRow } from "./05-render.js";
+import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
-import { cellOf, spokenText } from "./04c-doc-model.js";
-import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
+import { productionReaders, scheduleProductionRefresh } from "./07-production-tags.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { queueAutoSave } from "./14-export.js";
 import {
@@ -19,13 +18,24 @@ import {
   parseSceneLength,
   targetLengthOf
 } from "../core/document/timing.ts";
+import {
+  estimatedSeconds as estimatedSecondsIn,
+  formatDuration,
+  formatTimecode,
+  rowSeconds as rowSecondsIn,
+  targetClock,
+  totalSeconds as totalSecondsIn
+} from "../core/production/timing.ts";
 export {
   DEFAULT_WPM,
   SCENE_LENGTH_MAX,
+  formatDuration,
+  formatTimecode,
   hasSetLength,
   normalizeSceneLength,
   normalizeTargetLength,
   parseSceneLength,
+  targetClock,
   targetLengthOf
 };
 
@@ -50,37 +60,15 @@ export function rowStatus(id) {
 }
 
 export function estimatedSeconds(row) {
-  var wpm = (S.state && S.state.wordsPerMinute) || DEFAULT_WPM;
-  return wordCount(row.audioText) / wpm * 60;
+  return estimatedSecondsIn(row, S.state, productionReaders);
 }
 
 export function rowSeconds(row) {
-  return hasSetLength(row) ? row.lengthSeconds : estimatedSeconds(row);
+  return rowSecondsIn(row, S.state, productionReaders);
 }
 
 export function totalSeconds() {
-  return S.state.rows.reduce(function (n, r) { return n + rowSeconds(r); }, 0);
-}
-
-export function targetClock(total, target) {
-  var diff = Math.round(target) - Math.max(0, Math.round(total));
-  return {
-    target: formatDuration(target),
-    delta: formatDuration(Math.abs(diff)),
-    over: diff < 0
-  };
-}
-
-export function formatDuration(sec) {
-  var whole = Math.max(0, Math.round(sec));
-  var h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
-  return h ? (h + ":" + pad2(m) + ":" + pad2(s)) : (m + ":" + pad2(s));
-}
-
-export function formatTimecode(sec) {
-  var whole = Math.max(0, Math.round(sec));
-  var h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
-  return (h ? h + ":" : "") + pad2(m) + ":" + pad2(s);
+  return totalSecondsIn(S.state, productionReaders);
 }
 
 var LENGTH_TITLE = "The script's read time, from the Audio column — click to set your reading speed or a target length";
@@ -154,8 +142,5 @@ export function cycleRowStatus(rowId) {
 }
 
 export function __init() {
-  wordCount = contentMemo(function (html) {
-    var text = spokenText(cellOf(html));
-    return text ? text.split(/\s+/).filter(Boolean).length : 0;
-  });
+  wordCount = productionReaders.wordCount;
 }
