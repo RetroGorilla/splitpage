@@ -16,6 +16,10 @@ appear in the app under **Help**. The format follows
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Saving while a script was still opening, with **Save** in the header or in
+  writer mode or with Save in the desktop app's menu bar (Ctrl+S), did
+  nothing and reported an error in the background. It now says "Still
+  loading…", as the File menu's commands already did.
 
 ## 3.1.0 — 2026-09-29
 
