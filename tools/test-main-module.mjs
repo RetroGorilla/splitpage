@@ -90,6 +90,21 @@ if (problem && process.platform === "win32" && !process.env.CI) {
     const linked = node(repo, [join("linked", script), ...args]);
     check(`${script} run through a linked folder`, ok(linked), `exit ${linked.code}, stdout ${JSON.stringify(linked.out.slice(0, 200))}, stderr ${JSON.stringify(linked.err.slice(0, 200))}`);
   }
+
+  console.log("\nthe shipped updater runs when started through a linked folder:\n");
+
+  const app = join(work, "app");
+  mkdirSync(app);
+  copyFileSync(join(REPO, "update.mjs"), join(app, "update.mjs"));
+  const appProblem = link(app, join(work, "linked-app"));
+  const env = { ...process.env, SPLITPAGE_UPDATE_API: "invalid:" };
+  const updater = (dir) => {
+    const r = spawnSync(process.execPath, [join(dir, "update.mjs"), "--json"], { cwd: work, encoding: "utf8", env, timeout: 60000 });
+    return { code: r.status, out: r.stdout ?? "" };
+  };
+  eq("update.mjs run directly reports the failed check", [updater("app").code, updater("app").out.includes('"ok":false')], [1, true]);
+  if (appProblem) check("the app folder can be linked", false, appProblem);
+  else eq("update.mjs run through a linked folder reports it too", [updater("linked-app").code, updater("linked-app").out.includes('"ok":false')], [1, true]);
 }
 
 for (const path of links) unlinkSync(path);

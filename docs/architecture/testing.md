@@ -107,8 +107,10 @@ fails the run.
 A tool runs its command only when it is the script Node was started with,
 which `isMain` in `tools/main-module.mjs` decides by comparing the real paths
 of both, so a checkout reached through a junction or symlink still runs the
-gates instead of exiting 0 having done nothing. `tools/test-main-module.mjs`
-starts every tool through such a link, with the same skip rule.
+gates instead of exiting 0 having done nothing. `update.mjs` makes the same
+comparison itself, because it ships in the release zip without `tools/`.
+`tools/test-main-module.mjs` starts every tool and the updater through such a
+link, with the same skip rule.
 
 ## TypeScript
 
