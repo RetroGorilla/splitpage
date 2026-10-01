@@ -22,6 +22,7 @@ export const GROUPS = [
     runner: "node-test",
     matches: (p) => p.startsWith("src/") && !p.startsWith("src/test/") && TEST_FILE.test(p),
     requiredWhen: (files) => files.some((p) => MIGRATED_ROOTS.some((r) => p.startsWith(r)) && TS_SOURCE.test(p) && !TEST_FILE.test(p))
+      && !files.some((p) => p.startsWith("tests/") && TEST_FILE.test(p))
   },
   {
     name: "tests",

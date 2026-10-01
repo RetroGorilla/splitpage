@@ -1,0 +1,52 @@
+# Invariant INV-20: the header's Save and the Writer's Save show one save
+# state (4.0 milestone 1, which gave them one Save action). After an edit,
+# during a save, after a save that failed and after one that went through,
+# both show the same text, dirty mark and disabled state; while a save runs
+# neither starts another, from either button, the desktop app's native menu
+# or Ctrl+S. Passes against the code before the action registry
+# (4.0-development 47c0309) and after it. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; window.D = window.__desktopTest; if (A.enabled()) A.toggle(); window.pair = function () { return ['btn-save', 'wr-save'].map(function (id) { var b = document.getElementById(id); return b.textContent + '|' + b.classList.contains('is-dirty') + '|' + b.disabled; }).join(' ~ '); }; window.same = function () { var p = pair().split(' ~ '); return p[0] === p[1]; }; window.__mode = 'ok'; window.__writes = 0; var text = JSON.stringify({ schema: 2, title: 'Two buttons', rows: [{ id: 'r1', visualText: 'Wide', audioText: 'First words.', status: 'todo' }], comments: [] }); window.__mtime = Date.now() - 100000; window.__h = { name: 'two.splitpage', createWritable: function () { window.__writes++; if (window.__mode === 'fail') return Promise.reject(new Error('disk full')); if (window.__mode === 'hold') return new Promise(function (res) { window.__release = function () { res({ write: async function () {}, close: async function () { window.__mtime = Date.now(); } }); }; }); return Promise.resolve({ write: async function () {}, close: async function () { window.__mtime = Date.now(); } }); }, getFile: async function () { return new File([text], 'two.splitpage', { lastModified: window.__mtime }); } }; return F.openFile(new File([text], 'two.splitpage', { lastModified: window.__mtime }), window.__h); })()
+wait F.docFile().name === 'two.splitpage'
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+expect pair() === 'Save|false|false ~ Save|false|false'
+
+# --- after an edit ------------------------------------------------------------------
+eval (function(){ F.state().rows[0].audioText += ' More.'; D.markDirtyForTest(); return true; })()
+sleep 200
+expect pair() === 'Save •|true|false ~ Save •|true|false'
+
+# --- during a save: both say so, and neither starts a second one ----------------
+eval (function(){ window.__mode = 'hold'; window.__writes = 0; return true; })()
+jsclick #wr-save
+wait typeof window.__release === 'function'
+expect pair() === 'Saving…|false|true ~ Saving…|false|true'
+jsclick #btn-save
+jsclick #wr-save
+eval D.runMenuCommand('save'); true
+key ctrl KeyS
+sleep 300
+expect window.__writes === 1
+expect same()
+eval window.__release(); true
+wait pair() === 'Save|false|false ~ Save|false|false'
+
+# --- a save that fails: both keep the dirty mark and can try again --------------
+eval (function(){ F.state().rows[0].audioText += ' Again.'; D.markDirtyForTest(); window.__mode = 'fail'; return true; })()
+sleep 200
+jsclick #wr-save
+wait Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function (t) { return t.textContent === 'Could not save — disk full.'; })
+expect pair() === 'Save •|true|false ~ Save •|true|false'
+
+# --- and one that goes through ------------------------------------------------------
+eval (function(){ window.__mode = 'ok'; return true; })()
+jsclick #btn-save
+wait pair() === 'Save|false|false ~ Save|false|false'
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+expect same()

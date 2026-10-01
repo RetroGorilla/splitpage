@@ -1,0 +1,86 @@
+# What the header says about saving, for each place a script can be kept (4.0
+# milestone 1, pinned before milestone 4 gives each destination its own save
+# state): no destination yet, a browser file with autosave off and on, an
+# imported file written back in place or as a new copy, and a hosted script.
+# For each: #save-status (text, tooltip, class), the header Save button's
+# status words, state and tooltip, the file chip, the File menu's card, and
+# Save to file. Times are read in the page and compared as "T". 187-autosave-
+# status-words.txt covers the words over time; this is the matrix. Passes
+# against the code before the action registry (4.0-development 19c66f7 and
+# 47c0309) and after it. Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; window.H = window.__hostedTest; window.M = window.__fileMenuTest; A.timing().idle = 40; A.timing().hostedIdle = 40; A.timing().max = 400; window.T = function (s) { return String(s).replace(/\d{1,2}:\d{2}(\s?[AP]M)?/g, 'T'); }; window.st = function () { var s = document.getElementById('save-status'); return s.hidden ? 'hidden' : [s.textContent, T(s.title), s.className].join(' | '); }; window.btn = function () { var b = document.getElementById('btn-save'); return [b.textContent, b.getAttribute('data-status'), b.getAttribute('data-state'), b.getAttribute('aria-label'), T(b.title)].join(' | '); }; window.chip = function () { var c = document.getElementById('file-chip'); if (c.hidden) return 'hidden'; var s = document.getElementById('file-chip-state'); return [document.getElementById('file-chip-name').textContent, s.textContent, s.className].join(' | '); }; window.card = function () { var v = M.cardView(); return v.name + ' :: ' + v.bits.map(function (b) { return b.text + (b.unsaved ? ' (unsaved)' : '') + (b.title ? ' [' + T(b.title) + ']' : ''); }).join(' · '); }; window.back = function () { var b = document.getElementById('menu-save-back'); return (b.disabled ? 'disabled' : 'enabled') + ' | ' + b.textContent; }; window.doc = function (title, words) { return JSON.stringify({ schema: 2, title: title, rows: [{ id: 'r1', visualText: 'Wide', audioText: words, status: 'todo' }, { id: 'r2', visualText: 'Close', audioText: 'Second scene.', status: 'todo' }], comments: [] }); }; window.fakeFile = function (name, text) { var h = { name: name, _text: text, _mtime: Date.now() - 100000, _writes: 0, createWritable: async function () { h._writes++; return { write: async function (b) { h._text = typeof b === 'string' ? b : await new Response(b).text(); }, close: async function () { h._mtime = Date.now(); } }; }, getFile: async function () { return new File([h._text], name, { lastModified: h._mtime }); } }; return h; }; window.edit = function (w) { F.state().rows[0].audioText += w; window.__desktopTest.markDirtyForTest(); return true; }; return true; })()
+
+# --- no destination yet -----------------------------------------------------------
+expect st() === 'hidden'
+expect btn() === 'Save | Save | none | Save | Save this script'
+expect chip() === 'hidden'
+expect card() === 'Not saved yet :: Save to choose where it’s kept'
+expect back() === 'disabled | Save to file'
+expect A.target() === null
+eval edit(' more')
+sleep 200
+expect st() === 'Unsaved changes | Press Save to choose where this script is kept. | save-status is-pending'
+expect btn() === 'Save • | Unsaved changes | pending | Unsaved changes. Save now | Press Save to choose where this script is kept. Click to save now.'
+expect card() === 'Not saved yet :: Save to choose where it’s kept'
+
+# --- a browser file ---------------------------------------------------------------
+eval (function(){ window.__a = fakeFile('first.splitpage', doc('First', 'Opening words.')); return F.openFile(new File([__a._text], 'first.splitpage', { lastModified: __a._mtime }), __a); })()
+wait F.docFile().name === 'first.splitpage'
+expect st() === 'Saved | Up to date with first.splitpage. | save-status is-ok'
+expect btn() === 'Save | All changes saved | ok | All changes saved. Save now | Up to date with first.splitpage. Click to save now.'
+expect chip() === 'hidden'
+expect card() === 'first.splitpage :: All changes saved [Last saved at T] · Splitpage file'
+expect A.target() == file
+eval (function(){ if (A.enabled()) A.toggle(); return A.enabled(); })()
+eval edit(' more')
+sleep 200
+expect st() === 'Unsaved changes | Autosave is off — press Save to write these to first.splitpage. | save-status is-pending'
+expect btn() === 'Save • | Unsaved changes | pending | Unsaved changes. Save now | Autosave is off — press Save to write these to first.splitpage. Click to save now.'
+expect card() === 'first.splitpage :: Unsaved changes (unsaved) · Splitpage file'
+eval (function(){ if (!A.enabled()) A.toggle(); return A.enabled(); })()
+eval edit(' again')
+wait st() === 'Saved | Last saved to first.splitpage at T. | save-status is-ok'
+expect btn() === 'Save | Saved just now | ok | Saved just now. Save now | Last saved to first.splitpage at T. Click to save now.'
+expect card() === 'first.splitpage :: Saved just now [Last saved at T] · Splitpage file'
+expect __a._text.indexOf('again') !== -1
+
+# --- an imported file, written back in place ----------------------------------------
+eval (function(){ window.__h = { name: 'notes.txt', createWritable: async function () { return { write: async function () {}, close: async function () {} }; }, getFile: async function () { return new File(['one\n\ntwo'], 'notes.txt', { type: 'text/plain' }); } }; return F.openFile(new File(['one\n\ntwo'], 'notes.txt', { type: 'text/plain', lastModified: 1000 }), window.__h); })()
+wait H.home().kind === 'import'
+expect st() === 'Unsaved changes | Press Save to choose where this script is kept. | save-status is-pending'
+expect chip() === 'notes.txt | · up to date | file-chip-state'
+expect card() === 'notes.txt :: Up to date · Plain text'
+expect back() === 'enabled | Save to notes.txt'
+expect A.target() === null
+eval edit(' three')
+sleep 200
+expect chip() === 'notes.txt | · unsaved changes | file-chip-state unsaved'
+expect card() === 'notes.txt :: Not written back yet (unsaved) · Plain text'
+expect back() === 'enabled | Save to notes.txt'
+
+# --- an imported file with no handle, written back as a new copy -------------------
+eval (function(){ return F.openFile(new File(['uno\n\ndos'], 'copy.txt', { type: 'text/plain', lastModified: 1000 }), null); })()
+wait H.home().kind === 'import' && H.home().name === 'copy.txt'
+expect chip() === 'copy.txt | · up to date | file-chip-state'
+expect card() === 'copy.txt :: Up to date · Plain text'
+expect back() === 'enabled | Save a new copy of copy.txt'
+
+# --- a hosted script --------------------------------------------------------------
+eval (function(){ window.__puts = 0; window.__rev = 1; var real = window.fetch.bind(window); window.fetch = function (url, opts) { var u = String(url); if (opts && opts.method === 'PUT' && u.indexOf('api/docs/') !== -1) { window.__puts++; window.__rev++; return Promise.resolve(new Response(JSON.stringify({ id: 'doc-auto', rev: window.__rev, updatedAt: new Date().toISOString(), updatedBy: 'Me' }), { status: 200, headers: { 'content-type': 'application/json' } })); } if (u.indexOf('api/') !== -1) return new Promise(function () {}); return real(url, opts); }; return true; })()
+eval (function(){ H.setSession({ docId: 'doc-auto', rev: 1 }); return H.role(); })()
+sleep 300
+expect A.target() == server
+eval (function(){ A.timing().hostedIdle = 2500; A.timing().max = 5000; return true; })()
+eval edit(' hosted')
+sleep 100
+expect st() === 'Unsaved changes | Autosave will write these to the server a moment after you stop typing. | save-status is-pending'
+expect chip() === 'On the server | · saving… | file-chip-state unsaved'
+expect back() === 'disabled | Save to file'
+wait window.__puts >= 1 && st() === 'Saved | Last saved to the server at T. | save-status is-ok'
+expect btn() === 'Save | Saved just now | ok | Saved just now. Save now | Last saved to the server at T. Click to save now.'
+expect chip() === 'On the server | · v2, everyone sees this | file-chip-state'
+expect card() === 'copy :: All changes saved · On the server · v2'
+eval (function(){ H.setSession({ docId: null }); return true; })()

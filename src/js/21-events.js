@@ -5,7 +5,6 @@ import { cycleRowStatus } from "./01-scene-status.js";
 import {
   expandHiddenShotStrip,
   revealRow,
-  toggleHideShotScenes,
   updateHideShotMenu
 } from "./01b-hide-shot.js";
 import { loadInitialState } from "./02-state.js";
@@ -132,7 +131,6 @@ import {
   closeProductionPanel,
   handleSelectionClick,
   jumpToTag,
-  openGearPanel,
   openProductionPanel,
   renderGearList,
   renderProduction,
@@ -152,10 +150,8 @@ import {
   bulkTagOpen,
   closeBulkTag,
   closeFindBar,
-  findOpen,
   findQueryChanged,
   leaveFindAtMatch,
-  openFindBar,
   pickBulkTagCat,
   replaceAll,
   replaceCurrent,
@@ -242,7 +238,7 @@ import {
   tryResumeLastProject
 } from "./18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "./18a-local-merge.js";
-import { refusedUnderOverlay, toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
+import { toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
 import {
   applyWriterSize,
   caretTextOffset,
@@ -251,7 +247,6 @@ import {
   jumpFromWriterToRow,
   onWriterFormat,
   onWriterKeydown,
-  openWriter,
   placeCaretAtTextOffset,
   renderWriter,
   scheduleWriterStats,
@@ -265,7 +260,6 @@ import {
   buildPrompterContent,
   closePrompter,
   cueSceneForCurrentPosition,
-  openPrompter,
   promptSceneMode,
   prompterFlip,
   prompterMirror,
@@ -297,6 +291,7 @@ import {
   armServerDraftResume,
   draftRestorePending
 } from "./20g-drafts.js";
+import { appActions } from "../legacy/app-actions.ts";
 
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
@@ -1238,24 +1233,6 @@ function init() {
     if (e.target.id === "replace-input") { replaceCurrent(); return; }
     stepFind(e.shiftKey ? -1 : 1);
   });
-  window.addEventListener("keydown", function (e) {
-    if (!(e.ctrlKey || e.metaKey) || (e.key !== "f" && e.key !== "F")) return;
-    if (!S.state) return;
-    if (writerOpen) return;
-    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
-    e.preventDefault();
-    if (findOpen) { document.getElementById("find-input").select(); }
-    else openFindBar();
-  });
-
-  window.addEventListener("keydown", function (e) {
-    if (!(e.ctrlKey || e.metaKey) || !e.altKey) return;
-    if (e.key !== "h" && e.key !== "H") return;
-    if (!S.state) return;
-    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
-    e.preventDefault();
-    toggleHideShotScenes();
-  });
 
   document.addEventListener("focusin", function (e) {
     var cell = e.target.closest && e.target.closest(".cell-editable");
@@ -1274,11 +1251,7 @@ function init() {
     if (e.target.closest(".btn")) e.preventDefault();
   });
 
-  document.getElementById("btn-production").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading...", "warn"); return; }
-    var panel = document.getElementById("production-panel");
-    if (panel.hidden) openProductionPanel(); else closeProductionPanel();
-  });
+  document.getElementById("btn-production").addEventListener("click", function () { runFromButton("panel-production"); });
   document.getElementById("production-close").addEventListener("click", closeProductionPanel);
   wireTagEntityContainer("production-panel");
   document.getElementById("production-panel").addEventListener("keydown", function (e) {
@@ -1310,11 +1283,7 @@ function init() {
     }
   });
 
-  document.getElementById("btn-gear").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading...", "warn"); return; }
-    var panel = document.getElementById("gear-panel");
-    if (panel.hidden) openGearPanel(); else closeGearPanel();
-  });
+  document.getElementById("btn-gear").addEventListener("click", function () { runFromButton("panel-gear"); });
   document.getElementById("gear-close").addEventListener("click", closeGearPanel);
   wireTagEntityContainer("gear-panel");
   document.getElementById("gear-modes").addEventListener("click", function (e) {
@@ -1497,11 +1466,7 @@ function init() {
     el.addEventListener("drop", onDraftDrop);
   });
 
-  document.getElementById("btn-comments").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading…", "warn"); return; }
-    var panel = document.getElementById("comments-panel");
-    if (panel.hidden) openCommentsPanel(); else closeCommentsPanel();
-  });
+  document.getElementById("btn-comments").addEventListener("click", function () { runFromButton("panel-comments"); });
   document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
   initSidePanelResizeHandles();
   document.getElementById("comments-panel").addEventListener("change", function (e) {
@@ -1573,10 +1538,7 @@ function init() {
   });
 
   document.getElementById("btn-save").addEventListener("click", saveFromButton);
-  document.getElementById("btn-present").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading…", "warn"); return; }
-    openPrompter();
-  });
+  document.getElementById("btn-present").addEventListener("click", function () { runFromButton("present"); });
 
   document.getElementById("btn-file").addEventListener("click", function (e) {
     e.stopPropagation();
@@ -1719,11 +1681,7 @@ function init() {
     else if (e.key === "ArrowRight") { stepScene(1); }
   });
 
-  document.getElementById("btn-write").addEventListener("click", function () {
-    if (!S.state) { showToast("Still loading…", "warn"); return; }
-    if (reviewBlocked()) return;
-    openWriter();
-  });
+  document.getElementById("btn-write").addEventListener("click", function () { runFromButton("write"); });
 
   var writerDocEl = document.getElementById("writer-doc");
   writerDocEl.addEventListener("input", onRootInput);
@@ -1805,10 +1763,11 @@ function init() {
   if (S.DESKTOP && typeof initDesktop === "function") initDesktop();
 }
 
-function saveFromButton() {
-  if (refusedUnderOverlay("save")) return;
-  saveDoc();
+function runFromButton(id) {
+  appActions.invoke(id, "button");
 }
+
+function saveFromButton() { runFromButton("save"); }
 
 export function __init() {
   if (document.readyState === "loading") {

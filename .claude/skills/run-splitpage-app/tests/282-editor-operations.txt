@@ -1,0 +1,118 @@
+# Selected editor operations and what each one leaves behind (4.0 milestone
+# 1, pinned before milestones 2 and 3 move them into the document core and a
+# session): typing a word, Alt+Enter split, Ctrl+Enter new scene, Ctrl+B on a
+# selection, the status dot, deleting an empty scene and Alt+Arrow moving a
+# scene. For each: the rows it leaves, ONE undo entry, where the caret ends
+# up, and Ctrl+Z (and for typing Ctrl+Y) putting it back. Typing, the first
+# edit, marks the document unsaved; the others start from an unsaved document.
+# Undoing back to the rows it was opened with leaves it unsaved, as it does
+# today (checked after the first Ctrl+Z and again at the end). Passes against
+# the code before the action registry (4.0-development 47c0309) and after it.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var doc = { schema: 2, title: 'Editor ops', rows: [ { id: 'r1', visualText: 'Wide shot', audioText: 'Alpha bravo charlie', status: 'todo' }, { id: 'r2', visualText: '', audioText: '', status: 'todo' }, { id: 'r3', visualText: 'Close', audioText: 'Delta echo', status: 'todo' } ], comments: [] }; window.__loaded = F.state(); F.openFile(new File([JSON.stringify(doc)], 'editor-ops.splitpage')); return true; })()
+wait F.state() !== __loaded && F.state().title === 'Editor ops' && !!document.querySelector('#rows .row[data-id="r3"]')
+eval (function(){ window.cell = function(id, f){ return document.querySelector('#rows .row[data-id="' + id + '"] .' + (f || 'audio') + '-cell .cell-editable'); }; window.caretAt = function(el, offset){ el.focus(); var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); var n, seen = 0; while ((n = w.nextNode())) { if (offset <= seen + n.nodeValue.length) break; seen += n.nodeValue.length; } var r = document.createRange(); r.setStart(n, offset - seen); r.collapse(true); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; }; window.selText = function(el, a, b){ el.focus(); var n = el.firstChild; var r = document.createRange(); r.setStart(n, a); r.setEnd(n, b); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); }; window.rows = function(){ return F.state().rows.map(function(r){ return (['r1', 'r2', 'r3'].indexOf(r.id) === -1 ? 'new' : r.id) + '|' + r.visualText + '|' + r.audioText + '|' + r.status; }).join(' / '); }; window.undo = function(){ U.flush(); return U.sizes().undo + '/' + U.sizes().redo; }; window.unsaved = function(){ return document.getElementById('btn-save').textContent === 'Save •' && document.getElementById('save-status').textContent === 'Unsaved changes'; }; window.focusRow = function(){ var a = document.activeElement; var row = a && a.closest && a.closest('.row'); return row ? (row.getAttribute('data-id') === 'r1' ? 'r1' : 'other') + ':' + a.getAttribute('data-field') : 'none'; }; window.ORIG = 'r1|Wide shot|Alpha bravo charlie|todo / r2|||todo / r3|Close|Delta echo|todo'; return true; })()
+expect rows() === ORIG
+expect undo() === '0/0'
+expect document.getElementById('btn-save').textContent == Save
+expect document.getElementById('save-status').textContent == Saved
+
+# --- typing: one entry, unsaved; Ctrl+Z and Ctrl+Y --------------------------------
+eval caretAt(cell('r1'), 19)
+press xyz
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / r2|||todo / r3|Close|Delta echo|todo'
+expect undo() === '1/0'
+expect unsaved()
+expect focusRow() === 'r1:audioText'
+eval document.activeElement.blur()
+key ctrl KeyZ
+sleep 300
+expect rows() === ORIG
+expect undo() === '0/1'
+expect unsaved()
+key ctrl KeyY
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / r2|||todo / r3|Close|Delta echo|todo'
+expect undo() === '1/0'
+eval window.TYPED = rows(); true
+
+# --- Alt+Enter splits the focused column only ---------------------------------------
+eval caretAt(cell('r1'), 6)
+key alt Enter
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha |todo / new||bravo charliexyz|todo / r2|||todo / r3|Close|Delta echo|todo'
+expect undo() === '2/0'
+expect focusRow() === 'other:audioText'
+eval document.activeElement.blur()
+key ctrl KeyZ
+sleep 300
+expect rows() === TYPED
+expect undo() === '1/1'
+
+# --- Ctrl+Enter adds an empty scene after this one, caret in it -------------------
+eval caretAt(cell('r1'), 5)
+key ctrl Enter
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / new|||todo / r2|||todo / r3|Close|Delta echo|todo'
+expect undo() === '2/0'
+expect focusRow() === 'other:audioText'
+eval document.activeElement.blur()
+key ctrl KeyZ
+sleep 300
+expect rows() === TYPED
+expect undo() === '1/1'
+
+# --- Ctrl+B on a selection is in the document at once ----------------------------
+eval selText(cell('r3'), 0, 5)
+key ctrl KeyB
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / r2|||todo / r3|Close|<strong>Delta</strong> echo|todo'
+expect undo() === '2/0'
+eval document.activeElement.blur()
+key ctrl KeyZ
+sleep 300
+expect rows() === TYPED
+expect undo() === '1/1'
+
+# --- the status dot moves a scene on one status -----------------------------------
+eval document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]').click(); true
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|ready / r2|||todo / r3|Close|Delta echo|todo'
+expect undo() === '2/0'
+key ctrl KeyZ
+sleep 300
+expect rows() === TYPED
+expect undo() === '1/1'
+
+# --- an empty scene goes in one click ------------------------------------------------
+eval document.querySelector('#rows .row[data-id="r2"] [data-action="delete-row"]').click(); true
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / r3|Close|Delta echo|todo'
+expect undo() === '2/0'
+key ctrl KeyZ
+sleep 300
+expect rows() === TYPED
+expect undo() === '1/1'
+
+# --- Alt+ArrowUp moves the scene with the caret up one -------------------------------
+eval caretAt(cell('r3'), 3)
+key alt ArrowUp
+sleep 300
+expect rows() === 'r1|Wide shot|Alpha bravo charliexyz|todo / r3|Close|Delta echo|todo / r2|||todo'
+expect undo() === '2/0'
+eval document.activeElement.blur()
+key ctrl KeyZ
+sleep 300
+expect rows() === TYPED
+expect undo() === '1/1'
+
+# the typing undone too: the rows it was opened with, and still unsaved
+key ctrl KeyZ
+sleep 300
+expect rows() === ORIG
+expect undo() === '0/2'
+expect unsaved()

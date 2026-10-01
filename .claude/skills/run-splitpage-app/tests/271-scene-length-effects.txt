@@ -1,0 +1,75 @@
+# What setting a scene length does besides the length (4.0 milestone 1, the
+# characterisation before milestone 3 moves it into a command): a change that
+# changes nothing leaves the document, its dirty state and the undo stack
+# exactly as they were; a real change is one undo step and marks the document
+# unsaved. The editor itself is 173-scene-length.txt.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+sleep 400
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.__snap = function () { return JSON.stringify({ row: F.state().rows[0], undo: U.sizes(), dirty: document.getElementById('btn-save').classList.contains('is-dirty') }); }; window.__s0 = __snap(); return true; })()
+expect JSON.parse(__s0).dirty === false
+
+# --- the estimate confirmed unchanged: nothing ------------------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+key Enter
+sleep 300
+expect __snap() === window.__s0
+
+# --- Esc, and a box left by clicking away: nothing --------------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type 2:00
+key Escape
+sleep 300
+expect __snap() === window.__s0
+click #rows .row:nth-child(1) .row-read
+sleep 200
+click #rows .row:nth-child(2) .audio-cell .cell-editable
+sleep 300
+expect __snap() === window.__s0
+
+# --- not a length: nothing ---------------------------------------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type soon
+key Enter
+sleep 200
+expect document.querySelector('#rows .row-read-input') !== null
+key Escape
+sleep 300
+expect __snap() === window.__s0
+
+# --- a real change: the length, one undo step, unsaved -----------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type 1:30
+key Enter
+sleep 300
+expect F.state().rows[0].lengthSeconds === 90
+expect document.getElementById('btn-save').classList.contains('is-dirty')
+eval (function(){ window.__s1 = __snap(); return true; })()
+expect JSON.stringify(U.sizes()) !== JSON.stringify(JSON.parse(window.__s0).undo)
+
+# --- the same length again, typed another way: nothing -----------------------
+click #rows .row:nth-child(1) .row-read
+sleep 200
+type 90
+key Enter
+sleep 300
+expect __snap() === window.__s1
+click #rows .row:nth-child(1) .row-read
+sleep 200
+key Enter
+sleep 300
+expect __snap() === window.__s1
+
+# --- one undo takes the content back; the row keeps a fresh edit stamp -------
+key ctrl KeyZ
+sleep 300
+expect !('lengthSeconds' in F.state().rows[0])
+eval (function(){ window.__content = function (r) { var c = {}; Object.keys(r).forEach(function (k) { if (k !== 'updatedAt' && k !== 'updatedBy') c[k] = r[k]; }); return JSON.stringify(c); }; return true; })()
+expect __content(F.state().rows[0]) === __content(JSON.parse(window.__s0).row)
+# the undo is itself an edit to the row, stamped for merging
+expect F.state().rows[0].updatedAt !== JSON.parse(window.__s0).row.updatedAt
