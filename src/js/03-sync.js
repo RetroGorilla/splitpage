@@ -521,6 +521,7 @@ export function mergeStates(base, mine, theirs) {
       default: throw new Error("no merge strategy for state field " + f.key);
     }
   });
+  repointPeople(out, (theirs.people || []).concat(mine.people || []));
 
   return {
     merged: migrateRows(out),
@@ -560,6 +561,29 @@ export function mergePeople(basePeople, minePeople, theirPeople) {
     out.push({ id: p.id, name: p.name });
   });
   return out;
+}
+
+export function personIdRemap(people, mergedPeople) {
+  var kept = Object.create(null), byName = Object.create(null), remap = Object.create(null);
+  (mergedPeople || []).forEach(function (p) {
+    kept[p.id] = true;
+    byName[normalizeTagName(p.name)] = p.id;
+  });
+  (people || []).forEach(function (p) {
+    if (!p || !p.name || kept[p.id]) return;
+    var to = byName[normalizeTagName(p.name)];
+    if (to) remap[p.id] = to;
+  });
+  return remap;
+}
+
+function repointPeople(state, people) {
+  var remap = personIdRemap(people, state.people);
+  [state.productionTags, state.brollShots].forEach(function (list) {
+    (list || []).forEach(function (e) {
+      if (e && e.owner && remap[e.owner]) e.owner = remap[e.owner];
+    });
+  });
 }
 
 export function mergeProductionTags(baseTags, mineTags, theirTags) {

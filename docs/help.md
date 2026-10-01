@@ -25,6 +25,9 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 - Markdown export wrote `[text](null)` for a link with no address. It now
   writes the text alone.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
 
 ## What's new in 3.1
 
