@@ -239,7 +239,7 @@ test("replies from both sides are unioned, oldest first", () => {
   assert.deepEqual(out.replies.map((r) => r.id), ["rp1", "rp2"]);
 });
 
-test("pinned until 2.5: mergeStates changes the replies of its own mine and theirs, through migrateRows", () => {
+test("pinned, found and not changed in 2.5: mergeStates changes the replies of its own mine and theirs, through migrateRows", () => {
   const base = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
   const mine = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
   const theirs = commentDoc([cmt()]);
