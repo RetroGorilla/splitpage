@@ -11,7 +11,7 @@ import {
   insertText, mergeCells, normalizeCell, spokenText, toDocxRuns, toHtml, toMarkdown, toPlainText, withoutCues
 } from "../js/04c-doc-model.js";
 import {
-  __init as initTags, healTagRegistry, productionEntries, removeTag, renameTag, tagsInField
+  __init as initTags, closeCueNames, cueEditPairs, healTagRegistry, productionEntries, removeTag, renameTag, tagsInField
 } from "../js/07-production-tags.js";
 import { zipRead } from "../js/14-export.js";
 import { __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationText } from "../js/15-docx.js";
@@ -216,6 +216,120 @@ test("an edited cue leaves the item alone while its old name is still in the scr
     healTagRegistry();
     assert.deepEqual(t.productionTags.filter((x) => x.cat === "sound").map((x) => x.name).sort(), ["door slam", "upbeat intro"]);
   });
+});
+
+function twoCueDoc() {
+  return migrateRows({ schema: 2, title: "Two cues", wordsPerMinute: 150, rows: [
+    { id: "r1", visualText: "", audioText: CUE("SFX: door slam") + "<br>Then.<br>" + CUE("SFX: kettle whistle") },
+    { id: "r2", visualText: "", audioText: CUE("Music: theme") }
+  ] });
+}
+const soundItems = (s) => s.productionTags.filter((t) => t.cat === "sound").map((t) => t.name + "/" + t.status).sort();
+
+test("one cue deleted and another edited in the same cell: the edited one keeps its item (#282)", () => {
+  for (const [label, edited, keep, gone] of [
+    ["the first deleted, the second edited", "Then.<br>" + CUE("SFX: kettle whistling"), "kettle whistle", "door slam"],
+    ["the first edited, the second deleted", CUE("SFX: door slams") + "<br>Then.", "door slam", "kettle whistle"]
+  ]) {
+    const s = twoCueDoc();
+    withState(s, () => {
+      healTagRegistry();
+      const kept = s.productionTags.find((t) => t.name === keep);
+      Object.assign(kept, { status: "have", notes: "the good take" });
+      s.productionTags.find((t) => t.name === gone).status = "ordered";
+      s.rows[0].audioText = edited;
+      healTagRegistry();
+      const newName = keep === "kettle whistle" ? "kettle whistling" : "door slams";
+      assert.deepEqual(soundItems(s), [gone + "/ordered", newName + "/have", "theme/needed"].sort(), label);
+      const e = s.productionTags.find((t) => t.name === newName);
+      assert.equal(e.id, kept.id, label + ": the same entry");
+      assert.equal(e.notes, "the good take", label);
+      assert.deepEqual(productionEntries().filter((x) => x.orphaned).map((x) => x.name), [gone], label);
+    });
+  }
+});
+
+test("both cues in a cell edited at once: each keeps its own item, by its line", () => {
+  const s = twoCueDoc();
+  withState(s, () => {
+    healTagRegistry();
+    s.productionTags.find((t) => t.name === "door slam").status = "have";
+    s.rows[0].audioText = CUE("SFX: door slams") + "<br>Then.<br>" + CUE("SFX: kettle whistles");
+    healTagRegistry();
+    assert.deepEqual(soundItems(s), ["door slams/have", "kettle whistles/needed", "theme/needed"]);
+  });
+});
+
+test("a cue deleted beside an edit that could be either cue's: no rename, a new item (#282)", () => {
+  const s = migrateRows({ schema: 2, title: "Ambiguous", wordsPerMinute: 150, rows: [
+    { id: "r1", visualText: "", audioText: CUE("Music: slow") + "<br>" + CUE("Music: slow piano") }
+  ] });
+  withState(s, () => {
+    healTagRegistry();
+    s.productionTags.forEach((t) => { t.status = "have"; });
+    s.rows[0].audioText = CUE("Music: slow piano intro");
+    healTagRegistry();
+    assert.deepEqual(soundItems(s), ["slow piano intro/needed", "slow piano/have", "slow/have"]);
+  });
+  const t = twoCueDoc();
+  withState(t, () => {
+    healTagRegistry();
+    t.rows[0].audioText = "Then.<br>" + CUE("SFX: thunder");
+    healTagRegistry();
+    assert.deepEqual(soundItems(t), ["door slam/needed", "kettle whistle/needed", "theme/needed", "thunder/needed"]);
+  });
+});
+
+test("cueEditPairs: which old cue name each new one is taken as an edit of", () => {
+  assert.deepEqual(cueEditPairs(["a"], ["b"]), [["a", "b"]], "one out, one in: always an edit");
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["kettle whistling"]), [["kettle whistle", "kettle whistling"]]);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["door slams"]), [["door slam", "door slams"]]);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["thunder"]), [], "like neither: no rename");
+  assert.deepEqual(cueEditPairs(["slow", "slow piano"], ["slow piano intro"]), [], "like both: no rename");
+  assert.deepEqual(cueEditPairs(["ab", "cd", "ef"], ["xy", "cd"]), [], "a cue gone and nothing close: no rename");
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle", "theme"], ["door slams", "kettle whistles"]),
+    [["door slam", "door slams"], ["kettle whistle", "kettle whistles"]]);
+  assert.deepEqual(cueEditPairs(["x", "y"], ["p", "q"]), [["x", "p"], ["y", "q"]], "as many in as out: in order, as before");
+  assert.deepEqual(cueEditPairs(["door slam", "door slam"], ["door slams"]), [["door slam", "door slams"]]);
+  assert.deepEqual(cueEditPairs(["a", "b"], ["a", "b", "c"]), []);
+  assert.equal(closeCueNames("Pianno intro", "piano intro"), true, "a typo fixed in the middle");
+  assert.equal(closeCueNames("door slam", "door bang"), true);
+  assert.equal(closeCueNames("door slam", "upbeat intro"), false);
+});
+
+test("seeded: cueEditPairs pairs exactly as the old positional pairing wherever as many names went as came", () => {
+  const oldPairs = (before, after) => {
+    const gone = before.filter((n) => !after.includes(n));
+    const came = after.filter((n) => !before.includes(n));
+    const out = [];
+    for (let i = 0; i < gone.length && i < came.length; i++) out.push([gone[i], came[i]]);
+    return out;
+  };
+  const NAMES = ["door slam", "door slams", "kettle whistle", "kettle whistling", "theme", "thunder", "slow", "slow piano"];
+  let s = 7;
+  const r = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const draw = () => Array.from({ length: 1 + Math.floor(r() * 3) }, () => NAMES[Math.floor(r() * NAMES.length)]);
+  let compared = 0;
+  for (let i = 0; i < 2000; i++) {
+    const before = draw();
+    const after = r() < 0.5 ? before.map((n) => (r() < 0.5 ? n : NAMES[Math.floor(r() * NAMES.length)])) : draw();
+    const got = cueEditPairs(before, after);
+    const msg = JSON.stringify([before, after]);
+    const gone = before.filter((n) => !after.includes(n));
+    const came = after.filter((n) => !before.includes(n));
+    if (gone.length === came.length) {
+      assert.deepEqual(got, oldPairs(before, after), msg);
+      compared++;
+    } else {
+      const unique = (l) => new Set(l).size === l.length;
+      assert.ok(unique(got.map((p) => p[0])) && unique(got.map((p) => p[1])), msg);
+      if (new Set(gone).size > 1 || new Set(came).size > 1) {
+        for (const [g, c] of got) assert.ok(closeCueNames(g, c), msg + " paired names that are not close");
+      }
+    }
+    for (const [g, c] of got) assert.ok(gone.includes(g) && came.includes(c), msg);
+  }
+  assert.ok(compared > 300, "compared " + compared);
 });
 
 test("renaming the item rewrites the cue's words; removing it makes the line plain words", () => {

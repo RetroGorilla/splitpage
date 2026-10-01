@@ -480,21 +480,50 @@ function retitleEditedCues(was, now, ix) {
   Object.keys(now.cells).forEach(function (rowId) {
     var before = was.cells[rowId];
     if (!before) return;
-    var after = now.cells[rowId];
-    var gone = before.filter(function (name) { return after.indexOf(name) === -1; });
-    var came = after.filter(function (name) { return before.indexOf(name) === -1; });
-    for (var i = 0; i < gone.length && i < came.length; i++) {
-      var oldKey = registryKey("sound", gone[i]), newKey = registryKey("sound", came[i]);
-      if (!fresh[newKey] || !orphan[oldKey]) continue;
-      var entry = registryEntry("sound", gone[i]);
-      if (!entry) continue;
-      entry.name = came[i];
+    cueEditPairs(before, now.cells[rowId]).forEach(function (pair) {
+      var oldKey = registryKey("sound", pair[0]), newKey = registryKey("sound", pair[1]);
+      if (!fresh[newKey] || !orphan[oldKey]) return;
+      var entry = registryEntry("sound", pair[0]);
+      if (!entry) return;
+      entry.name = pair[1];
       delete fresh[newKey];
       delete orphan[oldKey];
       n++;
-    }
+    });
   });
   return n;
+}
+
+function uniqueNames(list) {
+  return list.filter(function (name, i) { return list.indexOf(name) === i; });
+}
+
+export function cueEditPairs(before, after) {
+  var gone = before.filter(function (name) { return after.indexOf(name) === -1; });
+  var came = after.filter(function (name) { return before.indexOf(name) === -1; });
+  if (gone.length === came.length) return gone.map(function (name, i) { return [name, came[i]]; });
+  gone = uniqueNames(gone);
+  came = uniqueNames(came);
+  if (gone.length === 1 && came.length === 1) return [[gone[0], came[0]]];
+  var pairs = [];
+  gone.forEach(function (g) {
+    var near = came.filter(function (c) { return closeCueNames(g, c); });
+    if (near.length !== 1) return;
+    var rivals = gone.filter(function (x) { return closeCueNames(x, near[0]); });
+    if (rivals.length === 1) pairs.push([g, near[0]]);
+  });
+  return pairs;
+}
+
+export function closeCueNames(a, b) {
+  a = normalizeTagName(a);
+  b = normalizeTagName(b);
+  var shorter = Math.min(a.length, b.length);
+  var p = 0;
+  while (p < shorter && a.charAt(p) === b.charAt(p)) p++;
+  var s = 0;
+  while (s < shorter - p && a.charAt(a.length - 1 - s) === b.charAt(b.length - 1 - s)) s++;
+  return shorter > 0 && (p + s) * 2 >= shorter;
 }
 
 export function missingRegistryTags(rows, registry) {
