@@ -1,0 +1,1318 @@
+{
+  "input": {
+    "schema": 2,
+    "title": "Harbour",
+    "docId": "d88888888888888888888888888888888",
+    "people": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "productionTags": [
+      {
+        "id": "t_kettle",
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "",
+        "notes": "",
+        "status": "have"
+      },
+      {
+        "id": "t_tripod",
+        "cat": "prop",
+        "name": "Tripod",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "cat": "location",
+        "name": "Pier",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_c5ebse16zafc2"
+      },
+      {
+        "cat": "location",
+        "name": "Quay",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_13cjkwitg54mk"
+      }
+    ],
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "<span class=\"broll-key\" data-broll-id=\"bs_keep\" contenteditable=\"false\">B-roll:</span> the gulls<br>over the pier<br>B-roll: drone sweep<br>low and slow<br>b roll - <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> steam rising",
+        "audioText": "Waves on the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Pier\" contenteditable=\"false\">pier</span>.",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "<span class=\"broll-key\" data-broll-id=\"bs_keep\" contenteditable=\"false\">B-roll:</span> the gulls again<br><strong>B-roll:</strong> The Harbour",
+        "audioText": "Boats.",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "B-roll: new wording<br><span class=\"broll-key\" data-broll-id=\"bs_held\" contenteditable=\"false\">B-roll:</span> held line",
+        "audioText": "Quiet <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Quay\" contenteditable=\"false\">quay</span> now.",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      },
+      {
+        "id": "r4",
+        "status": "todo",
+        "visualText": "Intro <span class=\"broll-key\" data-broll-id=\"bs_mid\" contenteditable=\"false\">B-roll:</span> mid-line key<br><span class=\"broll-key\" data-broll-id=\"bs_renamed\" contenteditable=\"false\">B-roll:</span> fresh name<br>with <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Tripod\" contenteditable=\"false\">the tripod</span>",
+        "audioText": "",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      }
+    ],
+    "brollShots": [
+      {
+        "id": "bs_keep",
+        "name": "the gulls",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "got it",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bs_harbour",
+        "name": "the harbour",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_tripod",
+            "name": "Tripod"
+          },
+          {
+            "id": "",
+            "name": "Boat hook"
+          }
+        ],
+        "origin": "script"
+      },
+      {
+        "id": "bs_held",
+        "name": "new wording",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "held by a key further down",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bs_renamed",
+        "name": "stale name",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "p1",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      },
+      {
+        "id": "bs_orphan",
+        "name": "cut from the script",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bs_list",
+        "name": "pickup from the list",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "list"
+      }
+    ],
+    "comments": [],
+    "wordsPerMinute": 150,
+    "rev": 0
+  },
+  "entries": [
+    {
+      "key": "prop kettle",
+      "id": "t_kettle",
+      "cat": "prop",
+      "name": "Kettle",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "visualText",
+          "text": "kettle"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "have"
+    },
+    {
+      "key": "prop tripod",
+      "id": "t_tripod",
+      "cat": "prop",
+      "name": "Tripod",
+      "mentions": [
+        {
+          "rowId": "r4",
+          "rowIndex": 3,
+          "field": "visualText",
+          "text": "the tripod"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "location pier",
+      "id": "t_c5ebse16zafc2",
+      "cat": "location",
+      "name": "Pier",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "audioText",
+          "text": "pier"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "location quay",
+      "id": "t_13cjkwitg54mk",
+      "cat": "location",
+      "name": "Quay",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "audioText",
+          "text": "quay"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    }
+  ],
+  "byCategory": [
+    {
+      "cat": "prop",
+      "items": [
+        "prop kettle",
+        "prop tripod"
+      ]
+    },
+    {
+      "cat": "location",
+      "items": [
+        "location pier",
+        "location quay"
+      ]
+    }
+  ],
+  "brollRead": [
+    {
+      "rec": {
+        "stored": 0
+      },
+      "id": "bs_keep",
+      "name": "the gulls",
+      "desc": "over the pier",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "shot",
+      "reshoot": false,
+      "notes": "got it",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "fresh": {
+          "status": "unshot",
+          "props": [],
+          "origin": "script",
+          "id": "<minted-broll-id-1>",
+          "name": "drone sweep",
+          "desc": "low and slow",
+          "audioRef": "Waves on the pier.",
+          "location": "Pier"
+        }
+      },
+      "id": "<minted-broll-id-1>",
+      "name": "drone sweep",
+      "desc": "low and slow",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 1,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "fresh": {
+          "status": "unshot",
+          "props": [],
+          "origin": "script",
+          "id": "<minted-broll-id-2>",
+          "name": "kettle steam rising",
+          "desc": "",
+          "audioRef": "Waves on the pier.",
+          "location": "Pier"
+        }
+      },
+      "id": "<minted-broll-id-2>",
+      "name": "kettle steam rising",
+      "desc": "",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 2,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": true,
+          "hand": false,
+          "tracked": true,
+          "ref": ""
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "fresh": {
+          "status": "unshot",
+          "props": [],
+          "origin": "script",
+          "id": "<minted-broll-id-3>",
+          "name": "the gulls again",
+          "desc": "",
+          "audioRef": "Boats.",
+          "location": ""
+        }
+      },
+      "id": "<minted-broll-id-3>",
+      "name": "the gulls again",
+      "desc": "",
+      "rowId": "r2",
+      "rowIndex": 1,
+      "ordinal": 0,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Boats.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 1
+      },
+      "id": "bs_harbour",
+      "name": "The Harbour",
+      "desc": "",
+      "rowId": "r2",
+      "rowIndex": 1,
+      "ordinal": 1,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_tripod",
+          "id": "t_tripod",
+          "name": "Tripod",
+          "status": "needed",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_tripod"
+        },
+        {
+          "key": "n:boat hook",
+          "id": "",
+          "name": "Boat hook",
+          "status": "",
+          "auto": false,
+          "hand": true,
+          "tracked": false,
+          "ref": "n:boat hook"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "fresh": {
+          "status": "unshot",
+          "props": [],
+          "origin": "script",
+          "id": "<minted-broll-id-4>",
+          "name": "new wording",
+          "desc": "",
+          "audioRef": "Quiet quay now.",
+          "location": "Quay"
+        }
+      },
+      "id": "<minted-broll-id-4>",
+      "name": "new wording",
+      "desc": "",
+      "rowId": "r3",
+      "rowIndex": 2,
+      "ordinal": 0,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Quiet quay now.",
+      "location": "Quay",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 2
+      },
+      "id": "bs_held",
+      "name": "held line",
+      "desc": "",
+      "rowId": "r3",
+      "rowIndex": 2,
+      "ordinal": 1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "held by a key further down",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 3
+      },
+      "id": "bs_renamed",
+      "name": "fresh name",
+      "desc": "with the tripod",
+      "rowId": "r4",
+      "rowIndex": 3,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "p1",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_tripod",
+          "id": "t_tripod",
+          "name": "Tripod",
+          "status": "needed",
+          "auto": true,
+          "hand": false,
+          "tracked": true,
+          "ref": ""
+        },
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_kettle"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 4
+      },
+      "id": "bs_orphan",
+      "name": "cut from the script",
+      "desc": "",
+      "rowId": null,
+      "rowIndex": -1,
+      "ordinal": -1,
+      "markerless": false,
+      "orphaned": true,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 5
+      },
+      "id": "bs_list",
+      "name": "pickup from the list",
+      "desc": "",
+      "rowId": null,
+      "rowIndex": -1,
+      "ordinal": -1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_kettle"
+        }
+      ],
+      "origin": "list"
+    }
+  ],
+  "shotsByProp": {
+    "prop kettle": [
+      "kettle steam rising",
+      "fresh name",
+      "pickup from the list"
+    ],
+    "prop tripod": [
+      "The Harbour",
+      "fresh name"
+    ],
+    "prop boat hook": [
+      "The Harbour"
+    ]
+  },
+  "readsWroteNothing": true,
+  "healed": 0,
+  "registryAfterHeal": "unchanged",
+  "entriesAfterHeal": "same as entries",
+  "healedAgain": 0,
+  "brollRepair": [
+    {
+      "rec": {
+        "stored": 0
+      },
+      "id": "bs_keep",
+      "name": "the gulls",
+      "desc": "over the pier",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "shot",
+      "reshoot": false,
+      "notes": "got it",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 6
+      },
+      "id": "<minted-broll-id-5>",
+      "name": "drone sweep",
+      "desc": "low and slow",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 1,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 7
+      },
+      "id": "<minted-broll-id-6>",
+      "name": "kettle steam rising",
+      "desc": "",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 2,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": true,
+          "hand": false,
+          "tracked": true,
+          "ref": ""
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 8
+      },
+      "id": "<minted-broll-id-7>",
+      "name": "the gulls again",
+      "desc": "",
+      "rowId": "r2",
+      "rowIndex": 1,
+      "ordinal": 0,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Boats.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 1
+      },
+      "id": "bs_harbour",
+      "name": "The Harbour",
+      "desc": "",
+      "rowId": "r2",
+      "rowIndex": 1,
+      "ordinal": 1,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_tripod",
+          "id": "t_tripod",
+          "name": "Tripod",
+          "status": "needed",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_tripod"
+        },
+        {
+          "key": "n:boat hook",
+          "id": "",
+          "name": "Boat hook",
+          "status": "",
+          "auto": false,
+          "hand": true,
+          "tracked": false,
+          "ref": "n:boat hook"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 9
+      },
+      "id": "<minted-broll-id-8>",
+      "name": "new wording",
+      "desc": "",
+      "rowId": "r3",
+      "rowIndex": 2,
+      "ordinal": 0,
+      "markerless": true,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Quiet quay now.",
+      "location": "Quay",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 2
+      },
+      "id": "bs_held",
+      "name": "held line",
+      "desc": "",
+      "rowId": "r3",
+      "rowIndex": 2,
+      "ordinal": 1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "held by a key further down",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 3
+      },
+      "id": "bs_renamed",
+      "name": "fresh name",
+      "desc": "with the tripod",
+      "rowId": "r4",
+      "rowIndex": 3,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "p1",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_tripod",
+          "id": "t_tripod",
+          "name": "Tripod",
+          "status": "needed",
+          "auto": true,
+          "hand": false,
+          "tracked": true,
+          "ref": ""
+        },
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_kettle"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 4
+      },
+      "id": "bs_orphan",
+      "name": "cut from the script",
+      "desc": "",
+      "rowId": null,
+      "rowIndex": -1,
+      "ordinal": -1,
+      "markerless": false,
+      "orphaned": true,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 5
+      },
+      "id": "bs_list",
+      "name": "pickup from the list",
+      "desc": "",
+      "rowId": null,
+      "rowIndex": -1,
+      "ordinal": -1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_kettle"
+        }
+      ],
+      "origin": "list"
+    }
+  ],
+  "shotsAfterRepair": [
+    {
+      "id": "bs_keep",
+      "name": "the gulls",
+      "desc": "over the pier",
+      "status": "shot",
+      "reshoot": false,
+      "notes": "got it",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_harbour",
+      "name": "The Harbour",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "id": "t_tripod",
+          "name": "Tripod"
+        },
+        {
+          "id": "",
+          "name": "Boat hook"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "id": "bs_held",
+      "name": "held line",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "held by a key further down",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_renamed",
+      "name": "fresh name",
+      "desc": "with the tripod",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "p1",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "id": "t_kettle",
+          "name": "Kettle"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "id": "bs_orphan",
+      "name": "cut from the script",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "bs_list",
+      "name": "pickup from the list",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "id": "t_kettle",
+          "name": "Kettle"
+        }
+      ],
+      "origin": "list"
+    },
+    {
+      "id": "<minted-broll-id-5>",
+      "name": "drone sweep",
+      "desc": "low and slow",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "<minted-broll-id-6>",
+      "name": "kettle steam rising",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "<minted-broll-id-7>",
+      "name": "the gulls again",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Boats.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "id": "<minted-broll-id-8>",
+      "name": "new wording",
+      "desc": "",
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Quiet quay now.",
+      "location": "Quay",
+      "props": [],
+      "origin": "script"
+    }
+  ],
+  "anchored": 5,
+  "visualAfterAnchoring": [
+    "<span class=\"broll-key\" data-broll-id=\"bs_keep\" contenteditable=\"false\">B-roll:</span> the gulls<br>over the pier<br><span class=\"broll-key\" data-broll-id=\"<minted-broll-id-5>\" contenteditable=\"false\">B-roll:</span> drone sweep<br>low and slow<br><span class=\"broll-key\" data-broll-id=\"<minted-broll-id-6>\" contenteditable=\"false\">b roll-</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> steam rising",
+    "<span class=\"broll-key\" data-broll-id=\"<minted-broll-id-7>\" contenteditable=\"false\">B-roll:</span> the gulls again<br><span class=\"broll-key\" data-broll-id=\"bs_harbour\" contenteditable=\"false\">B-roll:</span> The Harbour",
+    "<span class=\"broll-key\" data-broll-id=\"<minted-broll-id-8>\" contenteditable=\"false\">B-roll:</span> new wording<br><span class=\"broll-key\" data-broll-id=\"bs_held\" contenteditable=\"false\">B-roll:</span> held line",
+    "Intro <span class=\"broll-key\" data-broll-id=\"bs_mid\" contenteditable=\"false\">B-roll:</span> mid-line key<br><span class=\"broll-key\" data-broll-id=\"bs_renamed\" contenteditable=\"false\">B-roll:</span> fresh name<br>with <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Tripod\" contenteditable=\"false\">the tripod</span>"
+  ],
+  "brollAfterAnchoring": [
+    {
+      "rec": {
+        "stored": 0
+      },
+      "id": "bs_keep",
+      "name": "the gulls",
+      "desc": "over the pier",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "shot",
+      "reshoot": false,
+      "notes": "got it",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 6
+      },
+      "id": "<minted-broll-id-5>",
+      "name": "drone sweep",
+      "desc": "low and slow",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 7
+      },
+      "id": "<minted-broll-id-6>",
+      "name": "kettle steam rising",
+      "desc": "",
+      "rowId": "r1",
+      "rowIndex": 0,
+      "ordinal": 2,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Waves on the pier.",
+      "location": "Pier",
+      "props": [
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": true,
+          "hand": false,
+          "tracked": true,
+          "ref": ""
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 8
+      },
+      "id": "<minted-broll-id-7>",
+      "name": "the gulls again",
+      "desc": "",
+      "rowId": "r2",
+      "rowIndex": 1,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Boats.",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 1
+      },
+      "id": "bs_harbour",
+      "name": "The Harbour",
+      "desc": "",
+      "rowId": "r2",
+      "rowIndex": 1,
+      "ordinal": 1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_tripod",
+          "id": "t_tripod",
+          "name": "Tripod",
+          "status": "needed",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_tripod"
+        },
+        {
+          "key": "n:boat hook",
+          "id": "",
+          "name": "Boat hook",
+          "status": "",
+          "auto": false,
+          "hand": true,
+          "tracked": false,
+          "ref": "n:boat hook"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 9
+      },
+      "id": "<minted-broll-id-8>",
+      "name": "new wording",
+      "desc": "",
+      "rowId": "r3",
+      "rowIndex": 2,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "Quiet quay now.",
+      "location": "Quay",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 2
+      },
+      "id": "bs_held",
+      "name": "held line",
+      "desc": "",
+      "rowId": "r3",
+      "rowIndex": 2,
+      "ordinal": 1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "held by a key further down",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 3
+      },
+      "id": "bs_renamed",
+      "name": "fresh name",
+      "desc": "with the tripod",
+      "rowId": "r4",
+      "rowIndex": 3,
+      "ordinal": 0,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "p1",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_tripod",
+          "id": "t_tripod",
+          "name": "Tripod",
+          "status": "needed",
+          "auto": true,
+          "hand": false,
+          "tracked": true,
+          "ref": ""
+        },
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_kettle"
+        }
+      ],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 4
+      },
+      "id": "bs_orphan",
+      "name": "cut from the script",
+      "desc": "",
+      "rowId": null,
+      "rowIndex": -1,
+      "ordinal": -1,
+      "markerless": false,
+      "orphaned": true,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [],
+      "origin": "script"
+    },
+    {
+      "rec": {
+        "stored": 5
+      },
+      "id": "bs_list",
+      "name": "pickup from the list",
+      "desc": "",
+      "rowId": null,
+      "rowIndex": -1,
+      "ordinal": -1,
+      "markerless": false,
+      "orphaned": false,
+      "status": "unshot",
+      "reshoot": false,
+      "notes": "",
+      "owner": "",
+      "audioRef": "",
+      "location": "",
+      "props": [
+        {
+          "key": "t:t_kettle",
+          "id": "t_kettle",
+          "name": "Kettle",
+          "status": "have",
+          "auto": false,
+          "hand": true,
+          "tracked": true,
+          "ref": "t_kettle"
+        }
+      ],
+      "origin": "list"
+    }
+  ]
+}

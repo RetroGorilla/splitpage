@@ -1,0 +1,614 @@
+{
+  "input": {
+    "schema": 2,
+    "title": "Kitchen",
+    "docId": "d99999999999999999999999999999999",
+    "people": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "productionTags": [
+      {
+        "id": "t_kettle",
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "p1",
+        "notes": "copper",
+        "status": "have"
+      },
+      {
+        "id": "t_old",
+        "cat": "prop",
+        "name": "Old prop",
+        "owner": "",
+        "notes": "",
+        "status": "returned"
+      },
+      {
+        "id": "t_tripodone",
+        "cat": "gear",
+        "name": "Tripod",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_tripodtwo",
+        "cat": "gear",
+        "name": "tripod",
+        "owner": "",
+        "notes": "second copy",
+        "status": "returned"
+      },
+      {
+        "cat": "location",
+        "name": "Kitchen",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_13mj2fucx4sa4"
+      }
+    ],
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "Wide on the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Kitchen\" contenteditable=\"false\">kitchen</span>",
+        "audioText": "Fill the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>.",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Quiet.",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "Title card",
+        "audioText": "",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      }
+    ],
+    "comments": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 0
+  },
+  "edited": [
+    {
+      "id": "r1",
+      "status": "todo",
+      "visualText": "Wide on the <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"Kitchen\" contenteditable=\"false\">kitchen</span>",
+      "audioText": "Fill the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>.",
+      "imageRef": null,
+      "updatedAt": "2026-03-01T09:00:00.000Z",
+      "updatedBy": "Sam"
+    },
+    {
+      "id": "r2",
+      "status": "todo",
+      "visualText": "Mug and kettle on the side",
+      "audioText": "Pour from the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"kettle \" contenteditable=\"false\">KETTLE</span> into the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span>, then rinse the kettle and the mug.<br><span class=\"audio-cue\">SFX: whistle</span>",
+      "imageRef": null,
+      "updatedAt": "2026-03-01T09:00:00.000Z",
+      "updatedBy": "Sam"
+    },
+    {
+      "id": "r3",
+      "status": "todo",
+      "visualText": "<span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"Lower third\" contenteditable=\"false\">Lower third</span>: “Step 1” <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Whistle\" contenteditable=\"false\">whistle</span> <span class=\"tag-anchor\" data-tag-cat=\"bogus\" data-tag-name=\"Thing\" contenteditable=\"false\">Thing</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"  Ada  Lovelace \" contenteditable=\"false\">Ada</span>",
+      "audioText": "",
+      "imageRef": null,
+      "updatedAt": "2026-03-01T09:00:00.000Z",
+      "updatedBy": "Sam"
+    }
+  ],
+  "entries": [
+    {
+      "key": "prop kettle",
+      "id": "t_kettle",
+      "cat": "prop",
+      "name": "Kettle",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "audioText",
+          "text": "kettle"
+        },
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "audioText",
+          "text": "KETTLE"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p1",
+      "notes": "copper",
+      "status": "have"
+    },
+    {
+      "key": "prop old prop",
+      "id": "t_old",
+      "cat": "prop",
+      "name": "Old prop",
+      "mentions": [],
+      "orphaned": true,
+      "owner": "",
+      "notes": "",
+      "status": "returned"
+    },
+    {
+      "key": "gear tripod",
+      "id": "t_tripodone",
+      "cat": "gear",
+      "name": "Tripod",
+      "mentions": [],
+      "orphaned": true,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "location kitchen",
+      "id": "t_13mj2fucx4sa4",
+      "cat": "location",
+      "name": "Kitchen",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "visualText",
+          "text": "kitchen"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "prop mug",
+      "id": null,
+      "cat": "prop",
+      "name": "Mug",
+      "mentions": [
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "audioText",
+          "text": "mug"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "sound whistle",
+      "id": null,
+      "cat": "sound",
+      "name": "whistle",
+      "mentions": [
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "audioText",
+          "text": "SFX: whistle"
+        },
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "whistle"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx lower third",
+      "id": null,
+      "cat": "vfx",
+      "name": "Lower third",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "Lower third"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "cast ada lovelace",
+      "id": null,
+      "cat": "cast",
+      "name": "Ada  Lovelace",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "Ada"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    }
+  ],
+  "byCategory": [
+    {
+      "cat": "prop",
+      "items": [
+        "prop kettle",
+        "prop mug",
+        "prop old prop"
+      ]
+    },
+    {
+      "cat": "location",
+      "items": [
+        "location kitchen"
+      ]
+    },
+    {
+      "cat": "cast",
+      "items": [
+        "cast ada lovelace"
+      ]
+    },
+    {
+      "cat": "vfx",
+      "items": [
+        "vfx lower third"
+      ]
+    },
+    {
+      "cat": "sound",
+      "items": [
+        "sound whistle"
+      ]
+    },
+    {
+      "cat": "gear",
+      "items": [
+        "gear tripod"
+      ]
+    }
+  ],
+  "brollRead": [],
+  "shotsByProp": {},
+  "readsWroteNothing": true,
+  "occurrences": [
+    {
+      "cat": "prop",
+      "name": "kettle",
+      "hits": [
+        {
+          "rowId": "r2",
+          "field": "visualText",
+          "ranges": [
+            [
+              8,
+              14
+            ]
+          ]
+        },
+        {
+          "rowId": "r2",
+          "field": "audioText",
+          "ranges": [
+            [
+              50,
+              56
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 1,
+        "inTags": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "prop",
+      "name": "Mug",
+      "hits": [
+        {
+          "rowId": "r2",
+          "field": "visualText",
+          "ranges": [
+            [
+              0,
+              3
+            ]
+          ]
+        },
+        {
+          "rowId": "r2",
+          "field": "audioText",
+          "ranges": [
+            [
+              65,
+              68
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 1,
+        "inTags": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "cat": "sound",
+      "name": "whistle",
+      "hits": [
+        {
+          "rowId": "r2",
+          "field": "audioText",
+          "ranges": [
+            [
+              75,
+              82
+            ]
+          ]
+        }
+      ],
+      "visualColumnCount": {
+        "hits": 0,
+        "inTags": 1,
+        "skipped": 0
+      }
+    }
+  ],
+  "healed": 4,
+  "registryAfterHeal": [
+    {
+      "id": "t_kettle",
+      "cat": "prop",
+      "name": "Kettle",
+      "owner": "p1",
+      "notes": "copper",
+      "status": "have"
+    },
+    {
+      "id": "t_old",
+      "cat": "prop",
+      "name": "Old prop",
+      "owner": "",
+      "notes": "",
+      "status": "returned"
+    },
+    {
+      "id": "t_tripodone",
+      "cat": "gear",
+      "name": "Tripod",
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "id": "t_tripodtwo",
+      "cat": "gear",
+      "name": "tripod",
+      "owner": "",
+      "notes": "second copy",
+      "status": "returned"
+    },
+    {
+      "cat": "location",
+      "name": "Kitchen",
+      "owner": "",
+      "notes": "",
+      "status": "needed",
+      "id": "t_13mj2fucx4sa4"
+    },
+    {
+      "id": "t_1okou1ndmeusp",
+      "cat": "prop",
+      "name": "Mug",
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "id": "t_pns90m1unjmtw",
+      "cat": "sound",
+      "name": "whistle",
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "id": "t_1mi4te71e9svzw",
+      "cat": "vfx",
+      "name": "Lower third",
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "id": "t_10nvbql1lq79zq",
+      "cat": "cast",
+      "name": "Ada  Lovelace",
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    }
+  ],
+  "entriesAfterHeal": [
+    {
+      "key": "prop kettle",
+      "id": "t_kettle",
+      "cat": "prop",
+      "name": "Kettle",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "audioText",
+          "text": "kettle"
+        },
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "audioText",
+          "text": "KETTLE"
+        }
+      ],
+      "orphaned": false,
+      "owner": "p1",
+      "notes": "copper",
+      "status": "have"
+    },
+    {
+      "key": "prop old prop",
+      "id": "t_old",
+      "cat": "prop",
+      "name": "Old prop",
+      "mentions": [],
+      "orphaned": true,
+      "owner": "",
+      "notes": "",
+      "status": "returned"
+    },
+    {
+      "key": "gear tripod",
+      "id": "t_tripodone",
+      "cat": "gear",
+      "name": "Tripod",
+      "mentions": [],
+      "orphaned": true,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "location kitchen",
+      "id": "t_13mj2fucx4sa4",
+      "cat": "location",
+      "name": "Kitchen",
+      "mentions": [
+        {
+          "rowId": "r1",
+          "rowIndex": 0,
+          "field": "visualText",
+          "text": "kitchen"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "prop mug",
+      "id": "t_1okou1ndmeusp",
+      "cat": "prop",
+      "name": "Mug",
+      "mentions": [
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "audioText",
+          "text": "mug"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "sound whistle",
+      "id": "t_pns90m1unjmtw",
+      "cat": "sound",
+      "name": "whistle",
+      "mentions": [
+        {
+          "rowId": "r2",
+          "rowIndex": 1,
+          "field": "audioText",
+          "text": "SFX: whistle"
+        },
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "whistle"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "vfx lower third",
+      "id": "t_1mi4te71e9svzw",
+      "cat": "vfx",
+      "name": "Lower third",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "Lower third"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    },
+    {
+      "key": "cast ada lovelace",
+      "id": "t_10nvbql1lq79zq",
+      "cat": "cast",
+      "name": "Ada  Lovelace",
+      "mentions": [
+        {
+          "rowId": "r3",
+          "rowIndex": 2,
+          "field": "visualText",
+          "text": "Ada"
+        }
+      ],
+      "orphaned": false,
+      "owner": "",
+      "notes": "",
+      "status": "needed"
+    }
+  ],
+  "healedAgain": 0,
+  "brollRepair": "same as brollRead",
+  "shotsAfterRepair": "unchanged",
+  "anchored": 0,
+  "visualAfterAnchoring": "unchanged",
+  "brollAfterAnchoring": "same as brollRepair"
+}

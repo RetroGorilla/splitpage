@@ -1,0 +1,180 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "Wide shot.",
+          "audioText": "Alpha beta gamma.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "Close up.",
+          "audioText": "Delta epsilon.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "Insert.",
+          "audioText": "Zeta eta.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "Wide shot.",
+          "audioText": "Alpha BETA gamma.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "Close up.",
+          "audioText": "Delta epsilon.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "Insert, slow.",
+          "audioText": "Zeta eta.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "Wide shot.",
+          "audioText": "Alpha beta gamma.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "Close up, handheld.",
+          "audioText": "Delta epsilon.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "Insert.",
+          "audioText": "Zeta eta theta.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "Wide shot.",
+        "audioText": "Alpha BETA gamma.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "Close up, handheld.",
+        "audioText": "Delta epsilon.",
+        "imageRef": null,
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "Insert, slow.",
+        "audioText": "Zeta eta theta.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      }
+    ],
+    "comments": [],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 1,
+    "rowsFromMe": 2,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

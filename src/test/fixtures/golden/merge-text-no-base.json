@@ -1,0 +1,191 @@
+{
+  "inputs": {
+    "base": null,
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "one 2",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "same",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "gone",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "one two",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "same",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "one two",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "same",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "",
+        "imageRef": null,
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer"
+      }
+    ],
+    "comments": [
+      {
+        "id": "<minted-comment-id-1>",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "<minted-comment-id-1>",
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "one 2",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Audio",
+        "emptyValue": false,
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      },
+      {
+        "id": "<minted-comment-id-2>",
+        "rowId": "r3",
+        "field": "audioText",
+        "anchorId": "<minted-comment-id-2>",
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "gone",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Audio",
+        "emptyValue": false,
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      }
+    ],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [
+    {
+      "rowId": "r1",
+      "field": "audioText",
+      "mine": "one 2",
+      "theirs": "one two"
+    },
+    {
+      "rowId": "r3",
+      "field": "audioText",
+      "mine": "gone",
+      "theirs": null
+    }
+  ],
+  "stats": {
+    "rowsFromThem": 2,
+    "rowsFromMe": 0,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

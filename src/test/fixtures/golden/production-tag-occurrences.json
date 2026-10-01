@@ -1,0 +1,444 @@
+[
+  {
+    "html": "the kettle, the Kettle and KETTLE",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        4,
+        10
+      ],
+      [
+        16,
+        22
+      ],
+      [
+        27,
+        33
+      ]
+    ],
+    "count": {
+      "hits": 3,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "the kettle, the Kettle and KETTLE"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "the kettle, the Kettle and KETTLE"
+    },
+    "tagged": {
+      "hits": 3,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>, the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">Kettle</span> and <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">KETTLE</span>"
+    }
+  },
+  {
+    "html": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> and a kettle",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        13,
+        19
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 1,
+      "skipped": 0,
+      "html": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> and a kettle"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 1,
+      "skipped": 0,
+      "html": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> and a kettle"
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 1,
+      "skipped": 0,
+      "html": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> and a <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>"
+    }
+  },
+  {
+    "html": "<a href=\"https://x.example/\" target=\"_blank\" rel=\"noopener\">kettle</a> kettle",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        7,
+        13
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 1,
+      "html": "<a href=\"https://x.example/\" target=\"_blank\" rel=\"noopener\">kettle</a> kettle"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 1,
+      "html": "<a href=\"https://x.example/\" target=\"_blank\" rel=\"noopener\">kettle</a> kettle"
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 1,
+      "html": "<a href=\"https://x.example/\" target=\"_blank\" rel=\"noopener\">kettle</a> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>"
+    }
+  },
+  {
+    "html": "ket<span class=\"cmt-anchor\" data-cmt=\"c1\">tle</span> <span class=\"cmt-anchor\" data-cmt=\"c1\">kettle</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">ket</span><span class=\"cmt-anchor\" data-cmt=\"c3\">tle</span>",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        7,
+        13
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 2,
+      "html": "ket<span class=\"cmt-anchor\" data-cmt=\"c1\">tle</span> <span class=\"cmt-anchor\" data-cmt=\"c1\">kettle</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">ket</span><span class=\"cmt-anchor\" data-cmt=\"c3\">tle</span>"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 2,
+      "html": "ket<span class=\"cmt-anchor\" data-cmt=\"c1\">tle</span> <span class=\"cmt-anchor\" data-cmt=\"c1\">kettle</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">ket</span><span class=\"cmt-anchor\" data-cmt=\"c3\">tle</span>"
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 2,
+      "html": "ket<span class=\"cmt-anchor\" data-cmt=\"c1\">tle</span> <span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span></span> <span class=\"cmt-anchor\" data-cmt=\"c2\">ket</span><span class=\"cmt-anchor\" data-cmt=\"c3\">tle</span>"
+    }
+  },
+  {
+    "html": "kettles teakettle kettle-black kettle_",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        18,
+        24
+      ],
+      [
+        31,
+        37
+      ]
+    ],
+    "count": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "kettles teakettle kettle-black kettle_"
+    },
+    "countMatchingCase": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "kettles teakettle kettle-black kettle_"
+    },
+    "tagged": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "kettles teakettle <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>-black <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>_"
+    }
+  },
+  {
+    "html": "🎬kettle🎬 kettle· 𝒦kettle",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        2,
+        8
+      ],
+      [
+        11,
+        17
+      ],
+      [
+        21,
+        27
+      ]
+    ],
+    "count": {
+      "hits": 3,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "🎬kettle🎬 kettle· 𝒦kettle"
+    },
+    "countMatchingCase": {
+      "hits": 3,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "🎬kettle🎬 kettle· 𝒦kettle"
+    },
+    "tagged": {
+      "hits": 3,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "🎬<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>🎬 <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>· 𝒦<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>"
+    }
+  },
+  {
+    "html": "İstanbul istanbul ISTANBUL",
+    "phrase": "istanbul",
+    "ranges": [
+      [
+        9,
+        17
+      ],
+      [
+        18,
+        26
+      ]
+    ],
+    "count": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "İstanbul istanbul ISTANBUL"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "İstanbul istanbul ISTANBUL"
+    },
+    "tagged": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "İstanbul <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">istanbul</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">ISTANBUL</span>"
+    }
+  },
+  {
+    "html": "<span class=\"broll-key\" data-broll-id=\"bs_x\" contenteditable=\"false\">B-roll:</span>kettle <span class=\"broll-key\" data-broll-id=\"bs_y\" contenteditable=\"false\">B-roll:</span> kettle",
+    "phrase": "kettle",
+    "ranges": [
+      [
+        1,
+        7
+      ],
+      [
+        10,
+        16
+      ]
+    ],
+    "count": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "<span class=\"broll-key\" data-broll-id=\"bs_x\" contenteditable=\"false\">B-roll:</span>kettle <span class=\"broll-key\" data-broll-id=\"bs_y\" contenteditable=\"false\">B-roll:</span> kettle"
+    },
+    "countMatchingCase": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "<span class=\"broll-key\" data-broll-id=\"bs_x\" contenteditable=\"false\">B-roll:</span>kettle <span class=\"broll-key\" data-broll-id=\"bs_y\" contenteditable=\"false\">B-roll:</span> kettle"
+    },
+    "tagged": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "<span class=\"broll-key\" data-broll-id=\"bs_x\" contenteditable=\"false\">B-roll:</span><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> <span class=\"broll-key\" data-broll-id=\"bs_y\" contenteditable=\"false\">B-roll:</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>"
+    }
+  },
+  {
+    "html": "red<br>mug red mug red  mug",
+    "phrase": "red mug",
+    "ranges": [
+      [
+        8,
+        15
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "red<br>mug red mug red  mug"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "red<br>mug red mug red  mug"
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "red<br>mug <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">red mug</span> red  mug"
+    }
+  },
+  {
+    "html": "Straße STRASSE strasse",
+    "phrase": "straße",
+    "ranges": [
+      [
+        0,
+        6
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "Straße STRASSE strasse"
+    },
+    "countMatchingCase": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "Straße STRASSE strasse"
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">Straße</span> STRASSE strasse"
+    }
+  },
+  {
+    "html": "éclair éclair",
+    "phrase": "éclair",
+    "ranges": [
+      [
+        8,
+        14
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "éclair éclair"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "éclair éclair"
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "éclair <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">éclair</span>"
+    }
+  },
+  {
+    "html": "Kettle kettle",
+    "phrase": "Kettle",
+    "ranges": [
+      [
+        0,
+        6
+      ],
+      [
+        7,
+        13
+      ]
+    ],
+    "count": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "Kettle kettle"
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "Kettle kettle"
+    },
+    "tagged": {
+      "hits": 2,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">Kettle</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span>"
+    }
+  },
+  {
+    "html": "",
+    "phrase": "kettle",
+    "ranges": [],
+    "count": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": ""
+    },
+    "countMatchingCase": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": ""
+    },
+    "tagged": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": ""
+    }
+  },
+  {
+    "html": "kettle",
+    "phrase": "",
+    "ranges": [],
+    "count": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "kettle"
+    },
+    "countMatchingCase": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "kettle"
+    },
+    "tagged": {
+      "hits": 0,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "kettle"
+    }
+  },
+  {
+    "html": "  padded  ",
+    "phrase": "  padded  ",
+    "ranges": [
+      [
+        0,
+        10
+      ]
+    ],
+    "count": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "  padded  "
+    },
+    "countMatchingCase": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "  padded  "
+    },
+    "tagged": {
+      "hits": 1,
+      "inTags": 0,
+      "skipped": 0,
+      "html": "  <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">padded</span>  "
+    }
+  }
+]

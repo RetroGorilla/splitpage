@@ -1,0 +1,290 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer",
+          "moreImages": [
+            {
+              "imageRef": {
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              },
+              "name": "b.png"
+            },
+            {
+              "imageRef": {
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              },
+              "links": [
+                {
+                  "href": "https://video.example/c-one"
+                }
+              ]
+            },
+            {
+              "links": [
+                {
+                  "href": "https://video.example/clip",
+                  "poster": true
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer",
+          "moreImages": [
+            {
+              "imageRef": {
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              },
+              "links": [
+                {
+                  "href": "https://video.example/c-one"
+                },
+                {
+                  "href": "https://video.example/c-mine"
+                }
+              ]
+            },
+            {
+              "links": [
+                {
+                  "href": "https://video.example/clip",
+                  "poster": true
+                }
+              ]
+            },
+            {
+              "imageRef": {
+                "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              },
+              "name": "d.png"
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer",
+          "moreImages": [
+            {
+              "imageRef": {
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              },
+              "name": "b.png"
+            },
+            {
+              "imageRef": {
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              },
+              "links": [
+                {
+                  "href": "https://video.example/c-one"
+                },
+                {
+                  "href": "https://video.example/c-theirs"
+                }
+              ]
+            },
+            {
+              "links": [
+                {
+                  "href": "https://video.example/clip",
+                  "poster": true
+                },
+                {
+                  "href": "https://video.example/clip-extra"
+                }
+              ]
+            },
+            {
+              "imageRef": {
+                "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "width": 640,
+                "height": 360,
+                "mime": "image/png"
+              }
+            }
+          ]
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "One.",
+        "imageRef": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor",
+        "moreImages": [
+          {
+            "imageRef": {
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "width": 640,
+              "height": 360,
+              "mime": "image/png"
+            },
+            "links": [
+              {
+                "href": "https://video.example/c-one"
+              },
+              {
+                "href": "https://video.example/c-theirs"
+              },
+              {
+                "href": "https://video.example/c-mine"
+              }
+            ]
+          },
+          {
+            "links": [
+              {
+                "href": "https://video.example/clip",
+                "poster": true
+              },
+              {
+                "href": "https://video.example/clip-extra"
+              }
+            ]
+          },
+          {
+            "imageRef": {
+              "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "width": 640,
+              "height": 360,
+              "mime": "image/png"
+            }
+          },
+          {
+            "imageRef": {
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "width": 640,
+              "height": 360,
+              "mime": "image/png"
+            },
+            "name": "d.png"
+          }
+        ]
+      }
+    ],
+    "comments": [],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 1,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

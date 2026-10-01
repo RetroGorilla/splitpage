@@ -1,0 +1,447 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "<span class=\"cmt-anchor\" data-cmt=\"c1\">one</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">two</span> <span class=\"cmt-anchor\" data-cmt=\"c3\">three</span> <span class=\"cmt-anchor\" data-cmt=\"c4\">four</span>",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Second row.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c1",
+          "quotedText": "c1",
+          "author": "Sam",
+          "body": "Look at c1",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "c2",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c2",
+          "quotedText": "c2",
+          "author": "Sam",
+          "body": "Look at c2",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "c3",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c3",
+          "quotedText": "c3",
+          "author": "Sam",
+          "body": "Look at c3",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "cTitle",
+          "rowId": null,
+          "field": "title",
+          "anchorId": null,
+          "quotedText": "",
+          "author": "Sam",
+          "body": "Look at cTitle",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        }
+      ],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "<span class=\"cmt-anchor\" data-cmt=\"c1\">one</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">two</span> <span class=\"cmt-anchor\" data-cmt=\"c3\">three</span> <span class=\"cmt-anchor\" data-cmt=\"c4\">four</span>",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Second row.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c1",
+          "quotedText": "c1",
+          "author": "Sam",
+          "body": "Look at c1",
+          "resolved": true,
+          "resolvedBy": "Sam",
+          "resolvedAt": "2026-02-05T09:00:00.000Z",
+          "assignee": "Ada",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-05T09:00:00.000Z",
+          "replies": [
+            {
+              "id": "rpM",
+              "body": "Reply rpM",
+              "author": "Sam",
+              "createdAt": "2026-02-03T09:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "id": "c2",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c2",
+          "quotedText": "c2",
+          "author": "Sam",
+          "body": "Look at c2",
+          "resolved": true,
+          "resolvedBy": "Sam",
+          "resolvedAt": "2026-02-07T09:00:00.000Z",
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-07T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "c3",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c3",
+          "quotedText": "c3",
+          "author": "Sam",
+          "body": "Mine body",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-08T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "cTitle",
+          "rowId": null,
+          "field": "title",
+          "anchorId": null,
+          "quotedText": "",
+          "author": "Sam",
+          "body": "Title, mine",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-04T09:00:00.000Z",
+          "replies": []
+        }
+      ],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "<span class=\"cmt-anchor\" data-cmt=\"c1\">one</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">two</span> <span class=\"cmt-anchor\" data-cmt=\"c3\">three</span> <span class=\"cmt-anchor\" data-cmt=\"c4\">four</span>",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Second row.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c1",
+          "quotedText": "c1",
+          "author": "Sam",
+          "body": "Look at c1, edited",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-06T09:00:00.000Z",
+          "replies": [
+            {
+              "id": "rpT",
+              "body": "Reply rpT",
+              "author": "Bo",
+              "createdAt": "2026-02-04T09:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "id": "c2",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c2",
+          "quotedText": "c2",
+          "author": "Sam",
+          "body": "Look at c2",
+          "resolved": true,
+          "resolvedBy": "Bo",
+          "resolvedAt": "2026-02-08T09:00:00.000Z",
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-08T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "c3",
+          "rowId": "r1",
+          "field": "audioText",
+          "anchorId": "c3",
+          "quotedText": "c3",
+          "author": "Sam",
+          "body": "Their body",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-07T09:00:00.000Z",
+          "replies": []
+        },
+        {
+          "id": "cTitle",
+          "rowId": null,
+          "field": "title",
+          "anchorId": null,
+          "quotedText": "",
+          "author": "Sam",
+          "body": "Look at cTitle",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "Bo",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-03T09:00:00.000Z",
+          "replies": []
+        }
+      ],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "<span class=\"cmt-anchor\" data-cmt=\"c1\">one</span> <span class=\"cmt-anchor\" data-cmt=\"c2\">two</span> <span class=\"cmt-anchor\" data-cmt=\"c3\">three</span> <span class=\"cmt-anchor\" data-cmt=\"c4\">four</span>",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Second row.",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      }
+    ],
+    "comments": [
+      {
+        "id": "c1",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "c1",
+        "quotedText": "c1",
+        "author": "Sam",
+        "body": "Look at c1, edited",
+        "resolved": true,
+        "resolvedBy": "Sam",
+        "resolvedAt": "2026-02-05T09:00:00.000Z",
+        "assignee": "Ada",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-06T09:00:00.000Z",
+        "replies": [
+          {
+            "id": "rpM",
+            "body": "Reply rpM",
+            "author": "Sam",
+            "createdAt": "2026-02-03T09:00:00.000Z"
+          },
+          {
+            "id": "rpT",
+            "body": "Reply rpT",
+            "author": "Bo",
+            "createdAt": "2026-02-04T09:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "id": "c2",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "c2",
+        "quotedText": "c2",
+        "author": "Sam",
+        "body": "Look at c2",
+        "resolved": true,
+        "resolvedBy": "Bo",
+        "resolvedAt": "2026-02-08T09:00:00.000Z",
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-08T09:00:00.000Z",
+        "replies": []
+      },
+      {
+        "id": "c3",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "c3",
+        "quotedText": "c3",
+        "author": "Sam",
+        "body": "Mine body",
+        "resolved": false,
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-08T09:00:00.000Z",
+        "replies": []
+      },
+      {
+        "id": "cTitle",
+        "rowId": null,
+        "field": "title",
+        "anchorId": null,
+        "quotedText": "",
+        "author": "Sam",
+        "body": "Title, mine",
+        "resolved": false,
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": "Bo",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-04T09:00:00.000Z",
+        "replies": []
+      }
+    ],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 0,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}
