@@ -28,27 +28,29 @@ function withRandom<T>(values: number[], run: () => T): T {
   }
 }
 
-test("an id is its prefix, up to seven random base-36 digits and the time in base 36", (t) => {
+test("an id is its prefix, seven random base-36 digits and the time in base 36", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 8, 30, 12) });
-  const id = withRandom([0.5], () => makeId("bs"));
-  assert.equal(id, "bs" + (0.5).toString(36).slice(2, 9) + Date.UTC(2026, 8, 30, 12).toString(36));
+  const id = withRandom([0.123456789], () => makeId("bs"));
+  assert.equal(id, "bs4fzzzxjmuo1zeo0");
   assert.match(id, MINTED);
-  assert.equal(withRandom([0.123456789], () => makeId()).slice(0, 1), "r");
-  assert.equal(withRandom([0.123456789], () => makeId("")), withRandom([0.123456789], () => makeId("r")));
+  assert.equal(withRandom([0.123456789], () => makeId()), "r4fzzzxjmuo1zeo0");
+  assert.equal(withRandom([0.123456789], () => makeId("")), "r4fzzzxjmuo1zeo0");
+  assert.equal(withRandom([0.5], () => makeId("c")), "cimuo1zeo0", "a random number with fewer digits gives fewer");
   assert.notEqual(makeId("c"), makeId("c"));
 });
 
-test("random bytes come from the window's crypto when it has one", () => {
-  const hex = withWindow({ crypto: { getRandomValues: (bytes: Uint8Array) => bytes.fill(0x0a) } }, () => randomHexBytes(3));
-  assert.equal(hex, "0a0a0a");
-  const legacy = withWindow({ msCrypto: { getRandomValues: (bytes: Uint8Array) => bytes.fill(0xff) } }, () => randomHexBytes(2));
-  assert.equal(legacy, "ffff");
+const PAD_EDGE = [0x00, 0x0f, 0x10, 0xff];
+
+test("random bytes come from the window's crypto when it has one, each as two hex digits", () => {
+  const fill = (bytes: Uint8Array) => { bytes.set(PAD_EDGE); return bytes; };
+  assert.equal(withWindow({ crypto: { getRandomValues: fill } }, () => randomHexBytes(4)), "000f10ff");
+  assert.equal(withWindow({ msCrypto: { getRandomValues: fill } }, () => randomHexBytes(4)), "000f10ff");
 });
 
-test("without crypto, random bytes fall back to Math.random", () => {
-  const hex = withRandom([0, 0.5, 0.999], () => withWindow({}, () => randomHexBytes(3)));
-  assert.equal(hex, "0080ff");
-  assert.equal(withWindow({ crypto: {} }, () => withRandom([0.25], () => randomHexBytes(1))), "40");
+test("without crypto, random bytes fall back to Math.random, each as two hex digits", () => {
+  const draws = PAD_EDGE.map((b) => b / 256);
+  assert.equal(withRandom(draws, () => withWindow({}, () => randomHexBytes(4))), "000f10ff");
+  assert.equal(withWindow({ crypto: {} }, () => withRandom(draws, () => randomHexBytes(4))), "000f10ff");
 });
 
 test("a minted document id is d and sixteen random bytes in hex", () => {
