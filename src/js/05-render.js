@@ -62,8 +62,8 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
-
-export function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+import { pad2 } from "../core/production/timing.ts";
+export { pad2 };
 
 var LINK_POPOVER_HTML =
   '<div class="link-popover" hidden>' +
