@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { isMain } from "./main-module.mjs";
 import { parse } from "yaml";
 
 export const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -47,6 +48,6 @@ export function main(args, { repo = REPO, print = console.log, printError = cons
   }
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }

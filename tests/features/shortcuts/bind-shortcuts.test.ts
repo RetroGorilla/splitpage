@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry } from "../../src/application/actions.ts";
-import type { InvokeOutcome } from "../../src/application/actions.ts";
-import { bindShortcuts } from "../../src/features/shortcuts/bind-shortcuts.ts";
+import { createActionRegistry } from "../../../src/application/actions.ts";
+import type { InvokeOutcome } from "../../../src/application/actions.ts";
+import { bindShortcuts } from "../../../src/features/shortcuts/bind-shortcuts.ts";
 
 interface KeyInit { key: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean; isComposing?: boolean }
 

@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join, posix } from "node:path";
-import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { REPO, isScript, listRepoFiles, parseScript } from "./source-scan.mjs";
+import { isMain } from "./main-module.mjs";
 
 export const BASELINE_PATH = join(REPO, "tools", "dep-baseline.json");
 export const STATE_MODULE = "src/js/_state.js";
@@ -948,16 +948,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   return 0;
 }
 
-function isMainModule() {
-  if (!process.argv[1]) return false;
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-}
-
-if (isMainModule()) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   const modes = { "--metrics": "metrics", "--init": "init", "--prune": "prune" };
   let options = null;

@@ -12,7 +12,7 @@ runs the fast gates in the order CI does.
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
 | `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
 | `npm run test:desktop` | `desktop/test/*.test.mjs` |
-| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list) |
+| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list, each tool's entry check) |
 | `npm run test:all` | All three sets |
 | `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
 
@@ -60,13 +60,31 @@ them, and prints how many ran in each group.
 | Group | Files | Runner | Must be non-empty |
 | --- | --- | --- | --- |
 | `frontend` | `src/test/*.test.mjs` | `node --test` | always |
-| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated folder holds TypeScript source and `tests/` has no test for it |
+| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated area (below) holds TypeScript source and its `tests/` folder has no test |
 | `tests` | `tests/**/*.test.*` | `node --test` | once `tests/` holds TypeScript |
 | `desktop` | `desktop/test/*.test.mjs` | `node <file>`, one at a time | always |
 | `tools` | `tools/test-*.mjs` | `node <file>`, one at a time | always |
 
 A file named like a test that no group runs (`src/test/x.test.ts`,
 `server/x.test.mjs`) fails the run, as does a file two groups claim.
+
+Every migrated area that holds TypeScript source (declaration files aside)
+needs at least one test, beside its source (anywhere inside the area) or in
+its `tests/` folder; a unit run names each area that has none and fails. A
+test in one area's folder does not cover another.
+
+| Area | Its `tests/` folder |
+| --- | --- |
+| each `src/core/<folder>` | `tests/core/<folder>` |
+| files directly in `src/core` | directly in `tests/core`, or directly in `src/core` |
+| `src/application` | `tests/application` |
+| `src/contracts` | `tests/contracts` |
+| `src/adapters` | `tests/adapters` |
+| each `src/features/<folder>` | `tests/features/<folder>` |
+| files directly in `src/features` | directly in `tests/features`, or directly in `src/features` |
+| `src/bootstrap` | `tests/bootstrap` |
+| `src/legacy` | `tests/legacy` |
+
 `node tools/run-tests.mjs --list [unit|desktop|tools|all]` prints discovery
 without running anything.
 
@@ -85,6 +103,14 @@ link still cannot be made on a Windows workstation, the typecheck cases print
 `SKIP` with the reason and the summary counts them as skipped, not passed.
 Anywhere else, and on Windows when `CI` is set, a link that cannot be made
 fails the run.
+
+A tool runs its command only when it is the script Node was started with,
+which `isMain` in `tools/main-module.mjs` decides by comparing the real paths
+of both, so a checkout reached through a junction or symlink still runs the
+gates instead of exiting 0 having done nothing. `update.mjs` makes the same
+comparison itself, because it ships in the release zip without `tools/`.
+`tools/test-main-module.mjs` starts every tool and the updater through such a
+link, with the same skip rule.
 
 ## TypeScript
 

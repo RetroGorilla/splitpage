@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlinkSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
-import { REPO } from "./source-scan.mjs";
+import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { discover, runTests, parseArgs, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
@@ -50,7 +50,7 @@ console.log("\ndiscover():\n");
 }
 
 {
-  const found = discover(["src/test/a.test.mjs", "src/core/text/runs.ts", "tests/core/runs.test.ts"]);
+  const found = discover(["src/test/a.test.mjs", "src/core/text/runs.ts", "tests/core/text/runs.test.ts"]);
   eq("tests under tests/ satisfy migrated source", groupRequired(found, "source"), false);
   eq("migrated source with no test anywhere requires the source group", groupRequired(discover(["src/test/a.test.mjs", "src/core/text/runs.ts"]), "source"), true);
 }
@@ -59,6 +59,40 @@ console.log("\ndiscover():\n");
   const found = discover(["src/test/a.test.mjs"]);
   eq("the source group may be empty before any migration", groupRequired(found, "source"), false);
   eq("the frontend group is always required", groupRequired(found, "frontend"), true);
+}
+
+console.log("\nevery migrated area has a test:\n");
+
+{
+  const untested = (files) => (discover(files).untested ?? null)?.map((u) => `${u.area} ${u.tests}`) ?? null;
+  eq("today's tree has a test for every area", untested(listRepoFiles(REPO)), []);
+  eq("a test under tests/ for one area does not cover another", untested(["src/core/text/runs.ts", "src/application/a.ts", "tests/application/a.test.ts"]), ["src/core/text tests/core/text/"]);
+  eq("and the source group is then required", groupRequired(discover(["src/core/text/runs.ts", "src/application/a.ts", "tests/application/a.test.ts"]), "source"), true);
+  eq("a test beside the source covers its area", untested(["src/core/text/runs.ts", "src/core/text/runs.test.ts"]), []);
+  eq("each core folder is its own area", untested(["src/core/text/a.ts", "src/core/text/a.test.ts", "src/core/merge/b.ts"]), ["src/core/merge tests/core/merge/"]);
+  eq("a test under tests/core/<folder> covers only that folder", untested(["src/core/text/a.ts", "src/core/merge/b.ts", "tests/core/text/x.test.ts"]), ["src/core/merge tests/core/merge/"]);
+  eq("a test directly under tests/core covers no core folder", untested(["src/core/text/a.ts", "tests/core/x.test.ts"]), ["src/core/text tests/core/text/"]);
+  eq("each feature folder is its own area", untested(["src/features/rows/v.ts", "src/features/menu/m.ts", "src/features/menu/m.test.ts", "tests/legacy/x.test.ts"]), ["src/features/rows tests/features/rows/"]);
+  eq("one feature's tests do not cover another feature", untested(["src/features/rows/view.ts", "src/features/shortcuts/mount.ts", "tests/features/shortcuts/mount.test.ts"]), ["src/features/rows tests/features/rows/"]);
+  eq("tests/features/<folder> covers that feature", untested(["src/features/rows/v.ts", "tests/features/rows/v.test.ts"]), []);
+  eq("a test directly under tests/features covers no feature", untested(["src/features/rows/v.ts", "tests/features/rows.test.ts"]), ["src/features/rows tests/features/rows/"]);
+  eq("declaration files alone do not make an area", untested(["src/core/text/types.d.ts", "src/contracts/api.d.mts"]), []);
+  eq("a file directly in src/core is an area of its own", untested(["src/core/a.ts", "src/core/text/a.test.ts", "tests/core/text/b.test.ts"]), ["src/core tests/core/"]);
+  eq("covered by a test beside it in src/core", untested(["src/core/a.ts", "src/core/a.test.ts"]), []);
+  eq("or directly under tests/core", untested(["src/core/a.ts", "tests/core/a.test.ts"]), []);
+  eq("and that root test covers no core folder", untested(["src/core/a.ts", "src/core/text/b.ts", "tests/core/a.test.ts"]), ["src/core/text tests/core/text/"]);
+  eq("nested folders belong to their top-level area", untested(["src/bootstrap/start/a.ts", "src/contracts/x/c.mts", "src/adapters/idb/a.cts", "tests/contracts/c.test.ts"]), ["src/adapters tests/adapters/", "src/bootstrap tests/bootstrap/"]);
+  eq("a test in the wrong tests/ folder does not count", untested(["src/legacy/a.ts", "tests/legacy-old/a.test.ts", "tests/application/a.test.ts"]), ["src/legacy tests/legacy/"]);
+  eq("JavaScript and test files alone do not make an area", untested(["src/legacy/a.js", "src/core/text/a.test.ts"]), []);
+
+  const files = ["src/test/a.test.mjs", "src/core/text/runs.ts", "src/core/text/runs.test.ts", "src/application/a.ts", "tests/core/x.test.ts"];
+  const err = [];
+  const code = runTests({ repo: REPO, sets: ["unit"], files, print: () => {}, printError: (l) => err.push(l), spawn: () => ({ status: 0 }) });
+  eq("an untested area fails the run before anything runs", code, 1);
+  check("and is named with the folder that would cover it", err.join("\n").includes("run-tests: src/application holds TypeScript source but has no test beside it or under tests/application/"), err.join("\n"));
+  const focused = runTests({ repo: REPO, sets: ["unit"], files, only: ["src/test/a"], print: () => {}, printError: () => {}, spawn: () => ({ status: 0 }) });
+  eq("an untested area still fails a focused run", focused, 1);
+  eq("a run of the tools set alone does not check areas", runTests({ repo: REPO, sets: ["tools"], files: [...files, "tools/test-x.mjs"], print: () => {}, printError: () => {}, spawn: () => ({ status: 0 }) }), 0);
 }
 
 const work = mkdtempSync(join(tmpdir(), "splitpage-run-tests-"));

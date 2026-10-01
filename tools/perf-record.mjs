@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { cpus, totalmem, platform, release, arch, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { REPO } from "./source-scan.mjs";
+import { isMain } from "./main-module.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 const TYPED = "The quick brown fox films a take by the window at dusk.";
@@ -179,7 +179,7 @@ export function main(argv) {
   return 0;
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }
 

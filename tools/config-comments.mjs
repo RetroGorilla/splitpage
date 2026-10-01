@@ -1,6 +1,6 @@
 import ts from "typescript";
-import { Parser, parseAllDocuments, LineCounter, isMap, isSeq, isScalar } from "yaml";
-import { shellComments, batchComments, extensionOf } from "./source-scan.mjs";
+import { Parser, parseAllDocuments, LineCounter, isAlias, isMap, isSeq, isScalar } from "yaml";
+import { shellComments, batchComments, extensionOf, scriptComments as jsComments } from "./source-scan.mjs";
 
 export const DOCKERFILE_PATH = /(^|\/)(?![^/]*\.(?:md|txt)$)(?:Dockerfile(?:[._-][\w.-]*)?|[\w.-]+\.dockerfile)$/i;
 export const COMPOSE_PATH = /(^|\/)(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$/;
@@ -33,7 +33,7 @@ export function scriptComments(script, dialect, { shebang = false } = {}) {
     comments.push({ start: 0, end, text: body.slice(0, end).replace(/\r$/, "") });
     body = " ".repeat(end) + body.slice(end);
   }
-  if (dialect === "sh") body = body.replace(/<<</g, "   ");
+  if (dialect === "js") return [...comments, ...jsComments("step.js", body)];
   return [...comments, ...shellComments(body, dialect)];
 }
 
@@ -41,17 +41,19 @@ export function shellDialect(shell) {
   const name = String(shell ?? "bash").trim().split(/\s+/)[0].toLowerCase();
   if (name === "pwsh" || name === "powershell") return "ps1";
   if (name === "cmd") return "bat";
+  if (name === "node") return "js";
   return "sh";
 }
 
-export function runnerOs(runsOn) {
+export function runnerOs(node, resolve = (n) => n) {
+  const runsOn = resolve(node);
   if (runsOn == null) return null;
   let labels = runsOn;
   if (isMap(runsOn)) {
-    labels = runsOn.get("labels", true);
+    labels = resolve(runsOn.get("labels", true));
     if (labels == null) return "unknown";
   }
-  const texts = (isSeq(labels) ? labels.items : [labels]).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
+  const texts = (isSeq(labels) ? labels.items : [labels]).map(resolve).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
   if (texts.some((t) => t === null || t.includes("${{"))) return "unknown";
   if (texts.some((t) => /windows/i.test(t))) return "windows";
   if (texts.some((t) => /ubuntu|linux|macos|darwin/i.test(t))) return "other";
@@ -71,28 +73,105 @@ function stepComments(path, script, shell, os, line) {
   return asBash;
 }
 
-function runComments(path, doc, lineCounter) {
+const QUOTING = {
+  QUOTE_SINGLE: { escape: /''/, unescape: (s) => s.replace(/''/g, "'") },
+  QUOTE_DOUBLE: {
+    escape: /\\(?:x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[\s\S]|$)/,
+    unescape: (s) => s.replace(/\\([\\"/ t])/g, (m, c) => (c === "t" ? "\t" : c))
+  }
+};
+
+function valueLines(text, node, lineCounter) {
+  const value = node.value;
+  let offset = node.range[0];
+  let source = text.slice(node.range[0], node.range[1]);
+  if (node.type === "BLOCK_LITERAL" || node.type === "BLOCK_FOLDED") {
+    const eol = source.indexOf("\n");
+    offset += eol === -1 ? source.length : eol + 1;
+    source = eol === -1 ? "" : source.slice(eol + 1);
+  } else if (node.type === "QUOTE_DOUBLE" || node.type === "QUOTE_SINGLE") {
+    offset += 1;
+    source = source.slice(1, -1);
+  }
+  const quoting = QUOTING[node.type];
+  const candidates = (content) => {
+    if (!content) return [];
+    if (!quoting) return [content];
+    return [content, quoting.unescape(content), ...content.split(quoting.escape).map((s) => s.trim()).filter(Boolean)];
+  };
+  const marks = [];
+  let pos = 0;
+  let at = 0;
+  for (const raw of source.split("\n")) {
+    const lead = raw.length - raw.trimStart().length;
+    for (const candidate of candidates(raw.trim())) {
+      const hit = value.indexOf(candidate, pos);
+      if (hit === -1) continue;
+      marks.push([hit, lineCounter.linePos(offset + at + lead).line]);
+      pos = hit + candidate.length;
+      break;
+    }
+    at += raw.length + 1;
+  }
+  const first = marks.length ? marks[0][1] : lineCounter.linePos(offset).line;
+  return (index) => {
+    let line = first;
+    for (const [start, l] of marks) {
+      if (start > index) break;
+      line = l;
+    }
+    return line;
+  };
+}
+
+const GITHUB_SCRIPT = /^actions\/github-script@/i;
+
+function runComments(path, doc, text, lineCounter) {
   const found = [];
+  const seen = new Set();
+  const resolve = (node) => (isAlias(node) ? node.resolve(doc) : node);
+  const stringNode = (node) => {
+    const n = resolve(node);
+    return isScalar(n) && typeof n.value === "string" ? n : null;
+  };
+  const stringValue = (node) => {
+    const n = resolve(node);
+    return isScalar(n) && n.value != null ? String(n.value) : null;
+  };
+  const report = (node, comments) => {
+    const lineIn = valueLines(text, node, lineCounter);
+    for (const c of comments) {
+      const line = lineIn(c.start);
+      const key = `${line}\0${c.text}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({ start: node.range[0], end: node.range[1], text: c.text, line });
+    }
+  };
   const visit = (node, ctx) => {
     if (isSeq(node)) { for (const item of node.items) visit(item, ctx); return; }
     if (!isMap(node)) return;
     const local = { ...ctx };
-    const defaults = node.getIn(["defaults", "run", "shell"]);
-    if (defaults != null) local.shell = String(defaults);
-    const os = runnerOs(node.get("runs-on", true));
+    const defaults = stringValue(["defaults", "run", "shell"].reduce((n, k) => (isMap(n) ? resolve(n.get(k, true)) : null), node));
+    if (defaults != null) local.shell = defaults;
+    const os = runnerOs(node.get("runs-on", true), resolve);
     if (os !== null) local.os = os;
     for (const pair of node.items) {
       const key = isScalar(pair.key) ? pair.key.value : null;
-      if (key === "steps" && isSeq(pair.value)) {
-        for (const step of pair.value.items) {
+      const steps = key === "steps" ? resolve(pair.value) : null;
+      if (isSeq(steps)) {
+        for (const item of steps.items) {
+          const step = resolve(item);
           if (!isMap(step)) continue;
-          const run = step.get("run", true);
-          if (!isScalar(run) || typeof run.value !== "string") continue;
+          const uses = stringValue(step.get("uses", true));
+          const inputs = resolve(step.get("with", true));
+          const script = uses && GITHUB_SCRIPT.test(uses) && isMap(inputs) ? stringNode(inputs.get("script", true)) : null;
+          if (script) report(script, scriptComments(script.value, "js"));
+          const run = stringNode(step.get("run", true));
+          if (!run) continue;
           const block = run.type === "BLOCK_LITERAL" || run.type === "BLOCK_FOLDED";
           const first = lineCounter.linePos(run.range[0]).line + (block ? 1 : 0);
-          for (const c of stepComments(path, run.value, step.get("shell") ?? local.shell, local.os, first)) {
-            found.push({ start: run.range[0], end: run.range[1], text: c.text, line: first + lineAt(run.value, c.start) - 1 });
-          }
+          report(run, stepComments(path, run.value, stringValue(step.get("shell", true)) ?? local.shell, local.os, first));
         }
       }
       visit(pair.value, local);
@@ -117,7 +196,7 @@ export function yamlComments(path, text) {
   if (errors.length) throw new Error(`cannot parse ${path}: ${errors[0].message.split("\n")[0]}`);
   const comments = [];
   cstComments([...new Parser().parse(text)], comments);
-  if (isWorkflow(path)) for (const doc of list) comments.push(...runComments(path, doc, lineCounter));
+  if (isWorkflow(path)) for (const doc of list) comments.push(...runComments(path, doc, text, lineCounter));
   return comments.sort((a, b) => a.start - b.start);
 }
 

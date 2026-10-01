@@ -1,12 +1,47 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
+import { isMain } from "./main-module.mjs";
 
 const TS_SOURCE = /\.(?:ts|mts|cts)$/;
+const DECLARATION = /\.d\.(?:ts|mts|cts)$/;
 const TEST_FILE = /\.test\.(?:ts|mts|cts|js|mjs|cjs)$/;
-const MIGRATED_ROOTS = ["src/core/", "src/application/", "src/contracts/", "src/adapters/", "src/features/", "src/bootstrap/", "src/legacy/"];
+const AREAS = [
+  { root: "core", perFolder: true },
+  { root: "application", perFolder: false },
+  { root: "contracts", perFolder: false },
+  { root: "adapters", perFolder: false },
+  { root: "features", perFolder: true },
+  { root: "bootstrap", perFolder: false },
+  { root: "legacy", perFolder: false }
+];
+
+function areaOf(path) {
+  const spec = AREAS.find((a) => path.startsWith(`src/${a.root}/`));
+  if (!spec) return null;
+  const rest = path.slice(`src/${spec.root}/`.length).split("/");
+  if (spec.perFolder && rest.length > 1) {
+    return { area: `src/${spec.root}/${rest[0]}`, tests: `tests/${spec.root}/${rest[0]}/`, flat: false };
+  }
+  return { area: `src/${spec.root}`, tests: `tests/${spec.root}/`, flat: spec.perFolder };
+}
+
+function migratedAreas(files) {
+  const areas = new Map();
+  for (const p of files) {
+    if (!TS_SOURCE.test(p) || DECLARATION.test(p) || TEST_FILE.test(p)) continue;
+    const a = areaOf(p);
+    if (a) areas.set(a.area, a);
+  }
+  return [...areas.values()].sort((x, y) => (x.area < y.area ? -1 : x.area > y.area ? 1 : 0));
+}
+
+const hasTestIn = (files, prefix, flat) => files.some((p) => p.startsWith(prefix) && TEST_FILE.test(p) && !(flat && p.slice(prefix.length).includes("/")));
+
+export function untestedAreas(files) {
+  return migratedAreas(files).filter((a) => !hasTestIn(files, a.area + "/", a.flat) && !hasTestIn(files, a.tests, a.flat));
+}
 
 export const GROUPS = [
   {
@@ -21,8 +56,7 @@ export const GROUPS = [
     set: "unit",
     runner: "node-test",
     matches: (p) => p.startsWith("src/") && !p.startsWith("src/test/") && TEST_FILE.test(p),
-    requiredWhen: (files) => files.some((p) => MIGRATED_ROOTS.some((r) => p.startsWith(r)) && TS_SOURCE.test(p) && !TEST_FILE.test(p))
-      && !files.some((p) => p.startsWith("tests/") && TEST_FILE.test(p))
+    requiredWhen: (files) => migratedAreas(files).some((a) => !hasTestIn(files, a.tests, a.flat))
   },
   {
     name: "tests",
@@ -58,7 +92,7 @@ export function discover(files, groups = GROUPS) {
   });
   const overlaps = [...claimed].filter(([, names]) => names.length > 1).map(([p, names]) => `${p} (${names.join(", ")})`);
   const orphans = files.filter((p) => TEST_FILE.test(p) && !claimed.has(p) && !/(^|\/)node_modules\//.test(p)).sort();
-  return { groups: result, overlaps, orphans };
+  return { groups: result, overlaps, orphans, untested: untestedAreas(files) };
 }
 
 export function normalizePattern(pattern) {
@@ -102,7 +136,7 @@ export function runTests({
   listOnly = false,
   only = []
 } = {}) {
-  const { groups: found, overlaps, orphans } = discover(files, groups);
+  const { groups: found, overlaps, orphans, untested } = discover(files, groups);
   const focused = only.length > 0;
   const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only) }));
   let failed = false;
@@ -113,6 +147,9 @@ export function runTests({
   }
   for (const o of overlaps) { failed = true; printError(`run-tests: ${o} is claimed by more than one group`); }
   for (const o of orphans) { failed = true; printError(`run-tests: ${o} looks like a test but no group runs it`); }
+  if (sets.includes("unit")) {
+    for (const u of untested) { failed = true; printError(`run-tests: ${u.area} holds TypeScript source but has no test beside it or ${u.flat ? "directly " : ""}under ${u.tests}`); }
+  }
   for (const e of chosen) {
     if (e.required && e.files.length === 0) { failed = true; printError(`run-tests: group ${e.group.name} found no test files`); }
   }
@@ -167,7 +204,7 @@ export function parseArgs(args) {
   return { sets, listOnly, only };
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+if (isMain(import.meta.url)) {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.error) {
     console.error(`run-tests: ${parsed.error}`);

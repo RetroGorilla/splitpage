@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry } from "../../src/application/actions.ts";
-import { mountShortcuts } from "../../src/features/shortcuts/mount.ts";
+import { createActionRegistry } from "../../../src/application/actions.ts";
+import { mountShortcuts } from "../../../src/features/shortcuts/mount.ts";
 
 class CountingTarget extends EventTarget {
   listeners = 0;
