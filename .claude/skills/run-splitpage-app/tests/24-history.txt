@@ -278,12 +278,13 @@ eval (function(){return H.injectFault(null);})()
 # a save through the fake desktop backend still works, and clearing the
 # fault drains the pending entries.
 # =============================================================================
-eval (async function(){ await H.resetForTest(); window.__pdId = await openFixture(did('ce'), 'Pending Drain'); await H.idle(); window.__pdWarnBefore = document.querySelectorAll('.toast.warn').length; return true; })()
+eval (async function(){ await H.resetForTest(); window.__pdId = await openFixture(did('ce'), 'Pending Drain'); await H.idle(); window.__pdWarns = []; window.__pdObs = new MutationObserver(function(ms){ ms.forEach(function(m){ m.addedNodes.forEach(function(n){ if (n.classList && n.classList.contains('toast') && n.classList.contains('warn')) window.__pdWarns.push(n.textContent); }); }); }); window.__pdObs.observe(document.getElementById('toast-host'), { childList: true }); return true; })()
 eval (function(){H.injectFault('quota-always'); return true;})()
 eval (async function(){ await pushForeign('pd-1.txt'); await pushForeign('pd-2.txt'); await pushForeign('pd-3.txt'); await H.idle(); return true; })()
 eval (function(){window.__pdPending = H.pending(__pdId); return window.__pdPending.length;})()
 expect window.__pdPending.length === 3
-expect document.querySelectorAll('.toast.warn').length === window.__pdWarnBefore + 1
+eval (function(){ window.__pdObs.disconnect(); return window.__pdWarns; })()
+expect window.__pdWarns.length === 1
 eval (function(){window.fakePd = D.makeFakeBackend(); window.__pdFileId = window.fakePd._addFile('pd.splitpage', F.buildSplitpage()); D.setBackend(window.fakePd); return true;})()
 eval (async function(){ var handle = D.makeHandle({id: window.__pdFileId, name: 'pd.splitpage'}); var file = await handle.getFile(); await F.openFile(file, handle); return true; })()
 wait F.docFile().kind === 'splitpage'

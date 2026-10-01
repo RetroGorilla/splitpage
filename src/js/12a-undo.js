@@ -1,8 +1,10 @@
 import { S } from "./_state.js";
 import { STATE_FIELDS } from "./02-state.js";
 import { applySteps, fromHtml, invertSteps, mergeCells, normalizeCell, toHtml } from "./04c-doc-model.js";
+import { STATE_FIELDS as FIELD_POLICIES } from "../core/document/fields.ts";
 
-var SKIP_DOC_KEYS = { docId: true, rev: true, lastEditedBy: true, lastEditedAt: true, schema: true, rows: true, personColors: true };
+var SKIP_DOC_KEYS = {};
+FIELD_POLICIES.forEach(function (f) { if (!f.undo) SKIP_DOC_KEYS[f.key] = true; });
 var SKIP_ROW_KEYS = { id: true, updatedAt: true, updatedBy: true };
 var TEXT_KEYS = { visualText: true, audioText: true };
 var COALESCE_MS = 1000;

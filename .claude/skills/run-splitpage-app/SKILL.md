@@ -74,7 +74,11 @@ gates, every unit/desktop/tool test and the smoke, CSP and persistence suites
 on every pull request, so a focused run is feedback, not the gate. The full
 browser regression below, on Linux and Windows, is run at milestone and
 release gates (plan section 4) and its `summary.txt` attached to the closing
-PR. **Rebuild first** whichever you run, or you will be testing the previous
+PR. A few kinds of pull request also need one before merge (every 3.1.x fix,
+`02-state.js`, `build.mjs`, the harness); those, and the rest of how a pull
+request is reviewed and merged, are in
+[docs/architecture/review.md](../../../docs/architecture/review.md).
+**Rebuild first** whichever you run, or you will be testing the previous
 version of the app.
 
 ## Run the full regression (milestone and release gates)
@@ -84,12 +88,12 @@ node build.mjs
 powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 ```
 
-Runs every suite in `tests/` (162 today) and ends with
+Runs every suite in `tests/` and ends with
 `ALL PASS` and exit 0, or lists every failing assertion and exits 1. The
 Linux half is `node tools/run-suites.mjs <out-dir>` (below). Options:
 
 - `-Only 265-browser-drafts` — run just the suites whose filename starts with that (a PowerShell wildcard; numeric prefixes repeat, so `-Only 261` runs two suites)
-- `-Parallel N` — how many suites run at once (default 4; each has its own ports, Edge profile and log)
+- `-Parallel N` — how many suites run at once; each has its own ports, Edge profile and log. The default is 9 lanes for every 16 logical processors, rounded down and at least 1: 18 on a 32-thread PC, 4 on an 8-thread one. On a 32-thread Ryzen that ran all 181 suites clean in 3–4 min (2.9, 3.1 and 4.0 in three runs; 12 lanes took 4.5; 4 lanes about 12, projected from a partial run), while 24 lanes was faster still but showed a timing race in `24-history.txt`, since fixed. A run started without `-Parallel` while other `run-tests.ps1` runs are going divides its default by their number plus one and says so; the runs already going keep their lanes, so pass an explicit `-Parallel` to plan a split yourself.
 - `-Headed` — watch it happen in a real Edge window
 - `-TimeoutSec 300` — for a slow machine
 - `-Port` / `-CdpPort` — pin the port bases instead of auto-picking (below)

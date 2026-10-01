@@ -505,7 +505,9 @@ word edit on the other merges cleanly. The on-disk merge review
 can no longer disagree.
 
 **Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
-`03-sync.js` is the one decision, returning `{html, outcome}` with outcome
+`src/core/merge/text-field.ts` (re-exported by `03-sync.js`, and reading
+cells through the decoder its context carries) is the one decision,
+returning `{html, outcome}` with outcome
 `same`, `mine`, `theirs`, `merged` or `conflict`; `mergeRow` and the
 on-disk review both call it (the review labels `merged` "both sets of
 changes are combined"). What building it settled:
