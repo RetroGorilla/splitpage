@@ -3,10 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SCHEMA_VERSION } from "../js/00-prelude.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeBrollShots, mergePeople, mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { saveAuthorName } from "../js/10-comments.js";
 import {
-  FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, readGolden, updatingGoldens
+  FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, goldenText, jsonCopy, maskTokens, readGolden, updatingGoldens
 } from "./golden-helpers.mjs";
 
 freezeClockAndRandom(0x6d657267);
@@ -44,6 +44,10 @@ function doc(over) {
 }
 
 const four = () => doc({ rows: [row("r1", "One."), row("r2", "Two."), row("r3", "Three."), row("r4", "Four.")] });
+
+const PROTO_IDS = ["constructor", "__proto__", "toString", "hasOwnProperty"];
+const PROTO_TAG_IDS = { Kettle: "constructor", Lamp: "toString", Ladder: "hasOwnProperty", Tripod: "__proto__" };
+const protoRows = () => doc({ rows: [row("r1", "One.")].concat(PROTO_IDS.map((id) => row(id, "Row " + id + ".", "Visual " + id + "."))) });
 
 const find = (s, id) => s.rows.find((r) => r.id === id);
 function stamp(r, who) {
@@ -591,6 +595,68 @@ const CASES = [
     name: "editor-anonymous", editor: "", spec: four(),
     mine: (s) => { mineEdit(s, "r1", { audioText: "One, mine." }); mineEdit(s, "r2", { audioText: "Two, mine." }); },
     theirs: (s) => theirEdit(s, "r2", { audioText: "Two, theirs." })
+  },
+
+  { name: "prototype-ids-rows-deleted-by-mine", spec: protoRows(), mine: (s) => { s.rows = s.rows.filter((r) => r.id === "r1"); } },
+  { name: "prototype-ids-rows-deleted-by-theirs", spec: protoRows(), theirs: (s) => { s.rows = s.rows.filter((r) => r.id === "r1"); } },
+  {
+    name: "prototype-ids-rows-added-on-each-side", spec: doc({ rows: [row("r1", "One.")] }),
+    mine: (s) => { s.rows.push(newRow("constructor", "Mine ctor.", "mine"), newRow("__proto__", "Mine proto.", "mine")); },
+    theirs: (s) => { s.rows.push(newRow("toString", "Their ts.", "theirs"), newRow("hasOwnProperty", "Their hop.", "theirs")); }
+  },
+  {
+    name: "prototype-ids-rows-edited-on-each-side", spec: protoRows(),
+    mine: (s) => PROTO_IDS.forEach((id) => mineEdit(s, id, { audioText: "Row " + id + ", mine." })),
+    theirs: (s) => PROTO_IDS.forEach((id) => theirEdit(s, id, { visualText: "Visual " + id + ", theirs." }))
+  },
+  {
+    name: "prototype-ids-comments",
+    spec: doc({
+      rows: [row("r1", "One.")],
+      comments: [cm("constructor"), cm("toString"), cm("c1", { replies: [reply("constructor", at(3)), reply("__proto__", at(3))] })]
+    }),
+    mine: (s) => {
+      Object.assign(findComment(s, "constructor"), { body: "Ctor, mine", updatedAt: at(5) });
+      s.comments.push(cm("__proto__", { createdAt: at(5), updatedAt: at(5) }));
+      findComment(s, "c1").replies.push(reply("hasOwnProperty", at(5)));
+    },
+    theirs: (s) => {
+      Object.assign(findComment(s, "toString"), { resolved: true, resolvedBy: "Bo", resolvedAt: at(6), updatedAt: at(6) });
+      s.comments.push(cm("hasOwnProperty", { createdAt: at(6), updatedAt: at(6) }));
+      findComment(s, "c1").replies.push(reply("toString", at(6), "Bo"));
+    }
+  },
+  {
+    name: "prototype-ids-tags",
+    spec: doc({ people: [{ id: "p1", name: "Sam" }], productionTags: [tagEntry("", "prop", "Kettle"), tagEntry("", "prop", "Lamp")] }),
+    mine: (s) => {
+      s.productionTags.find((t) => t.name === "Kettle").notes = "mine";
+      s.productionTags.push(tagEntry("", "prop", "Ladder", { owner: "p1" }));
+    },
+    theirs: (s) => {
+      s.productionTags.find((t) => t.name === "Lamp").status = "have";
+      s.productionTags.push(tagEntry("", "gear", "Tripod"));
+    },
+    after: (d) => [d.base, d.mine, d.theirs].forEach((s) => s.productionTags.forEach((t) => { t.id = PROTO_TAG_IDS[t.name]; }))
+  },
+  {
+    name: "prototype-ids-shots",
+    spec: doc({ people: [{ id: "p1", name: "Sam" }], brollShots: [shot("constructor", "Gulls"), shot("toString", "Pier")] }),
+    mine: (s) => {
+      Object.assign(s.brollShots.find((b) => b.id === "constructor"), { owner: "p1", notes: "mine" });
+      s.brollShots = s.brollShots.filter((b) => b.id !== "toString");
+      s.brollShots.push(shot("hasOwnProperty", "Mine shot", { reshoot: true }));
+    },
+    theirs: (s) => {
+      s.brollShots.find((b) => b.id === "constructor").status = "shot";
+      s.brollShots.push(shot("__proto__", "Their shot"));
+    }
+  },
+  {
+    name: "prototype-ids-people",
+    spec: doc({ people: [{ id: "p1", name: "Sam" }, { id: "constructor", name: "Con" }] }),
+    mine: (s) => { s.people.push({ id: "__proto__", name: "Proto" }, { id: "p2", name: "constructor" }); },
+    theirs: (s) => { s.people.push({ id: "toString", name: "Tess" }, { id: "p3", name: "__proto__" }); }
   }
 ];
 
@@ -606,11 +672,41 @@ function inputsOf(c) {
   return jsonCopy(docs);
 }
 
+const WATCHED_BUILTINS = [
+  ["Object", Object], ["Object.prototype", Object.prototype], ["Object.prototype.toString", Object.prototype.toString],
+  ["Object.prototype.hasOwnProperty", Object.prototype.hasOwnProperty], ["Function.prototype", Function.prototype]
+];
+
+function builtinsSnapshot() {
+  return WATCHED_BUILTINS.map(([, o]) => new Map(Reflect.ownKeys(o).map((k) => [k, Object.getOwnPropertyDescriptor(o, k)])));
+}
+
+function builtinsRestore(snapshot) {
+  const touched = [];
+  WATCHED_BUILTINS.forEach(([label, o], i) => {
+    Reflect.ownKeys(o).forEach((k) => {
+      const was = snapshot[i].get(k), now = Object.getOwnPropertyDescriptor(o, k);
+      if (was && was.value === now.value && was.get === now.get && was.set === now.set) return;
+      const v = now.value;
+      touched.push({ on: label, key: String(k), value: typeof v === "function" ? "(function)" : v === undefined ? null : jsonCopy(v) });
+      if (was) Object.defineProperty(o, k, was);
+      else delete o[k];
+    });
+  });
+  return touched;
+}
+
 function produce(c, inputs) {
   saveAuthorName(c.editor === undefined ? EDITOR : c.editor);
   const args = jsonCopy(inputs);
   const before = JSON.stringify(args);
-  const res = mergeStates(args.base, args.mine, args.theirs);
+  const builtins = builtinsSnapshot();
+  let res, builtinsTouched;
+  try {
+    res = mergeStates(args.base, args.mine, args.theirs);
+  } finally {
+    builtinsTouched = builtinsRestore(builtins);
+  }
   const inputsUntouched = JSON.stringify(args) === before;
   const out = jsonCopy({ merged: res.merged, conflicts: res.conflicts, stats: res.stats });
 
@@ -629,7 +725,8 @@ function produce(c, inputs) {
     assert.match(out.merged.docId, /^d[0-9a-f]{32}$/);
     masked = maskTokens(masked, [out.merged.docId], "minted-doc-id");
   }
-  return Object.assign({ inputs, inputsUntouched }, masked);
+  const head = builtinsTouched.length ? { inputs, inputsUntouched, builtinsTouched } : { inputs, inputsUntouched };
+  return Object.assign(head, masked);
 }
 
 test("the clock, the random source and the editor are fixed for every case", () => {
@@ -646,15 +743,160 @@ for (const c of CASES) {
       return;
     }
     const stored = readGolden(name);
-    assert.deepStrictEqual(built, stored.inputs, name + ": the case builds the inputs its fixture recorded");
+    assert.equal(goldenText(built), goldenText(stored.inputs),
+      name + ": the case builds the inputs its fixture recorded, key order included");
     assertGolden(name, produce(c, stored.inputs));
   });
 }
 
+const sh = (id, extra) => shot(id, "Shot " + id, extra);
+const prop = (id, name) => ({ id, name });
+const K = prop("t_kettle", "Kettle"), L = prop("t_ladder", "Ladder"), T = prop("t_tripod", "Tripod");
+const tg = (id, cat, name, extra) => {
+  const t = tagEntry(id, cat, name, extra);
+  if (id === null) delete t.id;
+  return t;
+};
+const person = (id, name) => ({ id, name });
+const many = (n, label) => Array.from({ length: n }, (_, i) => prop("", label + " " + (i + 1)));
+
+const LIST_MERGERS = { brollShots: mergeBrollShots, productionTags: mergeProductionTags, people: mergePeople };
+
+const LIST_CASES = [
+  ["brollShots", "fields only my side set fill their empty ones",
+    [sh("b1")], [sh("b1", { owner: "p1", notes: "mine", audioRef: "Mine audio.", location: "Quay" })], [sh("b1")]],
+  ["brollShots", "fields their side set are kept over mine",
+    [sh("b1")], [sh("b1", { owner: "p1", notes: "mine", audioRef: "Mine audio.", location: "Quay" })],
+    [sh("b1", { owner: "p2", notes: "theirs", audioRef: "Their audio.", location: "Pier" })]],
+  ["brollShots", "fields only their side set are kept",
+    [sh("b1")], [sh("b1")], [sh("b1", { owner: "p2", notes: "theirs", audioRef: "Their audio.", location: "Pier" })]],
+  ["brollShots", "shot on my side wins over unshot on theirs", [sh("b1")], [sh("b1", { status: "shot" })], [sh("b1")]],
+  ["brollShots", "shot on their side stays shot", [sh("b1")], [sh("b1")], [sh("b1", { status: "shot" })]],
+  ["brollShots", "unshot on my side never undoes their shot",
+    [sh("b1", { status: "shot" })], [sh("b1", { status: "unshot" })], [sh("b1", { status: "shot" })]],
+  ["brollShots", "statuses neither side knows", [sh("b1")], [sh("b1", { status: "bogus" })], [sh("b1", { status: "later" })]],
+  ["brollShots", "flagged on my side wins", [sh("b1")], [sh("b1", { reshoot: true })], [sh("b1")]],
+  ["brollShots", "flagged on their side stays flagged", [sh("b1")], [sh("b1")], [sh("b1", { reshoot: true })]],
+  ["brollShots", "unflagged on my side never clears their flag",
+    [sh("b1", { reshoot: true })], [sh("b1", { reshoot: false })], [sh("b1", { reshoot: true })]],
+  ["brollShots", "a flag my side holds as a string", [sh("b1")], [sh("b1", { reshoot: "yes" })], [sh("b1")]],
+  ["brollShots", "name, description and origin follow their side",
+    [sh("b1", { name: "Gulls", desc: "base" })], [sh("b1", { name: "Gulls at dawn", desc: "mine", origin: "list" })],
+    [sh("b1", { name: "Gulls", desc: "base" })]],
+  ["brollShots", "a shot only I added and one only they added", [], [sh("b1"), sh("bM")], [sh("b1"), sh("bT")]],
+  ["brollShots", "a shot I deleted that they left alone goes", [sh("b1"), sh("b2")], [sh("b1")], [sh("b1"), sh("b2")]],
+  ["brollShots", "a shot I deleted that they edited stays",
+    [sh("b1"), sh("b2")], [sh("b1")], [sh("b1"), sh("b2", { notes: "theirs" })]],
+  ["brollShots", "a shot they deleted that I left alone goes", [sh("b1"), sh("b2")], [sh("b1"), sh("b2")], [sh("b1")]],
+  ["brollShots", "a shot they deleted that I edited stays, after theirs",
+    [sh("b1"), sh("b2"), sh("b3")], [sh("b1"), sh("b2", { notes: "mine" }), sh("b3")], [sh("b1"), sh("b3")]],
+  ["brollShots", "a shot both deleted goes", [sh("b1"), sh("b2")], [sh("b1")], [sh("b1")]],
+  ["brollShots", "with no ancestor nothing is a delete", null, [sh("b1")], [sh("b1"), sh("b2")]],
+  ["brollShots", "an empty ancestor list deletes nothing", [], [sh("b1")], []],
+  ["brollShots", "a repeated id: their first copy wins and my copies fill it in turn",
+    [sh("b1")],
+    [sh("b1", { notes: "first mine" }), sh("b1", { notes: "second mine", owner: "p1", status: "shot" })],
+    [sh("b1", { name: "Their first" }), sh("b1", { name: "Their second", notes: "dup" })]],
+  ["brollShots", "a repeated id in the ancestor: its first copy is the one compared",
+    [sh("b1", { props: [K] }), sh("b1", { props: [K, L] })], [sh("b1", { props: [K, L] })], [sh("b1", { props: [K] })]],
+  ["brollShots", "entries with no id, and holes, are skipped",
+    [sh("b1")], [null, sh(""), { name: "no id" }, sh("b1")], [sh("b1"), null, { id: "", name: "blank" }]],
+  ["brollShots", "props: an addition on each side", [sh("b1", { props: [K] })], [sh("b1", { props: [K, L] })], [sh("b1", { props: [K, T] })]],
+  ["brollShots", "props: a removal on each side",
+    [sh("b1", { props: [K, L, T] })], [sh("b1", { props: [L, T] })], [sh("b1", { props: [K, L] })]],
+  ["brollShots", "props: an ancestor with no list removes nothing",
+    [Object.assign(sh("b1"), { props: undefined })], [sh("b1", { props: [K] })], [sh("b1", { props: [] })]],
+  ["brollShots", "props: my copy with no list",
+    [sh("b1", { props: [K] })], [Object.assign(sh("b1", { notes: "mine" }), { props: undefined })], [sh("b1", { props: [K] })]],
+  ["brollShots", "props: a name-only prop beside an id'd one",
+    [sh("b1")], [sh("b1", { props: [K] })], [sh("b1", { props: [prop("", "kettle")] })]],
+  ["brollShots", "props: repeated, nameless and broken props",
+    [sh("b1")], [sh("b1", { props: [K, K, { id: "t_x" }, null, "Kettle"] })],
+    [sh("b1", { props: [prop("", "Lamp"), prop("", "lamp "), 7] })]],
+  ["brollShots", "props: the merged list is capped",
+    [sh("b1")], [sh("b1", { props: many(25, "Mine") })], [sh("b1", { props: many(25, "Their") })]],
+
+  ["productionTags", "names and categories changed on my side only, their side only, and both",
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "prop", "Beta"), tg("t_c", "prop", "Gamma")],
+    [tg("t_a", "prop", "Alpha mine"), tg("t_b", "prop", "Beta"), tg("t_c", "gear", "Gamma mine")],
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "location", "Beta theirs"), tg("t_c", "vfx", "Gamma theirs")]],
+  ["productionTags", "owner and notes come from my side only where theirs are empty",
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "prop", "Beta"), tg("t_c", "prop", "Gamma")],
+    [tg("t_a", "prop", "Alpha", { owner: "p1", notes: "mine" }), tg("t_b", "prop", "Beta", { owner: "p1", notes: "mine" }),
+      tg("t_c", "prop", "Gamma")],
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "prop", "Beta", { owner: "p2", notes: "theirs" }),
+      tg("t_c", "prop", "Gamma", { owner: "p2", notes: "theirs" })]],
+  ["productionTags", "a status my side moved further along raises theirs; a lower or unknown one does not",
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B"), tg("t_c", "prop", "C", { status: "have" }), tg("t_d", "prop", "D"),
+      tg("t_e", "prop", "E"), tg("t_f", "prop", "F")],
+    [tg("t_a", "prop", "A", { status: "have" }), tg("t_b", "prop", "B"), tg("t_c", "prop", "C", { status: "returned" }),
+      tg("t_d", "prop", "D", { status: "bogus" }), tg("t_e", "prop", "E", { status: "sourcing" }), tg("t_f", "prop", "F", { status: "bogus" })],
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B", { status: "sourcing" }), tg("t_c", "prop", "C", { status: "have" }),
+      tg("t_d", "prop", "D"), tg("t_e", "prop", "E", { status: "bogus" }), tg("t_f", "prop", "F", { status: "later" })]],
+  ["productionTags", "entries without ids line up by category and name",
+    [tg(null, "prop", "Kettle")], [tg(null, "prop", "kettle", { notes: "mine", status: "sourcing" })],
+    [tg(null, "prop", "KETTLE", { owner: "p2" })]],
+  ["productionTags", "an id on one side and none on the other: one entry, the first one's, filled from the other",
+    [], [tg("t_k", "prop", "Kettle", { owner: "p1", status: "returned" })], [tg(null, "prop", "kettle", { notes: "theirs" })]],
+  ["productionTags", "two ids for one name in their list: the first keeps its id and takes the rest",
+    [], [], [tg("t_a", "prop", "Ladder"), tg("t_b", "prop", "ladder", { owner: "p2", notes: "b", status: "have" })]],
+  ["productionTags", "a repeated id: their first copy wins and my copies fill it in turn",
+    [tg("t_a", "prop", "One")],
+    [tg("t_a", "prop", "One", { notes: "first mine" }), tg("t_a", "prop", "One", { owner: "p1", notes: "second mine", status: "have" })],
+    [tg("t_a", "prop", "One"), tg("t_a", "prop", "Two", { owner: "p2" })]],
+  ["productionTags", "a tag I deleted that they left alone goes; one they edited stays",
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B")], [], [tg("t_a", "prop", "A"), tg("t_b", "prop", "B", { notes: "edited" })]],
+  ["productionTags", "a tag they deleted that I left alone goes; one I edited stays",
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B")], [tg("t_a", "prop", "A"), tg("t_b", "prop", "B", { notes: "edited" })], []],
+  ["productionTags", "a tag both deleted goes, and each side's addition lands",
+    [tg("t_a", "prop", "A")], [tg("t_m", "prop", "Mine")], [tg("t_t", "prop", "Theirs")]],
+  ["productionTags", "with no ancestor nothing is a delete", null, [tg("t_a", "prop", "A")], []],
+  ["productionTags", "nameless entries and holes are skipped",
+    [tg("t_a", "prop", "A")], [null, tg("t_x", "prop", ""), tg("t_a", "prop", "A")], [{ cat: "prop" }, tg("t_a", "prop", "A")]],
+
+  ["people", "an addition, a delete and a rename on each side",
+    [person("p1", "Sam"), person("p2", "Ada"), person("p3", "Cy"), person("p4", "Dee")],
+    [person("p1", "Sam"), person("p3", "Cyril"), person("p4", "Dee"), person("p5", "Bo")],
+    [person("p1", "Sam"), person("p2", "Ada"), person("p3", "Cy"), person("p6", "Eve")]],
+  ["people", "one name added on both sides under different ids", [], [person("p1", "Bo")], [person("p2", "bo ")]],
+  ["people", "one id renamed on my side", [person("p1", "Sam")], [person("p1", "Samuel")], [person("p1", "Sam")]],
+  ["people", "nameless entries and holes are skipped", [], [null, person("p9", ""), person("p1", "Sam")], [person("p1", "Sam"), {}]]
+];
+
+test("merge golden: list-mergers", () => {
+  const out = LIST_CASES.map(([fn, label, base, mine, theirs]) => {
+    const args = jsonCopy({ base, mine, theirs });
+    const before = JSON.stringify(args);
+    const merged = LIST_MERGERS[fn](args.base, args.mine, args.theirs);
+    return { fn, case: label, base: args.base, mine: args.mine, theirs: args.theirs,
+      out: jsonCopy(merged), inputsUntouched: JSON.stringify(args) === before };
+  });
+  assertGolden("merge-list-mergers", out);
+});
+
+test("merge golden: state-fields", () => {
+  assertGolden("merge-state-fields", STATE_FIELDS.map((f) => ({
+    key: f.key, merge: f.merge, default: f.def ? f.def() : null, listMerger: typeof f.mergeList === "function"
+  })));
+});
+
+test("a STATE_FIELDS entry with no merge strategy makes mergeStates throw", () => {
+  const d = migrateRows(jsonCopy(doc()));
+  STATE_FIELDS.push({ key: "probe", merge: "no-such-strategy" });
+  try {
+    assert.throws(() => mergeStates(jsonCopy(d), jsonCopy(d), jsonCopy(d)), /^Error: no merge strategy for state field probe$/);
+  } finally {
+    STATE_FIELDS.pop();
+  }
+  assert.equal(STATE_FIELDS.some((f) => f.key === "probe"), false);
+});
+
+const EXTRA_MERGE_FIXTURES = ["merge-list-mergers", "merge-state-fields"];
+
 test("every STATE_FIELDS key is changed by each side in at least one merge fixture", () => {
   const changedBy = { mine: new Set(), theirs: new Set() };
   const val = (d, k) => JSON.stringify(d ? d[k] : undefined);
-  for (const name of goldenNames("merge-")) {
+  for (const name of CASES.map((c) => "merge-" + c.name)) {
     const { inputs } = readGolden(name);
     for (const f of STATE_FIELDS) {
       for (const side of ["mine", "theirs"]) {
@@ -669,5 +911,5 @@ test("every STATE_FIELDS key is changed by each side in at least one merge fixtu
 });
 
 test("every merge fixture belongs to a case, and every case has one", () => {
-  assert.deepEqual(goldenNames("merge-"), CASES.map((c) => "merge-" + c.name).sort());
+  assert.deepEqual(goldenNames("merge-"), CASES.map((c) => "merge-" + c.name).concat(EXTRA_MERGE_FIXTURES).sort());
 });
