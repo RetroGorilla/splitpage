@@ -1,8 +1,17 @@
-import { makeId } from "./02-state.js";
+import { randomIds } from "../adapters/identity/ids.ts";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
 import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
-import { tagCategory } from "./07-production-tags.js";
-import { BROLL_MARKER_RE } from "./08c-broll.js";
+import { BROLL_MARKER_RE } from "../core/document/broll.ts";
+import { tagCategoryId } from "../core/document/tags.ts";
+import {
+  plainName,
+  plainText,
+  safeHref,
+  safeId as safeIdFrom,
+  safeImageSrc,
+  storedImageHtml
+} from "../core/document/text-policy.ts";
+export { plainName, plainText, safeHref, safeImageSrc, storedImageHtml };
 
 export function inertBody(html) {
   var doc = new DOMParser().parseFromString(
@@ -14,11 +23,6 @@ export function sanitizeHtml(html) {
   var out = document.createElement("div");
   walkSanitize(inertBody(html), out);
   return out.innerHTML;
-}
-
-export function safeImageSrc(src) {
-  if (typeof src !== "string") return null;
-  return /^data:image\/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=\s]*$/.test(src) ? src : null;
 }
 
 export function imageRefOf(node) {
@@ -53,12 +57,6 @@ function storedImageEl(ref) {
   return img;
 }
 
-export function storedImageHtml(ref) {
-  var clean = normalizeImageRef(ref);
-  if (!clean) return "";
-  return storedImageEl(clean).outerHTML;
-}
-
 var STORED_IMG_ATTRS = { "class": true, "data-blob": true, "data-w": true, "data-h": true, "data-mime": true };
 
 export function storedHtmlFromDom(html) {
@@ -74,32 +72,8 @@ export function storedHtmlFromDom(html) {
   return body.innerHTML;
 }
 
-export function safeHref(href) {
-  if (typeof href !== "string") return null;
-  var trimmed = href.trim();
-  /* eslint-disable-next-line no-control-regex -- deliberate: "java\\0script:"
-     resolves as javascript: in a browser, so the probe has to see past them. */
-  var probe = trimmed.replace(/[\u0000-\u0020]/g, "").toLowerCase();
-  if (probe.indexOf("javascript:") === 0 || probe.indexOf("vbscript:") === 0) return null;
-  if (probe.indexOf("data:") === 0) return null;
-  if (/^https?:\/\//i.test(trimmed) || trimmed.indexOf("mailto:") === 0) return trimmed;
-  return null;
-}
-
-export function plainText(v) {
-  /* eslint-disable-next-line no-control-regex -- C0 controls, minus tab/LF/CR,
-     are exactly what a plain-text field must not carry. */
-  return String(v == null ? "" : v).replace(/<[^>]*>/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
-}
-
-export function plainName(v) {
-  var name = plainText(v).trim().slice(0, 80);
-  return name || "Anonymous";
-}
-
 export function safeId(id, prefix) {
-  var clean = String(id == null ? "" : id).replace(/[^A-Za-z0-9_-]/g, "");
-  return clean || makeId(prefix);
+  return safeIdFrom(id, prefix, randomIds);
 }
 
 export function cssAttr(value) {
@@ -155,12 +129,12 @@ function walkSanitize(srcParent, destParent) {
       return;
     }
     if (tag === "SPAN" && node.classList && node.classList.contains("tag-anchor")) {
-      var tcat = tagCategory(node.getAttribute("data-tag-cat"));
+      var tcat = tagCategoryId(node.getAttribute("data-tag-cat"));
       var tname = plainText(node.getAttribute("data-tag-name")).trim().slice(0, 80);
       if (!tcat || !tname) { walkSanitize(node, destParent); return; }
       var tagSpan = document.createElement("span");
       tagSpan.className = "tag-anchor";
-      tagSpan.setAttribute("data-tag-cat", tcat.id);
+      tagSpan.setAttribute("data-tag-cat", tcat);
       tagSpan.setAttribute("data-tag-name", tname);
       tagSpan.setAttribute("contenteditable", "false");
       walkSanitize(node, tagSpan);

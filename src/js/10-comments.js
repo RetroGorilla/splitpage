@@ -26,6 +26,8 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
+import { nowIso } from "../adapters/identity/ids.ts";
+export { nowIso };
 
 var commentFilter;
 
@@ -159,8 +161,6 @@ var expandedReplyIds = {};
 var replyDrafts = {};
 S.deleteCommentArmId = null;
 export var deleteCommentArmTimer = null;
-
-export function nowIso() { return new Date().toISOString(); }
 
 export function getSavedAuthorName() {
   try { return localStorage.getItem(COMMENT_NAME_KEY) || ""; } catch (e) { return ""; }
