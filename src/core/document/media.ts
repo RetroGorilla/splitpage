@@ -141,7 +141,10 @@ export function createImageIngestion(known: (sha: string) => ImageRef | null): I
       return freshRef(decoded.ref);
     },
     pending: function () {
-      return order.map(function (sha) { return pending[sha] as DecodedImage; });
+      return order.map(function (sha) {
+        const held = pending[sha] as DecodedImage;
+        return { ref: freshRef(held.ref), bytes: held.bytes.slice() };
+      });
     }
   };
 }

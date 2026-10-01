@@ -129,6 +129,21 @@ test("ingestion hands out copies, so a caller cannot change what is pending", ()
   assert.deepEqual(ingest.known(REF_A.sha256), REF_A);
 });
 
+test("the pending list is a copy too: changing it changes neither known() nor the next pending()", () => {
+  const ingest = createImageIngestion(() => null);
+  ingest.fromDataUrl(dataUrl(PNG_A));
+  const first = ingest.pending();
+  const held = first[0] as { ref: ImageRef; bytes: Uint8Array };
+  held.ref.width = 999;
+  held.ref.sha256 = "0".repeat(64);
+  held.bytes[0] = 0;
+  first.push({ ref: REF_B, bytes: PNG_B });
+  assert.deepEqual(ingest.known(REF_A.sha256), REF_A);
+  assert.equal(ingest.known("0".repeat(64)), null);
+  assert.deepEqual(ingest.pending(), [{ ref: REF_A, bytes: PNG_A }]);
+  assert.notEqual(ingest.pending()[0]?.bytes, ingest.pending()[0]?.bytes, "each call hands out its own bytes");
+});
+
 test("a row's picture is its legacy data URL first, else its normalised reference", () => {
   const legacy = dataUrl(PNG_A);
   assert.deepEqual(rowImage({ visualImage: legacy, imageRef: REF_B }), { ref: null, dataUrl: legacy });
