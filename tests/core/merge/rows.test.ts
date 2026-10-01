@@ -227,7 +227,7 @@ test("comments: on an updatedAt tie my copy is kept, while on a resolvedAt tie t
   assert.equal(created.body, "Mine", "the tie falls back to createdAt, and still keeps mine");
 });
 
-test("comments: the replies of a comment both sides hold are the input objects themselves, not copies (pinned until 2.5)", () => {
+test("comments: the replies of a comment both sides hold are the input objects themselves, not copies (pinned: found, not changed in 2.5)", () => {
   const mineShared = reply("rp1", at(2)), mineOwn = reply("rpM", at(3));
   const theirsShared = reply("rp1", at(2)), theirsOwn = reply("rpT", at(4));
   const onlyMine = reply("rpX", at(5));
