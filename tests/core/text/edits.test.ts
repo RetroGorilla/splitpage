@@ -89,6 +89,16 @@ test("replacing typed words with a tag, and retagging, keep a tag one stretch", 
   assert.deepEqual(key, { cell: [T("x "), B("bs3"), T("y")], end: 3 });
 });
 
+test("replacing keeps the first replaced character's marks, comment, link and tag included; a b-roll key there means typing marks", () => {
+  assert.deepEqual(replaceText([T("a"), T("bc", { b: true })], 1, 3, "x"), [T("a"), T("x", { b: true })]);
+  assert.deepEqual(replaceText([T("a", { i: true }), T("bc")], 2, 1, "x"), [T("a", { i: true }), T("xc")]);
+  assert.deepEqual(replaceText([T("say "), T("two words", { cmt: ["c1"], href: "https://e.x/" })], 4, 7, "three"),
+    [T("say "), T("three words", { href: "https://e.x/", cmt: ["c1"] })]);
+  assert.deepEqual(replaceText([T("red mug", { tag: "t:prop:Mug" })], 0, 3, "big"), [T("big mug", { tag: "t:prop:Mug" })]);
+  assert.deepEqual(replaceText([T("a", { i: true }), B("bs1"), T("b", { b: true })], 1, 2, "x"), [T("ax", { i: true }), T("b", { b: true })]);
+  assert.deepEqual(replaceText([T("ab", { u: true })], 0, 0, "x"), [T("xab", { u: true })], "an empty range types");
+});
+
 test("positions are clamped to the cell and floored", () => {
   const cell = [T("abc")];
   assert.equal(clamp(cell, -5), 0);

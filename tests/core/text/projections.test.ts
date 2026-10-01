@@ -51,6 +51,13 @@ test("Markdown: links escape their brackets, blank lines collapse, and the ends 
   assert.equal(toMarkdown([B("bs1"), T(" drone", { hl: true })]), "B-roll: <mark>drone</mark>");
 });
 
+test("Markdown: a blank line drops every mark, so no emphasis or link spans a paragraph break", () => {
+  assert.equal(toMarkdown([T("one\n\ntwo", { b: true })]), "**one**\n\n**two**");
+  assert.equal(toMarkdown([T("a\n \t\nb", { hl: true })]), "<mark>a</mark>\n \t\n<mark>b</mark>");
+  assert.equal(toMarkdown([T("x\n\ny", { href: "https://e.x/" })]), "[x](https://e.x/)\n\n[y](https://e.x/)");
+  assert.equal(toMarkdown([T("one\ntwo", { b: true })]), "**one\ntwo**", "one line break keeps it");
+});
+
 test("Markdown's rule of three: two delimiter runs whose lengths are both multiples of three may still pair", () => {
   assert.equal(toMarkdown([T(".", { b: true, i: true }), T("(")]), "***.***(");
   assert.equal(toMarkdown([T("a", { b: true, i: true }), T("a")]), "***a***a");
