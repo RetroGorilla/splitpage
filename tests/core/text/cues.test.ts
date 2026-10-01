@@ -32,13 +32,24 @@ test("settleCues leaves cells without cues as they are", () => {
   assert.equal(settleCues(runs), runs);
 });
 
-test("splitting a cue line leaves no cue on either side, and joining does not bring it back", () => {
+test("a split before a cue's colon loses the cue on both sides, and joining does not bring it back", () => {
   const cell = normalizeCell([T("SFX: rain", CUE)]);
-  const [a, b] = splitCell(cell, 2);
-  assert.deepEqual([a, b], [[T("SF")], [T("X: rain")]]);
-  assert.deepEqual(joinCells(a, b), [T("SFX: rain")]);
-  const [c, d] = splitCell(cell, 4);
-  assert.deepEqual([c, d], [[T("SFX:", CUE)], [T(" rain")]]);
+  for (const at of [1, 2, 3]) {
+    const [a, b] = splitCell(cell, at);
+    assert.deepEqual([a, b], [[T("SFX: rain".slice(0, at))], [T("SFX: rain".slice(at))]], "at " + at);
+    assert.deepEqual(joinCells(a, b), [T("SFX: rain")], "at " + at);
+  }
+  assert.deepEqual(splitCell(cell, 0), [[], cell], "at the line's start the whole cue moves");
+});
+
+test("a split after a cue's colon keeps the cue on the left, and joining restores it on the whole line", () => {
+  const cell = normalizeCell([T("SFX: rain", CUE)]);
+  assert.deepEqual(splitCell(cell, 4), [[T("SFX:", CUE)], [T(" rain")]]);
+  assert.deepEqual(splitCell(cell, 6), [[T("SFX: r", CUE)], [T("ain")]]);
+  for (const at of [4, 6, 9]) {
+    const [a, b] = splitCell(cell, at);
+    assert.deepEqual(joinCells(a, b), cell, "at " + at);
+  }
 });
 
 test("cue lines are counted in positions, a b-roll key and the line feed one each", () => {
