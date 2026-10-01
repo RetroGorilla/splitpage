@@ -8,9 +8,11 @@ import { pad2, render } from "./05-render.js";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,
+  addRegistryTags,
   bulkDeleteArmed,
   bulkTagRows,
   clearProductionSelection,
+  currentProductionIndex,
   deletePerson,
   deleteProductionTagEntry,
   disarmBulkDelete,
@@ -20,6 +22,7 @@ import {
   normalizeTagName,
   personById,
   productionEntries,
+  productionReaders,
   productionSelection,
   pruneProductionSelection,
   registerProductionTag,
@@ -40,6 +43,7 @@ import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
+import { planQuickAdd } from "../core/production/tags.ts";
 
 export var IS_TOUCH;
 
@@ -138,28 +142,10 @@ function fillGearQuickAdd() {
 export function applyGearQuickAdd() {
   if (reviewBlocked()) return;
   var raw = document.getElementById("gear-quickadd-input").value || "";
-  var wanted = {}, order = [];
-  raw.split(/\r\n|\r|\n/).forEach(function (line) {
-    var name = plainText(line).trim().slice(0, 80);
-    if (!name) return;
-    var key = normalizeTagName(name);
-    if (wanted[key]) return;
-    wanted[key] = name;
-    order.push(key);
-  });
-
-  var removed = 0;
-  gearEntries().forEach(function (item) {
-    if (wanted[normalizeTagName(item.name)] !== undefined) return;
-    if (!item.orphaned) return;
-    if (deleteProductionTagEntry("gear", item.name)) removed++;
-  });
-
-  var added = 0;
-  order.forEach(function (key) {
-    if (!registryEntry("gear", wanted[key])) added++;
-    registerProductionTag("gear", wanted[key]);
-  });
+  var plan = planQuickAdd(S.state, productionReaders, raw, currentProductionIndex());
+  plan.remove.forEach(function (name) { deleteProductionTagEntry("gear", name); });
+  addRegistryTags(plan.register);
+  var added = plan.added, removed = plan.removed;
 
   if (!added && !removed) { fillGearQuickAdd(); return; }
   markDirty();

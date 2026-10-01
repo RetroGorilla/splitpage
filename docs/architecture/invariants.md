@@ -228,8 +228,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-26 — Quick-add forgets only what it added
 
 - **Behaviour:** A quick-add box that tracks items whether or not the script mentions them adds a registry entry for each new line. When a line is removed, it deletes that entry only if the item is orphaned; an item still tagged in the script stays.
-- **Tests:** browser `12-gear.txt` ("removing a line un-tracks it, UNLESS it's still tagged live").
-- **Owner:** `src/core/production` (reconciliation plan), `src/features/production` · **Milestone:** 2 · **Class:** keep
+- **Tests:** `tests/core/production/tags.test.ts` ("INV-26: the quick-add plan deletes an orphaned entry whose line went and keeps one still tagged in the script"); `tests/core/production/golden.test.ts` (the Gear quick add against `production-gear-quick-add`); browser `12-gear.txt` ("removing a line un-tracks it, UNLESS it's still tagged live").
+- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/features/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** new unit test: for a removed line, the quick-add reconciliation plan deletes an orphaned entry and keeps a live-tagged one. `12-gear.txt` passes.
 
@@ -492,7 +492,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - **Brought in from outside:** a pasted or dropped key gets a new id whenever the document already knows its id. The exception is a cut then paste in the same tab, which moves the key.
   - **Moved:** a split, join or cut keeps the key's id and never copies it.
   - **Backstop:** the anchoring pass re-keys any duplicate that still gets through.
-- **Tests:** `src/test/clipboard.test.mjs` ("freshBrollIds: a key keeps its id only when nothing has it, and never twice in one paste", "brollIdsTaken…"); `src/test/broll-model.test.mjs` ("anchoring: a key repeating an id an earlier line holds gets an id of its own…", "a pasted key's record is a new shot seeded from its scene…"); browser `80-broll-paste-ids.txt`, `47-move-scene-keys.txt`, `45-broll-anchoring.txt`.
+- **Tests:** `src/test/clipboard.test.mjs` ("freshBrollIds: a key keeps its id only when nothing has it, and never twice in one paste", "brollIdsTaken…"); `src/test/broll-model.test.mjs` ("anchoring: a key repeating an id an earlier line holds gets an id of its own…", "a pasted key's record is a new shot seeded from its scene…"); `tests/core/production/broll.test.ts` ("INV-54: anchoring gives a key repeating an earlier line's id an id of its own…", "a line never takes a shot a keyed line further down holds…"); browser `80-broll-paste-ids.txt`, `47-move-scene-keys.txt`, `45-broll-anchoring.txt`.
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass against `src/core/production` and the migrated clipboard path.
@@ -512,7 +512,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - **Renames and merges:** a rename carries through by id, and folding onto another entry's name re-points the shot in the same edit. Merging is a base-aware set per shot.
   - **Pasting:** a pasted copy of a shot's line gets no props.
   - **New fields:** a new shot field must be kept by `migrateRows`, `mergeBrollShots` and `newBrollRecord`.
-- **Tests:** `src/test/broll-model.test.mjs`; `src/test/merge-states.test.mjs` ("b-roll props: …"); `src/test/migrate-rows.test.mjs` ("brollShots props: …"); `src/test/state-fields.test.mjs` ("a b-roll shot keeps every field it has — props too — through a merge and a save"); `src/test/formats.test.mjs` (props round trips); browser `95-broll-props.txt`.
+- **Tests:** `src/test/broll-model.test.mjs`; `tests/core/production/broll.test.ts` ("INV-56: …", two tests); `src/test/merge-states.test.mjs` ("b-roll props: …"); `src/test/migrate-rows.test.mjs` ("brollShots props: …"); `src/test/state-fields.test.mjs` ("a b-roll shot keeps every field it has — props too — through a merge and a save"); `src/test/formats.test.mjs` (props round trips); browser `95-broll-props.txt`.
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** — (the field-list clause can join the M2 field policy; the props rules stay explicit).
 - **Acceptance:** the named tests pass. New unit test: a field added to the shot record's policy survives migration, merge and save without edits to `mergeBrollShots`.
