@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { PAGE_SHELL, SCHEMA_VERSION } from "./00-prelude.js";
 import { normalizePersonColors } from "./00p-prefs.js";
 import { DEFAULT_WPM, normalizeSceneLength, normalizeTargetLength, rowStatus } from "./01-scene-status.js";
-import { migrateDocument, mintDocId, normalizeDocId, sha256Hex } from "./02b-doc-id.js";
+import { migrateDocument, mintDocId, normalizeDocId } from "./02b-doc-id.js";
 import { internDataUrl, queuePersist, recordFor } from "./02c-blobs.js";
 import { migrateGallery } from "./02d-gallery.js";
 import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
@@ -17,6 +17,8 @@ import {
   sanitizeHtml,
   storedImageHtml
 } from "./04-richtext.js";
+import { mediaCommentId } from "../core/document/ids.ts";
+import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,
@@ -30,6 +32,7 @@ import { fromHtml, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { BROLL_STATUSES, brollStatus, normalizeBrollProps } from "./08c-broll.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 export { makeId } from "../adapters/identity/ids.ts";
+export { escapeHtml, legacyMdToHtml, mediaCommentId };
 
 function defaultState() {
   try {
@@ -65,42 +68,10 @@ export function missingStateFields(s) {
   }).map(function (f) { return f.key; });
 }
 
-export function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-export function legacyMdToHtml(text) {
-  if (typeof text !== "string") return "";
-  var out = escapeHtml(text);
-  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-  out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
-  out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
-  out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
-  ["strong", "em", "s"].forEach(function (tag) {
-    out = out.replace(new RegExp("&lt;" + tag + "&gt;([\\s\\S]*?)&lt;\\/" + tag + "&gt;", "gi"), "<" + tag + ">$1</" + tag + ">");
-  });
-  out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
-  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m, label, url) {
-    var safe = safeHref(url);
-    return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : m;
-  });
-  out = out.replace(/\n/g, "<br>");
-  return out;
-}
-
 var MEDIA_COMMENT_NOTE = {
   visualText: "This was in the scene's visual column. Pictures and videos go in comments now:",
   audioText: "This was in the scene's audio column. Pictures and videos go in comments now:"
 };
-
-export function mediaCommentId(rowId, field, key) {
-  return "cm" + sha256Hex("splitpage-cell-media\n" + rowId + "\n" + field + "\n" + key).slice(0, 24);
-}
 
 function moveMediaOutOfCell(row, field) {
   var found = [];
