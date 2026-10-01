@@ -14,7 +14,6 @@
     {"rule":"cycle-edge","source":"src/js/01b-hide-shot.js","target":"src/js/12-dirty-toast.js"},
     {"rule":"cycle-edge","source":"src/js/02-state.js","target":"src/js/01-scene-status.js"},
     {"rule":"cycle-edge","source":"src/js/02-state.js","target":"src/js/02b-doc-id.js"},
-    {"rule":"cycle-edge","source":"src/js/02-state.js","target":"src/js/03-sync.js"},
     {"rule":"cycle-edge","source":"src/js/02-state.js","target":"src/js/07-production-tags.js"},
     {"rule":"cycle-edge","source":"src/js/02-state.js","target":"src/js/08c-broll.js"},
     {"rule":"cycle-edge","source":"src/js/02-state.js","target":"src/js/20b-onboarding.js"},
