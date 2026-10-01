@@ -6,7 +6,7 @@ import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { saveAuthorName } from "../js/10-comments.js";
 import {
-  FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, readGolden, updatingGoldens
+  FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, goldenText, jsonCopy, maskTokens, readGolden, updatingGoldens
 } from "./golden-helpers.mjs";
 
 freezeClockAndRandom(0x6d657267);
@@ -646,7 +646,8 @@ for (const c of CASES) {
       return;
     }
     const stored = readGolden(name);
-    assert.deepStrictEqual(built, stored.inputs, name + ": the case builds the inputs its fixture recorded");
+    assert.equal(goldenText(built), goldenText(stored.inputs),
+      name + ": the case builds the inputs its fixture recorded, key order included");
     assertGolden(name, produce(c, stored.inputs));
   });
 }
