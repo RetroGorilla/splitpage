@@ -45,6 +45,10 @@ function doc(over) {
 
 const four = () => doc({ rows: [row("r1", "One."), row("r2", "Two."), row("r3", "Three."), row("r4", "Four.")] });
 
+const PROTO_IDS = ["constructor", "__proto__", "toString", "hasOwnProperty"];
+const PROTO_TAG_IDS = { Kettle: "constructor", Lamp: "toString", Ladder: "hasOwnProperty", Tripod: "__proto__" };
+const protoRows = () => doc({ rows: [row("r1", "One.")].concat(PROTO_IDS.map((id) => row(id, "Row " + id + ".", "Visual " + id + "."))) });
+
 const find = (s, id) => s.rows.find((r) => r.id === id);
 function stamp(r, who) {
   r.updatedAt = who === "mine" ? at(5, 10) : at(6, 11);
@@ -591,6 +595,68 @@ const CASES = [
     name: "editor-anonymous", editor: "", spec: four(),
     mine: (s) => { mineEdit(s, "r1", { audioText: "One, mine." }); mineEdit(s, "r2", { audioText: "Two, mine." }); },
     theirs: (s) => theirEdit(s, "r2", { audioText: "Two, theirs." })
+  },
+
+  { name: "prototype-ids-rows-deleted-by-mine", spec: protoRows(), mine: (s) => { s.rows = s.rows.filter((r) => r.id === "r1"); } },
+  { name: "prototype-ids-rows-deleted-by-theirs", spec: protoRows(), theirs: (s) => { s.rows = s.rows.filter((r) => r.id === "r1"); } },
+  {
+    name: "prototype-ids-rows-added-on-each-side", spec: doc({ rows: [row("r1", "One.")] }),
+    mine: (s) => { s.rows.push(newRow("constructor", "Mine ctor.", "mine"), newRow("__proto__", "Mine proto.", "mine")); },
+    theirs: (s) => { s.rows.push(newRow("toString", "Their ts.", "theirs"), newRow("hasOwnProperty", "Their hop.", "theirs")); }
+  },
+  {
+    name: "prototype-ids-rows-edited-on-each-side", spec: protoRows(),
+    mine: (s) => PROTO_IDS.forEach((id) => mineEdit(s, id, { audioText: "Row " + id + ", mine." })),
+    theirs: (s) => PROTO_IDS.forEach((id) => theirEdit(s, id, { visualText: "Visual " + id + ", theirs." }))
+  },
+  {
+    name: "prototype-ids-comments",
+    spec: doc({
+      rows: [row("r1", "One.")],
+      comments: [cm("constructor"), cm("toString"), cm("c1", { replies: [reply("constructor", at(3)), reply("__proto__", at(3))] })]
+    }),
+    mine: (s) => {
+      Object.assign(findComment(s, "constructor"), { body: "Ctor, mine", updatedAt: at(5) });
+      s.comments.push(cm("__proto__", { createdAt: at(5), updatedAt: at(5) }));
+      findComment(s, "c1").replies.push(reply("hasOwnProperty", at(5)));
+    },
+    theirs: (s) => {
+      Object.assign(findComment(s, "toString"), { resolved: true, resolvedBy: "Bo", resolvedAt: at(6), updatedAt: at(6) });
+      s.comments.push(cm("hasOwnProperty", { createdAt: at(6), updatedAt: at(6) }));
+      findComment(s, "c1").replies.push(reply("toString", at(6), "Bo"));
+    }
+  },
+  {
+    name: "prototype-ids-tags",
+    spec: doc({ people: [{ id: "p1", name: "Sam" }], productionTags: [tagEntry("", "prop", "Kettle"), tagEntry("", "prop", "Lamp")] }),
+    mine: (s) => {
+      s.productionTags.find((t) => t.name === "Kettle").notes = "mine";
+      s.productionTags.push(tagEntry("", "prop", "Ladder", { owner: "p1" }));
+    },
+    theirs: (s) => {
+      s.productionTags.find((t) => t.name === "Lamp").status = "have";
+      s.productionTags.push(tagEntry("", "gear", "Tripod"));
+    },
+    after: (d) => [d.base, d.mine, d.theirs].forEach((s) => s.productionTags.forEach((t) => { t.id = PROTO_TAG_IDS[t.name]; }))
+  },
+  {
+    name: "prototype-ids-shots",
+    spec: doc({ people: [{ id: "p1", name: "Sam" }], brollShots: [shot("constructor", "Gulls"), shot("toString", "Pier")] }),
+    mine: (s) => {
+      Object.assign(s.brollShots.find((b) => b.id === "constructor"), { owner: "p1", notes: "mine" });
+      s.brollShots = s.brollShots.filter((b) => b.id !== "toString");
+      s.brollShots.push(shot("hasOwnProperty", "Mine shot", { reshoot: true }));
+    },
+    theirs: (s) => {
+      s.brollShots.find((b) => b.id === "constructor").status = "shot";
+      s.brollShots.push(shot("__proto__", "Their shot"));
+    }
+  },
+  {
+    name: "prototype-ids-people",
+    spec: doc({ people: [{ id: "p1", name: "Sam" }, { id: "constructor", name: "Con" }] }),
+    mine: (s) => { s.people.push({ id: "__proto__", name: "Proto" }, { id: "p2", name: "constructor" }); },
+    theirs: (s) => { s.people.push({ id: "toString", name: "Tess" }, { id: "p3", name: "__proto__" }); }
   }
 ];
 
@@ -606,11 +672,41 @@ function inputsOf(c) {
   return jsonCopy(docs);
 }
 
+const WATCHED_BUILTINS = [
+  ["Object", Object], ["Object.prototype", Object.prototype], ["Object.prototype.toString", Object.prototype.toString],
+  ["Object.prototype.hasOwnProperty", Object.prototype.hasOwnProperty], ["Function.prototype", Function.prototype]
+];
+
+function builtinsSnapshot() {
+  return WATCHED_BUILTINS.map(([, o]) => new Map(Reflect.ownKeys(o).map((k) => [k, Object.getOwnPropertyDescriptor(o, k)])));
+}
+
+function builtinsRestore(snapshot) {
+  const touched = [];
+  WATCHED_BUILTINS.forEach(([label, o], i) => {
+    Reflect.ownKeys(o).forEach((k) => {
+      const was = snapshot[i].get(k), now = Object.getOwnPropertyDescriptor(o, k);
+      if (was && was.value === now.value && was.get === now.get && was.set === now.set) return;
+      const v = now.value;
+      touched.push({ on: label, key: String(k), value: typeof v === "function" ? "(function)" : v === undefined ? null : jsonCopy(v) });
+      if (was) Object.defineProperty(o, k, was);
+      else delete o[k];
+    });
+  });
+  return touched;
+}
+
 function produce(c, inputs) {
   saveAuthorName(c.editor === undefined ? EDITOR : c.editor);
   const args = jsonCopy(inputs);
   const before = JSON.stringify(args);
-  const res = mergeStates(args.base, args.mine, args.theirs);
+  const builtins = builtinsSnapshot();
+  let res, builtinsTouched;
+  try {
+    res = mergeStates(args.base, args.mine, args.theirs);
+  } finally {
+    builtinsTouched = builtinsRestore(builtins);
+  }
   const inputsUntouched = JSON.stringify(args) === before;
   const out = jsonCopy({ merged: res.merged, conflicts: res.conflicts, stats: res.stats });
 
@@ -629,7 +725,8 @@ function produce(c, inputs) {
     assert.match(out.merged.docId, /^d[0-9a-f]{32}$/);
     masked = maskTokens(masked, [out.merged.docId], "minted-doc-id");
   }
-  return Object.assign({ inputs, inputsUntouched }, masked);
+  const head = builtinsTouched.length ? { inputs, inputsUntouched, builtinsTouched } : { inputs, inputsUntouched };
+  return Object.assign(head, masked);
 }
 
 test("the clock, the random source and the editor are fixed for every case", () => {
