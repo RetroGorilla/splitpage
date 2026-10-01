@@ -1,6 +1,6 @@
 # Splitpage review policy
 
-This applies to every PR into `4.0-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more fixes.
+This applies to every PR into `4.0-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on 4.0 under §2.
 
 **Fast path.** Two kinds of PR get the automated checks and a quick read instead of the full process:
 - docs-only PRs (CI's change classifier marks them as prose)
