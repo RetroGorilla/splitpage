@@ -45,14 +45,15 @@ export function shellDialect(shell) {
   return "sh";
 }
 
-export function runnerOs(runsOn) {
+export function runnerOs(node, resolve = (n) => n) {
+  const runsOn = resolve(node);
   if (runsOn == null) return null;
   let labels = runsOn;
   if (isMap(runsOn)) {
-    labels = runsOn.get("labels", true);
+    labels = resolve(runsOn.get("labels", true));
     if (labels == null) return "unknown";
   }
-  const texts = (isSeq(labels) ? labels.items : [labels]).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
+  const texts = (isSeq(labels) ? labels.items : [labels]).map(resolve).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
   if (texts.some((t) => t === null || t.includes("${{"))) return "unknown";
   if (texts.some((t) => /windows/i.test(t))) return "windows";
   if (texts.some((t) => /ubuntu|linux|macos|darwin/i.test(t))) return "other";
@@ -72,6 +73,14 @@ function stepComments(path, script, shell, os, line) {
   return asBash;
 }
 
+const QUOTING = {
+  QUOTE_SINGLE: { escape: /''/, unescape: (s) => s.replace(/''/g, "'") },
+  QUOTE_DOUBLE: {
+    escape: /\\(?:x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[\s\S]|$)/,
+    unescape: (s) => s.replace(/\\([\\"/ t])/g, (m, c) => (c === "t" ? "\t" : c))
+  }
+};
+
 function valueLines(text, node, lineCounter) {
   const value = node.value;
   let offset = node.range[0];
@@ -84,21 +93,23 @@ function valueLines(text, node, lineCounter) {
     offset += 1;
     source = source.slice(1, -1);
   }
-  const escape = { QUOTE_DOUBLE: "\\", QUOTE_SINGLE: "''" }[node.type] ?? null;
+  const quoting = QUOTING[node.type];
+  const candidates = (content) => {
+    if (!content) return [];
+    if (!quoting) return [content];
+    return [content, quoting.unescape(content), ...content.split(quoting.escape).map((s) => s.trim()).filter(Boolean)];
+  };
   const marks = [];
   let pos = 0;
   let at = 0;
   for (const raw of source.split("\n")) {
     const lead = raw.length - raw.trimStart().length;
-    let content = raw.trim();
-    let hit = content ? value.indexOf(content, pos) : -1;
-    if (hit === -1 && escape && content.includes(escape)) {
-      content = content.slice(0, content.indexOf(escape)).trim();
-      hit = content ? value.indexOf(content, pos) : -1;
-    }
-    if (hit !== -1) {
+    for (const candidate of candidates(raw.trim())) {
+      const hit = value.indexOf(candidate, pos);
+      if (hit === -1) continue;
       marks.push([hit, lineCounter.linePos(offset + at + lead).line]);
-      pos = hit + content.length;
+      pos = hit + candidate.length;
+      break;
     }
     at += raw.length + 1;
   }
@@ -141,9 +152,9 @@ function runComments(path, doc, text, lineCounter) {
     if (isSeq(node)) { for (const item of node.items) visit(item, ctx); return; }
     if (!isMap(node)) return;
     const local = { ...ctx };
-    const defaults = stringValue(node.getIn(["defaults", "run", "shell"], true));
+    const defaults = stringValue(["defaults", "run", "shell"].reduce((n, k) => (isMap(n) ? resolve(n.get(k, true)) : null), node));
     if (defaults != null) local.shell = defaults;
-    const os = runnerOs(resolve(node.get("runs-on", true)));
+    const os = runnerOs(node.get("runs-on", true), resolve);
     if (os !== null) local.os = os;
     for (const pair of node.items) {
       const key = isScalar(pair.key) ? pair.key.value : null;

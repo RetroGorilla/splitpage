@@ -286,14 +286,29 @@ eq("issue-template Markdown inside a block scalar is not a comment", found(".git
     "      - run: 'echo ''a''",
     "          # single-quoted comment'",
     "      - run: \"echo \\\"x\\\"",
-    "          make # after an escape\""
+    "          make # after an escape\"",
+    "      - run: 'echo a",
+    "          ''x'' # single after a leading escape'",
+    "      - run: \"echo a",
+    "          \\\\x # double after a leading escape\""
   );
   eq("comments in folded and quoted multi-line run: scalars are reported at their own lines", located(".github/workflows/fold.yml", folded), [
     "9 # folded comment",
     "11 # double-quoted comment",
     "13 # single-quoted comment",
-    "15 # after an escape"
+    "15 # after an escape",
+    "17 # single after a leading escape",
+    "19 # double after a leading escape"
   ]);
+
+  const attempt = (path, text) => { try { return found(path, text); } catch (e) { return e.message; } };
+  const psBlock = ["    steps:", "      - run: |", "          <# it's a PowerShell block #>"];
+  const aliasDefaults = ["jobs:", "  a:", "    runs-on: ubuntu-latest", "    defaults: &d", "      run:", "        shell: pwsh", "    steps:", "      - run: Write-Host a", "  b:", "    runs-on: ${{ matrix.os }}", "    defaults: *d", ...psBlock, ""].join("\n");
+  eq("defaults: given as an alias picks the dialect", attempt(".github/workflows/alias.yml", aliasDefaults), ["<# it's a PowerShell block #>"]);
+  const anchoredRunner = ["jobs:", "  a:", "    runs-on: &l [windows-2022]", "    steps:", "      - run: Write-Host a", "  b:"];
+  eq("runs-on labels given as an alias pick the dialect", attempt(".github/workflows/alias.yml", [...anchoredRunner, "    runs-on: { group: big, labels: *l }", ...psBlock, ""].join("\n")), ["<# it's a PowerShell block #>"]);
+  eq("a runs-on given as an alias picks the dialect", attempt(".github/workflows/alias.yml", [...anchoredRunner, "    runs-on: *l", ...psBlock, ""].join("\n")), ["<# it's a PowerShell block #>"]);
+  eq("a runs-on label given as an alias picks the dialect", attempt(".github/workflows/alias.yml", ["jobs:", "  a:", "    runs-on: [self-hosted, &w windows]", "    steps:", "      - run: Write-Host a", "  b:", "    runs-on: [self-hosted, *w]", ...psBlock, ""].join("\n")), ["<# it's a PowerShell block #>"]);
 }
 
 {
