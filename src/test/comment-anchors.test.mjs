@@ -2,6 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { commentRange, fromHtml, joinCells, splitCell, syncCommentAnchors, toHtml } from "../js/04c-doc-model.js";
+import { sanitizeHtml } from "../js/04-richtext.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 
@@ -77,6 +78,95 @@ test("joinCells' glue takes the comment and link both sides share, and never for
   assert.deepEqual(joinCells([T("a", l)], [T("b", l)], " "), [T("a b", l)]);
   assert.deepEqual(joinCells([T("a", { b: true })], [T("b", { b: true })], " "), [T("a", { b: true }), T(" "), T("b", { b: true })]);
   assert.deepEqual(joinCells([T("a", c)], [T("b", c)]), [T("ab", c)]);
+});
+
+test("a span that is both a comment anchor and a tag keeps both marks (#280)", () => {
+  const tagged = (inner) =>
+    `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp" contenteditable="false">${inner}</span>`;
+  const canonical = "pick up " + cmt("c1", tagged("the lamp")) + " now";
+  for (const classes of ["cmt-anchor tag-anchor", "tag-anchor cmt-anchor"]) {
+    const html = `pick up <span class="${classes}" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">the lamp</span> now`;
+    assert.equal(sanitizeHtml(html), canonical, classes);
+    const cell = fromHtml(html);
+    assert.deepEqual(cell, [T("pick up "), T("the lamp", { cmt: ["c1"], tag: "t:prop:Lamp" }), T(" now")], classes);
+    assert.equal(toHtml(cell), canonical, classes);
+    assert.deepEqual(fromHtml(toHtml(cell)), cell, classes);
+    assert.deepEqual(commentRange(cell, "c1"), { from: 8, to: 16 }, classes);
+  }
+  assert.deepEqual(fromHtml('<span class="stage-dir cmt-anchor" data-cmt="c2">aside</span>'),
+    [T("aside", { cmt: ["c2"], dir: true })]);
+  assert.deepEqual(fromHtml('a <span class="cmt-anchor tag-anchor" data-cmt="c3" data-tag-cat="nope" data-tag-name="">b</span>'),
+    [T("a "), T("b", { cmt: ["c3"] })], "a tag the sanitiser refuses still leaves the comment");
+  const state = {
+    rows: [{ id: "r2", visualText: "", audioText: `<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">lamp</span>` }],
+    comments: [comment("c1", "r1", "audioText")]
+  };
+  assert.equal(syncCommentAnchors(state), 1);
+  assert.equal(state.comments[0].rowId, "r2");
+});
+
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+const pick = (r, list) => list[Math.floor(r() * list.length)];
+const FUZZ_WORDS = ["the", "red mug", " ", "a b", "é", "x&lt;y", "&amp;", "&quot;q&quot;", "lamp "];
+const FUZZ_CATS = ["prop", "location", "cast", "vfx", "sound", "gear"];
+const FUZZ_NAMES = ["Lamp", "Red mug", "A &amp; B", "  spaced  "];
+const FUZZ_FORMATS = ["", "", "strong", "em", "u", "s", "mark"];
+
+function fuzzWords(r) {
+  let out = "";
+  const n = 1 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) out += pick(r, FUZZ_WORDS);
+  return out;
+}
+function fuzzFormat(r, inner) {
+  const f = pick(r, FUZZ_FORMATS);
+  return f ? `<${f}>${inner}</${f}>` : inner;
+}
+function fuzzSegment(r) {
+  const roll = r();
+  if (roll < 0.1) return { combined: "<br>", nested: "<br>" };
+  if (roll < 0.45) { const t = fuzzFormat(r, fuzzWords(r)); return { combined: t, nested: t }; }
+  const id = "c" + (1 + Math.floor(r() * 3));
+  const cat = pick(r, FUZZ_CATS);
+  const name = pick(r, FUZZ_NAMES);
+  const classes = pick(r, ["cmt-anchor tag-anchor", "tag-anchor cmt-anchor", "x-paste tag-anchor cmt-anchor"]);
+  const inner = fuzzFormat(r, fuzzWords(r));
+  const tagAttrs = `data-tag-cat="${cat}" data-tag-name="${name}"`;
+  return {
+    combined: `<span class="${classes}" data-cmt="${id}" ${tagAttrs}>${inner}</span>`,
+    nested: `<span class="cmt-anchor" data-cmt="${id}"><span class="tag-anchor" ${tagAttrs} contenteditable="false">${inner}</span></span>`
+  };
+}
+function fuzzCell(r) {
+  let combined = "", nested = "";
+  const n = 1 + Math.floor(r() * 5);
+  for (let i = 0; i < n; i++) {
+    const s = fuzzSegment(r);
+    combined += s.combined;
+    nested += s.nested;
+  }
+  if (r() < 0.25) {
+    combined = cmt("c9", combined);
+    nested = cmt("c9", nested);
+  }
+  return { combined, nested };
+}
+
+test("seeded fuzz: comment-and-tag spans read as the nested spans toHtml writes, and round-trip (#280)", () => {
+  for (let seed = 1; seed <= 400; seed++) {
+    const { combined, nested } = fuzzCell(rng(seed));
+    const msg = `seed ${seed}: ${combined}`;
+    const cell = fromHtml(combined);
+    assert.deepEqual(cell, fromHtml(nested), msg);
+    assert.deepEqual(fromHtml(toHtml(cell)), cell, msg);
+    assert.equal(sanitizeHtml(sanitizeHtml(combined)), sanitizeHtml(combined), msg);
+    for (const id of new Set([...combined.matchAll(/data-cmt="(c\d)"/g)].map((m) => m[1]))) {
+      assert.ok(commentRange(cell, id), `${msg} lost comment ${id}`);
+    }
+  }
 });
 
 test("migrateRows points a stale comment at its words — an old file, or a merge that moved them", () => {

@@ -112,6 +112,12 @@ function wrapNodes(nodesArr, tagName) {
   return [w];
 }
 
+var SPAN_MARK_CLASSES = ["tag-anchor", "broll-key", "stage-dir", "audio-cue"];
+
+function hasOtherSpanMark(node) {
+  return SPAN_MARK_CLASSES.some(function (c) { return node.classList.contains(c); });
+}
+
 function walkSanitize(srcParent, destParent) {
   var kids = Array.prototype.slice.call(srcParent.childNodes);
   kids.forEach(function (node) {
@@ -152,6 +158,19 @@ function walkSanitize(srcParent, destParent) {
     if (tag === "A" && node.classList && node.classList.contains("video-embed-card")) {
       var vhref = safeHref(node.getAttribute("href") || "");
       if (vhref) destParent.appendChild(buildVideoCardEl(vhref));
+      return;
+    }
+    if (tag === "SPAN" && node.classList && node.classList.contains("cmt-anchor") && hasOtherSpanMark(node)) {
+      var peeledCmt = document.createElement("span");
+      peeledCmt.className = "cmt-anchor";
+      peeledCmt.setAttribute("data-cmt", safeId(node.getAttribute("data-cmt") || "", "c"));
+      var rest = node.cloneNode(true);
+      rest.classList.remove("cmt-anchor");
+      rest.removeAttribute("data-cmt");
+      var restHolder = node.ownerDocument.createElement("span");
+      restHolder.appendChild(rest);
+      walkSanitize(restHolder, peeledCmt);
+      destParent.appendChild(peeledCmt);
       return;
     }
     if (tag === "SPAN" && node.classList && node.classList.contains("tag-anchor")) {
