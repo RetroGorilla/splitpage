@@ -1,6 +1,3 @@
-import { escapeHtml } from "./02-state.js";
-import { storedHtmlFromDom } from "./04-richtext.js";
-import { fromHtml, namedTagId, projection, replaceText, replaceWithTag } from "./04c-doc-model.js";
 import { cellSelection, domToPos, editCell, setCellSelection } from "./05b-cell-edit.js";
 import {
   isInsideTagOrLink,
@@ -10,6 +7,10 @@ import {
   updateTagBadges
 } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { replaceText, replaceWithTag } from "../core/text/edits.ts";
+import { namedTagId, projection } from "../core/text/runs.ts";
+import { fromHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
 
 export var PLAIN_TAG_KEYWORDS = {
   prop: "prop",

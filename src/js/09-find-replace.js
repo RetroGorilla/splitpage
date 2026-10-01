@@ -1,18 +1,21 @@
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { escapeHtml } from "./02-state.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
-import { cellOf, projection, replaceText, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import {
   TAG_CATEGORIES, bulkTagRows, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
 } from "./07-production-tags.js";
-import { BROLL_MARKER_RE } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
+import { BROLL_MARKER_RE } from "../core/document/broll.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { replaceText } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { projection } from "../core/text/runs.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export var findOpen = false;
 S.findMatchCase = false;

@@ -41,7 +41,6 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
 import {
   autoSaveHalt,
   exportMetaLine,
@@ -75,7 +74,9 @@ import {
   makeDesktopHandle, notifyDesktopDocumentState
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
