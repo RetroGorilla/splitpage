@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SCHEMA_VERSION } from "../js/00-prelude.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeBrollShots, mergePeople, mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { saveAuthorName } from "../js/10-comments.js";
 import {
   FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, goldenText, jsonCopy, maskTokens, readGolden, updatingGoldens
@@ -652,10 +652,154 @@ for (const c of CASES) {
   });
 }
 
+const sh = (id, extra) => shot(id, "Shot " + id, extra);
+const prop = (id, name) => ({ id, name });
+const K = prop("t_kettle", "Kettle"), L = prop("t_ladder", "Ladder"), T = prop("t_tripod", "Tripod");
+const tg = (id, cat, name, extra) => {
+  const t = tagEntry(id, cat, name, extra);
+  if (id === null) delete t.id;
+  return t;
+};
+const person = (id, name) => ({ id, name });
+const many = (n, label) => Array.from({ length: n }, (_, i) => prop("", label + " " + (i + 1)));
+
+const LIST_MERGERS = { brollShots: mergeBrollShots, productionTags: mergeProductionTags, people: mergePeople };
+
+const LIST_CASES = [
+  ["brollShots", "fields only my side set fill their empty ones",
+    [sh("b1")], [sh("b1", { owner: "p1", notes: "mine", audioRef: "Mine audio.", location: "Quay" })], [sh("b1")]],
+  ["brollShots", "fields their side set are kept over mine",
+    [sh("b1")], [sh("b1", { owner: "p1", notes: "mine", audioRef: "Mine audio.", location: "Quay" })],
+    [sh("b1", { owner: "p2", notes: "theirs", audioRef: "Their audio.", location: "Pier" })]],
+  ["brollShots", "fields only their side set are kept",
+    [sh("b1")], [sh("b1")], [sh("b1", { owner: "p2", notes: "theirs", audioRef: "Their audio.", location: "Pier" })]],
+  ["brollShots", "shot on my side wins over unshot on theirs", [sh("b1")], [sh("b1", { status: "shot" })], [sh("b1")]],
+  ["brollShots", "shot on their side stays shot", [sh("b1")], [sh("b1")], [sh("b1", { status: "shot" })]],
+  ["brollShots", "unshot on my side never undoes their shot",
+    [sh("b1", { status: "shot" })], [sh("b1", { status: "unshot" })], [sh("b1", { status: "shot" })]],
+  ["brollShots", "statuses neither side knows", [sh("b1")], [sh("b1", { status: "bogus" })], [sh("b1", { status: "later" })]],
+  ["brollShots", "flagged on my side wins", [sh("b1")], [sh("b1", { reshoot: true })], [sh("b1")]],
+  ["brollShots", "flagged on their side stays flagged", [sh("b1")], [sh("b1")], [sh("b1", { reshoot: true })]],
+  ["brollShots", "unflagged on my side never clears their flag",
+    [sh("b1", { reshoot: true })], [sh("b1", { reshoot: false })], [sh("b1", { reshoot: true })]],
+  ["brollShots", "a flag my side holds as a string", [sh("b1")], [sh("b1", { reshoot: "yes" })], [sh("b1")]],
+  ["brollShots", "name, description and origin follow their side",
+    [sh("b1", { name: "Gulls", desc: "base" })], [sh("b1", { name: "Gulls at dawn", desc: "mine", origin: "list" })],
+    [sh("b1", { name: "Gulls", desc: "base" })]],
+  ["brollShots", "a shot only I added and one only they added", [], [sh("b1"), sh("bM")], [sh("b1"), sh("bT")]],
+  ["brollShots", "a shot I deleted that they left alone goes", [sh("b1"), sh("b2")], [sh("b1")], [sh("b1"), sh("b2")]],
+  ["brollShots", "a shot I deleted that they edited stays",
+    [sh("b1"), sh("b2")], [sh("b1")], [sh("b1"), sh("b2", { notes: "theirs" })]],
+  ["brollShots", "a shot they deleted that I left alone goes", [sh("b1"), sh("b2")], [sh("b1"), sh("b2")], [sh("b1")]],
+  ["brollShots", "a shot they deleted that I edited stays, after theirs",
+    [sh("b1"), sh("b2"), sh("b3")], [sh("b1"), sh("b2", { notes: "mine" }), sh("b3")], [sh("b1"), sh("b3")]],
+  ["brollShots", "a shot both deleted goes", [sh("b1"), sh("b2")], [sh("b1")], [sh("b1")]],
+  ["brollShots", "with no ancestor nothing is a delete", null, [sh("b1")], [sh("b1"), sh("b2")]],
+  ["brollShots", "an empty ancestor list deletes nothing", [], [sh("b1")], []],
+  ["brollShots", "a repeated id: their first copy wins and my copies fill it in turn",
+    [sh("b1")],
+    [sh("b1", { notes: "first mine" }), sh("b1", { notes: "second mine", owner: "p1", status: "shot" })],
+    [sh("b1", { name: "Their first" }), sh("b1", { name: "Their second", notes: "dup" })]],
+  ["brollShots", "a repeated id in the ancestor: its first copy is the one compared",
+    [sh("b1", { props: [K] }), sh("b1", { props: [K, L] })], [sh("b1", { props: [K, L] })], [sh("b1", { props: [K] })]],
+  ["brollShots", "entries with no id, and holes, are skipped",
+    [sh("b1")], [null, sh(""), { name: "no id" }, sh("b1")], [sh("b1"), null, { id: "", name: "blank" }]],
+  ["brollShots", "props: an addition on each side", [sh("b1", { props: [K] })], [sh("b1", { props: [K, L] })], [sh("b1", { props: [K, T] })]],
+  ["brollShots", "props: a removal on each side",
+    [sh("b1", { props: [K, L, T] })], [sh("b1", { props: [L, T] })], [sh("b1", { props: [K, L] })]],
+  ["brollShots", "props: an ancestor with no list removes nothing",
+    [Object.assign(sh("b1"), { props: undefined })], [sh("b1", { props: [K] })], [sh("b1", { props: [] })]],
+  ["brollShots", "props: my copy with no list",
+    [sh("b1", { props: [K] })], [Object.assign(sh("b1", { notes: "mine" }), { props: undefined })], [sh("b1", { props: [K] })]],
+  ["brollShots", "props: a name-only prop beside an id'd one",
+    [sh("b1")], [sh("b1", { props: [K] })], [sh("b1", { props: [prop("", "kettle")] })]],
+  ["brollShots", "props: repeated, nameless and broken props",
+    [sh("b1")], [sh("b1", { props: [K, K, { id: "t_x" }, null, "Kettle"] })],
+    [sh("b1", { props: [prop("", "Lamp"), prop("", "lamp "), 7] })]],
+  ["brollShots", "props: the merged list is capped",
+    [sh("b1")], [sh("b1", { props: many(25, "Mine") })], [sh("b1", { props: many(25, "Their") })]],
+
+  ["productionTags", "names and categories changed on my side only, their side only, and both",
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "prop", "Beta"), tg("t_c", "prop", "Gamma")],
+    [tg("t_a", "prop", "Alpha mine"), tg("t_b", "prop", "Beta"), tg("t_c", "gear", "Gamma mine")],
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "location", "Beta theirs"), tg("t_c", "vfx", "Gamma theirs")]],
+  ["productionTags", "owner and notes come from my side only where theirs are empty",
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "prop", "Beta"), tg("t_c", "prop", "Gamma")],
+    [tg("t_a", "prop", "Alpha", { owner: "p1", notes: "mine" }), tg("t_b", "prop", "Beta", { owner: "p1", notes: "mine" }),
+      tg("t_c", "prop", "Gamma")],
+    [tg("t_a", "prop", "Alpha"), tg("t_b", "prop", "Beta", { owner: "p2", notes: "theirs" }),
+      tg("t_c", "prop", "Gamma", { owner: "p2", notes: "theirs" })]],
+  ["productionTags", "a status my side moved further along raises theirs; a lower or unknown one does not",
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B"), tg("t_c", "prop", "C", { status: "have" }), tg("t_d", "prop", "D"),
+      tg("t_e", "prop", "E"), tg("t_f", "prop", "F")],
+    [tg("t_a", "prop", "A", { status: "have" }), tg("t_b", "prop", "B"), tg("t_c", "prop", "C", { status: "returned" }),
+      tg("t_d", "prop", "D", { status: "bogus" }), tg("t_e", "prop", "E", { status: "sourcing" }), tg("t_f", "prop", "F", { status: "bogus" })],
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B", { status: "sourcing" }), tg("t_c", "prop", "C", { status: "have" }),
+      tg("t_d", "prop", "D"), tg("t_e", "prop", "E", { status: "bogus" }), tg("t_f", "prop", "F", { status: "later" })]],
+  ["productionTags", "entries without ids line up by category and name",
+    [tg(null, "prop", "Kettle")], [tg(null, "prop", "kettle", { notes: "mine", status: "sourcing" })],
+    [tg(null, "prop", "KETTLE", { owner: "p2" })]],
+  ["productionTags", "an id on one side and none on the other: one entry, the first one's, filled from the other",
+    [], [tg("t_k", "prop", "Kettle", { owner: "p1", status: "returned" })], [tg(null, "prop", "kettle", { notes: "theirs" })]],
+  ["productionTags", "two ids for one name in their list: the first keeps its id and takes the rest",
+    [], [], [tg("t_a", "prop", "Ladder"), tg("t_b", "prop", "ladder", { owner: "p2", notes: "b", status: "have" })]],
+  ["productionTags", "a repeated id: their first copy wins and my copies fill it in turn",
+    [tg("t_a", "prop", "One")],
+    [tg("t_a", "prop", "One", { notes: "first mine" }), tg("t_a", "prop", "One", { owner: "p1", notes: "second mine", status: "have" })],
+    [tg("t_a", "prop", "One"), tg("t_a", "prop", "Two", { owner: "p2" })]],
+  ["productionTags", "a tag I deleted that they left alone goes; one they edited stays",
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B")], [], [tg("t_a", "prop", "A"), tg("t_b", "prop", "B", { notes: "edited" })]],
+  ["productionTags", "a tag they deleted that I left alone goes; one I edited stays",
+    [tg("t_a", "prop", "A"), tg("t_b", "prop", "B")], [tg("t_a", "prop", "A"), tg("t_b", "prop", "B", { notes: "edited" })], []],
+  ["productionTags", "a tag both deleted goes, and each side's addition lands",
+    [tg("t_a", "prop", "A")], [tg("t_m", "prop", "Mine")], [tg("t_t", "prop", "Theirs")]],
+  ["productionTags", "with no ancestor nothing is a delete", null, [tg("t_a", "prop", "A")], []],
+  ["productionTags", "nameless entries and holes are skipped",
+    [tg("t_a", "prop", "A")], [null, tg("t_x", "prop", ""), tg("t_a", "prop", "A")], [{ cat: "prop" }, tg("t_a", "prop", "A")]],
+
+  ["people", "an addition, a delete and a rename on each side",
+    [person("p1", "Sam"), person("p2", "Ada"), person("p3", "Cy"), person("p4", "Dee")],
+    [person("p1", "Sam"), person("p3", "Cyril"), person("p4", "Dee"), person("p5", "Bo")],
+    [person("p1", "Sam"), person("p2", "Ada"), person("p3", "Cy"), person("p6", "Eve")]],
+  ["people", "one name added on both sides under different ids", [], [person("p1", "Bo")], [person("p2", "bo ")]],
+  ["people", "one id renamed on my side", [person("p1", "Sam")], [person("p1", "Samuel")], [person("p1", "Sam")]],
+  ["people", "nameless entries and holes are skipped", [], [null, person("p9", ""), person("p1", "Sam")], [person("p1", "Sam"), {}]]
+];
+
+test("merge golden: list-mergers", () => {
+  const out = LIST_CASES.map(([fn, label, base, mine, theirs]) => {
+    const args = jsonCopy({ base, mine, theirs });
+    const before = JSON.stringify(args);
+    const merged = LIST_MERGERS[fn](args.base, args.mine, args.theirs);
+    return { fn, case: label, base: args.base, mine: args.mine, theirs: args.theirs,
+      out: jsonCopy(merged), inputsUntouched: JSON.stringify(args) === before };
+  });
+  assertGolden("merge-list-mergers", out);
+});
+
+test("merge golden: state-fields", () => {
+  assertGolden("merge-state-fields", STATE_FIELDS.map((f) => ({
+    key: f.key, merge: f.merge, default: f.def ? f.def() : null, listMerger: typeof f.mergeList === "function"
+  })));
+});
+
+test("a STATE_FIELDS entry with no merge strategy makes mergeStates throw", () => {
+  const d = migrateRows(jsonCopy(doc()));
+  STATE_FIELDS.push({ key: "probe", merge: "no-such-strategy" });
+  try {
+    assert.throws(() => mergeStates(jsonCopy(d), jsonCopy(d), jsonCopy(d)), /^Error: no merge strategy for state field probe$/);
+  } finally {
+    STATE_FIELDS.pop();
+  }
+  assert.equal(STATE_FIELDS.some((f) => f.key === "probe"), false);
+});
+
+const EXTRA_MERGE_FIXTURES = ["merge-list-mergers", "merge-state-fields"];
+
 test("every STATE_FIELDS key is changed by each side in at least one merge fixture", () => {
   const changedBy = { mine: new Set(), theirs: new Set() };
   const val = (d, k) => JSON.stringify(d ? d[k] : undefined);
-  for (const name of goldenNames("merge-")) {
+  for (const name of CASES.map((c) => "merge-" + c.name)) {
     const { inputs } = readGolden(name);
     for (const f of STATE_FIELDS) {
       for (const side of ["mine", "theirs"]) {
@@ -670,5 +814,5 @@ test("every STATE_FIELDS key is changed by each side in at least one merge fixtu
 });
 
 test("every merge fixture belongs to a case, and every case has one", () => {
-  assert.deepEqual(goldenNames("merge-"), CASES.map((c) => "merge-" + c.name).sort());
+  assert.deepEqual(goldenNames("merge-"), CASES.map((c) => "merge-" + c.name).concat(EXTRA_MERGE_FIXTURES).sort());
 });
