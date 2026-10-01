@@ -56,6 +56,26 @@ test("a conflict card whose picture is in neither the pass nor the registry keep
   assert.equal("imageValue" in (out[2] as Item), false);
 });
 
+test("a conflict card's body picture wins over a valid imageValue naming a different picture", () => {
+  const f = fakeMigration();
+  const other = { sha256: "b".repeat(64), width: 3, height: 4, mime: "image/png" };
+  const url = pngDataUrl(640, 360, 7);
+  const doc: Doc = {
+    schema: 2, rows: [], comments: [
+      { id: "c1", kind: "conflict", field: "visualImage", rowId: "r1", body: '<img src="' + url + '">', imageValue: other }
+    ]
+  };
+  const card = list(migrateRows(doc, f.ports), "comments")[0] as Item;
+  const pending = f.images.pending();
+  assert.equal(pending.length, 1);
+  const ref = (pending[0] as { ref: { sha256: string } }).ref;
+  assert.notEqual(ref.sha256, other.sha256);
+  assert.deepEqual(card.imageValue, ref, "imageValue is the body's picture, not the stored one");
+  assert.equal(card.body, storedImageHtml(ref));
+  assert.match(card.body as string, new RegExp('data-blob="' + ref.sha256 + '"'));
+  assert.equal((card.body as string).includes(other.sha256), false);
+});
+
 test("the document is changed in place and returned, with existing keys where they were and new ones after", () => {
   const f = fakeMigration();
   const row: Item = { audioText: "a", id: "r1", lengthSeconds: -1, visualImage: "not a picture" };
@@ -156,6 +176,21 @@ test("pictures and video cards leave a cell for comments, once, through the port
   doc.comments = [{ id: comments[1]?.id, body: "kept" }];
   const held = list(migrateRows(doc, fakeMigration().ports), "comments");
   assert.deepEqual(held.map((c) => c.body), ["kept"], "a comment already holding that id keeps it");
+});
+
+test("a stored comment whose id only cleans to the media comment's id still holds it: no duplicate, and the id draws are pinned", () => {
+  const url = pngDataUrl(20, 10, 2);
+  const rows = (): Item[] => [{ id: "r1", audioText: 'say <img src="' + url + '">' }];
+  const probe = fakeMigration();
+  const mediaId = (list(migrateRows({ schema: 2, rows: rows() }, probe.ports), "comments")[0] as Item).id as string;
+  assert.match(mediaId, /^cm[0-9a-f]{24}$/);
+  assert.deepEqual(probe.ids.minted, []);
+
+  const f = fakeMigration();
+  const out = migrateRows({ schema: 2, rows: rows(), comments: [{ id: mediaId + "!", field: "audioText", body: "kept" }] }, f.ports);
+  const comments = list(out, "comments");
+  assert.deepEqual(comments.map((c) => [c.id, c.body]), [[mediaId, "kept"]], "the media comment is not added a second time");
+  assert.deepEqual(f.ids.minted, ["r-fake-1"], "the dedupe pass draws nothing; only the stored comment's missing rowId does");
 });
 
 test("a schema 1 document's scene text is Markdown, converted before it is sanitised", () => {
