@@ -16,7 +16,6 @@
     {"rule":"cycle-edge","source":"src/js/02b-doc-id.js","target":"src/js/12-dirty-toast.js"},
     {"rule":"cycle-edge","source":"src/js/02b-doc-id.js","target":"src/js/13-hosted.js"},
     {"rule":"cycle-edge","source":"src/js/02b-doc-id.js","target":"src/js/20b-onboarding.js","reason":"loadInitialState moved from 02-state.js to 02b-doc-id.js (milestone 2.5) and reads seedCheckPasses; goes when bootstrap owns the initial load (milestone 7)"},
-    {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/01-scene-status.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/02b-doc-id.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/03a-history-store.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/03b-side-panels.js"},
