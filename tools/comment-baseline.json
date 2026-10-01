@@ -255,10 +255,6 @@
       "/* eslint-disable-next-line no-control-regex -- a file name is one line */",
       "/* eslint-disable-next-line no-control-regex -- controls are what goes */"
     ],
-    "src/js/04-richtext.js": [
-      "/* eslint-disable-next-line no-control-regex -- C0 controls, minus tab/LF/CR, are exactly what a plain-text field must not carry. */",
-      "/* eslint-disable-next-line no-control-regex -- deliberate: \"java\\\\0script:\" resolves as javascript: in a browser, so the probe has to see past them. */"
-    ],
     "src/js/04c-doc-model.js": [
       "/* eslint-disable-next-line no-control-regex -- C0 controls are exactly what cell text must not carry. */"
     ],

@@ -109,7 +109,7 @@ console.log("\nanalyzeScript():\n");
     "export function f(fetch: number) { return fetch; }",
     "export const n = Date.now() + setTimeout.length;"
   ].join("\n"));
-  eq("only free platform identifiers are reported", a.globals.map((g) => g.name).sort(), ["setTimeout", "window"]);
+  eq("only free platform identifiers, the clock among them, are reported", a.globals.map((g) => g.name).sort(), ["Date", "setTimeout", "window"]);
 }
 
 console.log("\nscope-aware globals:\n");
@@ -222,6 +222,58 @@ const scopeCases = [
 ];
 
 for (const [name, path, lines, expected] of scopeCases) eq(name, freeGlobals(path, lines), expected);
+
+console.log("\nthe clock and random numbers:\n");
+
+const clockCases = [
+  ["Date.now reads the clock", ["export const t = Date.now();"], ["Date:1"]],
+  ["so does Date.now reached by a string key", ['export const t = Date["now"]();'], ["Date:1"]],
+  ["new Date() with no argument reads the clock", ["export const d = new Date();"], ["Date:1"]],
+  ["so does new Date without parentheses", ["export const d = new Date;"], ["Date:1"]],
+  ["so does new Date over a spread that may be empty", ["export const d = (parts: number[]) => new Date(...parts);"], ["Date:1"]],
+  ["Date() called without new is the time as text", ["export const s = Date();"], ["Date:1"]],
+  ["Date as a value can reach the clock", ["const Clock = Date;", "export const t = Clock.now();"], ["Date:1"]],
+  ["so can Date passed to a function", ["export const t = read(Date);"], ["Date:1"]],
+  ["a wrapper does not hide Date.now", ["export const t = (Date as DateConstructor).now();"], ["Date:1"]],
+  ["any other member of Date is reported", ["export const p = Date.prototype;"], ["Date:1"]],
+  ["Date through globalThis is globalThis", ["export const t = globalThis.Date.now();"], ["globalThis:1"]],
+  ["Math.random draws a random number", ["export const r = Math.random();"], ["Math.random:1"]],
+  ["so does Math.random reached by a string key", ['export const r = Math["random"]();'], ["Math.random:1"]],
+  ["a computed member of Math may be random", ["export const r = (k: string) => (Math as never)[k];"], ["Math.random:1"]],
+  ["Math as a value can reach Math.random", ["const M = Math;", "export const r = M.random();"], ["Math.random:1"]],
+  ["Date.parse and Date.UTC read no clock", ['export const t = [Date.parse("2026-09-30T00:00:00Z"), Date.UTC(2026, 8, 30)];'], []],
+  ["new Date with an argument reads no clock", ["export const iso = (ms: number) => [new Date(ms).toISOString(), new Date(2026, 8, 30)];"], []],
+  ["instanceof Date reads no clock", ["export const isDate = (v: unknown) => v instanceof Date;"], []],
+  ["Date as a type is not a value", ["export let d: Date | null = null;", "export type C = typeof Date;"], []],
+  ["the other members of Math are pure", ["export const n = Math.max(1, Math.floor(2.5), Math.PI, Math.imul(3, 4));"], []],
+  ["a local Date or Math is not the global", [
+    "export function f(Date: { now(): number }) { return Date.now(); }",
+    "const Math = { random: () => 4 };",
+    "export const r = Math.random();"
+  ], []]
+];
+
+for (const [name, lines, expected] of clockCases) eq(name, freeGlobals("src/core/document/x.ts", lines), expected);
+
+{
+  const rules = findViolations(graph({
+    "src/core/document/c.ts": "export const at = Date.now();\n",
+    "src/core/text/r.ts": "export const n = Math.random();\n",
+    "shared/h.js": '"use strict";\nmodule.exports = { at: () => new Date().toISOString(), parse: (s) => Date.parse(s) };\n',
+    "shared/p.js": '"use strict";\nmodule.exports = { iso: (ms) => new Date(ms).toISOString() };\n',
+    "src/contracts/k.ts": "export const k = Math.random();\n",
+    "src/application/a.ts": "export const a = Date.now();\n",
+    "src/js/legacy.js": "export const t = Date.now() + Math.random();\n",
+    "src/adapters/identity/i.ts": "export const i = Date.now() + Math.random();\n"
+  })).filter((v) => v.rule === "platform-global").map((v) => `${v.source} ${v.target}`);
+  eq("core, shared, contracts and application may not read the clock or draw random numbers; legacy and adapters may", rules, [
+    "shared/h.js global:Date",
+    "src/application/a.ts global:Date",
+    "src/contracts/k.ts global:Math.random",
+    "src/core/document/c.ts global:Date",
+    "src/core/text/r.ts global:Math.random"
+  ]);
+}
 
 {
   const a = analyzeScript("shared/loader.js", [
