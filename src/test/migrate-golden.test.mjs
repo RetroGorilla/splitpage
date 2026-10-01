@@ -6,7 +6,7 @@ import { migrateRows } from "../js/02-state.js";
 import { deriveDocId, migrateDocument } from "../js/02b-doc-id.js";
 import { has, recordFor, setBackend } from "../js/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
-import { createIdMasker, goldenText, image, settleGolden } from "./golden-helpers.mjs";
+import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";
 
 const SEED_TEXT = readFileSync(new URL("../seed-state.json", import.meta.url), "utf8");
 
@@ -219,15 +219,16 @@ function legacyFileWithPicture() {
   return { title: "Legacy", rows: [{ id: "r1", audioText: "one", visualImage: S5.row.dataUrl }] };
 }
 
+const asFile = (raw) => migrateDocument(raw, { kind: "file" });
+
 const SCENARIOS = [
-  { name: "schema 1 document", images: Object.values(S1), mintedDocId: true, migrate: () => migrateRows(schemaOneDocument()) },
-  { name: "media in cells", images: Object.values(S2), mintedDocId: false, migrate: () => migrateRows(cellsDocument()) },
-  { name: "schema 2 document saved before the tag registry", images: [], mintedDocId: true, migrate: () => migrateRows(beforeTheRegistry()) },
-  { name: "seed", images: [], mintedDocId: true, migrate: () => migrateRows(JSON.parse(SEED_TEXT)) },
-  { name: "odd shapes", images: [], mintedDocId: true, migrate: () => migrateRows(oddShapes()) },
-  { name: "null document", images: [], mintedDocId: true, migrate: () => migrateRows(null) },
-  { name: "legacy file with a picture", images: Object.values(S5), mintedDocId: false,
-    migrate: () => migrateDocument(legacyFileWithPicture(), { kind: "file" }) }
+  { name: "schema 1 document", images: Object.values(S1), mintedDocId: true, input: schemaOneDocument, migrate: migrateRows },
+  { name: "media in cells", images: Object.values(S2), mintedDocId: false, input: cellsDocument, migrate: migrateRows },
+  { name: "schema 2 document saved before the tag registry", images: [], mintedDocId: true, input: beforeTheRegistry, migrate: migrateRows },
+  { name: "seed", images: [], mintedDocId: true, input: () => JSON.parse(SEED_TEXT), migrate: migrateRows },
+  { name: "odd shapes", images: [], mintedDocId: true, input: oddShapes, migrate: migrateRows },
+  { name: "null document", images: [], mintedDocId: true, input: () => null, migrate: migrateRows },
+  { name: "legacy file with a picture", images: Object.values(S5), mintedDocId: false, input: legacyFileWithPicture, migrate: asFile }
 ];
 
 function recorder() {
@@ -282,18 +283,24 @@ async function runScenario(sc) {
   const before = sc.images.filter((img) => has(img.sha256)).map((img) => img.sha256);
   const started = Date.now();
   const masker = createIdMasker(() => started, () => Date.now());
-  const out = sc.migrate();
+  const raw = sc.input();
+  const input = JSON.stringify(raw);
+  const out = sc.migrate(raw);
   await settle();
   const persisted = backend.log.puts.slice();
   const missing = backend.log.missing.slice();
   const shas = [...new Set([...sc.images.map((img) => img.sha256), ...refsIn(out)])];
   const registry = Object.fromEntries(shas.map((sha) => [sha, recordFor(sha)]));
   const golden = { output: maskState(out, masker, sc.mintedDocId), registry, persisted };
+  const ended = Date.now();
   const once = JSON.stringify(out);
   const again = migrateRows(JSON.parse(once));
   await settle();
   return {
     golden,
+    input,
+    started,
+    ended,
     before,
     missing,
     minted: masker.minted,
@@ -343,10 +350,64 @@ for (const [name, r] of results) {
   });
 }
 
-test("every minted id has its prefix, seven random base-36 digits at most, and a time stamp from this run", () => {
-  for (const [, r] of results) {
-    for (const m of r.minted) assert.match(m.value, new RegExp("^" + m.prefix + "[0-9a-z]{0,7}[0-9a-z]{8}$"));
+function idsTheInputCarries(inputText) {
+  const known = new Set();
+  const add = (v) => known.add(v).add(v.replace(/[^A-Za-z0-9_-]/g, ""));
+  (function walk(v) {
+    if (typeof v === "string") {
+      add(v);
+      if (v.indexOf("<") !== -1) {
+        const body = new DOMParser().parseFromString(v, "text/html").body;
+        for (const el of body.querySelectorAll("[data-cmt], [data-broll-id]")) {
+          for (const a of [el.getAttribute("data-cmt"), el.getAttribute("data-broll-id")]) if (a !== null) add(a);
+        }
+      }
+    } else if (v && typeof v === "object") {
+      Object.values(v).forEach(walk);
+    }
+  })(JSON.parse(inputText === undefined ? "null" : inputText));
+  return known;
+}
+
+function idsInState(s) {
+  const out = [];
+  const html = (h) => out.push(...idsInHtml(h));
+  for (const r of s.rows) {
+    out.push({ prefix: "r", value: r.id });
+    html(r.visualText);
+    html(r.audioText);
   }
+  for (const c of s.comments) {
+    out.push({ prefix: "c", value: c.id }, { prefix: "c", value: c.anchorId }, { prefix: "r", value: c.rowId });
+    html(c.body);
+    for (const rep of c.replies) {
+      out.push({ prefix: "rp", value: rep.id });
+      html(rep.body);
+    }
+  }
+  for (const p of s.people) out.push({ prefix: "p", value: p.id });
+  for (const t of s.productionTags) out.push({ prefix: "p", value: t.owner });
+  for (const b of s.brollShots) out.push({ prefix: "bs", value: b.id }, { prefix: "p", value: b.owner });
+  return out.filter((x) => typeof x.value === "string" && x.value !== "");
+}
+
+const MEDIA_COMMENT_ID = /^cm[0-9a-f]{24}$/;
+
+test("every id the migration adds is minted in this run's format and masked; no id the input carried is masked", () => {
+  let added = 0;
+  for (const [name, r] of results) {
+    const known = idsTheInputCarries(r.input);
+    const ids = idsInState(JSON.parse(r.once)).filter((x) => !known.has(x.value) && !(x.prefix === "c" && MEDIA_COMMENT_ID.test(x.value)));
+    const golden = goldenText(r.golden.output);
+    for (const a of ids) {
+      assert.ok(mintedId(a.value, a.prefix, r.started, r.ended),
+        `${name}: ${a.value} is not ${a.prefix} plus seven base-36 digits at most and a base-36 time stamp from this run`);
+      assert.ok(!golden.includes(a.value), `${name}: ${a.value} is left unmasked`);
+    }
+    for (const m of r.minted) assert.ok(ids.some((a) => a.value === m.value), `${name}: ${m.value} was masked, yet the input carried it`);
+    added += ids.length;
+  }
+  assert.ok(added > 0, "the scenarios have rows, comments, replies, people, shots and anchors without ids");
 });
 
 test("a file saved before the tag registry gets entries collected from its script, keys in the order the collector writes them", () => {
