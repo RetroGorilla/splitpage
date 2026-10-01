@@ -56,6 +56,11 @@ test("with no base, a difference is a conflict and theirs stays; undefined base 
   assert.deepEqual(mergeTextField(html(BASE), html(MINE), html(THEIRS), noBase), { html: html(THEIRS), outcome: "conflict" });
 });
 
+test("a base that is undefined is no base, not an empty cell, even when the document has one", () => {
+  assert.deepEqual(mergeTextField(undefined, "", html(THEIRS), ctx), { html: html(THEIRS), outcome: "conflict" });
+  assert.deepEqual(mergeTextField("", "", html(THEIRS), ctx), { html: html(THEIRS), outcome: "theirs" });
+});
+
 test("null and missing cells read as empty", () => {
   assert.deepEqual(mergeTextField(null, null, undefined, ctx), { html: "", outcome: "same" });
   assert.deepEqual(mergeTextField("", html(MINE), null, ctx), { html: html(MINE), outcome: "mine" });
@@ -96,6 +101,27 @@ test("a tag renamed in the registry is written under its new name, through the m
   tags.calls.length = 0;
   assert.deepEqual(mergeTextField(html(MUG), html(MUG), html(MUG), unrenamed), { html: html(MUG), outcome: "same" });
   assert.deepEqual(tags.calls, [], "nothing to refit when no side's registry was renamed");
+});
+
+test("a tag whose category alone changed in the registry is written under its new category", () => {
+  const PROP = [T("the "), T("lamp", { tag: "t:prop:Lamp" })];
+  const GEAR = [T("the "), T("lamp", { tag: "t:gear:Lamp" })];
+  const tags = fakeDecoder([PROP, GEAR]);
+  const base = side([{ id: "t_lamp", cat: "prop", name: "Lamp" }]);
+  const c = textMergeContext(tags.decode, base, side([{ id: "t_lamp", cat: "gear", name: "Lamp" }]), base);
+  assert.deepEqual(c.refit, { mine: false, theirs: true });
+  assert.deepEqual(mergeTextField(html(PROP), html(PROP), html(PROP), c), { html: html(GEAR), outcome: "same" });
+});
+
+test("a tag the merged registry dropped is named from theirs first, then mine, then the base", () => {
+  const named = (name: string) => [{ id: "t_x", cat: "prop", name: name }];
+  const tagOf = (b: TagInput[], m: TagInput[], t: TagInput[], merged: TagInput[]) =>
+    textMergeContext(decode, side(b), side(m), side(t), merged as { id: string; cat: string; name: string }[]).out.tagOf("t_x");
+  assert.deepEqual(tagOf(named("Base"), named("Mine"), named("Theirs"), named("Merged")), { cat: "prop", name: "Merged" });
+  assert.deepEqual(tagOf(named("Base"), named("Mine"), named("Theirs"), []), { cat: "prop", name: "Theirs" });
+  assert.deepEqual(tagOf(named("Base"), named("Mine"), [], []), { cat: "prop", name: "Mine" });
+  assert.deepEqual(tagOf(named("Base"), [], [], []), { cat: "prop", name: "Base" });
+  assert.equal(tagOf([], [], [], []), null);
 });
 
 test("a context is built from each side's registry without changing it, and takes a given merged registry", () => {

@@ -126,6 +126,35 @@ test("rows: the further status wins, a set length follows the side that changed 
   assert.deepEqual(r.stats, { rowsFromThem: 0, rowsFromMe: 1, rowsAddedByMe: 0, rowsAddedByThem: 0 });
 });
 
+test("rows: a cell theirs holds as null, or not at all, is left so when the merge keeps it", () => {
+  const holed = () => {
+    const r = row("r1", [T("One.")], { visualText: null });
+    Reflect.deleteProperty(r, "audioText");
+    return r;
+  };
+  const r = runRows([], { rows: [holed()] }, { rows: [holed()] }, { rows: [holed()] });
+  assert.equal(r.rows[0]?.visualText, null);
+  assert.equal("audioText" in (r.rows[0] as MergeRow), false);
+  assert.deepEqual(r.rows, [holed()]);
+});
+
+test("rows: equal status ranks keep mine, and an unknown status ranks as todo, before migration", () => {
+  const status = (mine: string, theirs: string) => runRows([ONE], { rows: [row("r1", ONE)] },
+    { rows: [row("r1", ONE, { status: mine })] }, { rows: [row("r1", ONE, { status: theirs })] }).rows[0]?.status;
+  assert.equal(status("todo", "bogus"), "todo");
+  assert.equal(status("bogus", "todo"), "bogus");
+  assert.equal(status("bogus", "ready"), "ready");
+  assert.equal(status("shot", "ready"), "shot");
+});
+
+test("rows: one id added on both sides has no base, so an empty cell of mine beside their text is a conflict", () => {
+  const r = runRows([ONE, TWO], { rows: [row("r1", ONE)] },
+    { rows: [row("r1", ONE), row("r9", "")] }, { rows: [row("r1", ONE), row("r9", TWO)] });
+  assert.deepEqual(r.conflicts, [{ rowId: "r9", field: "audioText", mine: null, theirs: toHtml(TWO) }]);
+  assert.deepEqual(r.rows.map((x) => x.id), ["r1", "r9"]);
+  assert.equal(r.rows[1]?.audioText, toHtml(TWO));
+});
+
 test("rows: with no base nothing is a delete, and a row only they hold counts as theirs", () => {
   const r = runRows([ONE, TWO], null, { rows: [row("r1", ONE)] }, { rows: [row("r2", TWO)] });
   assert.deepEqual(r.rows.map((x) => x.id), ["r1", "r2"]);
@@ -186,6 +215,16 @@ test("comments: the newer copy wins, resolution and assignee are kept, replies a
   }));
   assert.deepEqual(mergeComments(null, { rows: [], comments: [cm("c1")] }, { rows: [], comments: [cm("c1", { resolved: true, resolvedBy: "Bo", resolvedAt: at(7) })] })[0],
     cm("c1", { resolved: true, resolvedBy: "Bo", resolvedAt: at(7) }));
+});
+
+test("comments: on an updatedAt tie my copy is kept, while on a resolvedAt tie theirs names the resolver", () => {
+  const side = (body: string, by: string, extra?: Partial<MergeComment>) => ({ rows: [], comments: [
+    cm("c1", Object.assign({ body: body, updatedAt: at(5), resolved: true, resolvedBy: by, resolvedAt: at(5) }, extra || {}))
+  ] });
+  const out = mergeComments(null, side("Mine", "Sam"), side("Theirs", "Bo"))[0] as MergeComment;
+  assert.deepEqual([out.body, out.resolvedBy], ["Mine", "Bo"]);
+  const created = mergeComments(null, side("Mine", "Sam", { updatedAt: null }), side("Theirs", "Bo", { updatedAt: null }))[0] as MergeComment;
+  assert.equal(created.body, "Mine", "the tie falls back to createdAt, and still keeps mine");
 });
 
 test("comments with Object.prototype ids are dropped, and a reply id of __proto__ is lost, as today (#278)", () => {

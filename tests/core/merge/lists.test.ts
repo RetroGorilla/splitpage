@@ -66,6 +66,14 @@ test("production tags: a status only ever rises, and two entries for one name be
   assert.deepEqual(mergeProductionTags(null, [tag("t_a", "A", { status: "bogus" })], [])[0]?.status, "needed");
 });
 
+test("production tags: of two entries for one name, the first keeps its own owner, notes and status", () => {
+  const out = mergeProductionTags([], [], [
+    tag("t_a", "Ladder", { owner: "p1", notes: "first", status: "have" }),
+    tag("t_b", "ladder", { owner: "p2", notes: "second", status: "sourcing" })
+  ]);
+  assert.deepEqual(out, [{ cat: "prop", name: "Ladder", owner: "p1", notes: "first", status: "have", id: "t_a" }]);
+});
+
 test("b-roll props: additions on both sides, removals, an ancestor with no list, and the cap", () => {
   const K = prop("t_kettle", "Kettle"), L = prop("t_ladder", "Ladder"), T = prop("t_tripod", "Tripod");
   assert.deepEqual(mergeBrollProps([K], [K, L], [K, T]), [K, T, L]);
