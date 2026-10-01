@@ -1,7 +1,13 @@
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { escapeHtml } from "./text-policy.ts";
 
 export interface DocIdHolder {
   docId?: unknown;
+}
+
+export interface PageHead {
+  title?: unknown;
+  description?: unknown;
 }
 
 const SHA256_K: readonly number[] = [
@@ -113,4 +119,28 @@ export function mergedDocId(base: DocIdHolder | null | undefined, mine: DocIdHol
   if (m === t) return m;
   if (base && t === normalizeDocId(base.docId)) return m || t;
   return t || m;
+}
+
+export function mediaCommentId(rowId: string, field: string, key: string): string {
+  return "cm" + sha256Hex("splitpage-cell-media\n" + rowId + "\n" + field + "\n" + key).slice(0, 24);
+}
+
+export function withPageHead(html: string, head: PageHead): string {
+  function oneLine(v: unknown): string { return escapeHtml(String(v).replace(/\s+/g, " ").trim()); }
+  const headEnd = html.search(/<\/head>/i);
+  if (headEnd === -1) return html;
+  let top = html.slice(0, headEnd);
+  const rest = html.slice(headEnd);
+  if (head.title) {
+    top = top.replace(/<title>[^<]*<\/title>/i, function () {
+      return "<title>" + oneLine(head.title) + "</title>";
+    });
+  }
+  if (head.description) {
+    const meta = '<meta name="description" content="' + oneLine(head.description) + '">';
+    let had = false;
+    top = top.replace(/<meta name="description" content="[^"]*">/i, function () { had = true; return meta; });
+    if (!had) top = top.replace(/<\/title>/i, function (m: string) { return m + "\n" + meta; });
+  }
+  return top + rest;
 }

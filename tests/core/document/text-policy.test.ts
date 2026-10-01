@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { plainName, plainText, safeHref, safeId, safeImageSrc, storedImageHtml } from "../../../src/core/document/text-policy.ts";
+import {
+  escapeHtml,
+  legacyMdToHtml,
+  plainName,
+  plainText,
+  safeHref,
+  safeId,
+  safeImageSrc,
+  storedImageHtml
+} from "../../../src/core/document/text-policy.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
 
 const SHA = "ab".repeat(32);
@@ -85,4 +94,24 @@ test("storedImageHtml is the stored image tag of a valid reference, and nothing 
   assert.equal(storedImageHtml({ sha256: SHA, width: 640, height: 480, mime: "image/svg+xml" }), "");
   assert.equal(storedImageHtml(null), "");
   assert.equal(storedImageHtml([SHA]), "");
+});
+
+test("escapeHtml escapes the four characters an attribute or text needs, and nothing else", () => {
+  assert.equal(escapeHtml(`<a href="x">Tom & 'Jerry'</a>`), "&lt;a href=&quot;x&quot;&gt;Tom &amp; 'Jerry'&lt;/a&gt;");
+  assert.equal(escapeHtml("&amp;"), "&amp;amp;");
+  assert.equal(escapeHtml(42), "42");
+  assert.equal(escapeHtml(null), "null");
+  assert.equal(escapeHtml(undefined), "undefined");
+});
+
+test("legacyMdToHtml reads the old markdown and the inline tags it allowed", () => {
+  assert.equal(legacyMdToHtml("**b** and *i* and ~~s~~"), "<strong>b</strong> and <em>i</em> and <s>s</s>");
+  assert.equal(legacyMdToHtml("<u>under</u> <mark>lit</mark> <STRONG>x</STRONG>"), "<u>under</u> <mark>lit</mark> <strong>x</strong>");
+  assert.equal(legacyMdToHtml("a<br/>b<br >c\nd"), "a<br>b<br>c<br>d");
+  assert.equal(legacyMdToHtml("<em>open"), "&lt;em&gt;open");
+  assert.equal(legacyMdToHtml("<script>x</script>"), "&lt;script&gt;x&lt;/script&gt;");
+  assert.equal(legacyMdToHtml("[go](https://x.test/?a=1&b=2)"), '<a href="https://x.test/?a=1&amp;b=2" target="_blank" rel="noopener">go</a>');
+  assert.equal(legacyMdToHtml("[x](javascript:alert(1))"), "[x](javascript:alert(1))");
+  assert.equal(legacyMdToHtml(null), "");
+  assert.equal(legacyMdToHtml(7), "");
 });

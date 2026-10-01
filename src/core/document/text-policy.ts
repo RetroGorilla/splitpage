@@ -25,6 +25,34 @@ export function plainName(v: unknown): string {
   return name || "Anonymous";
 }
 
+export function escapeHtml(s: unknown): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function legacyMdToHtml(text: unknown): string {
+  if (typeof text !== "string") return "";
+  let out = escapeHtml(text);
+  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+  out = out.replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/gi, "<u>$1</u>");
+  out = out.replace(/&lt;mark&gt;([\s\S]*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
+  ["strong", "em", "s"].forEach(function (tag) {
+    out = out.replace(new RegExp("&lt;" + tag + "&gt;([\\s\\S]*?)&lt;\\/" + tag + "&gt;", "gi"), "<" + tag + ">$1</" + tag + ">");
+  });
+  out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (m: string, label: string, url: string) {
+    const safe = safeHref(url);
+    return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : m;
+  });
+  out = out.replace(/\n/g, "<br>");
+  return out;
+}
+
 export function safeId(id: unknown, prefix: string, ids: IdSource): string {
   const clean = String(id == null ? "" : id).replace(/[^A-Za-z0-9_-]/g, "");
   return clean || ids.id(prefix);

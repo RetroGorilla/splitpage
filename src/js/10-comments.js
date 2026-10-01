@@ -27,6 +27,12 @@ import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
 import { nowIso } from "../adapters/identity/ids.ts";
+import {
+  commentMatchesFilterMode,
+  commentMatchesAssigneeFilter as matchesAssignee,
+  commentRecentOrder,
+  compareCommentPositions
+} from "../core/document/comments.ts";
 export { nowIso };
 
 var commentFilter;
@@ -217,19 +223,8 @@ export function setCommentAssigneeFilter(value) {
   captureReplyDrafts();
   renderComments();
 }
-function commentMatchesFilterMode(c, mode) {
-  if (mode === "resolved") return !!c.resolved;
-  if (mode === "all") return true;
-  return !c.resolved;
-}
 function commentMatchesAssigneeFilter(c, assignee) {
-  if (!assignee) return true;
-  if (assignee === "__unassigned__") return !c.assignee;
-  if (assignee === "me") {
-    var me = normalizeTagName(getSavedAuthorName());
-    return !!me && normalizeTagName(c.assignee || "") === me;
-  }
-  return normalizeTagName(c.assignee || "") === normalizeTagName(assignee);
+  return matchesAssignee(c, assignee, getSavedAuthorName);
 }
 
 function commentAssigneeCandidates() {
@@ -408,20 +403,7 @@ function formatTimestampAbsolute(iso) {
 }
 
 function commentPositionCompare(a, b) {
-  var ai = findRowIndex(a.rowId); if (ai === -1) ai = Infinity;
-  var bi = findRowIndex(b.rowId); if (bi === -1) bi = Infinity;
-  if (ai !== bi) return ai - bi;
-  var af = a.field === "audioText" ? 1 : 0, bf = b.field === "audioText" ? 1 : 0;
-  if (af !== bf) return af - bf;
-  return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
-}
-
-function commentLastActivity(c) {
-  var t = c.createdAt || "";
-  (c.replies || []).forEach(function (r) {
-    if ((r.createdAt || "") > t) t = r.createdAt;
-  });
-  return t;
+  return compareCommentPositions(a, b, findRowIndex);
 }
 
 export function commentEntries(opts) {
@@ -1072,9 +1054,7 @@ export function renderComments() {
   var items = S.state.comments.filter(function (c) {
     return commentMatchesFilterMode(c, commentFilter.mode) && commentMatchesAssigneeFilter(c, commentFilter.assignee);
   });
-  items = items.slice().sort(S.commentSortMode === "recent"
-    ? function (a, b) { return commentLastActivity(b).localeCompare(commentLastActivity(a)); }
-    : commentPositionCompare);
+  items = items.slice().sort(S.commentSortMode === "recent" ? commentRecentOrder : commentPositionCompare);
   if (!items.length) {
     listEl.innerHTML = '<div class="comments-empty">' + (S.state.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;

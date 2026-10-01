@@ -244,17 +244,6 @@
     "shared/video-embed.js": [
       "/* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */"
     ],
-    "src/js/00p-prefs.js": [
-      "/* eslint-disable-next-line no-control-regex -- stripping them is the job. */"
-    ],
-    "src/js/02c-blobs.js": [
-      "// eslint-disable-line no-control-regex"
-    ],
-    "src/js/02d-gallery.js": [
-      "/* eslint-disable-next-line no-control-regex -- a file name is one line */",
-      "/* eslint-disable-next-line no-control-regex -- a file name is one line */",
-      "/* eslint-disable-next-line no-control-regex -- controls are what goes */"
-    ],
     "src/js/09-find-replace.js": [
       "/* eslint-disable-next-line no-control-regex -- the characters cleanText() (04c-doc-model.js) drops. */",
       "/* eslint-disable-next-line no-control-regex -- the same set, for a whole string. */"
