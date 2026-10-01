@@ -14,4 +14,4 @@ export type DecodeOptions = NormalizeOptions & {
   onMedia?: ((media: DecodedMedia) => void) | null | undefined;
 };
 
-export type CellDecoder = (html: string) => readonly Run[];
+export type CellDecoder = (html: string, opts?: DecodeOptions | null) => readonly Run[];
