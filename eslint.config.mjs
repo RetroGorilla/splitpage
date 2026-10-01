@@ -125,7 +125,7 @@ export default [
   },
 
   {
-    files: ["src/core/text/runs.ts"],
+    files: ["src/core/text/runs.ts", "src/js/09-find-replace.js"],
     rules: { "no-control-regex": "off" }
   },
 

@@ -152,9 +152,7 @@ export function domProjection(root) {
   return out;
 }
 
-/* eslint-disable-next-line no-control-regex -- the characters cleanText() (04c-doc-model.js) drops. */
 var DROPPED_CHAR_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/;
-/* eslint-disable-next-line no-control-regex -- the same set, for a whole string. */
 var DROPPED_CHARS_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g;
 var OBJ = "\uFFFC";
 

@@ -243,10 +243,6 @@
     "shared/video-embed.js": [
       "/* global URL, AbortController, setTimeout, clearTimeout, TextDecoder */"
     ],
-    "src/js/09-find-replace.js": [
-      "/* eslint-disable-next-line no-control-regex -- the characters cleanText() (04c-doc-model.js) drops. */",
-      "/* eslint-disable-next-line no-control-regex -- the same set, for a whole string. */"
-    ],
     "src/js/13-hosted.js": [
       "/* global google -- injected at runtime by Google Identity Services; see above */"
     ],
