@@ -2,8 +2,7 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 #   ... -Only 02            run just the suite whose filename starts with 02
-#   ... -Parallel 1         one suite at a time (default is 4 lanes)
-#   ... -Headed             watch it happen in a real Edge window (forces -Parallel 1)
+#   ... -Headed            watch it happen in a real Edge window (forces -Parallel 1)
 #   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
 #
 # Each suite gets its own driver process, its own server port and its own
@@ -23,7 +22,7 @@ param(
   [int]$Port = 0,
   [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
-  [int]$Parallel = 4,
+  [int]$Parallel,
   [switch]$Headed
 )
 
@@ -33,6 +32,7 @@ $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if ($Headed) { $Parallel = 1 }
+elseif (-not $PSBoundParameters.ContainsKey('Parallel')) { $Parallel = [Math]::Floor([Environment]::ProcessorCount * 9 / 16) }
 if ($Parallel -lt 1) { $Parallel = 1 }
 
 # Start-Process returns Edge's launcher, which hands off to a process tree and
