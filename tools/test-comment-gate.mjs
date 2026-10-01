@@ -82,6 +82,14 @@ eq("an arithmetic shift is not a heredoc", texts("a.sh", [
   "echo $((16#ff)) ${x}#not $(( (1 << 2) + 1 )) # three",
   "# four"
 ].join("\n")), ["# one", "# two", "# three", "# four"]);
+eq("nested subshells opened with (( are not arithmetic", texts("a.sh", [
+  "((cd a # one",
+  ") | (wc))",
+  "x=$((cd b # two",
+  ") | wc)",
+  "(( (1 << 2) == 4 )) # three",
+  "# four"
+].join("\n")), ["# one", "# two", "# three", "# four"]);
 eq("a here-string is not a heredoc", texts("a.sh", ['jq . <<<"$health" # one', "cat <<< x", "# two"].join("\n")), ["# one", "# two"]);
 eq("ANSI-C quoting closes on its unescaped quote", texts("a.sh", [
   "echo $'it\\'s # not' # one",
@@ -376,6 +384,7 @@ console.log("\nDockerfiles:\n");
   eq("a directive passes only where it is configured for that file", scanFile("Dockerfile", "# syntax=docker/dockerfile:1\nFROM x\n", REQUIRED_MARKERS, { Dockerfile: ["# syntax=docker/dockerfile:1"] }), []);
   eq("and not for another file", scanFile("Dockerfile.prebuilt", "# syntax=docker/dockerfile:1\nFROM x\n", REQUIRED_MARKERS, { Dockerfile: ["# syntax=docker/dockerfile:1"] }).length, 1);
   eq("the same text further down is a comment even when configured", scanFile("Dockerfile", "FROM x\n# syntax=docker/dockerfile:1\n", REQUIRED_MARKERS, { Dockerfile: ["# syntax=docker/dockerfile:1"] }).length, 1);
+  eq("a RUN after SHELL [\"node\", ...] is read as JavaScript", found("Dockerfile", 'FROM node:22\nSHELL ["node", "-e"]\nRUN console.log("# not") // js\n'), ["// js"]);
   eq("Dockerfile.prebuilt and x.dockerfile are Dockerfiles", [found("Dockerfile.prebuilt", "# a\nFROM x\n"), found("web.dockerfile", "# b\nFROM x\n")], [["# a"], ["# b"]]);
 }
 
