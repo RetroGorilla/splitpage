@@ -53,8 +53,19 @@ export function runnerOs(node, resolve = (n) => n) {
     labels = resolve(runsOn.get("labels", true));
     if (labels == null) return "unknown";
   }
-  const texts = (isSeq(labels) ? labels.items : [labels]).map(resolve).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
-  if (texts.some((t) => t === null || t.includes("${{"))) return "unknown";
+  const raw = (isSeq(labels) ? labels.items : [labels]).map(resolve).map((n) => (isScalar(n) && n.value != null ? String(n.value) : null));
+  if (raw.some((t) => t === null)) return "unknown";
+  const texts = [];
+  for (const t of raw) {
+    if (!t.includes("${{")) {
+      texts.push(t);
+      continue;
+    }
+    const literals = [...t.matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1]);
+    const kinds = new Set(literals.map((l) => (/windows/i.test(l) ? "windows" : /ubuntu|linux|macos|darwin/i.test(l) ? "other" : "unknown")));
+    if (kinds.size !== 1 || kinds.has("unknown")) return "unknown";
+    texts.push(...literals);
+  }
   if (texts.some((t) => /windows/i.test(t))) return "windows";
   if (texts.some((t) => /ubuntu|linux|macos|darwin/i.test(t))) return "other";
   return "unknown";
