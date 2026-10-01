@@ -52,6 +52,41 @@ the seed and the long demo, with the machine, browser and font it ran under.
 [performance-record.md](performance-record.md) is the 4.0 starting point;
 compare a later run only under the same conditions.
 
+## Golden fixtures
+
+Characterisation tests named `src/test/<name>-golden.test.mjs` compare
+today's behaviour with JSON fixtures committed under
+`src/test/fixtures/golden/`. A test never writes its fixture: a mismatch is a
+behaviour change to explain, not a file to refresh. When a change is meant to
+alter pinned behaviour, regenerate on purpose and review the fixture diff in
+the pull request:
+
+```
+node src/test/golden-helpers.mjs --update richtext
+node src/test/golden-helpers.mjs --update richtext,migrate
+node src/test/golden-helpers.mjs --update all
+```
+
+The command runs the named golden tests with `GOLDEN_UPDATE` set to those
+names, and a golden test writes its fixture only when that variable names it
+(or `all`). Nothing else sets it.
+
+Fixtures are compared as JSON text, so key order counts. Minted ids appear as
+`{minted:<prefix>:<n>}` (`n` counts first appearances, so a reused id keeps
+its number) and a random docId as `{minted:docId}`. Only a value in the
+minting format is masked (the prefix, at most seven random base-36 digits and
+an eight-digit base-36 time stamp from the run), so a change of format fails
+the golden instead of being hidden.
+
+| Golden | Pins |
+| --- | --- |
+| `richtext` | `sanitizeHtml`, `fromHtml` and its media, `toHtml(fromHtml(x))`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML over a corpus; asserts INV-10 and that `toHtml` output is already in stored form |
+| `migrate` | `migrateRows`/`migrateDocument` JSON, the registry's records, the shas queued for persistence (through `setBackend`), idempotence and docIds; the file runs in its own process, so the registry starts empty |
+
+`sha256-utf8.test.mjs` has no fixture: `node:crypto` is its oracle for
+`sha256Hex` with `TextEncoder` and with the hand-written UTF-8 encoder it
+falls back on, lone surrogates and megabyte strings included.
+
 ## Test discovery
 
 `tools/run-tests.mjs` finds tests by path, prints every file it found, runs
