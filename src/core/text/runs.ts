@@ -2,7 +2,7 @@ import { BROLL_MARKER_RE } from "../document/broll.ts";
 import { safeHref } from "../document/text-policy.ts";
 import type { TagName } from "../document/tags.ts";
 
-export const FORMAT_MARKS = ["hl", "b", "i", "u", "s"] as const;
+export const FORMAT_MARKS = Object.freeze(["hl", "b", "i", "u", "s"] as const);
 
 export type FormatMark = (typeof FORMAT_MARKS)[number];
 
