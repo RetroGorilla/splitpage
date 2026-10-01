@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   CUE_LINE_RE,
+  FORMAT_MARKS,
   OBJ,
   cellLength,
   cleanMarks,
@@ -21,6 +22,13 @@ import {
 import { B, COMBINED_E, GRIN, NBSP, SHALOM, T, TECHNOLOGIST, THUMB, ZWJ, ZWSP, randomCells } from "./cells.ts";
 
 const RANDOM = randomCells(85, 300);
+
+test("the format marks are one frozen list, in the order the readers use", () => {
+  assert.deepEqual([...FORMAT_MARKS], ["hl", "b", "i", "u", "s"]);
+  assert.ok(Object.isFrozen(FORMAT_MARKS));
+  assert.throws(() => { (FORMAT_MARKS as unknown as string[]).push("x"); }, TypeError);
+  assert.deepEqual(cleanMarks({ hl: true, b: true, i: true, u: true, s: true, x: true }), { hl: true, b: true, i: true, u: true, s: true });
+});
 
 test("one canonical form: equal runs join, empty runs go, marks keep one order", () => {
   assert.deepEqual(normalizeCell([T("a", { b: true }), T("b", { b: true }), T(""), T("c")]), [T("ab", { b: true }), T("c")]);
