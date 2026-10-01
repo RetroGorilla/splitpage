@@ -31,7 +31,6 @@
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/05-render.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/05t-target.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/07-production-tags.js"},
-    {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/08c-broll.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/10-comments.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/12-dirty-toast.js"},
     {"rule":"cycle-edge","source":"src/js/03-sync.js","target":"src/js/12a-undo.js"},
