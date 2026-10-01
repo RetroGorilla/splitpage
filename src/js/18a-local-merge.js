@@ -108,7 +108,7 @@ function mergeItemSummary(bits) {
 }
 
 function mergeListEntries(label, mineList, theirList, keyOf, nameOf, summaryOf) {
-  var mineMap = {}, theirMap = {}, order = [], seen = {};
+  var mineMap = Object.create(null), theirMap = Object.create(null), order = [], seen = Object.create(null);
   (mineList || []).forEach(function (it) { if (it) mineMap[keyOf(it)] = it; });
   (theirList || []).forEach(function (it) { if (it) theirMap[keyOf(it)] = it; });
   (theirList || []).concat(mineList || []).forEach(function (it) {
@@ -151,7 +151,7 @@ function mergeDiffModel(base, mine, theirs) {
 
   var baseRows = byId(b && b.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
   var textCtx = textMergeContext(b, mine, theirs);
-  var order = [], seen = {}, sceneNo = {};
+  var order = [], seen = Object.create(null), sceneNo = Object.create(null);
   theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
   mine.rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
 

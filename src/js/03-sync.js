@@ -197,7 +197,7 @@ export function restoreSnapshotFromCard(btn) {
 }
 
 export function byId(list) {
-  var map = {};
+  var map = Object.create(null);
   (list || []).forEach(function (item) { map[item.id] = item; });
   return map;
 }
@@ -245,7 +245,7 @@ function tagHooksFor(tags) {
 }
 
 function registryRenamed(sideTags, mergedTags) {
-  var merged = {};
+  var merged = Object.create(null);
   (mergedTags || []).forEach(function (t) { if (t && t.id) merged[t.id] = t; });
   return (sideTags || []).some(function (t) {
     var m = t && t.id && merged[t.id];
@@ -322,7 +322,7 @@ export function mergeStates(base, mine, theirs) {
 
   var baseRows = byId(base && base.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
   var merged = [];
-  var placed = {};
+  var placed = Object.create(null);
 
   var tagField = STATE_FIELDS.filter(function (f) { return f.key === "productionTags"; })[0];
   var mergedTags = tagField.mergeList(base && base.productionTags, mine.productionTags, theirs.productionTags);
@@ -421,7 +421,7 @@ export function mergeStates(base, mine, theirs) {
 
   var baseC = byId(base && base.comments), mineC = byId(mine.comments), theirC = byId(theirs.comments);
   var mergedComments = [];
-  var seen = {};
+  var seen = Object.create(null);
   function newer(a, b2) {
     return (a.updatedAt || a.createdAt || "") >= (b2.updatedAt || b2.createdAt || "") ? a : b2;
   }
@@ -530,9 +530,9 @@ export function mergeStates(base, mine, theirs) {
 }
 
 function droppedListKeys(baseList, mineList, theirList, keyOf, fingerprint) {
-  var dropped = {};
+  var dropped = Object.create(null);
   if (!baseList || !baseList.length) return dropped;
-  var mineBy = {}, theirBy = {};
+  var mineBy = Object.create(null), theirBy = Object.create(null);
   (mineList || []).forEach(function (e) { var k = e && keyOf(e); if (k) mineBy[k] = e; });
   (theirList || []).forEach(function (e) { var k = e && keyOf(e); if (k) theirBy[k] = e; });
   baseList.forEach(function (e) {
@@ -549,7 +549,7 @@ function droppedListKeys(baseList, mineList, theirList, keyOf, fingerprint) {
 export function mergePeople(basePeople, minePeople, theirPeople) {
   var personKey = function (p) { return p.name ? normalizeTagName(p.name) : ""; };
   var dropped = droppedListKeys(basePeople, minePeople, theirPeople, personKey, personKey);
-  var out = [], seenId = {}, seenName = {};
+  var out = [], seenId = Object.create(null), seenName = Object.create(null);
   (theirPeople || []).concat(minePeople || []).forEach(function (p) {
     if (!p || !p.name) return;
     var norm = normalizeTagName(p.name);
@@ -569,9 +569,9 @@ export function mergeProductionTags(baseTags, mineTags, theirTags) {
                            (tagStatus(t.status) || TAG_STATUSES[0]).id]);
   };
   var dropped = droppedListKeys(baseTags, mineTags, theirTags, idOf, tagPrint);
-  var baseById = {};
+  var baseById = Object.create(null);
   (baseTags || []).forEach(function (t) { if (t && t.name) baseById[idOf(t)] = t; });
-  var out = [], byId = {};
+  var out = [], byId = Object.create(null);
   function entryOf(t) {
     var e = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
               status: (tagStatus(t.status) || TAG_STATUSES[0]).id };
@@ -604,7 +604,7 @@ export function mergeProductionTags(baseTags, mineTags, theirTags) {
       existing.status = (tagStatus(t.status) || TAG_STATUSES[0]).id;
     }
   });
-  var byKey = {};
+  var byKey = Object.create(null);
   return out.filter(function (e) {
     var key = registryKey(e.cat, e.name);
     var first = byKey[key];
@@ -623,9 +623,9 @@ export function mergeBrollShots(baseShots, mineShots, theirShots) {
       .map(function (k) { return [k, b[k]]; }));
   };
   var dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
-  var baseById = {};
+  var baseById = Object.create(null);
   (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
-  var out = [], byId = {};
+  var out = [], byId = Object.create(null);
   (theirShots || []).forEach(function (b) {
     if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
     byId[b.id] = cloneState(b);
@@ -649,7 +649,7 @@ export function mergeBrollShots(baseShots, mineShots, theirShots) {
 
 function mergeBrollProps(baseProps, mineProps, theirProps) {
   function keyed(list) {
-    var by = {}, order = [];
+    var by = Object.create(null), order = [];
     (Array.isArray(list) ? list : []).forEach(function (p) {
       if (!p || typeof p !== "object" || !p.name) return;
       var k = brollPropKey(p.id, p.name);
