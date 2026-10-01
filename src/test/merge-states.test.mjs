@@ -239,6 +239,20 @@ test("replies from both sides are unioned, oldest first", () => {
   assert.deepEqual(out.replies.map((r) => r.id), ["rp1", "rp2"]);
 });
 
+test("pinned until 2.5: mergeStates changes the replies of its own mine and theirs, through migrateRows", () => {
+  const base = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
+  const mine = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
+  const theirs = commentDoc([cmt()]);
+  mine.comments[0].replies = [{ id: "rpM", body: "mine", createdAt: "2026-01-02T00:00:00.000Z" }];
+  mine.comments[1].replies = [{ id: "rpX", body: "only mine", createdAt: "2026-01-02T00:00:00.000Z" }];
+  theirs.comments[0].replies = [{ id: "rpT", body: "theirs", createdAt: "2026-01-03T00:00:00.000Z" }];
+  const out = mergeStates(base, mine, theirs).merged.comments;
+  assert.equal(out.find((c) => c.id === "c1").replies[0], mine.comments[0].replies[0], "the merged reply is mine's own object");
+  assert.equal(mine.comments[0].replies[0].author, "Anonymous", "migrateRows wrote into mine's reply");
+  assert.equal(theirs.comments[0].replies[0].author, "Anonymous", "and into theirs'");
+  assert.equal("author" in mine.comments[1].replies[0], false, "a comment only one side holds is copied, so its reply is left alone");
+});
+
 test("a comment I deleted and they replied to comes back; one nobody touched does not", () => {
   const base = commentDoc([cmt()]);
   const mine = commentDoc([]);
