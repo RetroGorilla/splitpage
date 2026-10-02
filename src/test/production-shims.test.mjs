@@ -46,8 +46,13 @@ test("registerProductionTag adds a name once per category, whatever its spelling
 
 test("registerProductionTag refuses a blank or whitespace-only name (#298)", () => {
   const s = load({ rows: [], productionTags: [] });
-  for (const name of ["", "   ", "\t\n", " ", null, undefined]) registerProductionTag("prop", name);
+  for (const name of ["", "   ", "\t\n", " ", "   ", "​", "‌", "‍", "⁠", "­", " ​ ‍⁠­\t ", null, undefined]) {
+    registerProductionTag("prop", name);
+  }
   assert.deepEqual(s.productionTags, []);
+  registerProductionTag("prop", "!!");
+  assert.deepEqual(s.productionTags.map((t) => t.name), ["!!"]);
+  s.productionTags.length = 0;
   registerProductionTag("prop", " Kettle ");
   assert.deepEqual(s.productionTags.map((t) => t.name), [" Kettle "]);
 });

@@ -4,7 +4,7 @@ import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
-  TAG_CATEGORIES, bulkTagRows, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
+  TAG_CATEGORIES, bulkTagRows, isBlankTagName, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
 } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
@@ -342,7 +342,7 @@ export function closeBulkTag() {
 }
 
 function bulkTagRefusal(needle, plan) {
-  if (!needle) return "Type the words to tag in the Find box first.";
+  if (isBlankTagName(needle)) return "Type the words to tag in the Find box first.";
   if (needle.length > 80) return "That is too long to be a tag's name.";
   if (plan.hits) return "";
   if (plan.inTags) return "Every mention of \u201c" + needle + "\u201d in the Visual column is tagged already.";

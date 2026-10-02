@@ -94,8 +94,14 @@ export function registryEntry(registry: RegistryList, cat: string, name: unknown
   return at === -1 ? null : registry[at] as RegistryTag;
 }
 
+const INVISIBLE_RE = /[\s\p{Cf}]/gu;
+
+export function isBlankTagName(name: unknown): boolean {
+  return !String(name == null ? "" : name).replace(INVISIBLE_RE, "");
+}
+
 export function newRegistryTag(registry: RegistryList, cat: string, name: string): NewRegistryTag | null {
-  if (!normalizeTagName(name)) return null;
+  if (isBlankTagName(name)) return null;
   if (registryEntry(registry, cat, name)) return null;
   return { id: mintTagId(cat, name, registry), cat: cat, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
 }
