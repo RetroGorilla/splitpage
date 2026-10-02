@@ -302,6 +302,9 @@ test("cue snapshots hold scenes with Object.prototype ids, and a new such scene 
     const plan = planRegistryHealing(typed, readers, opened.cues);
     assert.deepEqual(plan.retitle, [{ at: 0, from: "slow", name: "slow piano" }], id);
     assert.deepEqual(plan.register.map((t) => t.name), ["bang"], id);
+    const fromJson = planRegistryHealing(typed, readers, jsonCopy(opened.cues));
+    assert.deepEqual(fromJson.retitle, [{ at: 0, from: "slow", name: "slow piano" }], id + ", a snapshot read back from JSON");
+    assert.deepEqual(fromJson.register.map((t) => t.name), ["bang"], id + ", a snapshot read back from JSON");
   }
 });
 
