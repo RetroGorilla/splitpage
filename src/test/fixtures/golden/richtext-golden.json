@@ -1046,12 +1046,15 @@
     },
     "one span, two special classes": {
       "input": "<span class=\"cmt-anchor tag-anchor\" data-cmt=\"c1\" data-tag-cat=\"prop\" data-tag-name=\"Mug\">mug</span> <span class=\"stage-dir audio-cue\">both</span> <span class=\"broll-key cmt-anchor\" data-cmt=\"c2\" data-broll-id=\"k1\">B-roll:</span> <a class=\"video-embed-card other\" href=\"https://e.x/v\">card</a>",
-      "sanitized": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> <span class=\"stage-dir\">both</span> <span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span> <a class=\"video-embed-card\" href=\"https://e.x/v\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· e.x</span></a>",
+      "sanitized": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span></span> <span class=\"stage-dir\">both</span> <span class=\"cmt-anchor\" data-cmt=\"c2\"><span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span></span> <a class=\"video-embed-card\" href=\"https://e.x/v\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· e.x</span></a>",
       "fromHtml": [
         {
           "text": "mug",
           "marks": {
-            "tag": "t:prop:Mug"
+            "tag": "t:prop:Mug",
+            "cmt": [
+              "c1"
+            ]
           }
         },
         {
@@ -1072,7 +1075,11 @@
           "atom": "broll",
           "id": "k1",
           "text": "B-roll:",
-          "marks": {}
+          "marks": {
+            "cmt": [
+              "c2"
+            ]
+          }
         },
         {
           "text": " ",
@@ -1085,7 +1092,7 @@
           "href": "https://e.x/v"
         }
       ],
-      "toHtml": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> <span class=\"stage-dir\">both</span> <span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span> ",
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span></span> <span class=\"stage-dir\">both</span> <span class=\"cmt-anchor\" data-cmt=\"c2\"><span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span></span> ",
       "markdown": "mug ((both)) B-roll: [▶Watch video· e.x](https://e.x/v)",
       "markdownOfInput": "mug ((both)) B-roll: [card](https://e.x/v)",
       "storedFromDom": "<span class=\"cmt-anchor tag-anchor\" data-cmt=\"c1\" data-tag-cat=\"prop\" data-tag-name=\"Mug\">mug</span> <span class=\"stage-dir audio-cue\">both</span> <span class=\"broll-key cmt-anchor\" data-cmt=\"c2\" data-broll-id=\"k1\">B-roll:</span> <a class=\"video-embed-card other\" href=\"https://e.x/v\">card</a>"
@@ -1887,7 +1894,7 @@
       "media": [],
       "toHtml": "ftp rel frag MAIL ns none",
       "markdown": "ftp rel frag MAIL ns none",
-      "markdownOfInput": "[ftp](ftp://e.x/) [rel](/x) [frag](#frag) [MAIL](MAILTO:a@e.x) [ns](https:no-slashes) [none](null)",
+      "markdownOfInput": "[ftp](ftp://e.x/) [rel](/x) [frag](#frag) [MAIL](MAILTO:a@e.x) [ns](https:no-slashes) none",
       "storedFromDom": "<a href=\"ftp://e.x/\">ftp</a> <a href=\"/x\">rel</a> <a href=\"#frag\">frag</a> <a href=\"MAILTO:a@e.x\">MAIL</a> <a href=\"https:no-slashes\">ns</a> <a>none</a>"
     },
     "links: label with brackets": {
@@ -1991,7 +1998,7 @@
       "media": [],
       "toHtml": "a  b  c",
       "markdown": "a  b  c",
-      "markdownOfInput": "a [Watch video](javascript:alert(1)) b [no href](null) c",
+      "markdownOfInput": "a [Watch video](javascript:alert(1)) b no href c",
       "storedFromDom": "a <a class=\"video-embed-card\" href=\"javascript:alert(1)\"><span>Watch video</span></a> b <a class=\"video-embed-card\">no href</a> c"
     },
     "video card: mailto and odd hosts": {
