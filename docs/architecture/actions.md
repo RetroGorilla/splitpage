@@ -35,15 +35,19 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 
 | Action | Difference kept from 3.1 |
 | --- | --- |
-| `save` | Its buttons and the native menu (which clicked the header's Save) do not wait for the document to load; Ctrl+S does |
 | `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
 | `write` | In a review session the command menu reads "Viewing only — the writer changes the script"; the button and the native menu say "Viewing only — you can comment on this script, but not change it." |
 | `find` | With the bar already open, Ctrl+F only puts the focus back in it and selects its query; the File menu, the command menu and the native Edit menu open the bar again, taking the selected words as the query (`run` looks at its source; `286-find-from-every-surface.txt`) |
 | `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source). The header's Search button is refused without a reason, so nothing is shown, as `openCommandMenu()` returned quietly in 3.1 |
 
-Two others differ by action rather than by surface, as in 3.1: the
-Production and Gear buttons say "Still loading..." and the B-roll button does
-not wait for the document at all. `tests/legacy/while-loading.test.ts` checks
+One other differs by action rather than by surface, as in 3.1: the B-roll
+button does not wait for the document at all. Every other refusal while the
+document loads reads "Still loading…", the same wording everywhere: the
+`loading` blocker in `screen.ts` gives it to the registry's actions, and
+`still-loading-wording.test.ts` fails if a literal elsewhere in `src` differs.
+`save` refuses from every surface (Ctrl+S silently, as every shortcut refusal
+is), where in 3.1 its buttons and the native menu ran and threw on the
+missing document (#276). `tests/legacy/while-loading.test.ts` checks
 the loading cases against the real definitions (the browser suites cannot
 reach a page that is still loading); `278-commands-as-before.txt` checks the
 rest, and passes against the code before the registry (4.0-development
@@ -185,8 +189,7 @@ started over one of them.
 
 | Action | Refused under |
 | --- | --- |
-| `save` | a dialog, the command menu; and still loading for Ctrl+S only |
-| `save-as` | still loading, a dialog, the command menu |
+| `save`, `save-as` | still loading, a dialog, the command menu |
 | `save-back`, `server-publish`, `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
 | `open`, `export` | still loading, every overlay |
 | `command-menu` | still loading, every overlay but itself |
