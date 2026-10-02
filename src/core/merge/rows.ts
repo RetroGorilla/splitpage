@@ -2,6 +2,7 @@ import { normalizeImageRef } from "../../../shared/blob-policy.js";
 import { GALLERY_FIELDS, ROW_FIELDS } from "../document/fields.ts";
 import { galleryFieldKey, mergeGalleryField } from "../document/gallery.ts";
 import type { GallerySide } from "../document/gallery.ts";
+import { idMap } from "../document/id-map.ts";
 import type { Clock, IdSource } from "../document/ports.ts";
 import { escapeHtml, storedImageHtml } from "../document/text-policy.ts";
 import { hasSetLength } from "../document/timing.ts";
@@ -76,7 +77,7 @@ export interface CardPorts {
 function jsonCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
 export function byId<T extends Identified>(list: readonly T[] | null | undefined): Record<string, T> {
-  const map: Record<string, T> = {};
+  const map = idMap<T>();
   (list || []).forEach(function (item) { map[item.id] = item; });
   return map;
 }
@@ -114,7 +115,7 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
   const conflicts = ctx.conflicts, stats = ctx.stats;
   const baseRows = byId(base && base.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
   const merged: MergeRow[] = [];
-  const placed: Record<string, boolean> = {};
+  const placed = idMap<boolean>();
 
   function mergeRow(b: MergeRow | undefined, m: MergeRow, t: MergeRow): MergeRow {
     const out = jsonCopy(t);
@@ -213,7 +214,7 @@ export function mergeRows(base: RowSide | null | undefined, mine: RowSide, their
 export function mergeComments(base: RowSide | null | undefined, mine: RowSide, theirs: RowSide): MergeComment[] {
   const baseC = byId(base && base.comments), mineC = byId(mine.comments), theirC = byId(theirs.comments);
   const mergedComments: MergeComment[] = [];
-  const seen: Record<string, boolean> = {};
+  const seen = idMap<boolean>();
   function newer(a: MergeComment, b2: MergeComment): MergeComment {
     return (a.updatedAt || a.createdAt || "") >= (b2.updatedAt || b2.createdAt || "") ? a : b2;
   }

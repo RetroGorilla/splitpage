@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStepsLive, caretAfterStep, changedBetween, createUndoHistory, diffStates } from "../js/12a-undo.js";
 import { invertSteps } from "../js/04c-doc-model.js";
+import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 
 const row = (id, audio, extra) => Object.assign({ id, status: "todo", visualText: "", audioText: audio || "" }, extra);
 const doc = (rows, extra) => Object.assign({ title: "T", docId: "d1", rev: 3, rows, comments: [], productionTags: [], people: [], brollShots: [] }, extra);
@@ -172,3 +173,40 @@ test("caretAfterStep: never lands between the two halves of an emoji's surrogate
   const offset = caretAfterStep(invertSteps([typed])[0]);
   assert.equal(offset, "a😀".length);
 });
+
+test("diffStates: deleting the scene constructor is a deleteRow, as for any other id (#311)", () => {
+  const steps = diffStates({ rows: [{ id: "r1", audioText: "one" }, { id: "constructor", audioText: "two" }] }, { rows: [{ id: "r1", audioText: "one" }] });
+  assert.deepEqual(steps, [{ op: "deleteRow", index: 1, row: { id: "constructor", audioText: "two" } }]);
+});
+
+for (const x of PROTOTYPE_IDS) {
+  test(`undo and redo: a scene with the id "${x}" is deleted, inserted, moved and edited like any other (#311)`, () => {
+    const base = doc([row("r1", "one"), row(x, "two"), row("r3", "three")]);
+    const cases = [
+      doc([row("r1", "one"), row("r3", "three")]),
+      doc([row(x, "two"), row("r1", "one"), row("r3", "three")]),
+      doc([row("r1", "one"), row(x, "TWO", { status: "shot" }), row("r3", "three")])
+    ];
+    for (const after of cases) roundTrip(base, after);
+    roundTrip(doc([row("r1", "one")]), doc([row("r1", "one"), row(x, "new")]));
+    assert.deepEqual(diffStates(doc([row("r1", "one")]), doc([row("r1", "one"), row(x, "new")])).map((s) => s.op), ["insertRow"]);
+  });
+
+  test(`applyStepsLive refuses a step for a missing scene "${x}" and inserts a new one (#311)`, () => {
+    const live = doc([row("r1", "one")]);
+    const edit = { op: "rowField", rowId: x, key: "audioText", before: "two", after: "TWO" };
+    assert.deepEqual(applyStepsLive(live, [edit]), { ok: false, reason: "a scene it changed has gone" });
+    assert.deepEqual(applyStepsLive(live, [{ op: "insertRow", index: 1, row: row(x, "two") }]), { ok: true });
+    assert.deepEqual(live.rows.map((r) => r.id), ["r1", x]);
+    assert.deepEqual(applyStepsLive(live, [edit]), { ok: true });
+    assert.equal(live.rows[1].audioText, "TWO");
+  });
+
+  test(`changedBetween: a scene "${x}" added or edited is reported as such (#311)`, () => {
+    const prev = doc([row("r1", "one")]);
+    const next = doc([row("r1", "one"), row(x, "two")]);
+    assert.deepEqual(changedBetween(prev, next), { rowFields: {}, structure: true, doc: {} });
+    const edited = doc([row("r1", "one"), row(x, "TWO")]);
+    assert.deepEqual(Object.keys(changedBetween(next, edited).rowFields), [x + "\u0000audioText"]);
+  });
+}

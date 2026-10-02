@@ -48,8 +48,11 @@ export const STATUS = Object.freeze({
   NO_RESULT: "NO-RESULT",
   TIMEOUT: "TIMEOUT",
   LEFTOVER: "LEFTOVER",
-  LAUNCH_ERROR: "LAUNCH-ERROR"
+  LAUNCH_ERROR: "LAUNCH-ERROR",
+  NOT_STARTED: "NOT-STARTED"
 });
+
+const NOT_STARTED_PREFIX = "NOT STARTED:";
 
 export const EXIT = Object.freeze({ OK: 0, SUITES_FAILED: 1, CONFIG: 2, RUNNER_ERROR: 3, HANGUP: 129, INTERRUPTED: 130, TERMINATED: 143 });
 
@@ -198,10 +201,12 @@ export function createSummaryScanner() {
   let first = null;
   let last = null;
   let lastIsSummary = false;
+  let notStarted = null;
   let done = null;
   const take = (raw) => {
     const line = (raw.endsWith("\r") ? raw.slice(0, -1) : raw).slice(0, LINE_LIMIT);
     if (line.trim() === "") return;
+    if (notStarted === null && line.startsWith(NOT_STARTED_PREFIX)) notStarted = line.slice(NOT_STARTED_PREFIX.length).trim();
     if (!line.startsWith("RESULT:")) { lastIsSummary = false; return; }
     count++;
     if (first === null) first = line;
@@ -223,7 +228,7 @@ export function createSummaryScanner() {
       if (done) return done;
       take(partial);
       partial = "";
-      done = { count, first, last, lastIsSummary };
+      done = { count, first, last, lastIsSummary, notStarted };
       return done;
     }
   };
@@ -283,8 +288,11 @@ export function classify(outcome, stdout) {
   if (outcome.heldOpen) {
     return { status: STATUS.LEFTOVER, result: `${describeExit(outcome)}, but a process it started held its output open ${DRAIN_MS / 1000}s later, ${describeSeen(scanned)}` };
   }
-  const verdict = judgeSummary(scanned);
   const exit = describeExit(outcome);
+  if (scanned.notStarted !== null && scanned.notStarted !== undefined) {
+    return { status: STATUS.NOT_STARTED, result: `${scanned.notStarted.length > QUOTE_LIMIT * 2 ? scanned.notStarted.slice(0, QUOTE_LIMIT * 2) + "..." : scanned.notStarted} (${exit})` };
+  }
+  const verdict = judgeSummary(scanned);
   if (verdict.kind === "missing") return { status: STATUS.NO_RESULT, result: `no RESULT line (${exit})` };
   if (verdict.kind === "bad") return { status: STATUS.BAD_RESULT, result: `${verdict.reason} (${exit})` };
   if (verdict.kind === "passing" && outcome.code === 0 && !outcome.signal) return { status: STATUS.PASS, result: verdict.line };
@@ -445,6 +453,8 @@ export async function runSuites(config, files, { print = console.log, owned = ne
     const failed = lines.filter((l) => !l.startsWith(STATUS.PASS + " "));
     print(failed.length ? failed.join("\n") : "ALL PASS");
     print(`${results.length} of ${files.length} suites ran, ${results.length - failed.length} passed`);
+    const unstarted = results.filter((r) => r.status === STATUS.NOT_STARTED).map((r) => r.file).sort((a, b) => a.localeCompare(b));
+    if (unstarted.length) print(`${unstarted.length} of those never started and count as failed: ${unstarted.join(", ")}`);
     return { results, exitCode: exitCodeFor(results) };
   } finally {
     await claim.release();

@@ -158,42 +158,6 @@
         "imageRef": null,
         "updatedAt": "2026-02-01T09:00:00.000Z",
         "updatedBy": "Base Writer"
-      },
-      {
-        "id": "constructor",
-        "status": "todo",
-        "visualText": "",
-        "audioText": "",
-        "imageRef": null,
-        "updatedAt": "2030-01-02T03:04:05.678Z",
-        "updatedBy": "Merge Editor"
-      },
-      {
-        "id": "__proto__",
-        "status": "todo",
-        "visualText": "",
-        "audioText": "",
-        "imageRef": null,
-        "updatedAt": "2030-01-02T03:04:05.678Z",
-        "updatedBy": "Merge Editor"
-      },
-      {
-        "id": "toString",
-        "status": "todo",
-        "visualText": "",
-        "audioText": "",
-        "imageRef": null,
-        "updatedAt": "2030-01-02T03:04:05.678Z",
-        "updatedBy": "Merge Editor"
-      },
-      {
-        "id": "hasOwnProperty",
-        "status": "todo",
-        "visualText": "",
-        "audioText": "",
-        "imageRef": null,
-        "updatedAt": "2030-01-02T03:04:05.678Z",
-        "updatedBy": "Merge Editor"
       }
     ],
     "comments": [],
@@ -209,7 +173,7 @@
   "conflicts": [],
   "stats": {
     "rowsFromThem": 0,
-    "rowsFromMe": 4,
+    "rowsFromMe": 0,
     "rowsAddedByMe": 0,
     "rowsAddedByThem": 0
   }

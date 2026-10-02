@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { adapterWith, fakePorts } from "./fakes.ts";
+import { PROTOTYPE_IDS } from "../../../src/core/document/id-map.ts";
 
 const SHA = "c3".repeat(32);
 const KEPT = `class="comment-img" data-blob="${SHA}" data-w="4" data-h="3" data-mime="image/png"`;
@@ -41,6 +42,28 @@ test("every attribute but the five a stored picture carries is dropped, and thos
   const reordered = `<img data-mime="image/png" alt="x" data-h="3" class="comment-img x" ONERROR="y" data-blob="${SHA}" data-w="4">`;
   assert.equal(rt.storedHtmlFromDom(reordered),
     `<img data-mime="image/png" data-h="3" class="comment-img x" data-blob="${SHA}" data-w="4">`);
+});
+
+test("an attribute named like an Object.prototype member is dropped too (#311)", () => {
+  const SHAPE = `<img class="blob-img" data-blob="${SHA}">`;
+  assert.equal(rt.storedHtmlFromDom(`<img class="blob-img" data-blob="${SHA}" constructor="x" __proto__="y" onclick="z">`), SHAPE);
+  const names = ["constructor", "__proto__", "tostring", "valueof", "hasownproperty", "__definegetter__", "isprototypeof"];
+  for (const n of names) assert.equal(rt.storedHtmlFromDom(`<img ${n}="v" ${KEPT}>`), STORED, n);
+});
+
+test("seeded: a stored picture keeps exactly the five attributes, whatever names sit beside them (#311)", () => {
+  const keep = ["class", "data-blob", "data-w", "data-h", "data-mime"];
+  const pool = keep.concat(PROTOTYPE_IDS.map((n) => n.toLowerCase()), ["prototype", "onclick", "src", "style", "data-x", "title"]);
+  let s = 349;
+  const next = (): number => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  for (let i = 0; i < 3000; i++) {
+    const n = 1 + Math.floor(next() * 8);
+    const names = new Set<string>(["data-blob"]);
+    while (names.size < n + 1) names.add(pool[Math.floor(next() * pool.length)] as string);
+    const attrs = Array.from(names).map((a) => a + '="v' + i + '"').join(" ");
+    const kept = attributeNames(rt.storedHtmlFromDom("x<img " + attrs + ">y") as string);
+    assert.deepEqual(kept.slice().sort(), Array.from(names).filter((a) => keep.indexOf(a) !== -1).sort(), "case " + i + ": " + attrs);
+  }
 });
 
 test("each stored picture is cleaned wherever it sits, and nothing else is touched", () => {

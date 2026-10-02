@@ -16,13 +16,15 @@ import {
   openPrompterInChromium
 } from "../js/20f-desktop.js";
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
-import { availableUnless, firstRefusal } from "./screen.ts";
+import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "./screen.ts";
 import type { Blocker } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 const LOADED: readonly Blocker[] = ["loading"];
 
 const NO_DIALOG: readonly Blocker[] = ["loading", "dialog", "launcher"];
+
+const OPENS_ONE: readonly Blocker[] = ["loading", ...OPENS_A_DIALOG];
 
 function loaded(own: Availability = { enabled: true }, blockers: readonly Blocker[] = LOADED): Availability {
   return firstRefusal(availableUnless(blockers, screenNow()), own);
@@ -70,7 +72,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-server",
       words: "server hosted shared documents",
-      availability: (source) => loaded(itemAvailability(serverOpenItemState(), source)),
+      availability: (source) => loaded(itemAvailability(serverOpenItemState(), source), OPENS_ONE),
       run: () => openServerPicker()
     },
     {
@@ -79,7 +81,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-clipboard",
       words: "import revised draft text",
-      availability: (source) => loaded(itemAvailability(pasteItemState(), source)),
+      availability: (source) => loaded(itemAvailability(pasteItemState(), source), OPENS_ONE),
       run: () => { openImportModal(); }
     },
     {
@@ -88,7 +90,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-link",
       words: "import google docs link url",
-      availability: () => loaded(),
+      availability: () => loaded(undefined, OPENS_ONE),
       run: () => { openGdocModal(); }
     },
     {
@@ -97,7 +99,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-cloud",
       words: "import google drive cloud files",
-      availability: () => shownWhen(driveOpenShown()),
+      availability: () => loaded(shownWhen(driveOpenShown()), OPENS_A_DIALOG),
       run: () => { openDriveModal(); }
     },
     {
@@ -108,7 +110,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       words: "collaborate share invite link url people live together send edit comment publish",
       availability: (source) => {
         const why = collaborateBlockedReason();
-        return loaded(why ? greyedOut(why, source) : { enabled: true });
+        return loaded(why ? greyedOut(why, source) : { enabled: true }, OPENS_ONE);
       },
       run: () => openCollaborate()
     },

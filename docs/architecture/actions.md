@@ -199,11 +199,25 @@ started over one of them.
 | `present` | still loading, every overlay but Present |
 | `write` | still loading, every overlay but the writer (then a review session) |
 | `toggle-hide-shot` | still loading, a dialog |
+| `about`, `settings`, `servers`, `setup`, `tagging-help`, `drive-open` | a dialog, the tour (`OPENS_A_DIALOG`) |
+| `collaborate`, `paste`, `gdoc-import`, `server-open` | still loading, a dialog, the tour (then their own state) |
+| `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide shot scenes still act in the writer, Present, the
 shot list and the tour, and Find, Hide shot scenes and Search commands behind
 the command menu (no toast: the command menu closes as they run).
+
+A command that opens a dialog (#307) is refused over another dialog, so two
+are never open at once, and during the tour, which sits above dialogs and
+would hide one under its dimming. It opens over the writer, Present and the
+shot list, which sit below dialogs. Every button that runs one of these from
+inside a dialog closes its own dialog first (the Settings dialog's Tagging
+reference, Google Drive and Servers, the wizard's Servers and Help, the
+Servers dialog's Collaborate), and a File menu item chosen over the setup
+wizard closes the wizard first (below), so neither is refused. The open
+command menu is not in the list, as in #307's proposal: it closes itself when
+it runs a command or loses the focus.
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them

@@ -124,6 +124,24 @@
         "updatedBy": "Base Writer"
       },
       {
+        "id": "constructor",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Mine ctor.",
+        "imageRef": null,
+        "updatedAt": "2026-02-05T10:00:00.000Z",
+        "updatedBy": "Mine Writer"
+      },
+      {
+        "id": "__proto__",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Mine proto.",
+        "imageRef": null,
+        "updatedAt": "2026-02-05T10:00:00.000Z",
+        "updatedBy": "Mine Writer"
+      },
+      {
         "id": "toString",
         "status": "todo",
         "visualText": "",
@@ -154,9 +172,9 @@
   },
   "conflicts": [],
   "stats": {
-    "rowsFromThem": 2,
+    "rowsFromThem": 0,
     "rowsFromMe": 0,
-    "rowsAddedByMe": 0,
-    "rowsAddedByThem": 0
+    "rowsAddedByMe": 2,
+    "rowsAddedByThem": 2
   }
 }
