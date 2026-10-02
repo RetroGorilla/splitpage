@@ -109,17 +109,19 @@ wait document.querySelectorAll('#broll-list .broll-loose-badge').length === 0
 # fresh key and the comment lost its anchor on the key.
 caret #rows .row:nth-child(2) .visual-cell .cell-editable
 eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);window.__keyId=c.querySelector('.broll-key').getAttribute('data-broll-id');return window.__keyId;})()
-sleep 300
+wait !getSelection().isCollapsed
 jsclick #rows .row:nth-child(2) .visual-cell .mini-toolbar [data-cmd="comment"]
-sleep 500
+wait !!document.getElementById('comment-body-editable') && document.getElementById('comment-body-editable').offsetParent !== null
 eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Check this shot.');return b.textContent;})()
 jsclick #comment-post
-sleep 600
+wait document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length === 1
 expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length == 1
 eval (function(){window.__cmtId=document.querySelector('#rows .row:nth-child(2) .visual-cell .cmt-anchor').getAttribute('data-cmt');return window.__cmtId;})()
 expect !!window.__cmtId
 
 click #doc-title
+wait !document.activeElement || !document.activeElement.isContentEditable
+wait document.getElementById('comment-post') === null || document.getElementById('comment-post').offsetParent === null
 sleep 900
 expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length == 1
 expect document.querySelector('#rows .row:nth-child(2) .visual-cell .broll-key').getAttribute('data-broll-id') === window.__keyId

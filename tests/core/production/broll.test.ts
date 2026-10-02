@@ -57,7 +57,12 @@ test("brollInCell reads a key or a typed marker at a line's start, and the lines
 test("a key carrying a comment still reads as a key, with its id", () => {
   assert.deepEqual(read([B("b1", "B-roll:", { cmt: ["c1"] }), T(" gulls")]), [{ id: "b1", name: "gulls", desc: "" }]);
   assert.deepEqual(read([T("  ", { cmt: ["c1"] }), B("b1", "B-roll:", { cmt: ["c1", "c2"] }), T(" gulls\ndesc", { cmt: ["c1"] })]),
-    [{ id: "b1", name: "gulls", desc: "desc" }]);});
+    [{ id: "b1", name: "gulls", desc: "desc" }]);
+});
+
+test("a key carrying a comment and another mark still reads as a typed marker, with no id", () => {
+  assert.deepEqual(read([B("b1", "B-roll:", { b: true, cmt: ["c1"] }), T(" gulls")]), [{ id: "", name: "gulls", desc: "" }]);
+});
 
 test("a commented key opens an item for the props tagged on its lines, and is collected with its id", () => {
   const html = cells.html([B("b1", "B-roll:", { cmt: ["c1"] }), T(" the "), tag("prop", "Red mug", "red mug")]);
