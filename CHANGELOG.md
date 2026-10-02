@@ -25,6 +25,11 @@ appear in the app under **Help**. The format follows
   Hide shot scenes, comment highlights and replies, and the merge review:
   undoing the delete of such a scene could fail, and such a shot scene never
   hid. They now behave like any other.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
+- Commenting a b-roll key's line no longer moves the comment off the key or
+  gives the shot a new id.
 - Words marked as both a comment and a production tag or b-roll key in one
   piece of markup, as a script or paste from elsewhere can carry them, kept
   the tag or key but lost the comment's highlight, leaving its card "No
@@ -34,6 +39,13 @@ appear in the app under **Help**. The format follows
   comment but lost the direction or cue mark. Both are now kept.
 - Markdown export wrote `[text](null)` for a link with no address. It now
   writes the text alone.
+- Deleting one SFX: or Music: cue and editing another in the same cell at
+  once could hand the deleted cue's Production item, with its status and
+  notes, to the edited cue, and leave the edited cue's own item "Not in
+  script". The edited cue now keeps its own item when its new words are
+  close to its old ones and to no other cue that went. When that can't be
+  told, it gets a new item at Needed and both old items stay, "Not in
+  script", rather than the wrong one being renamed.
 
 ## 3.1.0 — 2026-09-29
 

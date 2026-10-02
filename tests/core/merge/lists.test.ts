@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { BROLL_PROPS_MAX } from "../../../src/core/document/broll.ts";
 import { STATE_FIELDS } from "../../../src/core/document/fields.ts";
 import {
-  LIST_MERGERS, mergeBrollProps, mergeBrollShots, mergePeople, mergeProductionTags
+  LIST_MERGERS, mergeBrollProps, mergeBrollShots, mergePeople, mergeProductionTags, personIdRemap, repointOwners
 } from "../../../src/core/merge/lists.ts";
 import type { BrollShot, ListMerger, TagInput } from "../../../src/core/merge/lists.ts";
 import { jsonCopy } from "./fakes.ts";
@@ -57,6 +57,27 @@ test("people: theirs first, one entry per id and per name, and a delete one side
   assert.deepEqual(mergePeople(base, mine, theirs), [{ id: "p1", name: "Sam" }, { id: "p4", name: "Bo " }]);
   assert.deepEqual(mergePeople(null, mine, theirs),
     [{ id: "p1", name: "Sam" }, { id: "p2", name: "Ada" }, { id: "p4", name: "Bo " }]);
+});
+
+test("personIdRemap maps each id that did not survive to the survivor with its name, and nothing else (#283)", () => {
+  const theirs = [{ id: "p1", name: "Sam" }, { id: "p4", name: "Bo " }];
+  const mine = [{ id: "p1", name: "Sam" }, { id: "p3", name: "bo" }, { id: "p5", name: "Gone" }];
+  const merged = mergePeople(null, mine, theirs);
+  assert.deepEqual({ ...personIdRemap(theirs.concat(mine), merged) }, { p3: "p4" });
+  const remap = personIdRemap([{ id: "constructor", name: "Ada" }, { id: "p9", name: "toString" }],
+    [{ id: "pA", name: "ada" }]);
+  assert.deepEqual(Object.keys(remap), ["constructor"]);
+  assert.equal(remap.toString, undefined, "a map with no prototype");
+  assert.deepEqual({ ...personIdRemap(undefined, undefined) }, {});
+  assert.deepEqual({ ...personIdRemap([null, { id: "x", name: "" }], [null, { id: "p1", name: "Sam" }]) }, {});
+});
+
+test("repointOwners rewrites only owners the map names, in place, and skips what is not an item (#283)", () => {
+  const tags = [tag("t_a", "A", { owner: "p3" }), tag("t_b", "B", { owner: "p1" }), tag("t_c", "C")];
+  const shots: unknown[] = [shot("b1", { owner: "p3" }), null, "x", { owner: 7 }];
+  repointOwners([tags, shots, undefined, "not a list"], personIdRemap([{ id: "p3", name: "Bo" }], [{ id: "p4", name: "bo" }]));
+  assert.deepEqual(tags.map((t) => t.owner), ["p4", "p1", ""]);
+  assert.deepEqual(shots.map((s) => s && typeof s === "object" ? (s as BrollShot).owner : s), ["p4", null, "x", 7]);
 });
 
 test("production tags: a status only ever rises, and two entries for one name become the first", () => {

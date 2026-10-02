@@ -35,15 +35,19 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 
 | Action | Difference kept from 3.1 |
 | --- | --- |
-| `save` | Its buttons and the native menu (which clicked the header's Save) do not wait for the document to load; Ctrl+S does |
 | `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
 | `write` | In a review session the command menu reads "Viewing only — the writer changes the script"; the button and the native menu say "Viewing only — you can comment on this script, but not change it." |
 | `find` | With the bar already open, Ctrl+F only puts the focus back in it and selects its query; the File menu, the command menu and the native Edit menu open the bar again, taking the selected words as the query (`run` looks at its source; `286-find-from-every-surface.txt`) |
 | `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source). The header's Search button is refused without a reason, so nothing is shown, as `openCommandMenu()` returned quietly in 3.1 |
 
-Two others differ by action rather than by surface, as in 3.1: the
-Production and Gear buttons say "Still loading..." and the B-roll button does
-not wait for the document at all. `tests/legacy/while-loading.test.ts` checks
+One other differs by action rather than by surface, as in 3.1: the B-roll
+button does not wait for the document at all. Every other refusal while the
+document loads reads "Still loading…", the same wording everywhere: the
+`loading` blocker in `screen.ts` gives it to the registry's actions, and
+`still-loading-wording.test.ts` fails if a literal elsewhere in `src` differs.
+`save` refuses from every surface (Ctrl+S silently, as every shortcut refusal
+is), where in 3.1 its buttons and the native menu ran and threw on the
+missing document (#276). `tests/legacy/while-loading.test.ts` checks
 the loading cases against the real definitions (the browser suites cannot
 reach a page that is still loading); `278-commands-as-before.txt` checks the
 rest, and passes against the code before the registry (4.0-development
@@ -201,14 +205,17 @@ does the same for the feature alone.
 No listener left in `src/js` handles a chord the shortcuts feature binds:
 the old Ctrl+S, Ctrl+Shift+S, Ctrl+O (`18b`), Ctrl+E (`18c`), Ctrl+K (`18d`),
 Ctrl+F and Ctrl+Alt+H (`21-events.js`) listeners are gone, and a search of
-every `keydown` listener finds no other one for those keys. One overlap is
-older than the registry and kept: in Present, the prompter's own listener
-flips the text on F whatever modifiers are held, so Ctrl+F there flips it and
-opens Find, as in 3.1. In the desktop app, Ctrl+S, Ctrl+Shift+S and Ctrl+O
-belong to the native menu's accelerators (the page does not bind them), Ctrl+E,
-Ctrl+F and Ctrl+K to the page (their accelerators are not registered), and
-Ctrl+Alt+H to both: the page runs it and keeps the key, and only when the page
-refuses does the accelerator's command run, and refuse again with a toast.
+every `keydown` listener finds no other one for those keys. In Present, the
+prompter's own listener takes its bare keys M, F and Space (Shift allowed, as
+it takes the upper-case letter) only with Ctrl, Meta and Alt up, and ignores
+any key typed into an input, textarea, select or editable element, so Ctrl+F
+there leaves the text as it was (#309; `309-present-modifier-keys.txt`). The
+arrow keys still ignore modifiers. In the desktop app, Ctrl+S, Ctrl+Shift+S
+and Ctrl+O belong to the native menu's accelerators (the page does not bind
+them), Ctrl+E, Ctrl+F and Ctrl+K to the page (their accelerators are not
+registered), and Ctrl+Alt+H to both: the page runs it and keeps the key, and
+only when the page refuses does the accelerator's command run, and refuse
+again with a toast.
 
 ## Refusals are the same on every surface
 
