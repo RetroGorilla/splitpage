@@ -95,6 +95,7 @@ export function registryEntry(registry: RegistryList, cat: string, name: unknown
 }
 
 export function newRegistryTag(registry: RegistryList, cat: string, name: string): NewRegistryTag | null {
+  if (!normalizeTagName(name)) return null;
   if (registryEntry(registry, cat, name)) return null;
   return { id: mintTagId(cat, name, registry), cat: cat, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
 }
