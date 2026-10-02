@@ -177,7 +177,40 @@
         "name": "Sam"
       }
     ],
-    "productionTags": [],
+    "productionTags": [
+      {
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "",
+        "notes": "mine",
+        "status": "needed",
+        "id": "t_o3zvjjzm6qwq"
+      },
+      {
+        "cat": "prop",
+        "name": "Lamp",
+        "owner": "",
+        "notes": "",
+        "status": "have",
+        "id": "t_1gv2lyyv6wgsc"
+      },
+      {
+        "cat": "gear",
+        "name": "Tripod",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_1equb9e3b9un"
+      },
+      {
+        "cat": "prop",
+        "name": "Ladder",
+        "owner": "p1",
+        "notes": "",
+        "status": "needed",
+        "id": "t_wd1rn01mbatyn"
+      }
+    ],
     "brollShots": [],
     "wordsPerMinute": 150,
     "rev": 5,

@@ -111,6 +111,15 @@ run-id-scoped browser profile, so two concurrent runs no longer kill each
 other's live browser either) — see "Two `run-tests.ps1` invocations at once"
 under Gotchas.
 
+A suite whose static server will not come up is retried twice more, each time
+on a fresh port the operating system hands out. A listener that answers with
+an HTTP error, such as a 404 because `index.html` has not been built, is
+reported as that and not retried. If all three attempts fail,
+the driver prints `NOT STARTED:` with each attempt's reason and stops, and
+the suite counts as one failed check, so it stays in the run's totals. The
+summary also lists the suites that never started. A suite that times out or
+leaves no readable `RESULT:` line is counted the same way.
+
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
 
@@ -359,6 +368,7 @@ it is not the full gate; CI always runs them all.
 | `tests/285-save-buttons-one-state.txt` | INV-20: the header's and the Writer's Save show one state after an edit, during a save, after a failed save and after a good one; while a save runs, neither button, the native menu nor Ctrl+S starts another write. Passes against 47c0309 too |
 | `tests/286-find-from-every-surface.txt` | Find & replace with the bar already open: Ctrl+F only takes the focus back and selects the query; the File menu, the command menu and the native menu's Find open the bar again with the words selected in the script as the query. Passes against 47c0309 too |
 | `tests/287-delete-person-broll-owner.txt` | Removing a person in the Production panel's By person view clears them as owner of their production items and their b-roll shots at once (not at the next load), leaves another person's shots alone, and is ONE undo entry: Ctrl+Z restores the person and both owners, Ctrl+Shift+Z clears them again. Fails against the build before #305's fix |
+| `tests/307-menu-dialogs-not-stacked.txt` | the desktop app's native menu commands that open a dialog (`D.runMenuCommand`; `OPENS_A_DIALOG`, src/legacy/screen.ts; #307): About, Settings, Servers, Paste a script, Google Doc link, Set up, User guide and Tagging reference open with nothing in front; during the tour, About, Settings, Servers, Collaborate, Paste, Google Doc link, Google Drive, Open from the server, Set up and Tagging reference are refused ("Finish or skip the tour first.") with no dialog opened under it, while User guide opens, puts the tour aside and gives it back on close; over About the same commands and User guide are refused ("Close the open dialog first.") with About the only dialog, as is About over Settings; a command over the setup wizard closes the wizard and runs, as before |
 
 ## The server's own tests
 
@@ -525,7 +535,9 @@ stdout, and exit 0. It is 1 when any suite is `FAIL`, `BAD-RESULT` (a
 malformed, zero-check, negative, incomplete, contradictory, repeated or
 not-last `RESULT:` line), `NO-RESULT` (the driver exited without a `RESULT:`
 line), `TIMEOUT` (killed with its browser), `LEFTOVER` (something the driver
-started still held its output open 2 s after the driver exited) or
+started still held its output open 2 s after the driver exited),
+`NOT-STARTED` (the driver's static server would not come up after three
+attempts, the later two on a fresh port; the reason is in the summary line) or
 `LAUNCH-ERROR`. It is 2 when nothing matched, a flag is invalid, the driver or
 suite folder is missing, or a port is taken, and 3 when the runner itself
 failed. After SIGHUP, SIGINT or SIGTERM it exits 129, 130 or 143. SIGTERM used

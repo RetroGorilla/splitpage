@@ -4,13 +4,14 @@ import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
-  TAG_CATEGORIES, bulkTagRows, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
+  TAG_CATEGORIES, bulkTagRows, isBlankTagName, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
 } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
@@ -342,7 +343,7 @@ export function closeBulkTag() {
 }
 
 function bulkTagRefusal(needle, plan) {
-  if (!needle) return "Type the words to tag in the Find box first.";
+  if (isBlankTagName(needle)) return "Type the words to tag in the Find box first.";
   if (needle.length > 80) return "That is too long to be a tag's name.";
   if (plan.hits) return "";
   if (plan.inTags) return "Every mention of \u201c" + needle + "\u201d in the Visual column is tagged already.";
@@ -477,7 +478,7 @@ function firstMatchFrom(range) {
     if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
     nth++;
   }
-  var order = {};
+  var order = idMap();
   S.state.rows.forEach(function (row, i) { order[row.id] = i; });
   var at = field === "visualText" ? 0 : 1;
   for (var i = 0; i < findMatches.length; i++) {

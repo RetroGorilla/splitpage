@@ -1,3 +1,4 @@
+import { idMap } from "../document/id-map.ts";
 import { plainText } from "../document/text-policy.ts";
 import {
   TAG_STATUS_IDS,
@@ -94,7 +95,14 @@ export function registryEntry(registry: RegistryList, cat: string, name: unknown
   return at === -1 ? null : registry[at] as RegistryTag;
 }
 
+const INVISIBLE_RE = /[\s\p{Cf}]/gu;
+
+export function isBlankTagName(name: unknown): boolean {
+  return !String(name == null ? "" : name).replace(INVISIBLE_RE, "");
+}
+
 export function newRegistryTag(registry: RegistryList, cat: string, name: string): NewRegistryTag | null {
+  if (isBlankTagName(name)) return null;
   if (registryEntry(registry, cat, name)) return null;
   return { id: mintTagId(cat, name, registry), cat: cat, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
 }
@@ -248,7 +256,7 @@ export function deriveProductionIndex(state: TagState, readers: ProductionReader
 }
 
 export function snapshotCues(state: TagState, readers: ProductionReaders): CueSnapshot {
-  const cells: Record<string, string[]> = {};
+  const cells = idMap<string[]>();
   state.rows.forEach(function (r) {
     const names = readers.cueNamesInField(r.audioText);
     if (names.length) cells[r.id] = names;
@@ -268,7 +276,7 @@ function retitleEditedCues(
   ix.unregistered.forEach(function (t) { if (t.catId === "sound") fresh[registryKey("sound", t.name)] = true; });
   ix.entries.forEach(function (e) { if (e.orphaned && e.catId === "sound") orphan[e.key] = true; });
   Object.keys(now.cells).forEach(function (rowId) {
-    const before = was.cells[rowId];
+    const before = Object.prototype.hasOwnProperty.call(was.cells, rowId) ? was.cells[rowId] : undefined;
     if (!before) return;
     cueEditPairs(before, now.cells[rowId] as string[]).forEach(function (pair) {
       const oldName = pair[0], newName = pair[1];

@@ -59,6 +59,14 @@ expect snap() === window.__before
 eval (function(){ U.flush(); window.__n = U.sizes().undo; var c = document.querySelectorAll('#rows .row')[0].querySelector('.audio-cell .cell-editable'); c.focus(); var w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT); var t; while ((t = w.nextNode())) { if (t.nodeValue.indexOf('The red ') !== -1) break; } var i = t.nodeValue.indexOf('red '); var r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 3); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.toString(); })()
 jsclick #rows .row:nth-child(1) .audio-cell .mini-toolbar button[data-cmd="tag"]
 wait !document.getElementById('tag-modal').hidden
+# a name with no visible characters is a blank name (#298): the composer asks for one and changes nothing
+eval (function(){ document.getElementById('tag-name').value = '​ ‍'; document.getElementById('tag-all').checked = false; return true; })()
+jsclick #tag-apply
+sleep 300
+expect Array.from(document.querySelectorAll('.toast')).some(function (t) { return t.textContent === 'Give the label a name first.'; })
+expect !document.getElementById('tag-modal').hidden
+expect snap() === window.__before
+expect U.sizes().undo === window.__n
 eval (function(){ document.getElementById('tag-name').value = 'Red'; document.getElementById('tag-all').checked = false; return true; })()
 jsclick #tag-apply
 sleep 500
