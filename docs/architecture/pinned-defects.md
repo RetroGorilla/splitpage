@@ -10,7 +10,8 @@ commitment of the milestone 2 external review
   [milestone-2.md](milestone-2.md);
 - the issues filed while fixing those on the closed 3.1.x branches.
 
-The dispositions are proposals. Adam may change any of them.
+Adam approved these dispositions and the milestone assignments on 2026-10-01.
+He may change any of them later.
 
 **How a fix lands.** Bug fixes go to `4.0-development` only. No 3.1.x release
 is planned, and `3.1.x-development` takes no more fixes
@@ -46,7 +47,7 @@ none, no golden is expected to change.
 
 | Defect | Issue | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |
-| `mergeStates` writes into its own `mine` and `theirs`: merged comments share reply objects with the inputs, and `migrateRows` then writes into them | #303 | `tests/core/merge/rows.test.ts`, `tests/core/merge-states.test.ts`, `src/test/merge-states.test.mjs` (three "pinned" tests) | `src/core/merge/rows.ts` (`mergeComments`) | Post-M2 queue. Every merge golden records `inputsUntouched: true` (its inputs are already migrated), so none changes. The plan's milestone 3 cached-results criterion then tests that no merge writes into its inputs |
+| `mergeStates` writes into its own `mine` and `theirs`: merged comments share reply objects with the inputs, and `migrateRows` then writes into them | #303 | `tests/core/merge/rows.test.ts`, `tests/core/merge-states.test.ts`, `src/test/merge-states.test.mjs` (three tests: two have "pinned" in their names, and the third is the `tests/core/merge-states.test.ts` test "today's reply aliasing…") | `src/core/merge/rows.ts` (`mergeComments`) | Post-M2 queue. Every merge golden records `inputsUntouched: true` (its inputs are already migrated), so none changes. The plan's milestone 3 cached-results criterion then tests that no merge writes into its inputs |
 | `mergeStates` throws a `TypeError` on an unmigrated side with a list that is not an array, or with items that are not objects | #304 | Nothing; the differential fuzz saw it | `src/core/merge/lists.ts`, `rows.ts`, `states.ts`; the caller `applyMerge` in `src/js/03-sync.js` | Post-M2 queue. Milestone 3's validated document type then makes an unmigrated side a type error |
 | Ids such as `__proto__` or `constructor` break the id maps in merge and migration. This includes the 2.3 finding: a row with such an id that one side lacks merges with an `undefined` status until `migrateRows` resets it | #278 | Goldens `merge-prototype-ids-*.json` (eight files); the "(#278)" tests in `tests/core/merge/rows.test.ts` and `lists.test.ts` | `src/core/merge/rows.ts` and `lists.ts` (`byId` and the id maps), `src/core/document/text-policy.ts` (`safeId`) | Post-M2 queue, ported from `fix/278-290-ids-and-nested-links`. Golden: the eight merge prototype-id files |
 | The same `{}` id maps outside merge: undo records deleting the scene `constructor` as a field change, and view modules key maps by ids | #311 | Nothing on 4.0 | `src/js/12a-undo.js` (`diffStates`, `applyStepsLive`, `changedBetween`) and the view modules the issue lists | Post-M2 queue, after #278, using its set of reserved ids |
@@ -75,7 +76,7 @@ none, no golden is expected to change.
 | Sanitising is not a fixed point for nested links (INV-10) | #290 | Nothing; fuzzing found 58 of 111,800 cases | `src/adapters/richtext/sanitize.ts` | Post-M2 queue, ported from `fix/278-290-ids-and-nested-links`. Golden: `richtext-golden.json`, if any case changes |
 | `storedHtmlFromDom` keeps an image attribute named `constructor` or `__proto__`. Neither can carry script, and sanitising drops both | #311 (comment) | Nothing | `src/adapters/richtext/richtext.ts` (`STORED_IMG_ATTRS`) | Post-M2 queue, in #311's PR: the same `{}`-map class |
 | Stored-form quirks. `storedHtmlFromDom` looks for `data-blob` case-sensitively before it parses. An `is` attribute that was removed from a picture comes back when the picture is serialised | none | Nothing | `src/adapters/richtext/richtext.ts` | Won't fix: no cell reaches them. Every caller passes a live cell's `innerHTML`, which writes attribute names in lower case, and the sanitiser builds fresh elements that have no `is` value |
-| INV-10's check that no module outside `src/adapters/richtext/` builds cells from HTML is not written | #327 | Not applicable | `tools/dep-report.mjs` | Post-M2 queue, after #321, which changes the same tool |
+| INV-10's check that no module outside `src/adapters/richtext/` builds cells from HTML is not written | #327 | Not applicable | `tools/dep-report.mjs` | Post-M2 queue, after #321, which changed the same tool and has merged |
 
 ## Actions, desktop and Present
 
@@ -93,7 +94,7 @@ none, no golden is expected to change.
 | Defect | Issue | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |
 | The `xlsx-export` same-bytes test flakes across a 2-second zip timestamp boundary | #297 | It is the flaky test: `src/test/xlsx-export.test.mjs` ("two exports of one script are the same bytes") | `src/test/xlsx-export.test.mjs`; the zip time in `src/js/14-export.js` | Post-M2 queue: the test pins the clock |
-| `24-history.txt`'s quota toast check races the toast's lifetime | #293 | Not applicable | The 3.1.x copy of the suite | Won't fix on 3.1.x, which takes no more fixes. The 4.0 copy was fixed in #292. Proposed: close the issue |
+| `24-history.txt`'s quota toast check races the toast's lifetime | #293 | Not applicable | The 3.1.x copy of the suite | Close: fixed on 4.0 by #292 (24-history), and #318 is unrelated. #292 ("run-tests.ps1 picks its lane count from the machine's logical processors") changed the check in `24-history.txt` (107665c): a `MutationObserver` on `#toast-host` records every warn toast, and the case expects exactly one. The same PR also changed `69-html-images.txt` (d1f0b4d), which waits for its pictures to reach IndexedDB before stashing; that is a different flake and not part of #293. The 3.1.x copy stays as it is, because 3.1.x takes no more fixes |
 | A suite's static server sometimes fails to start, and the summary miscounts that suite | #299 | Nothing | `.claude/skills/run-splitpage-app/driver.ps1`, `tools/run-suites.mjs` | Post-M2 queue. Retry the start, and count a suite that could not start |
 
 ## Performance
