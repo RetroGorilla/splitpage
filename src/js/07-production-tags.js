@@ -208,6 +208,7 @@ export function findOrAddPerson(name) {
 export function deletePerson(id) {
   S.state.people = S.state.people.filter(function (p) { return p.id !== id; });
   S.state.productionTags.forEach(function (t) { if (t.owner === id) t.owner = ""; });
+  (S.state.brollShots || []).forEach(function (b) { if (b.owner === id) b.owner = ""; });
 }
 
 export function deleteProductionTagEntry(cat, name) {
