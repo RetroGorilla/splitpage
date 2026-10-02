@@ -44,6 +44,14 @@ test("registerProductionTag adds a name once per category, whatever its spelling
   assert.deepEqual(s.productionTags.map((t) => [t.cat, t.name]), [["prop", "Kettle"], ["location", "Kettle"]]);
 });
 
+test("registerProductionTag refuses a blank or whitespace-only name (#298)", () => {
+  const s = load({ rows: [], productionTags: [] });
+  for (const name of ["", "   ", "\t\n", " ", null, undefined]) registerProductionTag("prop", name);
+  assert.deepEqual(s.productionTags, []);
+  registerProductionTag("prop", " Kettle ");
+  assert.deepEqual(s.productionTags.map((t) => t.name), [" Kettle "]);
+});
+
 test("renaming a prop renames it on every shot that needs it, not only the first", () => {
   const s = load({
     rows: [row("r1", "", "")],

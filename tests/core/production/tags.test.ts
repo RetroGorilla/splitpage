@@ -96,6 +96,18 @@ test("registry lookups match by category and normalised name, first entry first"
   assert.equal(newRegistryTag(taken, "gear", "Slider")?.id, mintTagId("gear", "Slider") + "-2");
 });
 
+test("a blank or whitespace-only name registers nothing, in any category (#298)", () => {
+  const registry = [registered("gear", "Tripod")];
+  for (const name of ["", " ", "   ", "\t", "\n", " ", "  \t\r\n "]) {
+    for (const cat of ["gear", "prop", "sound"]) {
+      assert.equal(newRegistryTag(registry, cat, name), null, JSON.stringify(name) + " in " + cat);
+    }
+  }
+  assert.equal(newRegistryTag(registry, "gear", null as unknown as string), null);
+  assert.equal(newRegistryTag(registry, "gear", undefined as unknown as string), null);
+  assert.equal(newRegistryTag([], "gear", " a ")?.name, " a ", "a name with words is registered as given");
+});
+
 function occ(cell: Run[], phrase: unknown): number[][] {
   return tagOccurrences(normalizeCell(cell), phrase).map((m) => [m.from, m.to]);
 }
