@@ -16,6 +16,9 @@ appear in the app under **Help**. The format follows
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Pasted or imported text with a link inside another link could lose a
+  link the next time it was saved, merged or pasted. The inner link now
+  becomes part of the outer one as soon as the text comes in, and stays so.
 
 ## 3.1.0 — 2026-09-29
 

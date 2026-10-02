@@ -27,6 +27,13 @@ function hasClass(node: Element, name: string): boolean {
   return !!node.classList && node.classList.contains(name);
 }
 
+function insideSafeLink(node: Element): boolean {
+  for (let p = node.parentNode; p && p.nodeType === 1; p = p.parentNode) {
+    if ((p as Element).tagName === "A" && safeHref((p as Element).getAttribute("href") || "")) return true;
+  }
+  return false;
+}
+
 function imageDimAttr(v: string | null): number {
   return typeof v === "string" && /^[1-9][0-9]{0,6}$/.test(v) ? parseInt(v, 10) : NaN;
 }
@@ -121,6 +128,7 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
       if (ref) destParent.appendChild(storedImageElement(doc, ref));
       return;
     }
+    if (tag === "A" && insideSafeLink(el)) { walkSanitize(el, destParent, ctx); return; }
     if (tag === "A" && hasClass(el, "video-embed-card")) {
       const vhref = safeHref(el.getAttribute("href") || "");
       if (vhref) destParent.appendChild(videoCardElement(doc, vhref));
