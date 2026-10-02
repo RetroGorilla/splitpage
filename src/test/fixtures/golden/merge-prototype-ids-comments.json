@@ -331,6 +331,40 @@
     ],
     "comments": [
       {
+        "id": "constructor",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "constructor",
+        "quotedText": "constructor",
+        "author": "Sam",
+        "body": "Ctor, mine",
+        "resolved": false,
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-05T09:00:00.000Z",
+        "replies": []
+      },
+      {
+        "id": "toString",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "toString",
+        "quotedText": "toString",
+        "author": "Sam",
+        "body": "Look at toString",
+        "resolved": true,
+        "resolvedBy": "Bo",
+        "resolvedAt": "2026-02-06T09:00:00.000Z",
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-06T09:00:00.000Z",
+        "replies": []
+      },
+      {
         "id": "c1",
         "rowId": "r1",
         "field": "audioText",
@@ -353,6 +387,12 @@
             "createdAt": "2026-02-03T09:00:00.000Z"
           },
           {
+            "id": "__proto__",
+            "body": "Reply __proto__",
+            "author": "Sam",
+            "createdAt": "2026-02-03T09:00:00.000Z"
+          },
+          {
             "id": "hasOwnProperty",
             "body": "Reply hasOwnProperty",
             "author": "Sam",
@@ -365,6 +405,40 @@
             "createdAt": "2026-02-06T09:00:00.000Z"
           }
         ]
+      },
+      {
+        "id": "hasOwnProperty",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "hasOwnProperty",
+        "quotedText": "hasOwnProperty",
+        "author": "Sam",
+        "body": "Look at hasOwnProperty",
+        "resolved": false,
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-06T09:00:00.000Z",
+        "updatedAt": "2026-02-06T09:00:00.000Z",
+        "replies": []
+      },
+      {
+        "id": "__proto__",
+        "rowId": "r1",
+        "field": "audioText",
+        "anchorId": "__proto__",
+        "quotedText": "__proto__",
+        "author": "Sam",
+        "body": "Look at __proto__",
+        "resolved": false,
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-05T09:00:00.000Z",
+        "updatedAt": "2026-02-05T09:00:00.000Z",
+        "replies": []
       }
     ],
     "people": [],

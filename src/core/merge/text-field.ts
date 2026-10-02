@@ -1,3 +1,4 @@
+import { idMap } from "../document/id-map.ts";
 import { ensureTagIds, registryTagHooks } from "../document/tags.ts";
 import type { TagHooks, TagName, TagRecord } from "../document/tags.ts";
 import { toHtml } from "../text/html.ts";
@@ -53,7 +54,7 @@ function tagHooksFor(tags: TagList): TagHooks {
 }
 
 function registryRenamed(sideTags: TagList, mergedTags: Registry): boolean {
-  const merged: Record<string, TagRecord> = {};
+  const merged = idMap<TagRecord>();
   (mergedTags || []).forEach(function (t) { if (t && t.id) merged[t.id] = t; });
   return (sideTags || []).some(function (t) {
     const m = t && t.id && merged[t.id];
