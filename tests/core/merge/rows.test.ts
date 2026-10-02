@@ -227,18 +227,18 @@ test("comments: on an updatedAt tie my copy is kept, while on a resolvedAt tie t
   assert.equal(created.body, "Mine", "the tie falls back to createdAt, and still keeps mine");
 });
 
-test("comments: the replies of a comment both sides hold are the input objects themselves, not copies (pinned: found, not changed in 2.5)", () => {
+test("comments: the replies of a comment both sides hold are copies, not the input objects (#303)", () => {
   const mineShared = reply("rp1", at(2)), mineOwn = reply("rpM", at(3));
-  const theirsShared = reply("rp1", at(2)), theirsOwn = reply("rpT", at(4));
+  const theirsShared = Object.assign(reply("rp1", at(2)), { body: "Theirs" }), theirsOwn = reply("rpT", at(4));
   const onlyMine = reply("rpX", at(5));
   const mine = { rows: [], comments: [cm("c1", { replies: [mineShared, mineOwn] }), cm("c2", { replies: [onlyMine] })] };
   const theirs = { rows: [], comments: [cm("c1", { replies: [theirsShared, theirsOwn] })] };
   const out = mergeComments(null, mine, theirs);
   const both = (out[0] as MergeComment).replies || [];
-  assert.equal(both.length, 3);
-  assert.equal(both[0], theirsShared, "theirs replaces a reply id both hold, by reference");
-  assert.equal(both[1], mineOwn);
-  assert.equal(both[2], theirsOwn);
+  assert.deepEqual(both, [theirsShared, mineOwn, theirsOwn], "theirs replaces a reply id both hold");
+  [mineShared, mineOwn, theirsShared, theirsOwn].forEach(function (r) {
+    assert.equal(both.includes(r), false, "no merged reply is an input's own object");
+  });
   const one = (out[1] as MergeComment).replies || [];
   assert.notEqual(one[0], onlyMine, "a comment only one side holds is copied whole");
   assert.deepEqual(one[0], onlyMine);
