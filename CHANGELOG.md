@@ -64,6 +64,11 @@ appear in the app under **Help**. The format follows
   close to its old ones and to no other cue that went. When that can't be
   told, it gets a new item at Needed and both old items stay, "Not in
   script", rather than the wrong one being renamed.
+- Fixed: when one edit to a cell's sound cues lost a cue, added another and
+  changed a third, the changed cue's item could be renamed to the wrong name.
+  Cues are now matched to their old names by how alike they are, and when
+  that is unclear they get a new item instead. Find-and-replace across
+  several cues in one cell no longer renames their items.
 - Saving while a script was still opening, with **Save** in the header or in
   the desktop app's menu bar (Ctrl+S), did nothing and reported an error in
   the background. It now says "Still loading…", as the File menu's commands
