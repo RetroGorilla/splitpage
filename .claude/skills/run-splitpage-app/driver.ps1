@@ -64,7 +64,7 @@ function Get-ServerFailure {
 
 function Start-ServerOnce {
   $sb = {
-    param($root, $port)
+    param($root, $port, $ready)
     $mime = @{
       '.html' = 'text/html; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'
       '.json' = 'application/json; charset=utf-8'; '.webmanifest' = 'application/manifest+json; charset=utf-8'
@@ -74,6 +74,7 @@ function Start-ServerOnce {
     $l = New-Object System.Net.HttpListener
     $l.Prefixes.Add("http://localhost:$port/")
     $l.Start()
+    $ready.up = $true
     while ($l.IsListening) {
       $ctx = $l.GetContext()
       $res = $ctx.Response
@@ -95,37 +96,50 @@ function Start-ServerOnce {
       } catch { $res.StatusCode = 500 } finally { $res.OutputStream.Close() }
     }
   }
+  $ready = [hashtable]::Synchronized(@{ up = $false })
   $script:ServerPs = [PowerShell]::Create()
-  $null = $script:ServerPs.AddScript($sb).AddArgument($Root).AddArgument($Port)
+  $null = $script:ServerPs.AddScript($sb).AddArgument($Root).AddArgument($Port).AddArgument($ready)
   $null = $script:ServerPs.BeginInvoke()
   $clock = [Diagnostics.Stopwatch]::StartNew()
   $lastProbe = 'none'
   while ($clock.Elapsed.TotalSeconds -lt 20) {
     $failure = Get-ServerFailure
-    if ($failure) { return $failure }
+    if ($failure) { return [pscustomobject]@{ Reason = $failure; Retry = $true } }
+    if (-not $ready.up) { Start-Sleep -Milliseconds 50; continue }
     try {
       $null = Invoke-WebRequest "http://localhost:$Port/index.html" -UseBasicParsing -TimeoutSec 2
       $failure = Get-ServerFailure
-      if ($failure) { return $failure }
+      if ($failure) { return [pscustomobject]@{ Reason = $failure; Retry = $true } }
       Log "server up on http://localhost:$Port/ (root $Root)"
       return $null
-    } catch { $lastProbe = $_.Exception.Message; Start-Sleep -Milliseconds 250 }
+    } catch {
+      $lastProbe = $_.Exception.Message
+      $response = $_.Exception.Response
+      if ($response) {
+        return [pscustomobject]@{ Reason = ("the listener answered HTTP " + [int]$response.StatusCode + " for /index.html (is index.html built in $Root?)"); Retry = $false }
+      }
+      Start-Sleep -Milliseconds 250
+    }
   }
-  return "no answer from the listener in 20s (last probe: $lastProbe)"
+  $why = if ($ready.up) { "no answer from the listener in 20s (last probe: $lastProbe)" } else { "the listener did not start in 20s" }
+  return [pscustomobject]@{ Reason = $why; Retry = $true }
 }
 
 function Start-Server {
   if ($script:ServerPs) { return }
   $reasons = @()
-  for ($attempt = 1; $attempt -le $ServerAttempts; $attempt++) {
+  $retryable = $true
+  for ($attempt = 1; $attempt -le $ServerAttempts -and $retryable; $attempt++) {
     if ($attempt -gt 1) { $script:Port = Get-FreePort }
-    $reason = Start-ServerOnce
-    if (-not $reason) { return }
-    $reasons += "port ${Port}: $reason"
-    Log "static server attempt $attempt of $ServerAttempts failed: port ${Port}: $reason"
+    $failed = Start-ServerOnce
+    if (-not $failed) { return }
+    $retryable = $failed.Retry
+    $reasons += "port ${Port}: $($failed.Reason)"
+    Log "static server attempt $attempt of $ServerAttempts failed: port ${Port}: $($failed.Reason)"
     Stop-ServerAttempt
   }
-  $e = New-Object System.Exception ("static server did not come up after $ServerAttempts attempts (" + ($reasons -join '; ') + ")")
+  $tried = if ($retryable) { "after $ServerAttempts attempts" } else { "on port $Port" }
+  $e = New-Object System.Exception ("static server did not come up $tried (" + ($reasons -join '; ') + ")")
   $e.Data['notStarted'] = $true
   throw $e
 }
@@ -622,6 +636,17 @@ function Report-Error($ex) {
   return $false
 }
 
+function Get-ResultLine {
+  # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
+  # inside a $() subexpression inside another double-quoted string. Kept
+  # ASCII-only too, since this file is read without a BOM.
+  $total = [Math]::Max($script:Checks, $script:Failures)
+  $passed = $total - $script:Failures
+  $summary = "RESULT: $passed/$total checks passed"
+  if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
+  return $summary
+}
+
 $exit = 0
 try {
   if ($Script) {
@@ -647,15 +672,8 @@ try {
   if ($script:Checks -eq 0 -and $script:Failures -eq 0) {
     Out1 'WARNING: no expect/wait assertions ran - this proved nothing.'
   }
-  # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
-  # inside a $() subexpression inside another double-quoted string. Kept
-  # ASCII-only too, since this file is read without a BOM.
-  $total = [Math]::Max($script:Checks, $script:Failures)
-  $passed = $total - $script:Failures
-  $summary = "RESULT: $passed/$total checks passed"
-  if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
   Out1 ''
-  Out1 $summary
+  Out1 (Get-ResultLine)
 } finally {
   if ($script:Ws) { try { $script:Ws.Dispose() } catch {} }
   if ($script:EdgeProc) { try { Stop-Process -Id $script:EdgeProc.Id -Force -ErrorAction SilentlyContinue } catch {} }

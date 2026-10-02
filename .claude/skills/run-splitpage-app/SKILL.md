@@ -112,7 +112,9 @@ other's live browser either) — see "Two `run-tests.ps1` invocations at once"
 under Gotchas.
 
 A suite whose static server will not come up is retried twice more, each time
-on a fresh port the operating system hands out. If all three attempts fail,
+on a fresh port the operating system hands out. A listener that answers with
+an HTTP error, such as a 404 because `index.html` has not been built, is
+reported as that and not retried. If all three attempts fail,
 the driver prints `NOT STARTED:` with each attempt's reason and stops, and
 the suite counts as one failed check, so it stays in the run's totals. The
 summary also lists the suites that never started. A suite that times out or
