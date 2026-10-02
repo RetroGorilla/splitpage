@@ -158,7 +158,9 @@ bridge `src/legacy/richtext.ts` that does either of these:
 
 - Imports, re-exports, `require`s or dynamically imports a file under
   `src/adapters/richtext/` (target: that file). `import type` is not a decoder
-  and passes. The decoder is meant to be reached through the bridge.
+  and passes. Under `verbatimModuleSyntax` an `import { type X }` still loads
+  the module, and the report counts it as a value import, so only a whole
+  `import type` passes. The decoder is meant to be reached through the bridge.
 - Calls a method that parses an HTML string into a document (target:
   `html-parse:<method>`): `parseFromString` unless its second argument is a
   literal `application/xml`, `text/xml`, `image/svg+xml` or
@@ -172,7 +174,12 @@ reported. They render a cell into the page, the opposite direction, and the
 tree has more than a hundred of them in UI code that no syntax tells apart from
 a parse into a scratch element. A module that parses by assigning `innerHTML`
 to a detached element and reading it back is therefore not caught; reading the
-same markup through `parseFromString` or a fragment is. The tree has two
+same markup through `parseFromString` or a fragment is. The parse methods are
+matched by a literal name at the call, so a computed bracket name,
+destructuring the method off the parser, `.call`, `.bind` and `Reflect.apply`
+get past the rule. That is acceptable for a tripwire: it stops a module from
+adding a parse by accident, and a review reads the diff of anyone who goes
+round it on purpose. The tree has two
 legacy findings, both baselined with a reason: `src/js/18-local-files.js`
 parses a legacy `.html` export to read its `state-data` element, and
 `src/legacy/document-ports.ts` builds its own `RichText` over each migration's
