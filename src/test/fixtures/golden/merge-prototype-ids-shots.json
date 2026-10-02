@@ -205,7 +205,47 @@
       }
     ],
     "productionTags": [],
-    "brollShots": [],
+    "brollShots": [
+      {
+        "id": "constructor",
+        "name": "Gulls",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "p1",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "__proto__",
+        "name": "Their shot",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "hasOwnProperty",
+        "name": "Mine shot",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
     "wordsPerMinute": 150,
     "rev": 5,
     "lastEditedBy": "Base Writer",

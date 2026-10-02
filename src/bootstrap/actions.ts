@@ -26,7 +26,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerHelpActions(registry),
     () => registerShareActions(registry),
     () => registerZoomActions(registry),
-    () => runMenuCommandsWith(nativeMenuRunner(registry)),
+    () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
   ];
   const disposers: (() => void)[] = [];
