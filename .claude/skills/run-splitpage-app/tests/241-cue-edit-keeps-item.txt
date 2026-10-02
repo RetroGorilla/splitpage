@@ -55,4 +55,32 @@ key ctrl KeyZ
 sleep 1500
 eval names()
 expect names() == slow piano intro/have
+
+# --- two more cues in the cell; one deleted, the next edited, in one go (#282)
+# Pasting "Music: themes" over both lines takes "SFX: door slam" out and makes
+# "Music: theme" "Music: themes" in one heal. The edited cue keeps its item at
+# "Have it"; the deleted one's item stays, "Not in script". It used to be the
+# other way round: names were paired by their order in the cell.
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+key Enter
+press SFX: door slam
+sleep 1500
+key Enter
+press Music: theme
+sleep 1500
+eval names()
+expect names() == slow piano intro/have | door slam/needed | theme/needed
+eval pill('theme')
+sleep 300
+eval pill('theme')
+sleep 300
+expect names() == slow piano intro/have | door slam/needed | theme/have
+eval (function(){ var cell = document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'); var cues = cell.querySelectorAll('.audio-cue'); if (cues.length !== 3) return 'cues: ' + cues.length; cell.focus(); var r = document.createRange(); r.setStartBefore(cues[1]); r.setEndAfter(cues[2]); var s = getSelection(); s.removeAllRanges(); s.addRange(r); var dt = new DataTransfer(); dt.setData('text/html', '<span class="audio-cue">Music: themes</span>'); dt.setData('text/plain', 'Music: themes'); var ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }); cell.dispatchEvent(ev); return ev.defaultPrevented; })()
+sleep 300
+eval document.activeElement.blur()
+sleep 1500
+eval names()
+expect document.querySelectorAll('#rows .row:nth-child(2) .audio-cell .audio-cue').length === 2
+expect names() == slow piano intro/have | door slam/needed | themes/have
+expect Array.from(document.querySelectorAll('#production-list .tag-entity.is-orphaned .tag-entity-name')).map(function(e){ return e.textContent; }).join() == door slam
 quit
