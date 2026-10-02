@@ -12,6 +12,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/comments.ts": await import("../../src/core/document/comments.ts"),
   "document/fields.ts": await import("../../src/core/document/fields.ts"),
   "document/gallery.ts": await import("../../src/core/document/gallery.ts"),
+  "document/id-map.ts": await import("../../src/core/document/id-map.ts"),
   "document/ids.ts": await import("../../src/core/document/ids.ts"),
   "document/media.ts": await import("../../src/core/document/media.ts"),
   "document/memo.ts": await import("../../src/core/document/memo.ts"),
