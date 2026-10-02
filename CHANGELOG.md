@@ -18,6 +18,8 @@ appear in the app under **Help**. The format follows
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 - Commenting a b-roll key's line no longer moves the comment off the key or
   gives the shot a new id.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
 
 ## 3.1.0 — 2026-09-29
 

@@ -11,6 +11,7 @@ export function walkToMd(node: Node): string {
     else if (tag === "U") out += "<u>" + inner + "</u>";
     else if (tag === "S" || tag === "STRIKE" || tag === "DEL") out += "~~" + inner + "~~";
     else if (tag === "MARK") out += "<mark>" + inner + "</mark>";
+    else if (tag === "A" && !el.getAttribute("href")) out += inner;
     else if (tag === "A") out += "[" + inner.replace(/([\]()])/g, "\\$1") + "](" + el.getAttribute("href") + ")";
     else if (tag === "BR") out += "\n";
     else if (tag === "SPAN" && el.classList && el.classList.contains("stage-dir")) out += "((" + inner + "))";
