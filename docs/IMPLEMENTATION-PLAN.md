@@ -47,7 +47,7 @@ No UI framework replacement, editor-engine replacement, persisted document schem
 1. Read applicable repository instructions, `docs/help.md`, `HANDOFF.md` section 5, build/packaging scripts and tests for the area being changed. Resolve stale prose against executable source and fixtures.
 2. Use the existing `4.0-development` branch, or create it from current `main` if absent. Preserve unrelated working changes; use a clean worktree where necessary.
 3. Keep PRs focused on one ownership boundary. Separate a demonstrated behavioral repair from a broad extraction. Keep the application runnable after each PR.
-4. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes, and nothing is forward-merged from it. A bug that also exists on 3.1.x is fixed on `4.0-development` instead, as [review.md](architecture/review.md#2-where-bugs-get-fixed) describes. A bug in code that a pending step is moving is fixed after that move lands, in the module that now owns it, with its regression test; do not restore deleted implementations or maintain two competing paths. The closed 3.1.x fix branches (`fix/274-overlay-commands`, `fix/276-save-during-load`, `fix/278-290-ids-and-nested-links`, `fix/280-282-anchor-tags-and-cue-retitle`, `fix/281-283-md-null-href-and-person-merge`, `test/293-history-toast-race`) are the reference for those ports and their fail-first tests.
+4. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes, and nothing is forward-merged from it. A bug that also exists on 3.1.x is fixed on `4.0-development` instead, as [review.md](architecture/review.md#2-where-bugs-get-fixed) describes. A bug in code that a pending step is moving is fixed after that move lands, in the module that now owns it, with its regression test; do not restore deleted implementations or maintain two competing paths. The closed 3.1.x fix branches (`fix/274-overlay-commands`, `fix/276-save-during-load`, `fix/278-290-ids-and-nested-links`, `fix/280-282-anchor-tags-and-cue-retitle`, `fix/281-283-md-null-href-and-person-merge`, `test/293-history-toast-race`) are the reference for those ports and their fail-first tests. Every defect that milestone 2 pinned or deferred has a disposition in [pinned-defects.md](architecture/pinned-defects.md), and each one that will be fixed has an issue.
 5. Open enhancement issues wait for 4.x. A feature that touches editor, saving, formats or feature views is built once on the new structure. The integration owner decides per issue and says so on the issue.
 6. Continue through milestones after their gates pass. Do not pause for routine naming, file placement or reversible implementation decisions. Record substantive behavior/compatibility uncertainties before dependent changes.
 7. Do not deploy to the live service, overwrite user data, publish releases or merge into `main` as an incidental verification step.
@@ -195,6 +195,39 @@ Retain current diff/inversion machinery behind an undo adapter. Explicitly prese
 
 **Gate:** Scene-length/status behavior matches the baseline; accepted operations have one generation transition and correct undo/effects; views never mutate live state. Failure, no-op, review/read-only restrictions and undo/redo are exercised through real interfaces. No migrated view imports `S` or concrete adapters.
 
+The milestone 2 external review ([gate record](architecture/milestone-2-gate.md#external-review)) asked for acceptance criteria for the next two items. Both belong here, because `DocumentSession` is the first owner of the live document and the first to hand out read models.
+
+**Validated documents.** Today `migrateRows` and `migrateDocument` return `MigratedDocument`, which is `Record<string, unknown>`. Core's other document entry points take structural shapes (`MergeDoc`, `StepState`, `AnchorState`, `TagState`, `BrollState`), so a raw JSON object type-checks wherever a migrated document is assumed. #304 is that gap at run time: `mergeStates` throws on an unmigrated `theirs`.
+
+- Core exports one validated document type, branded with a type-only `unique symbol`. Only `src/core/migrate.ts` produces it: `migrateDocument`, and `migrateRows`, which `mergeStates` ends with. The brand changes no bytes and costs nothing at run time.
+- `DocumentSession` holds only that type. Every way a document enters the session, including milestone 4's transition API and an adopted merge result, either migrates raw input or receives the type. The session migrates `theirs` before it merges.
+- These accept only the type: `mergeStates`, `mergeStateFields`, `syncCommentAnchors`, `deriveProductionIndex`, `planRegistryHealing`, `planQuickAdd`, `brollEntries`, `planBrollAnchors`, the session's undo adapter over `applySteps`, and the session's selectors. Functions over one cell or one value keep their narrow types.
+- **Tests:**
+  - A tools test compiles fixtures with the TypeScript compiler API. It expects a type error when an object literal or a `JSON.parse` result is passed to each listed function. (A `@ts-expect-error` line would be a comment, which the comment gate refuses.)
+  - Lint or the dependency gate refuses a type assertion to the brand outside `src/core/migrate.ts`, with a fail-first case.
+  - A seeded fuzz over raw inputs, #304's table among them, goes through the session's entry points. Each one ends in a valid document or a typed failure, never an exception from a merge or a production plan.
+  - The migrate golden and the fixed-point test of a migrated document pass unchanged.
+
+**Cached results.** Today caches hand out their own objects:
+
+- `contentMemo` and the production readers return the cached value itself.
+- The rich-text adapter's cell reader returns its cached `Run[]`. Core's `CellDecoder` type says `readonly`; the adapter's `CellReader` type does not.
+- `currentProductionIndex()` returns the cached index, which `productionIndexFresh` also updates in place.
+- `productionEntries()` copies the list, but not its entries.
+
+A caller that writes into one of these values changes every later read of the same input. #303 is the same gap in a merge: merged comments share reply objects with `mine` and `theirs`, and `migrateRows` then writes into them.
+
+- A cache owns what it stores and hands it out shared and frozen. A caller that needs to change a value copies it first. Return types are `readonly` all the way down, so a write from TypeScript is a type error. Any exception, for example a hot path where freezing costs measurable time, is named in `docs/architecture/` with its reason and a test that no caller writes into it.
+- Only the index's owner updates the index. After a heal, its two views agree (#326).
+- A merge writes into none of its inputs, and its result shares no mutable object with them. `migrateRows` keeps writing in place, but only into the document it was given to migrate.
+- **Tests:**
+  - A write into a value returned by each cache throws a `TypeError`. Every module runs in strict mode.
+  - The full browser regression passes with freezing on, which shows that no legacy caller writes into a cached value.
+  - A test deep-freezes `base`, `mine` and `theirs`, then runs every merge golden case and a seeded differential corpus through `mergeStates` without a throw. It also walks `merged` and finds no object that is reachable from an input.
+  - #303 is fixed before this, in the post-milestone-2 queue, and its three pinned tests change on purpose.
+
+The blob registry's part is under milestone 4.
+
 ### 4 — Centralize save completion, session transitions and recovery
 
 **Source:** `_home.js`, `02b-doc-id.js`, `13-hosted.js`, `13b-collaborate.js`, `14-export.js`, `18-local-files.js`, `20g-drafts.js`, `03d-drafts-idb.js` and Drive/native save paths.
@@ -210,6 +243,15 @@ Move collaboration workflows behind application interfaces; retain modal stale-c
 Split recovery capture scheduling, store adapters, writer ownership and restore/adoption policy. Keep the existing injected IndexedDB draft store. Preserve browser hosted-edit scope, limits, credential-free keys/records, review exclusion and desktop recovery behavior. Define live-tab takeover with/without Web Locks. Permission loss preserves recoverable edits as an unsaved local copy and never authorizes a server write. Discard only the acknowledged draft generation owned by that writer.
 
 **Gate:** Controlled race matrix passes for document switch, same-ID reopen, changed destination/connection during serialization/upload, edits during writes, out-of-order completions, cancelled dialogs, permission revocation, 409 retries and write failure. Assert actual stored bytes, live document, dirty state, baseline and destination. Browser/desktop recovery tests cover multi-tab ownership, quota/unavailable/corrupt storage, offline images, restart and revoked links. Existing five repaired defects stay fixed.
+
+The blob registry (`02c-blobs.js`) moves into a store adapter here, so two criteria from the milestone 2 external review belong to this milestone:
+
+**Blob ownership.** Records already go out as copies: `recordFor` and `intern` return a fresh record. `bytesForSync`, however, returns the registry's own `Uint8Array`, which cannot be frozen. The store adapter hands out bytes the caller owns: a copy, or an immutable `Blob`. A test writes into the bytes it was given, then reads the same sha again, and gets the original bytes with a matching hash.
+
+**Image-heavy load and merge (#320).**
+- Before the registry moves, `tools/perf-record.mjs` gains an image-heavy case, timed in the browser. It opens a document with ten fresh 1 MiB pictures in comment bodies (the review's probe), and it merges two sides that each add such pictures.
+- The same script runs against builds of `d18adde` (where milestone 2 started) and `c4d5944` (milestone 2's final tree). Both runs use one machine, browser and font setup, and both results go in `performance-record.md` with their conditions. The case runs again under the same conditions on milestone 4's closing tree.
+- A material slowdown is explained, or trimmed. To trim it, hand the decoded record to the store without the second hash and copy, keeping byte ownership, hash validation, first-seen order and persistence when a pass throws.
 
 ### 5 — Make formats consume captured data and one registry
 
