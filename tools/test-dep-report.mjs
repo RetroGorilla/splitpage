@@ -546,11 +546,21 @@ eq("parseFromString with a computed or missing type is a parse", htmlSinks([
   "export const a = (s, m) => new DOMParser().parseFromString(s, m);",
   "export const b = (s) => new DOMParser().parseFromString(s);"
 ].join("\n")), ["html-parse:parseFromString"]);
-eq("parseFromString through an element access, an alias or an optional call is a parse", htmlSinks([
-  'export const a = (p, s) => p["parseFromString"](s, "text/html");',
-  'export const b = (p, s) => p?.parseFromString(s, "text/html");',
-  'export const c = (p, s) => (p.parseFromString)(s, "text/html");'
-].join("\n")), ["html-parse:parseFromString"]);
+eq("parseFromString through an element access is a parse", htmlCells({
+  "src/js/element-access.js": 'export const a = (p, s) => p["parseFromString"](s, "text/html");\n'
+}), ["src/js/element-access.js:1 html-parse:parseFromString"]);
+eq("parseFromString through an optional call is a parse", htmlCells({
+  "src/js/optional-call.js": 'export const a = (p, s) => p?.parseFromString(s, "text/html");\n'
+}), ["src/js/optional-call.js:1 html-parse:parseFromString"]);
+eq("parseFromString through parentheses is a parse", htmlCells({
+  "src/js/parenthesised.js": 'export const a = (p, s) => (p.parseFromString)(s, "text/html");\n'
+}), ["src/js/parenthesised.js:1 html-parse:parseFromString"]);
+eq("parseFromString through a parenthesised element access is a parse", htmlCells({
+  "src/js/wrapped-element-access.js": 'export const a = (p, s) => (p["parseFromString"])(s, "text/html");\n'
+}), ["src/js/wrapped-element-access.js:1 html-parse:parseFromString"]);
+eq("parseFromString through a local alias of the parser is a parse", htmlCells({
+  "src/js/alias.js": 'const p = new DOMParser();\nexport const a = (s) => p.parseFromString(s, "text/html");\n'
+}), ["src/js/alias.js:2 html-parse:parseFromString"]);
 eq("createContextualFragment, parseHTMLUnsafe, setHTMLUnsafe and setHTML are parses", htmlSinks([
   "export const a = (r, s) => r.createContextualFragment(s);",
   "export const b = (s) => Document.parseHTMLUnsafe(s);",
