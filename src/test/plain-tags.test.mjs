@@ -78,6 +78,10 @@ test("what Tab wraps: the words, the spaces either side left out", () => {
   assert.equal(plainTagPhrase("   "), null);
   assert.equal(plainTagPhrase(ZW), null);
   assert.equal(plainTagPhrase(ZW + " " + NB), null);
+  for (const invisible of ["‌", "‍", "⁠", "­", " ‍⁠­ "]) {
+    assert.equal(plainTagPhrase(invisible), null, JSON.stringify(invisible) + " alone names nothing (#298)");
+  }
+  assert.equal(plainTagPhrase("!!").name, "!!");
   const long = "a".repeat(50) + " " + "b".repeat(50);
   const p = plainTagPhrase(" " + long);
   assert.equal(p.text, long);

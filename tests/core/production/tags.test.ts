@@ -98,7 +98,7 @@ test("registry lookups match by category and normalised name, first entry first"
 
 test("a blank or whitespace-only name registers nothing, in any category (#298)", () => {
   const registry = [registered("gear", "Tripod")];
-  for (const name of ["", " ", "   ", "\t", "\n", " ", "  \t\r\n "]) {
+  for (const name of ["", " ", "   ", "\t", "\n", " ", "  \t\r\n ", "​", "‌", "‍", "⁠", "­", "﻿", " ​ ‍⁠­\t "]) {
     for (const cat of ["gear", "prop", "sound"]) {
       assert.equal(newRegistryTag(registry, cat, name), null, JSON.stringify(name) + " in " + cat);
     }
@@ -106,6 +106,8 @@ test("a blank or whitespace-only name registers nothing, in any category (#298)"
   assert.equal(newRegistryTag(registry, "gear", null as unknown as string), null);
   assert.equal(newRegistryTag(registry, "gear", undefined as unknown as string), null);
   assert.equal(newRegistryTag([], "gear", " a ")?.name, " a ", "a name with words is registered as given");
+  assert.equal(newRegistryTag([], "gear", "!!")?.name, "!!", "punctuation alone is a name");
+  assert.equal(newRegistryTag([], "gear", "a​b")?.name, "a​b", "an invisible character inside a name is kept as it is");
 });
 
 function occ(cell: Run[], phrase: unknown): number[][] {
