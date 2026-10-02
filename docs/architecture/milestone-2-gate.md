@@ -117,7 +117,7 @@ review it was.
 | Kind | A fresh agent, the last of the kinds section 8 allows. Codex does not claim to be a different model from the earlier reviewers. |
 | Snapshot | `cb60392` (this record's merge, #319), whose application code is the final milestone 2 tree |
 | Date | 2026-10-01 |
-| Record | A condensed copy of the review, which Adam received. The findings and numbers are as the reviewer gave them. |
+| Record | A condensed copy of the review, plus the reviewer's verbatim follow-up note (see [Commitments](#commitments)), is kept in Adam's review package. |
 
 **Verdict: keep the refactor.** In the cases it exercised, the review found no
 new user-facing regression. It found no upward dependency and no cycle through
@@ -129,7 +129,7 @@ justifies a rollback.
 
 | Finding | Severity | Closed by |
 | --- | --- | --- |
-| The dependency gate's `PLATFORM_GLOBALS` (`tools/dep-report.mjs`) omits DOM globals. The reviewer added an ambient `declare const DOMParser`, and a function calling `new DOMParser().parseFromString(...)`, to `src/core/document/text-policy.ts`. Lint, the type check, the dependency gate and `tests/core/environment.test.ts` all passed. A synthetic `XMLSerializer` use was missed too. The positive controls were caught: `Date.now`, `Math.random`, an ambient `Date`, an upward type-only import, a merge-to-production import and a type-only core cycle. No such dependency exists in the snapshot. | Concern | #321, "Dependency gate: forbid DOM globals in core, ambient declarations included", with fail-first tests for ambient declarations and bare references |
+| The dependency gate's `PLATFORM_GLOBALS` (`tools/dep-report.mjs`) omits DOM globals. The reviewer added an ambient `declare const DOMParser`, and a function calling `new DOMParser().parseFromString(...)`, to `src/core/document/text-policy.ts`. Lint, the type check, the dependency gate and `tests/core/environment.test.ts` all passed. A synthetic `XMLSerializer` use was missed too. The positive controls were caught: `Date.now`, `Math.random`, an ambient `Date`, an upward type-only import, a merge-to-production import and a type-only core cycle. No such dependency exists in the snapshot. | Concern | #321 (merged), "Dependency gate: forbid DOM globals in core, ambient declarations included", with fail-first tests for ambient declarations and bare references |
 | Image-heavy load and merge. Each picture is hashed twice, and its bytes may be copied twice (`decodeImageDataUrl` and `pending()` in `src/core/document/media.ts`, `keepPending` in `src/legacy/document-ports.ts`, `intern` in `src/js/02c-blobs.js`). The reviewer ran an exploratory Node/jsdom probe of ten fresh 1 MiB pictures in comment bodies. The median was about 1,039 ms on milestone 1 and 1,165 ms on milestone 2. This was not a controlled browser benchmark. | Suggestion | #320. The plan's milestone 4 now sets its acceptance criterion. |
 
 The integration assessment agreed with the milestone's own record:
@@ -165,8 +165,20 @@ wait for the 4.0 release gate.
 
 ### Commitments
 
-The reviewer asked for four follow-ups: some requirements need sharper
-acceptance tests and named follow-ups. Each one now has a place:
+The four commitments are not in the review itself. They come from a follow-up
+note from the same reviewer (Codex), which Adam relayed after the review. The
+note reads, verbatim:
+
+> I would add four concrete commitments:
+>
+> * Fix the demonstrated DOM-global gate loophole.
+> * Define acceptance criteria for validated internal document types and ownership of cached results.
+> * Measure image-heavy load and merge performance.
+> * Give every remaining pinned defect an explicit disposition, especially Unicode editing, undo key-order behavior, and b-roll anchor/comment loss.
+>
+> The plan already targets the central architectural problems in a sensible sequence. The current weaknesses mainly show that the refactor is unfinished. My strongest remaining criticism is that a few important requirements need sharper acceptance tests and named follow-ups.
+
+Each commitment now has a place:
 
 | Commitment | Where |
 | --- | --- |
@@ -177,7 +189,7 @@ acceptance tests and named follow-ups. Each one now has a place:
 
 ## Blockers for Adam
 
-None once #321 merges. Milestone 2 is complete when #321 merges: every run
-section 8 requires on this machine is recorded above, the ARM64 and Linux
-checks are moved to the 4.0 release gate by decision, and the external review
-is recorded with its concern closed by #321.
+None. #321 has merged, so every blocker is cleared and milestone 2 is complete:
+every run section 8 requires on this machine is recorded above, the ARM64 and
+Linux checks are moved to the 4.0 release gate by decision, and the external
+review is recorded with its concern closed by #321.

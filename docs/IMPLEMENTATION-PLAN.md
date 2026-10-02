@@ -222,9 +222,15 @@ A caller that writes into one of these values changes every later read of the sa
 - A merge writes into none of its inputs, and its result shares no mutable object with them. `migrateRows` keeps writing in place, but only into the document it was given to migrate.
 - **Tests:**
   - A write into a value returned by each cache throws a `TypeError`. Every module runs in strict mode.
-  - The full browser regression passes with freezing on, which shows that no legacy caller writes into a cached value.
+  - The full browser regression passes with freezing on, which shows that no legacy caller writes into a cached value. Milestone 3 builds the switch, a test-mode setting with a fixed name: the environment variable `SPLITPAGE_FREEZE_CACHES=1`, read by the test harness and passed to the page as a test-only flag (the same effect as a query flag). With it on, every cache deep-freezes what it hands out. With it off, which is every production build, nothing changes. The switch does not exist yet; the milestone adds it, and the regression's run with it on is part of the milestone's gate.
   - A test deep-freezes `base`, `mine` and `theirs`, then runs every merge golden case and a seeded differential corpus through `mergeStates` without a throw. It also walks `merged` and finds no object that is reachable from an input.
   - #303 is fixed before this, in the post-milestone-2 queue, and its three pinned tests change on purpose.
+
+**Undo key order (#323).** `applySteps` compares rows as JSON text, so an inverse step that restores a removed row field puts it last, and the inverse `deleteRow` of that row is refused. Milestone 3's undo adapter makes `applySteps` a path that undo depends on, so it is fixed here.
+
+- `applySteps` and its inverse compare rows independently of key order: two rows with the same fields and values match, whatever order the keys are in.
+- After a restore that puts a removed field back last, the inverse `deleteRow` is accepted.
+- **Tests:** a fail-first test of that case. The pinning test in `tests/core/text/steps.test.ts` ("today the inverse of an insertRow is refused once a field removed from that row has been put back, last") flips on purpose, and its name changes with it.
 
 The blob registry's part is under milestone 4.
 
@@ -251,7 +257,7 @@ The blob registry (`02c-blobs.js`) moves into a store adapter here, so two crite
 **Image-heavy load and merge (#320).**
 - Before the registry moves, `tools/perf-record.mjs` gains an image-heavy case, timed in the browser. It opens a document with ten fresh 1 MiB pictures in comment bodies (the review's probe), and it merges two sides that each add such pictures.
 - The same script runs against builds of `d18adde` (where milestone 2 started) and `c4d5944` (milestone 2's final tree). Both runs use one machine, browser and font setup, and both results go in `performance-record.md` with their conditions. The case runs again under the same conditions on milestone 4's closing tree.
-- A material slowdown is explained, or trimmed. To trim it, hand the decoded record to the store without the second hash and copy, keeping byte ownership, hash validation, first-seen order and persistence when a pass throws.
+- The threshold: a median slowdown of more than 10% against `d18adde` on the image-heavy case, on the same machine and browser, means the double hash and copy gets removed in this milestone. A slowdown of 10% or less is recorded and explained. To remove it, hand the decoded record to the store without the second hash and copy, keeping byte ownership, hash validation, first-seen order and persistence when a pass throws.
 
 ### 5 — Make formats consume captured data and one registry
 
