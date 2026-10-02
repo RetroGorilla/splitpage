@@ -1,5 +1,5 @@
 import type { ActionRegistry, RefusalPresenter } from "../application/actions.ts";
-import { handleFileMenuAction } from "../js/18-local-files.js";
+import { handleFileMenuAction, noteFileMenuChoice } from "../js/18-local-files.js";
 import { toggleFileMenu } from "../js/18b-file-menu.js";
 import { isExportAction } from "../js/18c-export-dialog.js";
 import { availableUnless } from "./screen.ts";
@@ -21,6 +21,7 @@ function isFileMenuItem(id: string): boolean {
 
 function formatRefused(id: string, present: RefusalPresenter): boolean {
   if (!isExportAction(id)) return false;
+  noteFileMenuChoice(id);
   const a = availableUnless(["dialog", "launcher"], screenNow());
   if (a.enabled) return false;
   present({ kind: "unavailable", id, reason: a.reason ?? "" }, "native-menu");
