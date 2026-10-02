@@ -45,6 +45,20 @@ test("max-plus-one and theirs-wins", () => {
   assert.equal(mergeTheirsWins("lastEditedBy", {}, {}), null);
 });
 
+test("an object value that wins is a copy, never the input's own object (#303)", () => {
+  const mine = { probe: { who: "Mine" }, lastEditedBy: { who: "Mine" } };
+  const theirs = { probe: { who: "Theirs" }, lastEditedBy: { who: "Theirs" } };
+  const changed = mergeChangedSideWins(NO_DEF, { probe: theirs.probe }, mine, theirs);
+  assert.deepEqual(changed, mine.probe);
+  assert.notEqual(changed, mine.probe);
+  const kept = mergeChangedSideWins(NO_DEF, null, mine, theirs);
+  assert.deepEqual(kept, theirs.probe);
+  assert.notEqual(kept, theirs.probe);
+  const won = mergeTheirsWins("lastEditedBy", mine, theirs);
+  assert.deepEqual(won, theirs.lastEditedBy);
+  assert.notEqual(won, theirs.lastEditedBy);
+});
+
 test("target length: the side that changed wins, with no base theirs if set, and junk reads as unset", () => {
   assert.equal(mergeTargetLength({ targetSeconds: 300 }, { targetSeconds: 420 }, { targetSeconds: 300 }), 420);
   assert.equal(mergeTargetLength({ targetSeconds: 300 }, { targetSeconds: 300 }, {}), null);
