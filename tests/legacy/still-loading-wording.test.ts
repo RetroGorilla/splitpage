@@ -9,7 +9,9 @@ const SOURCE = /\.(?:js|mjs|ts)$/;
 const LITERAL = /(["'`])((?:(?!\1)[^\n\\])*Still loading(?:(?!\1)[^\n\\])*)\1/g;
 
 function loadingReason(): string {
-  const view = availableUnless(["loading"], { loading: true, prompter: false, writer: false, tour: false });
+  const view = availableUnless(["loading"], {
+    loading: true, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
+  });
   assert.equal(view.enabled, false);
   return (!view.enabled && view.reason) || "";
 }

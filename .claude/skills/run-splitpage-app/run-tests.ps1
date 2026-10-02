@@ -179,6 +179,13 @@ function Test-LaneFinished($lane) {
 }
 
 $totalChecks = 0; $totalFail = 0; $suiteFail = 0
+$notStarted = New-Object System.Collections.ArrayList
+
+function Count-FailedSuite {
+  $script:suiteFail++
+  $script:totalChecks++
+  $script:totalFail++
+}
 
 function Report-Lane($lane) {
   $name = $lane.File.Name
@@ -187,7 +194,7 @@ function Report-Lane($lane) {
 
   if ($lane.TimedOut) {
     Write-Host ("--- {0}: TIMED OUT after {1}s" -f $name, $TimeoutSec) -ForegroundColor Red
-    $script:suiteFail++
+    Count-FailedSuite
     if (Test-Path $lane.Out) { Get-Content $lane.Out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
     return
   }
@@ -203,13 +210,28 @@ function Report-Lane($lane) {
     if ($l -cmatch '^FAIL')  { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ *(expected|actual):') { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ERROR') { Write-Host "    $l" -ForegroundColor Red }
+    elseif ($l -cmatch '^NOT STARTED') { Write-Host "    $l" -ForegroundColor Red }
   }
-  if ($result -match 'RESULT: (\d+)/(\d+)') {
-    $script:totalChecks += [int]$Matches[2]
-    $script:totalFail   += ([int]$Matches[2] - [int]$Matches[1])
+  if ($lines | Where-Object { $_ -cmatch '^NOT STARTED' }) { [void]$script:notStarted.Add($name) }
+  $counted = $false
+  $unreadable = 'unreadable RESULT line'
+  if ($result -match '^RESULT: (\d+)/(\d+)') {
+    $ran = [int]$Matches[2]; $ok = [int]$Matches[1]
+    if ($ran -eq 0) { $unreadable = 'no checks ran' }
+    elseif ($ok -gt $ran) { $unreadable = 'more passed than ran' }
+    else {
+      $script:totalChecks += $ran
+      $script:totalFail   += ($ran - $ok)
+      $counted = $true
+      if ($ok -lt $ran) { $failed = $true }
+    }
   }
   if (-not $result) { $result = 'RESULT: (driver exited without a RESULT line) FAILED' }
-  if ($failed) { $script:suiteFail++; Write-Host "    $result" -ForegroundColor Red }
+  elseif (-not $counted) { $failed = $true; $result = "$result ($unreadable, counted as one failed check)" }
+  if ($failed) {
+    if ($counted) { $script:suiteFail++ } else { Count-FailedSuite }
+    Write-Host "    $result" -ForegroundColor Red
+  }
   else { Write-Host "    $result" -ForegroundColor Green }
 }
 
@@ -234,13 +256,20 @@ while ($pending.Count -gt 0 -or $active.Count -gt 0) {
 
 Clear-SplitpageEdge $RunId
 
-Write-Host ''
-$passed = $totalChecks - $totalFail
-if ($suiteFail -gt 0) {
-  Write-Host "FAILED - $passed/$totalChecks checks passed across $($files.Count) suite(s)" -ForegroundColor Red
+function Write-Verdict([int]$SuiteCount) {
+  Write-Host ''
+  $passed = $script:totalChecks - $script:totalFail
+  if ($script:suiteFail -gt 0) {
+    Write-Host "FAILED - $passed/$($script:totalChecks) checks passed across $SuiteCount suite(s), $($script:suiteFail) suite(s) failed" -ForegroundColor Red
+    if ($script:notStarted.Count -gt 0) {
+      Write-Host ("{0} suite(s) never started and count as failed: {1}" -f $script:notStarted.Count, ($script:notStarted -join ', ')) -ForegroundColor Red
+    }
+    Write-Host "logs: $logs"
+    return 1
+  }
+  Write-Host "ALL PASS - $passed/$($script:totalChecks) checks across $SuiteCount suite(s)" -ForegroundColor Green
   Write-Host "logs: $logs"
-  exit 1
+  return 0
 }
-Write-Host "ALL PASS - $passed/$totalChecks checks across $($files.Count) suite(s)" -ForegroundColor Green
-Write-Host "logs: $logs"
-exit 0
+
+exit (Write-Verdict $files.Count)

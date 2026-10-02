@@ -1,4 +1,4 @@
-import type { ActionDefinition, ActionRegistry } from "../application/actions.ts";
+import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
 import { showTaggingHelp } from "../js/10-comments.js";
 import { openLongDemo } from "../js/18b-file-menu.js";
@@ -9,8 +9,12 @@ import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
-import { availableUnless } from "./screen.ts";
+import { OPENS_A_DIALOG, availableUnless } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
+
+function overDialogs(): Availability {
+  return availableUnless(OPENS_A_DIALOG, screenNow());
+}
 
 export function registerHelpActions(registry: ActionRegistry): () => void {
   const definitions: ActionDefinition[] = [
@@ -20,6 +24,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Share",
       icon: "i-globe",
       words: "server connect bookmark address pin join",
+      availability: overDialogs,
       run: () => { openServersDialog(); }
     },
     {
@@ -28,6 +33,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Help",
       icon: "i-settings",
       words: "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom",
+      availability: overDialogs,
       run: () => { openSettings(); }
     },
     {
@@ -38,6 +44,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       keys: () => (inDesktopApp() ? ["F1"] : []),
       bindKeys: () => false,
       words: "guide manual docs user guide how",
+      availability: () => availableUnless(["dialog"], screenNow()),
       run: () => { openHelp(); }
     },
     {
@@ -62,6 +69,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Help",
       icon: "i-sliders",
       words: "setup settings wizard install",
+      availability: overDialogs,
       run: () => { openOnboarding(); }
     },
     {
@@ -70,6 +78,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Help",
       icon: "i-info",
       words: "version about",
+      availability: overDialogs,
       run: () => { showAbout(); }
     },
     {
@@ -78,6 +87,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Tags",
       icon: "i-tag",
       words: "tags tagging reference shortcuts brackets help",
+      availability: overDialogs,
       run: () => { showTaggingHelp(); }
     },
     {

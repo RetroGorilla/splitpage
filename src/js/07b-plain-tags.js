@@ -1,5 +1,6 @@
 import { cellSelection, domToPos, editCell, setCellSelection } from "./05b-cell-edit.js";
 import {
+  isBlankTagName,
   isInsideTagOrLink,
   registerProductionTag,
   registryEntry,
@@ -44,7 +45,7 @@ export function matchPlainTagKeyword(before) {
 export function plainTagPhrase(typed) {
   var s = String(typed == null ? "" : typed).replace(ZWSP_RE, "");
   var text = s.trim();
-  if (!text) return null;
+  if (isBlankTagName(text)) return null;
   var lead = s.length - s.replace(/^\s+/, "").length;
   var trail = s.length - s.replace(/\s+$/, "").length;
   var name = text.replace(/\s+/g, " ").slice(0, NAME_MAX).trim();
