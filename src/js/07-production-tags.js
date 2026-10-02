@@ -38,6 +38,7 @@ import {
   collectTagsFromRows as collectTagGroups,
   deriveProductionIndex,
   holdsMedia,
+  isBlankTagName,
   missingRegistryTags as missingRegistryTagsIn,
   newRegistryTag,
   planRegistryHealing,
@@ -55,6 +56,7 @@ import { cellOf } from "../legacy/richtext.ts";
 export {
   contentMemo,
   ensureTagIds,
+  isBlankTagName,
   isTagId,
   mintTagId,
   nextTagStatus,
@@ -380,7 +382,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
   if (rule.open === rule.close && node.data.charAt(openAt - 1) === rule.open) return;
   var phrase = node.data.slice(openAt + 1, offset - 1);
   var trimmed = phrase.trim();
-  if (!trimmed || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
+  if (isBlankTagName(trimmed) || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
 
   tagTextRange(cellEl, node, openAt, offset, trimmed, rule.cat, trimmed);
   updateTagBadges();
@@ -896,7 +898,7 @@ export function applyTag() {
   if (!pendingTag) return;
   var cat = selectedTagCategory();
   var name = plainText(document.getElementById("tag-name").value).trim().slice(0, 80);
-  if (!name) { showToast("Give the label a name first.", "warn"); return; }
+  if (isBlankTagName(name)) { showToast("Give the label a name first.", "warn"); return; }
 
   var all = document.getElementById("tag-all").checked;
   var phrase = pendingTag.quotedText;
