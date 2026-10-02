@@ -258,6 +258,75 @@ test("wordsPerMinute follows whoever changed it", () => {
   assert.equal(mergeStates(base, mine, theirs).merged.wordsPerMinute, 200);
 });
 
+function shaped() {
+  const s = mk();
+  s.docId = "d" + "5".repeat(32);
+  s.comments = [{ id: "c1", rowId: "r1", field: "audioText", body: "look", createdAt: "2026-01-01T00:00:00.000Z",
+    replies: [{ id: "rp1", body: "yes", createdAt: "2026-01-02T00:00:00.000Z" }] }];
+  s.rows[0].imageLinks = [{ href: "https://video.example/a" }];
+  s.rows[0].moreImages = [
+    { links: [{ href: "https://video.example/b", poster: true }] },
+    { imageRef: { sha256: "a".repeat(64), width: 640, height: 360, mime: "image/png" }, name: "Pier", links: [{ href: "https://video.example/c" }] }
+  ];
+  const d = migrateRows(s);
+  assert.equal(d.rows[0].moreImages.length, 2, "the fixture keeps both gallery items");
+  return { base: cloneState(d), mine: cloneState(d), theirs: cloneState(d) };
+}
+
+const SHAPES = [
+  ["their tag list is an object", (d) => { d.theirs.productionTags = {}; }, (d) => { d.theirs.productionTags = []; }],
+  ["their scene list is an object", (d) => { d.theirs.rows = {}; }, (d) => { d.theirs.rows = []; }],
+  ["their scene list is missing", (d) => { delete d.theirs.rows; }, (d) => { d.theirs.rows = []; }],
+  ["my scene list is null", (d) => { d.mine.rows = null; }, (d) => { d.mine.rows = []; }],
+  ["their people list is a string", (d) => { d.theirs.people = "x"; }, (d) => { d.theirs.people = []; }],
+  ["my shot list is a number", (d) => { d.mine.brollShots = 7; }, (d) => { d.mine.brollShots = []; }],
+  ["the ancestor's lists are strings and objects", (d) => { d.base.productionTags = "x"; d.base.brollShots = {}; d.base.people = "y"; },
+    (d) => { d.base.productionTags = []; d.base.brollShots = []; d.base.people = []; }],
+  ["a scene that is a string on both sides", (d) => { d.mine.rows.push("x"); d.theirs.rows.push("x"); }, () => {}],
+  ["a scene that is null on both sides", (d) => { d.mine.rows.unshift(null); d.theirs.rows.push(null); }, () => {}],
+  ["a comment that is a string on both sides", (d) => { d.mine.comments.push("x"); d.theirs.comments.push("x"); }, () => {}],
+  ["their comment list is an object", (d) => { d.theirs.comments = { c1: d.theirs.comments[0] }; }, (d) => { d.theirs.comments = []; }],
+  ["their replies are a string", (d) => { d.theirs.comments[0].replies = "x"; }, (d) => { d.theirs.comments[0].replies = []; }],
+  ["a reply that is null", (d) => { d.mine.comments[0].replies.push(null); }, () => {}],
+  ["a gallery link that is null", (d) => { d.mine.rows[0].imageLinks.push(null); d.theirs.rows[0].imageLinks.unshift(null); }, () => {}],
+  ["their gallery lists are objects", (d) => { d.theirs.rows[0].imageLinks = {}; d.theirs.rows[0].moreImages[0].links = {}; },
+    (d) => { d.theirs.rows[0].imageLinks = []; d.theirs.rows[0].moreImages[0].links = []; }],
+  ["a picture that is null", (d) => { d.mine.rows[0].moreImages.push(null); d.theirs.rows[0].moreImages.push(null); }, () => {}],
+  ["both sides changed the gallery, and their picture's links are an object",
+    (d) => {
+      d.mine.rows[0].moreImages[1].links.push({ href: "https://video.example/mine" });
+      d.mine.rows[0].moreImages.push({ links: [{ href: "https://video.example/new", poster: true }] });
+      d.theirs.rows[0].moreImages[1].links = {};
+    },
+    (d) => {
+      d.mine.rows[0].moreImages[1].links.push({ href: "https://video.example/mine" });
+      d.mine.rows[0].moreImages.push({ links: [{ href: "https://video.example/new", poster: true }] });
+      d.theirs.rows[0].moreImages[1].links = [];
+    }]
+];
+
+for (const [label, bad, clean] of SHAPES) {
+  test("#304: " + label + ": the merge drops what is not a list or not an object, and nothing throws", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 2, 1) });
+    const odd = shaped(), plain = shaped();
+    bad(odd);
+    clean(plain);
+    const before = JSON.stringify(odd);
+    const got = mergeStates(odd.base, odd.mine, odd.theirs);
+    assert.equal(JSON.stringify(odd), before, "the inputs are left as they were");
+    const want = mergeStates(plain.base, plain.mine, plain.theirs);
+    assert.deepEqual(got, want);
+  });
+}
+
+test("#304: two unmigrated sides whose lists hold strings and nulls merge to a migrated document", () => {
+  const raw = { rows: ["x", null, { id: "r1", audioText: "a" }], comments: ["x", null], people: [null, "Sam"], productionTags: ["x"], brollShots: [null] };
+  const out = mergeStates(null, JSON.parse(JSON.stringify(raw)), JSON.parse(JSON.stringify(raw)));
+  assert.deepEqual(out.merged.rows.map((r) => [r.id, r.audioText]), [["r1", "a"]]);
+  assert.deepEqual([out.merged.comments, out.merged.people, out.merged.productionTags, out.merged.brollShots], [[], [], [], []]);
+  assert.deepEqual(out.conflicts, []);
+});
+
 const ID_A = "d" + "1".repeat(32);
 const ID_B = "d" + "2".repeat(32);
 const ID_D = "d" + "4".repeat(32);
