@@ -342,6 +342,45 @@ test("cueEditPairs: which old cue name each new one is taken as an edit of (#282
   assert.equal(closeCueNames("door slam", "door bang"), true);
   assert.equal(closeCueNames("door slam", "upbeat intro"), false);
   assert.equal(closeCueNames("", "door"), false);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle", "theme"], ["door slams", "door slammed"]), [], "one old cue close to two new ones: no rename");
+  assert.equal(closeCueNames("door slam", "dog bark"), false, "a shared start and nothing else is not close");
+  assert.equal(closeCueNames("DOOR SLAM", "door slams"), true, "case does not matter");
+});
+
+test("seeded: cueEditPairs pairs exactly as the old positional pairing wherever as many names went as came (#294's guarantee)", () => {
+  const oldPairs = (before: string[], after: string[]): [string, string][] => {
+    const gone = before.filter((n) => !after.includes(n));
+    const came = after.filter((n) => !before.includes(n));
+    const out: [string, string][] = [];
+    for (let i = 0; i < gone.length && i < came.length; i++) out.push([gone[i] as string, came[i] as string]);
+    return out;
+  };
+  const NAMES = ["door slam", "door slams", "kettle whistle", "kettle whistling", "theme", "thunder", "slow", "slow piano"];
+  let s = 7;
+  const r = (): number => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const pick = (): string => NAMES[Math.floor(r() * NAMES.length)] as string;
+  const draw = (): string[] => Array.from({ length: 1 + Math.floor(r() * 3) }, pick);
+  let compared = 0;
+  for (let i = 0; i < 2000; i++) {
+    const before = draw();
+    const after = r() < 0.5 ? before.map((n) => (r() < 0.5 ? n : pick())) : draw();
+    const got = cueEditPairs(before, after);
+    const msg = JSON.stringify([before, after]);
+    const gone = before.filter((n) => !after.includes(n));
+    const came = after.filter((n) => !before.includes(n));
+    if (gone.length === came.length) {
+      assert.deepEqual(got, oldPairs(before, after), msg);
+      compared++;
+    } else {
+      const unique = (l: string[]): boolean => new Set(l).size === l.length;
+      assert.ok(unique(got.map((p) => p[0])) && unique(got.map((p) => p[1])), msg);
+      if (new Set(gone).size > 1 || new Set(came).size > 1) {
+        for (const [g, c] of got) assert.ok(closeCueNames(g, c), msg + " paired names that are not close");
+      }
+    }
+    for (const [g, c] of got) assert.ok(gone.includes(g) && came.includes(c), msg);
+  }
+  assert.ok(compared > 300, "compared " + compared);
 });
 
 const GEAR_ROW: ProductionRow = {
