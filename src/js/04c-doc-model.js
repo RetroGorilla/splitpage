@@ -17,9 +17,12 @@ export {
 export {
   addComment,
   breakLine,
+  clamp,
+  clampRange,
   commentRange,
   deleteRange,
   insertBrollKey,
+  insertCell,
   insertText,
   insideDirection,
   joinCells,

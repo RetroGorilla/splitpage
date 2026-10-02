@@ -41,6 +41,11 @@ const PLATFORM_GLOBALS = new Set([
 
 const COMMONJS_GLOBALS = new Set(["require", "module", "exports"]);
 
+export const RICHTEXT_ADAPTER = "src/adapters/richtext/";
+export const RICHTEXT_BRIDGE = "src/legacy/richtext.ts";
+const HTML_PARSE_METHODS = new Set(["createContextualFragment", "parseHTMLUnsafe", "setHTMLUnsafe", "setHTML"]);
+const XML_MIME_TYPES = new Set(["application/xml", "text/xml", "image/svg+xml", "application/xhtml+xml"]);
+
 const CLOCK_FREE_DATE_MEMBERS = new Set(["parse", "UTC"]);
 
 export const MUTATING_METHODS = new Set(["push", "pop", "splice", "shift", "unshift", "sort", "reverse", "fill", "copyWithin"]);
@@ -221,6 +226,22 @@ function clockOrRandomUse(node) {
   if (ts.isNewExpression(p) && p.expression === n) return (p.arguments ?? []).some((a) => !ts.isSpreadElement(a)) ? null : "Date";
   if (ts.isBinaryExpression(p) && p.right === n && p.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) return null;
   return "Date";
+}
+
+function htmlParseSink(call) {
+  const callee = unwrap(call.expression);
+  let name = null;
+  if (ts.isPropertyAccessExpression(callee)) name = callee.name.text;
+  else if (ts.isElementAccessExpression(callee)) name = literalText(callee.argumentExpression);
+  if (name === null) return null;
+  if (HTML_PARSE_METHODS.has(name)) return name;
+  if (name !== "parseFromString") return null;
+  const mime = literalText(call.arguments[1]);
+  return mime !== null && XML_MIME_TYPES.has(mime) ? null : name;
+}
+
+export function ownsHtmlCells(path) {
+  return path.startsWith(RICHTEXT_ADAPTER) || path === RICHTEXT_BRIDGE;
 }
 
 function dynamicCodeUse(node) {
@@ -558,7 +579,12 @@ export function analyzeScript(path, text) {
   const liveLoad = (l) => l.kind !== "require" || isFree(l.requireCallee);
   const imports = [];
   const unresolved = [];
+  const htmlParses = new Map();
   const visitEdges = (node) => {
+    if (ts.isCallExpression(node)) {
+      const sink = htmlParseSink(node);
+      if (sink !== null && (!htmlParses.has(sink) || htmlParses.get(sink) > at(node))) htmlParses.set(sink, at(node));
+    }
     if (ts.isImportDeclaration(node)) {
       const spec = literalText(node.moduleSpecifier);
       if (spec !== null) imports.push({ spec, typeOnly: Boolean(node.importClause?.isTypeOnly), kind: "import", line: at(node) });
@@ -652,7 +678,7 @@ export function analyzeScript(path, text) {
     exportsOut.push({ name: e.name, spec: t.root.source.spec, via: [...t.root.source.via, ...t.path, ...extra], line: at(e.node) });
   }
 
-  return { imports, unresolved, globals: [...globals].map(([name, line]) => ({ name, line })), ambients: [...ambients].map(([name, line]) => ({ name, line })), sources, loads, exports: exportsOut };
+  return { imports, unresolved, htmlParses: [...htmlParses].map(([name, line]) => ({ name, line })), globals: [...globals].map(([name, line]) => ({ name, line })), ambients: [...ambients].map(([name, line]) => ({ name, line })), sources, loads, exports: exportsOut };
 }
 
 export function isAnalyzed(path) {
@@ -750,7 +776,7 @@ export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
       loads: analysis.loads.map((l) => ({ ...l, target: fileTarget(l.spec) })),
       exports: analysis.exports.map((e) => ({ ...e, target: fileTarget(e.spec) }))
     };
-    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, globals: analysis.globals, ambients: analysis.ambients, stateLinks });
+    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, htmlParses: analysis.htmlParses, globals: analysis.globals, ambients: analysis.ambients, stateLinks });
   }
   const { provides, truncated } = stateProviders(modules);
   for (const m of modules.values()) m.state = stateUsage(m, provides, truncated);
@@ -855,6 +881,14 @@ export function findViolations(modules) {
     if (platformGlobalsBanned(m.layer)) {
       for (const g of m.globals) add("platform-global", m.path, `global:${g.name}`, g.line, `${m.layer} may not use ${g.name}`);
       for (const a of m.ambients) add("platform-global", m.path, `ambient:${a.name}`, a.line, `${m.layer} may not declare an ambient ${a.name}`);
+    }
+    if (isProduction(m.layer) && !ownsHtmlCells(m.path)) {
+      for (const e of m.edges) {
+        if (e.kind === "file" && !e.typeOnly && e.target.startsWith(RICHTEXT_ADAPTER)) {
+          add("html-cells", m.path, e.target, e.line, `reaches the HTML decoder; only ${RICHTEXT_BRIDGE} may import ${RICHTEXT_ADAPTER}`);
+        }
+      }
+      for (const p of m.htmlParses) add("html-cells", m.path, `html-parse:${p.name}`, p.line, `parses HTML with ${p.name}; only ${RICHTEXT_ADAPTER} builds cells from HTML`);
     }
     if (isProduction(m.layer)) {
       if (m.state.importsState) add("state-import", m.path, `global:${STATE_EXPORT}`, m.state.line, m.state.bridge ? `re-exports ${STATE_EXPORT}` : `imports ${STATE_EXPORT}`);

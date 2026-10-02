@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, cloneState, mergeStates, setBaseState } from "../js/03-sync.js";
 import { __init as historyInit, getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
+import { personById } from "../js/07-production-tags.js";
 
 before(async () => {
   historyInit();
@@ -73,6 +74,25 @@ test("`base` and `mine` are normalised, so a caller hands over what it holds", (
   assert.equal(out.state.rows.length, 2);
   assert.equal(out.state.rows[0].audioText, "typed");
   assert.equal(out.result.stats.rowsFromMe, 1);
+});
+
+test("a recovered stash where both sides added the same person: the merged script still names my items' owner (#283)", async () => {
+  reset();
+  const id = freshId();
+  const base = mk(id);
+  const mine = mk(id);
+  mine.people = [{ id: "pMine", name: "Ada" }];
+  mine.productionTags = [{ cat: "prop", name: "Lamp", owner: "pMine", notes: "", status: "needed" }];
+  mine.brollShots = [{ id: "b1", name: "Harbour", owner: "pMine" }];
+  const theirs = mk(id);
+  theirs.people = [{ id: "pTheirs", name: "ada" }];
+
+  const out = applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash", mergeOnly: true });
+  S.state = out.state;
+  assert.deepEqual(S.state.people, [{ id: "pTheirs", name: "ada" }]);
+  assert.equal(personById(S.state.productionTags.find((t) => t.name === "Lamp").owner).name, "ada");
+  assert.equal(personById(S.state.brollShots[0].owner).name, "ada");
+  assert.deepEqual(migrateRows(cloneState(S.state)).brollShots[0].owner, "pTheirs", "and a reload keeps it");
 });
 
 test("pictures merge by sha through applyMerge, and a stash's legacy inline one is the same picture (#82)", () => {
