@@ -8,7 +8,7 @@ comments.
 
 | Command | What it checks | Baseline |
 | --- | --- | --- |
-| `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, unresolvable modules, computed dynamic loads, cycles through migrated folders, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
+| `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, HTML parsed into cells outside the rich text adapter, unresolvable modules, computed dynamic loads, cycles through migrated folders, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
 | `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included), Dockerfiles and JSON | `tools/comment-baseline.json` |
 
 Both fail on anything new and on anything the baseline lists that has gone.
@@ -148,6 +148,35 @@ type in a type annotation. Classes, enums, namespaces and ordinary imports are
 both. `typeof x` and the left side of a qualified name look up values, then
 type-only imports. The walker adds about 0.2 s to a full run (from about 1.2 s
 to about 1.4 s on the Windows workstation).
+
+## HTML into cells (INV-10)
+
+[INV-10](invariants.md) lets content reach a script cell only through the rich
+text adapter. The `html-cells` rule reports a production module (every layer
+but `tests`, `tools` and `other`) outside `src/adapters/richtext/` and its
+bridge `src/legacy/richtext.ts` that does either of these:
+
+- Imports, re-exports, `require`s or dynamically imports a file under
+  `src/adapters/richtext/` (target: that file). `import type` is not a decoder
+  and passes. The decoder is meant to be reached through the bridge.
+- Calls a method that parses an HTML string into a document (target:
+  `html-parse:<method>`): `parseFromString` unless its second argument is a
+  literal `application/xml`, `text/xml`, `image/svg+xml` or
+  `application/xhtml+xml`, so `text/html`, a computed type and a missing type
+  all count; and `createContextualFragment`, `parseHTMLUnsafe`, `setHTMLUnsafe`
+  and `setHTML`. The method is matched by name on any receiver, through an
+  element access, an optional call or parentheses.
+
+Writing `innerHTML` or `outerHTML` and calling `insertAdjacentHTML` are not
+reported. They render a cell into the page, the opposite direction, and the
+tree has more than a hundred of them in UI code that no syntax tells apart from
+a parse into a scratch element. A module that parses by assigning `innerHTML`
+to a detached element and reading it back is therefore not caught; reading the
+same markup through `parseFromString` or a fragment is. The tree has two
+legacy findings, both baselined with a reason: `src/js/18-local-files.js`
+parses a legacy `.html` export to read its `state-data` element, and
+`src/legacy/document-ports.ts` builds its own `RichText` over each migration's
+image ingestion.
 
 A cycle containing any file in a migrated layer (`core`, `contracts`,
 `application`, `adapters`, `features`, `bootstrap`, `legacy`) fails whether it
