@@ -67,6 +67,7 @@ import { setMenuItemReason } from "./18b-file-menu.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
+import { idMap } from "../core/document/id-map.ts";
 
 var sharedDocId;
 
@@ -1329,7 +1330,7 @@ function nextReviewWrite() {
       continue;
     }
     var was = base[bi];
-    var had = {};
+    var had = idMap();
     (was.replies || []).forEach(function (r) { if (r) had[r.id] = true; });
     var replies = c.replies || [];
     for (var j = 0; j < replies.length; j++) {
@@ -1365,7 +1366,7 @@ function reviewAnchorFor(c) {
   if (!row || !baseRow) return null;
   var body = inertBody(row[c.field] || "");
   if (!body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(c.id) + '"]')) return null;
-  var confirmed = {};
+  var confirmed = idMap();
   inertBody(baseRow[c.field] || "").querySelectorAll(".cmt-anchor").forEach(function (el) {
     confirmed[el.getAttribute("data-cmt")] = true;
   });
@@ -1450,7 +1451,7 @@ function adoptReviewAnswer(op, sent, body) {
   if (local) {
     var next = jsonCopy(stored);
     if (!Array.isArray(next.replies)) next.replies = [];
-    var have = {};
+    var have = idMap();
     next.replies.forEach(function (r) { if (r) have[r.id] = true; });
     (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
     list[si] = next;

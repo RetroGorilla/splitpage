@@ -11,6 +11,7 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
@@ -477,7 +478,7 @@ function firstMatchFrom(range) {
     if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
     nth++;
   }
-  var order = {};
+  var order = idMap();
   S.state.rows.forEach(function (row, i) { order[row.id] = i; });
   var at = field === "visualText" ? 0 : 1;
   for (var i = 0; i < findMatches.length; i++) {
