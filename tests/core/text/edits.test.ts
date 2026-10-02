@@ -8,7 +8,9 @@ import {
   clamp,
   commentRange,
   deleteRange,
+  clampRange,
   insertBrollKey,
+  insertCell,
   insertText,
   insideDirection,
   joinCells,
@@ -192,6 +194,69 @@ test("#322: the reported repro keeps the emoji whole", () => {
   assert.equal(projection(deleteRange(cell, 2, 3)), "ab");
   assert.equal(projection(deleteRange(cell, 2, 2)), "a" + GRIN + "b", "an empty range inside the pair deletes nothing");
   assert.deepEqual(setMark(cell, 0, 2, "b", true), [T("a" + GRIN, { b: true }), T("b")], "a mark over half the pair covers the emoji");
+});
+
+test("lone surrogates already in a cell are not pairs: positions beside them do not move", () => {
+  const high = [T("x\ud83dab")];
+  assert.equal(clamp(high, 2), 2);
+  assert.deepEqual(clampRange(high, 2, 3), { from: 2, to: 3 });
+  assert.equal(projection(insertText(high, 2, "y")), "x\ud83dyab");
+  assert.equal(projection(deleteRange(high, 2, 3)), "x\ud83db");
+  assert.equal(projection(deleteRange(high, 1, 2)), "xab");
+  const low = [T("a\ude00b")];
+  assert.equal(clamp(low, 1), 1);
+  assert.deepEqual(clampRange(low, 0, 1), { from: 0, to: 1 });
+  assert.equal(projection(insertText(low, 1, "y")), "ay\ude00b");
+  assert.equal(projection(deleteRange(low, 0, 1)), "\ude00b");
+  assert.equal(projection(deleteRange(low, 1, 2)), "ab");
+  assert.deepEqual(splitCell(low, 1), [[T("a")], [T("\ude00b")]]);
+});
+
+test("insertCell puts a cell in at a caret, once, and a caret inside a pair puts it after the character", () => {
+  const piece = [T("P", { b: true })];
+  assert.deepEqual(insertCell([T("a" + GRIN + "b")], 2, piece), { cell: [T("a" + GRIN), T("P", { b: true }), T("b")], end: 4 });
+  assert.deepEqual(insertCell([T("ab")], 1, [T("x"), B("bs9")]), { cell: [T("ax"), B("bs9"), T("b")], end: 3 });
+  assert.deepEqual(insertCell([T("ab")], 9, []), { cell: [T("ab")], end: 2 });
+  for (const cell of PAIRED) {
+    const text = projection(cell);
+    const cuts = pairCuts(cell);
+    for (let p = 0; p <= text.length; p++) {
+      const at = caretAt(cuts, p);
+      const got = insertCell(cell, p, piece);
+      const where = JSON.stringify(text) + " at " + p;
+      wholeCodePoints(got.cell, "insertCell " + where);
+      assert.equal(projection(got.cell), text.slice(0, at) + "P" + text.slice(at), "insertCell " + where);
+      assert.equal(got.end, at + 1, "insertCell " + where);
+    }
+  }
+});
+
+test("a paste over a range, as the editors build it, never doubles or splits a character", () => {
+  const piece = [T("P", { b: true })];
+  function paste(cell: readonly Run[], from: number, to: number) {
+    const r = clampRange(cell, from, to);
+    const rest = deleteRange(cell, r.from, r.to);
+    return insertCell(rest, r.from, piece);
+  }
+  assert.equal(projection(paste([T("a" + GRIN + "b")], 2, 2).cell), "a" + GRIN + "Pb");
+  assert.equal(projection(paste([T("a" + GRIN + "bc")], 2, 4).cell), "aPc");
+  const cut = clampRange([T("a" + GRIN + "bc")], 2, 4);
+  assert.deepEqual(cut, { from: 1, to: 4 });
+  assert.deepEqual(splitCell(deleteRange([T("a" + GRIN + "bc")], cut.from, cut.to), cut.from), [[T("a")], [T("c")]], "Alt+Enter over a selection");
+  for (const cell of PAIRED) {
+    const text = projection(cell);
+    const cuts = pairCuts(cell);
+    for (const p of cuts) {
+      for (const q of positionsAround(cell, p)) {
+        const [lo, hi] = rangeAt(cuts, p, q);
+        const got = paste(cell, p, q);
+        const where = JSON.stringify(text) + " at " + p + ".." + q;
+        wholeCodePoints(got.cell, "paste " + where);
+        assert.equal(projection(got.cell), text.slice(0, lo) + "P" + text.slice(hi), "paste " + where);
+        assert.equal(got.end, lo + 1, "paste " + where);
+      }
+    }
+  }
 });
 
 test("a caret inside a surrogate pair acts just after the character, for every caret edit", () => {
