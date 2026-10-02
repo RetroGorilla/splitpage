@@ -8,6 +8,7 @@ import type { ListMerger, TagEntry, TagList } from "./lists.ts";
 import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
+import { listShapedSide } from "./shape.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
 
@@ -80,8 +81,10 @@ function strategyFor(f: StateField): FieldStrategy {
   return STRATEGIES[f.merge];
 }
 
-export function mergeStateFields(base: MergeDoc | null | undefined, mine: MergeDoc, theirs: MergeDoc, ports: MergePorts): StateMerge {
+export function mergeStateFields(baseSide: MergeDoc | null | undefined, mineSide: MergeDoc, theirSide: MergeDoc, ports: MergePorts): StateMerge {
   const fields = ports.fields || STATE_FIELDS;
+  const base = baseSide ? listShapedSide(baseSide, fields) : baseSide;
+  const mine = listShapedSide(mineSide, fields), theirs = listShapedSide(theirSide, fields);
   const conflicts: MergeConflict[] = [];
   const stats: MergeStats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
