@@ -16,6 +16,9 @@ appear in the app under **Help**. The format follows
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
 
 ## 3.1.0 — 2026-09-29
 
