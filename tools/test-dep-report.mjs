@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, copyFileSy
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import {
   layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run
 } from "./dep-report.mjs";
@@ -178,9 +179,9 @@ const scopeCases = [
     "export const r = [f, K, fetch, Worker];"
   ], ["Worker:3", "fetch:3"]],
   ["an ambient declare is not a local binding", "src/core/document/x.ts", [
-    "export const n = () => window.name;",
-    "declare const window: { name: string };"
-  ], ["window:1"]],
+    "declare const window: { name: string };",
+    "export const n = window.name;"
+  ], ["window:2"]],
   ["an imported name is local to the whole module", "src/core/document/x.ts", [
     'import { fetch } from "./http.ts";',
     'export const g = () => fetch("/x");'
@@ -272,35 +273,21 @@ for (const name of DOM_GLOBALS) {
 }
 
 const domCases = [
-  ["the reviewer's probe: an ambient DOMParser and its use", [
+  ["the reviewer's probe: the use of an ambient DOMParser is a free reference", [
     "declare const DOMParser: new () => { parseFromString(s: string, m: string): unknown };",
     'export function reviewPlatformProbe(s: string): unknown { return new DOMParser().parseFromString(s, "text/html"); }'
-  ], ["DOMParser:1"]],
+  ], ["DOMParser:2"]],
   ["a use of XMLSerializer is reported", [
     "export const s = (n: unknown) => new XMLSerializer().serializeToString(n);"
   ], ["XMLSerializer:1"]],
-  ["an ambient XMLSerializer and its use are reported", [
+  ["an ambient XMLSerializer does not hide its use", [
     "declare var XMLSerializer: new () => { serializeToString(n: unknown): string };",
     "export const s = (n: unknown) => new XMLSerializer().serializeToString(n);"
-  ], ["XMLSerializer:1"]],
-  ["an ambient declare is reported although nothing uses it", [
-    "declare const DOMParser: new () => unknown;",
-    "export const x = 1;"
-  ], ["DOMParser:1"]],
-  ["an ambient declare var is reported", ["declare var Node: unknown;"], ["Node:1"]],
-  ["an ambient declare function is reported", ["declare function atob(s: string): string;"], ["atob:1"]],
-  ["an ambient declare class is reported", ["declare class MutationObserver { observe(n: unknown): void }"], ["MutationObserver:1"]],
-  ["an exported ambient declare is reported", ["export declare const structuredClone: <T>(v: T) => T;"], ["structuredClone:1"]],
-  ["an ambient declare inside declare global is reported", [
-    "export {};",
-    "declare global {",
-    "  var getSelection: () => unknown;",
-    "}"
-  ], ["getSelection:3"]],
-  ["an ambient declare of an existing platform global is still reported", ["declare const window: { name: string };"], ["window:1"]],
-  ["an ambient declare of the clock is reported", ["declare const Date: { now(): number };", "declare const Math: { random(): number };"], ["Date:1", "Math.random:2"]],
-  ["an ambient declare of an unrelated name is not reported", ["declare const __BUILD__: string;", "declare function helper(): void;", "export const b = __BUILD__;"], []],
-  ["an ambient type or interface is not a value declaration", ["declare interface Text { data: string }", "declare type Range = [number, number];"], []],
+  ], ["XMLSerializer:2"]],
+  ["an ambient interface does not hide a free type reference to a listed name", [
+    "declare interface Text { data: string }",
+    "export const t = (x: Text): string => x.data;"
+  ], ["Text:2"]],
   ["a local type named Text or Range is not the global", [
     "type Text = { runs: string[] };",
     "interface Range { from: number; to: number }",
@@ -329,6 +316,115 @@ const domCases = [
 
 for (const [name, lines, expected] of domCases) eq(name, freeGlobals("src/core/document/x.ts", lines), expected);
 
+console.log("\neval and Function:\n");
+
+const codeCases = [
+  ["an indirect eval is reported", ['export const r = (0, eval)("1 + 1");'], ["eval:1"]],
+  ["a direct eval is reported", ['export const r = eval("1 + 1");'], ["eval:1"]],
+  ["eval as a value is reported", ["export const e = eval;"], ["eval:1"]],
+  ["new Function is reported", ['export const f = new Function("a", "return a");'], ["Function:1"]],
+  ["Function called without new is reported", ['export const f = Function("return 1");'], ["Function:1"]],
+  ["Function as a value is reported", ["const F = Function;", 'export const f = new F("return 1");'], ["Function:1"]],
+  ["Function.prototype is reported", ["export const p = Function.prototype;"], ["Function:1"]],
+  ["the Function type in a type position is not reported", [
+    "export const call = (f: Function): unknown => (f as () => unknown)();",
+    "export type Handler = Function | null;",
+    "export interface Box { fn: Function }",
+    "export class K implements Box { fn: Function = () => 1; }"
+  ], []],
+  ["instanceof Function is not reported", ["export const isFn = (v: unknown) => v instanceof Function;"], []],
+  ["typeof on a value named eval or Function in a type query is not reported", ["export type T = typeof eval;", "export type U = typeof Function;"], []],
+  ["a local eval or Function is not the global", [
+    "export function f(eval_: number) { return eval_; }",
+    "const Function = class { run() { return 1; } };",
+    "export const g = new Function().run();"
+  ], []],
+  ["a method or property named eval or Function is not a reference", [
+    "const o = { eval: 1, Function: 2, run() { return 3; } };",
+    "export const r = [o.eval, o.Function, o.run()];"
+  ], []]
+];
+
+for (const [name, lines, expected] of codeCases) eq(name, freeGlobals("src/core/document/x.ts", lines), expected);
+
+console.log("\nambient declarations:\n");
+
+function ambientsOf(path, lines) {
+  return (analyzeScript(path, lines.join("\n")).ambients ?? []).map((a) => `${a.name}:${a.line}`).sort();
+}
+
+const ambientCases = [
+  ["an ambient declare const is reported although nothing uses it", ["declare const DOMParser: new () => unknown;", "export const x = 1;"], ["DOMParser:1"]],
+  ["an ambient declare let is reported", ["declare let counter: number;"], ["counter:1"]],
+  ["an ambient declare var is reported", ["declare var Node: unknown;"], ["Node:1"]],
+  ["an ambient declare function is reported", ["declare function atob(s: string): string;"], ["atob:1"]],
+  ["every overload of an ambient function is one finding", ["declare function f(a: number): number;", "declare function f(a: string): string;"], ["f:1"]],
+  ["an ambient declare class is reported", ["declare class MutationObserver { observe(n: unknown): void }"], ["MutationObserver:1"]],
+  ["an ambient declare abstract class is reported", ["declare abstract class Base { abstract run(): void }"], ["Base:1"]],
+  ["an ambient declare enum and const enum are reported", ["declare enum Color { Red }", "declare const enum Mode { A }"], ["Color:1", "Mode:2"]],
+  ["an exported ambient declare is reported", ["export declare const structuredClone: <T>(v: T) => T;"], ["structuredClone:1"]],
+  ["an ambient declare of an unlisted name is reported", ["declare const FormData: new () => unknown;", "export const f = new FormData();"], ["FormData:1"]],
+  ["an ambient declare of an existing platform global is reported", ["declare const window: { name: string };"], ["window:1"]],
+  ["an ambient declare of the clock is reported", ["declare const Date: { now(): number };", "declare const Math: { random(): number };"], ["Date:1", "Math:2"]],
+  ["an ambient build constant is reported", ["declare const __BUILD__: string;", "export const b = __BUILD__;"], ["__BUILD__:1"]],
+  ["an ambient value inside declare global is reported", [
+    "export {};",
+    "declare global {",
+    "  var getSelection: () => unknown;",
+    "  function open(): void;",
+    "  class Widget {}",
+    "  namespace Extra { const x: number }",
+    "}"
+  ], ["Extra:6", "Widget:5", "getSelection:3", "open:4"]],
+  ["a destructured ambient name is reported", ["declare const { DOMParser }: any;"], ["DOMParser:1"]],
+  ["a renamed, nested, rest and array destructured ambient are reported", [
+    "declare const { a: A, b: { B }, ...rest }: any;",
+    "declare const [first, [second], ...others]: any;"
+  ], ["A:1", "B:1", "first:2", "others:2", "rest:1", "second:2"]],
+  ["a multi-declarator ambient reports every name", ["declare const a: number, DOMParser: unknown;"], ["DOMParser:1", "a:1"]],
+  ["a declare namespace is reported", ["declare namespace Intl2 { const x: number }"], ["Intl2:1"]],
+  ["a dotted declare namespace reports its root", ["declare namespace A.B.C { const x: number }"], ["A:1"]],
+  ["a declare module with a string name is reported", ['declare module "virtual-thing" { export const v: number }'], ['"virtual-thing":1']],
+  ["a declare module with an identifier name is reported", ["declare module Legacy { const v: number }"], ["Legacy:1"]],
+  ["a type-only ambient is allowed", [
+    "declare interface Text { data: string }",
+    "declare type Range = [number, number];",
+    "declare global { interface Window { extra: number } type Id = string }"
+  ], []],
+  ["a file with no ambient declaration reports none", ["export const a = 1;", "export type T = number;"], []],
+  ["a lib reference directive is reported", ['/// <reference lib="dom" />', "export const a = 1;"], ['reference lib="dom":1']],
+  ["a types reference directive is reported", ['/// <reference types="node" />', "export const a = 1;"], ['reference types="node":1']],
+  ["a path reference directive is reported", ['/// <reference path="./env.d.ts" />', "export const a = 1;"], ['reference path="./env.d.ts":1']]
+];
+
+for (const [name, lines, expected] of ambientCases) eq(name, ambientsOf("src/core/document/x.ts", lines), expected);
+
+{
+  const lines = ["declare const FormData: new () => unknown;", "export const f = new FormData();"];
+  eq("an ambient declaration is not also a free reference to itself", freeGlobals("src/core/document/x.ts", ["declare const __BUILD__: string;"]), []);
+  eq("the unlisted use beside an ambient declaration is not a global; the declaration is the finding", [freeGlobals("src/core/document/x.ts", lines), ambientsOf("src/core/document/x.ts", lines)], [[], ["FormData:1"]]);
+}
+
+{
+  const compile = (files) => {
+    const config = ts.parseJsonConfigFileContent(ts.readConfigFile(join(ROOT, "tsconfig.core.json"), ts.sys.readFile).config, ts.sys, ROOT);
+    const virtual = new Map(Object.entries(files).map(([name, text]) => [join(ROOT, name).replaceAll("\\", "/"), text]));
+    const host = ts.createCompilerHost(config.options);
+    const getSourceFile = host.getSourceFile.bind(host);
+    host.getSourceFile = (name, ...rest) => (virtual.has(name) ? ts.createSourceFile(name, virtual.get(name), config.options.target) : getSourceFile(name, ...rest));
+    host.fileExists = ((exists) => (name) => virtual.has(name) || exists(name))(host.fileExists.bind(host));
+    host.readFile = ((read) => (name) => virtual.get(name) ?? read(name))(host.readFile.bind(host));
+    const program = ts.createProgram([...virtual.keys()], config.options, host);
+    return { diagnostics: ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")) };
+  };
+  const config = ts.parseJsonConfigFileContent(ts.readConfigFile(join(ROOT, "tsconfig.core.json"), ts.sys.readFile).config, ts.sys, ROOT);
+  const libs = (config.options.lib ?? []).map((l) => l.toLowerCase());
+  check("core's tsconfig has no DOM, WebWorker or ScriptHost lib", libs.length > 0 && !libs.some((l) => /dom|webworker|scripthost/.test(l)), JSON.stringify(libs));
+  eq("core's tsconfig loads no ambient @types packages", config.options.types, []);
+  const bare = compile({ "src/core/document/probe-dom.ts": 'export const f = new FormData();\nexport const p = new DOMParser();\nexport const t = document.title;\n' });
+  check("core's typecheck rejects undeclared DOM names", ["FormData", "DOMParser", "document"].every((n) => bare.diagnostics.some((d) => d.includes(`'${n}'`))), JSON.stringify(bare.diagnostics));
+}
+
 {
   const rules = findViolations(graph({
     "src/core/document/text-policy.ts": [
@@ -337,10 +433,21 @@ for (const [name, lines, expected] of domCases) eq(name, freeGlobals("src/core/d
     ].join("\n"),
     "src/core/text/s.ts": "export const s = (n: unknown) => new XMLSerializer().serializeToString(n);\n",
     "src/core/text/ok.ts": "type Text = { runs: string[] };\nexport const n = (t: Text) => t.runs.length;\n",
-    "src/adapters/dom/p.ts": "export const p = new DOMParser();\n"
+    "src/core/text/form.ts": "declare const FormData: new () => unknown;\nexport const f = new FormData();\n",
+    "src/core/text/code.ts": 'export const e = (0, eval)("1");\nexport const g = new Function("return 1");\n',
+    "src/application/a.ts": "declare const __BUILD__: string;\nexport const b = __BUILD__;\n",
+    "src/contracts/c.ts": "declare global { var leak: number }\nexport {};\n",
+    "shared/s.js": '"use strict";\nmodule.exports = { f: () => 1 };\n',
+    "src/adapters/dom/p.ts": "declare const FormData: new () => unknown;\nexport const p = [new DOMParser(), new FormData()];\n"
   })).filter((v) => v.rule === "platform-global").map((v) => `${v.source} ${v.target}`);
-  eq("core files using DOM constructors are platform-global violations; an adapter may use them", rules, [
+  eq("core, contracts and application may use or declare no DOM or ambient value; an adapter may", rules, [
+    "src/application/a.ts ambient:__BUILD__",
+    "src/contracts/c.ts ambient:leak",
+    "src/core/document/text-policy.ts ambient:DOMParser",
     "src/core/document/text-policy.ts global:DOMParser",
+    "src/core/text/code.ts global:Function",
+    "src/core/text/code.ts global:eval",
+    "src/core/text/form.ts ambient:FormData",
     "src/core/text/s.ts global:XMLSerializer"
   ]);
 }
