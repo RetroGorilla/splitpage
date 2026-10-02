@@ -400,6 +400,19 @@ test("as many cues went as came and the pairing is a tie: no rename, the new cue
   assert.deepEqual(retitlesAfter(["SFX: x", "SFX: y"], ["SFX: p", "SFX: q"]), [], "no resemblance at all");
 });
 
+test("a cue whose name only changed case is the same item: it is neither gone nor come (#294)", () => {
+  const door = [{ from: "door slam", name: "thunder" }];
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme"], ["SFX: thunder", "Music: Theme"]), door, "the issue's cues, one re-cased");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme"], ["Music: Theme", "SFX: thunder"]), door, "the new cues the other way round");
+  assert.deepEqual(retitlesAfter(["Music: theme", "SFX: door slam"], ["SFX: thunder", "Music: Theme"]), door, "the old cues the other way round");
+  assert.deepEqual(retitlesAfter(["Music: theme", "SFX: door slam"], ["Music: Theme", "SFX: thunder"]), door, "both the other way round");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme", "SFX: rain"], ["SFX: thunder", "Music: Theme"]), [], "two went and one came, none close: new item");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme", "SFX: rain"], ["SFX: door slams", "Music: Theme"]), [{ from: "door slam", name: "door slams" }], "two went and one came, one close");
+  assert.deepEqual(cueEditPairs(["door slam", "theme"], ["thunder", "Theme"]), [["door slam", "thunder"]]);
+  assert.deepEqual(cueEditPairs(["door slam", "theme", "rain"], ["thunder", "Theme"]), []);
+  assert.deepEqual(cueEditPairs(["Door slam", "door slam"], ["door slams"]), [["Door slam", "door slams"]], "one item under two spellings counts once");
+});
+
 test("cueEditPairs: which old cue name each new one is taken as an edit of (#282)", () => {
   assert.deepEqual(cueEditPairs(["a"], ["b"]), [["a", "b"]]);
   assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["kettle whistling"]), [["kettle whistle", "kettle whistling"]]);
@@ -423,23 +436,29 @@ test("cueEditPairs: which old cue name each new one is taken as an edit of (#282
   assert.deepEqual(cueEditPairs(["door slam", "kettle whistle", "theme"], ["door slams", "door slammed"]), [], "one old cue close to two new ones: no rename");
   assert.equal(closeCueNames("door slam", "dog bark"), false, "a shared start and nothing else is not close");
   assert.equal(closeCueNames("DOOR SLAM", "door slams"), true, "case does not matter");
+  assert.equal(closeCueNames("kick", "kiss"), true, "exactly half shared");
+  assert.equal(closeCueNames("kick", "kxyz"), false, "a quarter shared");
+  assert.equal(closeCueNames("cat", "cow"), false, "just under half shared");
+  assert.equal(closeCueNames("cart", "cost"), true, "exactly half shared, from both ends");
 });
 
 test("seeded: cueEditPairs pairs a name that left with a name that came only when they are close or are the only one each way (#294)", () => {
-  const NAMES = ["door slam", "door slams", "kettle whistle", "kettle whistling", "theme", "thunder", "slow", "slow piano"];
+  const NAMES = ["door slam", "door slams", "kettle whistle", "kettle whistling", "theme", "thunder", "slow", "slow piano", "Theme", "DOOR SLAM"];
   let s = 7;
   const r = (): number => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   const pick = (): string => NAMES[Math.floor(r() * NAMES.length)] as string;
   const draw = (): string[] => Array.from({ length: 1 + Math.floor(r() * 3) }, pick);
-  const unique = (l: string[]): string[] => l.filter((n, i) => l.indexOf(n) === i);
+  const key = (n: string): string => n.toLowerCase();
+  const unique = (l: string[]): string[] => l.filter((n, i) => l.findIndex((m) => key(m) === key(n)) === i);
+  const outside = (l: string[], other: string[]): string[] => unique(l.filter((n) => !other.some((m) => key(m) === key(n))));
   let sameCount = 0, renamedSameCount = 0, refused = 0;
   for (let i = 0; i < 2000; i++) {
     const before = draw();
     const after = r() < 0.5 ? before.map((n) => (r() < 0.5 ? n : pick())) : draw();
     const got = cueEditPairs(before, after);
     const msg = JSON.stringify([before, after]);
-    const gone = unique(before.filter((n) => !after.includes(n)));
-    const came = unique(after.filter((n) => !before.includes(n)));
+    const gone = outside(before, after);
+    const came = outside(after, before);
     const oneForOne = gone.length === 1 && came.length === 1;
     assert.equal(new Set(got.map((p) => p[0])).size, got.length, msg + " an old name paired twice");
     assert.equal(new Set(got.map((p) => p[1])).size, got.length, msg + " a new name paired twice");
@@ -456,7 +475,7 @@ test("seeded: cueEditPairs pairs a name that left with a name that came only whe
       }
     }
     assert.deepEqual(got, expected, msg);
-    if (before.filter((n) => !after.includes(n)).length === after.filter((n) => !before.includes(n)).length) {
+    if (gone.length === came.length) {
       sameCount++;
       if (got.length) renamedSameCount++;
       if (gone.length > 1 && !got.length) refused++;
