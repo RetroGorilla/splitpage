@@ -16,6 +16,7 @@ Every other PR goes through the full process below.
   - what changes, and what must stay the same
   - which modules and shared interfaces it touches (ports, contracts, the saved-data shape)
   - how it was verified (checks, suites, runs, with pass counts)
+  - for a user-visible fix, a "Suggested CHANGELOG line" (§7)
 
 ## 2. Where bugs get fixed
 
@@ -55,7 +56,7 @@ One independent reviewer: a session or agent that did not write the change. They
 | No comments | No authored comments anywhere, including workflow and config files |
 | Behavior preservation | Does the refactor change behavior? Is every intended change called out and routed per §2? |
 | Goldens | Are golden files changed only in a dedicated commit on `4.0-development` via `src/test/golden-helpers.mjs`, with the diff explained? |
-| User-facing text | Do CHANGELOG, help.md, toasts and refusal messages match what the code actually does? |
+| User-facing text | Do toasts and refusal messages, and the PR's suggested CHANGELOG line, match what the code actually does? The PR does not edit CHANGELOG or help.md (§7). |
 
 ## 5. Extra verification by risk
 
@@ -97,14 +98,20 @@ The lane that wrote the code fixes the findings. The reviewer then re-checks the
 **Merge when:**
 - blockers are fixed and concerns are closed
 - the final changes have been reviewed
-- the evidence matches the combined state being merged: the CI `gate` is green on the latest head
+- the evidence matches the PR's own latest head: the CI `gate` is green on it, and the base has been merged in only when the base merges rule below calls for it
 - a short PR comment records:
   - the findings and how each was closed
   - the verification, with counts
   - the head and base SHAs the evidence covers
   - any accepted limitations
 
-**If the base moved** after the evidence was produced, merge the base into the branch and push, so CI runs on the new combined tree. A re-run alone isn't enough, because it reuses the old merge commit. Local run evidence counts only for the tree it ran on.
+**Base merges.** Adam approved this rule on 2026-10-02, to cut the testing bottleneck. Merge the base into a PR branch only when:
+- GitHub reports a conflict, or
+- the base has changed files the PR touches.
+
+Otherwise merge with CI green on the PR's own head, even though the base has moved. The safety net is CI on `4.0-development` after every merge, plus the milestone gate's full run on the merged tree (§8). When the base is merged in, push, so CI runs on the new combined tree. A re-run alone isn't enough, because it reuses the old merge commit. Local run evidence counts only for the tree it ran on.
+
+**CHANGELOG and help are not edited in fix PRs.** Adam approved this rule on 2026-10-02. `CHANGELOG.md` and `docs/help.md` stay as the base has them. A user-visible fix puts a "Suggested CHANGELOG line" section in its PR body, in the existing entry style, or says "No CHANGELOG entry" and why. The coordinator writes every entry in one docs PR, and Adam signs off the wording there once, under "Wording for Adam's sign-off".
 
 **CI unavailable vs. failing.** Failing checks never merge. If CI is *unavailable*, merging on local evidence needs:
 - the exact tested revision and its logs
