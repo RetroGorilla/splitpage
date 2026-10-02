@@ -322,7 +322,7 @@ test("cue snapshots hold scenes with Object.prototype ids, and a new such scene 
   }
 });
 
-test("cue retitling pairs the names that went and came by position when as many went as came (#294, kept as found)", () => {
+test("cue retitling pairs the names that went and came by closeness, not by position, when as many went as came (#294)", () => {
   const before: TagState = {
     docId: "dC", rows: [cueRow("r1", ["SFX: door slam", "SFX: kettle whistle"])], productionTags: []
   };
@@ -331,8 +331,8 @@ test("cue retitling pairs the names that went and came by position when as many 
     docId: "dC", rows: [cueRow("r1", ["SFX: kettle whistles", "SFX: door slams"])], productionTags: opened.register
   };
   assert.deepEqual(planRegistryHealing(after, readers, opened.cues).retitle, [
-    { at: 0, from: "door slam", name: "kettle whistles" },
-    { at: 1, from: "kettle whistle", name: "door slams" }
+    { at: 0, from: "door slam", name: "door slams" },
+    { at: 1, from: "kettle whistle", name: "kettle whistles" }
   ]);
 });
 
@@ -359,6 +359,47 @@ test("a cue deleted beside an edit that could be either cue's: no rename, the ed
   assert.deepEqual(retitlesAfter(["SFX: door slam"], ["SFX: door bang"]), [{ from: "door slam", name: "door bang" }], "one out, one in");
 });
 
+test("a cue lost, one gained and one edited in one go: the edited cue keeps its item whichever way round they sit (#294)", () => {
+  const theme = [{ from: "theme", name: "themes" }];
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme"], ["Music: themes", "SFX: thunder"]), theme, "the issue's example");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme"], ["SFX: thunder", "Music: themes"]), theme, "the new cues swapped");
+  assert.deepEqual(retitlesAfter(["Music: theme", "SFX: door slam"], ["Music: themes", "SFX: thunder"]), theme, "the old cues swapped");
+  assert.deepEqual(retitlesAfter(["Music: theme", "SFX: door slam"], ["SFX: thunder", "Music: themes"]), theme, "both swapped");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme", "SFX: kettle whistle"], ["SFX: thunder", "SFX: kettle whistles", "Music: themes"]), [
+    { from: "theme", name: "themes" },
+    { from: "kettle whistle", name: "kettle whistles" }
+  ], "three cues, two edited");
+});
+
+test("a find-and-replace over several cues in one cell renames none of their items; each becomes a new item (#294)", () => {
+  const opened = planRegistryHealing({ docId: "dF", rows: [cueRow("r1", ["Music: slow", "Music: slowly"])], productionTags: [] }, readers, null);
+  const edited: TagState = { docId: "dF", rows: [cueRow("r1", ["Music: fast", "Music: fastly"])], productionTags: opened.register };
+  const plan = planRegistryHealing(edited, readers, opened.cues);
+  assert.deepEqual(plan.retitle, []);
+  assert.deepEqual(plan.register.map((t) => t.name), ["fast", "fastly"]);
+});
+
+test("one cue edited in a cell of several is still renamed, and several close edits at once are each renamed to their own (#294)", () => {
+  assert.deepEqual(retitlesAfter(["SFX: door slam"], ["SFX: door bang"]), [{ from: "door slam", name: "door bang" }]);
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme"], ["SFX: door slams", "Music: theme"]), [{ from: "door slam", name: "door slams" }]);
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "SFX: kettle whistle"], ["SFX: kettle whistles", "SFX: door slams"]), [
+    { from: "door slam", name: "door slams" },
+    { from: "kettle whistle", name: "kettle whistles" }
+  ]);
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme", "SFX: kettle whistle"], ["SFX: kettle whistles", "Music: themes", "SFX: door slams"]), [
+    { from: "door slam", name: "door slams" },
+    { from: "theme", name: "themes" },
+    { from: "kettle whistle", name: "kettle whistles" }
+  ]);
+});
+
+test("as many cues went as came and the pairing is a tie: no rename, the new cues become new items (#294)", () => {
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "SFX: door slap"], ["SFX: door slams", "SFX: thunder"]), [], "one new cue is close to both old ones");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "SFX: door slap"], ["SFX: door slams", "SFX: door slaps"]), [], "each old cue is close to both new ones");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "Music: theme"], ["SFX: thunder", "Music: lightning"]), [], "nothing is close");
+  assert.deepEqual(retitlesAfter(["SFX: x", "SFX: y"], ["SFX: p", "SFX: q"]), [], "no resemblance at all");
+});
+
 test("cueEditPairs: which old cue name each new one is taken as an edit of (#282)", () => {
   assert.deepEqual(cueEditPairs(["a"], ["b"]), [["a", "b"]]);
   assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["kettle whistling"]), [["kettle whistle", "kettle whistling"]]);
@@ -368,7 +409,12 @@ test("cueEditPairs: which old cue name each new one is taken as an edit of (#282
     ["door slam", "door slams"],
     ["kettle whistle", "kettle whistles"]
   ]);
-  assert.deepEqual(cueEditPairs(["x", "y"], ["p", "q"]), [["x", "p"], ["y", "q"]], "as many in as out: in order, as before");
+  assert.deepEqual(cueEditPairs(["x", "y"], ["p", "q"]), [], "as many in as out but none close: no rename (#294)");
+  assert.deepEqual(cueEditPairs(["door slam", "theme"], ["themes", "thunder"]), [["theme", "themes"]], "#294's example");
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["kettle whistles", "door slams"]), [
+    ["door slam", "door slams"],
+    ["kettle whistle", "kettle whistles"]
+  ], "as many in as out and each close to its own: by closeness, not position (#294)");
   assert.deepEqual(cueEditPairs(["door slam", "door slam"], ["door slams"]), [["door slam", "door slams"]]);
   assert.equal(closeCueNames("Pianno intro", "piano intro"), true);
   assert.equal(closeCueNames("door slam", "door bang"), true);
@@ -379,40 +425,44 @@ test("cueEditPairs: which old cue name each new one is taken as an edit of (#282
   assert.equal(closeCueNames("DOOR SLAM", "door slams"), true, "case does not matter");
 });
 
-test("seeded: cueEditPairs pairs exactly as the old positional pairing wherever as many names went as came (#294's guarantee)", () => {
-  const oldPairs = (before: string[], after: string[]): [string, string][] => {
-    const gone = before.filter((n) => !after.includes(n));
-    const came = after.filter((n) => !before.includes(n));
-    const out: [string, string][] = [];
-    for (let i = 0; i < gone.length && i < came.length; i++) out.push([gone[i] as string, came[i] as string]);
-    return out;
-  };
+test("seeded: cueEditPairs pairs a name that left with a name that came only when they are close or are the only one each way (#294)", () => {
   const NAMES = ["door slam", "door slams", "kettle whistle", "kettle whistling", "theme", "thunder", "slow", "slow piano"];
   let s = 7;
   const r = (): number => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   const pick = (): string => NAMES[Math.floor(r() * NAMES.length)] as string;
   const draw = (): string[] => Array.from({ length: 1 + Math.floor(r() * 3) }, pick);
-  let compared = 0;
+  const unique = (l: string[]): string[] => l.filter((n, i) => l.indexOf(n) === i);
+  let sameCount = 0, renamedSameCount = 0, refused = 0;
   for (let i = 0; i < 2000; i++) {
     const before = draw();
     const after = r() < 0.5 ? before.map((n) => (r() < 0.5 ? n : pick())) : draw();
     const got = cueEditPairs(before, after);
     const msg = JSON.stringify([before, after]);
-    const gone = before.filter((n) => !after.includes(n));
-    const came = after.filter((n) => !before.includes(n));
-    if (gone.length === came.length) {
-      assert.deepEqual(got, oldPairs(before, after), msg);
-      compared++;
-    } else {
-      const unique = (l: string[]): boolean => new Set(l).size === l.length;
-      assert.ok(unique(got.map((p) => p[0])) && unique(got.map((p) => p[1])), msg);
-      if (new Set(gone).size > 1 || new Set(came).size > 1) {
-        for (const [g, c] of got) assert.ok(closeCueNames(g, c), msg + " paired names that are not close");
+    const gone = unique(before.filter((n) => !after.includes(n)));
+    const came = unique(after.filter((n) => !before.includes(n)));
+    const oneForOne = gone.length === 1 && came.length === 1;
+    assert.equal(new Set(got.map((p) => p[0])).size, got.length, msg + " an old name paired twice");
+    assert.equal(new Set(got.map((p) => p[1])).size, got.length, msg + " a new name paired twice");
+    for (const [g, c] of got) {
+      assert.ok(gone.includes(g) && came.includes(c), msg + " paired a name that did not leave or come");
+      assert.ok(oneForOne || closeCueNames(g, c), msg + " paired names that are not close");
+    }
+    const expected: [string, string][] = [];
+    if (oneForOne) expected.push([gone[0] as string, came[0] as string]);
+    else {
+      for (const g of gone) {
+        const near = came.filter((c) => closeCueNames(g, c));
+        if (near.length === 1 && gone.filter((x) => closeCueNames(x, near[0] as string)).length === 1) expected.push([g, near[0] as string]);
       }
     }
-    for (const [g, c] of got) assert.ok(gone.includes(g) && came.includes(c), msg);
+    assert.deepEqual(got, expected, msg);
+    if (before.filter((n) => !after.includes(n)).length === after.filter((n) => !before.includes(n)).length) {
+      sameCount++;
+      if (got.length) renamedSameCount++;
+      if (gone.length > 1 && !got.length) refused++;
+    }
   }
-  assert.ok(compared > 300, "compared " + compared);
+  assert.ok(sameCount > 300 && renamedSameCount > 100 && refused > 20, [sameCount, renamedSameCount, refused].join(" "));
 });
 
 const GEAR_ROW: ProductionRow = {

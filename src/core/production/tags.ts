@@ -294,13 +294,8 @@ function retitleEditedCues(
 }
 
 export function cueEditPairs(before: readonly string[], after: readonly string[]): [string, string][] {
-  let gone = before.filter(function (name) { return after.indexOf(name) === -1; });
-  let came = after.filter(function (name) { return before.indexOf(name) === -1; });
-  if (gone.length === came.length) {
-    return gone.map(function (name, i): [string, string] { return [name, came[i] as string]; });
-  }
-  gone = uniqueNames(gone);
-  came = uniqueNames(came);
+  const gone = uniqueNames(before.filter(function (name) { return after.indexOf(name) === -1; }));
+  const came = uniqueNames(after.filter(function (name) { return before.indexOf(name) === -1; }));
   if (gone.length === 1 && came.length === 1) return [[gone[0] as string, came[0] as string]];
   const pairs: [string, string][] = [];
   gone.forEach(function (g) {
