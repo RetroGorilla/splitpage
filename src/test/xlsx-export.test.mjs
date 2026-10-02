@@ -183,8 +183,41 @@ test("awkward text survives: markup characters, line breaks, spaces at the ends,
   assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, S.state.title);
 });
 
+function withClock(next, run) {
+  const RealDate = globalThis.Date;
+  class StubDate extends RealDate {
+    constructor(...args) {
+      if (args.length) super(...args);
+      else super(next());
+    }
+    static now() { return next(); }
+  }
+  globalThis.Date = StubDate;
+  try {
+    return run();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
+const NOON = new Date(2030, 0, 2, 12, 0, 0).getTime();
+
 test("two exports of one script are the same bytes", () => {
   demo();
-  assert.deepEqual(buildScriptXlsx(), buildScriptXlsx());
-  assert.deepEqual(buildBreakdownXlsx(), buildBreakdownXlsx());
+  withClock(() => NOON, () => {
+    assert.deepEqual(buildScriptXlsx(), buildScriptXlsx());
+    assert.deepEqual(buildBreakdownXlsx(), buildBreakdownXlsx());
+    assert.deepEqual(buildBrollXlsx(), buildBrollXlsx());
+  });
+});
+
+test("the exports differ only by the zip timestamp when the clock crosses a two-second boundary", () => {
+  demo();
+  let t = NOON;
+  const ticking = () => { const at = t; t += 2000; return at; };
+  const [a, b] = withClock(ticking, () => [buildScriptXlsx(), buildScriptXlsx()]);
+  assert.equal(a.length, b.length);
+  assert.notDeepEqual(a, b);
+  const frozen = withClock(() => NOON, () => [buildScriptXlsx(), buildScriptXlsx()]);
+  assert.deepEqual(frozen[0], frozen[1]);
 });
