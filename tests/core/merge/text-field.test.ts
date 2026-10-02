@@ -113,6 +113,15 @@ test("a tag whose category alone changed in the registry is written under its ne
   assert.deepEqual(mergeTextField(html(PROP), html(PROP), html(PROP), c), { html: html(GEAR), outcome: "same" });
 });
 
+test("a tag with an Object.prototype id that the merged registry dropped is not read as renamed (#278)", () => {
+  ["constructor", "toString", "__proto__", "hasOwnProperty"].forEach((id) => {
+    const held = [{ id: id, cat: "prop", name: "Kettle" }];
+    assert.deepEqual(textMergeContext(decode, side(held), side(held), side(), []).refit, { mine: false, theirs: false }, id);
+    const renamed = [{ id: id, cat: "prop", name: "Pot" }];
+    assert.deepEqual(textMergeContext(decode, side(held), side(held), side(renamed), renamed).refit, { mine: true, theirs: false }, id);
+  });
+});
+
 test("a tag the merged registry dropped is named from theirs first, then mine, then the base", () => {
   const named = (name: string) => [{ id: "t_x", cat: "prop", name: name }];
   const tagOf = (b: TagInput[], m: TagInput[], t: TagInput[], merged: TagInput[]) =>

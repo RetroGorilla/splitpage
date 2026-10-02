@@ -1931,6 +1931,58 @@
       "markdownOfInput": "[a [b\\] \\(c\\)](https://e.x/(1)) and [**bold** label](https://e.x/)",
       "storedFromDom": "<a href=\"https://e.x/(1)\">a [b] (c)</a> and <a href=\"https://e.x/\"><strong>bold</strong> label</a>"
     },
+    "links: a link inside a link": {
+      "input": "<a href=\"https://one.test/\">p<table><td><a href=\"https://two.test/\"><b>x</b></a></td></table>q<object><a href=\"javascript:void(0)\">u</a></object></a>",
+      "sanitized": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">p</a><a href=\"https://two.test/\" target=\"_blank\" rel=\"noopener\"><strong>x</strong></a><a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">qu</a>",
+      "fromHtml": [
+        {
+          "text": "p",
+          "marks": {
+            "href": "https://one.test/"
+          }
+        },
+        {
+          "text": "x",
+          "marks": {
+            "b": true,
+            "href": "https://two.test/"
+          }
+        },
+        {
+          "text": "qu",
+          "marks": {
+            "href": "https://one.test/"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">p</a><a href=\"https://two.test/\" target=\"_blank\" rel=\"noopener\"><strong>x</strong></a><a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">qu</a>",
+      "markdown": "[p](https://one.test/)[**x**](https://two.test/)[qu](https://one.test/)",
+      "markdownOfInput": "[p[**x**\\]\\(https://two.test/\\)q[u\\]\\(javascript:void\\(0\\)\\)](https://one.test/)",
+      "storedFromDom": "<a href=\"https://one.test/\">p<table><td><a href=\"https://two.test/\"><b>x</b></a></td></table>q<object><a href=\"javascript:void(0)\">u</a></object></a>"
+    },
+    "links: a video card inside a link": {
+      "input": "<a href=\"https://one.test/\">see <object><a class=\"video-embed-card\" href=\"https://youtu.be/x\"><span>Watch video</span></a></object> after<object><a class=\"video-embed-card\" href=\"javascript:alert(1)\">gone</a></object></a>",
+      "sanitized": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">see </a><a class=\"video-embed-card\" href=\"https://youtu.be/x\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· youtu.be</span></a><a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\"> after</a>",
+      "fromHtml": [
+        {
+          "text": "see  after",
+          "marks": {
+            "href": "https://one.test/"
+          }
+        }
+      ],
+      "media": [
+        {
+          "kind": "video",
+          "href": "https://youtu.be/x"
+        }
+      ],
+      "toHtml": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">see  after</a>",
+      "markdown": "[see ](https://one.test/)[▶Watch video· youtu.be](https://youtu.be/x)[ after](https://one.test/)",
+      "markdownOfInput": "[see [Watch video\\]\\(https://youtu.be/x\\) after[gone\\]\\(javascript:alert\\(1\\)\\)](https://one.test/)",
+      "storedFromDom": "<a href=\"https://one.test/\">see <object><a class=\"video-embed-card\" href=\"https://youtu.be/x\"><span>Watch video</span></a></object> after<object><a class=\"video-embed-card\" href=\"javascript:alert(1)\">gone</a></object></a>"
+    },
     "links: nested in formatting": {
       "input": "<strong>bold <a href=\"https://e.x/\">link</a></strong> <a href=\"https://e.x/\"><em>it</em></a>",
       "sanitized": "<strong>bold <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">link</a></strong> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><em>it</em></a>",

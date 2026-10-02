@@ -136,6 +136,26 @@
       {
         "id": "p1",
         "name": "Sam"
+      },
+      {
+        "id": "constructor",
+        "name": "Con"
+      },
+      {
+        "id": "toString",
+        "name": "Tess"
+      },
+      {
+        "id": "p3",
+        "name": "__proto__"
+      },
+      {
+        "id": "__proto__",
+        "name": "Proto"
+      },
+      {
+        "id": "p2",
+        "name": "constructor"
       }
     ],
     "productionTags": [],

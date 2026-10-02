@@ -113,16 +113,34 @@ test("b-roll shots: my side fills their empty fields, shot and reshoot stick, pr
   assert.deepEqual(out, [shot("b1", { notes: "theirs", owner: "p1", status: "shot", reshoot: true, props: [prop("t_l", "L")] })]);
 });
 
-test("ids named like Object.prototype members collide in the id maps, as today (#278)", () => {
+test("ids and names like Object.prototype members merge like any other (#278)", () => {
   assert.deepEqual(mergePeople(
     [{ id: "p1", name: "Sam" }, { id: "constructor", name: "Con" }],
     [{ id: "p1", name: "Sam" }, { id: "constructor", name: "Con" }, { id: "__proto__", name: "Proto" }, { id: "p2", name: "constructor" }],
     [{ id: "p1", name: "Sam" }, { id: "constructor", name: "Con" }, { id: "toString", name: "Tess" }, { id: "p3", name: "__proto__" }]
-  ), [{ id: "p1", name: "Sam" }]);
+  ), [
+    { id: "p1", name: "Sam" }, { id: "constructor", name: "Con" }, { id: "toString", name: "Tess" },
+    { id: "p3", name: "__proto__" }, { id: "__proto__", name: "Proto" }, { id: "p2", name: "constructor" }
+  ]);
+  assert.deepEqual(mergePeople([{ id: "p9", name: "constructor" }], [], [{ id: "p9", name: "constructor" }]), []);
+  const entry = (id: string, name: string) => ({ cat: "prop", name: name, owner: "", notes: "", status: "needed", id: id });
   const tags = [tag("constructor", "Kettle"), tag("toString", "Lamp")];
-  assert.deepEqual(mergeProductionTags(tags, tags.concat([tag("hasOwnProperty", "Ladder")]), tags.concat([tag("__proto__", "Tripod")])), []);
+  assert.deepEqual(mergeProductionTags(tags, tags.concat([tag("hasOwnProperty", "Ladder")]), tags.concat([tag("__proto__", "Tripod")])),
+    [entry("constructor", "Kettle"), entry("toString", "Lamp"), entry("__proto__", "Tripod"), entry("hasOwnProperty", "Ladder")]);
+  assert.deepEqual(mergeProductionTags(tags, [tags[1] as TagInput], tags), [entry("toString", "Lamp")]);
   const shots = [shot("constructor"), shot("toString")];
   assert.deepEqual(mergeBrollShots(shots, [shot("constructor", { notes: "mine" }), shot("hasOwnProperty")],
-    shots.concat([shot("__proto__")])), []);
+    shots.concat([shot("__proto__")])), [shot("constructor", { notes: "mine" }), shot("__proto__"), shot("hasOwnProperty")]);
+  assert.deepEqual(mergeBrollProps([], [prop("constructor", "Kettle"), prop("", "toString")], [prop("__proto__", "Lamp")]),
+    [prop("__proto__", "Lamp"), prop("constructor", "Kettle"), prop("", "toString")]);
+  assert.deepEqual(mergeBrollProps([prop("constructor", "Kettle")], [], [prop("constructor", "Kettle")]), []);
+  const cup = prop("t_cup", "Cup"), hat = prop("t_hat", "Hat");
+  for (const id of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+    const base = [shot(id, { props: [cup, hat] })];
+    assert.deepEqual(mergeBrollShots(base, [shot(id, { props: [cup] })], [shot(id, { notes: "theirs", props: [cup, hat] })]),
+      [shot(id, { notes: "theirs", props: [cup] })], id + ": a prop mine removed stays removed");
+    assert.deepEqual(mergeBrollShots(base, [shot(id, { notes: "mine", props: [cup, hat] })], [shot(id, { props: [hat] })]),
+      [shot(id, { notes: "mine", props: [hat] })], id + ": a prop theirs removed stays removed");
+  }
   assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "notes"), false);
 });
