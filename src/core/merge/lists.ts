@@ -85,6 +85,33 @@ export function mergePeople(basePeople: PersonList, minePeople: PersonList, thei
   return out;
 }
 
+export function personIdRemap(people: PersonList, mergedPeople: PersonList): Record<string, string> {
+  const kept: Record<string, boolean> = Object.create(null) as Record<string, boolean>;
+  const byName: Record<string, string> = Object.create(null) as Record<string, string>;
+  const remap: Record<string, string> = Object.create(null) as Record<string, string>;
+  (Array.isArray(mergedPeople) ? mergedPeople : []).forEach(function (p) {
+    if (!p || !p.name) return;
+    kept[p.id] = true;
+    byName[normalizeTagName(p.name)] = p.id;
+  });
+  (Array.isArray(people) ? people : []).forEach(function (p) {
+    if (!p || !p.name || kept[p.id]) return;
+    const to = byName[normalizeTagName(p.name)];
+    if (to) remap[p.id] = to;
+  });
+  return remap;
+}
+
+export function repointOwners(lists: readonly unknown[], remap: Readonly<Record<string, string>>): void {
+  lists.forEach(function (list) {
+    (Array.isArray(list) ? list as unknown[] : []).forEach(function (e) {
+      if (!e || typeof e !== "object") return;
+      const item = e as { owner?: unknown };
+      if (typeof item.owner === "string" && item.owner && remap[item.owner]) item.owner = remap[item.owner];
+    });
+  });
+}
+
 export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirTags: TagList): TagEntry[] {
   const idOf = function (t: TagInput): string { return t.id || (t.name ? "key:" + registryKey(t.cat as string, t.name) : ""); };
   const tagPrint = function (t: TagInput): string {
