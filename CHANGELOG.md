@@ -16,6 +16,8 @@ appear in the app under **Help**. The format follows
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
 - Deleting one SFX: or Music: cue and editing another in the same cell at
   once could hand the deleted cue's Production item, with its status and
   notes, to the edited cue, and leave the edited cue's own item "Not in
