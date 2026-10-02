@@ -151,15 +151,59 @@ browser as an uncaught error, as it did before.
 group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts`,
 `share-actions.ts` and `zoom-actions.ts` define the actions whose handlers are
 still in `src/js`. `src/legacy/screen.ts` names what can refuse an action
-(still loading, Present, the Writer, a dialog, the open command menu, the
-tour) with the reason a person is shown; it imports nothing from `src/js`, so
-the numbered modules can import it without joining their import cycle.
+(still loading, a dialog, the open command menu, the tour, Present, the
+Writer, the B-roll shot-list page) with the reason a person is shown; it
+imports nothing from `src/js`, so the numbered modules can import it without
+joining their import cycle.
 
 `src/legacy/screen-state.ts` is the one bridge to the global state `S`: it
-answers `screenNow()` (still loading, Present, the Writer, the tour),
-`inDesktopApp()` and `saveInProgress()`. No other file under `src/legacy/` imports `S`; an action
+answers `screenNow()`, `inDesktopApp()` and `saveInProgress()`. No other file under `src/legacy/` imports `S`; an action
 file that needs to know something `S` holds asks the bridge, so the day `S`
 goes, one file changes.
+
+### What is in front
+
+`screenNow()` is the one read model of what is open, and every availability
+reads it. It reads state, not what the page last painted:
+
+| Blocker | Reason | Read from |
+| --- | --- | --- |
+| `loading` | Still loading… | `S.state` |
+| `dialog` | Close the open dialog first | any `.modal-backdrop` not `hidden` (`dialogOpen()`, `screen.ts`) |
+| `launcher` | Close the open dialog first | the command menu not `hidden`, unless it is the one asking (`launcherOpen()`, `screen.ts`) |
+| `tour` | Finish or skip the tour first | `tourShowing()`, `20c-help.js` (a tour suspended for Help is not showing) |
+| `prompter` | Close Present first | `S.prompterOpen` |
+| `writer` | Close the writer first | `writerOpen`, `19-writer.js` |
+| `shotlist` | Close the shot list first | `brollPageOpen()`, `08d-broll-panel.js` |
+
+An action names the blockers it is refused under, and `inFront()` picks the
+one in front, in the order of this table: still loading first, then a dialog,
+the command menu, the tour (which sits above dialogs on screen; a dialog is
+still named first, as everywhere), Present, the writer, the shot list. So a
+dialog over the writer is named rather than the writer, whichever order the
+action lists them in. `EVERY_OVERLAY` is the six overlays, and
+`everyOverlayBut(o)` leaves out an action's own (Present is not refused in
+Present). Before #274 each action's list was its order, and Search commands
+named the writer or Present before the tour; that differs only with the tour
+started over one of them.
+
+| Action | Refused under |
+| --- | --- |
+| `save`, `save-as` | still loading, a dialog, the command menu |
+| `save-back`, `server-publish`, `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
+| `open`, `export` | still loading, every overlay |
+| `command-menu` | still loading, every overlay but itself |
+| `find` | still loading, every overlay but the command menu |
+| `history` | every overlay (it opens while loading, as in 3.1) |
+| `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | their loading rule (above), then every overlay |
+| `present` | still loading, every overlay but Present |
+| `write` | still loading, every overlay but the writer (then a review session) |
+| `toggle-hide-shot` | still loading, a dialog |
+| The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
+
+Save, Save a copy and Hide shot scenes still act in the writer, Present, the
+shot list and the tour, and Find, Hide shot scenes and Search commands behind
+the command menu (no toast: the command menu closes as they run).
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them
@@ -174,7 +218,7 @@ the menu has closed to run it.
 `src/bootstrap/actions.ts` owns the lifetime and the composition.
 `startActions(registry, keyTarget)` installs the refusal presenter, registers
 every group of actions, hands the desktop app's native menu its runner
-(`runMenuCommandsWith(nativeMenuRunner(registry))`) and mounts the shortcuts
+(`runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal))`) and mounts the shortcuts
 feature (`mountShortcuts()` in `src/features/shortcuts/mount.ts`, one
 `keydown` listener on the target). It keeps every disposer and returns the
 function that undoes them all in reverse; `stopActions()` calls it. Starting
@@ -209,8 +253,10 @@ every `keydown` listener finds no other one for those keys. In Present, the
 prompter's own listener takes its bare keys M, F and Space (Shift allowed, as
 it takes the upper-case letter) only with Ctrl, Meta and Alt up, and ignores
 any key typed into an input, textarea, select or editable element, so Ctrl+F
-there leaves the text as it was (#309; `309-present-modifier-keys.txt`). The
-arrow keys still ignore modifiers. In the desktop app, Ctrl+S, Ctrl+Shift+S
+there leaves the text as it was (#309; `309-present-modifier-keys.txt`). Find
+is refused in Present since #274, silently as for any shortcut, so Ctrl+F in
+Present does nothing. In 3.1 it flipped the text and opened Find. The arrow
+keys still ignore modifiers. In the desktop app, Ctrl+S, Ctrl+Shift+S
 and Ctrl+O belong to the native menu's accelerators (the page does not bind
 them), Ctrl+E, Ctrl+F and Ctrl+K to the page (their accelerators are not
 registered), and Ctrl+Alt+H to both: the page runs it and keeps the key, and
@@ -233,6 +279,17 @@ toast names the dialog ("Close the open dialog first."); the writer's reason
 is "Close the writer first.". The toast that follows a link being turned off
 offers Save a copy…, which calls `saveDoc({ saveAs: true })` itself rather
 than the registry, so a dialog in front of it cannot refuse it.
+
+#274 extends the same rule, in the same suite, to what the native menu still
+ran behind an overlay: Present, Write, the panels and Version history behind
+the writer, Present, the shot-list page or the tour; Open, Export, Search
+commands and Find behind the shot-list page and the tour, and Find behind
+Present; Save to file, Put this script on the server, the two Present in the
+browser items and the export formats behind a dialog or the command menu. The
+shot-list page and the tour are overlays like the others ("What is in front",
+above). This is a change of behavior on every surface, not only the native
+menu, but the others could not reach it: the header buttons are covered by
+these overlays, and the command menu cannot open over them.
 
 One order from 3.1 is kept against the rule, for the setup wizard. Choosing
 a File menu item, from the File menu or from the desktop app's native menu,
@@ -266,8 +323,15 @@ Paste a script in a review session, the server items, Save while a save
 runs): the native menu cannot grey an item out, and in 3.1 it did nothing
 there, so `greyedOut()` and `itemAvailability()` (`src/legacy/menu-items.ts`)
 give such a refusal no reason for that source, and the native path does
-nothing at all for a refusal without one. The export formats are not actions
-yet (milestone 5) and keep the File menu item's own dispatch.
+nothing at all for a refusal without one; a dialog or other overlay in front
+of a greyed-out item is still named, as it is checked first. The export
+formats are not actions yet (milestone 5) and keep the File menu item's own
+dispatch, but the runner refuses one under a dialog or the command menu
+first, through the presenter the bootstrap gives it, so a refused format is
+neither run nor remembered for Export again. Before that check it runs the
+`onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `18-local-files.js`),
+as choosing any File menu item does, so a format chosen over the setup
+wizard closes the wizard and exports (`275-menu-refused-under-overlay.txt`).
 
 `280-other-surfaces.txt` checks the Settings buttons, the wizard's links and
 these native menu rules, against the code before the registry

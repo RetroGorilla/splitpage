@@ -1,18 +1,20 @@
 import type { Availability } from "../application/actions.ts";
 
-export type Blocker = "loading" | "prompter" | "writer" | "dialog" | "launcher" | "tour";
+export type Overlay = "dialog" | "launcher" | "tour" | "prompter" | "writer" | "shotlist";
 
-export interface ScreenState {
-  readonly loading: boolean;
-  readonly prompter: boolean;
-  readonly writer: boolean;
-  readonly tour: boolean;
-}
+export type Blocker = "loading" | Overlay;
+
+export type ScreenState = Readonly<Record<Blocker, boolean>>;
+
+const IN_FRONT_FIRST: readonly Blocker[] = ["loading", "dialog", "launcher", "tour", "prompter", "writer", "shotlist"];
+
+export const EVERY_OVERLAY: readonly Overlay[] = ["dialog", "launcher", "tour", "prompter", "writer", "shotlist"];
 
 const REASONS: Readonly<Record<Blocker, string>> = {
   loading: "Still loading…",
   prompter: "Close Present first",
   writer: "Close the writer first",
+  shotlist: "Close the shot list first",
   dialog: "Close the open dialog first",
   launcher: "Close the open dialog first",
   tour: "Finish or skip the tour first"
@@ -37,14 +39,16 @@ export function launcherShown(): boolean {
   return document.querySelector(".cmdk-backdrop:not([hidden])") !== null;
 }
 
-function launcherOpen(): boolean {
+export function launcherOpen(): boolean {
   return !launcherAsking && launcherShown();
 }
 
-function blocked(blocker: Blocker, screen: ScreenState): boolean {
-  if (blocker === "dialog") return dialogOpen();
-  if (blocker === "launcher") return launcherOpen();
-  return screen[blocker];
+export function everyOverlayBut(own: Overlay): readonly Overlay[] {
+  return EVERY_OVERLAY.filter((o) => o !== own);
+}
+
+export function inFront(blockers: readonly Blocker[], screen: ScreenState): Blocker | undefined {
+  return IN_FRONT_FIRST.find((b) => screen[b] && blockers.includes(b));
 }
 
 export function firstRefusal(screen: Availability, own: Availability): Availability {
@@ -52,7 +56,7 @@ export function firstRefusal(screen: Availability, own: Availability): Availabil
 }
 
 export function availableUnless(blockers: readonly Blocker[], screen: ScreenState, checked?: boolean): Availability {
-  const hit = blockers.find((b) => blocked(b, screen));
+  const hit = inFront(blockers, screen);
   const base: Availability = hit ? { enabled: false, reason: REASONS[hit] } : { enabled: true };
   return checked === undefined ? base : { ...base, checked };
 }

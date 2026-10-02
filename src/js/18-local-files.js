@@ -749,8 +749,12 @@ export function onFileMenuChoice(listener) {
   fileMenuChoiceListeners.push(listener);
 }
 
-export function handleFileMenuAction(action, source) {
+export function noteFileMenuChoice(action) {
   fileMenuChoiceListeners.forEach(function (listener) { listener(action); });
+}
+
+export function handleFileMenuAction(action, source) {
+  noteFileMenuChoice(action);
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
