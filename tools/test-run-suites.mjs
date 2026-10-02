@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNNER = join(REPO, "tools", "run-suites.mjs");
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
-const WRAPPER =join(REPO, ".claude", "handoff", "direction-b", "run-all-suites.mjs");
+const WRAPPER = join(REPO, ".claude", "handoff", "direction-b", "run-all-suites.mjs");
 const { classify, STATUS, EXIT, parseArgs, portPlan, ConfigError } = await import(pathToFileURL(RUNNER).href);
 
 const POSIX = process.platform !== "win32";
@@ -353,7 +353,7 @@ function unitChecks() {
   eq("a NOT-STARTED suite is NOT-STARTED even with no RESULT line", classify({ code: 1 }, "NOT STARTED: boom").status, STATUS.NOT_STARTED);
   eq("a timeout still wins over NOT STARTED", classify({ code: null, signal: "SIGKILL", timedOut: true }, "NOT STARTED: boom").status, STATUS.TIMEOUT);
   eq("a NOT STARTED text that is not at the start of a line is ignored", classify({ code: 0 }, "echo NOT STARTED: boom\nRESULT: 3/3 checks passed").status, STATUS.PASS);
-  eq("a passing summary killed by a signal is FAIL",classify({ code: null, signal: "SIGKILL" }, "RESULT: 3/3 checks passed").status, STATUS.FAIL);
+  eq("a passing summary killed by a signal is FAIL", classify({ code: null, signal: "SIGKILL" }, "RESULT: 3/3 checks passed").status, STATUS.FAIL);
   eq("output held open after exit is LEFTOVER", classify({ code: 0, heldOpen: true }, "RESULT: 3/3 checks passed").status, LEFTOVER);
   const timedOut = classify({ code: null, signal: "SIGKILL", timedOut: true, limitSec: 1 }, dup).result;
   check("a TIMEOUT after two RESULT lines says so", timedOut.includes("2 RESULT lines") && !timedOut.includes("no RESULT line"), timedOut);

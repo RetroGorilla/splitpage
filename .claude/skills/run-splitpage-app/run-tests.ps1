@@ -214,13 +214,20 @@ function Report-Lane($lane) {
   }
   if ($lines | Where-Object { $_ -cmatch '^NOT STARTED' }) { [void]$script:notStarted.Add($name) }
   $counted = $false
+  $unreadable = 'unreadable RESULT line'
   if ($result -match '^RESULT: (\d+)/(\d+)') {
-    $script:totalChecks += [int]$Matches[2]
-    $script:totalFail   += ([int]$Matches[2] - [int]$Matches[1])
-    $counted = $true
+    $ran = [int]$Matches[2]; $ok = [int]$Matches[1]
+    if ($ran -eq 0) { $unreadable = 'no checks ran' }
+    elseif ($ok -gt $ran) { $unreadable = 'more passed than ran' }
+    else {
+      $script:totalChecks += $ran
+      $script:totalFail   += ($ran - $ok)
+      $counted = $true
+      if ($ok -lt $ran) { $failed = $true }
+    }
   }
   if (-not $result) { $result = 'RESULT: (driver exited without a RESULT line) FAILED' }
-  elseif (-not $counted) { $failed = $true; $result = "$result (unreadable RESULT line, counted as one failed check)" }
+  elseif (-not $counted) { $failed = $true; $result = "$result ($unreadable, counted as one failed check)" }
   if ($failed) {
     if ($counted) { $script:suiteFail++ } else { Count-FailedSuite }
     Write-Host "    $result" -ForegroundColor Red
@@ -249,16 +256,20 @@ while ($pending.Count -gt 0 -or $active.Count -gt 0) {
 
 Clear-SplitpageEdge $RunId
 
-Write-Host ''
-$passed = $totalChecks - $totalFail
-if ($suiteFail -gt 0) {
-  Write-Host "FAILED - $passed/$totalChecks checks passed across $($files.Count) suite(s), $suiteFail suite(s) failed" -ForegroundColor Red
-  if ($notStarted.Count -gt 0) {
-    Write-Host ("{0} suite(s) never started and count as failed: {1}" -f $notStarted.Count, ($notStarted -join ', ')) -ForegroundColor Red
+function Write-Verdict([int]$SuiteCount) {
+  Write-Host ''
+  $passed = $script:totalChecks - $script:totalFail
+  if ($script:suiteFail -gt 0) {
+    Write-Host "FAILED - $passed/$($script:totalChecks) checks passed across $SuiteCount suite(s), $($script:suiteFail) suite(s) failed" -ForegroundColor Red
+    if ($script:notStarted.Count -gt 0) {
+      Write-Host ("{0} suite(s) never started and count as failed: {1}" -f $script:notStarted.Count, ($script:notStarted -join ', ')) -ForegroundColor Red
+    }
+    Write-Host "logs: $logs"
+    return 1
   }
+  Write-Host "ALL PASS - $passed/$($script:totalChecks) checks across $SuiteCount suite(s)" -ForegroundColor Green
   Write-Host "logs: $logs"
-  exit 1
+  return 0
 }
-Write-Host "ALL PASS - $passed/$totalChecks checks across $($files.Count) suite(s)" -ForegroundColor Green
-Write-Host "logs: $logs"
-exit 0
+
+exit (Write-Verdict $files.Count)
