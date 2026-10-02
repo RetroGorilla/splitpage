@@ -113,5 +113,13 @@ test("ids and names like Object.prototype members merge like any other (#278)", 
   assert.deepEqual(mergeBrollProps([], [prop("constructor", "Kettle"), prop("", "toString")], [prop("__proto__", "Lamp")]),
     [prop("__proto__", "Lamp"), prop("constructor", "Kettle"), prop("", "toString")]);
   assert.deepEqual(mergeBrollProps([prop("constructor", "Kettle")], [], [prop("constructor", "Kettle")]), []);
+  const cup = prop("t_cup", "Cup"), hat = prop("t_hat", "Hat");
+  for (const id of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+    const base = [shot(id, { props: [cup, hat] })];
+    assert.deepEqual(mergeBrollShots(base, [shot(id, { props: [cup] })], [shot(id, { notes: "theirs", props: [cup, hat] })]),
+      [shot(id, { notes: "theirs", props: [cup] })], id + ": a prop mine removed stays removed");
+    assert.deepEqual(mergeBrollShots(base, [shot(id, { notes: "mine", props: [cup, hat] })], [shot(id, { props: [hat] })]),
+      [shot(id, { notes: "mine", props: [hat] })], id + ": a prop theirs removed stays removed");
+  }
   assert.equal(Object.prototype.hasOwnProperty.call(Object.prototype, "notes"), false);
 });

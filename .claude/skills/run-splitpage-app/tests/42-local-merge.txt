@@ -250,4 +250,27 @@ expect window.fake._text(window.__deskId).indexOf('DESKTOPDISK') !== -1
 eval (function(){D.restoreBackend();return true;})()
 expect !window.splitpageDesktop
 
+# --- ids that are Object.prototype names (#278): a scene named constructor
+#     that only this side still holds, and a crew member named constructor
+#     only the file has, are both listed under their own names ------------
+eval (function(){ var doc = { schema: 2, title: 'Reserved ids', people: [{ id: 'p1', name: 'Sam' }], rows: [ { id: 'r1', visualText: '', audioText: 'one', status: 'todo' }, { id: 'constructor', visualText: '', audioText: 'two', status: 'todo' } ], comments: [] }; window.__idsBody = JSON.stringify(doc); window.__idsT0 = Date.now() - 100000; window.__idsWritten = 0; window.__idsHandle = { name: 'ids.splitpage', _mtime: window.__idsT0, _body: window.__idsBody, createWritable: async function(){ window.__idsWritten++; return { write: async function(b){ window.__idsHandle._body = b; }, close: async function(){ window.__idsHandle._mtime = Date.now(); } }; }, getFile: async function(){ return new File([window.__idsHandle._body], 'ids.splitpage', { type: 'application/json', lastModified: window.__idsHandle._mtime }); } }; return F.openFile(new File([window.__idsBody], 'ids.splitpage', { type: 'application/json', lastModified: window.__idsT0 }), window.__idsHandle); })()
+wait F.state().title === 'Reserved ids' && document.querySelectorAll('#rows .row').length === 2
+eval (function(){ var t = JSON.parse(window.__idsBody); t.rows.splice(1, 1); t.people.push({ id: 'p2', name: 'constructor' }); window.__idsHandle._body = JSON.stringify(t); window.__idsHandle._mtime = window.__idsT0 + 200000; return true; })()
+caret #rows .row[data-id="constructor"] .audio-cell .cell-editable
+type IDSMINE
+eval document.activeElement.blur()
+wait F.state().rows[1].audioText.indexOf('IDSMINE') !== -1
+eval (function(){ window.__idsBefore = window.__idsWritten; F.save(); return true; })()
+wait !document.getElementById('file-conflict-modal').hidden
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect document.getElementById('merge-review-list').textContent.indexOf('IDSMINE') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Scene 02') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Crew: constructor') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Crew: Object') === -1
+click #merge-review-cancel
+wait document.getElementById('merge-review-modal').hidden
+expect window.__idsWritten === window.__idsBefore
+
 quit
