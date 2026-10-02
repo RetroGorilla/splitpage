@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import {
   currentProductionIndex,
+  deletePerson,
   healTagRegistry,
   mintTagId,
   productionEntries,
@@ -42,6 +43,25 @@ test("registerProductionTag adds a name once per category, whatever its spelling
   registerProductionTag("prop", "KETTLE");
   registerProductionTag("location", "Kettle");
   assert.deepEqual(s.productionTags.map((t) => [t.cat, t.name]), [["prop", "Kettle"], ["location", "Kettle"]]);
+});
+
+test("deleting a person clears them as the owner of production items and b-roll shots at once (#305)", () => {
+  const s = load({
+    rows: [row("r1", "", "")],
+    people: [{ id: "p1", name: "Ada" }, { id: "p2", name: "Sam" }],
+    productionTags: [
+      { id: "t_kettle", cat: "prop", name: "Kettle", owner: "p1", notes: "", status: "needed" },
+      { id: "t_ladder", cat: "prop", name: "Ladder", owner: "p2", notes: "", status: "needed" }
+    ],
+    brollShots: [shot("b1", "steam", { owner: "p1" }), shot("b2", "pour", { owner: "p2" }), shot("b3", "cup")]
+  });
+  deletePerson("p1");
+  assert.deepEqual(s.people.map((p) => p.id), ["p2"]);
+  assert.deepEqual(s.productionTags.map((t) => t.owner), ["", "p2"]);
+  assert.deepEqual(s.brollShots.map((b) => b.owner), ["", "p2", ""]);
+  const reloaded = migrateRows(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(reloaded.brollShots.map((b) => b.owner), s.brollShots.map((b) => b.owner), "the next load changes nothing more");
+  assert.deepEqual(reloaded.productionTags.map((t) => t.owner), s.productionTags.map((t) => t.owner));
 });
 
 test("renaming a prop renames it on every shot that needs it, not only the first", () => {

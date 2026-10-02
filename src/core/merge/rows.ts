@@ -245,8 +245,8 @@ export function mergeComments(base: RowSide | null | undefined, mine: RowSide, t
     if (m && t) {
       const replies = byId(m.replies);
       (t.replies || []).forEach(function (r) { replies[r.id] = r; });
-      pick.replies = Object.keys(replies).map(function (k) { return replies[k] as MergeReply; })
-        .sort(function (x, y) { return (x.createdAt || "").localeCompare(y.createdAt || ""); });
+      pick.replies = jsonCopy(Object.keys(replies).map(function (k) { return replies[k] as MergeReply; })
+        .sort(function (x, y) { return (x.createdAt || "").localeCompare(y.createdAt || ""); }));
     }
     mergedComments.push(pick);
   });
