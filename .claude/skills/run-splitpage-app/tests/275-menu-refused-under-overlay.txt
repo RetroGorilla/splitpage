@@ -208,6 +208,10 @@ sleep 300
 expect __panels() === ''
 expect __toasts() === 'Close the open dialog first.'
 expect __shown('cmdk')
+eval __run('export-md')
+sleep 400
+expect __toasts() === 'Close the open dialog first.'
+expect __shown('cmdk')
 # ...but not for Hide shot scenes, Find or Search commands, whose shortcuts
 # act behind it
 eval __run('toggle-hide-shot')
@@ -558,6 +562,16 @@ eval __tidy()
 jsclick #tour-skip
 sleep 300
 expect !__shown('tour-overlay')
+
+# --- the setup wizard closes itself first, an export format included ---------
+eval __tidy()
+eval __run('setup')
+wait __shown('onboarding-modal')
+eval __tidy()
+eval __run('export-md')
+wait !__shown('onboarding-modal')
+sleep 400
+expect __toasts() === 'Exported untitled-script.md'
 
 # --- with everything closed again, the commands act as before ----------------
 eval __tidy()

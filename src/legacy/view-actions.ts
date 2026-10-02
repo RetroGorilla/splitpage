@@ -25,11 +25,11 @@ function panelOpen(id: string): boolean {
   return panel !== null && !panel.hidden;
 }
 
-function loadingRefusal(reason: string | null): Availability {
-  return reason !== null && screenNow().loading ? { enabled: false, reason } : { enabled: true };
+function loadingRefusal(waits: boolean): Availability {
+  return waits ? availableUnless(["loading"], screenNow()) : { enabled: true };
 }
 
-function panel(id: string, label: string, buttonId: string, panelId: string, words: string, whileLoading: string | null,
+function panel(id: string, label: string, buttonId: string, panelId: string, words: string, waitsForLoad: boolean,
   open: () => void, close: () => void): ActionDefinition {
   return {
     id,
@@ -37,7 +37,7 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
     group: "View",
     icon: "i-panel",
     words,
-    availability: () => withButton(buttonId, firstRefusal(loadingRefusal(whileLoading), availableUnless(EVERY_OVERLAY, screenNow()))),
+    availability: () => withButton(buttonId, firstRefusal(loadingRefusal(waitsForLoad), availableUnless(EVERY_OVERLAY, screenNow()))),
     run: () => {
       if (panelOpen(panelId)) close();
       else open();
@@ -48,13 +48,13 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
 export function registerViewActions(registry: ActionRegistry): () => void {
   const definitions: ActionDefinition[] = [
     panel("panel-production", "Production panel", "btn-production", "production-panel",
-      "breakdown tags props locations cast show hide toggle", "Still loading...", openProductionPanel, closeProductionPanel),
+      "breakdown tags props locations cast show hide toggle", true, openProductionPanel, closeProductionPanel),
     panel("panel-gear", "Gear panel", "btn-gear", "gear-panel",
-      "gear equipment kit camera show hide toggle", "Still loading...", openGearPanel, closeGearPanel),
+      "gear equipment kit camera show hide toggle", true, openGearPanel, closeGearPanel),
     panel("panel-broll", "B-roll panel", "btn-broll", "broll-panel",
-      "broll b roll shots cutaways show hide toggle", null, openBrollPanel, closeBrollPanel),
+      "broll b roll shots cutaways show hide toggle", false, openBrollPanel, closeBrollPanel),
     panel("panel-comments", "Comments panel", "btn-comments", "comments-panel",
-      "comments notes review feedback show hide toggle", "Still loading…", openCommentsPanel, closeCommentsPanel),
+      "comments notes review feedback show hide toggle", true, openCommentsPanel, closeCommentsPanel),
     {
       id: "write",
       label: "Write",
