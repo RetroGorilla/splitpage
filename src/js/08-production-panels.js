@@ -42,6 +42,7 @@ import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
+import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
 
@@ -167,7 +168,7 @@ function joinSceneLinks(links) {
 }
 
 function sceneLinksHtml(item) {
-  var byRow = {}, order = [];
+  var byRow = idMap(), order = [];
   item.mentions.forEach(function (m) {
     var s = byRow[m.rowId];
     if (!s) { s = byRow[m.rowId] = { m: m, n: 0, visual: false, audio: false }; order.push(s); }
@@ -444,7 +445,7 @@ function renderProductionByScene(all) {
 }
 
 function renderProductionByPerson(all) {
-  var buckets = {}, order = [];
+  var buckets = idMap(), order = [];
   function bucket(id, label) {
     if (!buckets[id]) { buckets[id] = { id: id, label: label, items: [] }; order.push(id); }
     return buckets[id];

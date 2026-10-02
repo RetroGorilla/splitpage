@@ -31,6 +31,7 @@ import {
   commentRecentOrder,
   compareCommentPositions
 } from "../core/document/comments.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 export { nowIso };
@@ -163,8 +164,8 @@ function initTaggingHelp() {
 
 export var COMMENT_NAME_KEY = "splitpage-comment-author";
 var pendingComment = null;
-var expandedReplyIds = {};
-var replyDrafts = {};
+var expandedReplyIds = idMap();
+var replyDrafts = idMap();
 S.deleteCommentArmId = null;
 export var deleteCommentArmTimer = null;
 
@@ -228,7 +229,7 @@ function commentMatchesAssigneeFilter(c, assignee) {
 }
 
 function commentAssigneeCandidates() {
-  var seen = {}, out = [];
+  var seen = idMap(), out = [];
   function add(name) {
     var clean = plainText(name || "").trim();
     if (!clean || clean === "Anonymous") return;
@@ -517,7 +518,7 @@ function unwrapAnchorInState(rowId, field, cmtId) {
 }
 
 export function syncAnchorResolvedClasses() {
-  var resolvedIds = {};
+  var resolvedIds = idMap();
   S.state.comments.forEach(function (c) { if (c.resolved) resolvedIds[c.id] = true; });
   document.querySelectorAll("#rows .cmt-anchor").forEach(function (el) {
     var id = el.getAttribute("data-cmt");

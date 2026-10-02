@@ -14,6 +14,7 @@ import {
 } from "./07-production-tags.js";
 import { applyStashedWork, htmlToPlainText } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
+import { idMap } from "../core/document/id-map.ts";
 import { safeImageSrc } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 
@@ -108,7 +109,7 @@ function mergeItemSummary(bits) {
 }
 
 function mergeListEntries(label, mineList, theirList, keyOf, nameOf, summaryOf) {
-  var mineMap = {}, theirMap = {}, order = [], seen = {};
+  var mineMap = idMap(), theirMap = idMap(), order = [], seen = idMap();
   (mineList || []).forEach(function (it) { if (it) mineMap[keyOf(it)] = it; });
   (theirList || []).forEach(function (it) { if (it) theirMap[keyOf(it)] = it; });
   (theirList || []).concat(mineList || []).forEach(function (it) {
@@ -151,7 +152,7 @@ function mergeDiffModel(base, mine, theirs) {
 
   var baseRows = byId(b && b.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
   var textCtx = textMergeContext(b, mine, theirs);
-  var order = [], seen = {}, sceneNo = {};
+  var order = [], seen = idMap(), sceneNo = idMap();
   theirs.rows.forEach(function (r) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; });
   mine.rows.forEach(function (r) { if (!seen[r.id]) { order.push(r.id); seen[r.id] = true; sceneNo[r.id] = order.length; } });
 

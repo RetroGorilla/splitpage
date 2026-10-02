@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { STATE_FIELDS } from "./02-state.js";
 import { STATE_FIELDS as FIELD_POLICIES } from "../core/document/fields.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { toHtml } from "../core/text/html.ts";
 import { normalizeCell } from "../core/text/runs.ts";
@@ -39,7 +40,7 @@ export function diffStates(before, after, opts) {
   var skip = (opts && opts.skip) || {};
   var steps = [];
   var bRows = (before && before.rows) || [], aRows = (after && after.rows) || [];
-  var aById = {}, bById = {};
+  var aById = idMap(), bById = idMap();
   aRows.forEach(function (r) { if (r && r.id) aById[r.id] = r; });
   bRows.forEach(function (r) { if (r && r.id) bById[r.id] = r; });
 
@@ -100,7 +101,7 @@ function resolveCell(live, step) {
 
 export function applyStepsLive(state, steps) {
   var order = state.rows.map(function (r) { return r.id; });
-  var byId = {};
+  var byId = idMap();
   state.rows.forEach(function (r) { byId[r.id] = r; });
   var plan = [];
   for (var n = 0; n < steps.length; n++) {
@@ -273,7 +274,7 @@ export function createUndoHistory() {
 export function changedBetween(prev, next) {
   var out = { rowFields: {}, structure: false, doc: {} };
   var p = (prev && prev.rows) || [], n = (next && next.rows) || [];
-  var pById = {};
+  var pById = idMap();
   p.forEach(function (r) { if (r) pById[r.id] = r; });
   if (p.length !== n.length || p.some(function (r, i) { return !n[i] || n[i].id !== r.id; })) out.structure = true;
   n.forEach(function (r) {

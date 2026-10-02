@@ -44,6 +44,7 @@ import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { cueShortcut } from "../core/text/cues.ts";
@@ -196,7 +197,7 @@ function rowGutterHtml(row, index, review) {
 export function paintRowTimes() {
   var rowsEl = document.getElementById("rows");
   if (!rowsEl || !S.state) return;
-  var byId = {};
+  var byId = idMap();
   for (var c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id")] = c;
   }
