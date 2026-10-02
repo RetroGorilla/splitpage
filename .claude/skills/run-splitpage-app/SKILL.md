@@ -123,6 +123,16 @@ leaves no readable `RESULT:` line is counted the same way.
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
 
+At the end of every run `tools/failure-digest.mjs` writes `digest.txt` next to
+the logs and the runner prints its path as the last line. Read `digest.txt`
+first, and open a suite's log only when the digest does not explain the failure.
+It holds the overall pass/fail line, then for each failing suite its name and
+number, each failing check with the 5 log lines before it and the exception or
+assertion text, then retries, and warnings de-duplicated with a count. A suite
+that ran 0 checks, left no `RESULT:` line or wrote no log counts as a failure.
+Each suite's section stops at about 60 lines with a pointer to its full log. A
+green run gives a few lines.
+
 ## The unit tests
 
 `npm test` — `tools/run-tests.mjs unit`, which runs `src/test/*.test.mjs`,

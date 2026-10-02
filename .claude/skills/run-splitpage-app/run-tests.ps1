@@ -272,4 +272,16 @@ function Write-Verdict([int]$SuiteCount) {
   return 0
 }
 
-exit (Write-Verdict $files.Count)
+function Write-Digest {
+  $digest = Join-Path $logs 'digest.txt'
+  Remove-Item $digest -ErrorAction SilentlyContinue
+  $module = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $here))) 'tools\failure-digest.mjs'
+  $names = ($files | ForEach-Object { $_.BaseName }) -join ','
+  try { & node $module --logs $logs --out $digest --suites $names }
+  catch { Write-Host "digest not written: $($_.Exception.Message)" -ForegroundColor Yellow }
+  if (Test-Path $digest) { Write-Host $digest }
+}
+
+$code = Write-Verdict $files.Count
+Write-Digest
+exit $code
