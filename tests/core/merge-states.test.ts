@@ -103,15 +103,21 @@ test("the merge's conflict cards and pictures are migrated in the same pass, ids
   assert.match(pic.body as string, new RegExp('data-blob="' + (pending[0] as { ref: { sha256: string } }).ref.sha256 + '"'));
 });
 
-test("today's reply aliasing: a comment both sides hold keeps their reply objects, and migrateRows writes into them", () => {
+test("a comment both sides hold gets copies of their replies, so migrateRows writes into neither input (#303)", () => {
   const ports = portsFor();
   const doc = migrated({ docId: "d" + "1".repeat(32), rows: [], comments: [{ id: "c1", body: "x", createdAt: "2026-01-01T00:00:00.000Z" }] });
   const mine = jsonCopy(doc), theirs = jsonCopy(doc);
   const mineReply: Item = { id: "rpM", body: "mine", createdAt: "2026-01-02T00:00:00.000Z" };
+  const theirReply: Item = { id: "rpT", body: "theirs", createdAt: "2026-01-03T00:00:00.000Z" };
   ((mine.comments as Item[])[0] as Item).replies = [mineReply];
-  ((theirs.comments as Item[])[0] as Item).replies = [{ id: "rpT", body: "theirs", createdAt: "2026-01-03T00:00:00.000Z" }];
+  ((theirs.comments as Item[])[0] as Item).replies = [theirReply];
+  const before = JSON.stringify([doc, mine, theirs]);
   const r = mergeStates(doc, mine, theirs, ports);
+  assert.equal(JSON.stringify([doc, mine, theirs]), before);
   const replies = ((r.merged.comments as Item[])[0] as Item).replies as Item[];
-  assert.equal(replies[0], mineReply);
-  assert.equal(mineReply.author, "Anonymous");
+  assert.notEqual(replies[0], mineReply);
+  assert.notEqual(replies[1], theirReply);
+  assert.deepEqual(replies.map((x) => [x.id, x.author]), [["rpM", "Anonymous"], ["rpT", "Anonymous"]], "migrateRows wrote into the merged copies");
+  assert.equal("author" in mineReply, false);
+  assert.equal("author" in theirReply, false);
 });
