@@ -270,22 +270,52 @@ function retitleEditedCues(
   Object.keys(now.cells).forEach(function (rowId) {
     const before = was.cells[rowId];
     if (!before) return;
-    const after = now.cells[rowId] as string[];
-    const gone = before.filter(function (name) { return after.indexOf(name) === -1; });
-    const came = after.filter(function (name) { return before.indexOf(name) === -1; });
-    for (let i = 0; i < gone.length && i < came.length; i++) {
-      const oldName = gone[i] as string, newName = came[i] as string;
+    cueEditPairs(before, now.cells[rowId] as string[]).forEach(function (pair) {
+      const oldName = pair[0], newName = pair[1];
       const oldKey = registryKey("sound", oldName), newKey = registryKey("sound", newName);
-      if (!fresh[newKey] || !orphan[oldKey]) continue;
+      if (!fresh[newKey] || !orphan[oldKey]) return;
       const at = registryIndex(work, "sound", oldName);
-      if (at === -1) continue;
+      if (at === -1) return;
       work[at] = Object.assign({}, work[at], { name: newName });
       Reflect.deleteProperty(fresh, newKey);
       Reflect.deleteProperty(orphan, oldKey);
       out.push({ at: at, from: oldName, name: newName });
-    }
+    });
   });
   return out;
+}
+
+export function cueEditPairs(before: readonly string[], after: readonly string[]): [string, string][] {
+  let gone = before.filter(function (name) { return after.indexOf(name) === -1; });
+  let came = after.filter(function (name) { return before.indexOf(name) === -1; });
+  if (gone.length === came.length) {
+    return gone.map(function (name, i): [string, string] { return [name, came[i] as string]; });
+  }
+  gone = uniqueNames(gone);
+  came = uniqueNames(came);
+  if (gone.length === 1 && came.length === 1) return [[gone[0] as string, came[0] as string]];
+  const pairs: [string, string][] = [];
+  gone.forEach(function (g) {
+    const near = came.filter(function (c) { return closeCueNames(g, c); });
+    if (near.length !== 1) return;
+    const rivals = gone.filter(function (x) { return closeCueNames(x, near[0] as string); });
+    if (rivals.length === 1) pairs.push([g, near[0] as string]);
+  });
+  return pairs;
+}
+
+function uniqueNames(list: readonly string[]): string[] {
+  return list.filter(function (name, i) { return list.indexOf(name) === i; });
+}
+
+export function closeCueNames(a: string, b: string): boolean {
+  const x = normalizeTagName(a), y = normalizeTagName(b);
+  const shorter = Math.min(x.length, y.length);
+  let p = 0;
+  while (p < shorter && x.charAt(p) === y.charAt(p)) p++;
+  let s = 0;
+  while (s < shorter - p && x.charAt(x.length - 1 - s) === y.charAt(y.length - 1 - s)) s++;
+  return shorter > 0 && (p + s) * 2 >= shorter;
 }
 
 export function planRegistryHealing(

@@ -8,6 +8,7 @@ import {
 import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../js/02c-blobs.js";
 import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
+import { personIdRemap } from "../core/merge/lists.ts";
 
 function mk() {
   return migrateRows({
@@ -76,6 +77,164 @@ test("additions still union", () => {
   const out = mergeStates(base, mine, theirs).merged;
   assert.equal(out.people.length, 3);
   assert.deepEqual(out.people.map((p) => p.name).sort(), ["Ada", "Bo", "Sam"]);
+});
+
+test("both sides add the same person: what I gave my copy keeps its owner (#283)", () => {
+  const base = mk(), mine = mk(), theirs = mk();
+  mine.people.push({ id: "pMine", name: "Ada" });
+  theirs.people.push({ id: "pTheirs", name: " ada " });
+  mine.productionTags[0].owner = "pMine";
+  mine.productionTags.push({ cat: "prop", name: "Lamp", owner: "pMine", notes: "", status: "needed" });
+  mine.brollShots[0].owner = "pMine";
+  mine.brollShots.push({ id: "b2", name: "Harbour", owner: "pMine" });
+  const out = mergeStates(base, migrateRows(mine), theirs).merged;
+  assert.deepEqual(out.people.map((p) => p.id).sort(), ["p1", "pTheirs"], "one Ada, under their id");
+  const tag = (name) => out.productionTags.find((t) => t.name === name);
+  const shot = (id) => out.brollShots.find((b) => b.id === id);
+  assert.equal(tag("Kettle").owner, "pTheirs", "an edited tag");
+  assert.equal(tag("Lamp").owner, "pTheirs", "a tag I added");
+  assert.equal(shot("b1").owner, "pTheirs", "an edited shot");
+  assert.equal(shot("b2").owner, "pTheirs", "a shot I added");
+});
+
+test("both sides add the same person: an owner they set, and other people's, are left alone (#283)", () => {
+  const base = mk(), mine = mk(), theirs = mk();
+  mine.people.push({ id: "pMine", name: "Ada" });
+  theirs.people.push({ id: "pTheirs", name: "Ada" });
+  theirs.productionTags[0].owner = "pTheirs";
+  mine.brollShots[0].owner = "p1";
+  const out = mergeStates(base, migrateRows(mine), migrateRows(theirs)).merged;
+  assert.equal(out.productionTags[0].owner, "pTheirs");
+  assert.equal(out.brollShots[0].owner, "p1");
+});
+
+test("both sides add the same person with no ancestor: my items keep their owner (#283)", () => {
+  const mine = mk(), theirs = mk();
+  mine.people.push({ id: "pMine", name: "Ada" });
+  theirs.people.push({ id: "pTheirs", name: "Ada" });
+  mine.brollShots[0].owner = "pMine";
+  const out = mergeStates(null, migrateRows(mine), migrateRows(theirs)).merged;
+  assert.equal(out.people.filter((p) => p.name === "Ada").length, 1);
+  assert.equal(out.brollShots[0].owner, "pTheirs");
+});
+
+test("I deleted a person and added them again while they kept the old one: my items follow theirs (#283)", () => {
+  const base = mk(), mine = mk(), theirs = mk();
+  mine.people = [{ id: "pNew", name: "sam" }];
+  mine.productionTags[0].owner = "pNew";
+  const out = mergeStates(base, migrateRows(mine), theirs).merged;
+  assert.deepEqual(out.people, [{ id: "p1", name: "Sam" }]);
+  assert.equal(out.productionTags[0].owner, "p1");
+});
+
+test("a person deleted on one side is not brought back by the re-pointing (#283)", () => {
+  const base = mk(), mine = mk(), theirs = mk();
+  base.brollShots[0].owner = "p1";
+  theirs.brollShots[0].owner = "p1";
+  mine.people = [];
+  mine.brollShots[0].owner = "";
+  const out = mergeStates(base, mine, theirs).merged;
+  assert.equal(out.people.length, 0);
+  assert.equal(out.brollShots[0].owner, "", "their item loses the owner I deleted, as before");
+});
+
+test("a side with no people list, or owners naming nobody, merges without re-pointing anything (#283)", () => {
+  const mine = mk(), theirs = mk();
+  delete mine.people;
+  mine.productionTags[0].owner = "pGone";
+  theirs.brollShots[0].owner = "p1";
+  const out = mergeStates(null, mine, theirs).merged;
+  assert.deepEqual(out.people, [{ id: "p1", name: "Sam" }]);
+  assert.equal(out.productionTags[0].owner, "");
+  assert.equal(out.brollShots[0].owner, "p1");
+});
+
+test("merging the merged state again changes no owner (#283)", () => {
+  const base = mk(), mine = mk(), theirs = mk();
+  mine.people.push({ id: "pMine", name: "Ada" });
+  theirs.people.push({ id: "pTheirs", name: "Ada" });
+  mine.productionTags[0].owner = "pMine";
+  const once = mergeStates(base, migrateRows(mine), migrateRows(theirs)).merged;
+  const twice = mergeStates(base, cloneState(once), migrateRows(theirs)).merged;
+  assert.equal(twice.productionTags[0].owner, "pTheirs");
+  assert.deepEqual(twice.people, once.people);
+});
+
+function seededRng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+const SEED_NAMES = ["Ada", "ada ", "Bo", "Cy", " BO", "Dee"];
+const norm = (n) => n.trim().toLowerCase();
+
+function seededMerge(r) {
+  const pick = (xs) => xs[Math.floor(r() * xs.length)];
+  const base = migrateRows({
+    title: "M",
+    rows: [{ id: "r1", visualText: "v", audioText: "a" }],
+    people: ["Ada", "Bo"].filter(() => r() < 0.5).map((n) => ({ id: "pb" + n, name: n })),
+    productionTags: [0, 1, 2].map((i) => ({ cat: "prop", name: "T" + i, owner: "", notes: "", status: "needed" })),
+    brollShots: [0, 1, 2].map((i) => ({ id: "s" + i, name: "S" + i })),
+    wordsPerMinute: 150
+  });
+  const owners = (s) => [""].concat(s.people.map((p) => p.id));
+  base.productionTags.concat(base.brollShots).forEach((e) => { e.owner = pick(owners(base)); });
+  function side(prefix) {
+    const s = cloneState(base);
+    s.people = s.people.filter(() => r() >= 0.2);
+    SEED_NAMES.forEach((n, i) => {
+      if (r() < 0.4 && !s.people.some((p) => norm(p.name) === norm(n))) s.people.push({ id: prefix + i, name: n });
+    });
+    const known = new Set(s.people.map((p) => p.id));
+    s.productionTags = s.productionTags.filter(() => r() >= 0.1);
+    s.brollShots = s.brollShots.filter(() => r() >= 0.1);
+    s.productionTags.push({ cat: "prop", name: "N" + prefix, owner: "", notes: "", status: "needed" });
+    s.brollShots.push({ id: "n" + prefix, name: "N" + prefix });
+    s.productionTags.concat(s.brollShots).forEach((e) => {
+      if (!known.has(e.owner)) e.owner = "";
+      if (r() < 0.5) e.owner = pick(owners(s));
+    });
+    return migrateRows(s);
+  }
+  return { base, mine: side("pm"), theirs: side("pt") };
+}
+
+function unifyPeople(base, mine, theirs) {
+  const theirId = {};
+  theirs.people.forEach((p) => { theirId[norm(p.name)] = p.id; });
+  const to = {};
+  mine.people.forEach((p) => {
+    const t = theirId[norm(p.name)];
+    if (t && t !== p.id) to[p.id] = t;
+  });
+  const um = cloneState(mine);
+  um.people.forEach((p) => { if (to[p.id]) p.id = to[p.id]; });
+  um.productionTags.concat(um.brollShots).forEach((e) => { if (to[e.owner]) e.owner = to[e.owner]; });
+  const targets = new Set(Object.values(to));
+  return { um, inBase: base.people.some((p) => to[p.id] || targets.has(p.id)) };
+}
+
+test("seeded merges with both sides adding people: the same as if the same name had always had their id (#283)", () => {
+  const r = seededRng(283);
+  let compared = 0, repointed = 0, readded = 0;
+  for (let i = 0; i < 600; i++) {
+    const { base, mine, theirs } = seededMerge(r);
+    const { um, inBase } = unifyPeople(base, mine, theirs);
+    const label = "case " + i + ": " + JSON.stringify({ base, mine, theirs });
+    const got = mergeStates(cloneState(base), cloneState(mine), cloneState(theirs)).merged;
+    const want = mergeStates(cloneState(base), um, cloneState(theirs)).merged;
+    const ids = new Set(got.people.map((p) => p.id));
+    for (const e of got.productionTags.concat(got.brollShots)) assert.ok(!e.owner || ids.has(e.owner), label);
+    assert.deepEqual(got.people, want.people, label);
+    if (inBase) { readded++; continue; }
+    assert.deepEqual(Object.keys(personIdRemap(theirs.people.concat(um.people), want.people)), [], label);
+    assert.deepEqual(got, want, label);
+    compared++;
+    const moved = mine.productionTags.concat(mine.brollShots).filter((e, k) => e.owner !== um.productionTags.concat(um.brollShots)[k].owner);
+    if (moved.length) repointed++;
+  }
+  assert.ok(compared > 400 && repointed > 50 && readded > 0,
+    "the generator covers what it should: " + JSON.stringify({ compared, repointed, readded }));
 });
 
 test("with no ancestor, nothing is a delete", () => {
@@ -239,18 +398,23 @@ test("replies from both sides are unioned, oldest first", () => {
   assert.deepEqual(out.replies.map((r) => r.id), ["rp1", "rp2"]);
 });
 
-test("pinned, found and not changed in 2.5: mergeStates changes the replies of its own mine and theirs, through migrateRows", () => {
+test("mergeStates leaves the replies of its own mine and theirs alone (#303)", () => {
   const base = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
   const mine = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
   const theirs = commentDoc([cmt()]);
   mine.comments[0].replies = [{ id: "rpM", body: "mine", createdAt: "2026-01-02T00:00:00.000Z" }];
   mine.comments[1].replies = [{ id: "rpX", body: "only mine", createdAt: "2026-01-02T00:00:00.000Z" }];
   theirs.comments[0].replies = [{ id: "rpT", body: "theirs", createdAt: "2026-01-03T00:00:00.000Z" }];
+  const before = JSON.stringify([base, mine, theirs]);
   const out = mergeStates(base, mine, theirs).merged.comments;
-  assert.equal(out.find((c) => c.id === "c1").replies[0], mine.comments[0].replies[0], "the merged reply is mine's own object");
-  assert.equal(mine.comments[0].replies[0].author, "Anonymous", "migrateRows wrote into mine's reply");
-  assert.equal(theirs.comments[0].replies[0].author, "Anonymous", "and into theirs'");
-  assert.equal("author" in mine.comments[1].replies[0], false, "a comment only one side holds is copied, so its reply is left alone");
+  assert.equal(JSON.stringify([base, mine, theirs]), before, "no input changed");
+  const both = out.find((c) => c.id === "c1").replies;
+  assert.notEqual(both[0], mine.comments[0].replies[0], "the merged reply is a copy of mine's");
+  assert.notEqual(both[1], theirs.comments[0].replies[0], "and of theirs'");
+  assert.deepEqual(both.map((r) => r.author), ["Anonymous", "Anonymous"], "migrateRows wrote into the copies");
+  assert.equal("author" in mine.comments[0].replies[0], false);
+  assert.equal("author" in theirs.comments[0].replies[0], false);
+  assert.equal("author" in mine.comments[1].replies[0], false, "a comment only one side holds is copied too");
 });
 
 test("a comment I deleted and they replied to comes back; one nobody touched does not", () => {

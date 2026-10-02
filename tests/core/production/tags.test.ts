@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { mintTagId } from "../../../src/core/document/tags.ts";
 import {
   bulkTagCell,
+  closeCueNames,
   collectTagsFromRows,
+  cueEditPairs,
   deriveProductionIndex,
   holdsMedia,
   missingRegistryTags,
@@ -288,7 +290,7 @@ test("a cue edited in place keeps its registry entry: the plan retitles it inste
   assert.deepEqual(planRegistryHealing(stillTagged, readers, opened.cues).retitle, [], "an old name still in the script is not retitled");
 });
 
-test("cue retitling pairs the names that went and came by position in the cell (#282, kept as found)", () => {
+test("cue retitling pairs the names that went and came by position when as many went as came (#294, kept as found)", () => {
   const before: TagState = {
     docId: "dC", rows: [cueRow("r1", ["SFX: door slam", "SFX: kettle whistle"])], productionTags: []
   };
@@ -300,6 +302,85 @@ test("cue retitling pairs the names that went and came by position in the cell (
     { at: 0, from: "door slam", name: "kettle whistles" },
     { at: 1, from: "kettle whistle", name: "door slams" }
   ]);
+});
+
+function retitlesAfter(was: string[], now: string[]): { from: string; name: string }[] {
+  const opened = planRegistryHealing({ docId: "dE", rows: [cueRow("r1", was)], productionTags: [] }, readers, null);
+  const edited: TagState = { docId: "dE", rows: [cueRow("r1", now)], productionTags: opened.register };
+  return planRegistryHealing(edited, readers, opened.cues).retitle.map((t) => ({ from: t.from, name: t.name }));
+}
+
+test("one cue deleted and another edited in the same cell: the edited cue keeps its own item (#282)", () => {
+  const two = ["SFX: door slam", "SFX: kettle whistle"];
+  assert.deepEqual(retitlesAfter(two, ["SFX: kettle whistling"]), [{ from: "kettle whistle", name: "kettle whistling" }], "the first deleted");
+  assert.deepEqual(retitlesAfter(two, ["SFX: door slams"]), [{ from: "door slam", name: "door slams" }], "the second deleted");
+  assert.deepEqual(retitlesAfter(two, ["SFX: door slams", "SFX: kettle whistles"]), [
+    { from: "door slam", name: "door slams" },
+    { from: "kettle whistle", name: "kettle whistles" }
+  ], "both edited: each by its own line");
+});
+
+test("a cue deleted beside an edit that could be either cue's: no rename, the edit becomes a new item (#282)", () => {
+  assert.deepEqual(retitlesAfter(["Music: slow", "Music: slow piano"], ["Music: slow piano intro"]), [], "like both");
+  assert.deepEqual(retitlesAfter(["SFX: door slam", "SFX: kettle whistle"], ["SFX: thunder"]), [], "like neither");
+  assert.deepEqual(retitlesAfter(["SFX: a", "SFX: b"], ["SFX: a", "SFX: b", "SFX: c"]), [], "only one added");
+  assert.deepEqual(retitlesAfter(["SFX: door slam"], ["SFX: door bang"]), [{ from: "door slam", name: "door bang" }], "one out, one in");
+});
+
+test("cueEditPairs: which old cue name each new one is taken as an edit of (#282)", () => {
+  assert.deepEqual(cueEditPairs(["a"], ["b"]), [["a", "b"]]);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["kettle whistling"]), [["kettle whistle", "kettle whistling"]]);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle"], ["thunder"]), []);
+  assert.deepEqual(cueEditPairs(["slow", "slow piano"], ["slow piano intro"]), []);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle", "theme"], ["door slams", "kettle whistles"]), [
+    ["door slam", "door slams"],
+    ["kettle whistle", "kettle whistles"]
+  ]);
+  assert.deepEqual(cueEditPairs(["x", "y"], ["p", "q"]), [["x", "p"], ["y", "q"]], "as many in as out: in order, as before");
+  assert.deepEqual(cueEditPairs(["door slam", "door slam"], ["door slams"]), [["door slam", "door slams"]]);
+  assert.equal(closeCueNames("Pianno intro", "piano intro"), true);
+  assert.equal(closeCueNames("door slam", "door bang"), true);
+  assert.equal(closeCueNames("door slam", "upbeat intro"), false);
+  assert.equal(closeCueNames("", "door"), false);
+  assert.deepEqual(cueEditPairs(["door slam", "kettle whistle", "theme"], ["door slams", "door slammed"]), [], "one old cue close to two new ones: no rename");
+  assert.equal(closeCueNames("door slam", "dog bark"), false, "a shared start and nothing else is not close");
+  assert.equal(closeCueNames("DOOR SLAM", "door slams"), true, "case does not matter");
+});
+
+test("seeded: cueEditPairs pairs exactly as the old positional pairing wherever as many names went as came (#294's guarantee)", () => {
+  const oldPairs = (before: string[], after: string[]): [string, string][] => {
+    const gone = before.filter((n) => !after.includes(n));
+    const came = after.filter((n) => !before.includes(n));
+    const out: [string, string][] = [];
+    for (let i = 0; i < gone.length && i < came.length; i++) out.push([gone[i] as string, came[i] as string]);
+    return out;
+  };
+  const NAMES = ["door slam", "door slams", "kettle whistle", "kettle whistling", "theme", "thunder", "slow", "slow piano"];
+  let s = 7;
+  const r = (): number => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  const pick = (): string => NAMES[Math.floor(r() * NAMES.length)] as string;
+  const draw = (): string[] => Array.from({ length: 1 + Math.floor(r() * 3) }, pick);
+  let compared = 0;
+  for (let i = 0; i < 2000; i++) {
+    const before = draw();
+    const after = r() < 0.5 ? before.map((n) => (r() < 0.5 ? n : pick())) : draw();
+    const got = cueEditPairs(before, after);
+    const msg = JSON.stringify([before, after]);
+    const gone = before.filter((n) => !after.includes(n));
+    const came = after.filter((n) => !before.includes(n));
+    if (gone.length === came.length) {
+      assert.deepEqual(got, oldPairs(before, after), msg);
+      compared++;
+    } else {
+      const unique = (l: string[]): boolean => new Set(l).size === l.length;
+      assert.ok(unique(got.map((p) => p[0])) && unique(got.map((p) => p[1])), msg);
+      if (new Set(gone).size > 1 || new Set(came).size > 1) {
+        for (const [g, c] of got) assert.ok(closeCueNames(g, c), msg + " paired names that are not close");
+      }
+    }
+    for (const [g, c] of got) assert.ok(gone.includes(g) && came.includes(c), msg);
+  }
+  assert.ok(compared > 300, "compared " + compared);
 });
 
 const GEAR_ROW: ProductionRow = {

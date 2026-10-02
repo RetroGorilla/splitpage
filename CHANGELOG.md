@@ -19,6 +19,27 @@ appear in the app under **Help**. The format follows
 - Pasted or imported text with a link inside another link could lose a
   link the next time it was saved, merged or pasted. The inner link now
   becomes part of the outer one as soon as the text comes in, and stays so.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
+- Commenting a b-roll key's line no longer moves the comment off the key or
+  gives the shot a new id.
+- Words marked as both a comment and a production tag or b-roll key in one
+  piece of markup, as a script or paste from elsewhere can carry them, kept
+  the tag or key but lost the comment's highlight, leaving its card "No
+  longer in script". Both are now kept.
+- A comment on a stage direction or a sound cue, in a script or paste that
+  carries both marks on the same words in one piece of markup, kept the
+  comment but lost the direction or cue mark. Both are now kept.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
+- Deleting one SFX: or Music: cue and editing another in the same cell at
+  once could hand the deleted cue's Production item, with its status and
+  notes, to the edited cue, and leave the edited cue's own item "Not in
+  script". The edited cue now keeps its own item when its new words are
+  close to its old ones and to no other cue that went. When that can't be
+  told, it gets a new item at Needed and both old items stay, "Not in
+  script", rather than the wrong one being renamed.
 
 ## 3.1.0 — 2026-09-29
 
