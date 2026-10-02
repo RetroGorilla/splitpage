@@ -25,6 +25,13 @@ appear in the app under **Help**. The format follows
   the server, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
   Recognition and each File ▸ Export format while a dialog or the command
   menu is.
+- In the desktop app, a menu-bar command that opens a dialog opened it
+  underneath the tour, or on top of a dialog that was already open. About
+  Splitpage, Settings…, Servers…, Collaborate…, Paste a script…, Import from
+  Google Doc link…, Google Drive files…, Open from the server…, Set up
+  Splitpage… and Tagging reference now stop and say what to close first while
+  the tour or a dialog is open. User guide… (F1) still opens during the
+  tour, but not over another dialog.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 - Merging two versions of a script could drop, duplicate or keep a deleted
@@ -32,6 +39,10 @@ appear in the app under **Help**. The format follows
   special word such as `constructor` or `__proto__`, and could blank a
   scene's text. Only a hand-edited or damaged file has such ids. They now
   merge like any other, and files that have them open unchanged.
+- A scene, comment or person whose id was a special word such as
+  `constructor` also tripped up undo, Hide shot scenes, comments, Find and
+  the Production panel: undoing the delete of such a scene could fail, and
+  such a shot scene never hid. They now behave like any other.
 - When a merge found that you and someone else had both added the same
   person, the production items and b-roll shots you had given that person
   came out unassigned. They now keep that person as their owner.
@@ -66,6 +77,10 @@ appear in the app under **Help**. The format follows
 - An emoji no longer breaks in two when a tag name cut inside it is tagged
   with "Tag all mentions", or when text is pasted, cut or split at a
   position inside it.
+- Pasted or imported text with a link inside another link could lose text
+  the next time it was saved, merged or pasted. The inner link now keeps its
+  own address and the outer link continues around it, as when you set a link
+  inside a link in the editor, and a video card inside a link stays a card.
 
 ## 3.1.0 — 2026-09-29
 
