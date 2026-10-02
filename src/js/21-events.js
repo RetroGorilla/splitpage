@@ -1670,9 +1670,11 @@ function init() {
 
   window.addEventListener("keydown", function (e) {
     if (!S.prompterOpen) return;
+    var target = e.target;
+    if (target && target.closest && !target.closest("#rows") && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
     var chord = e.ctrlKey || e.metaKey || e.altKey;
     if (e.key === "Escape") { closePrompter(); }
-    else if (e.key === " ") { e.preventDefault(); setPrompterPlaying(!S.prompterPlaying); }
+    else if (e.key === " ") { if (!chord) { e.preventDefault(); setPrompterPlaying(!S.prompterPlaying); } }
     else if (e.key === "ArrowUp") { stepPrompterSpeed(1); }
     else if (e.key === "ArrowDown") { stepPrompterSpeed(-1); }
     else if (!chord && (e.key === "m" || e.key === "M")) { setPrompterMirror(!prompterMirror); }

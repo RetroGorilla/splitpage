@@ -14,9 +14,10 @@ own network you can also [host a shared session](#hosting-a-shared-session).
 
 ## What's new since 3.1
 
-- In Present, Ctrl+F (and Ctrl+M, or Alt+F) flipped or mirrored the text
-  along with doing its own job. M and F now do nothing in Present while Ctrl
-  or Alt is held.
+- In Present, Ctrl+F, Ctrl+M, Alt+F and the like flipped or mirrored the
+  text, and Ctrl, Cmd or Alt with Space still played or paused it. M, F and
+  Space now do nothing in Present while Ctrl, Cmd or Alt is held, and none
+  of Present's keys act while you type in a field such as the Find box.
 - In the desktop app, some menu-bar commands ran behind an open dialog, the
   writer or Present. They now stop and say what to close first: Save and
   Save As… (Ctrl+S, Ctrl+Shift+S) while a dialog or the command menu is
