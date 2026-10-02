@@ -23,6 +23,8 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
 
 ## What's new in 3.1
 
