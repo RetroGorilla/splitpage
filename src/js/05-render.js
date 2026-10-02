@@ -51,6 +51,7 @@ import { cueShortcut } from "../core/text/cues.ts";
 import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../core/text/directions.ts";
 import {
   breakLine,
+  clamp,
   insertText,
   insideDirection,
   markThroughout,
@@ -751,10 +752,11 @@ export function typePendingMarks(cellEl, text) {
   var typed = false;
   var fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || !pendingAt(cellEl, sel.from)) return null;
-    var after = projection(cell).charAt(sel.from);
+    var from = clamp(cell, sel.from);
+    var after = projection(cell).charAt(from);
     var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
-    var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
-    var at = sel.from + cellLength(next) - cellLength(cell);
+    var next = insertText(cell, from, t, marksForTyping(cellEl, cell, from));
+    var at = from + cellLength(next) - cellLength(cell);
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
   });
@@ -855,10 +857,11 @@ export function typeAtDirectionEdge(cellEl, text) {
   var typed = false;
   var fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || insideDirection(cell, sel.from)) return null;
-    var after = projection(cell).charAt(sel.from);
+    var from = clamp(cell, sel.from);
+    var after = projection(cell).charAt(from);
     var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
-    var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
-    var at = sel.from + cellLength(next) - cellLength(cell);
+    var next = insertText(cell, from, t, marksForTyping(cellEl, cell, from));
+    var at = from + cellLength(next) - cellLength(cell);
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
   });

@@ -32,6 +32,9 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   Hide shot scenes, comment highlights and replies, and the merge review:
   undoing the delete of such a scene could fail, and such a shot scene never
   hid. They now behave like any other.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
 - Markdown export wrote `[text](null)` for a link with no address. It now
   writes the text alone.
 
