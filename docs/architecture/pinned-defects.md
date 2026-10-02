@@ -113,10 +113,6 @@ none, no golden is expected to change.
 | --- | --- | --- | --- | --- |
 | Image ingestion hashes each picture twice and may copy its bytes twice. The review's probe was slower on milestone 2, but it was not a controlled browser benchmark | #320 | Not applicable | `src/core/document/media.ts`, `src/legacy/document-ports.ts`, `src/js/02c-blobs.js` | Milestone 4, where the blob registry moves into a store adapter. Measure first, as the plan's milestone 4 criterion sets out |
 
-## Filed during the queue
-
-The issues below are now in their sections above.
-
 ## Not in this table
 
 - #302 is a test gap, not a defect: two b-roll id draws that no test pins. It stays in the post-M2 queue as a tests-only PR.
