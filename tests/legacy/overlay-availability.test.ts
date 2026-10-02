@@ -5,7 +5,8 @@ import { createActionRegistry } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { S } from "../../src/js/_state.js";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
-import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront } from "../../src/legacy/screen.ts";
+import { registerHelpActions } from "../../src/legacy/help-actions.ts";
+import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/legacy/screen.ts";
 import type { Blocker, ScreenState } from "../../src/legacy/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
@@ -45,6 +46,9 @@ test("each blocker refuses with its own reason", () => {
   assert.equal(reason("shotlist"), "Close the shot list first");
   assert.deepEqual(availableUnless(EVERY_OVERLAY, NOTHING, true), { enabled: true, checked: true });
   assert.deepEqual(everyOverlayBut("writer"), ["dialog", "launcher", "tour", "prompter", "shotlist"]);
+  assert.equal(availableUnless(OPENS_A_DIALOG, open("tour")).reason, "Finish or skip the tour first");
+  assert.equal(availableUnless(OPENS_A_DIALOG, open("tour", "dialog")).reason, "Close the open dialog first");
+  assert.equal(availableUnless(OPENS_A_DIALOG, open("writer", "prompter", "shotlist", "launcher")).enabled, true);
 });
 
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
@@ -105,6 +109,25 @@ test("a dialog over Present is named first, and the commands that only acted beh
     }
     assert.equal(refusal(registry, "toggle-rundown-min"), null);
   } finally {
+    restore();
+  }
+});
+
+const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help", "collaborate", "paste", "gdoc-import",
+  "drive-open", "server-open"];
+
+test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
+  const { registry, restore } = loadedRegistry();
+  const help = registerHelpActions(registry);
+  try {
+    for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
+    document.body.innerHTML = '<div class="modal-backdrop"></div>';
+    for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), "Close the open dialog first", id);
+    document.body.innerHTML = "";
+    Object.assign(S, { prompterOpen: true });
+    for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
+  } finally {
+    help();
     restore();
   }
 });

@@ -25,6 +25,13 @@ appear in the app under **Help**. The format follows
   the server, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
   Recognition and each File ▸ Export format while a dialog or the command
   menu is.
+- In the desktop app, a menu-bar command that opens a dialog opened it
+  underneath the tour, or on top of a dialog that was already open. About
+  Splitpage, Settings…, Servers…, Collaborate…, Paste a script…, Import from
+  Google Doc link…, Google Drive files…, Open from the server…, Set up
+  Splitpage… and Tagging reference now stop and say what to close first
+  while the tour or a dialog is open. User guide… (F1) still opens during
+  the tour, but not over another dialog.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 
