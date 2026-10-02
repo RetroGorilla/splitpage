@@ -45,7 +45,8 @@ sleep 300
 expect !document.getElementById('prompter-scroll').classList.contains('flip')
 
 # --- the bare letters, and Shift, still work -----------------------------------
-# Ctrl+F put the focus in the Find box, where the keys are typing, not shortcuts.
+# Find is refused in Present (#274), so Ctrl+F opened nothing; make sure the
+# page has the focus.
 eval (function(){ document.activeElement.blur(); return document.activeElement === document.body; })()
 key KeyF
 sleep 300
@@ -68,16 +69,21 @@ key KeyM
 sleep 300
 expect !document.getElementById('prompter-scroll').classList.contains('mirror')
 
-# --- typing in a field while Present is open: Ctrl+F, then "foo mix" ---------------
-# The f and m are typed into the Find box, not taken as the shortcuts, and the
-# space is kept rather than swallowed to play the text. (Where the Find box
-# sits while Present covers the page is a separate question.)
+# --- Ctrl+F in Present: Find is refused, so nothing opens and nothing flips ------
 key ctrl KeyF
 sleep 300
-expect document.activeElement.id == find-input
+expect document.getElementById('findbar').hidden || getComputedStyle(document.getElementById('findbar')).display === 'none'
+expect document.activeElement.id !== 'find-input'
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+# --- typing in a field while Present is open: "foo mix" ------------------------
+# The f and m are typed into the field, not taken as the shortcuts, and the
+# space is kept rather than swallowed to play the text.
+eval (function(){ var i = document.createElement('input'); i.id = 'zz-309-field'; document.body.appendChild(i); i.focus(); return document.activeElement === i; })()
 press foo mix
 sleep 300
-expect document.getElementById('find-input').value == foo mix
+expect document.getElementById('zz-309-field').value == foo mix
+eval (function(){ var i = document.getElementById('zz-309-field'); i.remove(); return true; })()
 expect !document.getElementById('prompter-scroll').classList.contains('flip')
 expect !document.getElementById('prompter-scroll').classList.contains('mirror')
 expect document.getElementById('pp-play').textContent.indexOf('Play') !== -1
