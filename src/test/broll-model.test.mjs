@@ -209,9 +209,18 @@ const BROLL_CELLS = (() => {
   return out;
 })();
 
-function seesKeyUnderComment(html) {
-  const now = brollInCell(cellOf(html)), before = oldBrollInField(html);
-  return html.includes("cmt-anchor") && JSON.stringify(now) !== JSON.stringify(before);
+function commentsAKeyOrBlank(html) {
+  return Array.prototype.some.call(inertBody(html).querySelectorAll(".cmt-anchor"),
+    (el) => !!el.querySelector(".broll-key") || !(el.textContent || "").trim());
+}
+
+function withoutComments(html) {
+  const body = inertBody(html);
+  body.querySelectorAll(".cmt-anchor").forEach((el) => {
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+  });
+  return body.innerHTML;
 }
 
 test("reading: every stored cell and every b-roll cell reads exactly as the HTML reader read it", () => {
@@ -219,12 +228,12 @@ test("reading: every stored cell and every b-roll cell reads exactly as the HTML
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = oldBrollInField(html);
     const now = brollInCell(cellOf(html));
-    if (seesKeyUnderComment(html)) {
-      assert.ok(now.length >= before.length, html);
-      if (now.length === before.length) {
-        assert.deepEqual(now.map((b) => [b.name, b.desc]), before.map((b) => [b.name, b.desc]), html);
-        now.forEach((b, k) => assert.ok(b.id === before[k].id || before[k].id === "", html));
-      }
+    if (commentsAKeyOrBlank(html)) {
+      const bare = oldBrollInField(withoutComments(html));
+      assert.equal(now.length, bare.length, html);
+      assert.deepEqual(now, bare, html);
+      const keyIds = Array.prototype.map.call(inertBody(html).querySelectorAll(".broll-key"), (el) => el.getAttribute("data-broll-id"));
+      now.forEach((b) => assert.ok(!b.id || keyIds.includes(b.id), html));
       covered++;
     } else assert.deepEqual(now, before, html);
     markers += before.length;
@@ -296,7 +305,7 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
     if (!before.some((b) => !b.id)) continue;
-    if (repeatsAnId(before) || seesKeyUnderComment(html)) continue;
+    if (repeatsAnId(before) || commentsAKeyOrBlank(html)) continue;
     const after = withRow(html, (row) => {
       const n = anchorBrollInRows([row]);
       assert.equal(n, before.filter((b) => !b.id).length, html);
@@ -407,7 +416,7 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
   let renamed = 0;
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
-    if (seesKeyUnderComment(html)) continue;
+    if (commentsAKeyOrBlank(html)) continue;
     before.forEach((b, ordinal) => {
       const id = b.id || "bsNew";
       const after = withRow(html, () => {
