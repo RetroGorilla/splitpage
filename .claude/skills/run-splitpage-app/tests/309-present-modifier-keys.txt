@@ -1,0 +1,53 @@
+# Present's letter shortcuts and modifier keys (#309). M mirrors the text and F
+# flips it, but the prompter's keydown listener looked only at the letter, so
+# Ctrl+F (Find, and the browser's own Find) flipped the text as well, and so
+# did Ctrl+M and Alt+F. The letters now do nothing with Ctrl, Meta or Alt held.
+# Shift stays allowed, as the listener has always taken an upper-case F or M.
+
+open
+
+click #btn-present
+sleep 800
+expect !document.getElementById('prompter').hidden
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+
+# --- with Ctrl or Alt held the letters leave the text alone ------------------
+key ctrl KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('pp-flip').classList.contains('is-active')
+expect localStorage.getItem('splitpage-prompter-flip') != '1'
+
+key ctrl KeyM
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect localStorage.getItem('splitpage-prompter-mirror') != '1'
+
+key alt KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+# --- the bare letters, and Shift, still work -----------------------------------
+key KeyF
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+key KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+key shift KeyF
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+key shift KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+key KeyM
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+key KeyM
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+
+quit

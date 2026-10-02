@@ -7,6 +7,9 @@ appear in the app under **Help**. The format follows
 ## Unreleased
 
 ### Fixed
+- In Present, Ctrl+F (and Ctrl+M, or Alt+F) flipped or mirrored the text
+  along with doing its own job. M and F now do nothing in Present while Ctrl
+  or Alt is held.
 - In the desktop app, some menu-bar commands ran behind an open dialog, the
   writer or Present. They now stop and say what to close first: Save and
   Save As… (Ctrl+S, Ctrl+Shift+S) while a dialog or the command menu is
