@@ -16,6 +16,11 @@ appear in the app under **Help**. The format follows
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Merging two versions of a script could drop, duplicate or keep a deleted
+  scene, comment, crew member, breakdown entry or b-roll shot whose id was a
+  special word such as `constructor` or `__proto__`, and could blank a
+  scene's text. Only a hand-edited or damaged file has such ids. They now
+  merge like any other, and files that have them open unchanged.
 - When a merge found that you and someone else had both added the same
   person, the production items and b-roll shots you had given that person
   came out unassigned. They now keep that person as their owner.
