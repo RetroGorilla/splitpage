@@ -1,6 +1,6 @@
 import { isDirRun, normalizeCell, projection } from "./runs.ts";
 import type { CellInput, Run } from "./runs.ts";
-import { clamp, deleteRange, explode, isDirChar, markThroughout, setMark } from "./edits.ts";
+import { clamp, clampRange, deleteRange, explode, isDirChar, markThroughout, setMark } from "./edits.ts";
 import type { CellEdit, CellRange, Char, TextChar } from "./edits.ts";
 
 export type DirectionToggle = { from: number; to: number; off: boolean };
@@ -24,9 +24,9 @@ export function toggleDirection(cell: CellInput, from: number, to: number): Run[
 }
 
 export function directionToggleRange(cell: CellInput, from: number, to: number): DirectionToggle {
-  from = clamp(cell, from);
-  to = clamp(cell, to);
-  if (to < from) { const x = from; from = to; to = x; }
+  const r = clampRange(cell, from, to);
+  from = r.from;
+  to = r.to;
   if (markThroughout(cell, from, to, "dir")) return { from: from, to: to, off: true };
   const p = projection(cell);
   while (from < to && /\s/.test(p.charAt(from))) from++;

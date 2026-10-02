@@ -1,4 +1,4 @@
-import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell } from "./runs.ts";
+import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell, projection } from "./runs.ts";
 import type { BrollRun, CellInput, MarkName, Marks, NormalizeOptions, Run } from "./runs.ts";
 
 export type AtomChar = { atom: BrollRun; ch?: undefined; marks?: undefined };
@@ -31,10 +31,33 @@ export function implode(chars: readonly Char[], opts?: NormalizeOptions): Run[] 
   return normalizeCell(runs, opts);
 }
 
-export function clamp(cell: CellInput, pos: number): number {
-  const n = cellLength(cell);
+function within(n: number, pos: number): number {
   pos = Math.floor(Number(pos) || 0);
   return pos < 0 ? 0 : (pos > n ? n : pos);
+}
+
+function cutsPair(text: string, pos: number): boolean {
+  const hi = text.charCodeAt(pos - 1), lo = text.charCodeAt(pos);
+  return hi >= 0xd800 && hi <= 0xdbff && lo >= 0xdc00 && lo <= 0xdfff;
+}
+
+export function clamp(cell: CellInput, pos: number): number {
+  const text = projection(cell);
+  pos = within(text.length, pos);
+  return cutsPair(text, pos) ? pos + 1 : pos;
+}
+
+export function clampRange(cell: CellInput, from: number, to: number): CellRange {
+  const text = projection(cell);
+  let a = within(text.length, from), b = within(text.length, to);
+  if (b < a) { const x = a; a = b; b = x; }
+  if (a === b) {
+    a = b = cutsPair(text, a) ? a + 1 : a;
+    return { from: a, to: b };
+  }
+  if (cutsPair(text, a)) a--;
+  if (cutsPair(text, b)) b++;
+  return { from: a, to: b };
 }
 
 export function marksAt(cell: CellInput, pos: number): Marks {
@@ -63,9 +86,10 @@ export function insideDirection(cell: CellInput, pos: number): boolean {
 
 export function sliceCell(cell: CellInput, from: number, to?: number): Run[] {
   const chars = explode(cell);
-  from = clamp(cell, from);
-  to = to === undefined ? chars.length : clamp(cell, to);
-  return implode(chars.slice(from, Math.max(from, to)));
+  const end = to === undefined ? chars.length : within(chars.length, to);
+  if (end < within(chars.length, from)) return [];
+  const r = clampRange(cell, from, end);
+  return implode(chars.slice(r.from, r.to));
 }
 
 export function insertText(cell: CellInput, pos: number, text: string, marks?: Marks): Run[] {
@@ -87,16 +111,14 @@ export function insertBrollKey(cell: CellInput, pos: number, id: string, text: s
 
 export function deleteRange(cell: CellInput, from: number, to: number): Run[] {
   const chars = explode(cell);
-  from = clamp(cell, from);
-  to = clamp(cell, to);
-  if (to < from) { const x = from; from = to; to = x; }
-  return implode(chars.slice(0, from).concat(chars.slice(to)));
+  const r = clampRange(cell, from, to);
+  return implode(chars.slice(0, r.from).concat(chars.slice(r.to)));
 }
 
 export function replaceText(cell: CellInput, from: number, to: number, text: string): Run[] {
-  from = clamp(cell, from);
-  to = clamp(cell, to);
-  if (to < from) { const x = from; from = to; to = x; }
+  const r = clampRange(cell, from, to);
+  from = r.from;
+  to = r.to;
   if (from === to) return insertText(cell, from, text);
   const chars = explode(cell);
   const first = chars[from] as Char;
@@ -105,23 +127,22 @@ export function replaceText(cell: CellInput, from: number, to: number, text: str
 }
 
 export function replaceWithTag(cell: CellInput, from: number, to: number, text: string, id: string): CellEdit {
-  const a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
-  const next = replaceText(cell, a, b, text);
-  const end = a + cleanText(text).length;
-  return { cell: setMark(next, a, end, "tag", id), end: end };
+  const r = clampRange(cell, from, to);
+  const next = replaceText(cell, r.from, r.to, text);
+  const end = r.from + cleanText(text).length;
+  return { cell: setMark(next, r.from, end, "tag", id), end: end };
 }
 
 export function replaceWithBrollKey(cell: CellInput, from: number, to: number, id: string, keyText: string): CellEdit {
-  const a = clamp(cell, Math.min(from, to)), b = clamp(cell, Math.max(from, to));
-  return { cell: insertBrollKey(deleteRange(cell, a, b), a, id, keyText, {}), end: a + 1 };
+  const r = clampRange(cell, from, to);
+  return { cell: insertBrollKey(deleteRange(cell, r.from, r.to), r.from, id, keyText, {}), end: r.from + 1 };
 }
 
 export function setMark(cell: CellInput, from: number, to: number, name: MarkName, value: unknown): Run[] {
   const chars = explode(cell);
-  from = clamp(cell, from);
-  to = clamp(cell, to);
+  const r = clampRange(cell, from, to);
   const cache = new Map<Marks, Marks>();
-  for (let i = Math.min(from, to); i < Math.max(from, to); i++) {
+  for (let i = r.from; i < r.to; i++) {
     const c = chars[i] as Char;
     const base = c.atom ? c.atom.marks : c.marks;
     if (c.atom && (name === "tag" || name === "dir" || name === "cue")) continue;
@@ -140,10 +161,9 @@ export function setMark(cell: CellInput, from: number, to: number, name: MarkNam
 
 export function markThroughout(cell: CellInput, from: number, to: number, name: MarkName): boolean {
   const chars = explode(cell);
-  from = clamp(cell, from);
-  to = clamp(cell, to);
+  const r = clampRange(cell, from, to);
   let seen = false;
-  for (let i = Math.min(from, to); i < Math.max(from, to); i++) {
+  for (let i = r.from; i < r.to; i++) {
     const c = chars[i] as Char;
     if (c.atom || c.ch === "\n") continue;
     if (!c.marks[name]) return false;
@@ -157,9 +177,9 @@ export function toggleMark(cell: CellInput, from: number, to: number, name: Mark
 }
 
 export function breakLine(cell: CellInput, from: number, to: number): { cell: Run[]; pos: number } {
-  from = clamp(cell, from);
-  to = clamp(cell, to);
-  if (to < from) { const x = from; from = to; to = x; }
+  const r = clampRange(cell, from, to);
+  from = r.from;
+  to = r.to;
   const rest = deleteRange(cell, from, to);
   const chars = explode(rest);
   const marks = typingMarks(rest, from);
@@ -177,9 +197,8 @@ export function breakLine(cell: CellInput, from: number, to: number): { cell: Ru
 
 function editComment(cell: CellInput, from: number, to: number, id: string, add: boolean): Run[] {
   const chars = explode(cell);
-  from = clamp(cell, from);
-  to = clamp(cell, to);
-  for (let i = Math.min(from, to); i < Math.max(from, to); i++) {
+  const r = clampRange(cell, from, to);
+  for (let i = r.from; i < r.to; i++) {
     const c = chars[i] as Char;
     const base = c.atom ? c.atom.marks : c.marks;
     const list = (base.cmt || []).filter(function (x) { return x !== id; });
@@ -220,6 +239,7 @@ export function retag(cell: CellInput, fromId: string, toId: string | null | und
 }
 
 export function splitCell(cell: CellInput, pos: number): [Run[], Run[]] {
+  pos = clamp(cell, pos);
   return [sliceCell(cell, 0, pos), sliceCell(cell, pos)];
 }
 
