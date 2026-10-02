@@ -103,6 +103,7 @@ export function mergeCase(rand, ids) {
           b.notes = sentence();
           if (chance(0.3)) b.status = "shot";
           if (chance(0.5)) b.props.push({ id: chance(0.5) ? pick(ids) : "", name: pick(WORDS.concat(ids)) });
+          else if (b.props.length) b.props.splice(upTo(b.props.length - 1), 1);
         }
       }
       else addShot(doc);
