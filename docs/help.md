@@ -32,6 +32,8 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   Hide shot scenes, comment highlights and replies, and the merge review:
   undoing the delete of such a scene could fail, and such a shot scene never
   hid. They now behave like any other.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
 
 ## What's new in 3.1
 
