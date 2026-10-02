@@ -9,6 +9,7 @@ export interface SanitizeContext {
   readonly doc: Document;
   readonly images: ImageSource;
   readonly ids: IdSource;
+  readonly inLink?: boolean;
 }
 
 type InlineStyle = {
@@ -31,11 +32,84 @@ const SPAN_MARK_CLASSES: readonly string[] = ["tag-anchor", "broll-key", "stage-
 
 const CUE_OUTRANKED: readonly string[] = ["tag-anchor", "broll-key", "stage-dir"];
 
-function insideSafeLink(node: Element): boolean {
-  for (let p = node.parentNode; p && p.nodeType === 1; p = p.parentNode) {
-    if ((p as Element).tagName === "A" && safeHref((p as Element).getAttribute("href") || "")) return true;
+const splitPoints = new WeakSet<Node>();
+
+function holdsSplitPoint(node: Node): boolean {
+  for (let c = node.firstChild; c; c = c.nextSibling) {
+    if (splitPoints.has(c) || holdsSplitPoint(c)) return true;
   }
   return false;
+}
+
+function nestShells(chain: readonly Element[]): Element[] {
+  const shells: Element[] = [];
+  chain.forEach(function (c, i) {
+    const shell = c.cloneNode(false) as Element;
+    if (i > 0) (shells[i - 1] as Element).appendChild(shell);
+    shells.push(shell);
+  });
+  return shells;
+}
+
+function isLinkPiece(node: Element): boolean {
+  return node.tagName === "A" && !hasClass(node, "video-embed-card");
+}
+
+function splitLinkAround(link: Element): Node[] {
+  if (!holdsSplitPoint(link)) return [link];
+  const result: Node[] = [];
+  let piece: Element | null = null;
+  let openSrc: Element[] = [];
+  let openClone: Element[] = [];
+
+  function append(chain: readonly Element[], leaf: Node): void {
+    const target: Element = piece || (link.cloneNode(false) as Element);
+    if (!piece) { piece = target; openSrc = []; openClone = []; }
+    let n = 0;
+    while (n < openSrc.length && n < chain.length && openSrc[n] === chain[n]) n++;
+    openSrc.length = n;
+    openClone.length = n;
+    for (let i = n; i < chain.length; i++) {
+      const shell = (chain[i] as Element).cloneNode(false) as Element;
+      (openClone[i - 1] || target).appendChild(shell);
+      openSrc.push(chain[i] as Element);
+      openClone.push(shell);
+    }
+    (openClone[openClone.length - 1] || target).appendChild(leaf);
+  }
+
+  function closePiece(): void {
+    if (piece) result.push(piece);
+    piece = null;
+  }
+
+  function emit(point: Element, chain: readonly Element[]): void {
+    closePiece();
+    if (!chain.length) { result.push(point); return; }
+    const shells = nestShells(chain);
+    const innermost = shells[shells.length - 1] as Element;
+    if (isLinkPiece(point)) {
+      while (point.firstChild) innermost.appendChild(point.firstChild);
+      point.appendChild(shells[0] as Element);
+      result.push(point);
+    } else {
+      innermost.appendChild(point);
+      result.push(shells[0] as Element);
+    }
+  }
+
+  function visit(parent: Node, chain: readonly Element[]): void {
+    Array.from(parent.childNodes).forEach(function (child) {
+      if (splitPoints.has(child)) { emit(child as Element, chain); return; }
+      if (child.nodeType === 1 && holdsSplitPoint(child)) { visit(child, chain.concat(child as Element)); return; }
+      if (child.nodeType === 3 && !(child as Text).data) return;
+      append(chain, child);
+    });
+  }
+
+  visit(link, []);
+  closePiece();
+  return result;
 }
 
 function imageDimAttr(v: string | null): number {
@@ -132,10 +206,13 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
       if (ref) destParent.appendChild(storedImageElement(doc, ref));
       return;
     }
-    if (tag === "A" && insideSafeLink(el)) { walkSanitize(el, destParent, ctx); return; }
     if (tag === "A" && hasClass(el, "video-embed-card")) {
       const vhref = safeHref(el.getAttribute("href") || "");
-      if (vhref) destParent.appendChild(videoCardElement(doc, vhref));
+      if (vhref) {
+        const card = videoCardElement(doc, vhref);
+        if (ctx.inLink) splitPoints.add(card);
+        destParent.appendChild(card);
+      }
       return;
     }
     if (tag === "SPAN" && hasClass(el, "cmt-anchor") && SPAN_MARK_CLASSES.some(function (c) { return hasClass(el, c); })) {
@@ -212,8 +289,11 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
         a.setAttribute("href", href);
         a.setAttribute("target", "_blank");
         a.setAttribute("rel", "noopener");
-        walkSanitize(el, a, ctx);
-        destParent.appendChild(a);
+        walkSanitize(el, a, { ...ctx, inLink: true });
+        splitLinkAround(a).forEach(function (piece) {
+          if (ctx.inLink) splitPoints.add(piece);
+          destParent.appendChild(piece);
+        });
       } else {
         walkSanitize(el, destParent, ctx);
       }
