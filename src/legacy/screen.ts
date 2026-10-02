@@ -10,6 +10,8 @@ const IN_FRONT_FIRST: readonly Blocker[] = ["loading", "dialog", "launcher", "to
 
 export const EVERY_OVERLAY: readonly Overlay[] = ["dialog", "launcher", "tour", "prompter", "writer", "shotlist"];
 
+export const OPENS_A_DIALOG: readonly Overlay[] = ["dialog", "tour"];
+
 const REASONS: Readonly<Record<Blocker, string>> = {
   loading: "Still loading…",
   prompter: "Close Present first",
