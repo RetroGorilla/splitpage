@@ -27,7 +27,7 @@ export interface RichText {
   imageRefOf(node: Element): StoredImageRef | null;
 }
 
-const STORED_IMG_ATTRS: Record<string, boolean> = { "class": true, "data-blob": true, "data-w": true, "data-h": true, "data-mime": true };
+const STORED_IMG_ATTRS: ReadonlySet<string> = new Set(["class", "data-blob", "data-w", "data-h", "data-mime"]);
 
 export function createRichText(ports: RichTextPorts): RichText {
   const Parser = ports.DOMParser;
@@ -59,7 +59,7 @@ export function createRichText(ports: RichTextPorts): RichText {
     if (!imgs.length) return html;
     imgs.forEach(function (img) {
       Array.from(img.attributes).forEach(function (a) {
-        if (!STORED_IMG_ATTRS[a.name]) img.removeAttribute(a.name);
+        if (!STORED_IMG_ATTRS.has(a.name)) img.removeAttribute(a.name);
       });
     });
     return body.innerHTML;
