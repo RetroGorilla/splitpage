@@ -4,13 +4,15 @@ import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   cellLength,
   cellOf,
+  clamp,
+  clampRange,
   commentIds,
   deleteRange,
   flattenCues,
   flattenDirections,
   fromHtml,
+  insertCell,
   insertText,
-  joinCells,
   normalizeCell,
   projection,
   sliceCell,
@@ -260,7 +262,8 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
   cutNonce = nonce;
   editCell(cellEl, function (cell, s) {
     if (!s || s.from === s.to) return null;
-    return { cell: deleteRange(cell, s.from, s.to), sel: { from: s.from, to: s.from } };
+    var r = clampRange(cell, s.from, s.to);
+    return { cell: deleteRange(cell, r.from, r.to), sel: { from: r.from, to: r.from } };
   });
   return true;
 }
@@ -292,15 +295,14 @@ export function pasteIntoCell(cellEl, html, text, extra) {
     return result;
   }
   var fresh = editCell(cellEl, function (cell, sel) {
-    var from = sel ? sel.from : cellLength(cell);
-    var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
+    var r = sel ? clampRange(cell, sel.from, sel.to) : { from: cellLength(cell), to: cellLength(cell) };
+    var rest = deleteRange(cell, r.from, r.to);
     var piece = got.text !== null ? got.cell
       : freshBrollIds(got.cell, brollIdsTaken(S.state, rowId, field, rest, got.fromCut)).cell;
     if (field === "visualText") piece = flattenDirections(piece);
     if (field === "visualText") piece = flattenCues(piece);
-    var next = got.text !== null
-      ? insertText(rest, from, got.text)
-      : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));
+    var from = clamp(rest, r.from);
+    var next = got.text !== null ? insertText(rest, from, got.text) : insertCell(rest, from, piece).cell;
     if (field === "visualText") recordPastedBroll(rowId, next, brollKeyIds(piece));
     var at = from + cellLength(next) - cellLength(rest);
     var also = null;
