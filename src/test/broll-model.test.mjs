@@ -209,16 +209,30 @@ const BROLL_CELLS = (() => {
   return out;
 })();
 
+function seesKeyUnderComment(html) {
+  const now = brollInCell(cellOf(html)), before = oldBrollInField(html);
+  return html.includes("cmt-anchor") && JSON.stringify(now) !== JSON.stringify(before);
+}
+
 test("reading: every stored cell and every b-roll cell reads exactly as the HTML reader read it", () => {
-  let markers = 0, keyed = 0, plain = 0;
+  let markers = 0, keyed = 0, plain = 0, covered = 0;
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = oldBrollInField(html);
-    assert.deepEqual(brollInCell(cellOf(html)), before, html);
+    const now = brollInCell(cellOf(html));
+    if (seesKeyUnderComment(html)) {
+      assert.ok(now.length >= before.length, html);
+      if (now.length === before.length) {
+        assert.deepEqual(now.map((b) => [b.name, b.desc]), before.map((b) => [b.name, b.desc]), html);
+        now.forEach((b, k) => assert.ok(b.id === before[k].id || before[k].id === "", html));
+      }
+      covered++;
+    } else assert.deepEqual(now, before, html);
     markers += before.length;
     before.forEach((b) => { if (b.id) keyed++; else plain++; });
   }
   assert.ok(keyed > 500 && plain > 500, "the cells exercise both kinds of marker: " + keyed + " keyed, " + plain + " plain");
   assert.ok(markers > 1000);
+  assert.ok(covered > 10, "keys under a comment: " + covered);
 });
 
 test("reading: where the model reads differently, by design", () => {
@@ -233,6 +247,34 @@ test("reading: where the model reads differently, by design", () => {
   const inTag = sanitizeHtml(tagSpan("prop", "It", KEY("b1") + " gulls"));
   assert.deepEqual(oldBrollInField(inTag), [{ id: "", name: "gulls", desc: "" }]);
   assert.deepEqual(read(inTag), [{ id: "b1", name: "gulls", desc: "" }]);
+  const commented = '<span class="cmt-anchor" data-cmt="c1">' + KEY("b1") + " gulls</span>";
+  assert.deepEqual(oldBrollInField(sanitizeHtml(commented)), [{ id: "", name: "gulls", desc: "" }]);
+  assert.deepEqual(read(commented), [{ id: "b1", name: "gulls", desc: "" }]);
+});
+
+test("anchoring: a key a comment covers keeps its id and its comment, and a repeated one keeps the comment", () => {
+  const commented = sanitizeHtml('<span class="cmt-anchor" data-cmt="c1">' + KEY("bsA") + " the gulls</span>");
+  S.state = {
+    rows: [
+      { id: "r0", visualText: commented, audioText: "" },
+      { id: "r1", visualText: "B-roll: drone", audioText: "" }
+    ],
+    brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
+    productionTags: []
+  };
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(S.state.rows[0].visualText, commented);
+  assert.match(S.state.rows[1].visualText, /^<span class="broll-key"/);
+
+  S.state.rows.push({ id: "r2", visualText: commented, audioText: "" });
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(S.state.rows[0].visualText, commented);
+  const after = S.state.rows[2].visualText;
+  assert.match(after, /data-cmt="c1"/);
+  const read = brollInCell(cellOf(after));
+  assert.deepEqual(read.map((b) => b.name), ["the gulls"]);
+  assert.ok(read[0].id && read[0].id !== "bsA");
+  assert.deepEqual(cellOf(after)[0].marks, { cmt: ["c1"] });
 });
 
 function bareBreaks(cell) {
@@ -254,7 +296,7 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
     if (!before.some((b) => !b.id)) continue;
-    if (repeatsAnId(before)) continue;
+    if (repeatsAnId(before) || seesKeyUnderComment(html)) continue;
     const after = withRow(html, (row) => {
       const n = anchorBrollInRows([row]);
       assert.equal(n, before.filter((b) => !b.id).length, html);
@@ -365,6 +407,7 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
   let renamed = 0;
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
+    if (seesKeyUnderComment(html)) continue;
     before.forEach((b, ordinal) => {
       const id = b.id || "bsNew";
       const after = withRow(html, () => {

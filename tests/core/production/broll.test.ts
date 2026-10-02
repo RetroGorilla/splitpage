@@ -54,8 +54,17 @@ test("brollInCell reads a key or a typed marker at a line's start, and the lines
     [{ id: "", name: "n".repeat(200), desc: "d".repeat(2000) }]);
 });
 
-test("a key carrying a comment reads as a typed marker, with no id", () => {
-  assert.deepEqual(read([B("b1", "B-roll:", { cmt: ["c1"] }), T(" gulls")]), [{ id: "", name: "gulls", desc: "" }]);
+test("a key carrying a comment still reads as a key, with its id", () => {
+  assert.deepEqual(read([B("b1", "B-roll:", { cmt: ["c1"] }), T(" gulls")]), [{ id: "b1", name: "gulls", desc: "" }]);
+  assert.deepEqual(read([T("  ", { cmt: ["c1"] }), B("b1", "B-roll:", { cmt: ["c1", "c2"] }), T(" gulls\ndesc", { cmt: ["c1"] })]),
+    [{ id: "b1", name: "gulls", desc: "desc" }]);});
+
+test("a commented key opens an item for the props tagged on its lines, and is collected with its id", () => {
+  const html = cells.html([B("b1", "B-roll:", { cmt: ["c1"] }), T(" the "), tag("prop", "Red mug", "red mug")]);
+  assert.deepEqual(brollPropsInCell(cells.decode(html)), [["Red mug"]]);
+  assert.deepEqual(collectBrollFromRows([{ id: "r0", visualText: html, audioText: EMPTY }], readers), [
+    { id: "b1", name: "the red mug", desc: "", rowId: "r0", rowIndex: 0, ordinal: 0, autoProps: ["Red mug"] }
+  ]);
 });
 
 test("brollPropsInCell lists the props tagged on each item's own lines, once each, lined up with brollInCell", () => {
@@ -220,27 +229,43 @@ test("INV-54: anchoring gives a key repeating an earlier line's id an id of its 
   });
 });
 
-test("anchoring turns a typed marker into a key and a space, and a commented key into a fresh key", () => {
+test("anchoring turns a typed marker into a key and a space, and leaves a commented key and its comment alone", () => {
   const typed = cells.html([T("B-roll: the gulls\nlow\nb roll - drone")]);
-  const commented = cells.html([B("b1", "B-roll:", { cmt: ["c1"] }), T(" gulls")]);
+  const commented = cells.html([B("b1", "B-roll:", { cmt: ["c1"] }), T(" gulls", { cmt: ["c1"] })]);
   const state: BrollState = {
     rows: [{ id: "r0", visualText: typed, audioText: EMPTY }, { id: "r1", visualText: commented, audioText: EMPTY }],
     brollShots: [],
     productionTags: []
   };
   const plan = planBrollAnchors(state, readers, countingIds());
-  assert.deepEqual(Object.values(plan), ["bsmint0001", "bsmint0002", "bsmint0003"]);
+  assert.deepEqual(Object.values(plan), ["bsmint0001", "bsmint0002"]);
   const typedCell = cells.decode(typed);
   assert.deepEqual(anchorBrollCell(typedCell, brollAnchorTodo(typedCell, "r0", plan)), {
     cell: normalizeCell([B("bsmint0001"), T(" the gulls\nlow\n"), B("bsmint0002", "b roll-"), T(" drone")]),
     anchored: 2
   });
   const commentedCell = cells.decode(commented);
-  assert.deepEqual(anchorBrollCell(commentedCell, brollAnchorTodo(commentedCell, "r1", plan)), {
-    cell: normalizeCell([B("bsmint0003"), T(" gulls")]),
+  const todo = brollAnchorTodo(commentedCell, "r1", plan);
+  assert.deepEqual(todo, []);
+  assert.deepEqual(anchorBrollCell(commentedCell, todo), { cell: commentedCell, anchored: 0 });
+  assert.deepEqual(brollMarkerLines(typedCell).map((m) => m.index), [0, 2]);
+});
+
+test("anchoring a commented key that repeats an earlier id gives it a fresh id and keeps its comment", () => {
+  const first = cells.html([B("bsA"), T(" the gulls")]);
+  const repeat = cells.html([T("intro\n"), B("bsA", "B-roll:", { cmt: ["c1"] }), T(" the gulls", { cmt: ["c1"] })]);
+  const state: BrollState = {
+    rows: [{ id: "r0", visualText: first, audioText: EMPTY }, { id: "r1", visualText: repeat, audioText: EMPTY }],
+    brollShots: [shot("bsA", "the gulls", { status: "shot" })],
+    productionTags: []
+  };
+  const plan = planBrollAnchors(state, readers, countingIds());
+  assert.deepEqual(Object.entries(plan), [[brollLineKey("r1", 0), "bsmint0001"]]);
+  const cell = cells.decode(repeat);
+  assert.deepEqual(anchorBrollCell(cell, brollAnchorTodo(cell, "r1", plan)), {
+    cell: normalizeCell([T("intro\n"), B("bsmint0001", "B-roll:", { cmt: ["c1"] }), T(" the gulls", { cmt: ["c1"] })]),
     anchored: 1
   });
-  assert.deepEqual(brollMarkerLines(typedCell).map((m) => m.index), [0, 2]);
 });
 
 test("INV-56: a shot shows props tagged on its lines and hand-added ones by registry id; a created shot stores none", () => {
