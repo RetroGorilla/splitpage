@@ -178,9 +178,9 @@ const scopeCases = [
     "export const r = [f, K, fetch, Worker];"
   ], ["Worker:3", "fetch:3"]],
   ["an ambient declare is not a local binding", "src/core/document/x.ts", [
-    "declare const window: { name: string };",
-    "export const n = window.name;"
-  ], ["window:2"]],
+    "export const n = () => window.name;",
+    "declare const window: { name: string };"
+  ], ["window:1"]],
   ["an imported name is local to the whole module", "src/core/document/x.ts", [
     'import { fetch } from "./http.ts";',
     'export const g = () => fetch("/x");'
@@ -254,6 +254,96 @@ const clockCases = [
 ];
 
 for (const [name, lines, expected] of clockCases) eq(name, freeGlobals("src/core/document/x.ts", lines), expected);
+
+console.log("\nDOM globals:\n");
+
+const DOM_GLOBALS = [
+  "DOMParser", "XMLSerializer", "Node", "Element", "HTMLElement", "Text", "DocumentFragment",
+  "Range", "Selection", "getSelection", "getComputedStyle",
+  "MutationObserver", "ResizeObserver", "IntersectionObserver",
+  "Event", "CustomEvent", "EventTarget", "KeyboardEvent", "MouseEvent",
+  "CSS", "matchMedia", "alert", "confirm", "prompt", "open",
+  "Option", "Audio", "HTMLCanvasElement", "OffscreenCanvas", "createImageBitmap", "structuredClone",
+  "atob", "btoa", "postMessage", "addEventListener", "removeEventListener", "dispatchEvent"
+];
+
+for (const name of DOM_GLOBALS) {
+  eq(`a bare ${name} reference in core is a platform global`, freeGlobals("src/core/document/x.ts", [`export const r = [${name}];`]), [`${name}:1`]);
+}
+
+const domCases = [
+  ["the reviewer's probe: an ambient DOMParser and its use", [
+    "declare const DOMParser: new () => { parseFromString(s: string, m: string): unknown };",
+    'export function reviewPlatformProbe(s: string): unknown { return new DOMParser().parseFromString(s, "text/html"); }'
+  ], ["DOMParser:1"]],
+  ["a use of XMLSerializer is reported", [
+    "export const s = (n: unknown) => new XMLSerializer().serializeToString(n);"
+  ], ["XMLSerializer:1"]],
+  ["an ambient XMLSerializer and its use are reported", [
+    "declare var XMLSerializer: new () => { serializeToString(n: unknown): string };",
+    "export const s = (n: unknown) => new XMLSerializer().serializeToString(n);"
+  ], ["XMLSerializer:1"]],
+  ["an ambient declare is reported although nothing uses it", [
+    "declare const DOMParser: new () => unknown;",
+    "export const x = 1;"
+  ], ["DOMParser:1"]],
+  ["an ambient declare var is reported", ["declare var Node: unknown;"], ["Node:1"]],
+  ["an ambient declare function is reported", ["declare function atob(s: string): string;"], ["atob:1"]],
+  ["an ambient declare class is reported", ["declare class MutationObserver { observe(n: unknown): void }"], ["MutationObserver:1"]],
+  ["an exported ambient declare is reported", ["export declare const structuredClone: <T>(v: T) => T;"], ["structuredClone:1"]],
+  ["an ambient declare inside declare global is reported", [
+    "export {};",
+    "declare global {",
+    "  var getSelection: () => unknown;",
+    "}"
+  ], ["getSelection:3"]],
+  ["an ambient declare of an existing platform global is still reported", ["declare const window: { name: string };"], ["window:1"]],
+  ["an ambient declare of the clock is reported", ["declare const Date: { now(): number };", "declare const Math: { random(): number };"], ["Date:1", "Math.random:2"]],
+  ["an ambient declare of an unrelated name is not reported", ["declare const __BUILD__: string;", "declare function helper(): void;", "export const b = __BUILD__;"], []],
+  ["an ambient type or interface is not a value declaration", ["declare interface Text { data: string }", "declare type Range = [number, number];"], []],
+  ["a local type named Text or Range is not the global", [
+    "type Text = { runs: string[] };",
+    "interface Range { from: number; to: number }",
+    "export const t = (x: Text, r: Range): number => x.runs.length + r.to - r.from;"
+  ], []],
+  ["a local class named Event or Node is not the global", [
+    "class Event { at = 0; }",
+    "class Node { next: Node | null = null; }",
+    "export const e = [new Event(), new Node()];"
+  ], []],
+  ["an imported Selection, Range or Option is not the global", [
+    'import type { Selection, Range } from "./model.ts";',
+    'import { Option } from "./option.ts";',
+    "export const o = (s: Selection, r: Range) => Option.some([s, r]);"
+  ], []],
+  ["a parameter or local named open, prompt or confirm is not the global", [
+    "export function f(open: boolean, prompt: string) { const confirm = open ? prompt : ''; return confirm; }"
+  ], []],
+  ["a property, method or key named open, alert or postMessage is not a reference", [
+    "const o = { open: 1, alert() { return 2; }, postMessage: 3 };",
+    "export const r = [o.open, o.alert(), o.postMessage];"
+  ], []],
+  ["a type reference to a free DOM type is reported", ["export type N = Node;", "export const f = (e: Event, t: Text): void => { void [e, t]; };"], ["Event:2", "Node:1", "Text:2"]],
+  ["a DOM global through globalThis is globalThis", ["export const p = new globalThis.DOMParser();"], ["globalThis:1"]]
+];
+
+for (const [name, lines, expected] of domCases) eq(name, freeGlobals("src/core/document/x.ts", lines), expected);
+
+{
+  const rules = findViolations(graph({
+    "src/core/document/text-policy.ts": [
+      "declare const DOMParser: new () => { parseFromString(s: string, m: string): unknown };",
+      'export function reviewPlatformProbe(s: string): unknown { return new DOMParser().parseFromString(s, "text/html"); }'
+    ].join("\n"),
+    "src/core/text/s.ts": "export const s = (n: unknown) => new XMLSerializer().serializeToString(n);\n",
+    "src/core/text/ok.ts": "type Text = { runs: string[] };\nexport const n = (t: Text) => t.runs.length;\n",
+    "src/adapters/dom/p.ts": "export const p = new DOMParser();\n"
+  })).filter((v) => v.rule === "platform-global").map((v) => `${v.source} ${v.target}`);
+  eq("core files using DOM constructors are platform-global violations; an adapter may use them", rules, [
+    "src/core/document/text-policy.ts global:DOMParser",
+    "src/core/text/s.ts global:XMLSerializer"
+  ]);
+}
 
 {
   const rules = findViolations(graph({

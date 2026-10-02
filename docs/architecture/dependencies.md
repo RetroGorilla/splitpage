@@ -53,7 +53,18 @@ Core, `contracts`, `application`, `shared` and feature layers may not import a
 Node built-in or a package (`platform-import`). Core, `contracts`,
 `application` and `shared` may not use browser, Node, timer or network globals
 (`platform-global`); CommonJS `require`, `module` and `exports` are allowed in
-CommonJS files.
+CommonJS files. The banned set includes the DOM: `DOMParser`, `XMLSerializer`,
+the node and element classes (`Node`, `Element`, `HTMLElement`, `Text`,
+`DocumentFragment`, `HTMLCanvasElement`, `OffscreenCanvas`, `Option`, `Audio`),
+selection and style (`Range`, `Selection`, `getSelection`, `getComputedStyle`,
+`CSS`, `matchMedia`), observers (`MutationObserver`, `ResizeObserver`,
+`IntersectionObserver`), events (`Event`, `CustomEvent`, `EventTarget`,
+`KeyboardEvent`, `MouseEvent`, `addEventListener`, `removeEventListener`,
+`dispatchEvent`, `postMessage`), dialogs and windows (`alert`, `confirm`,
+`prompt`, `open`) and the browser-only helpers `atob`, `btoa`,
+`createImageBitmap` and `structuredClone`, beside `window`, `document`,
+`TextEncoder`, `TextDecoder` and the timers. A type reference to a DOM global
+that no local type, class or import supplies is reported too.
 
 Those layers may not read the clock or draw random numbers either; time and
 randomness reach them through ports (`Clock`, `IdSource`). Both are reported
@@ -81,8 +92,13 @@ in one function does not hide a global `fetch` in the next, and a local
 declared later in the module still covers an earlier function. Property names,
 method names and labels are not references; a shorthand property
 (`{ performance }`) is. An ambient `declare const window` describes the global
-and is not a local binding. A call to `require` is a load only where `require`
-is not a binding in scope.
+and is not a local binding, so it does not hide a use of the global. The
+declaration is itself reported: a `declare const`, `declare var`,
+`declare function`, `declare class` or `declare enum` (also inside `declare
+global { … }`) naming a banned global, `Date` or `Math` is a `platform-global`
+finding even when nothing uses it, because core must not claim a platform
+global exists. Ambient types and interfaces are not values and pass. A call to
+`require` is a load only where `require` is not a binding in scope.
 
 Types and values are separate names. A type parameter, type alias, interface
 or `import type` does not hide a global value (`function f<URL>() { return new
