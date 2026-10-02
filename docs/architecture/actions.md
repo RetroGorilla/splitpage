@@ -324,7 +324,10 @@ of a greyed-out item is still named, as it is checked first. The export
 formats are not actions yet (milestone 5) and keep the File menu item's own
 dispatch, but the runner refuses one under a dialog or the command menu
 first, through the presenter the bootstrap gives it, so a refused format is
-neither run nor remembered for Export again.
+neither run nor remembered for Export again. Before that check it runs the
+`onFileMenuChoice()` listeners (`noteFileMenuChoice()`, `18-local-files.js`),
+as choosing any File menu item does, so a format chosen over the setup
+wizard closes the wizard and exports (`275-menu-refused-under-overlay.txt`).
 
 `280-other-surfaces.txt` checks the Settings buttons, the wizard's links and
 these native menu rules, against the code before the registry
