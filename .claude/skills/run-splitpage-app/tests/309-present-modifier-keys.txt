@@ -1,0 +1,107 @@
+# Present's letter shortcuts and modifier keys (#309). M mirrors the text and F
+# flips it, but the prompter's keydown listener looked only at the letter, so
+# Ctrl+F (Find, and the browser's own Find) flipped the text as well, and so
+# did Ctrl+M and Alt+F. The letters now do nothing with Ctrl, Meta or Alt held.
+# Shift stays allowed, as the listener has always taken an upper-case F or M.
+# Space is guarded the same way (the arrow keys keep acting with a modifier, but
+# every key the prompter handles bare now calls preventDefault so it cannot also
+# be typed into a script cell left focused behind Present), and
+# none of Present's keys act on a key typed into an input, so Ctrl+F then
+# typing in the Find box leaves the text alone and keeps the space. The driver
+# never sends Meta or an upper-case letter with a modifier, so the matrix
+# dispatches KeyboardEvents itself. Every `eval` is one physical line.
+
+open
+
+click #btn-present
+sleep 800
+expect !document.getElementById('prompter').hidden
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+
+# --- every key against all 16 Ctrl/Meta/Alt/Shift combinations --------------------
+# M, F and Space act on the prompter only when Ctrl, Meta and Alt are all up
+# (Shift either way), and Space calls preventDefault only when it acts.
+eval (function(){ var bad = []; var sc = document.getElementById('prompter-scroll'); var pl = document.getElementById('pp-play'); var btns = ['pp-mirror', 'pp-flip', 'pp-play']; var st = function () { return [sc.classList.contains('mirror'), sc.classList.contains('flip'), pl.textContent.indexOf('Pause') !== -1]; }; var keys = [['m', 0], ['M', 0], ['f', 1], ['F', 1], [' ', 2]]; keys.forEach(function (k) { for (var c = 0; c < 16; c++) { var init = { key: k[0], ctrlKey: !!(c & 1), metaKey: !!(c & 2), altKey: !!(c & 4), shiftKey: !!(c & 8), bubbles: true, cancelable: true }; var acts = !(init.ctrlKey || init.metaKey || init.altKey); var before = st(); var ev = new KeyboardEvent('keydown', init); document.body.dispatchEvent(ev); var after = st(); var changed = []; for (var i = 0; i < 3; i++) { if (before[i] !== after[i]) { changed.push(i); document.getElementById(btns[i]).click(); } } var want = acts ? String([k[1]]) : ''; var label = JSON.stringify(k[0]) + ' c' + c; if (String(changed) !== want) bad.push(label + ' changed [' + changed + ']'); if (k[0] === ' ' && ev.defaultPrevented !== acts) bad.push(label + ' defaultPrevented ' + ev.defaultPrevented); } }); window.__bad = bad.length ? bad.join('; ') : 'ok'; return true; })()
+expect window.__bad == ok
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('pp-play').textContent.indexOf('Play') !== -1
+
+# --- with Ctrl or Alt held the letters leave the text alone ------------------
+key ctrl KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('pp-flip').classList.contains('is-active')
+expect localStorage.getItem('splitpage-prompter-flip') != '1'
+
+key ctrl KeyM
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect localStorage.getItem('splitpage-prompter-mirror') != '1'
+
+key alt KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+# --- the bare letters, and Shift, still work -----------------------------------
+# Ctrl+F put the focus in the Find box, where the keys are typing, not shortcuts.
+eval (function(){ document.activeElement.blur(); return document.activeElement === document.body; })()
+key KeyF
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+key KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+key shift KeyF
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+key shift KeyF
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+
+key KeyM
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+key KeyM
+sleep 300
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+
+# --- typing in a field while Present is open: Ctrl+F, then "foo mix" ---------------
+# The f and m are typed into the Find box, not taken as the shortcuts, and the
+# space is kept rather than swallowed to play the text. (Where the Find box
+# sits while Present covers the page is a separate question.)
+key ctrl KeyF
+sleep 300
+expect document.activeElement.id == find-input
+press foo mix
+sleep 300
+expect document.getElementById('find-input').value == foo mix
+expect !document.getElementById('prompter-scroll').classList.contains('flip')
+expect !document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('pp-play').textContent.indexOf('Play') !== -1
+expect localStorage.getItem('splitpage-prompter-flip') != '1'
+expect localStorage.getItem('splitpage-prompter-mirror') != '1'
+
+# --- the caret still in a script cell when Present opens ------------------------
+# The keys the prompter handles are not also typed into the hidden cell: M and
+# F work, and the script keeps its text.
+jsclick #pp-close
+sleep 400
+expect document.getElementById('prompter').hidden
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+sleep 200
+eval window.__cellText = document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable').textContent
+expect window.__cellText.length > 0
+click #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.activeElement.closest('#rows') !== null
+press mf
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+eval window.__same = document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable').textContent === window.__cellText
+expect window.__same
+
+quit

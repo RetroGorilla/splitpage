@@ -1,5 +1,5 @@
 import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
-import { deleteRange, insertText, joinCells, markThroughout, setMark, sliceCell } from "../core/text/edits.ts";
+import { clamp, clampRange, deleteRange, insertCell, insertText, markThroughout, setMark } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
 import { fromHtml, inertBody, sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
@@ -299,11 +299,10 @@ export function pasteIntoDraft(box, html, text) {
   var clean = html ? sanitizeHtml(html) : "";
   if (!clean && !text) return null;
   return editDraft(box, function (cell, sel, media) {
-    var from = sel ? sel.from : cellLength(cell);
-    var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
-    var next = clean
-      ? joinCells(joinCells(sliceCell(rest, 0, from), media.cell(clean)), sliceCell(rest, from))
-      : insertText(rest, from, text);
+    var r = sel ? clampRange(cell, sel.from, sel.to) : { from: cellLength(cell), to: cellLength(cell) };
+    var rest = deleteRange(cell, r.from, r.to);
+    var from = clamp(rest, r.from);
+    var next = clean ? insertCell(rest, from, media.cell(clean)).cell : insertText(rest, from, text);
     var at = from + cellLength(next) - cellLength(rest);
     return { cell: next, sel: { from: at, to: at } };
   }, [clean, text]);

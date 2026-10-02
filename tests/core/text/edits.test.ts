@@ -8,9 +8,13 @@ import {
   clamp,
   commentRange,
   deleteRange,
+  clampRange,
   insertBrollKey,
+  insertCell,
   insertText,
+  insideDirection,
   joinCells,
+  markThroughout,
   marksAt,
   removeComment,
   replaceText,
@@ -26,6 +30,44 @@ import {
 import { B, COMBINED_E, GRIN, NBSP, OBJ, SHALOM, T, TECHNOLOGIST, THUMB, ZWJ, ZWSP, randomCells, rng } from "./cells.ts";
 
 const RANDOM = randomCells(7, 300);
+
+const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+function wholeCodePoints(cell: readonly Run[], what: string): void {
+  for (const r of cell) assert.ok(!LONE.test(r.text), what + ": a lone surrogate in " + JSON.stringify(r.text));
+}
+
+function pairCuts(cell: readonly Run[]): number[] {
+  const p = projection(cell);
+  const cuts: number[] = [];
+  for (let i = 1; i < p.length; i++) {
+    const hi = p.charCodeAt(i - 1), lo = p.charCodeAt(i);
+    if (hi >= 0xd800 && hi <= 0xdbff && lo >= 0xdc00 && lo <= 0xdfff) cuts.push(i);
+  }
+  return cuts;
+}
+
+function caretAt(cuts: readonly number[], p: number): number {
+  return cuts.includes(p) ? p + 1 : p;
+}
+
+function rangeAt(cuts: readonly number[], p: number, q: number): [number, number] {
+  const lo = Math.min(p, q), hi = Math.max(p, q);
+  if (lo === hi) return [caretAt(cuts, lo), caretAt(cuts, lo)];
+  return [cuts.includes(lo) ? lo - 1 : lo, caretAt(cuts, hi)];
+}
+
+const PAIRED = [
+  normalizeCell([T("a" + GRIN + "b", { b: true }), B("bs1"), T(THUMB + TECHNOLOGIST, { cmt: ["c1"] }), T(GRIN, { tag: "t:prop:X" }), T(" " + GRIN + "\n" + GRIN, { i: true })]),
+  normalizeCell([T(GRIN + GRIN, { dir: true }), T(GRIN, { href: "https://e.x/", cmt: ["c1"] })]),
+  ...RANDOM.map((c) => normalizeCell(c)).filter((c) => pairCuts(c).length).slice(0, 30)
+];
+
+function positionsAround(cell: readonly Run[], p: number): number[] {
+  const cuts = pairCuts(cell);
+  const all = [0, cellLength(cell), p, ...cuts, ...cuts.map((c) => c - 1), ...cuts.map((c) => c + 1)];
+  return all.filter((x, i) => all.indexOf(x) === i);
+}
 
 test("a b-roll key is one position: slicing, deleting and inserting treat it whole", () => {
   const cell = [T("ab"), B("bs1"), T("cd")];
@@ -109,6 +151,8 @@ test("positions are clamped to the cell and floored", () => {
   assert.deepEqual(deleteRange(cell, -1, 99), []);
   assert.deepEqual(sliceCell(cell, 2, 1), []);
   assert.deepEqual(sliceCell(cell, 1), [T("bc")]);
+  assert.equal(clamp([T("a" + GRIN + "b")], 2), 3, "a position inside a surrogate pair moves to just after it");
+  assert.equal(clamp([T("a" + GRIN + "b")], 2.5), 3);
 });
 
 test("Unicode: edits on whole code points keep astral characters, combining marks and ZWJ sequences", () => {
@@ -128,13 +172,163 @@ test("Unicode: edits on whole code points keep astral characters, combining mark
   assert.deepEqual(toggleMark([T(TECHNOLOGIST)], 0, 5, "i"), [T(TECHNOLOGIST, { i: true })]);
 });
 
-test("split and join are inverses at every position, inside a surrogate pair too, on lines that are not cues", () => {
+test("split and join are inverses at every position, inside a surrogate pair too, on lines that are not cues; a split never cuts a pair", () => {
   const noCues = RANDOM.filter((c) => !normalizeCell(c).some((r) => r.marks.cue)).slice(0, 60);
   for (const cell of [[T("a" + GRIN, { b: true }), B("bs1"), T(COMBINED_E + " x", { cmt: ["c1"] })], ...noCues]) {
+    const cuts = pairCuts(normalizeCell(cell));
     for (let p = 0; p <= cellLength(cell); p++) {
       const [a, b] = splitCell(cell, p);
-      assert.equal(cellLength(a), p);
+      assert.equal(cellLength(a), caretAt(cuts, p), "at " + p);
+      wholeCodePoints(a, "first half at " + p);
+      wholeCodePoints(b, "second half at " + p);
       assert.deepEqual(joinCells(a, b), normalizeCell(cell), "at " + p);
+    }
+  }
+  assert.deepEqual(splitCell([T("a" + GRIN + "b")], 2), [[T("a" + GRIN)], [T("b")]]);
+});
+
+test("#322: the reported repro keeps the emoji whole", () => {
+  const cell = [T("a" + GRIN + "b")];
+  assert.equal(projection(insertText(cell, 2, "x")), "a" + GRIN + "xb", "typing inside the pair types after the emoji");
+  assert.equal(projection(deleteRange(cell, 1, 2)), "ab", "deleting half the pair deletes the emoji");
+  assert.equal(projection(deleteRange(cell, 2, 3)), "ab");
+  assert.equal(projection(deleteRange(cell, 2, 2)), "a" + GRIN + "b", "an empty range inside the pair deletes nothing");
+  assert.deepEqual(setMark(cell, 0, 2, "b", true), [T("a" + GRIN, { b: true }), T("b")], "a mark over half the pair covers the emoji");
+});
+
+test("lone surrogates already in a cell are not pairs: positions beside them do not move", () => {
+  const high = [T("x\ud83dab")];
+  assert.equal(clamp(high, 2), 2);
+  assert.deepEqual(clampRange(high, 2, 3), { from: 2, to: 3 });
+  assert.equal(projection(insertText(high, 2, "y")), "x\ud83dyab");
+  assert.equal(projection(deleteRange(high, 2, 3)), "x\ud83db");
+  assert.equal(projection(deleteRange(high, 1, 2)), "xab");
+  const low = [T("a\ude00b")];
+  assert.equal(clamp(low, 1), 1);
+  assert.deepEqual(clampRange(low, 0, 1), { from: 0, to: 1 });
+  assert.equal(projection(insertText(low, 1, "y")), "ay\ude00b");
+  assert.equal(projection(deleteRange(low, 0, 1)), "\ude00b");
+  assert.equal(projection(deleteRange(low, 1, 2)), "ab");
+  assert.deepEqual(splitCell(low, 1), [[T("a")], [T("\ude00b")]]);
+});
+
+test("insertCell puts a cell in at a caret, once, and a caret inside a pair puts it after the character", () => {
+  const piece = [T("P", { b: true })];
+  assert.deepEqual(insertCell([T("a" + GRIN + "b")], 2, piece), { cell: [T("a" + GRIN), T("P", { b: true }), T("b")], end: 4 });
+  assert.deepEqual(insertCell([T("ab")], 1, [T("x"), B("bs9")]), { cell: [T("ax"), B("bs9"), T("b")], end: 3 });
+  assert.deepEqual(insertCell([T("ab")], 9, []), { cell: [T("ab")], end: 2 });
+  for (const cell of PAIRED) {
+    const text = projection(cell);
+    const cuts = pairCuts(cell);
+    for (let p = 0; p <= text.length; p++) {
+      const at = caretAt(cuts, p);
+      const got = insertCell(cell, p, piece);
+      const where = JSON.stringify(text) + " at " + p;
+      wholeCodePoints(got.cell, "insertCell " + where);
+      assert.equal(projection(got.cell), text.slice(0, at) + "P" + text.slice(at), "insertCell " + where);
+      assert.equal(got.end, at + 1, "insertCell " + where);
+    }
+  }
+});
+
+test("a paste over a range, as the editors build it, never doubles or splits a character", () => {
+  const piece = [T("P", { b: true })];
+  function paste(cell: readonly Run[], from: number, to: number) {
+    const r = clampRange(cell, from, to);
+    const rest = deleteRange(cell, r.from, r.to);
+    return insertCell(rest, r.from, piece);
+  }
+  assert.equal(projection(paste([T("a" + GRIN + "b")], 2, 2).cell), "a" + GRIN + "Pb");
+  assert.equal(projection(paste([T("a" + GRIN + "bc")], 2, 4).cell), "aPc");
+  const cut = clampRange([T("a" + GRIN + "bc")], 2, 4);
+  assert.deepEqual(cut, { from: 1, to: 4 });
+  assert.deepEqual(splitCell(deleteRange([T("a" + GRIN + "bc")], cut.from, cut.to), cut.from), [[T("a")], [T("c")]], "Alt+Enter over a selection");
+  for (const cell of PAIRED) {
+    const text = projection(cell);
+    const cuts = pairCuts(cell);
+    for (const p of cuts) {
+      for (const q of positionsAround(cell, p)) {
+        const [lo, hi] = rangeAt(cuts, p, q);
+        const got = paste(cell, p, q);
+        const where = JSON.stringify(text) + " at " + p + ".." + q;
+        wholeCodePoints(got.cell, "paste " + where);
+        assert.equal(projection(got.cell), text.slice(0, lo) + "P" + text.slice(hi), "paste " + where);
+        assert.equal(got.end, lo + 1, "paste " + where);
+      }
+    }
+  }
+});
+
+test("a caret inside a surrogate pair acts just after the character, for every caret edit", () => {
+  for (const cell of PAIRED) {
+    const text = projection(cell);
+    const cuts = pairCuts(cell);
+    for (const p of cuts) {
+      const at = caretAt(cuts, p);
+      const where = JSON.stringify(text) + " at " + p;
+      assert.equal(clamp(cell, p), at, where);
+      for (const ins of ["x", GRIN, "\n"]) {
+        const out = insertText(cell, p, ins);
+        wholeCodePoints(out, "insertText " + where);
+        assert.deepEqual(out, insertText(cell, at, ins), "insertText " + where);
+        assert.equal(projection(out), text.slice(0, at) + ins + text.slice(at), "insertText " + where);
+      }
+      const key = insertBrollKey(cell, p, "bs9", "B-roll:");
+      wholeCodePoints(key, "insertBrollKey " + where);
+      assert.deepEqual(key, insertBrollKey(cell, at, "bs9", "B-roll:"), "insertBrollKey " + where);
+      assert.deepEqual(marksAt(cell, p), marksAt(cell, at), "marksAt " + where);
+      assert.deepEqual(typingMarks(cell, p), typingMarks(cell, at), "typingMarks " + where);
+      assert.equal(insideDirection(cell, p), insideDirection(cell, at), "insideDirection " + where);
+      const [a, b] = splitCell(cell, p);
+      wholeCodePoints(a, "splitCell " + where);
+      wholeCodePoints(b, "splitCell " + where);
+      assert.deepEqual([a, b], splitCell(cell, at), "splitCell " + where);
+      const tail = sliceCell(cell, p);
+      wholeCodePoints(tail, "sliceCell to the end " + where);
+      assert.equal(projection(tail), text.slice(p - 1), "sliceCell to the end takes the whole character " + where);
+    }
+  }
+});
+
+test("a range with an end inside a surrogate pair grows to take the whole character, for every range edit", () => {
+  for (const cell of PAIRED) {
+    const text = projection(cell);
+    const cuts = pairCuts(cell);
+    for (const p of cuts) {
+      for (const q of positionsAround(cell, p)) {
+        const [lo, hi] = rangeAt(cuts, p, q);
+        const where = JSON.stringify(text) + " at " + p + ".." + q;
+        const pairs: [string, Run[], Run[]][] = [
+          ["deleteRange", deleteRange(cell, p, q), deleteRange(cell, lo, hi)],
+          ["deleteRange backwards", deleteRange(cell, q, p), deleteRange(cell, lo, hi)],
+          ["replaceText", replaceText(cell, p, q, "w"), replaceText(cell, lo, hi, "w")],
+          ["replaceText with an emoji", replaceText(cell, q, p, THUMB), replaceText(cell, lo, hi, THUMB)],
+          ["setMark", setMark(cell, p, q, "b", true), setMark(cell, lo, hi, "b", true)],
+          ["setMark clearing", setMark(cell, q, p, "i", null), setMark(cell, lo, hi, "i", null)],
+          ["toggleMark", toggleMark(cell, p, q, "hl"), toggleMark(cell, lo, hi, "hl")],
+          ["addComment", addComment(cell, p, q, "cx"), addComment(cell, lo, hi, "cx")],
+          ["removeComment", removeComment(cell, "c1", p, q), removeComment(cell, "c1", lo, hi)],
+          ["sliceCell", sliceCell(cell, Math.min(p, q), Math.max(p, q)), sliceCell(cell, lo, hi)]
+        ];
+        for (const [name, got, want] of pairs) {
+          wholeCodePoints(got, name + " " + where);
+          assert.deepEqual(got, want, name + " " + where);
+        }
+        assert.equal(projection(deleteRange(cell, p, q)), text.slice(0, lo) + text.slice(hi), "deleteRange " + where);
+        assert.equal(markThroughout(cell, p, q, "b"), markThroughout(cell, lo, hi, "b"), "markThroughout " + where);
+        const tag = replaceWithTag(cell, p, q, "w" + GRIN, "t:prop:W");
+        wholeCodePoints(tag.cell, "replaceWithTag " + where);
+        assert.deepEqual(tag, replaceWithTag(cell, lo, hi, "w" + GRIN, "t:prop:W"), "replaceWithTag " + where);
+        assert.equal(tag.end, lo + 3, "replaceWithTag " + where);
+        const key = replaceWithBrollKey(cell, q, p, "bs9", "B-roll:");
+        wholeCodePoints(key.cell, "replaceWithBrollKey " + where);
+        assert.deepEqual(key, replaceWithBrollKey(cell, lo, hi, "bs9", "B-roll:"), "replaceWithBrollKey " + where);
+        assert.equal(key.end, lo + 1, "replaceWithBrollKey " + where);
+        const br = breakLine(cell, p, q);
+        wholeCodePoints(br.cell, "breakLine " + where);
+        assert.deepEqual(br, breakLine(cell, lo, hi), "breakLine " + where);
+        assert.ok(!pairCuts(br.cell).includes(br.pos), "breakLine's caret " + where);
+      }
     }
   }
 });
@@ -161,12 +355,15 @@ test("random edits keep lengths and canonical form", () => {
   for (const cell of RANDOM) {
     const n = cellLength(cell);
     const p = Math.floor(r() * (n + 1)), q = Math.floor(r() * (n + 1));
-    const lo = Math.min(p, q), hi = Math.max(p, q);
+    const [lo, hi] = rangeAt(pairCuts(normalizeCell(cell)), p, q);
     const ins = insertText(cell, p, "zz");
     assert.equal(cellLength(ins), n + 2);
     const del = deleteRange(cell, p, q);
     assert.equal(projection(del), projection(cell).slice(0, lo) + projection(cell).slice(hi));
     const outs: Run[][] = [ins, del, setMark(cell, p, q, "i", true), addComment(cell, p, q, "cx"), toggleMark(cell, p, q, "hl"), replaceText(cell, p, q, "w")];
-    for (const out of outs) assert.deepEqual(normalizeCell(out), out);
+    for (const out of outs) {
+      assert.deepEqual(normalizeCell(out), out);
+      wholeCodePoints(out, "a random edit at " + p + ".." + q);
+    }
   }
 });

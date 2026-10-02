@@ -176,3 +176,17 @@ test("productionTags is merged once by id: a rename on my side and a status on t
   const r = mergeStateFields(base, mine, theirs, fakePorts(decode));
   assert.deepEqual(r.merged.productionTags, [Object.assign({}, kettle, { name: "Copper kettle", status: "have" })]);
 });
+
+test("a person both sides added keeps my items: their owners move to the id that survived, and no input changes (#283)", () => {
+  const base = doc();
+  const mine = doc({ people: [{ id: "pMine", name: "Ada" }], productionTags: [Object.assign({}, kettle, { owner: "pMine" })],
+    brollShots: [Object.assign({}, shot, { owner: "pMine" })] });
+  const theirs = doc({ people: [{ id: "pTheirs", name: "ada" }], brollShots: [Object.assign({}, shot, { id: "b2", owner: "pTheirs" })] });
+  const before = JSON.stringify([base, mine, theirs]);
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(base, mine, theirs, fakePorts(decode));
+  assert.equal(JSON.stringify([base, mine, theirs]), before);
+  assert.deepEqual(r.merged.people, [{ id: "pTheirs", name: "ada" }]);
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pTheirs"]);
+  assert.deepEqual((r.merged.brollShots as { id: string; owner: string }[]).map((b) => [b.id, b.owner]), [["b2", "pTheirs"], ["b1", "pTheirs"]]);
+});
