@@ -23,6 +23,11 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Saving while a script was still opening, with **Save** in the header or
+  with Save in the desktop app's menu bar (Ctrl+S), did nothing and reported
+  an error in the background. It now says "Still loading…", as the File
+  menu's commands already did. The Production and Gear buttons spell it the
+  same way.
 
 ## What's new in 3.1
 
