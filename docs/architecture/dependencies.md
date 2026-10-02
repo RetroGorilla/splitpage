@@ -53,7 +53,36 @@ Core, `contracts`, `application`, `shared` and feature layers may not import a
 Node built-in or a package (`platform-import`). Core, `contracts`,
 `application` and `shared` may not use browser, Node, timer or network globals
 (`platform-global`); CommonJS `require`, `module` and `exports` are allowed in
-CommonJS files.
+CommonJS files. The banned set includes the DOM: `DOMParser`, `XMLSerializer`,
+the node and element classes (`Node`, `Element`, `HTMLElement`, `Text`,
+`DocumentFragment`, `HTMLCanvasElement`, `OffscreenCanvas`, `Option`, `Audio`),
+selection and style (`Range`, `Selection`, `getSelection`, `getComputedStyle`,
+`CSS`, `matchMedia`), observers (`MutationObserver`, `ResizeObserver`,
+`IntersectionObserver`), events (`Event`, `CustomEvent`, `EventTarget`,
+`KeyboardEvent`, `MouseEvent`, `addEventListener`, `removeEventListener`,
+`dispatchEvent`, `postMessage`), dialogs and windows (`alert`, `confirm`,
+`prompt`, `open`) and the platform-supplied helpers `atob`, `btoa`,
+`createImageBitmap` and `structuredClone` (ES2023 does not define them; the
+host does), beside `window`, `document`, `TextEncoder`, `TextDecoder` and the
+timers. A type reference to a listed global that no local type, class or import
+supplies is reported too. `eval` (any reference, so `(0, eval)("x")` counts) and
+`Function` as a value (`new Function("…")`, `Function("…")`, `const F =
+Function`, `Function.prototype`) are reported as code-from-text globals; the
+`Function` type in a type position, `typeof Function` in a type query and
+`instanceof Function` are not, because the analyzer tells value use from type
+use by where the identifier sits.
+
+The list is a second line of defence. The first is the typecheck:
+`tsconfig.core.json` (core, `contracts` and `application`) sets `lib` to
+`ES2023` only and `types` to `[]`, so a DOM name nobody declared (`FormData`,
+`Headers`, `HTMLInputElement`) fails `tsc` as an undefined name.
+`tools/test-dep-report.mjs` checks that the config carries no DOM, WebWorker or
+ScriptHost lib and no `@types`, and that it rejects an undeclared
+`FormData`, `DOMParser` and `document`. `shared` is plain JavaScript that is not
+typechecked, so only the list covers it. The two layers meet at the ambient
+declaration: an author can silence the typecheck for any name by declaring it,
+so the report forbids the declaration itself (next paragraphs), whatever the
+name.
 
 Those layers may not read the clock or draw random numbers either; time and
 randomness reach them through ports (`Clock`, `IdSource`). Both are reported
@@ -81,8 +110,36 @@ in one function does not hide a global `fetch` in the next, and a local
 declared later in the module still covers an earlier function. Property names,
 method names and labels are not references; a shorthand property
 (`{ performance }`) is. An ambient `declare const window` describes the global
-and is not a local binding. A call to `require` is a load only where `require`
-is not a binding in scope.
+and is not a local binding, so it does not hide a use of the global. A call to
+`require` is a load only where `require` is not a binding in scope.
+
+Core, `contracts`, `application` and `shared` may declare no ambient value at
+all (`platform-global`, target `ambient:<name>`), whatever its name: core must
+not claim a platform global exists, and an ambient declaration is how a name
+the typecheck would reject gets past it. These forms are reported, even when
+nothing uses them:
+
+- `declare const`, `declare let` and `declare var`, with every declarator
+  (`declare const a: number, DOMParser: unknown`) and every destructured name
+  (`declare const { DOMParser }: any`, renamed, nested, rest and array
+  patterns);
+- `declare function` (its overloads are one finding), `declare class`,
+  `declare abstract class`, `declare enum` and `declare const enum`;
+- `declare namespace` (a dotted name reports its root) and `declare module`,
+  with an identifier or a string name (`declare module "x"`);
+- the value members of `declare global { … }` (`var`, `let`, `const`,
+  `function`, `class`, `enum`, `namespace`);
+- `export declare` of any of the above;
+- `/// <reference lib="…" />`, `types="…"` and `path="…"` directives, which
+  bring ambient declarations in without writing one.
+
+Ambient types and interfaces (`declare interface`, `declare type`, `interface`
+and `type` members of `declare global`) carry no value and are allowed. They do
+not hide a free type reference, though: a listed name used as a type after
+`declare interface Text { … }` is still reported as `global:Text`, and an
+unlisted name is left to the typecheck, which reports it unless something
+declared it. The real tree declares no ambient value under `src/` or `shared/`,
+so the rule adds no baseline entry.
 
 Types and values are separate names. A type parameter, type alias, interface
 or `import type` does not hide a global value (`function f<URL>() { return new
