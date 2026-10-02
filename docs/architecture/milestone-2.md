@@ -352,6 +352,7 @@ Each PR names its impacted browser suites and runs them along with `npm run veri
   - INV-10's dependency check: no module outside `src/adapters/richtext/` builds cells from HTML. It is not written.
   - #303 (reply aliasing in `mergeStates`) and #304 (a `TypeError` on a malformed unmigrated side), which 2.5 found, and the pinned bugs listed under Risks, are fixed on 4.0 after the milestone closes, each in its own PR.
   - The rest of plan section 4's milestone gate is not part of this step: the real Electron smoke, the Windows x64 packaged check (the native ARM64 one waits for the 4.0 release gate), and the external review of the integrated milestone.
+  - After 2.7: [the gate record](milestone-2-gate.md) holds those runs and the external review. INV-10's check is filed as #327. The dispositions of every pinned and deferred defect are in [pinned-defects.md](pinned-defects.md).
 
 ## Milestone 2 outcome
 
@@ -400,7 +401,7 @@ Fixtures are generated once from the current code and committed. Tests compare a
 - **Identity.** Keep the #82 seed order and the frozen SHA vectors, and write the manual encoder into a `Uint8Array`. The sanitiser mints ids for anchor and b-roll key spans that lack them.
 - **Translate literally.** Keep `{}` maps, `||` defaults and `var` semantics, and keep the throwing default of the merge strategy switch.
 - **Latent defect found, not fixed during the move.** Ids like `__proto__` or `constructor` survive `safeId` and collide in the id maps (#278). It is fixed on 4.0 after the move, in core.
-- **Pinned bugs after the milestone.** #274, #276, #278, #280–#283 and #290 are fixed on 4.0 once milestone 2 closes, each in the module that now owns the code, with the goldens that pin it regenerated in a dedicated commit. The closed 3.1.x branches hold the fixes and their fail-first tests to port from.
+- **Pinned bugs after the milestone.** #274, #276, #278, #280–#283 and #290 are fixed on 4.0 once milestone 2 closes, each in the module that now owns the code, with the goldens that pin it regenerated in a dedicated commit. The closed 3.1.x branches hold the fixes and their fail-first tests to port from. [pinned-defects.md](pinned-defects.md) gives each of these, and every "Found, not changed" item above, an issue (where it will be fixed), the test that pins it, its owner and its disposition.
 
 **What stays legacy behind a documented bridge after this milestone:**
 - DOM edits of cells that hold media;
