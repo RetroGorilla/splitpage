@@ -3,11 +3,12 @@ import type { StateField, StrategyId } from "../document/fields.ts";
 import { mergedDocId } from "../document/ids.ts";
 import { mergePersonColors } from "../document/person-colors.ts";
 import type { Clock, IdSource } from "../document/ports.ts";
-import { LIST_MERGERS } from "./lists.ts";
-import type { ListMerger, TagEntry, TagList } from "./lists.ts";
+import { LIST_MERGERS, personIdRemap, repointOwners } from "./lists.ts";
+import type { ListMerger, Person, PersonList, TagEntry, TagList } from "./lists.ts";
 import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
+import { listShapedSide } from "./shape.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
 
@@ -80,8 +81,10 @@ function strategyFor(f: StateField): FieldStrategy {
   return STRATEGIES[f.merge];
 }
 
-export function mergeStateFields(base: MergeDoc | null | undefined, mine: MergeDoc, theirs: MergeDoc, ports: MergePorts): StateMerge {
+export function mergeStateFields(baseSide: MergeDoc | null | undefined, mineSide: MergeDoc, theirSide: MergeDoc, ports: MergePorts): StateMerge {
   const fields = ports.fields || STATE_FIELDS;
+  const base = baseSide ? listShapedSide(baseSide, fields) : baseSide;
+  const mine = listShapedSide(mineSide, fields), theirs = listShapedSide(theirSide, fields);
   const conflicts: MergeConflict[] = [];
   const stats: MergeStats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
 
@@ -99,5 +102,7 @@ export function mergeStateFields(base: MergeDoc | null | undefined, mine: MergeD
     tagField: tagField, tags: mergedTags, rows: rows, comments: comments, title: title
   };
   fields.forEach(function (f) { strategyFor(f)(f, run); });
+  const people = [theirs.people, mine.people].flatMap(function (l) { return Array.isArray(l) ? l as Person[] : []; });
+  repointOwners([run.out.productionTags, run.out.brollShots], personIdRemap(people, run.out.people as PersonList));
   return { merged: run.out, conflicts: conflicts, stats: stats };
 }
