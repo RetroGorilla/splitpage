@@ -83,4 +83,32 @@ eval names()
 expect document.querySelectorAll('#rows .row:nth-child(2) .audio-cell .audio-cue').length === 2
 expect names() == slow piano intro/have | door slam/needed | themes/have
 expect Array.from(document.querySelectorAll('#production-list .tag-entity.is-orphaned .tag-entity-name')).map(function(e){ return e.textContent; }).join() == door slam
+
+# --- as many cues lost and gained as came: still by closeness, not order (#294)
+# Pasting "Music: tunes" and "SFX: wind" over "SFX: gate creak" and
+# "Music: tune" takes one cue out, adds an unrelated one and edits a third in
+# one heal. Two names went and two came, which used to pair them by their
+# order: gate creak's item became "tunes" and tune's, at "Have it", "wind".
+# Now the edited cue keeps its own item and the other two are an item left
+# "Not in script" and a new one.
+caret #rows .row:nth-child(2) .audio-cell .cell-editable
+key Enter
+press SFX: gate creak
+sleep 1500
+key Enter
+press Music: tune
+sleep 1500
+eval pill('tune')
+sleep 300
+eval pill('tune')
+sleep 300
+expect names() == slow piano intro/have | door slam/needed | themes/have | gate creak/needed | tune/have
+eval (function(){ var cell = document.querySelector('#rows .row:nth-child(2) .audio-cell .cell-editable'); var cues = cell.querySelectorAll('.audio-cue'); if (cues.length !== 4) return 'cues: ' + cues.length; cell.focus(); var r = document.createRange(); r.setStartBefore(cues[2]); r.setEndAfter(cues[3]); var s = getSelection(); s.removeAllRanges(); s.addRange(r); var dt = new DataTransfer(); dt.setData('text/html', '<span class="audio-cue">Music: tunes</span><br><span class="audio-cue">SFX: wind</span>'); dt.setData('text/plain', 'Music: tunes\nSFX: wind'); var ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }); cell.dispatchEvent(ev); return ev.defaultPrevented; })()
+sleep 300
+eval document.activeElement.blur()
+sleep 1500
+eval names()
+expect document.querySelectorAll('#rows .row:nth-child(2) .audio-cell .audio-cue').length === 4
+expect names() == slow piano intro/have | door slam/needed | themes/have | gate creak/needed | tunes/have | wind/needed
+expect Array.from(document.querySelectorAll('#production-list .tag-entity.is-orphaned .tag-entity-name')).map(function(e){ return e.textContent; }).join() == door slam,gate creak
 quit
