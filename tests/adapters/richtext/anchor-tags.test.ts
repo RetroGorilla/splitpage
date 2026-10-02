@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { toHtml } from "../../../src/core/text/html.ts";
 import { adapterWith, fakePorts } from "./fakes.ts";
 
 const rt = adapterWith(fakePorts());
@@ -32,7 +33,27 @@ test("a span that is a comment anchor and a stage direction or an audio cue keep
   assert.equal(rt.sanitize('<span class="stage-dir cmt-anchor" data-cmt="c3">aside</span>'),
     cmt("c3", '<span class="stage-dir">aside</span>'));
   assert.equal(rt.sanitize('<span class="cmt-anchor audio-cue" data-cmt="c4">SFX: boom</span>'),
-    cmt("c4", '<span class="audio-cue">SFX: boom</span>'));
+    '<span class="audio-cue">' + cmt("c4", "SFX: boom") + "</span>");
+});
+
+test("a combined span sanitises to the nesting toHtml writes, whatever the class order (#280)", () => {
+  const shapes = [
+    '<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">a</span>',
+    '<span class="tag-anchor cmt-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">a</span>',
+    '<span class="broll-key cmt-anchor" data-cmt="c2" data-broll-id="k1">B-roll:</span>',
+    '<span class="cmt-anchor broll-key" data-cmt="c2" data-broll-id="k1">B-roll:</span>',
+    '<span class="stage-dir cmt-anchor" data-cmt="c3">a</span>',
+    '<span class="cmt-anchor stage-dir" data-cmt="c3">a</span>',
+    '<span class="audio-cue cmt-anchor" data-cmt="c4">SFX: a</span>',
+    '<span class="cmt-anchor audio-cue" data-cmt="c4">Music: a</span>',
+    '<span class="cmt-anchor stage-dir audio-cue" data-cmt="c5">SFX: a</span>',
+    '<span class="audio-cue cmt-anchor tag-anchor" data-cmt="c6" data-tag-cat="prop" data-tag-name="Lamp">SFX: a</span>'
+  ];
+  for (const html of shapes) {
+    const decoded = rt.decode(html, { onMedia: () => undefined });
+    assert.equal(rt.sanitize(html), toHtml(decoded), html);
+    assert.equal(rt.sanitize(toHtml(decoded)), toHtml(decoded), html);
+  }
 });
 
 test("a mark the sanitiser refuses still leaves the comment (#280)", () => {
@@ -67,25 +88,80 @@ test("decoding a combined span reads the comment and the tag on the same words (
   assert.equal(marked.length, 1);
 });
 
-test("seeded fuzz: combined spans sanitise to nested spans, and the result is a fixed point (#280)", () => {
-  const classesList = ["cmt-anchor tag-anchor", "tag-anchor cmt-anchor", "x-paste tag-anchor cmt-anchor"];
+const MARK_CLASSES = ["tag-anchor", "broll-key", "stage-dir", "audio-cue"] as const;
+const ALLOWED_ATTRS: Readonly<Record<string, readonly string[]>> = {
+  "cmt-anchor": ["class", "data-cmt"],
+  "tag-anchor": ["class", "data-tag-cat", "data-tag-name", "contenteditable"],
+  "broll-key": ["class", "data-broll-id", "contenteditable"],
+  "stage-dir": ["class"],
+  "audio-cue": ["class"]
+};
+const PLAIN_TAGS = ["strong", "em", "u", "s", "mark", "br"];
+
+function shuffled<T>(r: () => number, list: readonly T[]): T[] {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [out[i], out[j]] = [out[j] as T, out[i] as T];
+  }
+  return out;
+}
+
+function assertWhitelisted(html: string, msg: string): void {
+  for (const m of html.matchAll(/<(\/?)([a-z0-9]+)([^>]*)>/g)) {
+    if (m[1]) continue;
+    const name = m[2] as string;
+    const attrs = Array.from((m[3] as string).matchAll(/([a-z-]+)="/g), (a) => a[1] as string);
+    if (name !== "span") {
+      assert.ok(PLAIN_TAGS.includes(name), `${msg}: element ${name}`);
+      assert.deepEqual(attrs, [], `${msg}: attributes on ${name}`);
+      continue;
+    }
+    const cls = /class="([^"]*)"/.exec(m[3] as string)?.[1] ?? "";
+    const allowed = ALLOWED_ATTRS[cls];
+    assert.ok(allowed, `${msg}: span class "${cls}"`);
+    assert.ok(attrs.every((a) => (allowed as readonly string[]).includes(a)), `${msg}: attributes ${attrs.join(",")} on ${cls}`);
+  }
+}
+
+test("seeded fuzz: every combination of comment, tag, key, direction and cue, in every class order (#280)", () => {
   const words = ["the", "red mug", " ", "a b", "x&lt;y", "&amp;", "lamp "];
   const formats = ["", "", "strong", "em", "u", "s", "mark"];
-  for (let seed = 1; seed <= 300; seed++) {
+  const hostile = ' onclick="alert(1)" style="x:y" id="i" href="javascript:alert(1)"';
+  for (let seed = 1; seed <= 1500; seed++) {
     const r = rng(seed);
     const pick = <T>(list: readonly T[]): T => list[Math.floor(r() * list.length)] as T;
-    let combined = "", nested = "";
+    let html = "";
+    const ids: string[] = [];
+    let unnamed = 0;
     const n = 1 + Math.floor(r() * 4);
     for (let i = 0; i < n; i++) {
-      const id = "c" + String(1 + Math.floor(r() * 3));
+      const marks = MARK_CLASSES.filter(() => r() < 0.4);
+      const withCmt = marks.length === 0 || r() < 0.85;
+      const classes = shuffled(r, [...marks, ...(withCmt ? ["cmt-anchor"] : []), ...(r() < 0.2 ? ["x-paste"] : [])]);
+      const attrs: string[] = [];
+      if (withCmt) {
+        if (r() < 0.25) unnamed++;
+        else {
+          const id = "c" + String(1 + Math.floor(r() * 3));
+          ids.push(id);
+          attrs.push(`data-cmt="${id}"`);
+        }
+      }
+      attrs.push('data-tag-cat="prop" data-tag-name="Lamp" data-broll-id="k1"');
       const f = pick(formats);
-      const text = pick(words) + pick(words);
-      const inner = f ? `<${f}>${text}</${f}>` : text;
-      combined += `<span class="${pick(classesList)}" data-cmt="${id}" data-tag-cat="prop" data-tag-name="Lamp">${inner}</span>`;
-      nested += cmt(id, tagged(inner));
+      const text = marks.includes("broll-key") ? "B-roll:" : marks.includes("audio-cue") ? "SFX: boom" : pick(words) + pick(words);
+      const inner = f && !marks.includes("broll-key") ? `<${f}>${text}</${f}>` : text;
+      html += (i ? "<br>" : "") + `<span class="${classes.join(" ")}" ${shuffled(r, attrs).join(" ")}${r() < 0.3 ? hostile : ""}>${inner}</span>`;
     }
-    const msg = `seed ${String(seed)}: ${combined}`;
-    assert.equal(rt.sanitize(combined), nested, msg);
-    assert.equal(rt.sanitize(rt.sanitize(combined)), rt.sanitize(combined), msg);
+    const msg = `seed ${String(seed)}: ${html}`;
+    const once = rt.sanitize(html);
+    assert.equal(rt.sanitize(once), once, msg);
+    assertWhitelisted(once, msg);
+    assert.doesNotMatch(once, /onclick|style=|id="i"|href=|javascript/, msg);
+    for (const id of new Set(ids)) assert.ok(once.includes(`data-cmt="${id}"`), `${msg}: lost comment ${id}`);
+    assert.equal(Array.from(once.matchAll(/data-cmt="/g)).length >= ids.length + unnamed, true, `${msg}: comment count`);
+    const unminted = (s: string): string => s.replace(/cMinted\d+/g, "cMinted");
+    assert.equal(unminted(once), unminted(toHtml(rt.decode(html, { onMedia: () => undefined }))), msg);
   }
 });

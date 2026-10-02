@@ -29,6 +29,8 @@ function hasClass(node: Element, name: string): boolean {
 
 const SPAN_MARK_CLASSES: readonly string[] = ["tag-anchor", "broll-key", "stage-dir", "audio-cue"];
 
+const CUE_OUTRANKED: readonly string[] = ["tag-anchor", "broll-key", "stage-dir"];
+
 function imageDimAttr(v: string | null): number {
   return typeof v === "string" && /^[1-9][0-9]{0,6}$/.test(v) ? parseInt(v, 10) : NaN;
 }
@@ -132,9 +134,16 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
       const peeledSpan = doc.createElement("span");
       peeledSpan.className = "cmt-anchor";
       peeledSpan.setAttribute("data-cmt", safeId(el.getAttribute("data-cmt") || "", "c", ctx.ids));
+      if (hasClass(el, "audio-cue") && !CUE_OUTRANKED.some(function (c) { return hasClass(el, c); })) {
+        const cueSpan = doc.createElement("span");
+        cueSpan.className = "audio-cue";
+        walkSanitize(el, peeledSpan, ctx);
+        cueSpan.appendChild(peeledSpan);
+        destParent.appendChild(cueSpan);
+        return;
+      }
       const rest = el.cloneNode(true) as Element;
       rest.classList.remove("cmt-anchor");
-      rest.removeAttribute("data-cmt");
       const restHolder = doc.createElement("span");
       restHolder.appendChild(rest);
       walkSanitize(restHolder, peeledSpan, ctx);
