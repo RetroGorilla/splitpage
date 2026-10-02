@@ -1,3 +1,4 @@
+import { idMap } from "../document/id-map.ts";
 import { plainText } from "../document/text-policy.ts";
 import {
   TAG_STATUS_IDS,
@@ -248,7 +249,7 @@ export function deriveProductionIndex(state: TagState, readers: ProductionReader
 }
 
 export function snapshotCues(state: TagState, readers: ProductionReaders): CueSnapshot {
-  const cells: Record<string, string[]> = {};
+  const cells = idMap<string[]>();
   state.rows.forEach(function (r) {
     const names = readers.cueNamesInField(r.audioText);
     if (names.length) cells[r.id] = names;
@@ -268,7 +269,7 @@ function retitleEditedCues(
   ix.unregistered.forEach(function (t) { if (t.catId === "sound") fresh[registryKey("sound", t.name)] = true; });
   ix.entries.forEach(function (e) { if (e.orphaned && e.catId === "sound") orphan[e.key] = true; });
   Object.keys(now.cells).forEach(function (rowId) {
-    const before = was.cells[rowId];
+    const before = Object.prototype.hasOwnProperty.call(was.cells, rowId) ? was.cells[rowId] : undefined;
     if (!before) return;
     const after = now.cells[rowId] as string[];
     const gone = before.filter(function (name) { return after.indexOf(name) === -1; });

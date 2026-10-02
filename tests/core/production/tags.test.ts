@@ -244,14 +244,15 @@ test("the healing plan registers each unregistered tag with an id minted after t
   assert.deepEqual(plan.register, minted(registry, "location", ["Kitchen"]).concat(minted(
     registry.concat(minted(registry, "location", ["Kitchen"])), "sound", ["whistle"])));
   assert.equal(plan.register[0]?.id, mintTagId("location", "Kitchen") + "-2");
-  assert.deepEqual(plan.cues, { docId: "d1", cells: {} });
+  assert.deepEqual(jsonCopy(plan.cues), { docId: "d1", cells: {} });
+  assert.equal(Object.getPrototypeOf(plan.cues.cells), null, "the cells are keyed by scene id, in a map with no prototype");
 });
 
 test("with nothing to register the plan is empty but still snapshots the cues", () => {
   const audio = cells.html([cue("Music: theme")]);
   const state: TagState = { docId: "d2", rows: [{ id: "r1", visualText: EMPTY, audioText: audio }], productionTags: [registered("sound", "theme")] };
-  assert.deepEqual(planRegistryHealing(state, readers), { cues: { docId: "d2", cells: { r1: ["theme"] } }, count: 0, retitle: [], register: [] });
-  assert.deepEqual(snapshotCues(state, readers), { docId: "d2", cells: { r1: ["theme"] } });
+  assert.deepEqual(jsonCopy(planRegistryHealing(state, readers)), { cues: { docId: "d2", cells: { r1: ["theme"] } }, count: 0, retitle: [], register: [] });
+  assert.deepEqual(jsonCopy(snapshotCues(state, readers)), { docId: "d2", cells: { r1: ["theme"] } });
 });
 
 function cueRow(id: string, lines: string[]): ProductionRow {
@@ -270,7 +271,7 @@ test("a cue edited in place keeps its registry entry: the plan retitles it inste
   const registry: RegistryTag[] = [Object.assign({}, opened.register[0] as RegistryTag, { status: "have", notes: "the Rhodes take" })];
   const typed: TagState = { docId: "dA", rows: [cueRow("r1", ["Music: slow piano"])], productionTags: registry };
   const plan = planRegistryHealing(typed, readers, opened.cues);
-  assert.deepEqual(plan, {
+  assert.deepEqual(jsonCopy(plan), {
     cues: { docId: "dA", cells: { r1: ["slow piano"] } },
     count: 1,
     retitle: [{ at: 0, from: "slow", name: "slow piano" }],
@@ -286,6 +287,20 @@ test("a cue edited in place keeps its registry entry: the plan retitles it inste
     productionTags: registry
   };
   assert.deepEqual(planRegistryHealing(stillTagged, readers, opened.cues).retitle, [], "an old name still in the script is not retitled");
+});
+
+test("cue snapshots hold scenes with Object.prototype ids, and a new such scene is read against the old snapshot (#311)", () => {
+  const snap = snapshotCues({ docId: "dP", rows: [cueRow("__proto__", ["Music: theme"]), cueRow("constructor", ["SFX: bang"])], productionTags: [] }, readers);
+  assert.deepEqual(Object.keys(snap.cells), ["__proto__", "constructor"]);
+  assert.deepEqual(snap.cells["__proto__"], ["theme"]);
+  const opened = planRegistryHealing({ docId: "dA", rows: [cueRow("r1", ["Music: slow"])], productionTags: [] }, readers, null);
+  const registry: RegistryTag[] = [opened.register[0] as RegistryTag];
+  for (const id of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    const typed: TagState = { docId: "dA", rows: [cueRow("r1", ["Music: slow piano"]), cueRow(id, ["SFX: bang"])], productionTags: registry };
+    const plan = planRegistryHealing(typed, readers, opened.cues);
+    assert.deepEqual(plan.retitle, [{ at: 0, from: "slow", name: "slow piano" }], id);
+    assert.deepEqual(plan.register.map((t) => t.name), ["bang"], id);
+  }
 });
 
 test("cue retitling pairs the names that went and came by position in the cell (#282, kept as found)", () => {
