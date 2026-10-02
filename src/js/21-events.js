@@ -1670,12 +1670,13 @@ function init() {
 
   window.addEventListener("keydown", function (e) {
     if (!S.prompterOpen) return;
+    var chord = e.ctrlKey || e.metaKey || e.altKey;
     if (e.key === "Escape") { closePrompter(); }
     else if (e.key === " ") { e.preventDefault(); setPrompterPlaying(!S.prompterPlaying); }
     else if (e.key === "ArrowUp") { stepPrompterSpeed(1); }
     else if (e.key === "ArrowDown") { stepPrompterSpeed(-1); }
-    else if (e.key === "m" || e.key === "M") { setPrompterMirror(!prompterMirror); }
-    else if (e.key === "f" || e.key === "F") { setPrompterFlip(!prompterFlip); }
+    else if (!chord && (e.key === "m" || e.key === "M")) { setPrompterMirror(!prompterMirror); }
+    else if (!chord && (e.key === "f" || e.key === "F")) { setPrompterFlip(!prompterFlip); }
     else if (e.key === "ArrowLeft") { stepScene(-1); }
     else if (e.key === "ArrowRight") { stepScene(1); }
   });
