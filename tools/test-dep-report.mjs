@@ -483,6 +483,110 @@ for (const [name, lines, expected] of ambientCases) eq(name, ambientsOf("src/cor
   eq("a require parameter or block binding is not a load; the free require beside it is", a.imports.map((i) => i.spec), ["./c.js"]);
 }
 
+console.log("\nINV-10, HTML into cells:\n");
+
+const ADAPTER_FILES = {
+  "src/adapters/richtext/decode.ts": "export const decode = (html: string): string[] => [html];\n",
+  "src/adapters/richtext/richtext.ts": "export type RichText = { decode(html: string): string[] };\nexport const createRichText = (): RichText => ({ decode: (h) => [h] });\n"
+};
+
+function htmlCells(files) {
+  return findViolations(graph({ ...ADAPTER_FILES, ...files }))
+    .filter((v) => v.rule === "html-cells")
+    .map((v) => `${v.source}:${v.line} ${v.target}`);
+}
+
+function htmlSinks(text, path = "src/js/h.js") {
+  return htmlCells({ [path]: text }).map((f) => f.split(" ")[1]);
+}
+
+eq("the adapter itself may parse HTML and import its own modules", htmlCells({
+  "src/adapters/richtext/sanitize.ts": 'import { decode } from "./decode.ts";\nexport const s = (h: string, p: { parseFromString(a: string, b: string): unknown }) => [decode(h), p.parseFromString(h, "text/html")];\n'
+}), []);
+eq("the bridge may import the adapter and parse", htmlCells({
+  "src/legacy/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nimport { decode } from "../adapters/richtext/decode.ts";\nexport const r = [createRichText(), decode("")];\n'
+}), []);
+eq("another legacy module importing the adapter is reported", htmlCells({
+  "src/legacy/document-ports.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
+}), ["src/legacy/document-ports.ts:1 src/adapters/richtext/richtext.ts"]);
+eq("a numbered legacy module importing the decoder is reported", htmlCells({
+  "src/js/05-x.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n'
+}), ["src/js/05-x.js:1 src/adapters/richtext/decode.ts"]);
+eq("bootstrap importing the adapter is reported", htmlCells({
+  "src/bootstrap/main.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
+}), ["src/bootstrap/main.ts:1 src/adapters/richtext/richtext.ts"]);
+eq("a re-export of the decoder is reported", htmlCells({
+  "src/legacy/other.ts": 'export { decode } from "../adapters/richtext/decode.ts";\n'
+}), ["src/legacy/other.ts:1 src/adapters/richtext/decode.ts"]);
+eq("a dynamic import and a require of the decoder are reported", htmlCells({
+  "src/js/late.js": 'export const l = () => import("../adapters/richtext/decode.ts");\n',
+  "server/s.js": '"use strict";\nmodule.exports = require("../src/adapters/richtext/decode.ts");\n'
+}), ["server/s.js:2 src/adapters/richtext/decode.ts", "src/js/late.js:1 src/adapters/richtext/decode.ts"]);
+eq("a type-only import of the adapter is not a decoder", htmlCells({
+  "src/legacy/types.ts": 'import type { RichText } from "../adapters/richtext/richtext.ts";\nexport type T = RichText;\n'
+}), []);
+eq("tests and tools may import the adapter", htmlCells({
+  "src/test/x.test.mjs": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n',
+  "tests/adapters/richtext/golden.test.ts": 'import { decode } from "../../../src/adapters/richtext/decode.ts";\nexport const d = decode;\n',
+  "tools/probe.mjs": 'import { decode } from "../src/adapters/richtext/decode.ts";\nexport const d = decode;\n'
+}), []);
+eq("a module that imports the adapter's neighbour is not reported", htmlCells({
+  "src/adapters/identity/ids.ts": "export const id = 1;\n",
+  "src/legacy/ids.ts": 'import { id } from "../adapters/identity/ids.ts";\nexport const i = id;\n'
+}), []);
+
+eq("parseFromString as text/html is a parse", htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'), ["html-parse:parseFromString"]);
+eq("parseFromString as XML, SVG or XHTML is not", htmlSinks([
+  'export const a = (s) => new DOMParser().parseFromString(s, "application/xml");',
+  'export const b = (s) => new DOMParser().parseFromString(s, "text/xml");',
+  'export const c = (s) => new DOMParser().parseFromString(s, "image/svg+xml");',
+  'export const d = (s) => new DOMParser().parseFromString(s, "application/xhtml+xml");'
+].join("\n")), []);
+eq("parseFromString with a computed or missing type is a parse", htmlSinks([
+  "export const a = (s, m) => new DOMParser().parseFromString(s, m);",
+  "export const b = (s) => new DOMParser().parseFromString(s);"
+].join("\n")), ["html-parse:parseFromString"]);
+eq("parseFromString through an element access, an alias or an optional call is a parse", htmlSinks([
+  'export const a = (p, s) => p["parseFromString"](s, "text/html");',
+  'export const b = (p, s) => p?.parseFromString(s, "text/html");',
+  'export const c = (p, s) => (p.parseFromString)(s, "text/html");'
+].join("\n")), ["html-parse:parseFromString"]);
+eq("createContextualFragment, parseHTMLUnsafe, setHTMLUnsafe and setHTML are parses", htmlSinks([
+  "export const a = (r, s) => r.createContextualFragment(s);",
+  "export const b = (s) => Document.parseHTMLUnsafe(s);",
+  "export const c = (e, s) => e.setHTMLUnsafe(s);",
+  "export const d = (e, s) => e.setHTML(s);"
+].join("\n")), ["html-parse:createContextualFragment", "html-parse:parseHTMLUnsafe", "html-parse:setHTML", "html-parse:setHTMLUnsafe"]);
+eq("innerHTML, outerHTML and insertAdjacentHTML render and are not parses", htmlSinks([
+  "export const a = (e, h) => { e.innerHTML = h; e.outerHTML = h; e.insertAdjacentHTML('beforeend', h); e.innerHTML += h; };"
+].join("\n")), []);
+eq("reading innerHTML or a name that only looks like a parse is not a parse", htmlSinks([
+  "export const a = (e) => e.innerHTML;",
+  "export const parseFromString = (s) => s;",
+  "export const b = (o) => o.parse(1);"
+].join("\n")), []);
+eq("a parse in a feature, core-adjacent adapter, server or desktop module is reported", [
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/features/rows/view.ts"),
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/adapters/dom/p.ts"),
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "desktop/p.js"),
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "server/p.js")
+], [["html-parse:parseFromString"], ["html-parse:parseFromString"], ["html-parse:parseFromString"], ["html-parse:parseFromString"]]);
+eq("a parse in a test, a tool or a root script is not reported", [
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/test/p.test.mjs"),
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "tools/p.mjs"),
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "build.mjs")
+], [[], [], []]);
+eq("a parse inside the adapter and inside the bridge is not reported", [
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/adapters/richtext/inert.ts"),
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/legacy/richtext.ts")
+], [[], []]);
+eq("each sink is reported once, at its first line", htmlCells({
+  "src/js/two.js": 'export const a = (s) => new DOMParser().parseFromString(s, "text/html");\nexport const b = (s) => new DOMParser().parseFromString(s, "text/html");\n'
+}), ["src/js/two.js:1 html-parse:parseFromString"]);
+eq("an import and a parse in one module are two findings", htmlCells({
+  "src/js/both.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const a = (s) => new DOMParser().parseFromString(decode(s), "text/html");\n'
+}), ["src/js/both.js:2 html-parse:parseFromString", "src/js/both.js:1 src/adapters/richtext/decode.ts"]);
+
 console.log("\nS importers and writers:\n");
 
 const STATE_FILE = { "src/js/_state.js": "export const S = { state: undefined, dirty: false, editSeq: 0 };\n" };
@@ -805,6 +909,50 @@ try {
   check("the cycle is named", cyclic.err.includes("cycle (runtime)"), cyclic.err);
 } finally {
   rmSync(work, { recursive: true, force: true });
+}
+
+console.log("\nINV-10 through run():\n");
+
+const inv10Work = mkdtempSync(join(tmpdir(), "splitpage-dep-report-inv10-"));
+
+try {
+  const repo = mkdtempSync(join(inv10Work, "repo-"));
+  spawnSync("git", ["init", "-q"], { cwd: repo });
+  writeFiles(repo, {
+    ...ADAPTER_FILES,
+    "src/legacy/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n',
+    "src/js/old.js": 'export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'
+  });
+  const baselinePath = join(repo, "baseline.json");
+  const go = (mode, reason) => {
+    const out = [];
+    const err = [];
+    const code = run({ repo, baselinePath, mode, reason, print: (l) => out.push(l), printError: (l) => err.push(l) });
+    return { code, out: out.join("\n"), err: err.join("\n") };
+  };
+  eq("init records the existing HTML parse and not the bridge", (go("init"), JSON.parse(readFileSync(baselinePath, "utf8")).exceptions), [
+    { rule: "html-cells", source: "src/js/old.js", target: "html-parse:parseFromString" }
+  ]);
+  eq("the baselined parse passes", go("check").code, 0);
+
+  writeFiles(repo, { "src/js/new.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n' });
+  const added = go("check");
+  eq("a new module reaching the decoder fails", added.code, 1);
+  check("the failure names the rule, the line and the adapter file", added.err.includes("new html-cells: src/js/new.js:1 -> src/adapters/richtext/decode.ts"), added.err);
+  eq("accept without a reason is refused", go("accept").code, 2);
+  const accepted = go("accept", "reads the decoder until the bridge lands");
+  eq("accept with a reason records it", accepted.code, 0);
+  const rows = JSON.parse(readFileSync(baselinePath, "utf8")).exceptions;
+  eq("the accepted row carries its reason", rows.find((r) => r.source === "src/js/new.js")?.reason, "reads the decoder until the bridge lands");
+  eq("the check passes after accepting", go("check").code, 0);
+
+  writeFiles(repo, { "src/js/old.js": "export const p = (s) => s;\n" });
+  const resolved = go("check");
+  eq("removing the parse leaves a resolved exception that fails", resolved.code, 1);
+  eq("prune clears it", go("prune").code, 0);
+  eq("and the check passes", go("check").code, 0);
+} finally {
+  rmSync(inv10Work, { recursive: true, force: true });
 }
 
 console.log("\nthe CLI against a temporary git repository:\n");
