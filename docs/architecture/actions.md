@@ -263,15 +263,19 @@ does the same for the feature alone.
 No listener left in `src/js` handles a chord the shortcuts feature binds:
 the old Ctrl+S, Ctrl+Shift+S, Ctrl+O (`18b`), Ctrl+E (`18c`), Ctrl+K (`18d`),
 Ctrl+F and Ctrl+Alt+H (`21-events.js`) listeners are gone, and a search of
-every `keydown` listener finds no other one for those keys. One overlap is
-older than the registry and kept: in Present, the prompter's own listener
-flips the text on F whatever modifiers are held, so Ctrl+F there flips it. It
-opened Find as well in 3.1; since #274 Find is refused in Present, silently
-as for any shortcut. In the desktop app, Ctrl+S, Ctrl+Shift+S and Ctrl+O
-belong to the native menu's accelerators (the page does not bind them), Ctrl+E,
-Ctrl+F and Ctrl+K to the page (their accelerators are not registered), and
-Ctrl+Alt+H to both: the page runs it and keeps the key, and only when the page
-refuses does the accelerator's command run, and refuse again with a toast.
+every `keydown` listener finds no other one for those keys. In Present, the
+prompter's own listener takes its bare keys M, F and Space (Shift allowed, as
+it takes the upper-case letter) only with Ctrl, Meta and Alt up, and ignores
+any key typed into an input, textarea, select or editable element, so Ctrl+F
+there leaves the text as it was (#309; `309-present-modifier-keys.txt`). Find
+is refused in Present since #274, silently as for any shortcut, so Ctrl+F in
+Present does nothing. In 3.1 it flipped the text and opened Find. The arrow
+keys still ignore modifiers. In the desktop app, Ctrl+S, Ctrl+Shift+S
+and Ctrl+O belong to the native menu's accelerators (the page does not bind
+them), Ctrl+E, Ctrl+F and Ctrl+K to the page (their accelerators are not
+registered), and Ctrl+Alt+H to both: the page runs it and keeps the key, and
+only when the page refuses does the accelerator's command run, and refuse
+again with a toast.
 
 ## Refusals are the same on every surface
 
