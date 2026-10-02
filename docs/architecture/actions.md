@@ -42,10 +42,12 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 
 One other differs by action rather than by surface, as in 3.1: the B-roll
 button does not wait for the document at all. Every other refusal while the
-document loads reads "Still loading…", the one string `screen.ts` gives the
-`loading` blocker, and `save` refuses from every surface (Ctrl+S silently, as
-every shortcut refusal is), where in 3.1 its buttons and the native menu ran
-and threw on the missing document (#276). `tests/legacy/while-loading.test.ts` checks
+document loads reads "Still loading…", the same wording everywhere: the
+`loading` blocker in `screen.ts` gives it to the registry's actions, and
+`still-loading-wording.test.ts` fails if a literal elsewhere in `src` differs.
+`save` refuses from every surface (Ctrl+S silently, as every shortcut refusal
+is), where in 3.1 its buttons and the native menu ran and threw on the
+missing document (#276). `tests/legacy/while-loading.test.ts` checks
 the loading cases against the real definitions (the browser suites cannot
 reach a page that is still loading); `278-commands-as-before.txt` checks the
 rest, and passes against the code before the registry (4.0-development

@@ -1887,7 +1887,7 @@
       "media": [],
       "toHtml": "ftp rel frag MAIL ns none",
       "markdown": "ftp rel frag MAIL ns none",
-      "markdownOfInput": "[ftp](ftp://e.x/) [rel](/x) [frag](#frag) [MAIL](MAILTO:a@e.x) [ns](https:no-slashes) [none](null)",
+      "markdownOfInput": "[ftp](ftp://e.x/) [rel](/x) [frag](#frag) [MAIL](MAILTO:a@e.x) [ns](https:no-slashes) none",
       "storedFromDom": "<a href=\"ftp://e.x/\">ftp</a> <a href=\"/x\">rel</a> <a href=\"#frag\">frag</a> <a href=\"MAILTO:a@e.x\">MAIL</a> <a href=\"https:no-slashes\">ns</a> <a>none</a>"
     },
     "links: label with brackets": {
@@ -1991,7 +1991,7 @@
       "media": [],
       "toHtml": "a  b  c",
       "markdown": "a  b  c",
-      "markdownOfInput": "a [Watch video](javascript:alert(1)) b [no href](null) c",
+      "markdownOfInput": "a [Watch video](javascript:alert(1)) b no href c",
       "storedFromDom": "a <a class=\"video-embed-card\" href=\"javascript:alert(1)\"><span>Watch video</span></a> b <a class=\"video-embed-card\">no href</a> c"
     },
     "video card: mailto and odd hosts": {

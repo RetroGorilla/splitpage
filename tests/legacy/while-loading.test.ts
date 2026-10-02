@@ -36,8 +36,8 @@ test("while loading, Save is refused from every surface with the File menu's wor
     assert.equal(refusal(registry, "save", "button"), STILL_LOADING);
     assert.equal(refusal(registry, "save", "native-menu"), STILL_LOADING);
     assert.equal(refusal(registry, "save", "shortcut"), STILL_LOADING);
-    assert.equal(refusal(registry, "save-as", "native-menu"), "Still loading…");
-    assert.equal(refusal(registry, "open", "menu"), "Still loading…");
+    assert.equal(refusal(registry, "save-as", "native-menu"), STILL_LOADING);
+    assert.equal(refusal(registry, "open", "menu"), STILL_LOADING);
   } finally {
     restore();
   }
@@ -58,8 +58,8 @@ test("while loading, the rundown's own button still toggles and the File menu's 
   const { registry, restore } = loadingRegistry();
   try {
     assert.equal(refusal(registry, "toggle-rundown-min", "button"), null);
-    assert.equal(refusal(registry, "toggle-rundown-min", "menu"), "Still loading…");
-    assert.equal(refusal(registry, "toggle-rundown-min", "native-menu"), "Still loading…");
+    assert.equal(refusal(registry, "toggle-rundown-min", "menu"), STILL_LOADING);
+    assert.equal(refusal(registry, "toggle-rundown-min", "native-menu"), STILL_LOADING);
   } finally {
     restore();
   }
