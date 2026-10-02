@@ -43,6 +43,7 @@ none, no golden is expected to change.
 | Unicode editing: positions count UTF-16 code units, so an edit inside a surrogate pair splits it into lone surrogates | #322 | Nothing asserts the split. `tests/core/text/edits.test.ts` ("split and join are inverses at every position, inside a surrogate pair too…") splits inside a pair, but checks only the join | `src/core/text/edits.ts` | Fixed by #341: no cell edit leaves half a surrogate pair. Names are still cut by UTF-16 unit, which #344 tracks |
 | Undo key order: `applySteps` compares rows as JSON text. An inverse step that restores a removed field puts it last, so the inverse `deleteRow` is refused. No user effect today: `12a-undo.js` falls back to a copy | #323 | `tests/core/text/steps.test.ts` ("today the inverse of an insertRow is refused once a field removed from that row has been put back, last") | `src/core/text/steps.ts` | Milestone 3, because its undo adapter behind `DocumentSession` makes `applySteps` a path that undo depends on |
 | A cue line split before its colon leaves neither half a cue, and joining does not restore the mark | none | `tests/core/text/cues.test.ts` ("a split before a cue's colon loses the cue on both sides…") | `src/core/text/cues.ts`, `edits.ts`, `runs.ts` (`settleCues`) | Won't fix, by design. Typing a line's colon, or an import, makes a cue. Normalising spreads a cue across a line that still reads as one and removes it from a line that does not, but never adds one, so a join that brings the words back makes no cue. Split after the colon, the cue survives |
+| Tag and person names are cut by UTF-16 unit and can keep half an emoji | #344 | The normaliser goldens pin today's behaviour ("an astral character across the cut") | `src/js/07-production-tags.js`, `src/js/07b-plain-tags.js`, `src/core/production/tags.ts`, `src/core/migrate.ts`, `src/adapters/richtext/sanitize.ts`, `src/core/document/text-policy.ts`, `src/core/text/runs.ts` | triage |
 
 ## Core merge and migration
 
@@ -55,6 +56,7 @@ none, no golden is expected to change.
 | Both sides adding the same person drops the owner of my items | #283 | Golden `merge-people-each-side.json` | `src/core/merge/lists.ts` (`mergePeople`) | Fixed by #339, ported from `fix/281-283-md-null-href-and-person-merge`. Golden: `merge-people-each-side.json`. #353 tracks two follow-ups |
 | A `list-union-with-base` field with no `LIST_MERGERS` entry throws `TypeError: listMerger(...) is not a function`, not "no merge strategy" | none | Nothing | `src/core/merge/states.ts` | Won't fix. Only a developer adding a list field reaches it, and `src/test/state-fields.test.mjs` already fails for a list field with no merger |
 | A field table without `productionTags` makes the merge throw | none | Nothing | `src/core/merge/states.ts` | Won't fix, by design. `productionTags` is a schema field every migrated document has. Only a hand-built table can leave it out |
+| Undo replay drops same-named people; deleted owner beats other side's assignment | #353 | Regression case from #339 review | `src/js/12a-undo.js` (`applyStepsLive`), `src/core/merge/lists.ts`, `src/core/merge/tags.ts`, `src/core/merge/broll.ts` | triage |
 
 ## Production: tags and b-roll
 
@@ -67,6 +69,8 @@ none, no golden is expected to change.
 | Deleting a person leaves their id as the owner of their b-roll shots until the next load | #305 | Nothing | `src/js/07-production-tags.js` (`deletePerson`) | Fixed by #346: deleting a person clears them as the owner of their b-roll shots at once |
 | After a heal, the cached core production index keeps the old ids, while `productionEntries()` shows the new ones. Nothing reads them yet | #326 | `src/test/production-shims.test.mjs` ("after a heal the cached core index keeps the ids it was derived with…") | `src/js/07-production-tags.js` (`healTagRegistry`, the index cache) | Milestone 3, under the plan's cached-results criterion: the index's owner keeps both views in step |
 | Reads that repair: drawing the b-roll badge creates and renames shots, and every save heals the registry and repairs shots first | #325 | `src/test/production-shims.test.mjs`, `src/test/broll-id-sequence.test.mjs` (both fail if `brollEntries()` stops repairing) | `src/js/08c-broll.js` (the badge), `src/js/14-export.js` (`settleDerivedRecords`) | Milestone 6, because the plan removes render-time repair there. The repairs move to ingestion, milestone 3's commands and milestone 4's save coordinator |
+| B-roll keys still lose comment: formatted keys, typed markers, panel rename | #348 | Regression cases from #324 (PR #336) | `src/core/production/broll.ts` (`carriesOnlyComments`, `brollAnchorLine`), `src/js/08c-broll.js` (`renameBrollInScript`) | triage |
+| Gear quick add ignores names like `constructor` and `__proto__`; tag suggestions skip `__proto__` | #354 | Golden `production-gear-quick-add`; unit test "quick-add lines whose key is an Object property…" | `src/core/production/tags.ts` (`planQuickAdd`), `src/js/07-production-tags.js` (`refreshTagNameList`), `src/core/document/id-map.ts` | triage |
 
 ## Rich text adapter
 
@@ -75,6 +79,7 @@ none, no golden is expected to change.
 | A span that is both a comment anchor and a tag loses its comment. The same golden case shows a span that is both a b-roll key and a comment anchor losing its comment too (comment on the issue) | #280 | Richtext golden, case "one span, two special classes" | `src/adapters/richtext/sanitize.ts` | Fixed by #330, ported from `fix/280-282-anchor-tags-and-cue-retitle`, both spans in one PR. Golden: `richtext-golden.json` |
 | Markdown export writes `(null)` for a link with no `href` | #281 | Richtext golden, cases "links: other schemes" and "video card: unsafe href" (`markdownOfInput`) | `src/adapters/richtext/markdown.ts` | Fixed by #334, ported from `fix/281-283-md-null-href-and-person-merge`. Golden: `richtext-golden.json` |
 | Sanitising is not a fixed point for nested links (INV-10) | #290 | Nothing; fuzzing found 58 of 111,800 cases | `src/adapters/richtext/sanitize.ts` | Fixed by #342, ported from `fix/278-290-ids-and-nested-links`: a link inside a link splits the outer link around it. Golden: `richtext-golden.json`, two new cases. #355 tracks the output size on deeply nested formatting |
+| Sanitiser: deeply nested formatting around many inner links blows up output size | #355 | Real Edge measurements of output growth on hostile HTML | `src/adapters/richtext/sanitize.ts` (`splitLinkAround`, `nestShells`) | triage |
 | `storedHtmlFromDom` keeps an image attribute named `constructor` or `__proto__`. Neither can carry script, and sanitising drops both | #311 (comment) | Nothing | `src/adapters/richtext/richtext.ts` (`STORED_IMG_ATTRS`) | Fixed by #349, in #311's PR: `STORED_IMG_ATTRS` is a `Set` |
 | Stored-form quirks. `storedHtmlFromDom` looks for `data-blob` case-sensitively before it parses. An `is` attribute that was removed from a picture comes back when the picture is serialised | none | Nothing | `src/adapters/richtext/richtext.ts` | Won't fix: no cell reaches them. Every caller passes a live cell's `innerHTML`, which writes attribute names in lower case, and the sanitiser builds fresh elements that have no `is` value |
 | INV-10's check that no module outside `src/adapters/richtext/` builds cells from HTML is not written | #327 | Not applicable | `tools/dep-report.mjs` | Fixed by #347: the `html-cells` rule in `tools/dep-report.mjs` |
@@ -89,6 +94,9 @@ none, no golden is expected to change.
 | Dialogs open under the tour, and a second dialog opens over an open one, from the desktop menu | #307 | Nothing | Registry availability, and the capture-phase listeners in `20c-help.js`, `20e-connect.js`, `20s-settings.js` and `20b-onboarding.js` | Fixed by #351, after #274, in the same availability rules |
 | Refusal toasts are invisible in fullscreen Present, and repeated ones stack | #308 | Nothing | `src/js/12-dirty-toast.js` (`showToast`, `#toast-host`) | Milestone 6, because overlay and stacking ownership (INV-19) arrives there and decides where the toast host lives |
 | Ctrl+F in Present flips the prompter: its letter shortcuts ignore modifiers | #309 | [actions.md](actions.md) records it as a kept overlap | `src/js/21-events.js` (Present's `keydown` listener) | Fixed by #331. The actions.md note records the fix. #350 tracks the Find bar opening invisibly behind the prompter |
+| Find bar opens invisibly behind Present's prompter | #350 | `275-menu-refused-under-overlay.txt` lines 259–275 pin Find available under Present | `src/js/21-events.js` (Present's `keydown`), `src/legacy/this-document-actions.ts` (Find availability), `src/js/19-find.js` (#findbar z-index) | Milestone 6, with overlay and stacking ownership (INV-19): Find opens above prompter, searches prompter text, jumps highlight matches, pause on jump |
+| Overlay follow-ups: tour starts over overlays; import/export not refused under dialog; three manual dialog checks | #352 | Suite coverage: overlay authority and import/export refusal not yet written | `src/legacy/screen.ts` (overlay read model), `src/js/08d-broll-panel.js`, `src/js/20j-newtab.js`, `src/js/21-events.js` (manual dialog checks) | triage |
+| Desktop: second tab can't open another server's document (regression from #351) | #361 | Electron smoke: "per-tab connections: two servers side by side" (66/76 pass) | `src/legacy/share-actions.ts` (File action availability), desktop connection flow | triage |
 
 ## Tests and tooling
 
@@ -97,25 +105,13 @@ none, no golden is expected to change.
 | The `xlsx-export` same-bytes test flakes across a 2-second zip timestamp boundary | #297 | It is the flaky test: `src/test/xlsx-export.test.mjs` ("two exports of one script are the same bytes") | `src/test/xlsx-export.test.mjs`; the zip time in `src/js/14-export.js` | Fixed by #329: the test pins the clock |
 | `24-history.txt`'s quota toast check races the toast's lifetime | #293 | Not applicable | The 3.1.x copy of the suite | Close: fixed on 4.0 by #292 (24-history). #292 ("run-tests.ps1 picks its lane count from the machine's logical processors") changed the check in `24-history.txt` (107665c): a `MutationObserver` on `#toast-host` records every warn toast, and the case expects exactly one. The same PR also changed `69-html-images.txt` (d1f0b4d), which waits for its pictures to reach IndexedDB before stashing; that is a different flake and not part of #293. The 3.1.x copy stays as it is, because 3.1.x takes no more fixes |
 | A suite's static server sometimes fails to start, and the summary miscounts that suite | #299 | Nothing | `.claude/skills/run-splitpage-app/driver.ps1`, `tools/run-suites.mjs` | Fixed by #345: the start is retried, and a suite that could not start counts as a failed check |
+| Flaky test: history-store strict-mode stray await races a 5 ms timer | #358 | `src/test/history-store.test.mjs:507` ("strict mode: a stray non-tx await inside exclusive() fails") failed in CI run 37022901649 | `src/test/history-store.test.mjs`, test harness (mock clock) | triage |
 
 ## Performance
 
 | Item | Issue | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |
 | Image ingestion hashes each picture twice and may copy its bytes twice. The review's probe was slower on milestone 2, but it was not a controlled browser benchmark | #320 | Not applicable | `src/core/document/media.ts`, `src/legacy/document-ports.ts`, `src/js/02c-blobs.js` | Milestone 4, where the blob registry moves into a store adapter. Measure first, as the plan's milestone 4 criterion sets out |
-
-## Filed during the queue
-
-Defects found while fixing the rows above, each filed as its own issue:
-
-- #344: tag and person names are cut by UTF-16 unit and can keep half an emoji.
-- #348: b-roll keys still lose their comment: formatted keys, typed markers, and panel rename.
-- #350: Ctrl+F in Present opens the Find bar invisibly behind the prompter.
-- #352: overlay follow-ups: the tour starts over overlays, app data import and export, and manual dialog checks.
-- #353: owner follow-ups: undo replay drops same-named people, and a deleted owner beats the other side's assignment.
-- #354: Gear quick add ignores names like `constructor` and `__proto__`, and tag suggestions skip `__proto__`.
-- #355: the sanitiser's output size blows up on deeply nested formatting around many inner links.
-- #358: Flaky test: history-store strict-mode stray await races a 5 ms timer.
 
 ## Not in this table
 
