@@ -223,6 +223,15 @@ function clockOrRandomUse(node) {
   return "Date";
 }
 
+function dynamicCodeUse(node) {
+  const name = node.text;
+  if (name !== "eval" && name !== "Function") return null;
+  const n = outermost(node);
+  const p = n.parent;
+  if (name === "Function" && ts.isBinaryExpression(p) && p.right === n && p.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) return null;
+  return name;
+}
+
 function referenceSpace(node) {
   const p = node.parent;
   if (ts.isTypeReferenceNode(p) && p.typeName === node) return "type";
@@ -417,7 +426,7 @@ function bindScopes(sf) {
       for (const d of node.declarationList.declarations) ambient.push(...ambientNames(d.name));
     } else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) && node.name) {
       ambient.push(node.name);
-    } else if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name)) {
+    } else if (ts.isModuleDeclaration(node)) {
       if (node.flags & ts.NodeFlags.GlobalAugmentation) {
         if (node.body && ts.isModuleBlock(node.body)) for (const st of node.body.statements) collectAmbient(st);
       } else ambient.push(node.name);
@@ -572,18 +581,23 @@ export function analyzeScript(path, text) {
   visitEdges(sf);
 
   const globals = new Map();
-  const noteGlobal = (name, node) => {
-    if (!name || (commonjs && COMMONJS_GLOBALS.has(name))) return;
-    const line = at(node);
-    if (!globals.has(name) || globals.get(name) > line) globals.set(name, line);
-  };
   for (const r of refs) {
     if (r.binding) continue;
     const text = r.node.text;
-    noteGlobal(PLATFORM_GLOBALS.has(text) ? text : r.space === "value" ? clockOrRandomUse(r.node) : null, r.node);
+    const name = PLATFORM_GLOBALS.has(text) ? text : r.space === "value" ? dynamicCodeUse(r.node) ?? clockOrRandomUse(r.node) : null;
+    if (!name || (commonjs && COMMONJS_GLOBALS.has(name))) continue;
+    const line = at(r.node);
+    if (!globals.has(name) || globals.get(name) > line) globals.set(name, line);
   }
-  for (const id of scopes.ambient) {
-    noteGlobal(PLATFORM_GLOBALS.has(id.text) ? id.text : id.text === "Date" ? "Date" : id.text === "Math" ? "Math.random" : null, id);
+
+  const ambients = new Map();
+  const noteAmbient = (name, line) => {
+    if (!ambients.has(name) || ambients.get(name) > line) ambients.set(name, line);
+  };
+  for (const id of scopes.ambient) noteAmbient(ts.isStringLiteral(id) ? `"${id.text}"` : id.text, at(id));
+  const directives = [["lib", sf.libReferenceDirectives], ["types", sf.typeReferenceDirectives], ["path", sf.referencedFiles]];
+  for (const [kind, list] of directives) {
+    for (const d of list) noteAmbient(`reference ${kind}="${d.fileName}"`, sf.getLineAndCharacterOfPosition(d.pos).line + 1);
   }
 
   const memo = new Map();
@@ -638,7 +652,7 @@ export function analyzeScript(path, text) {
     exportsOut.push({ name: e.name, spec: t.root.source.spec, via: [...t.root.source.via, ...t.path, ...extra], line: at(e.node) });
   }
 
-  return { imports, unresolved, globals: [...globals].map(([name, line]) => ({ name, line })), sources, loads, exports: exportsOut };
+  return { imports, unresolved, globals: [...globals].map(([name, line]) => ({ name, line })), ambients: [...ambients].map(([name, line]) => ({ name, line })), sources, loads, exports: exportsOut };
 }
 
 export function isAnalyzed(path) {
@@ -736,7 +750,7 @@ export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
       loads: analysis.loads.map((l) => ({ ...l, target: fileTarget(l.spec) })),
       exports: analysis.exports.map((e) => ({ ...e, target: fileTarget(e.spec) }))
     };
-    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, globals: analysis.globals, stateLinks });
+    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, globals: analysis.globals, ambients: analysis.ambients, stateLinks });
   }
   const { provides, truncated } = stateProviders(modules);
   for (const m of modules.values()) m.state = stateUsage(m, provides, truncated);
@@ -840,6 +854,7 @@ export function findViolations(modules) {
     for (const u of m.unresolved) add("unresolved-dynamic", m.path, u.expression, u.line, `${u.kind} with a computed specifier`);
     if (platformGlobalsBanned(m.layer)) {
       for (const g of m.globals) add("platform-global", m.path, `global:${g.name}`, g.line, `${m.layer} may not use ${g.name}`);
+      for (const a of m.ambients) add("platform-global", m.path, `ambient:${a.name}`, a.line, `${m.layer} may not declare an ambient ${a.name}`);
     }
     if (isProduction(m.layer)) {
       if (m.state.importsState) add("state-import", m.path, `global:${STATE_EXPORT}`, m.state.line, m.state.bridge ? `re-exports ${STATE_EXPORT}` : `imports ${STATE_EXPORT}`);
