@@ -3,6 +3,7 @@ import { writePref } from "./00p-prefs.js";
 import { findRowIndex } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
+import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 
 export var hideShotScenes;
@@ -13,8 +14,8 @@ var HIDE_SHOT_GRACE_MS = 1400;
 function readHideShotFlag() {
   try { return localStorage.getItem(HIDE_SHOT_KEY) === "1"; } catch (e) { return false; }
 }
-var expandedShotRowIds = {};
-var shotHideTimers = {};
+var expandedShotRowIds = idMap();
+var shotHideTimers = idMap();
 
 function isRowHiddenByShotToggle(row) {
   return !!(hideShotScenes && row.status === "shot" && !expandedShotRowIds[row.id]);
@@ -30,7 +31,7 @@ export function setHideShotScenes(on) {
   on = !!on;
   if (on === hideShotScenes) return;
   hideShotScenes = on;
-  if (on) expandedShotRowIds = {};
+  if (on) expandedShotRowIds = idMap();
   writePref(HIDE_SHOT_KEY, on ? "1" : "0");
   updateHideShotMenu();
   if (S.state) render();

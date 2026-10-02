@@ -43,6 +43,13 @@ test("every attribute but the five a stored picture carries is dropped, and thos
     `<img data-mime="image/png" data-h="3" class="comment-img x" data-blob="${SHA}" data-w="4">`);
 });
 
+test("an attribute named like an Object.prototype member is dropped too (#311)", () => {
+  const SHAPE = `<img class="blob-img" data-blob="${SHA}">`;
+  assert.equal(rt.storedHtmlFromDom(`<img class="blob-img" data-blob="${SHA}" constructor="x" __proto__="y" onclick="z">`), SHAPE);
+  const names = ["constructor", "__proto__", "tostring", "valueof", "hasownproperty", "__definegetter__", "isprototypeof"];
+  for (const n of names) assert.equal(rt.storedHtmlFromDom(`<img ${n}="v" ${KEPT}>`), STORED, n);
+});
+
 test("each stored picture is cleaned wherever it sits, and nothing else is touched", () => {
   const html = `<span class="cmt-anchor" data-cmt="c1">x<img onerror="a" ${KEPT} alt="1"></span>` +
     `<strong><img src="blob:https://splitpage.test/2" ${KEPT} onload="b"></strong><img data-blob="${SHA}" onclick="c">`;

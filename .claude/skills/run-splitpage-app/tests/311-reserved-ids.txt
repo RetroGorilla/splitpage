@@ -1,0 +1,90 @@
+# Scenes and comments whose ids are Object.prototype names (#311): a
+# hand-edited or crafted file can hold the ids constructor or toString, which
+# pass safeId. The view modules and undo keyed plain {} maps by those ids, so
+# a missing "constructor" read as present. Checked here, in the real app, on a
+# .splitpage holding the scenes r1, constructor, toString (shot) and r4:
+# a comment anchor drawn resolved only when its comment is, the reply box of
+# the comment "constructor" closed until asked for, Hide shot scenes hiding
+# the shot scene "toString" (and the timecodes still painting), deleting the
+# scene "constructor" undone and redone as a delete, a status click on it
+# undone, and the merge review listing that scene and a crew member named
+# "constructor" (18a-local-merge.js). The pure halves are in
+# src/test/undo.test.mjs and src/test/reserved-ids-views.test.mjs.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.ids = function(){ return F.state().rows.map(function(r){ return r.id; }).join(','); }; window.__doc = { schema: 2, title: 'Reserved ids', people: [{ id: 'p1', name: 'Sam' }], rows: [ { id: 'r1', visualText: 'Visual one', audioText: 'one <span class="cmt-anchor" data-cmt="constructor">anchored</span> and <span class="cmt-anchor" data-cmt="c2">done</span>', status: 'todo' }, { id: 'constructor', visualText: 'Visual two', audioText: 'two', status: 'todo' }, { id: 'toString', visualText: 'Visual three', audioText: 'three', status: 'shot' }, { id: 'r4', visualText: 'Visual four', audioText: 'four', status: 'todo' } ], comments: [ { id: 'constructor', rowId: 'r1', field: 'audioText', anchorId: 'constructor', quotedText: 'anchored', author: 'Sam', body: 'open note', resolved: false, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', replies: [] }, { id: 'c2', rowId: 'r1', field: 'audioText', anchorId: 'c2', quotedText: 'done', author: 'Sam', body: 'done note', resolved: true, resolvedBy: 'Sam', resolvedAt: '2026-01-02T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z', replies: [] } ] }; window.__body = JSON.stringify(window.__doc); window.__t0 = Date.now() - 100000; window.__written = 0; window.__fakeHandle = { name: 'ids.splitpage', _mtime: window.__t0, _body: window.__body, createWritable: async function(){ window.__written++; return { write: async function(b){ window.__fakeHandle._body = b; }, close: async function(){ window.__fakeHandle._mtime = Date.now(); } }; }, getFile: async function(){ return new File([window.__fakeHandle._body], 'ids.splitpage', { type: 'application/json', lastModified: window.__fakeHandle._mtime }); } }; return F.openFile(new File([window.__body], 'ids.splitpage', { type: 'application/json', lastModified: window.__t0 }), window.__fakeHandle); })()
+wait F.state().title === 'Reserved ids' && document.querySelectorAll('#rows .row').length === 4
+expect ids() == r1,constructor,toString,r4
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+
+# --- a comment anchor is drawn resolved only when its comment is -------------
+expect document.querySelector('#rows .cmt-anchor[data-cmt="c2"]').classList.contains('resolved')
+expect !document.querySelector('#rows .cmt-anchor[data-cmt="constructor"]').classList.contains('resolved')
+
+# --- the reply box of the comment "constructor" opens only when asked --------
+click #btn-comments
+expect !document.getElementById('comments-panel').hidden
+wait document.querySelector('[data-action="toggle-reply"][data-id="constructor"]') !== null
+expect document.querySelector('.reply-composer[data-for="constructor"]') === null
+jsclick [data-action="toggle-reply"][data-id="constructor"]
+wait document.querySelector('.reply-composer[data-for="constructor"]') !== null
+jsclick [data-action="reply-cancel"][data-id="constructor"]
+wait document.querySelector('.reply-composer[data-for="constructor"]') === null
+click #btn-comments
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+
+# --- Hide shot scenes hides the shot scene "toString", and times still paint -
+key ctrl+alt KeyH
+wait document.querySelector('#rows .row[data-id="toString"]') === null
+expect document.querySelectorAll('.hidden-shot-strip').length === 1
+expect document.querySelector('#rows .row[data-id="constructor"]') !== null
+expect document.querySelector('#rows .row[data-id="r4"] .row-start').textContent !== ''
+key ctrl+alt KeyH
+wait document.querySelector('#rows .row[data-id="toString"]') !== null
+
+# --- deleting the scene "constructor" is undone and redone as a delete --------
+eval (function(){ var b = document.querySelector('#rows .row[data-id="constructor"] [data-action="delete-row"]'); b.click(); b = document.querySelector('#rows .row[data-id="constructor"] [data-action="delete-row"]'); if (b) b.click(); return true; })()
+wait F.state().rows.length === 3
+expect ids() == r1,toString,r4
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows.length === 4
+expect ids() == r1,constructor,toString,r4
+expect F.state().rows[1].audioText === 'two'
+expect F.state().rows[1].visualText === 'Visual two'
+key ctrl+shift KeyZ
+wait F.state().rows.length === 3
+expect ids() == r1,toString,r4
+key ctrl KeyZ
+wait F.state().rows.length === 4
+expect ids() == r1,constructor,toString,r4
+
+# --- a status click on the scene "constructor" is undone ----------------------
+jsclick #rows .row[data-id="constructor"] [data-action="cycle-status"]
+wait F.state().rows[1].status !== 'todo'
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+wait F.state().rows[1].status === 'todo'
+expect ids() == r1,constructor,toString,r4
+
+# --- the merge review lists the scene "constructor" and the crew member -------
+eval (function(){ var t = JSON.parse(window.__body); t.rows.splice(1, 1); t.people.push({ id: 'p2', name: 'constructor' }); window.__fakeHandle._body = JSON.stringify(t); window.__fakeHandle._mtime = window.__t0 + 200000; return true; })()
+caret #rows .row[data-id="constructor"] .audio-cell .cell-editable
+type MINEEDIT
+eval document.activeElement.blur()
+wait F.state().rows[1].audioText.indexOf('MINEEDIT') !== -1
+eval (function(){ window.__writtenBefore = window.__written; F.save(); return true; })()
+wait !document.getElementById('file-conflict-modal').hidden
+wait !document.getElementById('file-conflict-merge').hidden
+click #file-conflict-merge
+wait !document.getElementById('merge-review-modal').hidden
+expect document.getElementById('merge-review-list').textContent.indexOf('MINEEDIT') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Crew: constructor') !== -1
+expect document.getElementById('merge-review-list').textContent.indexOf('Crew: Object') === -1
+click #merge-review-cancel
+wait document.getElementById('merge-review-modal').hidden
+expect window.__written === window.__writtenBefore
+quit

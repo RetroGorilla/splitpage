@@ -7,6 +7,7 @@ import {
   rundownPresenceActivity,
   rundownPresenceGroups
 } from "../js/05p-rundown-presence.js";
+import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 
 var rows = {
   r1: { id: "r1", audioText: "One", visualText: "", status: "todo" },
@@ -45,7 +46,7 @@ test("someone who left is dropped; a person with no id is ignored", () => {
   var a = rundownPresenceActivity({}, [{ id: "p1", rowId: "r1" }, { id: "p2", rowId: "r2" }], rows, null, 1000);
   var b = rundownPresenceActivity(a, [{ id: "p2", rowId: "r2" }, { rowId: "r1" }, null], rows, null, 2000);
   assert.deepEqual(Object.keys(b), ["p2"]);
-  assert.deepEqual(rundownPresenceActivity(null, null, null, null, 1), {});
+  assert.deepEqual(Object.keys(rundownPresenceActivity(null, null, null, null, 1)), []);
 });
 
 test("groups: one per scene, in script order, idle after the minute", () => {
@@ -75,6 +76,20 @@ test("groups: nobody in a scene this copy lacks, the title, or nowhere", () => {
   assert.deepEqual(rundownPresenceGroups(people, ["r1"], {}, 0, RUNDOWN_IDLE_MS), []);
   assert.deepEqual(rundownPresenceGroups([], ["r1"], {}, 0, RUNDOWN_IDLE_MS), []);
   assert.equal(rundownPresenceGroups([{ id: "x", name: "X", color: "", rowId: "r1" }], ["r1"], {}, 1e12, 1)[0].people[0].idle, false);
+});
+
+test("groups and activity: scenes and people with Object.prototype ids are placed and timed like any other (#311)", () => {
+  for (const x of PROTOTYPE_IDS) {
+    var people = [{ id: x, name: "A", color: "#80BDFB", rowId: x, field: "audioText" }, { id: "p2", name: "B", color: "#80BDFB", rowId: x }];
+    var groups = rundownPresenceGroups(people, ["r1", x], {}, 0, RUNDOWN_IDLE_MS);
+    assert.deepEqual(groups.map((g) => [g.rowId, g.index, g.people.map((p) => p.id)]), [[x, 1, [x, "p2"]]], x);
+    var byId = Object.create(null);
+    byId[x] = { id: x, audioText: "Two", visualText: "", status: "todo" };
+    var a = rundownPresenceActivity({}, people.slice(0, 1), byId, null, 1000);
+    assert.deepEqual(Object.keys(a), [x]);
+    assert.equal(a[x].at, 1000, x);
+    assert.equal(a[x].sig, "Two\u0001\u0001todo", x);
+  }
 });
 
 test("dots: one on the block's middle, several side by side around it", () => {

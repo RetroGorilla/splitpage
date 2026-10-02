@@ -28,6 +28,10 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   special word such as `constructor` or `__proto__`, and could blank a
   scene's text. Only a hand-edited or damaged file has such ids. They now
   merge like any other, and files that have them open unchanged.
+- A scene or comment whose id was such a special word also tripped up undo,
+  Hide shot scenes, comment highlights and replies, and the merge review:
+  undoing the delete of such a scene could fail, and such a shot scene never
+  hid. They now behave like any other.
 
 ## What's new in 3.1
 
