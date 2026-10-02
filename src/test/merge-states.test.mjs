@@ -105,8 +105,12 @@ function shaped() {
   s.comments = [{ id: "c1", rowId: "r1", field: "audioText", body: "look", createdAt: "2026-01-01T00:00:00.000Z",
     replies: [{ id: "rp1", body: "yes", createdAt: "2026-01-02T00:00:00.000Z" }] }];
   s.rows[0].imageLinks = [{ href: "https://video.example/a" }];
-  s.rows[0].moreImages = [{ links: [{ href: "https://video.example/b", poster: true }] }];
+  s.rows[0].moreImages = [
+    { links: [{ href: "https://video.example/b", poster: true }] },
+    { imageRef: { sha256: "a".repeat(64), width: 640, height: 360, mime: "image/png" }, name: "Pier", links: [{ href: "https://video.example/c" }] }
+  ];
   const d = migrateRows(s);
+  assert.equal(d.rows[0].moreImages.length, 2, "the fixture keeps both gallery items");
   return { base: cloneState(d), mine: cloneState(d), theirs: cloneState(d) };
 }
 
@@ -128,11 +132,23 @@ const SHAPES = [
   ["a gallery link that is null", (d) => { d.mine.rows[0].imageLinks.push(null); d.theirs.rows[0].imageLinks.unshift(null); }, () => {}],
   ["their gallery lists are objects", (d) => { d.theirs.rows[0].imageLinks = {}; d.theirs.rows[0].moreImages[0].links = {}; },
     (d) => { d.theirs.rows[0].imageLinks = []; d.theirs.rows[0].moreImages[0].links = []; }],
-  ["a picture that is null", (d) => { d.mine.rows[0].moreImages.push(null); d.theirs.rows[0].moreImages.push(null); }, () => {}]
+  ["a picture that is null", (d) => { d.mine.rows[0].moreImages.push(null); d.theirs.rows[0].moreImages.push(null); }, () => {}],
+  ["both sides changed the gallery, and their picture's links are an object",
+    (d) => {
+      d.mine.rows[0].moreImages[1].links.push({ href: "https://video.example/mine" });
+      d.mine.rows[0].moreImages.push({ links: [{ href: "https://video.example/new", poster: true }] });
+      d.theirs.rows[0].moreImages[1].links = {};
+    },
+    (d) => {
+      d.mine.rows[0].moreImages[1].links.push({ href: "https://video.example/mine" });
+      d.mine.rows[0].moreImages.push({ links: [{ href: "https://video.example/new", poster: true }] });
+      d.theirs.rows[0].moreImages[1].links = [];
+    }]
 ];
 
 for (const [label, bad, clean] of SHAPES) {
-  test("#304: " + label + ": the merge drops what is not a list or not an object, and nothing throws", () => {
+  test("#304: " + label + ": the merge drops what is not a list or not an object, and nothing throws", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 2, 1) });
     const odd = shaped(), plain = shaped();
     bad(odd);
     clean(plain);
