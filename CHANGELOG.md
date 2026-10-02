@@ -16,6 +16,8 @@ appear in the app under **Help**. The format follows
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Commenting a b-roll key's line no longer moves the comment off the key or
+  gives the shot a new id.
 - Words marked as both a comment and a production tag or b-roll key in one
   piece of markup, as a script or paste from elsewhere can carry them, kept
   the tag or key but lost the comment's highlight, leaving its card "No
