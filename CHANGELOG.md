@@ -14,6 +14,17 @@ appear in the app under **Help**. The format follows
   Present is; Find & replace while a dialog or the writer is; Hide shot
   scenes (Ctrl+Alt+H) while a dialog is. Search Commands… already stopped
   under a dialog, the writer, Present or the tour, and now says why too.
+- In the desktop app, more menu-bar commands ran behind the writer, Present,
+  the B-roll shot list page or the tour. They now stop and say what to close
+  first: Present, Write, Production (Ctrl+Alt+P), Gear, Comments
+  (Ctrl+Alt+C) and Version history… while a dialog, the command menu, the
+  writer, Present, the shot list or the tour is open (Present and Write not
+  for themselves); Open… (Ctrl+O), Export… (Ctrl+E), Search Commands…
+  (Ctrl+K) and Find & replace (Ctrl+F) also while the shot list or the tour
+  is, and Find & replace while Present is; Save to file, Put this script on
+  the server, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
+  Recognition and each File ▸ Export format while a dialog or the command
+  menu is.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
 - When a merge found that you and someone else had both added the same
@@ -37,6 +48,19 @@ appear in the app under **Help**. The format follows
   close to its old ones and to no other cue that went. When that can't be
   told, it gets a new item at Needed and both old items stay, "Not in
   script", rather than the wrong one being renamed.
+- Saving while a script was still opening, with **Save** in the header or in
+  the desktop app's menu bar (Ctrl+S), did nothing and reported an error in
+  the background. It now says "Still loading…", as the File menu's commands
+  already did.
+- In Present, Ctrl+F, Ctrl+M, Alt+F and the like flipped or mirrored the
+  text, and Ctrl, Cmd or Alt with Space still played or paused it. M, F and
+  Space now do nothing in Present while Ctrl, Cmd or Alt is held, none of
+  Present's keys act while you type in a field such as the Find box, and
+  pressing M or F with the caret still in a script cell no longer types the
+  letter into it.
+- An emoji no longer breaks in two when a tag name cut inside it is tagged
+  with "Tag all mentions", or when text is pasted, cut or split at a
+  position inside it.
 
 ## 3.1.0 — 2026-09-29
 

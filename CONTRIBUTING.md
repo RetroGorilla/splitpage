@@ -35,9 +35,11 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
    CI runs every unit test and the smoke, CSP and persistence suites on the
    pull request; the full browser regression and the platform checks are run
    at milestone and release gates.
-3. If what a person sees or does changed, update
-   [`docs/help.md`](docs/help.md) and add a line under **Unreleased** in
-   [CHANGELOG.md](CHANGELOG.md).
+3. If what a person sees or does changed, put a "Suggested CHANGELOG line"
+   in the pull request description. Do not edit
+   [`docs/help.md`](docs/help.md) or [CHANGELOG.md](CHANGELOG.md) in the
+   pull request: the maintainer writes the entries together
+   ([review policy §7](docs/architecture/review.md#7-fixes-evidence-and-merge)).
 4. Fill in the pull request template. Screenshots for UI changes, light and
    dark.
 
