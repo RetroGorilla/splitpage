@@ -201,7 +201,7 @@
       {
         "cat": "prop",
         "name": "Ladder",
-        "owner": "",
+        "owner": "p5",
         "notes": "",
         "status": "needed",
         "id": "t_ladder"

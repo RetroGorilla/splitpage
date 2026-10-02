@@ -39,6 +39,14 @@ test("toggling a direction trims white space, turns off only when all of it is o
   assert.deepEqual(toggleDirection([T("a"), B("bs1"), T("b")], 0, 3), [T("a", { dir: true }), B("bs1"), T("b", { dir: true })]);
 });
 
+test("#322: a direction toggled over half a surrogate pair takes the whole character", () => {
+  const cell = [T("a" + GRIN + " b" + GRIN)];
+  assert.deepEqual(directionToggleRange(cell, 2, 6), { from: 1, to: 7, off: false });
+  assert.deepEqual(toggleDirection(cell, 2, 6), [T("a"), T(GRIN + " b" + GRIN, { dir: true })]);
+  assert.deepEqual(directionToggleRange(cell, 2, 2), { from: 3, to: 3, off: false });
+  assert.deepEqual(directionRangeAt([T("a"), T(GRIN, { dir: true })], 2), { from: 1, to: 3 });
+});
+
 test("typing ((words)) makes a direction of the words, leaving the spaces inside them out", () => {
   assert.deepEqual(directionShortcut([T("say ((softly))")], 14), { cell: [T("say "), T("softly", { dir: true })], end: 10 });
   assert.deepEqual(directionShortcut([T("say (( softly ))")], 16), { cell: [T("say  "), T("softly", { dir: true }), T(" ")], end: 12 });
