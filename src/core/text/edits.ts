@@ -243,6 +243,13 @@ export function splitCell(cell: CellInput, pos: number): [Run[], Run[]] {
   return [sliceCell(cell, 0, pos), sliceCell(cell, pos)];
 }
 
+export function insertCell(cell: CellInput, pos: number, piece: CellInput): CellEdit {
+  pos = clamp(cell, pos);
+  const halves = splitCell(cell, pos);
+  const next = joinCells(joinCells(halves[0], piece), halves[1]);
+  return { cell: next, end: pos + cellLength(next) - cellLength(cell) };
+}
+
 export function joinCells(a: CellInput, b: CellInput, glue?: string): Run[] {
   const runs = normalizeCell(a).slice();
   const rest = normalizeCell(b);
