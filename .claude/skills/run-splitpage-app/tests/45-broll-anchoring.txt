@@ -103,6 +103,31 @@ click #doc-title
 wait document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .broll-key').length === 1
 wait document.querySelectorAll('#broll-list .broll-loose-badge').length === 0
 
+# --- 5) a comment on a key and its line survives anchoring, and so does the id
+# Row 2 now holds an anchored key. A comment over the whole line used to make
+# the key read as a typed marker with no id, so leaving the field swapped in a
+# fresh key and the comment lost its anchor on the key.
+caret #rows .row:nth-child(2) .visual-cell .cell-editable
+eval (function(){var c=document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable');var r=document.createRange();r.selectNodeContents(c);var s=getSelection();c.focus();s.removeAllRanges();s.addRange(r);window.__keyId=c.querySelector('.broll-key').getAttribute('data-broll-id');return window.__keyId;})()
+sleep 300
+jsclick #rows .row:nth-child(2) .visual-cell .mini-toolbar [data-cmd="comment"]
+sleep 500
+eval (function(){var b=document.getElementById('comment-body-editable');b.focus();document.execCommand('insertText',false,'Check this shot.');return b.textContent;})()
+jsclick #comment-post
+sleep 600
+expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length == 1
+eval (function(){window.__cmtId=document.querySelector('#rows .row:nth-child(2) .visual-cell .cmt-anchor').getAttribute('data-cmt');return window.__cmtId;})()
+expect !!window.__cmtId
+
+click #doc-title
+sleep 900
+expect document.querySelectorAll('#rows .row:nth-child(2) .visual-cell .cmt-anchor .broll-key').length == 1
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell .broll-key').getAttribute('data-broll-id') === window.__keyId
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cmt-anchor').getAttribute('data-cmt') === window.__cmtId
+expect document.querySelector('#rows .row:nth-child(2) .visual-cell .cell-editable').textContent.indexOf('unanchored for now') !== -1
+expect document.querySelectorAll('#broll-list .broll-row').length == 4
+expect document.querySelectorAll('#broll-list .broll-orphan-ico').length == 0
+
 shot 45-broll-anchoring
 
 quit
