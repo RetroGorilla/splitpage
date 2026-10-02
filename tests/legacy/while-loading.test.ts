@@ -22,20 +22,33 @@ function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   };
 }
 
+const STILL_LOADING = "Still loading…";
+
 function refusal(registry: ActionRegistry, id: string, source: ActionSource): string | null {
   const view = registry.view(id, source);
   assert.ok(view, `${id} is registered`);
   return view.enabled ? null : view.reason;
 }
 
-test("while loading, Save from its buttons and the desktop menu runs, and only Ctrl+S waits, as in 3.1", () => {
+test("while loading, Save is refused from every surface with the File menu's wording", () => {
   const { registry, restore } = loadingRegistry();
   try {
-    assert.equal(refusal(registry, "save", "button"), null);
-    assert.equal(refusal(registry, "save", "native-menu"), null);
-    assert.equal(refusal(registry, "save", "shortcut"), "Still loading…");
+    assert.equal(refusal(registry, "save", "button"), STILL_LOADING);
+    assert.equal(refusal(registry, "save", "native-menu"), STILL_LOADING);
+    assert.equal(refusal(registry, "save", "shortcut"), STILL_LOADING);
     assert.equal(refusal(registry, "save-as", "native-menu"), "Still loading…");
     assert.equal(refusal(registry, "open", "menu"), "Still loading…");
+  } finally {
+    restore();
+  }
+});
+
+test("while loading, Save from its button and the native menu is refused rather than run", () => {
+  const { registry, restore } = loadingRegistry();
+  try {
+    for (const source of ["button", "native-menu", "shortcut"] as const) {
+      assert.deepEqual(registry.invoke("save", source), { kind: "unavailable", id: "save", reason: STILL_LOADING });
+    }
   } finally {
     restore();
   }
@@ -52,15 +65,15 @@ test("while loading, the rundown's own button still toggles and the File menu's 
   }
 });
 
-test("while loading, each panel button answers as its own 3.1 handler did", () => {
+test("while loading, each panel button that waits refuses with the one wording and the B-roll button does not wait", () => {
   const { registry, restore } = loadingRegistry();
   try {
-    assert.equal(refusal(registry, "panel-production", "button"), "Still loading...");
-    assert.equal(refusal(registry, "panel-gear", "button"), "Still loading...");
-    assert.equal(refusal(registry, "panel-comments", "button"), "Still loading…");
+    assert.equal(refusal(registry, "panel-production", "button"), STILL_LOADING);
+    assert.equal(refusal(registry, "panel-gear", "button"), STILL_LOADING);
+    assert.equal(refusal(registry, "panel-comments", "button"), STILL_LOADING);
     assert.equal(refusal(registry, "panel-broll", "button"), null);
-    assert.equal(refusal(registry, "present", "button"), "Still loading…");
-    assert.equal(refusal(registry, "write", "button"), "Still loading…");
+    assert.equal(refusal(registry, "present", "button"), STILL_LOADING);
+    assert.equal(refusal(registry, "write", "button"), STILL_LOADING);
   } finally {
     restore();
   }
