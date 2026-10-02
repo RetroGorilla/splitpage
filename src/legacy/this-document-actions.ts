@@ -4,7 +4,7 @@ import { hideShotScenes, toggleHideShotScenes } from "../js/01b-hide-shot.js";
 import { openHistoryPanel } from "../js/03-sync.js";
 import { isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
 import { findOpen, openFindBar } from "../js/09-find-replace.js";
-import { availableUnless } from "./screen.ts";
+import { EVERY_OVERLAY, availableUnless, everyOverlayBut } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
 
 export function registerThisDocumentActions(registry: ActionRegistry): () => void {
@@ -34,6 +34,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       group: "This document",
       icon: "i-history",
       words: "versions restore snapshot backup older undo",
+      availability: () => availableUnless(EVERY_OVERLAY, screenNow()),
       run: () => { openHistoryPanel(); }
     },
     {
@@ -43,7 +44,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       icon: "i-find",
       keys: ["mod+f", "mod+shift+f", "mod+alt+f", "mod+alt+shift+f"],
       words: "search replace look for",
-      availability: () => availableUnless(["loading", "dialog", "writer"], screenNow()),
+      availability: () => availableUnless(["loading", ...everyOverlayBut("launcher")], screenNow()),
       run: (source) => {
         const input = document.getElementById("find-input");
         if (source === "shortcut" && findOpen && input instanceof HTMLInputElement) input.select();

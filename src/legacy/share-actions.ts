@@ -17,10 +17,15 @@ import {
 } from "../js/20f-desktop.js";
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { availableUnless, firstRefusal } from "./screen.ts";
+import type { Blocker } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 
-function loaded(own: Availability = { enabled: true }): Availability {
-  return firstRefusal(availableUnless(["loading"], screenNow()), own);
+const LOADED: readonly Blocker[] = ["loading"];
+
+const NO_DIALOG: readonly Blocker[] = ["loading", "dialog", "launcher"];
+
+function loaded(own: Availability = { enabled: true }, blockers: readonly Blocker[] = LOADED): Availability {
+  return firstRefusal(availableUnless(blockers, screenNow()), own);
 }
 
 function desktopKeys(keys: readonly string[]): () => readonly string[] {
@@ -36,7 +41,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       icon: "i-save",
       words: "write back original docx csv txt",
       availability: (source) => {
-        const a = loaded(itemAvailability(saveBackItemState(), source));
+        const a = loaded(itemAvailability(saveBackItemState(), source), NO_DIALOG);
         return a.enabled ? a : { ...a, visible: false };
       },
       run: async () => { await saveBackToFile(); }
@@ -113,7 +118,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "Share",
       icon: "i-cloud-up",
       words: "publish upload server hosted",
-      availability: (source) => loaded(itemAvailability(serverPublishItemState(), source)),
+      availability: (source) => loaded(itemAvailability(serverPublishItemState(), source), NO_DIALOG),
       run: async () => { await publishToServer(); }
     },
     {
@@ -142,7 +147,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       keys: desktopKeys(["mod+shift+p"]),
       bindKeys: () => false,
       words: "teleprompter browser follow my voice present",
-      availability: () => loaded(shownWhen(canOpenPrompterInBrowser())),
+      availability: () => loaded(shownWhen(canOpenPrompterInBrowser()), NO_DIALOG),
       run: async () => { await openPrompterInBrowser(); }
     },
     {
@@ -151,7 +156,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "This document",
       icon: "i-mic",
       words: "teleprompter chrome edge chromium speech recognition voice",
-      availability: () => loaded(shownWhen(canOpenPrompterInChromium())),
+      availability: () => loaded(shownWhen(canOpenPrompterInChromium()), NO_DIALOG),
       run: async () => { await openPrompterInChromium(); }
     }
   ];

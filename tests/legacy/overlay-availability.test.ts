@@ -1,0 +1,123 @@
+import "../../src/test/_dom.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createActionRegistry } from "../../src/application/actions.ts";
+import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
+import { S } from "../../src/js/_state.js";
+import { registerFileActions } from "../../src/legacy/file-actions.ts";
+import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront } from "../../src/legacy/screen.ts";
+import type { Blocker, ScreenState } from "../../src/legacy/screen.ts";
+import { registerShareActions } from "../../src/legacy/share-actions.ts";
+import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { registerViewActions } from "../../src/legacy/view-actions.ts";
+
+const NOTHING: ScreenState = {
+  loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
+};
+
+function open(...blockers: Blocker[]): ScreenState {
+  const screen: Record<Blocker, boolean> = { ...NOTHING };
+  for (const b of blockers) screen[b] = true;
+  return screen;
+}
+
+test("the one in front is named: loading, then a dialog, the command menu, the tour, Present, the writer, the shot list", () => {
+  const all = ["loading", ...EVERY_OVERLAY] as const;
+  assert.equal(inFront(all, NOTHING), undefined);
+  assert.equal(inFront(all, open(...all)), "loading");
+  assert.equal(inFront(all, open("writer", "dialog")), "dialog");
+  assert.equal(inFront(all, open("shotlist", "launcher")), "launcher");
+  assert.equal(inFront(all, open("writer", "tour")), "tour");
+  assert.equal(inFront(all, open("writer", "prompter")), "prompter");
+  assert.equal(inFront(all, open("shotlist", "writer")), "writer");
+  assert.equal(inFront(["writer"], open("dialog", "writer")), "writer");
+  assert.equal(inFront(["dialog"], open("writer", "prompter", "tour", "shotlist")), undefined);
+});
+
+test("each blocker refuses with its own reason", () => {
+  const reason = (b: Blocker): string | undefined => availableUnless([b], open(b)).reason;
+  assert.equal(reason("loading"), "Still loading…");
+  assert.equal(reason("dialog"), "Close the open dialog first");
+  assert.equal(reason("launcher"), "Close the open dialog first");
+  assert.equal(reason("tour"), "Finish or skip the tour first");
+  assert.equal(reason("prompter"), "Close Present first");
+  assert.equal(reason("writer"), "Close the writer first");
+  assert.equal(reason("shotlist"), "Close the shot list first");
+  assert.deepEqual(availableUnless(EVERY_OVERLAY, NOTHING, true), { enabled: true, checked: true });
+  assert.deepEqual(everyOverlayBut("writer"), ["dialog", "launcher", "tour", "prompter", "shotlist"]);
+});
+
+function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
+  const registry = createActionRegistry();
+  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
+    registerShareActions(registry)];
+  const was = { state: S.state as unknown, prompterOpen: S.prompterOpen as unknown };
+  Object.assign(S, { state: { rows: [] }, prompterOpen: false });
+  return {
+    registry,
+    restore: () => {
+      Object.assign(S, was);
+      document.body.innerHTML = "";
+      for (const dispose of disposers) dispose();
+    }
+  };
+}
+
+function refusal(registry: ActionRegistry, id: string, source: ActionSource = "native-menu"): string | null {
+  const view = registry.view(id, source);
+  assert.ok(view, `${id} is registered`);
+  return view.enabled ? null : view.reason;
+}
+
+const PAGE_COMMANDS = ["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
+
+test("in Present, what would open behind it is refused, and Save, Hide shot scenes and Present itself are not", () => {
+  const { registry, restore } = loadedRegistry();
+  try {
+    Object.assign(S, { prompterOpen: true });
+    for (const id of [...PAGE_COMMANDS, "write"]) assert.equal(refusal(registry, id), "Close Present first", id);
+    for (const id of ["save", "save-as", "toggle-hide-shot", "present"]) assert.equal(refusal(registry, id), null, id);
+  } finally {
+    restore();
+  }
+});
+
+test("on the shot-list page, what would open behind it is refused", () => {
+  const { registry, restore } = loadedRegistry();
+  try {
+    document.body.innerHTML = '<div id="broll-page"></div>';
+    for (const id of [...PAGE_COMMANDS, "write", "present"]) assert.equal(refusal(registry, id), "Close the shot list first", id);
+    for (const id of ["save", "save-as", "toggle-hide-shot"]) assert.equal(refusal(registry, id), null, id);
+    document.getElementById("broll-page")?.setAttribute("hidden", "");
+    for (const id of [...PAGE_COMMANDS, "write", "present"]) assert.equal(refusal(registry, id), null, id);
+  } finally {
+    restore();
+  }
+});
+
+test("a dialog over Present is named first, and the commands that only acted behind a dialog are refused there too", () => {
+  const { registry, restore } = loadedRegistry();
+  try {
+    Object.assign(S, { prompterOpen: true });
+    document.body.innerHTML = '<div class="modal-backdrop"></div>';
+    for (const id of [...PAGE_COMMANDS, "write", "present", "save", "save-as", "toggle-hide-shot", "server-publish"]) {
+      assert.equal(refusal(registry, id), "Close the open dialog first", id);
+    }
+    assert.equal(refusal(registry, "toggle-rundown-min"), null);
+  } finally {
+    restore();
+  }
+});
+
+test("the open command menu refuses what its shortcut refused, and not Find, Hide shot scenes or itself", () => {
+  const { registry, restore } = loadedRegistry();
+  try {
+    document.body.innerHTML = '<div class="cmdk-backdrop"></div>';
+    for (const id of ["save", "save-as", "open", "export", "present", "write", "history", "panel-production", "server-publish"]) {
+      assert.equal(refusal(registry, id), "Close the open dialog first", id);
+    }
+    for (const id of ["find", "toggle-hide-shot", "command-menu"]) assert.equal(refusal(registry, id), null, id);
+  } finally {
+    restore();
+  }
+});
