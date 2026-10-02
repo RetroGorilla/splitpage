@@ -26,6 +26,11 @@ own network you can also [host a shared session](#hosting-a-shared-session).
 - Pasted or imported text with a link inside another link could lose a
   link the next time it was saved, merged or pasted. The inner link now
   becomes part of the outer one as soon as the text comes in, and stays so.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
 
 ## What's new in 3.1
 

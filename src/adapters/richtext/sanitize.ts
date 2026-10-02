@@ -27,6 +27,10 @@ function hasClass(node: Element, name: string): boolean {
   return !!node.classList && node.classList.contains(name);
 }
 
+const SPAN_MARK_CLASSES: readonly string[] = ["tag-anchor", "broll-key", "stage-dir", "audio-cue"];
+
+const CUE_OUTRANKED: readonly string[] = ["tag-anchor", "broll-key", "stage-dir"];
+
 function insideSafeLink(node: Element): boolean {
   for (let p = node.parentNode; p && p.nodeType === 1; p = p.parentNode) {
     if ((p as Element).tagName === "A" && safeHref((p as Element).getAttribute("href") || "")) return true;
@@ -132,6 +136,26 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
     if (tag === "A" && hasClass(el, "video-embed-card")) {
       const vhref = safeHref(el.getAttribute("href") || "");
       if (vhref) destParent.appendChild(videoCardElement(doc, vhref));
+      return;
+    }
+    if (tag === "SPAN" && hasClass(el, "cmt-anchor") && SPAN_MARK_CLASSES.some(function (c) { return hasClass(el, c); })) {
+      const peeledSpan = doc.createElement("span");
+      peeledSpan.className = "cmt-anchor";
+      peeledSpan.setAttribute("data-cmt", safeId(el.getAttribute("data-cmt") || "", "c", ctx.ids));
+      if (hasClass(el, "audio-cue") && !CUE_OUTRANKED.some(function (c) { return hasClass(el, c); })) {
+        const cueSpan = doc.createElement("span");
+        cueSpan.className = "audio-cue";
+        walkSanitize(el, peeledSpan, ctx);
+        cueSpan.appendChild(peeledSpan);
+        destParent.appendChild(cueSpan);
+        return;
+      }
+      const rest = el.cloneNode(true) as Element;
+      rest.classList.remove("cmt-anchor");
+      const restHolder = doc.createElement("span");
+      restHolder.appendChild(rest);
+      walkSanitize(restHolder, peeledSpan, ctx);
+      destParent.appendChild(peeledSpan);
       return;
     }
     if (tag === "SPAN" && hasClass(el, "tag-anchor")) {

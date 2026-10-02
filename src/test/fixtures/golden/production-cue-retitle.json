@@ -405,13 +405,13 @@
       "sound": [
         [
           "t_1opaishvqv40e",
-          "kettle whistling",
+          "door slams",
           "needed",
           ""
         ],
         [
           "t_18sj9dp103vkh2",
-          "kettle whistles",
+          "kettle whistling",
           "needed",
           ""
         ],
@@ -423,7 +423,7 @@
         ]
       ],
       "orphaned": [
-        "sound kettle whistles"
+        "sound door slams"
       ]
     }
   ],

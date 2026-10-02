@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
 import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
 import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
-import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
+import { clampRange, deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
@@ -57,9 +57,11 @@ export function splitRowFieldCore(cellEl) {
   breakUndoCoalescing();
   var row = S.state.rows[idx];
   var html = row[field] || "";
+  var cell = fromHtml(html);
+  var cut = clampRange(cell, sel.from, sel.to);
   var halves = /<img|video-embed-card/.test(html)
     ? splitMediaCellInDom(cellEl)
-    : splitCell(deleteRange(fromHtml(html), sel.from, sel.to), sel.from).map(function (c) { return toHtml(c); });
+    : splitCell(deleteRange(cell, cut.from, cut.to), cut.from).map(function (c) { return toHtml(c); });
 
   row[field] = halves[0];
   stampRow(row);
