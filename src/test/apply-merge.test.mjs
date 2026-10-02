@@ -76,6 +76,22 @@ test("`base` and `mine` are normalised, so a caller hands over what it holds", (
   assert.equal(out.result.stats.rowsFromMe, 1);
 });
 
+test("`theirs` arrives as it is: lists of the wrong shape in it merge as their objects, and applyMerge hands back a migrated state (#304)", () => {
+  reset();
+  const id = freshId();
+  const mine = mk(id);
+  mine.rows[0].audioText = "typed";
+  const theirs = { docId: id, title: "M", rows: [mine.rows[1], "x", null], comments: {}, people: "Sam", productionTags: { 0: "x" }, brollShots: 7 };
+  const before = JSON.stringify(theirs);
+
+  const out = applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "stash", mergeOnly: true });
+  assert.equal(JSON.stringify(theirs), before, "their copy is left as it came");
+  assert.deepEqual(out.state.rows.map((r) => [r.id, r.audioText]), [["r1", "typed"], ["r2", "a2"]]);
+  assert.deepEqual([out.state.comments, out.state.people, out.state.productionTags, out.state.brollShots], [[], [], [], []]);
+  assert.equal(out.result.stats.rowsAddedByThem, 0, "nothing that is not a scene counts as one");
+  assert.deepEqual(migrateRows(cloneState(out.state)), out.state);
+});
+
 test("a recovered stash where both sides added the same person: the merged script still names my items' owner (#283)", async () => {
   reset();
   const id = freshId();
