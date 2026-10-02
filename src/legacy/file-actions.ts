@@ -27,8 +27,8 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       bindKeys: pageOwnsKeys,
       claimKeys: true,
       words: "store keep write disk",
-      availability: (source) => firstRefusal(
-        availableUnless(source === "shortcut" ? ["loading", "dialog", "launcher"] : ["dialog", "launcher"], screenNow()),
+      availability: () => firstRefusal(
+        availableUnless(["loading", "dialog", "launcher"], screenNow()),
         saveInProgress() ? { enabled: false, reason: "" } : { enabled: true }),
       run: () => {
         closeFileMenu();

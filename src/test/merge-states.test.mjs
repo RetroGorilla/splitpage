@@ -292,18 +292,23 @@ test("replies from both sides are unioned, oldest first", () => {
   assert.deepEqual(out.replies.map((r) => r.id), ["rp1", "rp2"]);
 });
 
-test("pinned, found and not changed in 2.5: mergeStates changes the replies of its own mine and theirs, through migrateRows", () => {
+test("mergeStates leaves the replies of its own mine and theirs alone (#303)", () => {
   const base = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
   const mine = commentDoc([cmt(), cmt({ id: "c2", anchorId: "c2" })]);
   const theirs = commentDoc([cmt()]);
   mine.comments[0].replies = [{ id: "rpM", body: "mine", createdAt: "2026-01-02T00:00:00.000Z" }];
   mine.comments[1].replies = [{ id: "rpX", body: "only mine", createdAt: "2026-01-02T00:00:00.000Z" }];
   theirs.comments[0].replies = [{ id: "rpT", body: "theirs", createdAt: "2026-01-03T00:00:00.000Z" }];
+  const before = JSON.stringify([base, mine, theirs]);
   const out = mergeStates(base, mine, theirs).merged.comments;
-  assert.equal(out.find((c) => c.id === "c1").replies[0], mine.comments[0].replies[0], "the merged reply is mine's own object");
-  assert.equal(mine.comments[0].replies[0].author, "Anonymous", "migrateRows wrote into mine's reply");
-  assert.equal(theirs.comments[0].replies[0].author, "Anonymous", "and into theirs'");
-  assert.equal("author" in mine.comments[1].replies[0], false, "a comment only one side holds is copied, so its reply is left alone");
+  assert.equal(JSON.stringify([base, mine, theirs]), before, "no input changed");
+  const both = out.find((c) => c.id === "c1").replies;
+  assert.notEqual(both[0], mine.comments[0].replies[0], "the merged reply is a copy of mine's");
+  assert.notEqual(both[1], theirs.comments[0].replies[0], "and of theirs'");
+  assert.deepEqual(both.map((r) => r.author), ["Anonymous", "Anonymous"], "migrateRows wrote into the copies");
+  assert.equal("author" in mine.comments[0].replies[0], false);
+  assert.equal("author" in theirs.comments[0].replies[0], false);
+  assert.equal("author" in mine.comments[1].replies[0], false, "a comment only one side holds is copied too");
 });
 
 test("a comment I deleted and they replied to comes back; one nobody touched does not", () => {
