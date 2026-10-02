@@ -21,26 +21,10 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   Present is; Find & replace while a dialog or the writer is; Hide shot
   scenes (Ctrl+Alt+H) while a dialog is. Search Commands… already stopped
   under a dialog, the writer, Present or the tour, and now says why too.
-- In the desktop app, more menu-bar commands ran behind the writer, Present,
-  the B-roll shot list page or the tour. They now stop and say what to close
-  first: Present, Write, Production (Ctrl+Alt+P), Gear, Comments
-  (Ctrl+Alt+C) and Version history… while a dialog, the command menu, the
-  writer, Present, the shot list or the tour is open (Present and Write not
-  for themselves); Open… (Ctrl+O), Export… (Ctrl+E), Search Commands…
-  (Ctrl+K) and Find & replace (Ctrl+F) also while the shot list or the tour
-  is, and Find & replace while Present is; Save to file, Put this script on
-  the server, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
-  Recognition and each File ▸ Export format while a dialog or the command
-  menu is.
-- In the desktop app, a menu-bar command that opens a dialog opened it
-  underneath the tour, or on top of a dialog that was already open. About
-  Splitpage, Settings…, Servers…, Collaborate…, Paste a script…, Import from
-  Google Doc link…, Google Drive files…, Open from the server…, Set up
-  Splitpage… and Tagging reference now stop and say what to close first
-  while the tour or a dialog is open. User guide… (F1) still opens during
-  the tour, but not over another dialog.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
 
 ## What's new in 3.1
 
