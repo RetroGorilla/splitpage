@@ -12,7 +12,7 @@ function parseArgs(argv) {
   const out = {
     port: 8791, cdpPort: 9333, root: path.resolve(HERE, "..", "..", ".."),
     shotDir: path.join(os.tmpdir(), "splitpage-shots"),
-    headed: false, script: null, runId: null, chrome: null,
+    headed: false, script: null, runId: null, chrome: null, bind: "127.0.0.1",
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -26,9 +26,10 @@ function parseArgs(argv) {
       case "script": out.script = argv[++i]; break;
       case "runid": case "run-id": out.runId = argv[++i]; break;
       case "chrome": out.chrome = argv[++i]; break;
+      case "bind": out.bind = argv[++i]; break;
       case "headed": out.headed = true; break;
       case "h": case "help":
-        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--headed]");
+        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed]");
         process.exit(0);
         break;
       default: throw new Error(`unknown option: ${a}`);
@@ -54,10 +55,20 @@ const MIME = {
 };
 
 let server = null;
+const SERVER_ATTEMPTS = 3;
+
+function listenOnce(handler, port) {
+  return new Promise((resolve, reject) => {
+    const s = http.createServer(handler);
+    s.once("error", reject);
+    s.listen(port, opts.bind, () => { s.removeListener("error", reject); resolve(s); });
+  });
+}
+
 async function startServer() {
   if (server) return;
   const root = opts.root;
-  server = http.createServer((req, res) => {
+  const handler = (req, res) => {
     let p;
     try { p = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
     catch { res.statusCode = 400; return res.end(); }
@@ -72,12 +83,25 @@ async function startServer() {
     res.setHeader("Content-Type", MIME[path.extname(f).toLowerCase()] || "application/octet-stream");
     res.setHeader("Content-Length", body.length);
     res.end(body);
-  });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port, "127.0.0.1", resolve);
-  });
-  log(`server up on http://localhost:${opts.port}/ (root ${root})`);
+  };
+  const reasons = [];
+  for (let attempt = 1; attempt <= SERVER_ATTEMPTS; attempt++) {
+    const port = attempt === 1 ? opts.port : 0;
+    try {
+      server = await listenOnce(handler, port);
+      opts.port = server.address().port;
+      log(`server up on http://localhost:${opts.port}/ (root ${root})`);
+      return;
+    } catch (e) {
+      reasons.push(`${port === 0 ? "a fresh port" : "port " + port}: ${e.code ?? e.message}`);
+      log(`static server attempt ${attempt} of ${SERVER_ATTEMPTS} failed: ${reasons[reasons.length - 1]}`);
+      if (attempt < SERVER_ATTEMPTS) await sleep(250);
+    }
+  }
+  const e = new Error(`static server did not come up after ${SERVER_ATTEMPTS} attempts (${reasons.join("; ")})`);
+  e.fatal = true;
+  e.notStarted = true;
+  throw e;
 }
 
 function findBrowser() {
@@ -595,7 +619,9 @@ async function main() {
     for (const line of lines) {
       try { if (!(await invokeLine(line))) break; }
       catch (e) {
-        out1(`ERROR: ${e.message}`); failures++; exit = 1;
+        if (e.notStarted) { out1(`NOT STARTED: ${e.message}`); checks++; }
+        else out1(`ERROR: ${e.message}`);
+        failures++; exit = 1;
         if (e.fatal) break;
       }
     }
