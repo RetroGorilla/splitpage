@@ -123,6 +123,10 @@ var tourResizeHandler = null;
 var tourTaggingHelpWasHidden = true;
 var tourSuspendedAt = -1;
 
+export function tourShowing() {
+  return tourStepIndex >= 0;
+}
+
 function markTourDone() {
   try { localStorage.setItem(TOUR_DONE_KEY, "1"); } catch (e) {}
 }
