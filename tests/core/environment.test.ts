@@ -25,6 +25,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "merge/lists.ts": await import("../../src/core/merge/lists.ts"),
   "merge/rows.ts": await import("../../src/core/merge/rows.ts"),
   "merge/scalars.ts": await import("../../src/core/merge/scalars.ts"),
+  "merge/shape.ts": await import("../../src/core/merge/shape.ts"),
   "merge/states.ts": await import("../../src/core/merge/states.ts"),
   "merge/text-field.ts": await import("../../src/core/merge/text-field.ts"),
   "migrate.ts": await import("../../src/core/migrate.ts"),

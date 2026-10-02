@@ -373,8 +373,8 @@ sleep 300
 expect __toasts() === 'Close Present first.'
 expect __panels() === ''
 eval __tidy()
-# the in-page Ctrl+F refuses here too, and says nothing (F flips Present, so
-# twice)
+# the in-page Ctrl+F refuses here too, and says nothing (since #309 it no
+# longer flips Present either)
 key ctrl KeyF
 sleep 200
 key ctrl KeyF
