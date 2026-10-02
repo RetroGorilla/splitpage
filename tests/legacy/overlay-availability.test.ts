@@ -27,6 +27,7 @@ test("the one in front is named: loading, then a dialog, the command menu, the t
   assert.equal(inFront(all, NOTHING), undefined);
   assert.equal(inFront(all, open(...all)), "loading");
   assert.equal(inFront(all, open("writer", "dialog")), "dialog");
+  assert.equal(inFront(all, open("tour", "dialog")), "dialog");
   assert.equal(inFront(all, open("shotlist", "launcher")), "launcher");
   assert.equal(inFront(all, open("writer", "tour")), "tour");
   assert.equal(inFront(all, open("writer", "prompter")), "prompter");
@@ -73,7 +74,9 @@ function refusal(registry: ActionRegistry, id: string, source: ActionSource = "n
   return view.enabled ? null : view.reason;
 }
 
-const PAGE_COMMANDS = ["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
+const NO_DIALOG_COMMANDS = ["server-publish", "save-back", "prompter-open-in-browser", "prompter-open-in-chromium"];
+
+const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
 
 test("in Present, what would open behind it is refused, and Save, Hide shot scenes and Present itself are not", () => {
   const { registry, restore } = loadedRegistry();
@@ -104,7 +107,7 @@ test("a dialog over Present is named first, and the commands that only acted beh
   try {
     Object.assign(S, { prompterOpen: true });
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
-    for (const id of [...PAGE_COMMANDS, "write", "present", "save", "save-as", "toggle-hide-shot", "server-publish"]) {
+    for (const id of [...PAGE_COMMANDS, "write", "present", "save", "save-as", "toggle-hide-shot", ...NO_DIALOG_COMMANDS]) {
       assert.equal(refusal(registry, id), "Close the open dialog first", id);
     }
     assert.equal(refusal(registry, "toggle-rundown-min"), null);
@@ -136,7 +139,7 @@ test("the open command menu refuses what its shortcut refused, and not Find, Hid
   const { registry, restore } = loadedRegistry();
   try {
     document.body.innerHTML = '<div class="cmdk-backdrop"></div>';
-    for (const id of ["save", "save-as", "open", "export", "present", "write", "history", "panel-production", "server-publish"]) {
+    for (const id of ["save", "save-as", "open", "export", "present", "write", "history", "panel-production", ...NO_DIALOG_COMMANDS]) {
       assert.equal(refusal(registry, id), "Close the open dialog first", id);
     }
     for (const id of ["find", "toggle-hide-shot", "command-menu"]) assert.equal(refusal(registry, id), null, id);

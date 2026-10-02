@@ -2,6 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { commentRange, fromHtml, joinCells, splitCell, syncCommentAnchors, toHtml } from "../js/04c-doc-model.js";
+import { sanitizeHtml } from "../js/04-richtext.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 
@@ -77,6 +78,29 @@ test("joinCells' glue takes the comment and link both sides share, and never for
   assert.deepEqual(joinCells([T("a", l)], [T("b", l)], " "), [T("a b", l)]);
   assert.deepEqual(joinCells([T("a", { b: true })], [T("b", { b: true })], " "), [T("a", { b: true }), T(" "), T("b", { b: true })]);
   assert.deepEqual(joinCells([T("a", c)], [T("b", c)]), [T("ab", c)]);
+});
+
+test("a span that is both a comment anchor and a tag keeps both marks (#280)", () => {
+  const tagged = (inner) =>
+    `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp" contenteditable="false">${inner}</span>`;
+  const canonical = "pick up " + cmt("c1", tagged("the lamp")) + " now";
+  for (const classes of ["cmt-anchor tag-anchor", "tag-anchor cmt-anchor"]) {
+    const html = `pick up <span class="${classes}" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">the lamp</span> now`;
+    assert.equal(sanitizeHtml(html), canonical, classes);
+    const cell = fromHtml(html);
+    assert.deepEqual(cell, [T("pick up "), T("the lamp", { tag: "t:prop:Lamp", cmt: ["c1"] }), T(" now")], classes);
+    assert.equal(toHtml(cell), canonical, classes);
+    assert.deepEqual(fromHtml(toHtml(cell)), cell, classes);
+    assert.deepEqual(commentRange(cell, "c1"), { from: 8, to: 16 }, classes);
+  }
+  const brollCell = fromHtml('<span class="broll-key cmt-anchor" data-cmt="c2" data-broll-id="k1">B-roll:</span> x');
+  assert.ok(commentRange(brollCell, "c2"), "a comment on a b-roll key is found");
+  const state = {
+    rows: [{ id: "r2", visualText: "", audioText: `<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">lamp</span>` }],
+    comments: [comment("c1", "r1", "audioText")]
+  };
+  assert.equal(syncCommentAnchors(state), 1);
+  assert.equal(state.comments[0].rowId, "r2");
 });
 
 test("migrateRows points a stale comment at its words — an old file, or a merge that moved them", () => {
