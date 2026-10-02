@@ -1,5 +1,6 @@
 import { BROLL_PROPS_MAX, brollPropKey } from "../document/broll.ts";
 import type { BrollProp } from "../document/broll.ts";
+import { idMap } from "../document/id-map.ts";
 import { TAG_STATUS_IDS, normalizeTagName, registryKey, tagStatusId, tagStatusRank } from "../document/tags.ts";
 
 export interface Person {
@@ -53,9 +54,9 @@ export type ListMerger = (base: unknown, mine: unknown, theirs: unknown) => unkn
 function jsonCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
 function droppedListKeys<T extends object>(baseList: List<T>, mineList: List<T>, theirList: List<T>, keyOf: (e: T) => string, fingerprint: (e: T) => string): Record<string, boolean> {
-  const dropped: Record<string, boolean> = {};
+  const dropped = idMap<boolean>();
   if (!baseList || !baseList.length) return dropped;
-  const mineBy: Record<string, T> = {}, theirBy: Record<string, T> = {};
+  const mineBy = idMap<T>(), theirBy = idMap<T>();
   (mineList || []).forEach(function (e) { const k = e && keyOf(e); if (k) mineBy[k] = e as T; });
   (theirList || []).forEach(function (e) { const k = e && keyOf(e); if (k) theirBy[k] = e as T; });
   baseList.forEach(function (e) {
@@ -72,7 +73,7 @@ function droppedListKeys<T extends object>(baseList: List<T>, mineList: List<T>,
 export function mergePeople(basePeople: PersonList, minePeople: PersonList, theirPeople: PersonList): Person[] {
   const personKey = function (p: Person): string { return p.name ? normalizeTagName(p.name) : ""; };
   const dropped = droppedListKeys(basePeople, minePeople, theirPeople, personKey, personKey);
-  const out: Person[] = [], seenId: Record<string, boolean> = {}, seenName: Record<string, boolean> = {};
+  const out: Person[] = [], seenId = idMap<boolean>(), seenName = idMap<boolean>();
   (theirPeople || []).concat(minePeople || []).forEach(function (p) {
     if (!p || !p.name) return;
     const norm = normalizeTagName(p.name);
@@ -92,9 +93,9 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
                            tagStatusId(t.status) || TAG_STATUS_IDS[0]]);
   };
   const dropped = droppedListKeys(baseTags, mineTags, theirTags, idOf, tagPrint);
-  const baseById: Record<string, TagInput> = {};
+  const baseById = idMap<TagInput>();
   (baseTags || []).forEach(function (t) { if (t && t.name) baseById[idOf(t)] = t; });
-  const out: TagEntry[] = [], byId: Record<string, TagEntry> = {};
+  const out: TagEntry[] = [], byId = idMap<TagEntry>();
   function entryOf(t: TagInput): TagEntry {
     const e: TagEntry = { cat: t.cat as string, name: t.name as string, owner: t.owner || "", notes: t.notes || "",
                           status: tagStatusId(t.status) || TAG_STATUS_IDS[0] };
@@ -127,7 +128,7 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
       existing.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
     }
   });
-  const byKey: Record<string, TagEntry> = {};
+  const byKey = idMap<TagEntry>();
   return out.filter(function (e) {
     const key = registryKey(e.cat, e.name);
     const first = byKey[key];
@@ -146,9 +147,9 @@ export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirS
       .map(function (k) { return [k, b[k]]; }));
   };
   const dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
-  const baseById: Record<string, BrollShot> = {};
+  const baseById = idMap<BrollShot>();
   (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
-  const out: BrollShot[] = [], byId: Record<string, BrollShot> = {};
+  const out: BrollShot[] = [], byId = idMap<BrollShot>();
   (theirShots || []).forEach(function (b) {
     if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
     byId[b.id] = jsonCopy(b);
@@ -172,7 +173,7 @@ export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirS
 
 export function mergeBrollProps(baseProps: unknown, mineProps: unknown, theirProps: unknown): BrollProp[] {
   function keyed(list: unknown): { by: Record<string, PropInput>; order: string[] } {
-    const by: Record<string, PropInput> = {}, order: string[] = [];
+    const by = idMap<PropInput>(), order: string[] = [];
     (Array.isArray(list) ? list as unknown[] : []).forEach(function (p) {
       if (!p || typeof p !== "object" || !(p as PropInput).name) return;
       const prop = p as PropInput;

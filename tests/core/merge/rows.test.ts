@@ -4,6 +4,7 @@ import {
   byId, commentContentEqual, conflictComment, mergeComments, mergeRows, rowContentEqual, rowFieldKey
 } from "../../../src/core/merge/rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats } from "../../../src/core/merge/rows.ts";
+import { PROTOTYPE_IDS } from "../../../src/core/document/id-map.ts";
 import type { MergeDoc } from "../../../src/core/merge/states.ts";
 import { textMergeContext } from "../../../src/core/merge/text-field.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
@@ -34,21 +35,26 @@ function runRows(cells: Run[][], base: MergeDoc | null, mine: MergeDoc, theirs: 
   return { rows: rows, conflicts: conflicts, stats: stats };
 }
 
-test("byId maps by id, the last entry winning, into a plain object", () => {
+test("byId maps by id, the last entry winning, into a map with no prototype", () => {
   const a = { id: "a", n: 1 }, a2 = { id: "a", n: 2 }, b = { id: "b", n: 3 };
   const map = byId([a, b, a2]);
   assert.deepEqual(Object.keys(map), ["a", "b"]);
   assert.equal(map.a, a2);
-  assert.deepEqual(byId(null), {});
-  assert.equal(Object.getPrototypeOf(byId([])), Object.prototype);
+  assert.deepEqual(Object.keys(byId(null)), []);
+  assert.equal(Object.getPrototypeOf(byId([])), null);
 });
 
-test("byId with an id of __proto__ sets the map's prototype, and other prototype names read through, as today (#278)", () => {
+test("byId stores an id of __proto__ like any other, and a missing prototype name is missing (#278)", () => {
   const p = { id: "__proto__", n: 1 };
   const map = byId([p]);
-  assert.deepEqual(Object.keys(map), []);
-  assert.equal(Object.getPrototypeOf(map), p);
-  assert.equal(typeof byId([]).toString, "function");
+  assert.deepEqual(Object.keys(map), ["__proto__"]);
+  assert.equal(map["__proto__"], p);
+  assert.equal(Object.getPrototypeOf(map), null);
+  PROTOTYPE_IDS.forEach((id) => {
+    assert.equal(byId([])[id], undefined, id);
+    const item = { id: id };
+    assert.equal(byId([item])[id], item, id);
+  });
 });
 
 test("a row's field keys and content equality ignore stamps but not a set length", () => {
@@ -163,28 +169,51 @@ test("rows: with no base nothing is a delete, and a row only they hold counts as
 
 const PROTO_IDS = ["constructor", "__proto__", "toString", "hasOwnProperty"];
 
-test("rows with Object.prototype ids: mine's new ones are lost and theirs' count as edits, as today (#278)", () => {
+test("rows with Object.prototype ids: each side's new ones are added once, after their neighbour (#278)", () => {
   const cells = [[T("One.")], [T("Mine ctor.")], [T("Mine proto.")], [T("Their ts.")], [T("Their hop.")]];
   const base = { rows: [row("r1", [T("One.")])] };
   const mine = { rows: [row("r1", [T("One.")]), row("constructor", [T("Mine ctor.")]), row("__proto__", [T("Mine proto.")])] };
   const theirs = { rows: [row("r1", [T("One.")]), row("toString", [T("Their ts.")]), row("hasOwnProperty", [T("Their hop.")])] };
   const r = runRows(cells, base, mine, theirs);
-  assert.deepEqual(r.rows.map((x) => x.id), ["r1", "toString", "hasOwnProperty"]);
-  assert.deepEqual(r.stats, { rowsFromThem: 2, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 });
+  assert.deepEqual(r.rows.map((x) => x.id), ["r1", "constructor", "__proto__", "toString", "hasOwnProperty"]);
+  assert.deepEqual(r.rows.slice(1), [mine.rows[1], mine.rows[2], theirs.rows[1], theirs.rows[2]]);
+  assert.deepEqual(r.stats, { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 2, rowsAddedByThem: 2 });
 });
 
-test("rows with Object.prototype ids that mine deleted come back emptied and stamped mine, as today (#278)", () => {
+test("rows with Object.prototype ids that one side deleted stay deleted, and nothing is blanked (#278)", () => {
   const cells = PROTO_IDS.flatMap((id) => [[T("Row " + id + ".")], [T("Visual " + id + ".")]]);
   const all = [row("r1", "")].concat(PROTO_IDS.map((id) =>
     row(id, [T("Row " + id + ".")], { visualText: toHtml([T("Visual " + id + ".")]) })));
-  const r = runRows(cells, { rows: jsonCopy(all) }, { rows: [row("r1", "")] }, { rows: jsonCopy(all) });
-  assert.deepEqual(r.rows.map((x) => x.id), ["r1"].concat(PROTO_IDS));
-  r.rows.slice(1).forEach((x) => {
-    assert.equal(x.audioText, "", x.id);
-    assert.equal(x.visualText, "", x.id);
-    assert.equal(x.updatedBy, EDITOR, x.id);
+  const byMine = runRows(cells, { rows: jsonCopy(all) }, { rows: [row("r1", "")] }, { rows: jsonCopy(all) });
+  assert.deepEqual(byMine.rows, [row("r1", "")]);
+  assert.deepEqual(byMine.stats, { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 });
+  const byTheirs = runRows(cells, { rows: jsonCopy(all) }, { rows: jsonCopy(all) }, { rows: [row("r1", "")] });
+  assert.deepEqual(byTheirs.rows, [row("r1", "")]);
+});
+
+test("a row with an Object.prototype id that only one side holds keeps its own status and stamps (#278)", () => {
+  PROTO_IDS.forEach((id) => ["todo", "ready", "shot"].forEach((status) => {
+    const theirsOnly = row(id, [T("One.")], { status: status, updatedBy: "Theirs" });
+    const t = runRows([[T("One.")]], { rows: [] }, { rows: [] }, { rows: [theirsOnly] });
+    assert.deepEqual(t.rows, [theirsOnly], id + " " + status);
+    const mineOnly = row(id, [T("One.")], { status: status, updatedBy: "Mine" });
+    const m = runRows([[T("One.")]], null, { rows: [mineOnly] }, { rows: [] });
+    assert.deepEqual(m.rows, [mineOnly], id + " " + status);
+  }));
+});
+
+test("edits to different fields of a row with an Object.prototype id combine (#278)", () => {
+  PROTO_IDS.forEach((id) => {
+    const cells = [[T("One.")], [T("One, mine.")], [T("Look.")], [T("Look, theirs.")]];
+    const b = row(id, [T("One.")], { visualText: toHtml([T("Look.")]) });
+    const m = row(id, [T("One, mine.")], { visualText: toHtml([T("Look.")]) });
+    const t = row(id, [T("One.")], { visualText: toHtml([T("Look, theirs.")]), status: "ready" });
+    const r = runRows(cells, { rows: [b] }, { rows: [m] }, { rows: [t] });
+    assert.deepEqual(r.rows, [row(id, [T("One, mine.")], {
+      visualText: toHtml([T("Look, theirs.")]), status: "ready", updatedAt: FIXED_ISO, updatedBy: EDITOR
+    })], id);
+    assert.deepEqual(r.conflicts, [], id);
   });
-  assert.deepEqual(r.stats, { rowsFromThem: 0, rowsFromMe: 4, rowsAddedByMe: 0, rowsAddedByThem: 0 });
 });
 
 function cm(id: string, extra?: Partial<MergeComment>): MergeComment {
@@ -244,7 +273,7 @@ test("comments: the replies of a comment both sides hold are the input objects t
   assert.deepEqual(one[0], onlyMine);
 });
 
-test("comments with Object.prototype ids are dropped, and a reply id of __proto__ is lost, as today (#278)", () => {
+test("comments and replies with Object.prototype ids merge like any other (#278)", () => {
   const base = { rows: [], comments: [cm("constructor"), cm("toString"), cm("c1", { replies: [reply("constructor", at(3)), reply("__proto__", at(3))] })] };
   const mine = jsonCopy(base);
   (mine.comments[0] as MergeComment).body = "Ctor, mine";
@@ -255,8 +284,16 @@ test("comments with Object.prototype ids are dropped, and a reply id of __proto_
   theirs.comments.push(cm("hasOwnProperty"));
   ((theirs.comments[2] as MergeComment).replies as unknown[]).push(reply("toString", at(6)));
   const out = mergeComments(base, mine, theirs);
-  assert.deepEqual(out.map((c) => c.id), ["c1"]);
-  assert.deepEqual((out[0] as MergeComment).replies?.map((x) => x.id), ["constructor", "hasOwnProperty", "toString"]);
+  assert.deepEqual(out.map((c) => c.id), ["constructor", "toString", "c1", "hasOwnProperty", "__proto__"]);
+  assert.deepEqual(out[0], cm("constructor", { body: "Ctor, mine" }));
+  assert.deepEqual(out[1], cm("toString", { resolved: true }));
+  assert.deepEqual((out[2] as MergeComment).replies?.map((x) => x.id), ["constructor", "__proto__", "hasOwnProperty", "toString"]);
+  assert.deepEqual(out[3], cm("hasOwnProperty"));
+  assert.deepEqual(out[4], cm("__proto__"));
+  const deleted = jsonCopy(base);
+  deleted.comments = deleted.comments.filter((c) => c.id === "c1");
+  assert.deepEqual(mergeComments(base, deleted, jsonCopy(base)).map((c) => c.id), ["c1"]);
+  assert.deepEqual(mergeComments(base, jsonCopy(base), deleted).map((c) => c.id), ["c1"]);
 });
 
 test("a conflict card takes its id, time and author from the ports, in today's key order", () => {

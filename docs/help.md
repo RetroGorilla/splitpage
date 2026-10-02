@@ -23,6 +23,11 @@ own network you can also [host a shared session](#hosting-a-shared-session).
   under a dialog, the writer, Present or the tour, and now says why too.
 - Ctrl+Z right after opening writer mode closes writer instead of undoing a
   change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Merging two versions of a script could drop, duplicate or keep a deleted
+  scene, comment, crew member, breakdown entry or b-roll shot whose id was a
+  special word such as `constructor` or `__proto__`, and could blank a
+  scene's text. Only a hand-edited or damaged file has such ids. They now
+  merge like any other, and files that have them open unchanged.
 
 ## What's new in 3.1
 
