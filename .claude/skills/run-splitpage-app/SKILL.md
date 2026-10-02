@@ -111,6 +111,13 @@ run-id-scoped browser profile, so two concurrent runs no longer kill each
 other's live browser either) — see "Two `run-tests.ps1` invocations at once"
 under Gotchas.
 
+A suite whose static server will not come up is retried twice more, each time
+on a fresh port the operating system hands out. If all three attempts fail,
+the driver prints `NOT STARTED:` with each attempt's reason and stops, and
+the suite counts as one failed check, so it stays in the run's totals. The
+summary also lists the suites that never started. A suite that times out or
+leaves no readable `RESULT:` line is counted the same way.
+
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
 
@@ -523,7 +530,9 @@ stdout, and exit 0. It is 1 when any suite is `FAIL`, `BAD-RESULT` (a
 malformed, zero-check, negative, incomplete, contradictory, repeated or
 not-last `RESULT:` line), `NO-RESULT` (the driver exited without a `RESULT:`
 line), `TIMEOUT` (killed with its browser), `LEFTOVER` (something the driver
-started still held its output open 2 s after the driver exited) or
+started still held its output open 2 s after the driver exited),
+`NOT-STARTED` (the driver's static server would not come up after three
+attempts, the later two on a fresh port; the reason is in the summary line) or
 `LAUNCH-ERROR`. It is 2 when nothing matched, a flag is invalid, the driver or
 suite folder is missing, or a port is taken, and 3 when the runner itself
 failed. After SIGHUP, SIGINT or SIGTERM it exits 129, 130 or 143. SIGTERM used

@@ -179,6 +179,13 @@ function Test-LaneFinished($lane) {
 }
 
 $totalChecks = 0; $totalFail = 0; $suiteFail = 0
+$notStarted = New-Object System.Collections.ArrayList
+
+function Count-FailedSuite {
+  $script:suiteFail++
+  $script:totalChecks++
+  $script:totalFail++
+}
 
 function Report-Lane($lane) {
   $name = $lane.File.Name
@@ -187,7 +194,7 @@ function Report-Lane($lane) {
 
   if ($lane.TimedOut) {
     Write-Host ("--- {0}: TIMED OUT after {1}s" -f $name, $TimeoutSec) -ForegroundColor Red
-    $script:suiteFail++
+    Count-FailedSuite
     if (Test-Path $lane.Out) { Get-Content $lane.Out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
     return
   }
@@ -203,13 +210,21 @@ function Report-Lane($lane) {
     if ($l -cmatch '^FAIL')  { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ *(expected|actual):') { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ERROR') { Write-Host "    $l" -ForegroundColor Red }
+    elseif ($l -cmatch '^NOT STARTED') { Write-Host "    $l" -ForegroundColor Red }
   }
-  if ($result -match 'RESULT: (\d+)/(\d+)') {
+  if ($lines | Where-Object { $_ -cmatch '^NOT STARTED' }) { [void]$script:notStarted.Add($name) }
+  $counted = $false
+  if ($result -match '^RESULT: (\d+)/(\d+)') {
     $script:totalChecks += [int]$Matches[2]
     $script:totalFail   += ([int]$Matches[2] - [int]$Matches[1])
+    $counted = $true
   }
   if (-not $result) { $result = 'RESULT: (driver exited without a RESULT line) FAILED' }
-  if ($failed) { $script:suiteFail++; Write-Host "    $result" -ForegroundColor Red }
+  elseif (-not $counted) { $failed = $true; $result = "$result (unreadable RESULT line, counted as one failed check)" }
+  if ($failed) {
+    if ($counted) { $script:suiteFail++ } else { Count-FailedSuite }
+    Write-Host "    $result" -ForegroundColor Red
+  }
   else { Write-Host "    $result" -ForegroundColor Green }
 }
 
@@ -237,7 +252,10 @@ Clear-SplitpageEdge $RunId
 Write-Host ''
 $passed = $totalChecks - $totalFail
 if ($suiteFail -gt 0) {
-  Write-Host "FAILED - $passed/$totalChecks checks passed across $($files.Count) suite(s)" -ForegroundColor Red
+  Write-Host "FAILED - $passed/$totalChecks checks passed across $($files.Count) suite(s), $suiteFail suite(s) failed" -ForegroundColor Red
+  if ($notStarted.Count -gt 0) {
+    Write-Host ("{0} suite(s) never started and count as failed: {1}" -f $notStarted.Count, ($notStarted -join ', ')) -ForegroundColor Red
+  }
   Write-Host "logs: $logs"
   exit 1
 }

@@ -40,8 +40,29 @@ function Out1($m) { [Console]::Out.WriteLine($m) }
 # Own HttpListener rather than start.ps1: start.ps1 also does Start-Process on
 # the URL, which pops a real Edge window on the user's desktop.
 $script:ServerPs = $null
-function Start-Server {
-  if ($script:ServerPs) { return }
+$ServerAttempts = 3
+
+function Get-FreePort {
+  $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+  try { $l.Start(); return ([System.Net.IPEndPoint]$l.LocalEndpoint).Port } finally { $l.Stop() }
+}
+
+function Stop-ServerAttempt {
+  if (-not $script:ServerPs) { return }
+  try { $null = $script:ServerPs.BeginStop($null, $null) } catch {}
+  $script:ServerPs = $null
+}
+
+function Get-ServerFailure {
+  $ps = $script:ServerPs
+  if ($ps.InvocationStateInfo.State -eq 'Running') { return $null }
+  $why = @($ps.Streams.Error | ForEach-Object { $_.ToString() })
+  if (-not $why.Count -and $ps.InvocationStateInfo.Reason) { $why = @($ps.InvocationStateInfo.Reason.Message) }
+  if (-not $why.Count) { $why = @("the listener stopped (" + $ps.InvocationStateInfo.State + ")") }
+  return ($why -join ' ')
+}
+
+function Start-ServerOnce {
   $sb = {
     param($root, $port)
     $mime = @{
@@ -77,11 +98,36 @@ function Start-Server {
   $script:ServerPs = [PowerShell]::Create()
   $null = $script:ServerPs.AddScript($sb).AddArgument($Root).AddArgument($Port)
   $null = $script:ServerPs.BeginInvoke()
-  for ($i = 0; $i -lt 40; $i++) {
-    try { $null = Invoke-WebRequest "http://localhost:$Port/index.html" -UseBasicParsing -TimeoutSec 2
-          Log "server up on http://localhost:$Port/ (root $Root)"; return } catch { Start-Sleep -Milliseconds 250 }
+  $clock = [Diagnostics.Stopwatch]::StartNew()
+  $lastProbe = 'none'
+  while ($clock.Elapsed.TotalSeconds -lt 20) {
+    $failure = Get-ServerFailure
+    if ($failure) { return $failure }
+    try {
+      $null = Invoke-WebRequest "http://localhost:$Port/index.html" -UseBasicParsing -TimeoutSec 2
+      $failure = Get-ServerFailure
+      if ($failure) { return $failure }
+      Log "server up on http://localhost:$Port/ (root $Root)"
+      return $null
+    } catch { $lastProbe = $_.Exception.Message; Start-Sleep -Milliseconds 250 }
   }
-  throw "static server did not come up on port $Port (port already in use?)"
+  return "no answer from the listener in 20s (last probe: $lastProbe)"
+}
+
+function Start-Server {
+  if ($script:ServerPs) { return }
+  $reasons = @()
+  for ($attempt = 1; $attempt -le $ServerAttempts; $attempt++) {
+    if ($attempt -gt 1) { $script:Port = Get-FreePort }
+    $reason = Start-ServerOnce
+    if (-not $reason) { return }
+    $reasons += "port ${Port}: $reason"
+    Log "static server attempt $attempt of $ServerAttempts failed: port ${Port}: $reason"
+    Stop-ServerAttempt
+  }
+  $e = New-Object System.Exception ("static server did not come up after $ServerAttempts attempts (" + ($reasons -join '; ') + ")")
+  $e.Data['notStarted'] = $true
+  throw $e
 }
 
 # ------------------------------------------------------------------------ edge
@@ -565,6 +611,17 @@ function Invoke-Line([string]$line) {
   return $true
 }
 
+function Report-Error($ex) {
+  $script:Failures++
+  if ($ex.Data['notStarted']) {
+    $script:Checks++
+    Out1 "NOT STARTED: $($ex.Message)"
+    return $true
+  }
+  Out1 "ERROR: $($ex.Message)"
+  return $false
+}
+
 $exit = 0
 try {
   if ($Script) {
@@ -576,14 +633,14 @@ try {
     $scriptText = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Script)))
     foreach ($line in ($scriptText -split "`r?`n")) {
       try { if (-not (Invoke-Line $line)) { break } }
-      catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
+      catch { $exit = 1; if (Report-Error $_.Exception) { break } }
     }
   } else {
     while ($true) {
       $line = [Console]::In.ReadLine()
       if ($null -eq $line) { break }
       try { if (-not (Invoke-Line $line)) { break } }
-      catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
+      catch { $exit = 1; if (Report-Error $_.Exception) { break } }
     }
   }
   # A run that asserted nothing is a run that proved nothing.
@@ -593,8 +650,9 @@ try {
   # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
   # inside a $() subexpression inside another double-quoted string. Kept
   # ASCII-only too, since this file is read without a BOM.
-  $passed = $script:Checks - $script:Failures
-  $summary = "RESULT: $passed/$($script:Checks) checks passed"
+  $total = [Math]::Max($script:Checks, $script:Failures)
+  $passed = $total - $script:Failures
+  $summary = "RESULT: $passed/$total checks passed"
   if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
   Out1 ''
   Out1 $summary
