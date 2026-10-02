@@ -27,6 +27,8 @@ function hasClass(node: Element, name: string): boolean {
   return !!node.classList && node.classList.contains(name);
 }
 
+const SPAN_MARK_CLASSES: readonly string[] = ["tag-anchor", "broll-key", "stage-dir", "audio-cue"];
+
 function imageDimAttr(v: string | null): number {
   return typeof v === "string" && /^[1-9][0-9]{0,6}$/.test(v) ? parseInt(v, 10) : NaN;
 }
@@ -124,6 +126,19 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
     if (tag === "A" && hasClass(el, "video-embed-card")) {
       const vhref = safeHref(el.getAttribute("href") || "");
       if (vhref) destParent.appendChild(videoCardElement(doc, vhref));
+      return;
+    }
+    if (tag === "SPAN" && hasClass(el, "cmt-anchor") && SPAN_MARK_CLASSES.some(function (c) { return hasClass(el, c); })) {
+      const peeledSpan = doc.createElement("span");
+      peeledSpan.className = "cmt-anchor";
+      peeledSpan.setAttribute("data-cmt", safeId(el.getAttribute("data-cmt") || "", "c", ctx.ids));
+      const rest = el.cloneNode(true) as Element;
+      rest.classList.remove("cmt-anchor");
+      rest.removeAttribute("data-cmt");
+      const restHolder = doc.createElement("span");
+      restHolder.appendChild(rest);
+      walkSanitize(restHolder, peeledSpan, ctx);
+      destParent.appendChild(peeledSpan);
       return;
     }
     if (tag === "SPAN" && hasClass(el, "tag-anchor")) {
