@@ -1,0 +1,40 @@
+# Deleting a person from the Production panel's By person view (#305,
+# 07-production-tags.js deletePerson): their production items AND their
+# b-roll shots become unassigned at once, so the stale id is not left in
+# autosaves and history snapshots until the next load clears it. The delete is
+# ONE undo entry: Ctrl+Z gives back the person, the item owner and the shot
+# owner together, and redo clears them again. Another person's shot is left alone.
+# Every `eval` is one physical line.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; var key = function (id) { return '<span class="broll-key" data-broll-id="' + id + '" contenteditable="false">B-roll:</span>'; }; var tag = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Kettle" contenteditable="false">kettle</span>'; var doc = { schema: 2, title: 'Crew list', rows: [{ id: 'r1', visualText: key('bs1') + ' steam off the ' + tag + '<br>' + key('bs2') + ' boats coming in', audioText: 'Morning.', status: 'todo' }], people: [{ id: 'p1', name: 'Jordan Sato' }, { id: 'p2', name: 'Ada Brenner' }], productionTags: [{ cat: 'prop', name: 'Kettle', status: 'have', owner: 'p1' }], brollShots: [{ id: 'bs1', name: 'steam off the kettle', status: 'unshot', owner: 'p1' }, { id: 'bs2', name: 'boats coming in', status: 'unshot', owner: 'p2' }], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'crew.splitpage')); return true; })()
+wait F.state().title === 'Crew list' && document.querySelectorAll('#rows .row').length === 1
+eval (function(){ window.owners = function () { var s = F.state(); return JSON.stringify({ people: s.people.map(function (p) { return p.id; }), tags: s.productionTags.map(function (t) { return t.owner; }), shots: s.brollShots.map(function (b) { return b.id + ':' + b.owner; }) }); }; return true; })()
+sleep 400
+expect owners() === '{"people":["p1","p2"],"tags":["p1"],"shots":["bs1:p1","bs2:p2"]}'
+jsclick #btn-production
+wait !document.getElementById('production-panel').hidden
+jsclick #production-modes [data-group="person"]
+wait document.querySelectorAll('#production-list .tag-person-head').length === 2
+eval (function(){ U.flush(); window.__n = U.sizes().undo; return window.__n; })()
+
+# --- delete Jordan: the item and the shot are both unassigned, in one entry
+jsclick #production-list [data-action="person-delete"][data-person="p1"]
+sleep 300
+jsclick #production-list [data-action="person-delete"][data-person="p1"]
+sleep 500
+expect owners() === '{"people":["p2"],"tags":[""],"shots":["bs1:","bs2:p2"]}'
+expect U.sizes().undo === window.__n + 1
+
+# --- one Ctrl+Z puts the person and both owners back; redo clears them again
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+sleep 400
+expect owners() === '{"people":["p1","p2"],"tags":["p1"],"shots":["bs1:p1","bs2:p2"]}'
+key ctrl+shift KeyZ
+sleep 400
+expect owners() === '{"people":["p2"],"tags":[""],"shots":["bs1:","bs2:p2"]}'
+key ctrl KeyZ
+sleep 400
+expect owners() === '{"people":["p1","p2"],"tags":["p1"],"shots":["bs1:p1","bs2:p2"]}'
