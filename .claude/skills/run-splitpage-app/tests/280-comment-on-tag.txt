@@ -1,0 +1,26 @@
+# A span that is both a comment anchor and a tag keeps its comment (#280;
+# src/adapters/richtext/sanitize.ts).
+#
+# A script whose cell carries one <span class="cmt-anchor tag-anchor"> used to
+# open with the tag and no comment highlight, the comment card "No longer in
+# script". Both marks now survive, the comment nesting outside the tag as the
+# document model writes it. Every class order and nesting is the seeded fuzz
+# in tests/adapters/richtext/anchor-tags.test.ts.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (async function(){ var F = window.__splitpageFormats; var s = F.clone(F.state()); var r = s.rows.filter(function(r){ return r.id === 'r2'; })[0]; r.audioText = r.audioText.replace('<span class="cmt-anchor" data-cmt="c1">', '<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Word card">'); if (r.audioText.indexOf('tag-anchor') === -1) return 'seed changed'; await F.openFile(new File([F.buildSplitpage(s)], 'comment-on-tag.splitpage')); return true; })()
+wait document.querySelector('#rows .row:nth-child(2) .audio-cell .tag-anchor') !== null
+expect document.querySelectorAll('#rows .row:nth-child(2) .audio-cell .cmt-anchor[data-cmt="c1"] .tag-anchor[data-tag-name="Word card"]').length === 1
+expect document.querySelector('#rows .row:nth-child(2) .audio-cell .cmt-anchor').textContent === 'word for word'
+expect window.__splitpageFormats.state().rows[1].audioText.indexOf('<span class="cmt-anchor" data-cmt="c1"><span class="tag-anchor"') !== -1
+expect window.__splitpageFormats.state().productionTags.some(function(t){ return t.cat === 'prop' && t.name === 'Word card'; })
+
+click #btn-comments
+wait document.querySelectorAll('.comment-card').length == 1
+expect document.querySelectorAll('.comment-card').length == 1
+expect document.querySelector('.comment-card').classList.contains('is-jumpable')
+expect document.querySelector('.comment-quote').classList.contains('orphaned') === false
+quit
