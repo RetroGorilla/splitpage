@@ -29,7 +29,14 @@ const PLATFORM_GLOBALS = new Set([
   "AbortController", "URL", "TextDecoder", "TextEncoder", "Blob", "File", "FileReader", "Image",
   "setTimeout", "setInterval", "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame",
   "requestIdleCallback", "queueMicrotask", "performance", "crypto", "process", "Buffer", "require", "module",
-  "exports", "__dirname", "__filename", "globalThis", "self", "electron"
+  "exports", "__dirname", "__filename", "globalThis", "self", "electron",
+  "DOMParser", "XMLSerializer", "Node", "Element", "HTMLElement", "Text", "DocumentFragment",
+  "Range", "Selection", "getSelection", "getComputedStyle",
+  "MutationObserver", "ResizeObserver", "IntersectionObserver",
+  "Event", "CustomEvent", "EventTarget", "KeyboardEvent", "MouseEvent",
+  "CSS", "matchMedia", "alert", "confirm", "prompt", "open",
+  "Option", "Audio", "HTMLCanvasElement", "OffscreenCanvas", "createImageBitmap", "structuredClone",
+  "atob", "btoa", "postMessage", "addEventListener", "removeEventListener", "dispatchEvent"
 ]);
 
 const COMMONJS_GLOBALS = new Set(["require", "module", "exports"]);
@@ -272,6 +279,7 @@ function bindScopes(sf) {
   const loads = [];
   const reexports = [];
   const localExports = [];
+  const ambient = [];
   const scopeOf = (parent, isFunction) => ({ parent, isFunction, values: new Map(), types: new Map() });
   const moduleScope = scopeOf(null, true);
   const functionScope = (s) => { while (!s.isFunction) s = s.parent; return s; };
@@ -402,6 +410,20 @@ function bindScopes(sf) {
     for (const m of node.members) walk(m, cs);
   };
 
+  const ambientNames = (name) => (ts.isIdentifier(name) ? [name] : name.elements.flatMap((el) => (ts.isOmittedExpression(el) ? [] : ambientNames(el.name))));
+
+  const collectAmbient = (node) => {
+    if (ts.isVariableStatement(node)) {
+      for (const d of node.declarationList.declarations) ambient.push(...ambientNames(d.name));
+    } else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) && node.name) {
+      ambient.push(node.name);
+    } else if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name)) {
+      if (node.flags & ts.NodeFlags.GlobalAugmentation) {
+        if (node.body && ts.isModuleBlock(node.body)) for (const st of node.body.statements) collectAmbient(st);
+      } else ambient.push(node.name);
+    }
+  };
+
   const children = (node, s) => ts.forEachChild(node, (c) => { walk(c, s); });
 
   function walk(node, s) {
@@ -414,7 +436,7 @@ function bindScopes(sf) {
       return;
     }
     if (!BINDING_KINDS.has(node.kind)) { children(node, s); return; }
-    if (hasModifier(node, ts.SyntaxKind.DeclareKeyword)) return;
+    if (hasModifier(node, ts.SyntaxKind.DeclareKeyword)) { collectAmbient(node); return; }
     if (ts.isImportDeclaration(node)) { handleImport(node, s); return; }
     if (ts.isExportDeclaration(node)) { handleExport(node, s); return; }
     if (ts.isImportEqualsDeclaration(node)) { declare(s, node.name, "import-equals"); return; }
@@ -491,7 +513,7 @@ function bindScopes(sf) {
     if (r.binding && writeKind(r.node) === "assign") r.binding.reassigned = true;
   }
   const isFree = (identifier) => !refOf.get(identifier)?.binding;
-  return { refs, refOf, bindings, loads, reexports, localExports, lookup, isFree };
+  return { refs, refOf, bindings, loads, reexports, localExports, ambient, lookup, isFree };
 }
 
 function accessAt(identifier, isFree) {
@@ -550,13 +572,18 @@ export function analyzeScript(path, text) {
   visitEdges(sf);
 
   const globals = new Map();
+  const noteGlobal = (name, node) => {
+    if (!name || (commonjs && COMMONJS_GLOBALS.has(name))) return;
+    const line = at(node);
+    if (!globals.has(name) || globals.get(name) > line) globals.set(name, line);
+  };
   for (const r of refs) {
     if (r.binding) continue;
     const text = r.node.text;
-    const name = PLATFORM_GLOBALS.has(text) ? text : r.space === "value" ? clockOrRandomUse(r.node) : null;
-    if (!name || (commonjs && COMMONJS_GLOBALS.has(name))) continue;
-    const line = at(r.node);
-    if (!globals.has(name) || globals.get(name) > line) globals.set(name, line);
+    noteGlobal(PLATFORM_GLOBALS.has(text) ? text : r.space === "value" ? clockOrRandomUse(r.node) : null, r.node);
+  }
+  for (const id of scopes.ambient) {
+    noteGlobal(PLATFORM_GLOBALS.has(id.text) ? id.text : id.text === "Date" ? "Date" : id.text === "Math" ? "Math.random" : null, id);
   }
 
   const memo = new Map();
