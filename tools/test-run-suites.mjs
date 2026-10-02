@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNNER = join(REPO, "tools", "run-suites.mjs");
+const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 const WRAPPER = join(REPO, ".claude", "handoff", "direction-b", "run-all-suites.mjs");
 const { classify, STATUS, EXIT, parseArgs, portPlan, ConfigError } = await import(pathToFileURL(RUNNER).href);
 
@@ -54,7 +55,7 @@ mkdirSync(suites);
 const KINDS = [
   "pass", "crlf", "split", "fail", "errored", "silent", "stderr", "lying",
   "zero", "garbage", "partial", "negative", "contradictory", "overwritten", "twice", "trailing", "long",
-  "hang", "dupehang", "held", "orphan", "escaped", "afterhang"
+  "hang", "dupehang", "held", "orphan", "escaped", "afterhang", "nostart"
 ];
 for (const name of KINDS) writeFileSync(join(suites, `${name}.txt`), "");
 
@@ -117,6 +118,7 @@ switch (kind) {
     break;
   }
   case "afterhang": waitForFile("hang.json", () => done(["RESULT: 1/1 checks passed"], 0)); break;
+  case "nostart": done(["NOT STARTED: static server did not come up after 3 attempts (port 1: EADDRINUSE; a fresh port: EADDRINUSE; a fresh port: EADDRINUSE)", "", "RESULT: 0/1 checks passed - 1 FAILED"], 1); break;
   default: done(["RESULT: unknown fake kind " + kind], 1);
 }
 `);
@@ -345,6 +347,12 @@ function unitChecks() {
   eq("more passed than ran is BAD-RESULT", classify({ code: 0 }, "RESULT: 4/3 checks passed").status, BAD_RESULT);
   eq("a RESULT line that is not at the start of a line is not a summary", classify({ code: 0 }, "echo RESULT: 3/3 checks passed").status, STATUS.NO_RESULT);
   eq("the driver's error-before-any-check summary is FAIL", classify({ code: 1 }, "RESULT: -1/0 checks passed - 1 FAILED").status, STATUS.FAIL);
+  const unstarted = classify({ code: 1 }, "NOT STARTED: static server did not come up after 3 attempts (port 9: EADDRINUSE)\n\nRESULT: 0/1 checks passed - 1 FAILED");
+  eq("a suite that never started is NOT-STARTED, not FAIL", unstarted.status, STATUS.NOT_STARTED);
+  check("a NOT-STARTED suite carries the driver's reason", unstarted.result.startsWith("static server did not come up after 3 attempts (port 9: EADDRINUSE)"), unstarted.result);
+  eq("a NOT-STARTED suite is NOT-STARTED even with no RESULT line", classify({ code: 1 }, "NOT STARTED: boom").status, STATUS.NOT_STARTED);
+  eq("a timeout still wins over NOT STARTED", classify({ code: null, signal: "SIGKILL", timedOut: true }, "NOT STARTED: boom").status, STATUS.TIMEOUT);
+  eq("a NOT STARTED text that is not at the start of a line is ignored", classify({ code: 0 }, "echo NOT STARTED: boom\nRESULT: 3/3 checks passed").status, STATUS.PASS);
   eq("a passing summary killed by a signal is FAIL", classify({ code: null, signal: "SIGKILL" }, "RESULT: 3/3 checks passed").status, STATUS.FAIL);
   eq("output held open after exit is LEFTOVER", classify({ code: 0, heldOpen: true }, "RESULT: 3/3 checks passed").status, LEFTOVER);
   const timedOut = classify({ code: null, signal: "SIGKILL", timedOut: true, limitSec: 1 }, dup).result;
@@ -456,6 +464,44 @@ async function processChecks() {
     check("long.txt's summary line stays short", (files["long.txt"]?.result ?? "").length < 260, `${files["long.txt"]?.result?.length} characters`);
     check("no invalid summary is reported as passing", !r.stdout.includes("ALL PASS") && !(r.summary || []).some((l) => l.startsWith("PASS ")), r.stdout);
     check("each invalid-summary suite still has its log", Object.keys(expected).every((f) => existsSync(join(r.out, `${f}.log`))), null);
+  }
+
+  {
+    const r = run(["^(pass|nostart)\\.txt$", "--lanes", "2"]);
+    eq("a suite that never started makes the process exit 1", r.status, EXIT.SUITES_FAILED);
+    eq("the unstarted suite stays in summary.txt", r.summary?.length, 2);
+    const files = byFile(r.summary);
+    eq("nostart.txt is NOT-STARTED", files["nostart.txt"]?.status, STATUS.NOT_STARTED);
+    check("nostart.txt says why", (files["nostart.txt"]?.result ?? "").startsWith("static server did not come up after 3 attempts"), files["nostart.txt"]?.result);
+    eq("pass.txt is still PASS", files["pass.txt"]?.status, STATUS.PASS);
+    check("stdout counts both suites as having run", r.stdout.includes("2 of 2 suites ran, 1 passed"), r.stdout);
+    check("stdout names the suite that never started", /1 of those never started and count as failed: nostart\.txt/.test(r.stdout), r.stdout);
+    check("stdout does not say ALL PASS", !r.stdout.includes("ALL PASS"), r.stdout);
+  }
+
+  {
+    const script = join(work, "open-only.txt");
+    writeFileSync(script, "open\nexpect 1\nexpect 2\n");
+    const missing = join(work, "no-such-browser");
+    const driverRun = (port, extra = []) => spawnSync(process.execPath, [
+      DRIVER, "--script", script, "--port", String(port), "--cdp-port", String(port + 1200),
+      "--shot-dir", join(work, "shots"), "--chrome", missing, ...extra
+    ], { cwd: REPO, encoding: "utf8", timeout: 30000 });
+    const { port, server } = await holdInBlock(18100);
+    try {
+      const busy = driverRun(port);
+      const upOn = /server up on http:\/\/localhost:(\d+)\//.exec(busy.stderr);
+      check("a busy port is retried on a fresh one", upOn !== null && Number(upOn[1]) !== port, busy.stderr);
+      check("the retry's own failure is the browser, not the server", /ERROR: --chrome not found/.test(busy.stdout) && !/NOT STARTED/.test(busy.stdout), busy.stdout);
+      check("the failed first attempt is logged", /static server attempt 1 of 3 failed: port \d+: EADDRINUSE/.test(busy.stderr), busy.stderr);
+    } finally {
+      server.close();
+    }
+    const never = driverRun(18100, ["--bind", "203.0.113.1"]);
+    check("a server that cannot start names the attempts", /NOT STARTED: static server did not come up after 3 attempts \(port 18100: \w+; a fresh port: \w+; a fresh port: \w+\)/.test(never.stdout), never.stdout);
+    check("it is counted as one failed check", /RESULT: 0\/1 checks passed - 1 FAILED/.test(never.stdout), never.stdout);
+    check("it stops instead of failing every later check", !/RESULT: 0\/3/.test(never.stdout) && !/FAIL expect/.test(never.stdout), never.stdout);
+    eq("it exits 1", never.status, 1);
   }
 
   {

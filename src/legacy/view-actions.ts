@@ -6,7 +6,7 @@ import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
 import { VIEWING_ONLY, reviewMode } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
-import { availableUnless } from "./screen.ts";
+import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
 
 const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
@@ -37,7 +37,7 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
     group: "View",
     icon: "i-panel",
     words,
-    availability: () => withButton(buttonId, loadingRefusal(waitsForLoad)),
+    availability: () => withButton(buttonId, firstRefusal(loadingRefusal(waitsForLoad), availableUnless(EVERY_OVERLAY, screenNow()))),
     run: () => {
       if (panelOpen(panelId)) close();
       else open();
@@ -62,7 +62,7 @@ export function registerViewActions(registry: ActionRegistry): () => void {
       icon: "i-pen",
       words: "writer narration word processor audio column",
       availability: (source) => {
-        const screen = availableUnless(["loading"], screenNow());
+        const screen = availableUnless(["loading", ...everyOverlayBut("writer")], screenNow());
         const refused: Availability = { enabled: false, reason: source === "command-menu" ? VIEWING_ONLY_LISTED : VIEWING_ONLY };
         return withButton("btn-write", screen.enabled && reviewMode() ? refused : screen);
       },
@@ -74,7 +74,7 @@ export function registerViewActions(registry: ActionRegistry): () => void {
       group: "View",
       icon: "i-play",
       words: "teleprompter prompter autocue read play",
-      availability: () => withButton("btn-present", availableUnless(["loading"], screenNow())),
+      availability: () => withButton("btn-present", availableUnless(["loading", ...everyOverlayBut("prompter")], screenNow())),
       run: () => { openPrompter(); }
     }
   ];

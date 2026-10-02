@@ -45,6 +45,19 @@ test("registerProductionTag adds a name once per category, whatever its spelling
   assert.deepEqual(s.productionTags.map((t) => [t.cat, t.name]), [["prop", "Kettle"], ["location", "Kettle"]]);
 });
 
+test("registerProductionTag refuses a blank or whitespace-only name (#298)", () => {
+  const s = load({ rows: [], productionTags: [] });
+  for (const name of ["", "   ", "\t\n", " ", "   ", "​", "‌", "‍", "⁠", "­", " ​ ‍⁠­\t ", null, undefined]) {
+    registerProductionTag("prop", name);
+  }
+  assert.deepEqual(s.productionTags, []);
+  registerProductionTag("prop", "!!");
+  assert.deepEqual(s.productionTags.map((t) => t.name), ["!!"]);
+  s.productionTags.length = 0;
+  registerProductionTag("prop", " Kettle ");
+  assert.deepEqual(s.productionTags.map((t) => t.name), [" Kettle "]);
+});
+
 test("deleting a person clears them as the owner of production items and b-roll shots at once (#305)", () => {
   const s = load({
     rows: [row("r1", "", "")],
