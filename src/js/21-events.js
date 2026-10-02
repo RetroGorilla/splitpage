@@ -1675,12 +1675,12 @@ function init() {
     var chord = e.ctrlKey || e.metaKey || e.altKey;
     if (e.key === "Escape") { closePrompter(); }
     else if (e.key === " ") { if (!chord) { e.preventDefault(); setPrompterPlaying(!S.prompterPlaying); } }
-    else if (e.key === "ArrowUp") { stepPrompterSpeed(1); }
-    else if (e.key === "ArrowDown") { stepPrompterSpeed(-1); }
-    else if (!chord && (e.key === "m" || e.key === "M")) { setPrompterMirror(!prompterMirror); }
-    else if (!chord && (e.key === "f" || e.key === "F")) { setPrompterFlip(!prompterFlip); }
-    else if (e.key === "ArrowLeft") { stepScene(-1); }
-    else if (e.key === "ArrowRight") { stepScene(1); }
+    else if (e.key === "ArrowUp") { if (!chord) e.preventDefault(); stepPrompterSpeed(1); }
+    else if (e.key === "ArrowDown") { if (!chord) e.preventDefault(); stepPrompterSpeed(-1); }
+    else if (!chord && (e.key === "m" || e.key === "M")) { e.preventDefault(); setPrompterMirror(!prompterMirror); }
+    else if (!chord && (e.key === "f" || e.key === "F")) { e.preventDefault(); setPrompterFlip(!prompterFlip); }
+    else if (e.key === "ArrowLeft") { if (!chord) e.preventDefault(); stepScene(-1); }
+    else if (e.key === "ArrowRight") { if (!chord) e.preventDefault(); stepScene(1); }
   });
 
   document.getElementById("btn-write").addEventListener("click", function () { runFromButton("write"); });

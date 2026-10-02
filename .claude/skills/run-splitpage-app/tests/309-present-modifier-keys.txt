@@ -3,7 +3,9 @@
 # Ctrl+F (Find, and the browser's own Find) flipped the text as well, and so
 # did Ctrl+M and Alt+F. The letters now do nothing with Ctrl, Meta or Alt held.
 # Shift stays allowed, as the listener has always taken an upper-case F or M.
-# Space is guarded the same way (the arrow keys are left as they were), and
+# Space is guarded the same way (the arrow keys keep acting with a modifier, but
+# every key the prompter handles bare now calls preventDefault so it cannot also
+# be typed into a script cell left focused behind Present), and
 # none of Present's keys act on a key typed into an input, so Ctrl+F then
 # typing in the Find box leaves the text alone and keeps the space. The driver
 # never sends Meta or an upper-case letter with a modifier, so the matrix
@@ -81,5 +83,25 @@ expect !document.getElementById('prompter-scroll').classList.contains('mirror')
 expect document.getElementById('pp-play').textContent.indexOf('Play') !== -1
 expect localStorage.getItem('splitpage-prompter-flip') != '1'
 expect localStorage.getItem('splitpage-prompter-mirror') != '1'
+
+# --- the caret still in a script cell when Present opens ------------------------
+# The keys the prompter handles are not also typed into the hidden cell: M and
+# F work, and the script keeps its text.
+jsclick #pp-close
+sleep 400
+expect document.getElementById('prompter').hidden
+caret #rows .row:nth-child(1) .audio-cell .cell-editable
+sleep 200
+eval window.__cellText = document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable').textContent
+expect window.__cellText.length > 0
+click #btn-present
+wait !document.getElementById('prompter').hidden
+expect document.activeElement.closest('#rows') !== null
+press mf
+sleep 300
+expect document.getElementById('prompter-scroll').classList.contains('mirror')
+expect document.getElementById('prompter-scroll').classList.contains('flip')
+eval window.__same = document.querySelector('#rows .row:nth-child(1) .audio-cell .cell-editable').textContent === window.__cellText
+expect window.__same
 
 quit
