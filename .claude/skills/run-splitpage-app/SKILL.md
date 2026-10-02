@@ -358,6 +358,7 @@ it is not the full gate; CI always runs them all.
 | `tests/284-exports-from-a-fixture.txt` | fourteen exports of one fixture (before milestone 5): names and types, the six text formats in full (dates and times normalised), exporting changes nothing in the document, its undo or its save state, the same export twice gives the same bytes, and Hide shot scenes and the Writer do not change the Markdown; an export that makes no file fails. Passes against 47c0309 too |
 | `tests/285-save-buttons-one-state.txt` | INV-20: the header's and the Writer's Save show one state after an edit, during a save, after a failed save and after a good one; while a save runs, neither button, the native menu nor Ctrl+S starts another write. Passes against 47c0309 too |
 | `tests/286-find-from-every-surface.txt` | Find & replace with the bar already open: Ctrl+F only takes the focus back and selects the query; the File menu, the command menu and the native menu's Find open the bar again with the words selected in the script as the query. Passes against 47c0309 too |
+| `tests/287-delete-person-broll-owner.txt` | Removing a person in the Production panel's By person view clears them as owner of their production items and their b-roll shots at once (not at the next load), leaves another person's shots alone, and is ONE undo entry: Ctrl+Z restores the person and both owners, Ctrl+Shift+Z clears them again. Fails against the build before #305's fix |
 
 ## The server's own tests
 
