@@ -132,6 +132,15 @@ test("a deleteRow compares the row's keys and values at every depth, not their o
   refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, note: ["n"] });
   refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, note: { 0: "n" } });
   refused({ id: "r1", status: { list: { 0: { x: 1, y: 2 } }, label: "shot" }, note: "n" });
+  refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, Note: "n" });
+  refused({ note: "n", status: { list: [{ X: 1, y: 2 }], label: "shot" }, id: "r1" });
+  const boxed: StepState = { rows: [{ id: "r1", n: new Number(1), b: new Boolean(true), s: new String("a") }] };
+  const boxedRefused = (row: StepRow) => assert.throws(() => applySteps(boxed, [{ op: "deleteRow", index: 0, row: row }]),
+    (e: Error & { code?: string }) => e.code === "STEP_REFUSED" && e.message === "step does not apply: deleteRow (row has changed)");
+  boxedRefused({ s: new String("a"), b: new Boolean(true), n: new Number(2), id: "r1" });
+  boxedRefused({ s: new String("a"), b: new Boolean(false), n: new Number(1), id: "r1" });
+  boxedRefused({ s: new String("b"), b: new Boolean(true), n: new Number(1), id: "r1" });
+  assert.deepEqual(applySteps(boxed, [{ op: "deleteRow", index: 0, row: { s: "a", b: true, n: 1, id: "r1" } }]), { rows: [] });
   const parsed = JSON.parse("{\"rows\":[{\"id\":\"r1\",\"__proto__\":{\"a\":1},\"b\":2}]}") as StepState;
   assert.throws(() => applySteps(parsed, [{ op: "deleteRow", index: 0, row: JSON.parse("{\"b\":2,\"id\":\"r1\",\"__proto__\":{\"a\":2}}") as StepRow }]),
     (e: Error & { code?: string }) => e.code === "STEP_REFUSED");
