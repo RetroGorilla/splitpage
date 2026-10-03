@@ -32,6 +32,7 @@ export function stampRow(row) {
   calls.push("stampRow");
   stamped.push(rowCopy(row));
   row.updatedAt = "stamped";
+  row.updatedBy = "stub editor";
 }
 
 export function markDirty() {

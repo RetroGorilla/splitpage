@@ -49,32 +49,34 @@ test("a status click whose row does not paint renders the whole script instead",
 
 test("with shot scenes hidden, reaching shot arms the grace between dirty and the repaint", () => {
   stubs.resetFanout({ hideShot: true });
-  doc([{ id: "r1", status: "ready" }]);
-  cycleRowStatus("r1");
-  assert.equal(S.state.rows[0].status, "shot");
+  doc([{ id: "r1", status: "ready" }, { id: "r2", status: "ready" }]);
+  cycleRowStatus("r2");
+  assert.equal(S.state.rows[1].status, "shot");
+  assert.equal(S.state.rows[0].status, "ready");
   assert.deepEqual(stubs.calls, [
-    "findRowIndex", "stampRow", "markDirty", "armShotHideGrace:r1", "renderRow:r1", ...STATS,
+    "findRowIndex", "stampRow", "markDirty", "armShotHideGrace:r2", "renderRow:r2", ...STATS,
     "scheduleProductionRefresh", "queueAutoSave"
   ]);
 });
 
 test("with shot scenes hidden, leaving shot clears the grace in the same place", () => {
   stubs.resetFanout({ hideShot: true });
-  doc([{ id: "r1", status: "shot" }]);
-  cycleRowStatus("r1");
-  assert.equal(S.state.rows[0].status, "todo");
+  doc([{ id: "r1", status: "shot" }, { id: "r2", status: "shot" }]);
+  cycleRowStatus("r2");
+  assert.equal(S.state.rows[1].status, "todo");
+  assert.equal(S.state.rows[0].status, "shot");
   assert.deepEqual(stubs.calls, [
-    "findRowIndex", "stampRow", "markDirty", "clearShotHideGrace:r1", "renderRow:r1", ...STATS,
+    "findRowIndex", "stampRow", "markDirty", "clearShotHideGrace:r2", "renderRow:r2", ...STATS,
     "scheduleProductionRefresh", "queueAutoSave"
   ]);
 });
 
 test("with shot scenes hidden, todo to ready touches no grace", () => {
   stubs.resetFanout({ hideShot: true });
-  doc([{ id: "r1", status: "todo" }]);
-  cycleRowStatus("r1");
+  doc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
+  cycleRowStatus("r2");
   assert.deepEqual(stubs.calls, [
-    "findRowIndex", "stampRow", "markDirty", "renderRow:r1", ...STATS, "scheduleProductionRefresh", "queueAutoSave"
+    "findRowIndex", "stampRow", "markDirty", "renderRow:r2", ...STATS, "scheduleProductionRefresh", "queueAutoSave"
   ]);
 });
 
