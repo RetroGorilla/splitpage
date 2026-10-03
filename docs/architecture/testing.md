@@ -227,13 +227,21 @@ A type carries the brand when the brand's property or its `unique symbol` key
 is reachable from it, directly or through an alias, a union, an intersection,
 an array, a property, a type argument, a constraint, a return type or an index
 signature. A top-level `never` counts too, because `never` is assignable to
-every type; a `never` nested inside another type does not. The typecheck
-refuses, in every `.ts` file but `migrate.ts`:
+every type; a `never` nested inside another type does not, so the rule checks
+where a nested `never` comes out instead. The typecheck refuses, in every
+`.ts` file but `migrate.ts`:
 - a type assertion to such a type, unless the value already has that type
-  (this covers `as never`);
-- a type predicate to such a type, unless it only narrows a parameter whose
-  type already carries the brand (`(d): d is ValidatedDocument => d !== null`
-  over `ValidatedDocument | null` passes);
+  (this covers `as never`), and an assertion to a library container of
+  `never` (`never[]`, `Promise<never>`, `Set<never>`);
+- a property or element access whose declared type is `never` on a value that
+  is not `never` (`({ v: raw } as { v: never }).v`, `([raw] as [never])[0]`),
+  and a call through a signature written inside a cast that returns `never`
+  (`(f as () => never)()`). `fail()` and `assertNever(x)` pass;
+- a type predicate to such a type, unless it only strips `null` and
+  `undefined` from a parameter that already carries the brand
+  (`(d): d is ValidatedDocument => d !== null` over `ValidatedDocument | null`
+  passes; over `ValidatedDocument | DocumentShape` or `ValidatedDocument |
+  string` it is refused);
 - a call to a function declared outside the default library whose
   instantiated return type or predicate carries the brand when its declared
   one does not, and no argument or receiver supplies it: a generic helper
@@ -264,9 +272,13 @@ library's method.
 
 What the rule does not refuse, each shown as a known gap in
 `tools/test-brand-casts.mjs`:
-- a generic class whose member casts to its own type parameter
-  (`new Box<ValidatedDocument>().value`), since `new` is not checked;
-- a `never` nested in a target (`raw as Promise<never>`, then awaited);
+- a generic class whose member casts to its own type parameter, since `new`
+  is not checked: `new Box<ValidatedDocument>().value`, a subclass
+  (`class DocBox extends Base<ValidatedDocument> {}`, then `new
+  DocBox(raw).v`), or a contextually typed `const g: G<ValidatedDocument> =
+  new G(raw)`;
+- a `never` that comes out somewhere the rule does not look, such as a
+  computed element key or a signature declared in a type alias and cast to;
 - a laundering call given any branded argument or receiver, which exempts it
   (`pick<ValidatedDocument>(doc, raw)`);
 - a class method override that narrows its parameter to the brand
