@@ -131,7 +131,12 @@ number, each failing check with the 5 log lines before it and the exception or
 assertion text, then retries, and warnings de-duplicated with a count. A suite
 that ran 0 checks, left no `RESULT:` line or wrote no log counts as a failure.
 Each suite's section stops at about 60 lines with a pointer to its full log. A
-green run gives a few lines.
+green run gives a few lines. A suite that timed out or left no `RESULT:` line
+also shows the tails of its `.out.txt` and `.err.txt`.
+
+The runner deletes the old `digest.txt` when it starts. If it did not print the
+digest path as its last line, there is no digest: the run aborted, so read the
+console output.
 
 ## The unit tests
 
