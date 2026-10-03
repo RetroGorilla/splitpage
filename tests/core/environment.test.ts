@@ -21,6 +21,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/tags.ts": await import("../../src/core/document/tags.ts"),
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
+  "document/validated.ts": await import("../../src/core/document/validated.ts"),
   "merge-states.ts": await import("../../src/core/merge-states.ts"),
   "merge/cells.ts": await import("../../src/core/merge/cells.ts"),
   "merge/lists.ts": await import("../../src/core/merge/lists.ts"),
