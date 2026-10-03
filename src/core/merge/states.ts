@@ -11,6 +11,7 @@ import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWi
 import { listShapedSide } from "./shape.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
+import type { ValidatedDocument } from "../document/validated.ts";
 
 export interface MergeDoc extends RowSide {
   title?: unknown;
@@ -86,7 +87,7 @@ function strategyFor(f: StateField): FieldStrategy {
   return STRATEGIES[f.merge];
 }
 
-export function mergeStateFields(baseSide: MergeDoc | null | undefined, mineSide: MergeDoc, theirSide: MergeDoc, ports: MergePorts): StateMerge {
+export function mergeStateFields(baseSide: ValidatedDocument | null | undefined, mineSide: ValidatedDocument, theirSide: ValidatedDocument, ports: MergePorts): StateMerge {
   const fields = ports.fields || STATE_FIELDS;
   const base = baseSide ? listShapedSide(baseSide, fields) : baseSide;
   const mine = listShapedSide(mineSide, fields), theirs = listShapedSide(theirSide, fields);

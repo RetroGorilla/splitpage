@@ -3,6 +3,6 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/adapters/**/*.ts", "src/features/**/*.ts", "src/bootstrap/**/*.ts", "src/legacy/**/*.ts"],
+  "include": ["types/*.d.ts", "src/adapters/**/*.ts", "src/features/**/*.ts", "src/bootstrap/**/*.ts", "src/legacy/**/*.ts"],
   "exclude": ["**/*.test.ts"]
 }

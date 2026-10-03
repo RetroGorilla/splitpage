@@ -16,7 +16,7 @@ export type Step = RowFieldStep | DocFieldStep | InsertRowStep | DeleteRowStep |
 
 export type StepRefused = Error & { code: "STEP_REFUSED" };
 
-function clone<T>(v: T): T { return v === undefined ? undefined as T : JSON.parse(JSON.stringify(v)); }
+function clone<T>(v: T): T { return v === undefined ? undefined as T : JSON.parse(JSON.stringify(v)) as T; }
 function keysInOrder(_key: string, v: unknown): unknown {
   if (!v || typeof v !== "object") return v;
   const proto: unknown = Object.getPrototypeOf(v);

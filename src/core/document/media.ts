@@ -19,7 +19,7 @@ export interface DecodedImage {
 }
 
 export interface ImageIngestion extends ImageSource {
-  pending(): DecodedImage[];
+  pending: () => DecodedImage[];
 }
 
 export type MediaField = "visualText" | "audioText";

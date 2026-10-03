@@ -3,6 +3,6 @@
   "compilerOptions": {
     "lib": ["ES2023"]
   },
-  "include": ["src/core/**/*.ts", "src/application/**/*.ts", "src/contracts/**/*.ts"],
+  "include": ["types/*.d.ts", "src/core/**/*.ts", "src/application/**/*.ts", "src/contracts/**/*.ts"],
   "exclude": ["**/*.test.ts"]
 }

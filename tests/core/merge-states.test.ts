@@ -4,11 +4,11 @@ import { STATE_FIELDS } from "../../src/core/document/fields.ts";
 import type { StateField } from "../../src/core/document/fields.ts";
 import { mergeStates } from "../../src/core/merge-states.ts";
 import type { MergeStatesPorts } from "../../src/core/merge-states.ts";
-import type { MergeDoc } from "../../src/core/merge/states.ts";
+import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { T } from "./text/cells.ts";
 import { fakeDecoder, fixedClock, EDITOR } from "./merge/fakes.ts";
-import { fakeMigration, jsonCopy, pngDataUrl } from "./migrate-ports.ts";
+import { fakeMigration, jsonCopy, migratedThenSet, pngDataUrl } from "./migrate-ports.ts";
 
 type Doc = Record<string, unknown>;
 type Item = Record<string, unknown>;
@@ -37,8 +37,8 @@ function portsFor(fields?: readonly StateField[]): MergeStatesPorts & { migratio
   };
 }
 
-function migrated(doc: Doc, fields?: readonly StateField[]): MergeDoc {
-  return migrateRows(doc, fakeMigration(undefined, fields).ports) as MergeDoc;
+function migrated(doc: Doc, fields?: readonly StateField[]): ValidatedDocument {
+  return migrateRows(doc, fakeMigration(undefined, fields).ports);
 }
 
 test("INV-04: a field added to the table survives migrateRows, mergeStates and a .splitpage round trip, with no other edit", () => {
@@ -76,7 +76,7 @@ test("the merged document is migrated with the merge's own table, whatever the m
 test("a field with no strategy throws before anything is migrated", () => {
   const ports = portsFor([...STATE_FIELDS, { key: "probe", merge: "no-such-strategy" as StateField["merge"], undo: false }]);
   const theirs: Doc = { rows: [], comments: [{ id: "c1", body: '<img src="' + pngDataUrl(3, 3, 9) + '">' }] };
-  assert.throws(() => mergeStates(null, { rows: [] }, theirs as MergeDoc, ports), /^Error: no merge strategy for state field probe$/);
+  assert.throws(() => mergeStates(null, migrated({ rows: [] }), migratedThenSet(theirs), ports), /^Error: no merge strategy for state field probe$/);
   assert.deepEqual(ports.migration.log, []);
   assert.equal(ports.migration.images.pending().length, 0);
 });

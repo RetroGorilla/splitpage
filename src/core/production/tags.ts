@@ -10,6 +10,7 @@ import {
   tagStatusId
 } from "../document/tags.ts";
 import type { TagCategoryId, TagName, TagStatusId } from "../document/tags.ts";
+import type { ValidatedDocument } from "../document/validated.ts";
 import { editCues } from "../text/cues.ts";
 import { retag, setMark } from "../text/edits.ts";
 import type { CellRange } from "../text/edits.ts";
@@ -201,7 +202,7 @@ export function productionIndexFresh(ix: ProductionIndex, state: TagState, reade
   return true;
 }
 
-export function deriveProductionIndex(state: TagState, readers: ProductionReaders): ProductionIndex {
+export function deriveProductionIndex(state: ValidatedDocument, readers: ProductionReaders): ProductionIndex {
   const rows = state.rows;
   const live = collectTagsFromRows(rows, readers);
   const liveByKey: Record<string, TagGroup> = {};
@@ -325,7 +326,7 @@ export function closeCueNames(a: string, b: string): boolean {
 }
 
 export function planRegistryHealing(
-  state: TagState,
+  state: ValidatedDocument,
   readers: ProductionReaders,
   was?: CueSnapshot | null,
   index?: ProductionIndex
@@ -345,7 +346,7 @@ export function planRegistryHealing(
   return plan;
 }
 
-export function planQuickAdd(state: TagState, readers: ProductionReaders, raw: string, index?: ProductionIndex): QuickAddPlan {
+export function planQuickAdd(state: ValidatedDocument, readers: ProductionReaders, raw: string, index?: ProductionIndex): QuickAddPlan {
   const wanted: Record<string, string> = {}, order: string[] = [];
   raw.split(/\r\n|\r|\n/).forEach(function (line) {
     const name = plainText(line).trim().slice(0, 80);

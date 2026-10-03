@@ -20,11 +20,14 @@ import {
 import type { CueSnapshot, HealingPlan, MediaTagWriter, ProductionEntry, RegistryTag } from "../../../src/core/production/tags.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import { maskTokens, newTokens } from "../../../src/test/golden-helpers.mjs";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { migratedThenSet } from "../migrate-ports.ts";
 import { countingIds, jsonCopy, plainTextOf } from "./cells.ts";
 import { storedDecoder } from "./stored.ts";
 
 type Row = { id: string; visualText: string; audioText: string };
 type Doc = { docId: string; rows: Row[]; productionTags: RegistryTag[]; brollShots: BrollShot[] };
+type Live = Doc & ValidatedDocument;
 type Out = Record<string, unknown>;
 
 const stored = storedDecoder();
@@ -39,10 +42,10 @@ function fixture(name: string): Out {
 
 const LONG_DEMO = JSON.parse(readFileSync(new URL("../../../src/starters/long-demo.json", import.meta.url), "utf8")) as Doc;
 
-function demo(): Doc {
+function demo(): Live {
   const doc = jsonCopy(LONG_DEMO);
   doc.docId = "d" + "7".repeat(32);
-  return doc;
+  return migratedThenSet(doc);
 }
 
 function entriesView(entries: readonly ProductionEntry[]): unknown[] {
@@ -85,7 +88,7 @@ function applyBroll(doc: Doc, read: BrollRead): void {
   });
 }
 
-function anchorAll(doc: Doc, ids: IdSource): number {
+function anchorAll(doc: Live, ids: IdSource): number {
   const plan = planned(doc, () => planBrollAnchors(doc, readers, ids));
   let total = 0;
   doc.rows.forEach((row) => {
@@ -100,7 +103,7 @@ function anchorAll(doc: Doc, ids: IdSource): number {
   return total;
 }
 
-function readAll(doc: Doc, ids: IdSource): Out {
+function readAll(doc: Live, ids: IdSource): Out {
   const before = JSON.stringify(doc);
   const out: Out = {
     entries: entriesView(deriveProductionIndex(doc, readers).entries),
@@ -130,7 +133,7 @@ function occurrencesOf(doc: Doc, names: { cat: string; name: string }[]): unknow
   });
 }
 
-function repairAll(doc: Doc, out: Out, ids: IdSource): Out {
+function repairAll(doc: Live, out: Out, ids: IdSource): Out {
   const registryBefore = jsonCopy(doc.productionTags);
   const heal = planned(doc, () => planRegistryHealing(doc, readers, null));
   applyHealing(doc, heal);
@@ -203,7 +206,7 @@ test("the long demo with its shots dropped: the b-roll plan creates the shots th
 
 test("the crafted b-roll document: creations, renames and anchoring match the legacy writes", () => {
   const fx = fixture("broll-crafted");
-  const doc = jsonCopy(fx.input) as Doc;
+  const doc = migratedThenSet(jsonCopy(fx.input) as Doc);
   const ids = countingIds();
   const out: Out = Object.assign({ input: jsonCopy(fx.input) }, readAll(doc, ids));
   matchesGolden("broll-crafted", masked(repairAll(doc, out, ids), fx.input));
@@ -211,7 +214,7 @@ test("the crafted b-roll document: creations, renames and anchoring match the le
 
 test("the crafted healing document: the plan registers what the legacy heal wrote, the raw cells read as the sanitiser leaves them", () => {
   const fx = fixture("heal-crafted");
-  const doc = jsonCopy(fx.input) as Doc;
+  const doc = migratedThenSet(jsonCopy(fx.input) as Doc);
   doc.rows = jsonCopy(fx.edited) as Row[];
   const inputCells = new Set((fx.input as Doc).rows.flatMap((r) => [r.visualText, r.audioText]));
   doc.rows.forEach((r) => [r.visualText, r.audioText].forEach((html) => { if (!inputCells.has(html)) stored.raw.add(html); }));
@@ -229,16 +232,16 @@ function row(id: string, audioText?: string, visualText?: string): Row {
   return { id, visualText: visualText || "", audioText: audioText || "" };
 }
 
-function loadWithoutRegistry(docId: string, rows: Row[]): Doc {
+function loadWithoutRegistry(docId: string, rows: Row[]): Live {
   const productionTags: RegistryTag[] = collectTagsFromRows(rows, readers)
     .map((t) => ({ cat: t.catId, name: plainText(t.name).trim().slice(0, 80), status: "needed", owner: "", notes: "" }))
     .filter((t) => t.name);
   missingRegistryTags(rows, productionTags, readers).forEach((t) => { productionTags.push(t); });
   ensureTagIds(productionTags);
-  return { docId, rows, productionTags, brollShots: [] };
+  return migratedThenSet<Doc>({ docId, rows, productionTags, brollShots: [] });
 }
 
-function cueDoc(docId: string, rows?: Row[]): Doc {
+function cueDoc(docId: string, rows?: Row[]): Live {
   return loadWithoutRegistry(docId, rows || [
     row("r1", "Welcome back.<br>" + cue("SFX: door slam") + "<br>Today, the kettle.", "Kitchen"),
     row("r2", cue("Music: upbeat intro")),
@@ -341,7 +344,7 @@ test("cue retitling: the healing plans, applied step by step, match every legacy
 test("the Gear quick add: each plan, applied as the panel applies it, leaves the registry the legacy apply left", () => {
   const fx = fixture("gear-quick-add");
   const golden = fx.steps as Out[];
-  let doc = jsonCopy(fx.input) as Doc;
+  let doc = migratedThenSet(jsonCopy(fx.input) as Doc);
   const quickAdd = (label: string, lines: string[], eol?: string): Out => {
     const text = lines.join(eol || "\n");
     const others = jsonCopy(doc.productionTags.filter((t) => t.cat !== "gear"));
@@ -372,7 +375,7 @@ test("the Gear quick add: each plan, applied as the panel applies it, leaves the
     quickAdd("the same list, CR", lines, "\r"),
     quickAdd("a list leaving out everything not in the script", ["Tripod", "Slider"])
   ];
-  doc = {
+  doc = migratedThenSet<Doc>({
     docId: "d" + "5".repeat(31) + "c",
     rows: jsonCopy((fx.input as Doc).rows),
     productionTags: [
@@ -380,7 +383,7 @@ test("the Gear quick add: each plan, applied as the panel applies it, leaves the
       { id: "t_spare", cat: "gear", name: "Spare battery", owner: "", notes: "", status: "needed" }
     ],
     brollShots: []
-  };
+  });
   missingRegistryTags(doc.rows, doc.productionTags, readers).forEach((t) => { doc.productionTags.push(t); });
   ensureTagIds(doc.productionTags);
   mine.push(quickAdd("lines named after Object's own properties, none tracked yet", ["constructor", "__proto__", "Tripod", "toString"]));
