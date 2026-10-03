@@ -393,6 +393,11 @@ bridge, is explained here.
 - **`desktop/verify-dist-payload.mjs`** loads electron-builder's 7-Zip toolset
   through `require.resolve`, so the file is found in whichever copy of
   `app-builder-lib` is installed.
+- **`src/core/document/validated.ts` ambient `validated`**. The gate reads any
+  `declare` in core as a platform declaration. This one is the module-scoped
+  `unique symbol` that brands `ValidatedDocument`
+  ([testing.md](testing.md#the-validated-document-brand)); it is used only in a
+  type and never read at run time.
 - **Test harnesses** (`desktop/test/verify-dist-payload.test.mjs`,
   `tools/test-run-suites.mjs`, `tools/test-update.mjs`) import the module under
   test by a computed file URL so the same file can be loaded from a temporary

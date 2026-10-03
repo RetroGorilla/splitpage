@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { syncCommentAnchors } from "../../../src/core/text/anchors.ts";
 import type { AnchorState, AnchoredComment } from "../../../src/core/text/anchors.ts";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { migratedThenSet } from "../migrate-ports.ts";
 import type { CellDecoder } from "../../../src/core/text/ports.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
@@ -31,8 +33,8 @@ function decoderFor(cells: Run[][]): { decode: CellDecoder; seen: string[] } {
 
 const { decode, seen } = decoderFor([PLAIN, C1_AND_C2, C2, C3_ON_KEY, A9]);
 
-function state(comments: (AnchoredComment | null)[]): AnchorState {
-  return {
+function state(comments: (AnchoredComment | null)[]): AnchorState & ValidatedDocument {
+  return migratedThenSet({
     comments: comments,
     rows: [
       { id: "r1", visualText: toHtml(PLAIN), audioText: toHtml(C1_AND_C2) },
@@ -40,7 +42,12 @@ function state(comments: (AnchoredComment | null)[]): AnchorState {
       { id: "r2", visualText: toHtml(C2), audioText: toHtml(C3_ON_KEY) },
       { id: "r3", visualText: 7, audioText: toHtml(A9) }
     ]
-  };
+  });
+}
+
+function without(key: string, doc: ValidatedDocument): ValidatedDocument {
+  Reflect.deleteProperty(doc, key);
+  return doc;
 }
 
 test("a comment follows its anchor to the row and field that hold it now", () => {
@@ -79,9 +86,9 @@ test("only cells with an anchor are decoded, and nothing is decoded without comm
   assert.deepEqual(seen, [toHtml(C1_AND_C2), toHtml(C2), toHtml(C3_ON_KEY), toHtml(A9)]);
   seen.length = 0;
   assert.equal(syncCommentAnchors(state([]), decode), 0);
-  assert.equal(syncCommentAnchors({ rows: state([]).rows }, decode), 0);
+  assert.equal(syncCommentAnchors(without("comments", state([])), decode), 0);
   assert.equal(syncCommentAnchors(null, decode), 0);
   assert.equal(syncCommentAnchors(undefined, decode), 0);
-  assert.equal(syncCommentAnchors({ comments: [{ id: "c1" }] }, decode), 0);
+  assert.equal(syncCommentAnchors(without("rows", migratedThenSet({ comments: [{ id: "c1" }] })), decode), 0);
   assert.deepEqual(seen, []);
 });

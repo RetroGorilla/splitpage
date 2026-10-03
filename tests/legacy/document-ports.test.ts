@@ -72,7 +72,7 @@ test("a save straight after a load finds every picture the load decoded", async 
     ]
   });
   assert.deepEqual(((doc.comments as Item[])[1] as Item).imageValue, card.record);
-  const copy = JSON.parse(JSON.stringify(doc));
+  const copy = JSON.parse(JSON.stringify(doc)) as Item;
   assert.deepEqual(inlineStateImages(copy), []);
   assert.equal(((copy.rows as Item[])[0] as Item).visualImage, row.dataUrl);
   assert.deepEqual((await settled()).map((p) => p.sha), [row.sha256, body.sha256, card.sha256]);
@@ -104,7 +104,7 @@ test("02-state, 02b and 03-sync migrate with 02-state's own table, so a field pu
     assert.equal(migrateRows({}).probe, 7);
     assert.equal(migrateDocument({ rows: [] }, { kind: "file" }).probe, 7);
     const d = migrateRows({ rows: [] });
-    const mine = JSON.parse(JSON.stringify(d));
+    const mine = JSON.parse(JSON.stringify(d)) as Item;
     mine.probe = 9;
     assert.equal(mergeStates(JSON.parse(JSON.stringify(d)), mine, JSON.parse(JSON.stringify(d))).merged.probe, 9);
   } finally {

@@ -1,5 +1,6 @@
 import { commentIds } from "./runs.ts";
 import type { CellDecoder } from "./ports.ts";
+import type { ValidatedDocument } from "../document/validated.ts";
 
 export type AnchorRow = { id?: unknown; visualText?: unknown; audioText?: unknown };
 
@@ -12,7 +13,7 @@ export type AnchorState = {
 
 type AnchorPlace = { rowId: unknown; field: "visualText" | "audioText" };
 
-export function syncCommentAnchors(state: AnchorState | null | undefined, cellOf: CellDecoder): number {
+export function syncCommentAnchors(state: ValidatedDocument | null | undefined, cellOf: CellDecoder): number {
   const comments = state && state.comments;
   if (!Array.isArray(comments) || !comments.length) return 0;
   const where: Record<string, AnchorPlace> = Object.create(null);

@@ -11,12 +11,12 @@ import type { CellMedia, MediaComment, MediaField, MediaRow } from "./document/m
 import type { IdSource, ImageSource } from "./document/ports.ts";
 import { TAG_CATEGORY_IDS, TAG_STATUS_IDS, ensureTagIds, tagCategoryId, tagStatusId } from "./document/tags.ts";
 import type { TagRecord } from "./document/tags.ts";
+import type { ValidatedDocument } from "./document/validated.ts";
 import { legacyMdToHtml, plainName, plainText, safeId, safeImageSrc, storedImageHtml } from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
 import { collectTagsFromRows, missingRegistryTags } from "./production/tags.ts";
 import { syncCommentAnchors } from "./text/anchors.ts";
-import type { AnchorState } from "./text/anchors.ts";
 import { toHtml } from "./text/html.ts";
 import type { DecodeOptions } from "./text/ports.ts";
 import type { Run } from "./text/runs.ts";
@@ -39,8 +39,6 @@ export interface DocumentOrigin {
   fallbackId?: unknown;
 }
 
-export type MigratedDocument = Record<string, unknown>;
-
 type Bag = Record<string, unknown>;
 
 function isObject(v: unknown): v is Bag {
@@ -56,7 +54,7 @@ function moveMediaOutOfCell(row: Bag, field: MediaField, ports: MigratePorts): M
   return mediaComments(row as unknown as MediaRow, field, found, ports.images, ports.videoCardHtml);
 }
 
-export function migrateRows(input: unknown, ports: MigratePorts): MigratedDocument {
+export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocument {
   let s = input as Bag;
   if (!s || typeof s !== "object") s = { title: "Untitled Script", rows: [], comments: [] };
   const fields = ports.fields || STATE_FIELDS;
@@ -143,7 +141,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): MigratedDocume
     }
     c.assignee = c.assignee ? plainText(c.assignee).trim().slice(0, 80) : "";
   });
-  syncCommentAnchors(s as AnchorState, ports.readers.cellOf);
+  syncCommentAnchors(s as ValidatedDocument, ports.readers.cellOf);
 
   if (!Array.isArray(s.people)) s.people = [];
   s.people = (s.people as unknown[]).filter(isObject);
@@ -202,10 +200,10 @@ export function migrateRows(input: unknown, ports: MigratePorts): MigratedDocume
   if (typeof s.rev !== "number") s.rev = 0;
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;
-  return s;
+  return s as ValidatedDocument;
 }
 
-export function migrateDocument(raw: unknown, origin: DocumentOrigin | null | undefined, ports: MigratePorts): MigratedDocument {
+export function migrateDocument(raw: unknown, origin: DocumentOrigin | null | undefined, ports: MigratePorts): ValidatedDocument {
   const from = origin || { kind: "fresh" };
   const embedded = docIdEmbeddedIn(raw);
   let seed = "";

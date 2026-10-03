@@ -3,6 +3,7 @@ import type { StateField, StrategyId } from "../document/fields.ts";
 import { mergedDocId } from "../document/ids.ts";
 import { mergePersonColors } from "../document/person-colors.ts";
 import type { Clock, IdSource } from "../document/ports.ts";
+import type { ValidatedDocument } from "../document/validated.ts";
 import { LIST_MERGERS, personIdRemap, repointOwners } from "./lists.ts";
 import type { ListMerger, Person, PersonList, TagEntry, TagList } from "./lists.ts";
 import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
@@ -81,7 +82,7 @@ function strategyFor(f: StateField): FieldStrategy {
   return STRATEGIES[f.merge];
 }
 
-export function mergeStateFields(baseSide: MergeDoc | null | undefined, mineSide: MergeDoc, theirSide: MergeDoc, ports: MergePorts): StateMerge {
+export function mergeStateFields(baseSide: ValidatedDocument | null | undefined, mineSide: ValidatedDocument, theirSide: ValidatedDocument, ports: MergePorts): StateMerge {
   const fields = ports.fields || STATE_FIELDS;
   const base = baseSide ? listShapedSide(baseSide, fields) : baseSide;
   const mine = listShapedSide(mineSide, fields), theirs = listShapedSide(theirSide, fields);

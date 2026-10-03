@@ -25,6 +25,8 @@ import type { ProductionRow } from "../../../src/core/production/ports.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { migratedThenSet } from "../migrate-ports.ts";
 import { B, T, cue, jsonCopy, mapDecoder, readersOver, tag } from "./cells.ts";
 
 const cells = mapDecoder();
@@ -32,6 +34,10 @@ const EMPTY = cells.html([]);
 const readers = readersOver(cells);
 
 const NO_MEDIA: MediaTagWriter = function () { throw new Error("no cell here holds media"); };
+
+function doc(state: TagState): TagState & ValidatedDocument {
+  return migratedThenSet(state);
+}
 
 const R1: ProductionRow = {
   id: "r1",
@@ -199,8 +205,8 @@ test("retagCell renames or removes one item's tags, and its cue lines for a soun
   assert.equal(retagCell(cued, "prop", "door slam", null, readers), cued, "a cue is only a sound");
 });
 
-function tagState(): TagState {
-  return {
+function tagState(): TagState & ValidatedDocument {
+  return doc({
     docId: "d1",
     rows: [R1, R2],
     productionTags: [
@@ -211,7 +217,7 @@ function tagState(): TagState {
       registered("prop", "KETTLE", { id: "t_dupe" }),
       registered("gear", "Tripod", { id: "t_tripod", status: "weird" })
     ]
-  };
+  });
 }
 
 test("deriveProductionIndex lists registry entries in order, then the live tags it lacks", () => {
@@ -251,7 +257,7 @@ test("an index stays fresh through prose edits and goes stale when what it reads
 
 test("the healing plan registers each unregistered tag with an id minted after the ones before it, and writes nothing", () => {
   const registry = [registered("prop", "Kettle", { status: "have" }), { id: mintTagId("location", "Kitchen"), cat: "cast", name: "Taken" }];
-  const state: TagState = { docId: "d1", rows: [R1, R2], productionTags: registry };
+  const state = doc({ docId: "d1", rows: [R1, R2], productionTags: registry });
   const before = JSON.stringify(state);
   const plan = planRegistryHealing(state, readers);
   assert.equal(JSON.stringify(state), before);
@@ -266,7 +272,7 @@ test("the healing plan registers each unregistered tag with an id minted after t
 
 test("with nothing to register the plan is empty but still snapshots the cues", () => {
   const audio = cells.html([cue("Music: theme")]);
-  const state: TagState = { docId: "d2", rows: [{ id: "r1", visualText: EMPTY, audioText: audio }], productionTags: [registered("sound", "theme")] };
+  const state = doc({ docId: "d2", rows: [{ id: "r1", visualText: EMPTY, audioText: audio }], productionTags: [registered("sound", "theme")] });
   assert.deepEqual(jsonCopy(planRegistryHealing(state, readers)), { cues: { docId: "d2", cells: { r1: ["theme"] } }, count: 0, retitle: [], register: [] });
   assert.deepEqual(jsonCopy(snapshotCues(state, readers)), { docId: "d2", cells: { r1: ["theme"] } });
 });
@@ -281,11 +287,11 @@ function cueRow(id: string, lines: string[]): ProductionRow {
 }
 
 test("a cue edited in place keeps its registry entry: the plan retitles it instead of registering the new name", () => {
-  const first: TagState = { docId: "dA", rows: [cueRow("r1", ["Music: slow"])], productionTags: [] };
+  const first = doc({ docId: "dA", rows: [cueRow("r1", ["Music: slow"])], productionTags: [] });
   const opened = planRegistryHealing(first, readers, null);
   assert.deepEqual(opened.register.map((t) => t.name), ["slow"]);
   const registry: RegistryTag[] = [Object.assign({}, opened.register[0] as RegistryTag, { status: "have", notes: "the Rhodes take" })];
-  const typed: TagState = { docId: "dA", rows: [cueRow("r1", ["Music: slow piano"])], productionTags: registry };
+  const typed = doc({ docId: "dA", rows: [cueRow("r1", ["Music: slow piano"])], productionTags: registry });
   const plan = planRegistryHealing(typed, readers, opened.cues);
   assert.deepEqual(jsonCopy(plan), {
     cues: { docId: "dA", cells: { r1: ["slow piano"] } },
@@ -297,11 +303,11 @@ test("a cue edited in place keeps its registry entry: the plan retitles it inste
   const elsewhere = planRegistryHealing(typed, readers, { docId: "dB", cells: opened.cues.cells });
   assert.deepEqual(elsewhere.retitle, [], "a snapshot of another document retitles nothing");
   assert.deepEqual(elsewhere.register.map((t) => t.name), ["slow piano"]);
-  const stillTagged: TagState = {
+  const stillTagged = doc({
     docId: "dA",
     rows: [cueRow("r1", ["Music: slow piano"]), { id: "r2", visualText: cells.html([tag("sound", "slow")]), audioText: EMPTY }],
     productionTags: registry
-  };
+  });
   assert.deepEqual(planRegistryHealing(stillTagged, readers, opened.cues).retitle, [], "an old name still in the script is not retitled");
 });
 
@@ -309,10 +315,10 @@ test("cue snapshots hold scenes with Object.prototype ids, and a new such scene 
   const snap = snapshotCues({ docId: "dP", rows: [cueRow("__proto__", ["Music: theme"]), cueRow("constructor", ["SFX: bang"])], productionTags: [] }, readers);
   assert.deepEqual(Object.keys(snap.cells), ["__proto__", "constructor"]);
   assert.deepEqual(snap.cells["__proto__"], ["theme"]);
-  const opened = planRegistryHealing({ docId: "dA", rows: [cueRow("r1", ["Music: slow"])], productionTags: [] }, readers, null);
+  const opened = planRegistryHealing(doc({ docId: "dA", rows: [cueRow("r1", ["Music: slow"])], productionTags: [] }), readers, null);
   const registry: RegistryTag[] = [opened.register[0] as RegistryTag];
   for (const id of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
-    const typed: TagState = { docId: "dA", rows: [cueRow("r1", ["Music: slow piano"]), cueRow(id, ["SFX: bang"])], productionTags: registry };
+    const typed = doc({ docId: "dA", rows: [cueRow("r1", ["Music: slow piano"]), cueRow(id, ["SFX: bang"])], productionTags: registry });
     const plan = planRegistryHealing(typed, readers, opened.cues);
     assert.deepEqual(plan.retitle, [{ at: 0, from: "slow", name: "slow piano" }], id);
     assert.deepEqual(plan.register.map((t) => t.name), ["bang"], id);
@@ -323,13 +329,13 @@ test("cue snapshots hold scenes with Object.prototype ids, and a new such scene 
 });
 
 test("cue retitling pairs the names that went and came by closeness, not by position, when as many went as came (#294)", () => {
-  const before: TagState = {
+  const before = doc({
     docId: "dC", rows: [cueRow("r1", ["SFX: door slam", "SFX: kettle whistle"])], productionTags: []
-  };
+  });
   const opened = planRegistryHealing(before, readers, null);
-  const after: TagState = {
+  const after = doc({
     docId: "dC", rows: [cueRow("r1", ["SFX: kettle whistles", "SFX: door slams"])], productionTags: opened.register
-  };
+  });
   assert.deepEqual(planRegistryHealing(after, readers, opened.cues).retitle, [
     { at: 0, from: "door slam", name: "door slams" },
     { at: 1, from: "kettle whistle", name: "kettle whistles" }
@@ -337,8 +343,8 @@ test("cue retitling pairs the names that went and came by closeness, not by posi
 });
 
 function retitlesAfter(was: string[], now: string[]): { from: string; name: string }[] {
-  const opened = planRegistryHealing({ docId: "dE", rows: [cueRow("r1", was)], productionTags: [] }, readers, null);
-  const edited: TagState = { docId: "dE", rows: [cueRow("r1", now)], productionTags: opened.register };
+  const opened = planRegistryHealing(doc({ docId: "dE", rows: [cueRow("r1", was)], productionTags: [] }), readers, null);
+  const edited = doc({ docId: "dE", rows: [cueRow("r1", now)], productionTags: opened.register });
   return planRegistryHealing(edited, readers, opened.cues).retitle.map((t) => ({ from: t.from, name: t.name }));
 }
 
@@ -372,8 +378,8 @@ test("a cue lost, one gained and one edited in one go: the edited cue keeps its 
 });
 
 test("a find-and-replace over several cues in one cell renames none of their items; each becomes a new item (#294)", () => {
-  const opened = planRegistryHealing({ docId: "dF", rows: [cueRow("r1", ["Music: slow", "Music: slowly"])], productionTags: [] }, readers, null);
-  const edited: TagState = { docId: "dF", rows: [cueRow("r1", ["Music: fast", "Music: fastly"])], productionTags: opened.register };
+  const opened = planRegistryHealing(doc({ docId: "dF", rows: [cueRow("r1", ["Music: slow", "Music: slowly"])], productionTags: [] }), readers, null);
+  const edited = doc({ docId: "dF", rows: [cueRow("r1", ["Music: fast", "Music: fastly"])], productionTags: opened.register });
   const plan = planRegistryHealing(edited, readers, opened.cues);
   assert.deepEqual(plan.retitle, []);
   assert.deepEqual(plan.register.map((t) => t.name), ["fast", "fastly"]);
@@ -490,14 +496,14 @@ const GEAR_ROW: ProductionRow = {
   audioText: EMPTY
 };
 
-function gearState(extra?: RegistryTag[]): TagState {
-  return {
+function gearState(extra?: RegistryTag[]): TagState & ValidatedDocument {
+  return doc({
     rows: [GEAR_ROW],
     productionTags: [
       registered("gear", "Tripod", { status: "have" }), registered("gear", "Slider"),
       registered("gear", "Old lens", { notes: "sold" }), registered("gear", "Gimbal"), registered("prop", "Kettle")
     ].concat(extra || [])
-  };
+  });
 }
 
 test("INV-26: the quick-add plan deletes an orphaned entry whose line went and keeps one still tagged in the script", () => {

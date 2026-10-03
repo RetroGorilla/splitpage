@@ -20,6 +20,8 @@ import type { BrollShot, BrollState } from "../../../src/core/production/broll.t
 import type { RegistryTag } from "../../../src/core/production/tags.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { migratedThenSet } from "../migrate-ports.ts";
 import { B, T, countingIds, jsonCopy, mapDecoder, plainTextOf, readersOver, tag } from "./cells.ts";
 
 const cells = mapDecoder();
@@ -100,8 +102,12 @@ test("collectBrollFromRows numbers each row's items and keeps an id only the fir
 const PIER = cells.html([T("Waves on the "), tag("location", "Pier", "pier"), T(".")]);
 const QUAY = cells.html([T("Quiet "), tag("location", "Quay", "quay"), T(" now.")]);
 
-function crafted(): BrollState & { brollShots: BrollShot[] } {
-  return {
+function doc<T extends BrollState>(state: T): T & ValidatedDocument {
+  return migratedThenSet(state);
+}
+
+function crafted(): BrollState & { brollShots: BrollShot[] } & ValidatedDocument {
+  return doc({
     rows: [
       { id: "r1", audioText: PIER, visualText: cells.html([B("bs_keep"), T(" the gulls\nover the pier\nB-roll: drone sweep\nlow and slow")]) },
       { id: "r2", audioText: EMPTY, visualText: cells.html([B("bs_keep"), T(" the gulls again\nB-roll: The Harbour")]) },
@@ -115,7 +121,7 @@ function crafted(): BrollState & { brollShots: BrollShot[] } {
       shot("bs_orphan", "cut from the script"),
       shot("bs_list", "pickup from the list", { origin: "list", props: [{ id: "t_kettle", name: "Kettle" }] })
     ]
-  };
+  });
 }
 
 test("the b-roll read model matches each line to a shot and plans the shots to create and rename, writing nothing", () => {
@@ -162,14 +168,14 @@ test("a repair draws one more id after each created shot's seeds and stores none
   const ids = countingIds();
   const logged = { id: (p: string) => { const id = ids.id(p); log.push(id); return id; }, docId: ids.docId };
   const seeded = (html: string | null | undefined): string => { log.push("seed"); return plainTextOf(html); };
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [
       { id: "r1", audioText: PIER, visualText: cells.html([T("B-roll: Steam\nB-roll: Hands")]) },
       { id: "r2", audioText: EMPTY, visualText: cells.html([B("bs_new"), T(" Cup")]) }
     ],
     brollShots: [],
     productionTags: []
-  };
+  });
   const read = brollEntries(state, readers, logged, seeded, false);
   assert.deepEqual(log, ["bsmint0001", "seed", "bsmint0002", "seed", "seed"]);
   assert.deepEqual(read.plan.create.map((c) => c.shot.id), ["bsmint0001", "bsmint0002", "bs_new"]);
@@ -181,14 +187,14 @@ test("a repair draws one more id after each created shot's seeds and stores none
 });
 
 test("a line never takes a shot a keyed line further down holds, and a typed marker takes a shot by its name", () => {
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [
       { id: "r0", visualText: cells.html([T("B-roll: the gulls\nB-roll: Drone Sweep")]), audioText: EMPTY },
       { id: "r1", visualText: cells.html([B("bsA"), T(" the gulls")]), audioText: EMPTY }
     ],
     brollShots: [shot("bsA", "the gulls", { status: "shot" }), shot("bsD", "drone sweep")],
     productionTags: []
-  };
+  });
   const ids = countingIds();
   const res = brollEntries(state, readers, ids, plainTextOf, false);
   assert.deepEqual(res.entries.map((e) => e.id), ["bsmint0001", "bsD", "bsA"]);
@@ -198,14 +204,14 @@ test("a line never takes a shot a keyed line further down holds, and a typed mar
 });
 
 test("anchoring hands a shot to one typed line only: a second line of the same name gets a fresh id", () => {
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [
       { id: "r0", visualText: cells.html([T("B-roll: the gulls\nB-roll: The Gulls")]), audioText: EMPTY },
       { id: "r1", visualText: cells.html([T("B-roll: the gulls")]), audioText: EMPTY }
     ],
     brollShots: [shot("bsA", "the gulls")],
     productionTags: []
-  };
+  });
   const plan = planBrollAnchors(state, readers, countingIds());
   assert.deepEqual(Object.entries(plan), [
     [brollLineKey("r0", 0), "bsA"], [brollLineKey("r0", 1), "bsmint0001"], [brollLineKey("r1", 0), "bsmint0002"]
@@ -215,11 +221,11 @@ test("anchoring hands a shot to one typed line only: a second line of the same n
 test("INV-54: anchoring gives a key repeating an earlier line's id an id of its own, and leaves the first alone", () => {
   const first = cells.html([B("bsA"), T(" the gulls")]);
   const repeat = cells.html([T("intro\n"), B("bsA"), T(" the gulls")]);
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [{ id: "r0", visualText: first, audioText: EMPTY }, { id: "r1", visualText: repeat, audioText: EMPTY }],
     brollShots: [shot("bsA", "the gulls", { status: "shot" })],
     productionTags: []
-  };
+  });
   const before = JSON.stringify(state);
   const ids = countingIds();
   const plan = planBrollAnchors(state, readers, ids);
@@ -237,11 +243,11 @@ test("INV-54: anchoring gives a key repeating an earlier line's id an id of its 
 test("anchoring turns a typed marker into a key and a space, and leaves a commented key and its comment alone", () => {
   const typed = cells.html([T("B-roll: the gulls\nlow\nb roll - drone")]);
   const commented = cells.html([B("b1", "B-roll:", { cmt: ["c1"] }), T(" gulls", { cmt: ["c1"] })]);
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [{ id: "r0", visualText: typed, audioText: EMPTY }, { id: "r1", visualText: commented, audioText: EMPTY }],
     brollShots: [],
     productionTags: []
-  };
+  });
   const plan = planBrollAnchors(state, readers, countingIds());
   assert.deepEqual(Object.values(plan), ["bsmint0001", "bsmint0002"]);
   const typedCell = cells.decode(typed);
@@ -259,11 +265,11 @@ test("anchoring turns a typed marker into a key and a space, and leaves a commen
 test("anchoring a commented key that repeats an earlier id gives it a fresh id and keeps its comment", () => {
   const first = cells.html([B("bsA"), T(" the gulls")]);
   const repeat = cells.html([T("intro\n"), B("bsA", "B-roll:", { cmt: ["c1"] }), T(" the gulls", { cmt: ["c1"] })]);
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [{ id: "r0", visualText: first, audioText: EMPTY }, { id: "r1", visualText: repeat, audioText: EMPTY }],
     brollShots: [shot("bsA", "the gulls", { status: "shot" })],
     productionTags: []
-  };
+  });
   const plan = planBrollAnchors(state, readers, countingIds());
   assert.deepEqual(Object.entries(plan), [[brollLineKey("r1", 0), "bsmint0001"]]);
   const cell = cells.decode(repeat);
@@ -278,7 +284,7 @@ test("INV-56: a shot shows props tagged on its lines and hand-added ones by regi
     { id: "t_mug", cat: "prop", name: "Red mug", status: "have" },
     { id: "t_kettle", cat: "prop", name: "Kettle" }
   ];
-  const state: BrollState = {
+  const state = doc<BrollState>({
     rows: [
       { id: "r0", visualText: cells.html([B("b1"), T(" the "), tag("prop", "Red mug", "red mug"), T(" on the sill")]), audioText: EMPTY },
       { id: "r1", visualText: cells.html([B("b2"), T(" a "), tag("prop", "Lamp", "lamp")]), audioText: EMPTY }
@@ -287,7 +293,7 @@ test("INV-56: a shot shows props tagged on its lines and hand-added ones by regi
       props: [{ id: "t_mug", name: "Red mug" }, { id: "", name: "Boat hook" }, { id: "t_kettle", name: "old kettle name" }, null]
     })],
     productionTags: registry
-  };
+  });
   const res = brollEntries(state, readers, countingIds(), plainTextOf, false);
   assert.deepEqual(res.entries[0]?.props, [
     { key: "t:t_mug", id: "t_mug", name: "Red mug", status: "have", auto: true, hand: true, tracked: true, ref: "t_mug" },

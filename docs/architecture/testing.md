@@ -6,7 +6,7 @@ runs the fast gates in the order CI does.
 | Command | What it runs |
 | --- | --- |
 | `npm run lint` | eslint over every source tree, `.ts` included; any warning fails |
-| `npm run typecheck` | `tsc` rules for each `tsconfig.*.json`; fails on a `.ts` file no config covers |
+| `npm run typecheck` | `tsc` rules for each `tsconfig.*.json`; fails on a `.ts` file no config covers, and on a cast to the validated document brand ([below](#the-validated-document-brand)) |
 | `npm run check:deps` | Layer, platform and cycle rules ([dependencies.md](dependencies.md)) |
 | `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
@@ -208,6 +208,43 @@ All three extend `tsconfig.base.json`: `strict`, `noUncheckedIndexedAccess`,
 `erasableSyntaxOnly`, `verbatimModuleSyntax`, NodeNext modules and no emit.
 Import with the `.ts` extension and `import type` for types; path aliases are
 not used because Node would not resolve them.
+
+`types/json.d.ts`, in all three configs, makes `JSON.parse` return `unknown`
+instead of `any`, so a parsed value is checked or asserted before it reaches a
+typed parameter.
+
+### The validated document brand
+
+`ValidatedDocument` (`src/core/document/validated.ts`) is the document shape
+plus a type-only brand keyed by an unexported `unique symbol`. Only
+`src/core/migrate.ts` produces it: `migrateRows` and `migrateDocument`, and
+through them `mergeStates`. `mergeStates`, `mergeStateFields`,
+`syncCommentAnchors`, `deriveProductionIndex`, `planRegistryHealing`,
+`planQuickAdd`, `brollEntries` and `planBrollAnchors` take only that type. The
+brand changes no bytes; `checkJs` is off, so it constrains `.ts` callers only.
+
+The typecheck refuses, in every `.ts` file but `migrate.ts`:
+- a type assertion to a type that carries the brand, directly or through an
+  alias, a union, an intersection, an array, a property, a type argument, a
+  constraint or a return type, unless the value already has that type;
+- a type predicate to such a type;
+- a function signature with no body that returns one;
+- an ambient declaration of one.
+
+The rule is `tools/brand-casts.mjs`, tested by `tools/test-brand-casts.mjs`.
+It sits in the typecheck, not in eslint or the dependency gate, because only
+the type checker sees through aliases and indirect forms. A value typed `any`
+still passes; `@typescript-eslint/no-explicit-any` and the `JSON.parse`
+declaration keep `any` out of authored code.
+`tools/test-validated-document.mjs` compiles a call to each guarded function
+with an object literal, a `JSON.parse` result and one asserted to the
+unbranded shape, and expects a type error for each.
+
+Tests get a branded document from `migrateRows` with fake ports.
+`migratedThenSet` in `tests/core/migrate-ports.ts` migrates a copy of a fixture
+and then sets the fixture's own fields back, the way the app edits a live
+document, so a test of an unregistered tag or a malformed registry keeps its
+input.
 
 eslint applies `typescript-eslint`'s strict rules to `.ts` files and
 refuses inline `eslint-disable` directives in the migrated folders and
