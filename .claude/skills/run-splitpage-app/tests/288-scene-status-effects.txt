@@ -1,0 +1,94 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.A = F.autosave; window.U = window.__undoTest; window.R = window.__renderTest; var doc = {"schema": 2, "title": "Status effects", "wordsPerMinute": 150, "rows": [{"id": "r1", "visualText": "Wide on the harbour", "audioText": "Every morning the town wakes.", "status": "ready"}, {"id": "r2", "visualText": "Close on the nets", "audioText": "Mara has mended nets for thirty years.", "status": "todo"}, {"id": "r3", "visualText": "Cafe window", "audioText": "The kettle never stops.", "status": "todo"}], "comments": []}; window.__open = JSON.stringify(doc); window.__written = 0; window.__h = {name: 'status.splitpage', _mtime: Date.now() - 100000, createWritable: async function(){ window.__written++; return {write: async function(b){ window.__body = typeof b === 'string' ? b : await new Response(b).text(); }, close: async function(){ window.__h._mtime = Date.now(); }}; }, getFile: async function(){ return new File([window.__open], 'status.splitpage', {lastModified: window.__h._mtime}); }}; return F.openFile(new File([window.__open], 'status.splitpage', {lastModified: window.__h._mtime}), window.__h); })()
+wait F.docFile().kind === 'splitpage' && document.querySelector('#rows .row[data-id="r3"]')
+expect document.getElementById('save-status').textContent === 'Saved'
+eval (function(){ A.timing().idle = 4000; A.timing().max = 8000; window.__log = []; new MutationObserver(function(ms){ ms.forEach(function(m){ Array.prototype.forEach.call(m.addedNodes, function(n){ if (n.nodeType === 3) window.__log.push(n.data); }); }); }).observe(document.getElementById('save-status'), {childList: true}); window.__st = function(){ return document.getElementById('save-status').textContent; }; window.__arm = function(){ window.__log = []; window.__w0 = window.__written; return true; }; window.__cycled = function(){ var l = window.__log, a = l.indexOf('Unsaved changes'), b = a === -1 ? -1 : l.indexOf('Saving…', a + 1), c = b === -1 ? -1 : l.indexOf('Saved', b + 1); return c !== -1 && window.__written > window.__w0 && window.__st() === 'Saved'; }; window.__disk = function(id){ return JSON.parse(window.__body).rows.filter(function(r){ return r.id === id; })[0]; }; window.__same = function(){ return window.__st() === 'Saved' && window.__body === F.buildSplitpage(F.state()); }; window.__live = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.__shown = function(id){ return !!document.querySelector('#rows .row[data-id="' + id + '"]'); }; window.__stripped = function(id){ return Array.prototype.some.call(document.querySelectorAll('#rows .hidden-shot-strip'), function(s){ return s.getAttribute('data-ids').split(',').indexOf(id) !== -1; }); }; window.__click = function(id, keep){ document.activeElement.blur(); U.flush(); window.__u0 = U.sizes().undo; window.__stamp0 = __live(id).updatedAt; R.reset(); if (!keep) __arm(); document.querySelector('#rows .row[data-id="' + id + '"] [data-action="cycle-status"]').click(); window.__at = { dirty: document.getElementById('btn-save').classList.contains('is-dirty'), counts: R.counts(), status: __live(id).status, stamped: __live(id).updatedAt !== window.__stamp0 }; U.flush(); window.__at.undo = U.sizes().undo - window.__u0; return true; }; return true; })()
+expect U.sizes().undo === 0
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'false'
+
+eval __click('r2')
+expect window.__at.status === 'ready'
+expect window.__at.stamped === true
+expect window.__at.dirty === true
+expect window.__at.undo === 1
+expect window.__at.counts.render === 0
+expect window.__at.counts.rowsPainted === 1
+expect window.__at.counts.cellsPainted === 0
+expect document.querySelector('#rows .row[data-id="r2"] .status-dot').className == status-dot is-half
+sleep 700
+expect __cycled()
+expect __disk('r2').status === 'ready'
+
+eval __click('r2', true)
+expect window.__at.status === 'shot'
+expect window.__at.undo === 1
+expect window.__at.counts.render === 0
+expect window.__at.counts.rowsPainted === 1
+sleep 700
+expect __disk('r2').status === 'shot'
+expect U.sizes().undo === 2
+expect __same()
+
+eval (function(){ window.__stamp1 = __live('r2').updatedAt; __arm(); return true; })()
+key ctrl KeyZ
+wait __live('r2').status === 'ready'
+expect __live('r2').updatedAt !== window.__stamp1
+expect U.sizes().undo === 1
+expect U.sizes().redo === 1
+wait __cycled()
+expect __disk('r2').status === 'ready'
+eval (function(){ window.__stamp1 = __live('r2').updatedAt; __arm(); return true; })()
+key ctrl KeyZ
+wait __live('r2').status === 'todo'
+expect __live('r2').updatedAt !== window.__stamp1
+expect U.sizes().undo === 0
+expect U.sizes().redo === 2
+wait __cycled()
+expect __disk('r2').status === 'todo'
+sleep 300
+expect __same()
+
+jsclick #menu-hide-shot
+wait document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'true'
+expect __shown('r1')
+eval __click('r1')
+expect window.__at.status === 'shot'
+expect window.__at.undo === 1
+expect window.__at.counts.render === 0
+expect window.__at.counts.rowsPainted === 1
+expect __shown('r1')
+expect !__stripped('r1')
+sleep 700
+expect __cycled()
+expect __disk('r1').status === 'shot'
+expect __shown('r1')
+expect !__stripped('r1')
+wait __stripped('r1') && !__shown('r1')
+expect R.counts().render === 1
+
+eval (function(){ window.__stamp1 = __live('r1').updatedAt; __arm(); document.activeElement.blur(); return true; })()
+key ctrl KeyZ
+wait __live('r1').status === 'ready'
+expect __live('r1').updatedAt !== window.__stamp1
+wait __shown('r1') && !__stripped('r1')
+wait __cycled()
+expect __disk('r1').status === 'ready'
+
+eval __click('r1')
+expect window.__at.status === 'shot'
+eval __click('r1')
+expect window.__at.status === 'todo'
+expect window.__at.undo === 1
+sleep 1800
+expect __shown('r1')
+expect !__stripped('r1')
+expect R.counts().render === 0
+
+jsclick #menu-hide-shot
+wait document.getElementById('menu-hide-shot').getAttribute('aria-checked') === 'false'
+sleep 300
+expect __same()
+expect A.pending() === false
+
+quit
