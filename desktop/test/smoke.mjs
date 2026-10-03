@@ -4918,6 +4918,7 @@ async function connectTabViaDialog(cdp, srv, opts) {
   const o = opts || {};
   const js = "(function(){" +
     "document.querySelector('#file-menu [data-file-action=\"servers\"]').click();" +
+    (o.mustShow ? "if (document.getElementById('connect-modal').hidden) return false;" : "") +
     "document.getElementById('connect-name').value=" + JSON.stringify(o.name || ("Srv " + srv.port)) + ";" +
     "document.getElementById('connect-url').value=" + JSON.stringify(srv.url) + ";" +
     "document.getElementById('connect-pin').value=" + JSON.stringify(srv.pin || "") + ";" +
@@ -4929,7 +4930,8 @@ async function connectTabViaDialog(cdp, srv, opts) {
         "document.getElementById('connect-ssh-local').value=" + JSON.stringify(String(o.ssh.localPort)) + ";"
       : "") +
     "document.querySelector('#connect-modal [data-connect-action=\"add\"]').click(); return true; })()";
-  await evalPage(cdp, js, { awaitPromise: false });
+  const shown = await evalPage(cdp, js, { awaitPromise: false });
+  if (o.mustShow && shown !== true) return false;
   const ok = await poll(cdp, "(function(){ var c = window.__hostedTest.conn(); return c.serverUrl === " +
     JSON.stringify(srv.url) + " && c.hasToken && !document.getElementById('menu-server-open').hidden; })()", 20000)
     .catch(() => false);
@@ -4937,10 +4939,12 @@ async function connectTabViaDialog(cdp, srv, opts) {
   return !!ok;
 }
 
-async function openViaPicker(cdp, docId) {
+async function openViaPicker(cdp, docId, opts) {
+  const o = opts || {};
   await evalPage(cdp, "(function(){ document.getElementById('menu-server-open').click(); return true; })()", { awaitPromise: false });
   const sel = "#server-modal [data-action=\"server-open\"][data-id=" + JSON.stringify(docId) + "]";
-  const listed = await poll(cdp, "!!document.querySelector(" + JSON.stringify(sel) + ")", 15000).catch(() => false);
+  const visible = o.mustShow ? " && !document.getElementById('server-modal').hidden && document.querySelectorAll('.modal-backdrop:not([hidden])').length === 1" : "";
+  const listed = await poll(cdp, "!!document.querySelector(" + JSON.stringify(sel) + ")" + visible, 15000).catch(() => false);
   if (!listed) return false;
   await evalPage(cdp, "(function(){ document.querySelector(" + JSON.stringify(sel) + ").click(); return true; })()", { awaitPromise: false });
   return true;
@@ -4981,8 +4985,8 @@ async function caseTwoServersSideBySide(target) {
     await waitForRows(cdp1, 20000);
     const tab1Id = await tabIdOfTarget(cdp1);
 
-    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX));
-    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id));
+    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX, { mustShow: true }));
+    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id, { mustShow: true }));
     record(tag + ": tab 1 shows X's script", !!(await poll(cdp1, titleExpr("Twin On X"), 15000).catch(() => false)));
 
     const tab2Id = await shell(cdp1, "createTab", {});
@@ -4991,8 +4995,11 @@ async function caseTwoServersSideBySide(target) {
     const fresh2 = await connOf(cdp2);
     record(tag + ": a new tab does not inherit tab 1's token", !!fresh2 && fresh2.hasToken === false, JSON.stringify(fresh2));
 
-    record(tag + ": tab 2 joins server Y through the Servers dialog", await connectTabViaDialog(cdp2, srvY));
-    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id));
+    record(tag + ": tab 2 asks for server X's PIN, the server it inherited without a token",
+      !!(await poll(cdp2, "!document.getElementById('pin-modal').hidden", 15000).catch(() => false)));
+    record(tag + ": tab 2 joins server Y through the Servers dialog, opened over that PIN prompt", await connectTabViaDialog(cdp2, srvY, { mustShow: true }));
+    record(tag + ": tab 2's PIN prompt for X closed once it joined Y", await evalPage(cdp2, "document.getElementById('pin-modal').hidden"));
+    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id, { mustShow: true }));
     record(tag + ": tab 2 shows Y's script, not a switch to tab 1",
       !!(await poll(cdp2, titleExpr("Twin On Y"), 15000).catch(() => false)));
 
