@@ -255,6 +255,21 @@ export function currentProductionIndex() {
   return productionIndex().core;
 }
 
+function adoptRegisteredIds(ix) {
+  var ids = Object.create(null);
+  ix.core.unregistered.forEach(function (t) {
+    var reg = registryEntry(t.catId, t.name);
+    if (reg) ids[registryKey(t.catId, t.name)] = reg.id;
+  });
+  ix.core.entries.forEach(function (e, i) {
+    if (!(e.key in ids)) return;
+    e.id = ids[e.key];
+    ix.entries[i].id = ids[e.key];
+  });
+  ix.core.unregistered = [];
+  ix.core.tagSig = registrySignature(S.state.productionTags);
+}
+
 export function healTagRegistry() {
   if (!S.state) return 0;
   var ix = productionIndex();
@@ -263,12 +278,7 @@ export function healTagRegistry() {
   if (!plan.count) return 0;
   plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
   addRegistryTags(plan.register);
-  ix.core.unregistered.forEach(function (t) {
-    var reg = registryEntry(t.catId, t.name);
-    ix.entries.forEach(function (e) { if (e.key === registryKey(t.catId, t.name) && reg) e.id = reg.id; });
-  });
-  ix.core.unregistered = [];
-  ix.core.tagSig = registrySignature(S.state.productionTags);
+  adoptRegisteredIds(ix);
   if (plan.retitle.length) prodIndex = null;
   return plan.count;
 }

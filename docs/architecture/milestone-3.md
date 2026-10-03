@@ -153,6 +153,7 @@ Recording stubs pin the fan-out order for both commands. 3.0 also characterises 
 - Tests:
   - a write into each cache's value throws `TypeError`;
   - deep-frozen `base`, `mine` and `theirs` through all 58 merge golden cases and a seeded corpus, with no throw and nothing in `merged` reachable from an input.
+- 07's index writers that freezing meets (from 3.3): entries handed out before a heal take the new ids in place, which `production-index.test.mjs:31` and 3.3's shims tests ("…a fresh derivation of the healed document…", "a name the registry refuses…") pin and which flip; the heal reassigns `core.unregistered` and `core.tagSig`; the heal writes ids into core entries (no test requires it in place, so a copy is fine); `productionIndexFresh` writes `core.rowSig` on every prose edit (older than 3.3, and it would throw on each edit under freeze).
 - The harness change means a full run before merge (review.md §3). This PR runs two, off and on. Every legacy writer that freeze-on exposes is fixed here or named in `docs/architecture/` with a test. Metrics: none expected.
 
 **3.6 Session, undo adapter, effects.**
