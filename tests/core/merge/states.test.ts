@@ -192,3 +192,39 @@ test("a person both sides added keeps my items: their owners move to the id that
   assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pTheirs"]);
   assert.deepEqual((r.merged.brollShots as { id: string; owner: string }[]).map((b) => [b.id, b.owner]), [["b2", "pTheirs"], ["b1", "pTheirs"]]);
 });
+
+test("an owner I deleted on my side gives way to the owner I handed the items to, and no input changes (#353)", () => {
+  const people = [{ id: "pSam", name: "Sam" }, { id: "pAda", name: "Ada" }];
+  const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })], brollShots: [Object.assign({}, shot, { owner: owner })] });
+  const base = doc(Object.assign({ people: people }, owned("pSam")));
+  const theirs = doc(Object.assign({ people: people }, owned("pSam")));
+  const mine = doc(Object.assign({ people: [{ id: "pAda", name: "Ada" }] }, owned("pAda")));
+  const before = JSON.stringify([base, mine, theirs]);
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(base, mine, theirs, fakePorts(decode));
+  assert.equal(JSON.stringify([base, mine, theirs]), before);
+  assert.deepEqual(r.merged.people, [{ id: "pAda", name: "Ada" }]);
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pAda"]);
+  assert.deepEqual((r.merged.brollShots as { owner: string }[]).map((b) => b.owner), ["pAda"]);
+});
+
+test("their owner whose id lost to their own same-named person still survives, so mine does not replace it (#353)", () => {
+  const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })] });
+  const base = doc(owned(""));
+  const theirs = doc(Object.assign({ people: [{ id: "pT1", name: "Ada" }, { id: "pT2", name: "ada" }] }, owned("pT2")));
+  const mine = doc(Object.assign({ people: [{ id: "pBo", name: "Bo" }] }, owned("pBo")));
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(base, mine, theirs, fakePorts(decode));
+  assert.deepEqual((r.merged.people as { id: string }[]).map((p) => p.id), ["pT1", "pBo"]);
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pT1"]);
+});
+
+test("a table with no people field merges owners as before: no person counts as deleted (#353)", () => {
+  const fields = STATE_FIELDS.filter((f) => f.key !== "people");
+  const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })] });
+  const base = doc(Object.assign({ people: [{ id: "pSam", name: "Sam" }] }, owned("pSam")));
+  const mine = doc(Object.assign({ people: [{ id: "pAda", name: "Ada" }] }, owned("pAda")));
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(base, mine, doc(Object.assign({ people: "junk" }, owned("pSam"))), fakePorts(decode, { fields: fields }));
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pSam"]);
+});
