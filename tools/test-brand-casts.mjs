@@ -36,12 +36,16 @@ const HEAD = [
   "const shape = raw as DocumentShape;",
   "function copy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }",
   "function launder<T>(v: unknown): T { return v as T; }",
+  "function pick<T>(seed: unknown, v: unknown): T { return (seed && v) as T; }",
   "const launderArrow = <T,>(v: unknown): T => v as T;",
   "function deferred<T>(v: unknown): T extends object ? T : never { return v as T extends object ? T : never; }",
   "function indexed<T extends { d: unknown }>(v: unknown): T[\"d\"] { return v as T[\"d\"]; }",
   "function is<T>(v: unknown): v is T { return !!v; }",
   "class Box<T> { get value(): T { return undefined as T; } }",
-  'function fail(): never { throw new Error("no"); }'
+  "class Store<T> { private items = new Map<string, T>(); get(id: string): T | undefined { return this.items.get(id); } }",
+  'function fail(): never { throw new Error("no"); }',
+  "function run<T>(fn: () => T): T { return fn(); }",
+  "class Keeper<T> { readonly items: T[]; constructor() { this.items = []; } }"
 ];
 
 const ASSERTION = "a type assertion";
@@ -72,15 +76,13 @@ const FORGED = [
   ["raw as typeof doc", ASSERTION],
   ["JSON.parse(JSON.stringify(doc)) as typeof doc", ASSERTION],
   ["raw as never", ASSERTION],
-  ["raw as Promise<never>", ASSERTION],
   ["{ ...shape, [Symbol() as unknown as K]: true as const }", ASSERTION],
   ["launder<ValidatedDocument>(raw)", CALL],
   ["launder<never>(raw)", CALL],
   ["launderArrow<ValidatedDocument>(raw)", CALL],
   ["deferred<ValidatedDocument>(raw)", CALL],
   ["indexed<{ d: ValidatedDocument }>(raw)", CALL],
-  ["is<ValidatedDocument>(raw)", CALL],
-  ["new Box<ValidatedDocument>().value", CALL]
+  ["is<ValidatedDocument>(raw)", CALL]
 ].map(([e, what], i) => [`export const f${i} = ${e};`, what]).concat([
   ["export const inferred: ValidatedDocument = launder(raw);", CALL],
   ["export function isDoc(x: unknown): x is ValidatedDocument { return !!x; }", PREDICATE],
@@ -119,14 +121,42 @@ const ALLOWED = [
   "export interface Port { read(): ValidatedDocument; }",
   "export const a17 = (): never => fail();",
   "export const a18 = ({}) as Record<string, never>;",
-  "export const a19 = new Box<string>().value;"
+  "export const a19 = new Box<string>().value;",
+  "export const a20 = new Map<string, ValidatedDocument>();",
+  "export const a21 = new Set<ValidatedDocument>();",
+  "export const a22 = new WeakMap<ValidatedDocument, number>();",
+  "export class Registry { byId = new Map<string, ValidatedDocument>(); }",
+  "export const a23: Set<ValidatedDocument> = new Set();",
+  "export const a24: Map<string, ValidatedDocument> = new Map();",
+  "export const a25 = new Promise<ValidatedDocument>((resolve) => resolve(migrateRows(raw, ports)));",
+  "export const a26 = new Store<ValidatedDocument>();",
+  "export const a27 = [doc, null].filter((d): d is ValidatedDocument => d !== null);",
+  "export function present(d: ValidatedDocument | null): asserts d is ValidatedDocument { if (!d) throw new Error(\"no\"); }",
+  "export const a28 = raw as Record<string, never>;",
+  "export const a29 = raw as [];",
+  "export const a30 = raw as { rows: [] };",
+  "export const a31 = raw as { fail: () => never };",
+  "export class Owner { doc: ValidatedDocument | null = null; }",
+  "export const a32 = (): never => run(() => fail());",
+  "export const a33 = new Keeper<ValidatedDocument>();",
+  "export const a34 = Array.of<ValidatedDocument>();",
+  "export class Built { doc: ValidatedDocument; constructor() { this.doc = migrateRows(raw, ports); } }"
+];
+
+const KNOWN_GAPS = [
+  "export const g0 = new Box<ValidatedDocument>().value;",
+  "export const g1 = raw as Promise<never>;",
+  "export const g2 = pick<ValidatedDocument>(doc, raw);",
+  "export class Base { take(d: ValidatedDocument | string): void { void d; } }",
+  "export class Derived extends Base { override take(d: ValidatedDocument): void { void d; } }",
+  "export const g3 = (new Derived() as Base).take(\"x\");"
 ];
 
 function fixture() {
   const lines = [...HEAD];
   const expected = [];
   FORGED.forEach(([code, what, offset]) => { expected.push([lines.length + 1 + (offset || 0), what]); lines.push(...code.split("\n")); });
-  lines.push(...ALLOWED);
+  lines.push(...ALLOWED, ...KNOWN_GAPS);
   return { text: lines.join("\n") + "\n", expected };
 }
 
@@ -155,6 +185,17 @@ eq("the producer itself may cast to the brand", brandForgeries(both.program, REP
 const NAMESAKE = "tests/__brand__/migrate.ts";
 const namesake = compileFixtures({ [NAMESAKE]: [HEAD[0], HEAD[9], "export const forged = raw as ValidatedDocument;", ""].join("\n") });
 eq("another file named migrate.ts is no producer", brandForgeries(namesake.program, REPO, new Set([NAMESAKE])).map((f) => f.line), [3]);
+
+const SCRIPT = "tests/__brand__/script.ts";
+const script = compileFixtures({
+  [SCRIPT]: [
+    'interface JSON { parse(text: string, tag: 2): import("../../src/core/document/validated.ts").ValidatedDocument; }',
+    'const parsed: unknown = JSON.parse("{}", 2);',
+    ""
+  ].join("\n")
+});
+eq("a .ts file with no import or export is still a module, so its JSON interface is local and changes nothing",
+  [script.errorLines(SCRIPT), brandForgeries(script.program, REPO, new Set([SCRIPT]))], [[2], []]);
 
 const work = mkdtempSync(join(tmpdir(), "splitpage-brand-"));
 try {

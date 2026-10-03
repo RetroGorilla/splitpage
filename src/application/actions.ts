@@ -53,13 +53,13 @@ export type InvokeOutcome =
 export type RefusalPresenter = (refusal: Refusal, source: ActionSource) => void;
 
 export interface ActionRegistry {
-  register(definition: ActionDefinition): () => void;
-  has(id: string): boolean;
-  shortcuts(): readonly KeyedAction[];
-  view(id: string, source?: ActionSource): ActionView | undefined;
-  list(source?: ActionSource): readonly ActionView[];
-  invoke(id: string, source: ActionSource): InvokeOutcome;
-  presentRefusals(presenter: RefusalPresenter): () => void;
+  register: (definition: ActionDefinition) => () => void;
+  has: (id: string) => boolean;
+  shortcuts: () => readonly KeyedAction[];
+  view: (id: string, source?: ActionSource) => ActionView | undefined;
+  list: (source?: ActionSource) => readonly ActionView[];
+  invoke: (id: string, source: ActionSource) => InvokeOutcome;
+  presentRefusals: (presenter: RefusalPresenter) => () => void;
 }
 
 export interface RegistryOptions {
