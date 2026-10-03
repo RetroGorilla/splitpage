@@ -99,3 +99,5 @@ Recorded 2026-10-03 by `node tools/perf-record.mjs`, once, on 4.0-development at
 | long | 1.6 | 4.5 | 2.6 |
 
 No long task fired in any case on either fixture.
+
+Against the milestone 2 record on this machine, the p95 values moved by up to about 5 ms, in both directions (short typing 19.3 then 14.5, long typing 16.3 then 16.9, long new scene 42.8 then 45.3), while typing's p50 moved by under 1 ms (3.6 then 3.9, 5.1 then 5.3). The post-milestone-2 queue changed code between the two runs, but a band like that in both directions is what single runs show here. A later comparison, 3.12's typing case first, should compare p50, or run three times and compare the medians, before calling a p95 difference of that size a change.

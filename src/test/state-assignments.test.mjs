@@ -1,5 +1,4 @@
-import "./_dom.mjs";
-import "fake-indexeddb/auto";
+import { bootApp, closeApp, seen } from "./_app-boot.mjs";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,82 +7,19 @@ import assert from "node:assert/strict";
 import ts from "typescript";
 import { S } from "../js/_state.js";
 
-const seen = [];
-let held = S.state;
-
-function siteOf(stack) {
-  for (const line of String(stack).split("\n").slice(1)) {
-    const named = /^\s*at (?:async )?([\w$.<>]+) \(.*\/src\/js\/([\w.-]+\.js):\d+:\d+\)$/.exec(line);
-    if (named) return named[2] + "#" + named[1].replace(/^Object\./, "");
-    const bare = /^\s*at (?:async )?.*\/src\/js\/([\w.-]+\.js):\d+:\d+$/.exec(line);
-    if (bare) return bare[1] + "#(anonymous)";
-  }
-  return "(not from src/js)";
-}
-
-Object.defineProperty(S, "state", {
-  configurable: true,
-  enumerable: true,
-  get() { return held; },
-  set(v) {
-    held = v;
-    seen.push({ site: siteOf(new Error().stack), value: v === null || v === undefined ? v : JSON.parse(JSON.stringify(v)) });
-  }
-});
-
-const timers = new Set();
-for (const [set, clear] of [["setTimeout", "clearTimeout"], ["setInterval", "clearInterval"]]) {
-  const realSet = globalThis[set];
-  const realClear = globalThis[clear];
-  globalThis[set] = function (...args) { const id = realSet(...args); timers.add([realClear, id]); return id; };
-  window[set] = globalThis[set];
-  window[clear] = realClear;
-}
-const channels = new Set();
-const NodeChannel = globalThis.BroadcastChannel;
-class TrackedChannel extends NodeChannel {
-  constructor(name) {
-    super(name);
-    channels.add(this);
-  }
-}
-globalThis.BroadcastChannel = TrackedChannel;
-window.BroadcastChannel = TrackedChannel;
-for (const name of Object.getOwnPropertyNames(window)) {
-  if (!(name in globalThis)) globalThis[name] = window[name];
-}
-for (const name of ["indexedDB", "IDBKeyRange"]) window[name] = globalThis[name];
-const noMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
-window.matchMedia = noMedia;
-globalThis.matchMedia = noMedia;
-const noRect = () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 });
-window.Range.prototype.getBoundingClientRect = noRect;
-window.Range.prototype.getClientRects = () => [];
-window.__splitpageNoNewTab = true;
-const consoleError = window.console.error;
-window.console.error = () => {};
-
-const PAGE = readFileSync(new URL("../page.html", import.meta.url), "utf8");
-document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(PAGE)[1];
-
-await import("../js/_entry.js");
-await S.initialStateReady;
-const atBoot = seen.splice(0);
+const atBoot = await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { adoptRestoredState, migrateDocument } = await import("../js/02b-doc-id.js");
+const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { openLongDemo, startNewScript } = await import("../js/18b-file-menu.js");
+const { seedCheckPasses } = await import("../js/20b-onboarding.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 
-after(() => {
-  for (const [clear, id] of timers) clear(id);
-  window.console.error = consoleError;
-  for (const channel of channels) channel.close();
-});
+after(closeApp);
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 
@@ -117,31 +53,41 @@ function sourceFiles(dir) {
   return out;
 }
 
-function enclosingName(node) {
+function enclosingFunction(node) {
   for (let n = node.parent; n; n = n.parent) {
-    if ((ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n)) && n.name) return n.name.text;
-    if (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n)) return "(anonymous)";
+    if (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n)) return n;
   }
-  return "(anonymous)";
+  return null;
 }
 
-function assignmentSites() {
-  const sites = [];
+function nameOf(fn) {
+  return fn && (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) && fn.name ? fn.name.text : "(anonymous)";
+}
+
+function isStateAssignment(node) {
+  return ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    ts.isPropertyAccessExpression(node.left) && node.left.name.text === "state" &&
+    ts.isIdentifier(node.left.expression) && node.left.expression.text === "S";
+}
+
+function walk(node, visit) {
+  visit(node);
+  ts.forEachChild(node, (child) => walk(child, visit));
+}
+
+function assignments() {
+  const found = [];
   for (const file of sourceFiles(SRC)) {
     const text = readFileSync(file, "utf8");
     if (text.indexOf("S.state") === -1) continue;
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-    const visit = (node) => {
-      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-          ts.isPropertyAccessExpression(node.left) && node.left.name.text === "state" &&
-          ts.isIdentifier(node.left.expression) && node.left.expression.text === "S") {
-        sites.push(relative(join(SRC, "js"), file).replace(/\\/g, "/") + "#" + enclosingName(node));
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(source);
+    walk(source, (node) => {
+      if (!isStateAssignment(node)) return;
+      const fn = enclosingFunction(node);
+      found.push({ site: relative(join(SRC, "js"), file).replace(/\\/g, "/") + "#" + nameOf(fn), node, fn });
+    });
   }
-  return sites.sort();
+  return found;
 }
 
 function fixedPoint(value) {
@@ -180,13 +126,32 @@ function migrated(title) {
 }
 
 test("there are fourteen S.state assignments, in these functions", () => {
-  assert.deepEqual(assignmentSites(), SITES.slice().sort());
+  assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
 });
 
-test("boot: 00-prelude and init assign null, then the loaded document, a migrateRows fixed point", () => {
+test("13-hosted resumeServerDoc assigns `theirs`, which is migrateDocument's answer and nothing else", () => {
+  const site = assignments().filter((a) => a.site === "13-hosted.js#resumeServerDoc")[0];
+  assert.ok(ts.isIdentifier(site.node.right) && site.node.right.text === "theirs", "S.state = " + site.node.right.getText());
+  const writes = [];
+  walk(site.fn, (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "theirs") writes.push(node.initializer);
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isIdentifier(node.left) && node.left.text === "theirs") writes.push(node.right);
+  });
+  assert.equal(writes.length, 1, "theirs is set once in resumeServerDoc");
+  const init = writes[0];
+  assert.ok(init && ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === "migrateDocument",
+    "theirs = " + (init ? init.getText() : "nothing"));
+});
+
+test("boot from the seed: 00-prelude and init assign null, then the seed script, a migrateRows fixed point", () => {
+  assert.equal(seedCheckPasses(), true, "the page's seed check matches its state-data, as a fresh build's does");
   assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "21-events.js#init", "21-events.js#(anonymous)"]);
   assert.equal(atBoot[0].value, null);
   assert.equal(atBoot[1].value, null);
+  const seed = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));
+  assert.equal(atBoot[2].value.title, seed.title);
+  assert.equal(atBoot[2].value.rows.length, seed.rows.length);
   assert.equal(fixedPoint(atBoot[2].value), true);
 });
 
@@ -231,11 +196,6 @@ test("13-hosted openServerDoc: migrateDocument's answer, a migrateRows fixed poi
   }
 });
 
-test("13-hosted resumeServerDoc, by its producer: migrateDocument for a server origin is a migrateRows fixed point", () => {
-  const theirs = migrateDocument(cloneState(rawDoc("Resumed")), { kind: "server", serverId: "doc1", fallbackId: null });
-  assert.equal(fixedPoint(theirs), true);
-});
-
 test("18-local-files adoptProjectState, from a .splitpage file: a migrateRows fixed point", async () => {
   const file = new File([buildSplitpageFile(migrated("On disk"))], "disk.splitpage", { lastModified: 1 });
   const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
@@ -262,8 +222,30 @@ test("20g recoverDraftAsUnsavedCopy, an imported file's draft: a migrateRows fix
   assert.notEqual(value.docId, draftId, "the copy is given a docId of its own before it is assigned");
 });
 
-test("20g restoreFileDraft, by its producer: a draft read through migrateRows is a fixed point", () => {
-  assert.equal(fixedPoint(migrateRows(JSON.parse(JSON.stringify(rawDoc("File draft"))))), true);
+test("20g restoreFileDraft, a desktop file untouched since the draft's base: the draft, a migrateRows fixed point", async () => {
+  const docId = "d" + "2".repeat(32);
+  const disk = migrateRows(Object.assign(rawDoc("On disk"), { docId }));
+  const bytes = new TextEncoder().encode(buildSplitpageFile(disk));
+  const desktop = S.DESKTOP;
+  S.DESKTOP = {
+    readFile: async () => ({ name: "disk.splitpage", bytes, lastModified: 1 }),
+    setDocumentState: () => {},
+    draftRestoreDone: () => {}
+  };
+  const t = {
+    header: { origin: { kind: "file", fileName: "disk.splitpage" }, docIdWrittenOut: true },
+    file: { id: "f1", name: "disk.splitpage" },
+    stateJson: JSON.stringify(Object.assign(rawDoc("Edited since"), { docId })),
+    baseJson: JSON.stringify(disk)
+  };
+  try {
+    const got = await drive(() => applyTakenDraft(t));
+    const value = only(got, "20g-drafts.js#restoreFileDraft");
+    assert.equal(fixedPoint(value), true);
+    assert.equal(value.title, "Edited since");
+  } finally {
+    S.DESKTOP = desktop;
+  }
 });
 
 test("20g adoptUntitledDraft: a migrateRows fixed point", async () => {
