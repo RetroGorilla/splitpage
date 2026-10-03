@@ -453,6 +453,16 @@ async function pressChars(text) {
   out1(`pressed ${text.length} chars`);
 }
 
+async function imeInput(rest) {
+  const m = /^(set|commit|cancel)(?: ([\s\S]*))?$/.exec(rest);
+  if (!m) throw new Error("ime needs: set <text> | commit <text> | cancel");
+  const text = m[2] ?? "";
+  if (m[1] === "set") await send("Input.imeSetComposition", { text, selectionStart: text.length, selectionEnd: text.length });
+  else if (m[1] === "commit") await send("Input.insertText", { text });
+  else await send("Input.imeSetComposition", { text: "", selectionStart: 0, selectionEnd: 0 });
+  out1(`ime ${m[1]} ${text.length} chars`);
+}
+
 const KEY_MAP = {
   enter:     { key: "Enter",     code: "Enter",     vk: 13, text: "\r" },
   tab:       { key: "Tab",       code: "Tab",       vk: 9,  text: "\t" },
@@ -581,6 +591,7 @@ async function invokeLine(line) {
     }
     case "type": await typeText(rest); break;
     case "press": await pressChars(rest); break;
+    case "ime": await imeInput(rest); break;
     case "key": {
       const p = rest.trim().split(/\s+/);
       if (p.length >= 2) await pressKey(p[1], p[0].toLowerCase()); else await pressKey(p[0]);
