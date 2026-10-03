@@ -223,22 +223,43 @@ through them `mergeStates`. `mergeStates`, `mergeStateFields`,
 `planQuickAdd`, `brollEntries` and `planBrollAnchors` take only that type. The
 brand changes no bytes; `checkJs` is off, so it constrains `.ts` callers only.
 
-The typecheck refuses, in every `.ts` file but `migrate.ts`:
-- a type assertion to a type that carries the brand, directly or through an
-  alias, a union, an intersection, an array, a property, a type argument, a
-  constraint or a return type, unless the value already has that type;
+A type carries the brand when the brand's property or its `unique symbol` key
+is reachable from it, directly or through an alias, a union, an intersection,
+an array, a property, a type argument, a constraint, a return type or an index
+signature. `never` counts as carrying it, because `never` is assignable to
+every type. The typecheck refuses, in every `.ts` file but `migrate.ts`:
+- a type assertion to such a type, unless the value already has that type
+  (this covers `as never`);
 - a type predicate to such a type;
-- a function signature with no body that returns one;
-- an ambient declaration of one.
+- a call or `new` whose instantiated return type or type predicate carries the
+  brand when its declared one does not, and neither an argument nor the
+  receiver does: a generic helper that would launder a cast (`jsonCopy(doc)`
+  and `structuredClone(doc)` pass, since their argument carries it);
+- a function signature with no body that returns such a type;
+- a variable or class property of such a type that is ambient (`declare`, a
+  global script or a declaration file) or definitely assigned (`!:`);
+- an interface or type member of such a type in an ambient context, such as
+  `declare global { interface JSON { … } }`. Ordinary port interfaces pass.
 
 The rule is `tools/brand-casts.mjs`, tested by `tools/test-brand-casts.mjs`.
 It sits in the typecheck, not in eslint or the dependency gate, because only
-the type checker sees through aliases and indirect forms. A value typed `any`
-still passes; `@typescript-eslint/no-explicit-any` and the `JSON.parse`
-declaration keep `any` out of authored code.
+the type checker sees through aliases and indirect forms.
+
+A value typed `any` is assignable to the brand without any cast, and `any`
+still reaches authored code: `Object.create(null)`, `Reflect.get` on an
+untyped receiver, `Array.isArray` narrowing an `unknown`, and any call into
+legacy `.js`, whose functions are untyped because `checkJs` is off.
+`@typescript-eslint/no-explicit-any` and the `JSON.parse` declaration close
+the explicit sources only. eslint runs the type-aware
+`@typescript-eslint/no-unsafe-argument` and `no-unsafe-return` on `.ts`
+files, so an `any` passed to a guarded function or returned as one is
+refused. An `any` assigned to a variable annotated with the brand still
+passes: `no-unsafe-assignment` would refuse 31 existing assignments, mostly
+`Object.create(null)` maps, and is not on.
 `tools/test-validated-document.mjs` compiles a call to each guarded function
 with an object literal, a `JSON.parse` result and one asserted to the
-unbranded shape, and expects a type error for each.
+unbranded shape, under each of the three tsconfigs, and expects a type error
+for each.
 
 Tests get a branded document from `migrateRows` with fake ports.
 `migratedThenSet` in `tests/core/migrate-ports.ts` migrates a copy of a fixture

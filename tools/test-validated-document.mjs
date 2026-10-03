@@ -1,4 +1,5 @@
 import { compileFixtures } from "./ts-fixtures.mjs";
+import { CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
 const failures = [];
@@ -80,13 +81,15 @@ for (const c of CALLS) {
   }
 }
 
-const { errorLines } = compileFixtures({ [FIXTURE]: lines.join("\n") + "\n" });
-const errors = errorLines(FIXTURE);
 const caseLines = new Set(cases.map((c) => c.line));
-check("the fixture's setup lines type-check", errors.every((l) => caseLines.has(l)), JSON.stringify(errors.filter((l) => !caseLines.has(l))));
-for (const c of cases) {
-  const hit = errors.includes(c.line);
-  check(c.name, hit === c.refused, hit ? "a type error" : "no type error");
+for (const config of CONFIGS) {
+  const { errorLines } = compileFixtures({ [FIXTURE]: lines.join("\n") + "\n" }, { config });
+  const errors = errorLines(FIXTURE);
+  check(`${config}: the fixture's setup lines type-check`, errors.every((l) => caseLines.has(l)), JSON.stringify(errors.filter((l) => !caseLines.has(l))));
+  for (const c of cases) {
+    const hit = errors.includes(c.line);
+    check(`${config}: ${c.name}`, hit === c.refused, hit ? "a type error" : "no type error");
+  }
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
