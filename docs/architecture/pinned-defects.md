@@ -56,7 +56,7 @@ none, no golden is expected to change.
 | Both sides adding the same person drops the owner of my items | #283 | Golden `merge-people-each-side.json` | `src/core/merge/lists.ts` (`mergePeople`) | Fixed by #339, ported from `fix/281-283-md-null-href-and-person-merge`. Golden: `merge-people-each-side.json`. #353 tracks two follow-ups |
 | A `list-union-with-base` field with no `LIST_MERGERS` entry throws `TypeError: listMerger(...) is not a function`, not "no merge strategy" | none | Nothing | `src/core/merge/states.ts` | Won't fix. Only a developer adding a list field reaches it, and `src/test/state-fields.test.mjs` already fails for a list field with no merger |
 | A field table without `productionTags` makes the merge throw | none | Nothing | `src/core/merge/states.ts` | Won't fix, by design. `productionTags` is a schema field every migrated document has. Only a hand-built table can leave it out |
-| Undo replay drops same-named people; deleted owner beats other side's assignment | #353 | Regression case from #339 review | `src/js/12a-undo.js` (`applyStepsLive`), `src/core/merge/lists.ts`, `src/core/merge/tags.ts`, `src/core/merge/broll.ts` | triage |
+| Undo replay drops same-named people; deleted owner beats other side's assignment | #353 | Regression case from #339 review | `src/js/12a-undo.js` (`applyStepsLive`), `src/core/merge/lists.ts` | Milestone 3: part 2 in 3.4 (`core/merge/lists.ts`), part 1 in 3.7 (after the undo adapter) |
 
 ## Production: tags and b-roll
 
@@ -96,7 +96,7 @@ none, no golden is expected to change.
 | Ctrl+F in Present flips the prompter: its letter shortcuts ignore modifiers | #309 | [actions.md](actions.md) records it as a kept overlap | `src/js/21-events.js` (Present's `keydown` listener) | Fixed by #331. The actions.md note records the fix. #350 tracks the Find bar opening invisibly behind the prompter |
 | Find bar opens invisibly behind Present's prompter | #350 | `275-menu-refused-under-overlay.txt` lines 259–275 pin Find available under Present | `src/js/21-events.js` (Present's `keydown`), `src/legacy/this-document-actions.ts` (Find availability), `src/js/19-find.js` (#findbar z-index) | Milestone 6, with overlay and stacking ownership (INV-19): Find opens above prompter, searches prompter text, jumps highlight matches, pause on jump |
 | Overlay follow-ups: tour starts over overlays; import/export not refused under dialog; three manual dialog checks | #352 | Suite coverage: overlay authority and import/export refusal not yet written | `src/legacy/screen.ts` (overlay read model), `src/js/08d-broll-panel.js`, `src/js/20j-newtab.js`, `src/js/21-events.js` (manual dialog checks) | triage |
-| Desktop: second tab can't open another server's document (regression from #351) | #361 | Electron smoke: "per-tab connections: two servers side by side" (66/76 pass) | `src/legacy/share-actions.ts` (File action availability), desktop connection flow | triage |
+| Desktop: second tab can't open another server's document (regression from #351) | #361 | Electron smoke: "per-tab connections: two servers side by side" (66/76 pass) | `src/legacy/share-actions.ts` (File action availability), desktop connection flow | Fixed by #367: File ▸ Servers opens over the join-PIN prompt, which closes once the tab joins another server |
 
 ## Tests and tooling
 
