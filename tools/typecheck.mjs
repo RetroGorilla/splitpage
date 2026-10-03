@@ -31,6 +31,7 @@ function parseConfig(path) {
 export function typecheck({ repo = REPO, configs = CONFIGS, files = listRepoFiles(repo), print = console.log, printError = console.error } = {}) {
   let failed = false;
   const covered = new Map();
+  const forgeries = new Set();
   for (const name of configs) {
     const path = join(repo, name);
     if (!existsSync(path)) { failed = true; printError(`typecheck: ${name} is missing`); continue; }
@@ -52,9 +53,11 @@ export function typecheck({ repo = REPO, configs = CONFIGS, files = listRepoFile
     } else {
       print(`typecheck: ${name}: ${own.length} files, no errors`);
     }
-    const forged = brandForgeries(program, repo, new Set(own));
-    for (const f of forged) printError(`typecheck: ${f.path}:${f.line}: ${f.what}; only ${BRAND_PRODUCER} produces a validated document`);
-    if (forged.length) failed = true;
+    for (const f of brandForgeries(program, repo, new Set(own))) {
+      const line = `typecheck: ${f.path}:${f.line}: ${f.what}; only ${BRAND_PRODUCER} produces a validated document`;
+      failed = true;
+      if (!forgeries.has(line)) { forgeries.add(line); printError(line); }
+    }
   }
   for (const f of files.filter((p) => TS_FILE.test(p) && !/(^|\/)node_modules\//.test(p) && !p.endsWith(".d.ts"))) {
     const owners = covered.get(f) ?? [];

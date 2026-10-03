@@ -145,6 +145,20 @@ export default [
   },
 
   {
+    files: typescriptFiles,
+    languageOptions: {
+      parserOptions: {
+        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json"],
+        tsconfigRootDir: import.meta.dirname
+      }
+    },
+    rules: {
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-return": "error"
+    }
+  },
+
+  {
     files: commentFree,
     linterOptions: { noInlineConfig: true }
   }
