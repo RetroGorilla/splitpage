@@ -178,7 +178,7 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const key = registryKey(e.cat, e.name);
     const first = byKey[key];
     if (!first) { byKey[key] = e; return true; }
-    if (!first.owner && e.owner) first.owner = e.owner;
+    if (ownerGivesWay(first.owner, e.owner, live)) first.owner = e.owner;
     if (!first.notes && e.notes) first.notes = e.notes;
     if (tagStatusRank(e.status) > tagStatusRank(first.status)) first.status = e.status;
     return false;
