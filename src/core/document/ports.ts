@@ -6,15 +6,15 @@ export interface ImageRef {
 }
 
 export interface IdSource {
-  id(prefix: string): string;
-  docId(): string;
+  id: (prefix: string) => string;
+  docId: () => string;
 }
 
 export interface ImageSource {
-  known(sha: string): ImageRef | null;
-  fromDataUrl(url: string): ImageRef | null;
+  known: (sha: string) => ImageRef | null;
+  fromDataUrl: (url: string) => ImageRef | null;
 }
 
 export interface Clock {
-  nowIso(): string;
+  nowIso: () => string;
 }

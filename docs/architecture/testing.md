@@ -226,24 +226,52 @@ brand changes no bytes; `checkJs` is off, so it constrains `.ts` callers only.
 A type carries the brand when the brand's property or its `unique symbol` key
 is reachable from it, directly or through an alias, a union, an intersection,
 an array, a property, a type argument, a constraint, a return type or an index
-signature. `never` counts as carrying it, because `never` is assignable to
-every type. The typecheck refuses, in every `.ts` file but `migrate.ts`:
+signature. A top-level `never` counts too, because `never` is assignable to
+every type; a `never` nested inside another type does not. The typecheck
+refuses, in every `.ts` file but `migrate.ts`:
 - a type assertion to such a type, unless the value already has that type
   (this covers `as never`);
-- a type predicate to such a type;
-- a call or `new` whose instantiated return type or type predicate carries the
-  brand when its declared one does not, and neither an argument nor the
-  receiver does: a generic helper that would launder a cast (`jsonCopy(doc)`
-  and `structuredClone(doc)` pass, since their argument carries it);
+- a type predicate to such a type, unless it only narrows a parameter whose
+  type already carries the brand (`(d): d is ValidatedDocument => d !== null`
+  over `ValidatedDocument | null` passes);
+- a call to a function declared outside the default library whose
+  instantiated return type or predicate carries the brand when its declared
+  one does not, and no argument or receiver supplies it: a generic helper
+  that would launder a cast. `jsonCopy(doc)` passes, and library calls and
+  every `new` are not checked, so empty containers (`new Map<string,
+  ValidatedDocument>()`), `new Promise<ValidatedDocument>(…)` and a generic
+  `new Store<ValidatedDocument>()` pass;
 - a function signature with no body that returns such a type;
-- a variable or class property of such a type that is ambient (`declare`, a
-  global script or a declaration file) or definitely assigned (`!:`);
+- a variable or class property of such a type that is ambient (`declare` or a
+  declaration file) or definitely assigned (`!:`). This is a decision: a
+  field that holds a document is typed `ValidatedDocument | null`, or is set
+  in the constructor, not declared `doc!: ValidatedDocument`;
 - an interface or type member of such a type in an ambient context, such as
   `declare global { interface JSON { … } }`. Ordinary port interfaces pass.
+  Every `.ts` file here is a module, so an interface outside `declare global`
+  is local and cannot augment a global.
 
 The rule is `tools/brand-casts.mjs`, tested by `tools/test-brand-casts.mjs`.
 It sits in the typecheck, not in eslint or the dependency gate, because only
-the type checker sees through aliases and indirect forms.
+the type checker sees through aliases and indirect forms. Two eslint rules
+back it on `.ts` files: `@typescript-eslint/no-unnecessary-type-parameters`
+refuses a helper such as `launder<T>(v: unknown): T` where it is written, and
+`@typescript-eslint/method-signature-style: property` makes interface members
+function properties, so they are checked contravariantly and an
+implementation cannot narrow a parameter to the brand. `types/*.d.ts` is
+exempt from the second, since `JSON.parse` there must merge with the
+library's method.
+
+What the rule does not refuse, each shown as a known gap in
+`tools/test-brand-casts.mjs`:
+- a generic class whose member casts to its own type parameter
+  (`new Box<ValidatedDocument>().value`), since `new` is not checked;
+- a `never` nested in a target (`raw as Promise<never>`, then awaited);
+- a laundering call given any branded argument or receiver, which exempts it
+  (`pick<ValidatedDocument>(doc, raw)`);
+- a class method override that narrows its parameter to the brand
+  (`override take(d: ValidatedDocument)`), called through the base type:
+  method parameters stay bivariant in classes.
 
 A value typed `any` is assignable to the brand without any cast, and `any`
 still reaches authored code: `Object.create(null)`, `Reflect.get` on an

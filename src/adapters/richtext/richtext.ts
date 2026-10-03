@@ -16,15 +16,15 @@ export interface RichTextPorts {
 }
 
 export interface RichText {
-  inertBody(html: unknown): HTMLElement;
-  sanitize(html: unknown): string;
-  decode(html: unknown, opts?: DecodeOptions | null): Run[];
-  createCellReader(): CellReader;
-  storedHtmlFromDom<T>(html: T): T | string;
-  htmlToMarkdown(html: unknown): string;
-  videoCardElement(href: string): HTMLAnchorElement;
-  videoCardHtml(href: string): string;
-  imageRefOf(node: Element): StoredImageRef | null;
+  inertBody: (html: unknown) => HTMLElement;
+  sanitize: (html: unknown) => string;
+  decode: (html: unknown, opts?: DecodeOptions | null) => Run[];
+  createCellReader: () => CellReader;
+  storedHtmlFromDom: <T>(html: T) => T | string;
+  htmlToMarkdown: (html: unknown) => string;
+  videoCardElement: (href: string) => HTMLAnchorElement;
+  videoCardHtml: (href: string) => string;
+  imageRefOf: (node: Element) => StoredImageRef | null;
 }
 
 const STORED_IMG_ATTRS: ReadonlySet<string> = new Set(["class", "data-blob", "data-w", "data-h", "data-mime"]);
