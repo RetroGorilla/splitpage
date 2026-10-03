@@ -206,6 +206,17 @@ test("an owner I deleted on my side gives way to the owner I handed the items to
   assert.deepEqual((r.merged.brollShots as { owner: string }[]).map((b) => b.owner), ["pAda"]);
 });
 
+test("their owner whose id lost to their own same-named person still survives, so mine does not replace it (#353)", () => {
+  const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })] });
+  const base = doc(owned(""));
+  const theirs = doc(Object.assign({ people: [{ id: "pT1", name: "Ada" }, { id: "pT2", name: "ada" }] }, owned("pT2")));
+  const mine = doc(Object.assign({ people: [{ id: "pBo", name: "Bo" }] }, owned("pBo")));
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(base, mine, theirs, fakePorts(decode));
+  assert.deepEqual((r.merged.people as { id: string }[]).map((p) => p.id), ["pT1", "pBo"]);
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pT1"]);
+});
+
 test("a table with no people field merges owners as before: no person counts as deleted (#353)", () => {
   const fields = STATE_FIELDS.filter((f) => f.key !== "people");
   const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })] });
