@@ -1,8 +1,8 @@
 open
 viewport 1400 900
 wait document.querySelectorAll('#rows .row').length > 0
-eval (function(){ window.D = window.__desktopTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__dialogs = function () { return Array.prototype.map.call(document.querySelectorAll('.modal-backdrop:not([hidden])'), function (m) { return m.id; }).sort().join(','); }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__run = function (cmd) { D.runMenuCommand(cmd); return true; }; window.__tidy = function () { __toasts(); return true; }; return !!(D && D.runMenuCommand); })()
-eval (function(){ var X = 'http://127.0.0.1:9/', Y = 'http://127.0.0.1:8/'; var pins = {}; pins[X] = '111111'; pins[Y] = '222222'; var tokens = {}; tokens[X] = 'tok-x'; tokens[Y] = 'tok-y'; var reply = function (status, body) { return Promise.resolve(new Response(JSON.stringify(body), { status: status, headers: { 'content-type': 'application/json' } })); }; var real = window.fetch; window.__fakeServers = { X: X, Y: Y, joins: [] }; window.fetch = function (input, init) { var url = String(input && input.url || input); var base = url.indexOf(X) === 0 ? X : url.indexOf(Y) === 0 ? Y : null; if (!base) return real.apply(this, arguments); var path = url.slice(base.length).split('?')[0]; var headers = (init && init.headers) || {}; var signedIn = headers['x-splitpage-token'] === tokens[base]; if (path === 'api/health') return reply(200, { ok: true, authRequired: true, reviewAvailable: false }); if (path === 'api/join') { var body = JSON.parse((init && init.body) || '{}'); window.__fakeServers.joins.push(base); return body.pin === pins[base] ? reply(200, { token: tokens[base], role: 'edit' }) : reply(403, { error: 'bad-pin' }); } if (!signedIn) return reply(403, { error: 'pin-required' }); if (path === 'api/me') return reply(200, { role: 'edit' }); if (path === 'api/docs') return reply(200, { docs: [{ id: base === Y ? 'doc-on-y' : 'doc-on-x', title: base === Y ? 'Script On Y' : 'Script On X', rows: 1, rev: 1 }] }); return reply(404, { error: 'not-found' }); }; return true; })()
+eval (function(){ window.D = window.__desktopTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__dialogs = function () { return Array.prototype.map.call(document.querySelectorAll('.modal-backdrop:not([hidden])'), function (m) { return m.id; }).sort().join(','); }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__run = function (cmd) { D.runMenuCommand(cmd); return true; }; window.__tidy = function () { __toasts(); return true; }; window.__inFront = function (id) { var r = document.querySelector('#' + id + ' .modal-panel').getBoundingClientRect(); var el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); var m = el && el.closest('.modal-backdrop'); return !!m && m.id === id; }; window.__bookmark = function (name, action) { var b = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')).filter(function (x) { return x.name === name; })[0]; document.querySelector('#connect-list [data-connect-action="' + action + '"][data-id="' + b.id + '"]').click(); return true; }; return !!(D && D.runMenuCommand); })()
+eval (function(){ var X = 'http://127.0.0.1:9/', Y = 'http://127.0.0.1:8/', Z = 'http://127.0.0.1:7/'; var pins = {}; pins[X] = '111111'; pins[Y] = '222222'; pins[Z] = '333333'; var tokens = {}; tokens[X] = 'tok-x'; tokens[Y] = 'tok-y'; tokens[Z] = 'tok-z'; var reply = function (status, body) { return Promise.resolve(new Response(JSON.stringify(body), { status: status, headers: { 'content-type': 'application/json' } })); }; var real = window.fetch; window.__fakeServers = { X: X, Y: Y, Z: Z }; window.fetch = function (input, init) { var url = String(input && input.url || input); var base = [X, Y, Z].filter(function (b) { return url.indexOf(b) === 0; })[0]; if (!base) return real.apply(this, arguments); var path = url.slice(base.length).split('?')[0]; var headers = (init && init.headers) || {}; var signedIn = headers['x-splitpage-token'] === tokens[base]; if (path === 'api/health') return reply(200, { ok: true, authRequired: true, reviewAvailable: false }); if (path === 'api/join') { var body = JSON.parse((init && init.body) || '{}'); return body.pin === pins[base] ? reply(200, { token: tokens[base], role: 'edit' }) : reply(403, { error: 'bad-pin' }); } if (!signedIn) return reply(403, { error: 'pin-required' }); if (path === 'api/me') return reply(200, { role: 'edit' }); if (path === 'api/docs') return reply(200, { docs: [{ id: base === Y ? 'doc-on-y' : 'doc-on-x', title: base === Y ? 'Script On Y' : 'Script On X', rows: 1, rev: 1 }] }); return reply(404, { error: 'not-found' }); }; return true; })()
 
 eval window.__hostedTest.pointTabAt(__fakeServers.X, {makeDefault: true})
 eval window.__hostedTest.detect()
@@ -33,9 +33,26 @@ wait __shown('connect-modal')
 expect __dialogs() === 'connect-modal,pin-modal'
 expect __toasts() === ''
 expect document.querySelector('#connect-modal .modal-panel').getBoundingClientRect().width > 0
-expect document.elementFromPoint(700, 450).closest('.modal-backdrop').id === 'connect-modal'
+expect __inFront('connect-modal')
+eval __run('servers')
+sleep 300
+expect __dialogs() === 'connect-modal,pin-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval document.getElementById('connect-url').focus()
 key Escape
 wait !__shown('connect-modal')
+expect __dialogs() === 'pin-modal'
+expect document.activeElement && document.activeElement.id === 'pin-input'
+
+eval __run('tour')
+wait __shown('tour-overlay')
+eval __tidy()
+eval __run('servers')
+sleep 300
+expect __dialogs() === 'pin-modal'
+expect __toasts() === 'Finish or skip the tour first.'
+jsclick #tour-skip
+wait !__shown('tour-overlay')
 expect __dialogs() === 'pin-modal'
 
 eval __run('servers')
@@ -67,6 +84,49 @@ jsclick #connect-modal [data-connect-action="back"]
 wait window.__hostedTest.conn().serverUrl === ''
 wait !__shown('pin-modal')
 jsclick #connect-modal [data-connect-action="close"]
+wait __dialogs() === ''
+
+eval window.__hostedTest.pointTabAt(__fakeServers.X)
+eval window.__hostedTest.clearToken()
+eval window.__hostedTest.detect()
+wait __shown('pin-modal')
+eval __run('servers')
+wait __shown('connect-modal')
+eval (function(){ document.getElementById('connect-name').value = 'Server X'; document.getElementById('connect-url').value = __fakeServers.X; document.getElementById('connect-pin').value = '111111'; document.getElementById('connect-remember').checked = false; return true; })()
+jsclick #connect-modal [data-connect-action="add"]
+wait window.__hostedTest.conn().serverUrl === __fakeServers.X && window.__hostedTest.conn().hasToken
+sleep 400
+expect __dialogs() === 'connect-modal,pin-modal'
+eval document.getElementById('connect-url').focus()
+jsclick #connect-modal [data-connect-action="close"]
+wait !__shown('connect-modal')
+expect document.activeElement && document.activeElement.id === 'pin-input'
+key Escape
+wait __dialogs() === ''
+
+eval __run('servers')
+wait __shown('connect-modal')
+eval (function(){ document.getElementById('connect-name').value = 'Server Z'; document.getElementById('connect-url').value = __fakeServers.Z; document.getElementById('connect-pin').value = ''; return true; })()
+jsclick #connect-modal [data-connect-action="add"]
+wait document.querySelectorAll('#connect-list .connect-row').length === 3
+eval __bookmark('Server Z', 'pin')
+wait __shown('pin-modal')
+expect __dialogs() === 'connect-modal,pin-modal'
+expect __inFront('pin-modal')
+expect document.activeElement && document.activeElement.id === 'pin-input'
+key Escape
+wait !__shown('pin-modal')
+expect __dialogs() === 'connect-modal'
+eval __bookmark('Server Z', 'use')
+wait window.__hostedTest.conn().serverUrl === __fakeServers.Z
+wait __shown('pin-modal')
+expect __dialogs() === 'connect-modal,pin-modal'
+expect __inFront('pin-modal')
+expect document.activeElement && document.activeElement.id === 'pin-input'
+key Escape
+wait !__shown('pin-modal')
+expect __shown('connect-modal')
+key Escape
 wait __dialogs() === ''
 
 eval __run('tour')
