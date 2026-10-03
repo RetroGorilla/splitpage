@@ -49,7 +49,7 @@ export type PersonList = List<Person>;
 export type TagList = List<TagInput>;
 export type ShotList = List<BrollShot>;
 
-export type ListMerger = (base: unknown, mine: unknown, theirs: unknown) => unknown[];
+export type ListMerger = (base: unknown, mine: unknown, theirs: unknown, survives?: PersonSurvives) => unknown[];
 
 function jsonCopy<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T; }
 
@@ -103,6 +103,23 @@ export function personIdRemap(people: PersonList, mergedPeople: PersonList): Rec
   return remap;
 }
 
+export type PersonSurvives = (personId: string) => boolean;
+
+export function personSurvives(people: PersonList, mergedPeople: PersonList): PersonSurvives {
+  const kept = idMap<boolean>();
+  (Array.isArray(mergedPeople) ? mergedPeople : []).forEach(function (p) { if (p && p.name) kept[p.id] = true; });
+  const remap = personIdRemap(people, mergedPeople);
+  return function (personId) { return !!kept[personId] || !!remap[personId]; };
+}
+
+function everyoneSurvives(): boolean { return true; }
+
+function ownerGivesWay(current: unknown, other: unknown, survives: PersonSurvives): boolean {
+  if (!other) return false;
+  if (!current) return true;
+  return typeof current === "string" && typeof other === "string" && !survives(current) && survives(other);
+}
+
 export function repointOwners(lists: readonly unknown[], remap: Readonly<Record<string, string>>): void {
   lists.forEach(function (list) {
     (Array.isArray(list) ? list as unknown[] : []).forEach(function (e) {
@@ -113,7 +130,8 @@ export function repointOwners(lists: readonly unknown[], remap: Readonly<Record<
   });
 }
 
-export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirTags: TagList): TagEntry[] {
+export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirTags: TagList, survives?: PersonSurvives): TagEntry[] {
+  const live = survives || everyoneSurvives;
   const idOf = function (t: TagInput): string { return t.id || (t.name ? "key:" + registryKey(t.cat as string, t.name) : ""); };
   const tagPrint = function (t: TagInput): string {
     return JSON.stringify([t.cat || "", t.name || "", t.owner || "", t.notes || "",
@@ -149,7 +167,7 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const b = baseById[k];
     if (b && existing.name === b.name && t.name !== b.name) existing.name = t.name;
     if (b && existing.cat === b.cat && t.cat !== b.cat) existing.cat = t.cat as string;
-    if (!existing.owner && t.owner) existing.owner = t.owner;
+    if (ownerGivesWay(existing.owner, t.owner, live)) existing.owner = t.owner as string;
     if (!existing.notes && t.notes) existing.notes = t.notes;
     if (tagStatusRank(t.status) > tagStatusRank(existing.status)) {
       existing.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
@@ -160,14 +178,15 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const key = registryKey(e.cat, e.name);
     const first = byKey[key];
     if (!first) { byKey[key] = e; return true; }
-    if (!first.owner && e.owner) first.owner = e.owner;
+    if (ownerGivesWay(first.owner, e.owner, live)) first.owner = e.owner;
     if (!first.notes && e.notes) first.notes = e.notes;
     if (tagStatusRank(e.status) > tagStatusRank(first.status)) first.status = e.status;
     return false;
   });
 }
 
-export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirShots: ShotList): BrollShot[] {
+export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirShots: ShotList, survives?: PersonSurvives): BrollShot[] {
+  const live = survives || everyoneSurvives;
   const shotKey = function (b: BrollShot): string { return b.id || ""; };
   const shotPrint = function (b: BrollShot): string {
     return JSON.stringify(Object.keys(b).filter(function (k) { return k !== "id"; }).sort()
@@ -186,7 +205,7 @@ export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirS
     if (!b || !b.id || dropped[b.id]) return;
     const existing = byId[b.id];
     if (!existing) { byId[b.id] = jsonCopy(b); out.push(byId[b.id] as BrollShot); return; }
-    if (!existing.owner && b.owner) existing.owner = b.owner;
+    if (ownerGivesWay(existing.owner, b.owner, live)) existing.owner = b.owner;
     if (!existing.notes && b.notes) existing.notes = b.notes;
     if (!existing.audioRef && b.audioRef) existing.audioRef = b.audioRef;
     if (!existing.location && b.location) existing.location = b.location;
@@ -232,6 +251,6 @@ export function mergeBrollProps(baseProps: unknown, mineProps: unknown, theirPro
 
 export const LIST_MERGERS: Readonly<Record<string, ListMerger>> = Object.freeze({
   people: function (b: unknown, m: unknown, t: unknown) { return mergePeople(b as PersonList, m as PersonList, t as PersonList); },
-  productionTags: function (b: unknown, m: unknown, t: unknown) { return mergeProductionTags(b as TagList, m as TagList, t as TagList); },
-  brollShots: function (b: unknown, m: unknown, t: unknown) { return mergeBrollShots(b as ShotList, m as ShotList, t as ShotList); }
+  productionTags: function (b: unknown, m: unknown, t: unknown, s?: PersonSurvives) { return mergeProductionTags(b as TagList, m as TagList, t as TagList, s); },
+  brollShots: function (b: unknown, m: unknown, t: unknown, s?: PersonSurvives) { return mergeBrollShots(b as ShotList, m as ShotList, t as ShotList, s); }
 });
