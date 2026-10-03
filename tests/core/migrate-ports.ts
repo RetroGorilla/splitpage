@@ -3,6 +3,8 @@ import { createImageIngestion } from "../../src/core/document/media.ts";
 import type { ImageIngestion } from "../../src/core/document/media.ts";
 import type { ImageRef } from "../../src/core/document/ports.ts";
 import { storedImageMarkup } from "../../src/core/document/text-policy.ts";
+import type { ValidatedDocument } from "../../src/core/document/validated.ts";
+import { migrateRows } from "../../src/core/migrate.ts";
 import type { MigratePorts } from "../../src/core/migrate.ts";
 import { createProductionReaders } from "../../src/core/production/readers.ts";
 import { toHtml } from "../../src/core/text/html.ts";
@@ -106,4 +108,9 @@ export function pngDataUrl(width: number, height: number, salt: number): string 
 
 export function jsonCopy<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
+}
+
+export function migratedThenSet<T extends object>(fixture: T, ports?: MigratePorts): T & ValidatedDocument {
+  const doc = migrateRows(jsonCopy(fixture), ports || fakeMigration().ports);
+  return Object.assign(doc, fixture);
 }
