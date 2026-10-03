@@ -15,6 +15,12 @@ expect __live('r1').audioText === 'Helloかな'
 expect __cell('r1').textContent === 'Helloかな'
 expect __same('r1')
 expect R.counts().cellsPainted === 0 && R.counts().render === 0
+eval R.render()
+expect R.counts().render === 1 && R.counts().cellsPainted === 0
+expect __same('r1')
+expect document.activeElement === __cell('r1')
+expect __caret(__cell('r1')) === 7
+eval R.reset()
 ime commit かな
 expect __live('r1').audioText === 'Helloかな'
 expect __cell('r1').textContent === 'Helloかな'

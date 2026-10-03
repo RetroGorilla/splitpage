@@ -532,3 +532,96 @@ test("a cut b-roll key pasted in the same tab keeps its id and makes no second r
   assert.equal(row("r4").visualText, KEY("bsA") + " gulls");
   assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA"]);
 });
+test("a Writer join into a scene with no visual takes the later scene's visual and gallery slot, in one entry", async () => {
+  const doc = fixture();
+  doc.rows[3].visualText = "Drone over the bay";
+  doc.rows[3].imageLinks = [{ href: "https://youtu.be/abc" }];
+  doc.rows.splice(3, 0, { id: "r3b", visualText: "", audioText: "Bridge.", status: "todo" });
+  await open(doc);
+  const links = JSON.stringify(row("r4").imageLinks);
+  assert.ok(row("r4").imageLinks && row("r4").imageLinks.length === 1, "the fixture's slot survives the load");
+  assert.ok(!row("r3b").imageLinks);
+  writer.openWriter();
+  const p4 = para("r4");
+  p4.focus();
+  selectText(p4, 0, 0);
+  const got = record(() => key(p4, "Backspace"));
+  assert.equal(got.seq, 1);
+  assert.equal(got.undo, 1);
+  assert.ok(got.steps.includes("deleteRow:r4"));
+  assert.ok(got.steps.includes("rowField:r3b.visualText"));
+  assert.ok(got.steps.includes("rowField:r3b.imageLinks"));
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r3b"]);
+  assert.equal(row("r3b").visualText, "Drone over the bay");
+  assert.equal(JSON.stringify(row("r3b").imageLinks), links);
+  assert.equal(row("r3b").audioText, "Bridge. Four " + cmt("c2", "words") + ".");
+  assert.equal(row("r3b").status, "shot");
+  assert.equal(undo().ok, true);
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r3b", "r4"]);
+  assert.equal(row("r3b").visualText, "");
+  assert.ok(!row("r3b").imageLinks);
+  assert.equal(JSON.stringify(row("r4").imageLinks), links);
+  writer.closeWriter();
+});
+
+test("a Writer join by Delete at a scene's end pulls the next scene up into it, in one entry", async () => {
+  await open();
+  writer.openWriter();
+  const p3 = para("r3");
+  p3.focus();
+  selectText(p3, "Three.".length, "Three.".length);
+  const got = record(() => key(p3, "Delete"));
+  assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r4", "rowField:r3.audioText", "rowField:r3.status", "docField:comments"] });
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3"]);
+  assert.equal(row("r3").audioText, "Three. Four " + cmt("c2", "words") + ".");
+  assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r3", "audioText"]]);
+  assert.equal(document.activeElement, para("r3"));
+  assert.equal(caretTextOffset(document.activeElement), "Three.".length);
+  assert.equal(undo().ok, true);
+  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  writer.closeWriter();
+});
+
+test("leaving a cell and coming back inside 1,000 ms keeps typing in the same entry", async () => {
+  await open();
+  const a = cellOf("r1", "audioText");
+  await typeWord(a, "ab", 100);
+  const v = cellOf("r1", "visualText");
+  clock += 100;
+  v.focus();
+  assert.equal(document.activeElement, v);
+  clock += 100;
+  a.focus();
+  await typeWord(a, "c", 100);
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+  assert.equal(lastUndoEntry().steps[0].after, "Hello thereabc");
+});
+
+test("a composition straight after typing in the same cell joins the typing's entry", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  await typeWord(el, "ab", 100);
+  el.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" }));
+  clock += 100;
+  typeChar(el, "\u304B", { inputType: "insertCompositionText", isComposing: true });
+  el.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "\u304B" }));
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+  assert.equal(lastUndoEntry().steps[0].after, "Hello thereab\u304B");
+});
+
+test("any same-tab cut then paste counts two edits in one entry, even with no comment in it", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  selectText(el, 0, 6);
+  const store = clip("cut", el);
+  assert.equal(row("r1").audioText, "there");
+  assert.doesNotMatch(store["text/html"], /cmt-anchor/);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  const got = record(() => clip("paste", to, store));
+  assert.deepEqual(got, { seq: 2, render: 0, undo: 1, steps: ["rowField:r3.audioText"] });
+  assert.equal(row("r3").audioText, "Three.Hello ");
+});
