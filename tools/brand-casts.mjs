@@ -26,11 +26,9 @@ function fromLibrary(program, type) {
 
 export function brandChecker(program, repo) {
   const checker = program.getTypeChecker();
-  const memo = new Map();
 
   function carries(type, depth, seen) {
     if (!type || depth > MAX_DEPTH || seen.has(type)) return false;
-    if (memo.has(type)) return memo.get(type);
     if (type.flags & LEAF_FLAGS) return false;
     seen.add(type);
     let found = false;
@@ -50,7 +48,6 @@ export function brandChecker(program, repo) {
       }
     }
     seen.delete(type);
-    if (depth === 0) memo.set(type, found);
     return found;
   }
 
