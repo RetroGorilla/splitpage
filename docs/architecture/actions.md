@@ -222,10 +222,15 @@ it runs a command or loses the focus.
 
 The one hand-off (#361): Servers opens in front of the join-PIN prompt, as the
 way out when the code is not to hand, for example in a new desktop tab that
-inherited a server without its token. Escape closes Servers first. Once the
-tab moves to another server (joining or using one, or going back to this
-copy), the prompt for the old server closes. Over the prompt alone, every
-other command that opens a dialog is still refused.
+inherited a server without its token. Of the two, the one opened last is in
+front: a prompt opened from inside Servers (a bookmark's PIN button, or Use
+this server on a server that asks for one) comes in front of it. Escape
+closes the one in front, and closing Servers over the prompt puts the focus
+back in its field. Once the tab moves to another server (joining or using
+one, or going back to this copy), the prompt for the old server closes;
+joining the same server leaves it open. Over the prompt alone, every other
+command that opens a dialog is still refused, and so is a second Servers
+over the pair.
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them

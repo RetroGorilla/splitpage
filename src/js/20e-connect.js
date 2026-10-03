@@ -82,8 +82,22 @@ export function openPinDialog(opts) {
   var input = document.getElementById("pin-input");
   input.value = "";
   setPinError("");
+  placeAfter(modal, document.getElementById("connect-modal"));
   modal.hidden = false;
   input.focus();
+}
+
+function placeAfter(modal, other) {
+  if (!other || other.parentNode !== modal.parentNode) return;
+  if (other.compareDocumentPosition(modal) & Node.DOCUMENT_POSITION_PRECEDING) other.after(modal);
+}
+
+function frontmostOf(ids) {
+  var open = ids.map(function (id) { return document.getElementById(id); })
+    .filter(function (m) { return m && !m.hidden; });
+  return open.reduce(function (front, m) {
+    return front && (front.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_PRECEDING) ? front : m;
+  }, null);
 }
 
 function closePinDialog() {
@@ -187,6 +201,7 @@ export function openServersDialog() {
   sshShownFor = null;
   document.getElementById("connect-ssh-out").hidden = true;
   setConnectError("");
+  placeAfter(modal, document.getElementById("pin-modal"));
   modal.hidden = false;
   renderConnect();
   renderReviewLink();
@@ -196,6 +211,8 @@ export function openServersDialog() {
 function closeServersDialog() {
   var modal = document.getElementById("connect-modal");
   if (modal) modal.hidden = true;
+  var pin = document.getElementById("pin-modal");
+  if (pin && !pin.hidden) document.getElementById("pin-input").focus();
 }
 
 function setConnectError(message) {
@@ -555,10 +572,11 @@ export function __init() {
 
     window.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
-      var connect = document.getElementById("connect-modal");
-      if (connect && !connect.hidden) { e.stopPropagation(); closeServersDialog(); return; }
-      var pin = document.getElementById("pin-modal");
-      if (pin && !pin.hidden) { e.stopPropagation(); closePinDialog(); }
+      var front = frontmostOf(["pin-modal", "connect-modal"]);
+      if (!front) return;
+      e.stopPropagation();
+      if (front.id === "pin-modal") closePinDialog();
+      else closeServersDialog();
     }, true);
   })();
 
