@@ -220,6 +220,18 @@ test("a deleted owner on their side gives way to mine's owner who survived under
   assert.equal(out.productionTags[0].owner, "pT");
 });
 
+test("both sides added one tag name under different ids: theirs owned by Sam, whom I deleted, mine by Ada: Ada owns it (#353)", () => {
+  const base = mk();
+  base.productionTags = [];
+  const theirs = cloneState(base), mine = cloneState(base);
+  theirs.productionTags.push({ id: "t_lampT", cat: "prop", name: "Lamp", owner: "p1", notes: "", status: "needed" });
+  mine.people = [{ id: "pAda", name: "Ada" }];
+  mine.productionTags.push({ id: "t_lampM", cat: "prop", name: "lamp", owner: "pAda", notes: "", status: "needed" });
+  const out = mergeStates(base, mine, theirs).merged;
+  assert.deepEqual(out.people, [{ id: "pAda", name: "Ada" }]);
+  assert.deepEqual(out.productionTags.map((t) => [t.name, t.owner]), [["Lamp", "pAda"]]);
+});
+
 function seededRng(seed) {
   let s = seed >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
