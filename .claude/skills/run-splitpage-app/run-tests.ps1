@@ -31,6 +31,7 @@ $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
+Remove-Item (Join-Path $logs 'digest.txt'), (Join-Path $logs 'verdicts.json') -ErrorAction SilentlyContinue
 if ($Headed) { $Parallel = 1 }
 elseif (-not $PSBoundParameters.ContainsKey('Parallel')) {
   try {
@@ -179,6 +180,7 @@ function Test-LaneFinished($lane) {
 }
 
 $totalChecks = 0; $totalFail = 0; $suiteFail = 0
+$laneVerdicts = @()
 $notStarted = New-Object System.Collections.ArrayList
 
 function Count-FailedSuite {
@@ -189,12 +191,14 @@ function Count-FailedSuite {
 
 function Report-Lane($lane) {
   $name = $lane.File.Name
+  $c0 = $script:totalChecks; $f0 = $script:totalFail; $s0 = $script:suiteFail
   # Sweep this lane's own leftover browsers only (see Clear-SplitpageEdge).
   Clear-SplitpageEdge $lane.Tag
 
   if ($lane.TimedOut) {
     Write-Host ("--- {0}: TIMED OUT after {1}s" -f $name, $TimeoutSec) -ForegroundColor Red
     Count-FailedSuite
+    $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = $true; timedOut = $true; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0 }
     if (Test-Path $lane.Out) { Get-Content $lane.Out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
     return
   }
@@ -233,6 +237,7 @@ function Report-Lane($lane) {
     Write-Host "    $result" -ForegroundColor Red
   }
   else { Write-Host "    $result" -ForegroundColor Green }
+  $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = ($script:suiteFail -gt $s0); timedOut = $false; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0 }
 }
 
 $pending = [System.Collections.Generic.Queue[object]]::new()
@@ -272,4 +277,18 @@ function Write-Verdict([int]$SuiteCount) {
   return 0
 }
 
-exit (Write-Verdict $files.Count)
+function Write-Digest {
+  $digest = Join-Path $logs 'digest.txt'
+  $verdicts = Join-Path $logs 'verdicts.json'
+  $json = ConvertTo-Json -InputObject @{ timeoutSec = $TimeoutSec; suites = @($laneVerdicts) } -Compress -Depth 4
+  [IO.File]::WriteAllText($verdicts, $json, (New-Object System.Text.UTF8Encoding $false))
+  $module = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $here))) 'tools\failure-digest.mjs'
+  $names = ($files | ForEach-Object { $_.BaseName }) -join ','
+  try { & node $module --logs $logs --out $digest --suites $names --verdicts $verdicts }
+  catch { Write-Host "digest not written: $($_.Exception.Message)" -ForegroundColor Yellow }
+  if (Test-Path $digest) { Write-Host $digest }
+}
+
+$code = Write-Verdict $files.Count
+Write-Digest
+exit $code

@@ -52,6 +52,15 @@ the seed and the long demo, with the machine, browser and font it ran under.
 [performance-record.md](performance-record.md) is the 4.0 starting point;
 compare a later run only under the same conditions.
 
+Every `run-tests.ps1` run ends by writing `digest.txt` beside the suite logs
+and printing its path as the last line. Read the digest before any log: it has
+the overall result, then for each failing suite the failing checks with 5 lines
+of context and the exception text, the retries, and the de-duplicated warnings.
+A suite that ran 0 checks counts as a failure. A section is cut at about 60
+lines with a pointer to the full log, so a green run is a few lines and a red
+run stays small. The logic is `tools/failure-digest.mjs`, tested by
+`tools/test-failure-digest.mjs`.
+
 ## Golden fixtures
 
 Characterisation tests named `src/test/<name>-golden.test.mjs` compare
