@@ -57,7 +57,7 @@ function randomSteps(r: () => number, start: Doc, count: number): Step[] {
         const next = editCell(r, cell);
         start.cells.set(row.id + " " + key, next);
         after = toHtml(next);
-      } else if (before !== undefined && String(row.id).charAt(0) === "r" && r() < 0.6) {
+      } else if (before !== undefined && r() < 0.6) {
         after = undefined;
       } else {
         after = pick(r, ["todo", "shot", "cut", { nested: [1, 2] }]);
@@ -81,7 +81,7 @@ function randomSteps(r: () => number, start: Doc, count: number): Step[] {
   return steps;
 }
 
-test("apply, then apply the inverse, is the identity over seeded random edits, fields removed from the starting rows included", () => {
+test("apply, then apply the inverse, is the identity over seeded random edits, fields removed from any row included", () => {
   const r = rng(2024);
   const seen = { removals: 0, moves: 0, stillMoves: 0 };
   for (let n = 0; n < 200; n++) {
@@ -104,7 +104,7 @@ test("apply, then apply the inverse, is the identity over seeded random edits, f
   assert.equal(seen.stillMoves, 0);
 });
 
-test("today the inverse of an insertRow is refused once a field removed from that row has been put back, last", () => {
+test("the inverse of an insertRow applies once a field removed from that row has been put back, last (#323)", () => {
   const steps: Step[] = [
     { op: "insertRow", index: 0, row: { id: "r1", a: 1, b: 2 } },
     { op: "rowField", rowId: "r1", key: "a", before: 1 }
@@ -114,8 +114,120 @@ test("today the inverse of an insertRow is refused once a field removed from tha
   const inverse = invertSteps(steps);
   const restored = applySteps(after, inverse.slice(0, 1));
   assert.deepEqual(Object.keys((restored.rows || [])[0] || {}), ["id", "b", "a"]);
-  assert.throws(() => applySteps(after, inverse),
+  assert.deepEqual(applySteps(after, inverse), { rows: [] });
+});
+
+test("a deleteRow compares the row's keys and values at every depth, not their order (#323)", () => {
+  const state: StepState = { rows: [{ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, note: "n" }] };
+  const applies = (row: StepRow) => assert.deepEqual(applySteps(state, [{ op: "deleteRow", index: 0, row: row }]), { rows: [] });
+  const refused = (row: StepRow) => assert.throws(() => applySteps(state, [{ op: "deleteRow", index: 0, row: row }]),
     (e: Error & { code?: string }) => e.code === "STEP_REFUSED" && e.message === "step does not apply: deleteRow (row has changed)");
+  applies({ note: "n", status: { list: [{ y: 2, x: 1 }], label: "shot" }, id: "r1" });
+  applies({ id: "r1", note: "n", status: { label: "shot", list: [{ x: 1, y: 2 }] }, gone: undefined });
+  refused({ note: "n", status: { list: [{ y: 2, x: 1 }], label: "cut" }, id: "r1" });
+  refused({ note: "n", status: { list: [{ y: 2, x: 1 }, 3], label: "shot" }, id: "r1" });
+  refused({ note: "n", status: { list: [{ y: 2 }], label: "shot" }, id: "r1" });
+  refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] } });
+  refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, note: "n", extra: 0 });
+  refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, note: ["n"] });
+  refused({ id: "r1", status: { label: "shot", list: [{ x: 1, y: 2 }] }, note: { 0: "n" } });
+  refused({ id: "r1", status: { list: { 0: { x: 1, y: 2 } }, label: "shot" }, note: "n" });
+  const parsed = JSON.parse("{\"rows\":[{\"id\":\"r1\",\"__proto__\":{\"a\":1},\"b\":2}]}") as StepState;
+  assert.throws(() => applySteps(parsed, [{ op: "deleteRow", index: 0, row: JSON.parse("{\"b\":2,\"id\":\"r1\",\"__proto__\":{\"a\":2}}") as StepRow }]),
+    (e: Error & { code?: string }) => e.code === "STEP_REFUSED");
+  assert.deepEqual(applySteps(parsed, [{ op: "deleteRow", index: 0, row: JSON.parse("{\"b\":2,\"__proto__\":{\"a\":1},\"id\":\"r1\"}") as StepRow }]), { rows: [] });
+});
+
+test("a field's before value is compared by keys and values too, not their order", () => {
+  const state: StepState = { meta: { a: 1, b: [{ c: 2, d: 3 }] }, rows: [{ id: "r1", status: { label: "shot", n: 1 } }] };
+  assert.deepEqual(applySteps(state, [
+    { op: "rowField", rowId: "r1", key: "status", before: { n: 1, label: "shot" }, after: "cut" },
+    { op: "docField", key: "meta", before: { b: [{ d: 3, c: 2 }], a: 1 }, after: "m" }
+  ]), { meta: "m", rows: [{ id: "r1", status: "cut" }] });
+  assert.throws(() => applySteps(state, [{ op: "rowField", rowId: "r1", key: "status", before: { n: 2, label: "shot" }, after: "cut" }]),
+    (e: Error & { code?: string }) => e.code === "STEP_REFUSED" && /status has changed/.test(e.message));
+  assert.throws(() => applySteps(state, [{ op: "docField", key: "meta", before: { b: [{ c: 3, d: 2 }], a: 1 }, after: "m" }]),
+    (e: Error & { code?: string }) => e.code === "STEP_REFUSED" && /meta has changed/.test(e.message));
+});
+
+function shuffled(r: () => number, v: unknown): unknown {
+  if (Array.isArray(v)) return v.map((x) => shuffled(r, x));
+  if (!v || typeof v !== "object") return v;
+  const keys = Object.keys(v);
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    const k = keys[i] as string;
+    keys[i] = keys[j] as string;
+    keys[j] = k;
+  }
+  const out: Record<string, unknown> = {};
+  for (const k of keys) out[k] = shuffled(r, (v as Record<string, unknown>)[k]);
+  return out;
+}
+
+function sameOrder(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function randomValue(r: () => number): unknown {
+  return pick(r, ["todo", "shot", 0, 7, null, true, ["Ada", "Bo"], { label: "x", list: [1, { p: 1, q: 2 }] }, { a: { b: "c", d: "e" }, f: 1 }]);
+}
+
+function randomRow(r: () => number, id: string): StepRow {
+  const row: StepRow = { id: id };
+  for (const k of ["status", "note", "lengthSeconds", "tags", "meta"]) if (r() < 0.7) row[k] = randomValue(r);
+  return shuffled(r, row) as StepRow;
+}
+
+test("in any key order, apply then the inverse gives the original back, over seeded steps that remove and restore fields of any row (#323)", () => {
+  const r = rng(323);
+  const seen = { restoredThenDeleted: 0, deletedInOtherOrder: 0, steps: 0 };
+  for (let n = 0; n < 400; n++) {
+    const rows: StepRow[] = [];
+    for (let i = 0, count = Math.floor(r() * 4); i < count; i++) rows.push(randomRow(r, "r" + i));
+    const before = shuffled(r, { title: "T", people: ["Ada"], rows: rows }) as StepState;
+    const frozen = JSON.stringify(before);
+    const steps: Step[] = [];
+    const removed: Record<string, boolean> = {};
+    let state = before;
+    let fresh = 0;
+    for (let k = 0, count = 1 + Math.floor(r() * 8); k < count; k++) {
+      const live = (state.rows || []) as StepRow[];
+      let kind = live.length ? Math.floor(r() * 6) : 0;
+      if (kind === 5 && live.length < 2) kind = 0;
+      let step: Step;
+      if (kind === 0) {
+        step = { op: "insertRow", index: Math.floor(r() * (live.length + 1)), row: randomRow(r, "n" + fresh++) };
+      } else if (kind === 1 || kind === 2) {
+        const row = pick(r, live);
+        const key = pick(r, ["status", "note", "lengthSeconds", "tags", "meta"]);
+        const after = row[key] !== undefined && r() < 0.6 ? undefined : shuffled(r, randomValue(r));
+        if (after === undefined) removed[row.id as string] = true;
+        step = { op: "rowField", rowId: row.id as string, key: key, before: shuffled(r, row[key]), after: after };
+      } else if (kind === 3) {
+        const key = pick(r, ["title", "people", "extra"]);
+        step = { op: "docField", key: key, before: shuffled(r, state[key]), after: r() < 0.3 ? undefined : shuffled(r, randomValue(r)) };
+      } else if (kind === 4) {
+        const index = Math.floor(r() * live.length);
+        const row = shuffled(r, live[index]) as StepRow;
+        if (!sameOrder(row, live[index])) seen.deletedInOtherOrder++;
+        step = { op: "deleteRow", index: index, row: row };
+      } else {
+        const from = Math.floor(r() * live.length);
+        step = { op: "moveRow", from: from, to: (from + 1 + Math.floor(r() * (live.length - 1))) % live.length };
+      }
+      steps.push(step);
+      state = applySteps(state, [step]);
+    }
+    seen.steps += steps.length;
+    for (const s of steps) if (s.op === "insertRow" && removed[s.row.id as string]) seen.restoredThenDeleted++;
+    const back = applySteps(state, invertSteps(steps));
+    assert.equal(JSON.stringify(before), frozen, "the state handed in is not touched");
+    assert.deepEqual(back, before);
+    assert.deepEqual(applySteps(back, steps), state);
+  }
+  assert.ok(seen.restoredThenDeleted >= 50, JSON.stringify(seen));
+  assert.ok(seen.deletedInOtherOrder >= 50, JSON.stringify(seen));
 });
 
 test("each step's inverse undoes it alone, in reverse order", () => {
