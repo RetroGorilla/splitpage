@@ -473,6 +473,18 @@ function Press-Chars([string]$Text) {
   Out1 "pressed $($Text.Length) chars"
 }
 
+function Ime-Input([string]$Rest) {
+  if ($Rest -notmatch '^(set|commit|cancel)(?: (.*))?$') { throw 'ime needs: set <text> | commit <text> | cancel' }
+  $what = $Matches[1]
+  $text = if ($null -ne $Matches[2]) { $Matches[2] } else { '' }
+  switch ($what) {
+    'set'    { $null = Send-Cdp 'Input.imeSetComposition' @{ text = $text; selectionStart = $text.Length; selectionEnd = $text.Length } }
+    'commit' { $null = Send-Cdp 'Input.insertText' @{ text = $text } }
+    'cancel' { $null = Send-Cdp 'Input.imeSetComposition' @{ text = ''; selectionStart = 0; selectionEnd = 0 } }
+  }
+  Out1 "ime $what $($text.Length) chars"
+}
+
 $KeyMap = @{
   Enter     = @{ key = 'Enter';     code = 'Enter';     vk = 13; text = "`r" }
   Tab       = @{ key = 'Tab';       code = 'Tab';       vk = 9;  text = "`t" }
@@ -609,6 +621,7 @@ function Invoke-Line([string]$line) {
     'caret'   { if ($rest -match '^(.*)\s+start$') { Set-Caret $Matches[1] 'start' } else { Set-Caret $rest 'end' } }
     'type'    { Type-Text $rest }
     'press'   { Press-Chars $rest }
+    'ime'     { Ime-Input $rest }
     'key'     { $p = $rest -split '\s+'
                 if ($p.Count -ge 2) { Press-Key $p[1] $p[0].ToLower() } else { Press-Key $p[0] } }
     'text'    { $e = Resolve-Sel $rest

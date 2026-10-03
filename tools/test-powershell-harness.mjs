@@ -195,6 +195,51 @@ function driverStateChecks() {
   eq("a NOT STARTED error counts one failed check, prints NOT STARTED and stops the script", [r[5]?.stop, r[5]?.checks, r[5]?.failures, r[5]?.out, r[5]?.line], [true, 1, 1, ["NOT STARTED: static server did not come up after 3 attempts (x)"], "RESULT: 0/1 checks passed - 1 FAILED"]);
 }
 
+function imeHarness() {
+  const file = join(work, "ime.ps1");
+  writeFileSync(file, "﻿" + [
+    importParts(join(SKILL, "driver.ps1"), ["Ime-Input", "Invoke-Line"], []),
+    "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false",
+    "$script:Sent = @()",
+    "$script:Out = @()",
+    "function Send-Cdp($method, $params) { $script:Sent += ,@{ method = $method; params = $params }; return $null }",
+    "function Out1($m) { $script:Out += [string]$m }",
+    "function Case($line) {",
+    "  $script:Sent = @(); $script:Out = @(); $err = $null",
+    "  try { $null = Invoke-Line $line } catch { $err = $_.Exception.Message }",
+    "  Emit @{ sent = @($script:Sent); out = @($script:Out); err = $err }",
+    "}",
+    "Case 'ime set か'",
+    "Case 'ime set かな'",
+    "Case 'ime commit かな'",
+    "Case 'ime cancel'",
+    "Case 'ime set  two words '",
+    "Case 'ime commit'",
+    "Case 'ime nonsense'",
+    "Case 'ime'",
+    "[Environment]::Exit(0)"
+  ].join("\n"), "utf8");
+  return file;
+}
+
+function imeChecks() {
+  console.log("\ndriver.ps1's ime verb:\n");
+  const r = powershell(imeHarness()).records.map((rec) => ({
+    ...rec,
+    sent: (rec.sent ?? []).map((s) => ({ method: s.method, params: Object.fromEntries(Object.entries(s.params ?? {}).sort(([a], [b]) => a.localeCompare(b))) }))
+  }));
+  const set = (text) => ({ method: "Input.imeSetComposition", params: { selectionEnd: text.length, selectionStart: text.length, text } });
+  eq("ime set sends one imeSetComposition with the caret at the end of the marked text", r[0]?.sent, [set("か")]);
+  eq("a longer composition is one more imeSetComposition, not an insert", r[1]?.sent, [set("かな")]);
+  eq("ime commit sends the text through insertText", r[2]?.sent, [{ method: "Input.insertText", params: { text: "かな" } }]);
+  eq("ime cancel sets an empty composition", r[3]?.sent, [set("")]);
+  eq("the text after `set ` keeps its leading space; the script line's trailing space is trimmed", r[4]?.sent, [set(" two words")]);
+  eq("ime commit with no text commits an empty string", r[5]?.sent, [{ method: "Input.insertText", params: { text: "" } }]);
+  eq("each call says what it sent", [r[0]?.out, r[2]?.out, r[3]?.out], [["ime set 1 chars"], ["ime commit 2 chars"], ["ime cancel 0 chars"]]);
+  eq("an unknown ime form throws and sends nothing", [r[6]?.err, r[6]?.sent, r[7]?.err, r[7]?.sent],
+    ["ime needs: set <text> | commit <text> | cancel", [], "ime needs: set <text> | commit <text> | cancel", []]);
+}
+
 function laneSpec(name, lines, timedOut = false) {
   return { name, lines, timedOut };
 }
@@ -290,6 +335,7 @@ function runnerChecks() {
 try {
   await serverChecks();
   driverStateChecks();
+  imeChecks();
   runnerChecks();
 } catch (e) {
   check("the checks ran to the end", false, e instanceof Error ? e.stack : String(e));
