@@ -18,7 +18,9 @@ export type StepRefused = Error & { code: "STEP_REFUSED" };
 
 function clone<T>(v: T): T { return v === undefined ? undefined as T : JSON.parse(JSON.stringify(v)); }
 function keysInOrder(_key: string, v: unknown): unknown {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+  if (!v || typeof v !== "object") return v;
+  const proto: unknown = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) return v;
   const out: Record<string, unknown> = Object.create(null);
   Object.keys(v).sort().forEach(function (k) { out[k] = (v as Record<string, unknown>)[k]; });
   return out;
