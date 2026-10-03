@@ -45,6 +45,9 @@ const HEAD = [
   "class Store<T> { private items = new Map<string, T>(); get(id: string): T | undefined { return this.items.get(id); } }",
   'function fail(): never { throw new Error("no"); }',
   "function run<T>(fn: () => T): T { return fn(); }",
+  "function use(d: ValidatedDocument): ValidatedDocument { return d; }",
+  "class Held1<T> { v: T; constructor(v: unknown) { this.v = v as T; } }",
+  "function assertNever(x: never): never { throw new Error(String(x)); }",
   "class Keeper<T> { readonly items: T[]; constructor() { this.items = []; } }"
 ];
 
@@ -54,6 +57,7 @@ const CALL = "a generic call";
 const BODILESS = "a function signature";
 const DECLARED = "an ambient or";
 const MEMBER = "an ambient member";
+const NEVER_OUT = "a value of";
 
 const FORGED = [
   ["raw as ValidatedDocument", ASSERTION],
@@ -82,11 +86,22 @@ const FORGED = [
   ["launderArrow<ValidatedDocument>(raw)", CALL],
   ["deferred<ValidatedDocument>(raw)", CALL],
   ["indexed<{ d: ValidatedDocument }>(raw)", CALL],
-  ["is<ValidatedDocument>(raw)", CALL]
+  ["is<ValidatedDocument>(raw)", CALL],
+  ["use(({ v: raw } as { v: never }).v)", NEVER_OUT],
+  ["use(([raw] as [never])[0])", NEVER_OUT],
+  ["use(((() => raw) as () => never)())", NEVER_OUT],
+  ["async () => use(await (raw as Promise<never>))", ASSERTION],
+  ["Array.from(raw as never[]).map(use)", ASSERTION],
+  ["raw as never[] | null", ASSERTION]
 ].map(([e, what], i) => [`export const f${i} = ${e};`, what]).concat([
   ["export const inferred: ValidatedDocument = launder(raw);", CALL],
   ["export function isDoc(x: unknown): x is ValidatedDocument { return !!x; }", PREDICATE],
   ["export function isNever(x: unknown): x is never { return !!x; }", PREDICATE],
+  ["export function isV(d: ValidatedDocument | DocumentShape): d is ValidatedDocument { return !!d; }", PREDICATE],
+  ["export function assertV(d: ValidatedDocument | DocumentShape): asserts d is ValidatedDocument { if (!d) throw new Error(\"no\"); }", PREDICATE],
+  ["export function isV2(d: ValidatedDocument | string): d is ValidatedDocument { return typeof d !== \"string\"; }", PREDICATE],
+  ["export function isAny(d: any): d is ValidatedDocument { return !!d; }", PREDICATE],
+  ["export class Guard {\n  isDoc(): this is ValidatedDocument { return false; }\n}", PREDICATE, 1],
   ["export function assertDoc(x: unknown): asserts x is Alias { if (!x) throw new Error(\"no\"); }", PREDICATE],
   ["export function generic<T extends ValidatedDocument>(x: unknown): T { return x as T; }", ASSERTION],
   ["export function overload(x: unknown): ValidatedDocument;\nexport function overload(x: unknown): unknown { return x; }", BODILESS],
@@ -140,12 +155,21 @@ const ALLOWED = [
   "export const a32 = (): never => run(() => fail());",
   "export const a33 = new Keeper<ValidatedDocument>();",
   "export const a34 = Array.of<ValidatedDocument>();",
+  "export function exhaust(k: \"a\"): string { if (k === \"a\") return \"a\"; return assertNever(k); }",
+  "export const a35 = (): never => fail();",
+  "export const a36 = [doc, undefined].filter((d): d is ValidatedDocument => d !== undefined);",
+  "export const a37 = (d: ValidatedDocument | null | undefined): d is ValidatedDocument => !!d;",
+  "export const a38 = raw as Store<never>;",
+  "export function narrowed(o: { k: \"a\" | \"b\" }): string { if (o.k === \"a\") return \"a\"; if (o.k === \"b\") return \"b\"; return String(o.k); }",
+  "export const a39 = ((() => \"x\") as () => string)();",
   "export class Built { doc: ValidatedDocument; constructor() { this.doc = migrateRows(raw, ports); } }"
 ];
 
 const KNOWN_GAPS = [
   "export const g0 = new Box<ValidatedDocument>().value;",
-  "export const g1 = raw as Promise<never>;",
+  "export class DocBox extends Held1<ValidatedDocument> {}",
+  "export const g4 = new DocBox(raw).v;",
+  "export const g5: Held1<ValidatedDocument> = new Held1(raw);",
   "export const g2 = pick<ValidatedDocument>(doc, raw);",
   "export class Base { take(d: ValidatedDocument | string): void { void d; } }",
   "export class Derived extends Base { override take(d: ValidatedDocument): void { void d; } }",

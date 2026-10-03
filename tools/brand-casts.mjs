@@ -97,7 +97,31 @@ export function brandForgeries(program, repo, files) {
   const narrowsBranded = (predicate) => {
     const name = predicate.parameterName;
     const param = ts.isIdentifier(name) ? predicate.parent.parameters?.find((p) => ts.isIdentifier(p.name) && p.name.text === name.text) : null;
-    return !!param && carriesBrand(typeOf(param));
+    if (!param) return false;
+    const from = typeOf(param);
+    return carriesBrand(from) && checker.isTypeAssignableTo(checker.getNonNullableType(from), checker.getTypeFromTypeNode(predicate.type));
+  };
+  const isNever = (t) => !!(t.flags & ts.TypeFlags.Never);
+  const neverContainer = (target) => (target.isUnion() ? target.types : [target]).some((t) =>
+    !!(t.flags & ts.TypeFlags.Object) && !!(t.objectFlags & ts.ObjectFlags.Reference) && fromLibrary(program, t) && checker.getTypeArguments(t).some(isNever));
+  const inCast = (node) => {
+    for (let n = node; n; n = n.parent) if (ts.isAsExpression(n) || ts.isTypeAssertionExpression(n)) return true;
+    return false;
+  };
+  const memberType = (node) => {
+    const key = ts.isPropertyAccessExpression(node) ? node.name.text
+      : ts.isStringLiteral(node.argumentExpression) || ts.isNumericLiteral(node.argumentExpression) ? node.argumentExpression.text : null;
+    const prop = key === null ? null : checker.getPropertyOfType(checker.getApparentType(typeOf(node.expression)), key);
+    return prop ? checker.getTypeOfSymbol(prop) : null;
+  };
+  const neverOut = (node) => {
+    if (!isNever(typeOf(node))) return false;
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      const declared = memberType(node);
+      return !!declared && isNever(declared);
+    }
+    const decl = ts.isCallExpression(node) ? checker.getResolvedSignature(node)?.getDeclaration() : null;
+    return !!decl && inCast(decl);
   };
   for (const sf of program.getSourceFiles()) {
     const path = repoPath(repo, sf.fileName);
@@ -110,13 +134,15 @@ export function brandForgeries(program, repo, files) {
     const visit = (node) => {
       if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) {
         const target = checker.getTypeFromTypeNode(node.type);
-        if (carriesBrand(target) && !checker.isTypeAssignableTo(typeOf(node.expression), target)) {
+        if ((carriesBrand(target) || neverContainer(target)) && !checker.isTypeAssignableTo(typeOf(node.expression), target)) {
           report(node, "a type assertion to the validated document brand or to never");
         }
       } else if (ts.isTypePredicateNode(node) && node.type && carriesBrand(checker.getTypeFromTypeNode(node.type)) && !narrowsBranded(node)) {
         report(node, "a type predicate to the validated document brand or to never");
       } else if (ts.isCallExpression(node) && signatureForges(node)) {
         report(node, "a generic call that returns the validated document brand or never from no branded input");
+      } else if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isCallExpression(node)) && neverOut(node)) {
+        report(node, "a value of type never taken out of a value that is not never");
       } else if (MEMBER_SIGNATURE(node) && isAmbient(node) && node.type && carriesBrand(declaredType(node))) {
         report(node, "an ambient member that yields the validated document brand");
       } else if (ts.isFunctionLike(node) && !ts.isFunctionTypeNode(node) && !ts.isConstructorTypeNode(node) && !MEMBER_SIGNATURE(node) &&
