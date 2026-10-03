@@ -145,6 +145,27 @@ export default [
   },
 
   {
+    files: typescriptFiles,
+    languageOptions: {
+      parserOptions: {
+        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json"],
+        tsconfigRootDir: import.meta.dirname
+      }
+    },
+    rules: {
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/no-unnecessary-type-parameters": "error",
+      "@typescript-eslint/method-signature-style": ["error", "property"]
+    }
+  },
+
+  {
+    files: ["types/*.d.ts"],
+    rules: { "@typescript-eslint/method-signature-style": "off" }
+  },
+
+  {
     files: commentFree,
     linterOptions: { noInlineConfig: true }
   }

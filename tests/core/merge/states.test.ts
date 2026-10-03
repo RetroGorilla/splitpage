@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { SCHEMA_VERSION, STATE_FIELDS, STRATEGY_IDS } from "../../../src/core/document/fields.ts";
 import type { StateField } from "../../../src/core/document/fields.ts";
 import type { MergeComment, MergeRow } from "../../../src/core/merge/rows.ts";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { mergeStateFields } from "../../../src/core/merge/states.ts";
 import type { MergeDoc } from "../../../src/core/merge/states.ts";
+import { migratedThenSet } from "../migrate-ports.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 import { T } from "../text/cells.ts";
@@ -27,12 +29,12 @@ function cm(id: string): MergeComment {
     kind: "anchor", createdAt: NEW, updatedAt: NEW, replies: [] };
 }
 
-function doc(over?: Partial<MergeDoc>): MergeDoc {
-  return Object.assign({
+function doc(over?: Partial<MergeDoc>): ValidatedDocument {
+  return migratedThenSet(Object.assign({
     title: "Lighthouse", docId: DOC, rows: [row("r1", ONE)], comments: [], people: [], productionTags: [], brollShots: [],
     wordsPerMinute: 150, rev: 4, lastEditedBy: "Base", lastEditedAt: OLD, personColors: { Sam: "#80BDFB" }, targetSeconds: 300,
     schema: SCHEMA_VERSION
-  }, over || {});
+  }, over || {}));
 }
 
 const shot = { id: "b1", name: "Gulls", desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "", location: "", props: [], origin: "list" };
@@ -84,7 +86,7 @@ test("every strategy merges its field, in the table's order", () => {
 });
 
 test("person colours and a target length that no side has leave no key behind", () => {
-  const strip = (d: MergeDoc) => { delete d.personColors; delete d.targetSeconds; return d; };
+  const strip = (d: ValidatedDocument) => { delete d.personColors; delete d.targetSeconds; return d; };
   const { decode } = fakeDecoder(CELLS);
   const r = mergeStateFields(strip(doc()), strip(doc()), strip(doc()), fakePorts(decode));
   assert.deepEqual(Object.keys(r.merged), STATE_FIELDS.map((f) => f.key).filter((k) => k !== "personColors" && k !== "targetSeconds"));

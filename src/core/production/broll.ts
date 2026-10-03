@@ -10,6 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
+import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
 import { tagNameOf } from "../text/runs.ts";
@@ -371,7 +372,7 @@ function newBrollShot(fields: BrollSeedFields): NewBrollShot {
 }
 
 export function brollEntries(
-  state: BrollState,
+  state: ValidatedDocument,
   readers: ProductionReaders,
   ids: IdSource,
   plainTextOf: FieldText,
@@ -420,7 +421,7 @@ export function brollLineKey(rowId: string, ordinal: number): string {
   return rowId + "\u0000" + ordinal;
 }
 
-export function planBrollAnchors(state: BrollState, readers: ProductionReaders, ids: IdSource): BrollAnchorPlan {
+export function planBrollAnchors(state: ValidatedDocument, readers: ProductionReaders, ids: IdSource): BrollAnchorPlan {
   const shots = state.brollShots;
   const claimed: Record<string, boolean> = Object.create(null);
   const byId = shotIndexById(shots);

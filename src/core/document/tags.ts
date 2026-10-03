@@ -21,8 +21,8 @@ export interface TagName {
 }
 
 export interface TagHooks {
-  tagId(cat: string, name: string): string;
-  tagOf(id: unknown): TagName | null;
+  tagId: (cat: string, name: string) => string;
+  tagOf: (id: unknown) => TagName | null;
 }
 
 export function tagCategoryId(id: unknown): TagCategoryId | null {

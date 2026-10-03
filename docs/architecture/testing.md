@@ -6,7 +6,7 @@ runs the fast gates in the order CI does.
 | Command | What it runs |
 | --- | --- |
 | `npm run lint` | eslint over every source tree, `.ts` included; any warning fails |
-| `npm run typecheck` | `tsc` rules for each `tsconfig.*.json`; fails on a `.ts` file no config covers |
+| `npm run typecheck` | `tsc` rules for each `tsconfig.*.json`; fails on a `.ts` file no config covers, and on a cast to the validated document brand ([below](#the-validated-document-brand)) |
 | `npm run check:deps` | Layer, platform and cycle rules ([dependencies.md](dependencies.md)) |
 | `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
 | `node build.mjs` | Builds `index.html` and stamps `sw.js` |
@@ -208,6 +208,104 @@ All three extend `tsconfig.base.json`: `strict`, `noUncheckedIndexedAccess`,
 `erasableSyntaxOnly`, `verbatimModuleSyntax`, NodeNext modules and no emit.
 Import with the `.ts` extension and `import type` for types; path aliases are
 not used because Node would not resolve them.
+
+`types/json.d.ts`, in all three configs, makes `JSON.parse` return `unknown`
+instead of `any`, so a parsed value is checked or asserted before it reaches a
+typed parameter.
+
+### The validated document brand
+
+`ValidatedDocument` (`src/core/document/validated.ts`) is the document shape
+plus a type-only brand keyed by an unexported `unique symbol`. Only
+`src/core/migrate.ts` produces it: `migrateRows` and `migrateDocument`, and
+through them `mergeStates`. `mergeStates`, `mergeStateFields`,
+`syncCommentAnchors`, `deriveProductionIndex`, `planRegistryHealing`,
+`planQuickAdd`, `brollEntries` and `planBrollAnchors` take only that type. The
+brand changes no bytes; `checkJs` is off, so it constrains `.ts` callers only.
+
+A type carries the brand when the brand's property or its `unique symbol` key
+is reachable from it, directly or through an alias, a union, an intersection,
+an array, a property, a type argument, a constraint, a return type or an index
+signature. A top-level `never` counts too, because `never` is assignable to
+every type; a `never` nested inside another type does not, so the rule checks
+where a nested `never` comes out instead. The typecheck refuses, in every
+`.ts` file but `migrate.ts`:
+- a type assertion to such a type, unless the value already has that type
+  (this covers `as never`), and an assertion to a library container of
+  `never` (`never[]`, `Promise<never>`, `Set<never>`);
+- a property or element access whose declared type is `never` on a value that
+  is not `never` (`({ v: raw } as { v: never }).v`, `([raw] as [never])[0]`),
+  and a call through a signature written inside a cast that returns `never`
+  (`(f as () => never)()`). `fail()` and `assertNever(x)` pass;
+- a type predicate to such a type, unless it only strips `null` and
+  `undefined` from a parameter that already carries the brand
+  (`(d): d is ValidatedDocument => d !== null` over `ValidatedDocument | null`
+  passes; over `ValidatedDocument | DocumentShape` or `ValidatedDocument |
+  string` it is refused);
+- a call to a function declared outside the default library whose
+  instantiated return type or predicate carries the brand when its declared
+  one does not, and no argument or receiver supplies it: a generic helper
+  that would launder a cast. `jsonCopy(doc)` passes, and library calls and
+  every `new` are not checked, so empty containers (`new Map<string,
+  ValidatedDocument>()`), `new Promise<ValidatedDocument>(…)` and a generic
+  `new Store<ValidatedDocument>()` pass;
+- a function signature with no body that returns such a type;
+- a variable or class property of such a type that is ambient (`declare` or a
+  declaration file) or definitely assigned (`!:`). This is a decision: a
+  field that holds a document is typed `ValidatedDocument | null`, or is set
+  in the constructor, not declared `doc!: ValidatedDocument`;
+- an interface or type member of such a type in an ambient context, such as
+  `declare global { interface JSON { … } }`. Ordinary port interfaces pass.
+  Every `.ts` file here is a module, so an interface outside `declare global`
+  is local and cannot augment a global.
+
+The rule is `tools/brand-casts.mjs`, tested by `tools/test-brand-casts.mjs`.
+It sits in the typecheck, not in eslint or the dependency gate, because only
+the type checker sees through aliases and indirect forms. Two eslint rules
+back it on `.ts` files: `@typescript-eslint/no-unnecessary-type-parameters`
+refuses a helper such as `launder<T>(v: unknown): T` where it is written, and
+`@typescript-eslint/method-signature-style: property` makes interface members
+function properties, so they are checked contravariantly and an
+implementation cannot narrow a parameter to the brand. `types/*.d.ts` is
+exempt from the second, since `JSON.parse` there must merge with the
+library's method.
+
+What the rule does not refuse, each shown as a known gap in
+`tools/test-brand-casts.mjs`:
+- a generic class whose member casts to its own type parameter, since `new`
+  is not checked: `new Box<ValidatedDocument>().value`, a subclass
+  (`class DocBox extends Base<ValidatedDocument> {}`, then `new
+  DocBox(raw).v`), or a contextually typed `const g: G<ValidatedDocument> =
+  new G(raw)`;
+- a `never` that comes out somewhere the rule does not look, such as a
+  computed element key or a signature declared in a type alias and cast to;
+- a laundering call given any branded argument or receiver, which exempts it
+  (`pick<ValidatedDocument>(doc, raw)`);
+- a class method override that narrows its parameter to the brand
+  (`override take(d: ValidatedDocument)`), called through the base type:
+  method parameters stay bivariant in classes.
+
+A value typed `any` is assignable to the brand without any cast, and `any`
+still reaches authored code: `Object.create(null)`, `Reflect.get` on an
+untyped receiver, `Array.isArray` narrowing an `unknown`, and any call into
+legacy `.js`, whose functions are untyped because `checkJs` is off.
+`@typescript-eslint/no-explicit-any` and the `JSON.parse` declaration close
+the explicit sources only. eslint runs the type-aware
+`@typescript-eslint/no-unsafe-argument` and `no-unsafe-return` on `.ts`
+files, so an `any` passed to a guarded function or returned as one is
+refused. An `any` assigned to a variable annotated with the brand still
+passes: `no-unsafe-assignment` would refuse 31 existing assignments, mostly
+`Object.create(null)` maps, and is not on.
+`tools/test-validated-document.mjs` compiles a call to each guarded function
+with an object literal, a `JSON.parse` result and one asserted to the
+unbranded shape, under each of the three tsconfigs, and expects a type error
+for each.
+
+Tests get a branded document from `migrateRows` with fake ports.
+`migratedThenSet` in `tests/core/migrate-ports.ts` migrates a copy of a fixture
+and then sets the fixture's own fields back, the way the app edits a live
+document, so a test of an unregistered tag or a malformed registry keeps its
+input.
 
 eslint applies `typescript-eslint`'s strict rules to `.ts` files and
 refuses inline `eslint-disable` directives in the migrated folders and
