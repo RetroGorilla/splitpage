@@ -17,7 +17,17 @@ export type Step = RowFieldStep | DocFieldStep | InsertRowStep | DeleteRowStep |
 export type StepRefused = Error & { code: "STEP_REFUSED" };
 
 function clone<T>(v: T): T { return v === undefined ? undefined as T : JSON.parse(JSON.stringify(v)); }
-function same(a: unknown, b: unknown): boolean { return JSON.stringify(a) === JSON.stringify(b); }
+function keysInOrder(_key: string, v: unknown): unknown {
+  if (!v || typeof v !== "object") return v;
+  const proto: unknown = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) return v;
+  const out: Record<string, unknown> = Object.create(null);
+  Object.keys(v).sort().forEach(function (k) { out[k] = (v as Record<string, unknown>)[k]; });
+  return out;
+}
+function same(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b) || JSON.stringify(a, keysInOrder) === JSON.stringify(b, keysInOrder);
+}
 
 function stepRefused(step: Step, why: string): StepRefused {
   const err = new Error("step does not apply: " + step.op + " (" + why + ")") as StepRefused;
