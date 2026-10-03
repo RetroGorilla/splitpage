@@ -9,11 +9,15 @@ import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
-import { OPENS_A_DIALOG, availableUnless } from "./screen.ts";
+import { OPENS_A_DIALOG, availableUnless, onlyDialogOpen } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 function overDialogs(): Availability {
   return availableUnless(OPENS_A_DIALOG, screenNow());
+}
+
+function overDialogsButThePinPrompt(): Availability {
+  return onlyDialogOpen("pin-modal") ? availableUnless(["tour"], screenNow()) : overDialogs();
 }
 
 export function registerHelpActions(registry: ActionRegistry): () => void {
@@ -24,7 +28,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Share",
       icon: "i-globe",
       words: "server connect bookmark address pin join",
-      availability: overDialogs,
+      availability: overDialogsButThePinPrompt,
       run: () => { openServersDialog(); }
     },
     {

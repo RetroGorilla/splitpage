@@ -199,7 +199,8 @@ started over one of them.
 | `present` | still loading, every overlay but Present |
 | `write` | still loading, every overlay but the writer (then a review session) |
 | `toggle-hide-shot` | still loading, a dialog |
-| `about`, `settings`, `servers`, `setup`, `tagging-help`, `drive-open` | a dialog, the tour (`OPENS_A_DIALOG`) |
+| `about`, `settings`, `setup`, `tagging-help`, `drive-open` | a dialog, the tour (`OPENS_A_DIALOG`) |
+| `servers` | a dialog other than the join-PIN prompt, the tour |
 | `collaborate`, `paste`, `gdoc-import`, `server-open` | still loading, a dialog, the tour (then their own state) |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
@@ -218,6 +219,18 @@ Servers dialog's Collaborate), and a File menu item chosen over the setup
 wizard closes the wizard first (below), so neither is refused. The open
 command menu is not in the list, as in #307's proposal: it closes itself when
 it runs a command or loses the focus.
+
+The one hand-off (#361): Servers opens in front of the join-PIN prompt, as the
+way out when the code is not to hand, for example in a new desktop tab that
+inherited a server without its token. Of the two, the one opened last is in
+front: a prompt opened from inside Servers (a bookmark's PIN button, or Use
+this server on a server that asks for one) comes in front of it. Escape
+closes the one in front, and closing Servers over the prompt puts the focus
+back in its field. Once the tab moves to another server (joining or using
+one, or going back to this copy), the prompt for the old server closes;
+joining the same server leaves it open. Over the prompt alone, every other
+command that opens a dialog is still refused, and so is a second Servers
+over the pair.
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them

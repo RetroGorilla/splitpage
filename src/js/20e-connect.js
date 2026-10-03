@@ -82,14 +82,35 @@ export function openPinDialog(opts) {
   var input = document.getElementById("pin-input");
   input.value = "";
   setPinError("");
+  placeAfter(modal, document.getElementById("connect-modal"));
   modal.hidden = false;
   input.focus();
+}
+
+function placeAfter(modal, other) {
+  if (!other || other.parentNode !== modal.parentNode) return;
+  if (other.compareDocumentPosition(modal) & Node.DOCUMENT_POSITION_PRECEDING) other.after(modal);
+}
+
+function frontmostOf(ids) {
+  var open = ids.map(function (id) { return document.getElementById(id); })
+    .filter(function (m) { return m && !m.hidden; });
+  return open.reduce(function (front, m) {
+    return front && (front.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_PRECEDING) ? front : m;
+  }, null);
 }
 
 function closePinDialog() {
   var modal = document.getElementById("pin-modal");
   if (modal) modal.hidden = true;
   pinRequest = null;
+}
+
+function closePinDialogForAnotherServer() {
+  var modal = document.getElementById("pin-modal");
+  if (!modal || modal.hidden || !pinRequest) return;
+  if (normalizeServerBase(pinRequest.base) === conn.serverUrl) return;
+  closePinDialog();
 }
 
 function setPinError(message) {
@@ -180,6 +201,7 @@ export function openServersDialog() {
   sshShownFor = null;
   document.getElementById("connect-ssh-out").hidden = true;
   setConnectError("");
+  placeAfter(modal, document.getElementById("pin-modal"));
   modal.hidden = false;
   renderConnect();
   renderReviewLink();
@@ -189,6 +211,8 @@ export function openServersDialog() {
 function closeServersDialog() {
   var modal = document.getElementById("connect-modal");
   if (modal) modal.hidden = true;
+  var pin = document.getElementById("pin-modal");
+  if (pin && !pin.hidden) document.getElementById("pin-input").focus();
 }
 
 function setConnectError(message) {
@@ -358,6 +382,7 @@ async function useServer(bookmark, opts) {
   } catch (e) {
     pointTabAt(bookmark.url, { token: opts.token, makeDefault: true });
   }
+  closePinDialogForAnotherServer();
   if (opts.token) setServerToken(opts.token, !!opts.remember);
   updateConnectMenu();
   renderConnect();
@@ -408,6 +433,7 @@ async function backToThisCopy() {
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
   pointTabAt("", { makeDefault: true });
+  closePinDialogForAnotherServer();
   updateConnectMenu();
   await detectServer();
   applyReviewMode();
@@ -546,10 +572,11 @@ export function __init() {
 
     window.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
-      var pin = document.getElementById("pin-modal");
-      if (pin && !pin.hidden) { e.stopPropagation(); closePinDialog(); return; }
-      var connect = document.getElementById("connect-modal");
-      if (connect && !connect.hidden) { e.stopPropagation(); closeServersDialog(); }
+      var front = frontmostOf(["pin-modal", "connect-modal"]);
+      if (!front) return;
+      e.stopPropagation();
+      if (front.id === "pin-modal") closePinDialog();
+      else closeServersDialog();
     }, true);
   })();
 
