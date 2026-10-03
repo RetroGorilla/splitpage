@@ -3,7 +3,6 @@ import type { StateField, StrategyId } from "../document/fields.ts";
 import { mergedDocId } from "../document/ids.ts";
 import { mergePersonColors } from "../document/person-colors.ts";
 import type { Clock, IdSource } from "../document/ports.ts";
-import type { ValidatedDocument } from "../document/validated.ts";
 import { LIST_MERGERS, personIdRemap, repointOwners } from "./lists.ts";
 import type { ListMerger, Person, PersonList, TagEntry, TagList } from "./lists.ts";
 import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
@@ -12,6 +11,7 @@ import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWi
 import { listShapedSide } from "./shape.ts";
 import { textMergeContext } from "./text-field.ts";
 import type { MergeDecoder } from "./text-field.ts";
+import type { ValidatedDocument } from "../document/validated.ts";
 
 export interface MergeDoc extends RowSide {
   title?: unknown;
