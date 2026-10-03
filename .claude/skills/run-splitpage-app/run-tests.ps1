@@ -192,6 +192,7 @@ function Count-FailedSuite {
 function Report-Lane($lane) {
   $name = $lane.File.Name
   $c0 = $script:totalChecks; $f0 = $script:totalFail; $s0 = $script:suiteFail
+  # Sweep this lane's own leftover browsers only (see Clear-SplitpageEdge).
   Clear-SplitpageEdge $lane.Tag
 
   if ($lane.TimedOut) {
