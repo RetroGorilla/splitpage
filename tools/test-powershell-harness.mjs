@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer, connect } from "node:net";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -223,7 +223,7 @@ function runnerHarness(selected, verdictOnly) {
     "function Clear-SplitpageEdge($t) {}",
     "$TimeoutSec = 180",
     `$logs = '${logs.replace(/'/g, "''")}'`,
-    "$totalChecks = 0; $totalFail = 0; $suiteFail = 0",
+    "$totalChecks = 0; $totalFail = 0; $suiteFail = 0; $laneVerdicts = @()",
     "$notStarted = New-Object System.Collections.ArrayList",
     `$spec = Get-Content -Raw '${specFile.replace(/'/g, "''")}' | ConvertFrom-Json`,
     "function Lane($s) {",
@@ -273,6 +273,18 @@ function runnerChecks() {
 
   const zero = powershell(runnerHarness([LANES[0], LANES[6]], true));
   eq("a suite that ran no checks fails the run", zero.records[0]?.code, 1);
+
+  const staleTemp = join(work, "stale-temp");
+  const staleLogs = join(staleTemp, "splitpage-testlogs");
+  mkdirSync(staleLogs, { recursive: true });
+  writeFileSync(join(staleLogs, "digest.txt"), "ALL PASS - 9/9 checks across 1 suite(s)\n");
+  writeFileSync(join(staleLogs, "verdicts.json"), "{}");
+  const aborted = spawnSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(SKILL, "run-tests.ps1"), "-Only", "zzz"], {
+    encoding: "utf8", timeout: 60000, windowsHide: true, env: { ...process.env, TEMP: staleTemp, TMP: staleTemp }
+  });
+  eq("a run that aborts before any suite exits 1", aborted.status, 1);
+  eq("and leaves no digest.txt or verdicts.json from an earlier run", [existsSync(join(staleLogs, "digest.txt")), existsSync(join(staleLogs, "verdicts.json"))], [false, false]);
+  check("and prints no digest path", !/digest\.txt/.test(aborted.stdout ?? ""), aborted.stdout);
 }
 
 try {

@@ -51,6 +51,7 @@ const CASES = [
   ["ci-changes.mjs", [], (r) => r.code === 0 && r.out.includes("ci-changes: code=true")],
   ["comment-gate.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("comment-gate: unknown argument --bogus")],
   ["dep-report.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("dep-report: unknown argument --bogus")],
+  ["failure-digest.mjs", [], (r) => r.code === 2 && r.err.includes("usage: node tools/failure-digest.mjs")],
   ["perf-record.mjs", [], (r) => r.code === 2 && r.err.includes("perf-record: index.html is not built")],
   ["run-suites.mjs", ["--bogus"], (r) => r.code !== 0 && r.err.includes("run-suites: unknown option --bogus")],
   ["run-tests.mjs", ["--bogus"], (r) => r.code === 2 && r.err.includes("run-tests: unknown flag --bogus")],
