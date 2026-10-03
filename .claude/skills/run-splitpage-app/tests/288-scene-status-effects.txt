@@ -99,6 +99,8 @@ expect window.__at.counts.render === 0
 expect window.__at.counts.rowsPainted === 1
 expect __shown('r3')
 expect !__stripped('r3')
+eval (function(){ R.render(); R.reset(); return true; })()
+expect __shown('r3') && !__stripped('r3')
 sleep 150
 expect __saving()
 sleep 550
