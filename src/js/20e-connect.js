@@ -92,6 +92,13 @@ function closePinDialog() {
   pinRequest = null;
 }
 
+function closePinDialogForAnotherServer() {
+  var modal = document.getElementById("pin-modal");
+  if (!modal || modal.hidden || !pinRequest) return;
+  if (normalizeServerBase(pinRequest.base) === conn.serverUrl) return;
+  closePinDialog();
+}
+
 function setPinError(message) {
   var el = document.getElementById("pin-error");
   if (!el) return;
@@ -358,6 +365,7 @@ async function useServer(bookmark, opts) {
   } catch (e) {
     pointTabAt(bookmark.url, { token: opts.token, makeDefault: true });
   }
+  closePinDialogForAnotherServer();
   if (opts.token) setServerToken(opts.token, !!opts.remember);
   updateConnectMenu();
   renderConnect();
@@ -408,6 +416,7 @@ async function backToThisCopy() {
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
   pointTabAt("", { makeDefault: true });
+  closePinDialogForAnotherServer();
   updateConnectMenu();
   await detectServer();
   applyReviewMode();
@@ -546,10 +555,10 @@ export function __init() {
 
     window.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
-      var pin = document.getElementById("pin-modal");
-      if (pin && !pin.hidden) { e.stopPropagation(); closePinDialog(); return; }
       var connect = document.getElementById("connect-modal");
-      if (connect && !connect.hidden) { e.stopPropagation(); closeServersDialog(); }
+      if (connect && !connect.hidden) { e.stopPropagation(); closeServersDialog(); return; }
+      var pin = document.getElementById("pin-modal");
+      if (pin && !pin.hidden) { e.stopPropagation(); closePinDialog(); }
     }, true);
   })();
 
