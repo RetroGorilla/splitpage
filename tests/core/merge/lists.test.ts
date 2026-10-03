@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { BROLL_PROPS_MAX } from "../../../src/core/document/broll.ts";
 import { STATE_FIELDS } from "../../../src/core/document/fields.ts";
 import {
-  LIST_MERGERS, mergeBrollProps, mergeBrollShots, mergePeople, mergeProductionTags, personIdRemap, repointOwners
+  LIST_MERGERS, mergeBrollProps, mergeBrollShots, mergePeople, mergeProductionTags, personIdRemap, personSurvives, repointOwners
 } from "../../../src/core/merge/lists.ts";
 import type { BrollShot, ListMerger, TagInput } from "../../../src/core/merge/lists.ts";
 import { jsonCopy } from "./fakes.ts";
@@ -78,6 +78,39 @@ test("repointOwners rewrites only owners the map names, in place, and skips what
   repointOwners([tags, shots, undefined, "not a list"], personIdRemap([{ id: "p3", name: "Bo" }], [{ id: "p4", name: "bo" }]));
   assert.deepEqual(tags.map((t) => t.owner), ["p4", "p1", ""]);
   assert.deepEqual(shots.map((s) => s && typeof s === "object" ? (s as BrollShot).owner : s), ["p4", null, "x", 7]);
+});
+
+test("personSurvives holds for a merged person's id and for an id that moves to one, and nothing else (#353)", () => {
+  const theirs = [{ id: "p1", name: "Sam" }, { id: "p4", name: "Bo " }];
+  const mine = [{ id: "p3", name: "bo" }, { id: "constructor", name: "Gone" }];
+  const survives = personSurvives(theirs.concat(mine), mergePeople([{ id: "p1", name: "Sam" }], mine, theirs));
+  assert.deepEqual(["p1", "p3", "p4", "constructor", "toString", "__proto__", ""].map(survives), [false, true, true, true, false, false, false]);
+  assert.equal(personSurvives(undefined, undefined)("p1"), false);
+  assert.equal(personSurvives([null], [null, { id: "p1", name: "" }])("p1"), false);
+});
+
+test("an owner who did not survive gives way to the other side's live owner, in tags and shots (#353)", () => {
+  const survives = (id: string) => id === "pAda" || id === "pBo";
+  const tagsOf = (owner: string) => [tag("t_k", "Kettle", { owner: owner })];
+  const shotsOf = (owner: unknown) => [shot("b1", { owner: owner })];
+  const tagOwner = (mine: string, theirs: string, check?: (id: string) => boolean) =>
+    mergeProductionTags(tagsOf("pSam"), tagsOf(mine), tagsOf(theirs), check)[0]?.owner;
+  const shotOwner = (mine: unknown, theirs: unknown, check?: (id: string) => boolean) =>
+    mergeBrollShots(shotsOf("pSam"), shotsOf(mine), shotsOf(theirs), check)[0]?.owner;
+  for (const owner of [tagOwner, shotOwner]) {
+    assert.equal(owner("pAda", "pSam", survives), "pAda", owner.name + ": my live owner replaces their deleted one");
+    assert.equal(owner("pSam", "pAda", survives), "pAda", owner.name + ": their live owner stays");
+    assert.equal(owner("pAda", "pBo", survives), "pBo", owner.name + ": a live owner on their side is never replaced");
+    assert.equal(owner("pCy", "pSam", survives), "pSam", owner.name + ": a deleted owner gives way only to a live one");
+    assert.equal(owner("", "pSam", survives), "pSam", owner.name + ": nor to no owner");
+    assert.equal(owner("pAda", "pSam"), "pSam", owner.name + ": with no check every owner counts as live");
+  }
+  assert.equal(shotOwner("pAda", 7, survives), 7, "an owner that is not an id is left as it was");
+  assert.equal(shotOwner(7, "pSam", survives), "pSam");
+  const tags = [tag("t_k", "Kettle", { owner: "pSam" })];
+  const before = JSON.stringify(tags);
+  mergeProductionTags(tags, [tag("t_k", "Kettle", { owner: "pAda" })], tags, survives);
+  assert.equal(JSON.stringify(tags), before);
 });
 
 test("production tags: a status only ever rises, and two entries for one name become the first", () => {

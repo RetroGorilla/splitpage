@@ -160,6 +160,66 @@ test("merging the merged state again changes no owner (#283)", () => {
   assert.deepEqual(twice.people, once.people);
 });
 
+function deletedOwnerSides() {
+  const base = mk();
+  base.people.push({ id: "pAda", name: "Ada" });
+  base.productionTags[0].owner = "p1";
+  base.brollShots[0].owner = "p1";
+  const withOwners = (s, owner) => {
+    s.productionTags[0].owner = owner;
+    s.brollShots[0].owner = owner;
+    return s;
+  };
+  return { base, kept: () => withOwners(cloneState(base), "p1"), handedOver: () => {
+    const s = withOwners(cloneState(base), "pAda");
+    s.people = s.people.filter((p) => p.id !== "p1");
+    return s;
+  } };
+}
+
+test("I deleted Sam and gave his items to Ada while they kept him: Ada keeps them (#353)", () => {
+  const { base, kept, handedOver } = deletedOwnerSides();
+  const out = mergeStates(base, handedOver(), kept()).merged;
+  assert.deepEqual(out.people, [{ id: "pAda", name: "Ada" }]);
+  assert.equal(out.productionTags[0].owner, "pAda", "the tag");
+  assert.equal(out.brollShots[0].owner, "pAda", "the shot");
+});
+
+test("they deleted Sam and gave his items to Ada while I kept him: Ada keeps them (#353)", () => {
+  const { base, kept, handedOver } = deletedOwnerSides();
+  const out = mergeStates(base, kept(), handedOver()).merged;
+  assert.deepEqual(out.people, [{ id: "pAda", name: "Ada" }]);
+  assert.equal(out.productionTags[0].owner, "pAda");
+  assert.equal(out.brollShots[0].owner, "pAda");
+});
+
+test("a deleted owner gives way only to a live one; a live owner on their side still wins (#353)", () => {
+  const { base, kept, handedOver } = deletedOwnerSides();
+  const toBo = kept();
+  toBo.people.push({ id: "pBo", name: "Bo" });
+  toBo.productionTags[0].owner = "pBo";
+  toBo.brollShots[0].owner = "pBo";
+  const live = mergeStates(base, handedOver(), toBo).merged;
+  assert.deepEqual([live.productionTags[0].owner, live.brollShots[0].owner], ["pBo", "pBo"]);
+  const gone = handedOver();
+  gone.people = [];
+  const none = mergeStates(base, gone, kept()).merged;
+  assert.deepEqual(none.people, []);
+  assert.deepEqual([none.productionTags[0].owner, none.brollShots[0].owner], ["", ""]);
+});
+
+test("a deleted owner on their side gives way to mine's owner who survived under their id (#283, #353)", () => {
+  const { base, kept } = deletedOwnerSides();
+  const mine = cloneState(base);
+  mine.people = [{ id: "pM", name: "Bo" }];
+  mine.productionTags[0].owner = "pM";
+  const theirs = kept();
+  theirs.people.push({ id: "pT", name: "bo" });
+  const out = mergeStates(base, mine, theirs).merged;
+  assert.deepEqual(out.people, [{ id: "pT", name: "bo" }]);
+  assert.equal(out.productionTags[0].owner, "pT");
+});
+
 function seededRng(seed) {
   let s = seed >>> 0;
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
