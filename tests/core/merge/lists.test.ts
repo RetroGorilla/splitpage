@@ -113,6 +113,30 @@ test("an owner who did not survive gives way to the other side's live owner, in 
   assert.equal(JSON.stringify(tags), before);
 });
 
+test("two or more entries for one tag name: a deleted owner gives way to the next live one, in list order (#353)", () => {
+  const survives = (id: string) => id === "pAda" || id === "pBo";
+  const names = ["Ladder", "ladder", "LADDER ", " Ladder"];
+  const theirOwner = (owners: string[], check?: (id: string) => boolean) =>
+    mergeProductionTags([], [], owners.map((o, i) => tag("t" + i, names[i] as string, { owner: o })), check)[0]?.owner;
+  assert.equal(theirOwner(["pSam", "pCy"], survives), "pSam", "both deleted: the first stays, and migrateRows clears it");
+  assert.equal(theirOwner(["pAda", "pBo"], survives), "pAda", "both alive: the first keeps its owner");
+  assert.equal(theirOwner(["pSam", "pCy", "pBo"], survives), "pBo");
+  assert.equal(theirOwner(["pSam", "pAda", "pBo"], survives), "pAda");
+  assert.equal(theirOwner(["", "pSam", "pBo"], survives), "pBo");
+  assert.equal(theirOwner(["pSam", "pBo"]), "pSam", "with no check, as the undo replay calls it, the first owner stays");
+  assert.equal(theirOwner(["", "pSam", "pBo"]), "pSam");
+  const mineOwner = (mine: string[], theirs: string[], check?: (id: string) => boolean) =>
+    mergeProductionTags([], mine.map((o, i) => tag("tm" + i, "ladder", { owner: o })),
+      theirs.map((o, i) => tag("tt" + i, "Ladder", { owner: o })), check)[0];
+  assert.deepEqual(mineOwner(["pAda"], ["pSam"], survives), { cat: "prop", name: "Ladder", owner: "pAda", notes: "", status: "needed", id: "tt0" });
+  assert.equal(mineOwner(["pAda", "pBo"], ["pSam"], survives)?.owner, "pAda");
+  assert.equal(mineOwner(["pSam", "pBo"], [], survives)?.owner, "pBo", "duplicates on my side alone");
+  assert.equal(mineOwner(["pAda"], ["pSam"])?.owner, "pSam");
+  const theirs = [{ id: "pT", name: "ada" }], mine = [{ id: "pM", name: "Ada" }];
+  const known = personSurvives(theirs.concat(mine), mergePeople([], mine, theirs));
+  assert.equal(mineOwner(["pM"], ["pSam"], known)?.owner, "pM", "a live owner known under another id (#283)");
+});
+
 test("production tags: a status only ever rises, and two entries for one name become the first", () => {
   const out = mergeProductionTags([], [tag("t_a", "Ladder", { status: "have", owner: "p1" })],
     [tag("t_b", "ladder", { notes: "6 ft" }), tag("t_a", "Ladder", { status: "sourcing" })]);

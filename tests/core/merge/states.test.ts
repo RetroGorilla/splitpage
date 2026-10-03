@@ -221,7 +221,7 @@ test("a table with no people field merges owners as before: no person counts as 
   const fields = STATE_FIELDS.filter((f) => f.key !== "people");
   const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })] });
   const base = doc(Object.assign({ people: [{ id: "pSam", name: "Sam" }] }, owned("pSam")));
-  const mine = doc(Object.assign({ people: [] }, owned("pAda")));
+  const mine = doc(Object.assign({ people: [{ id: "pAda", name: "Ada" }] }, owned("pAda")));
   const { decode } = fakeDecoder(CELLS);
   const r = mergeStateFields(base, mine, doc(Object.assign({ people: "junk" }, owned("pSam"))), fakePorts(decode, { fields: fields }));
   assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pSam"]);
