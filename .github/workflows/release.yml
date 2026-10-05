@@ -48,9 +48,9 @@ jobs:
       # looking for a signing certificate in the runner's store.
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
@@ -100,7 +100,7 @@ jobs:
           sha256sum "splitpage-$v.zip" "SplitpageDesktopSetup-$v-x64.exe" "SplitpageDesktopSetup-$v-arm64.exe" > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: splitpage-release-${{ steps.version.outputs.version }}
           path: release/
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: splitpage-release-${{ needs.build.outputs.version }}
           path: release
