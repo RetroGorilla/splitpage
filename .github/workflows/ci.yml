@@ -57,9 +57,9 @@ jobs:
       # repo's own files. driver.mjs passes these straight to the browser.
       SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
@@ -150,7 +150,7 @@ jobs:
       # Last, deliberately: a run whose tests failed uploads nothing, so an
       # artifact that exists is one every check above it passed.
       - name: Upload the built app
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: splitpage-app
           path: |
@@ -194,9 +194,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
