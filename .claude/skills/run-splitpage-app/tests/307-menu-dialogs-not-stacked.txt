@@ -161,6 +161,32 @@ expect __toasts() === 'Close the open dialog first.'
 key Escape
 wait __dialogs() === ''
 
+eval __run('about')
+wait __shown('about-modal')
+eval __tidy()
+eval __run('tour')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect !__shown('tour-overlay')
+expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+eval __run('settings')
+wait __shown('settings-modal')
+eval __tidy()
+eval __run('tour')
+sleep 300
+expect __dialogs() === 'settings-modal'
+expect !__shown('tour-overlay')
+expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+eval __run('tour')
+wait __shown('tour-overlay')
+expect __toasts() === ''
+jsclick #tour-skip
+wait !__shown('tour-overlay')
+
 # --- the setup wizard closes itself first, as before --------------------------
 eval __run('setup')
 wait __shown('onboarding-modal')
