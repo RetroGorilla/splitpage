@@ -128,8 +128,11 @@ const states = [];
 const reaped = new Set();
 const runners = [];
 
+const FIRST_FREE_BASE_TENS = 100;
+const LAST_BASE_TENS = 1299;
+
 function randomPortBase() {
-  return 10 * Math.floor(Math.random() * 1300);
+  return 10 * (FIRST_FREE_BASE_TENS + Math.floor(Math.random() * (LAST_BASE_TENS - FIRST_FREE_BASE_TENS + 1)));
 }
 
 function newState() {
