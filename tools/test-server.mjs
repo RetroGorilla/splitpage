@@ -1167,6 +1167,161 @@ try {
   sHeadRO.stop();
 }
 
+const NOT_DOCUMENTS = [
+  ["an empty array", []],
+  ["an array of scenes", [{ title: "Array script", rows: [{ id: "r1" }] }]],
+  ["null", null],
+  ["a number", 42],
+  ["a string", "Untitled Script"],
+  ["true", true],
+  ["false", false]
+];
+
+const sShape = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
+try {
+  const token = (await json(await fetch(sShape.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: PIN })
+  }))).token;
+  const auth = { "Content-Type": "application/json", "x-splitpage-token": token };
+  const docFiles = () => readdirSync(sShape.dataDir).filter((n) => n.endsWith(".json")).sort().join(",");
+  const readAs = async (docId) => await fetch(sShape.base + "api/docs/" + docId, { headers: auth });
+
+  const made = await fetch(sShape.base + "api/docs", {
+    method: "POST", headers: auth,
+    body: JSON.stringify({ state: { title: "Shape check", rows: [{ id: "r1" }] } })
+  });
+  eq("a document that is an object is still created", made.status, 201);
+  const madeBody = await json(made);
+  eq("...at rev 1", madeBody && madeBody.rev, 1);
+  const file = join(sShape.dataDir, madeBody.id + ".json");
+  eq("...and stored as sent", JSON.parse(readFileSync(file, "utf8")).state.title, "Shape check");
+
+  const saved = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+    method: "PUT", headers: auth,
+    body: JSON.stringify({ baseRev: 1, state: { title: "Shape check, saved", rows: [] } })
+  });
+  eq("a save of an object is still 200", saved.status, 200);
+  eq("...at the next rev", (await json(saved)).rev, 2);
+  eq("...and stored as sent", JSON.parse(readFileSync(file, "utf8")).state.title, "Shape check, saved");
+
+  for (const [label, state] of NOT_DOCUMENTS) {
+    {
+      const before = docFiles();
+      const res = await fetch(sShape.base + "api/docs", {
+        method: "POST", headers: auth, body: JSON.stringify({ state, title: "Not a document" })
+      });
+      eq("creating a document from " + label + " is 400", res.status, 400);
+      eq("...saying bad-state", (await json(res) || {}).error, "bad-state");
+      eq("...and stores nothing", docFiles(), before);
+    }
+    {
+      const before = readFileSync(file, "utf8");
+      const res = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+        method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 2, state })
+      });
+      eq("saving " + label + " over a document is 400", res.status, 400);
+      eq("...saying bad-state", (await json(res) || {}).error, "bad-state");
+      eq("...and leaves the stored document as it was", readFileSync(file, "utf8"), before);
+    }
+  }
+
+  {
+    const res = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 2, state: { title: "Still saves", rows: [] } })
+    });
+    eq("after all that the document still saves at the rev it had", res.status, 200);
+    eq("...moving on to the next one", (await json(res)).rev, 3);
+  }
+
+  const stored = (id, state) => {
+    const path = join(sShape.dataDir, id + ".json");
+    writeFileSync(path, JSON.stringify({
+      id, rev: 4, state, updatedAt: "2026-01-01T00:00:00.000Z", updatedBy: "Host"
+    }));
+    return path;
+  };
+
+  {
+    const path = stored("stored-array", [{ title: "Array script" }]);
+    const res = await readAs("stored-array");
+    eq("an array stored before this check still reads", res.status, 200);
+    const body = await json(res);
+    check("...handing back the array as it is", Array.isArray(body && body.state) && body.state[0].title === "Array script",
+      JSON.stringify(body));
+    eq("...at its rev", body && body.rev, 4);
+
+    const list = await json(await fetch(sShape.base + "api/docs", { headers: auth }));
+    const row = (list.docs || []).find((d) => d.id === "stored-array");
+    eq("...the picker still lists it, as an untitled script", row && row.title, "Untitled Script");
+    eq("...with no scenes", row && row.rows, 0);
+    let head = null;
+    for (let i = 0; i < 40 && !head; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      try { head = headOfFile(path); } catch { head = null; }
+    }
+    check("...and gives it a head line as it does any old document", !!head);
+    check("...without changing what is stored", Array.isArray(JSON.parse(readFileSync(path, "utf8")).state) &&
+      JSON.parse(readFileSync(path, "utf8")).state[0].title === "Array script");
+
+    const stale = await fetch(sShape.base + "api/docs/stored-array", {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 3, state: { title: "Late", rows: [] } })
+    });
+    eq("a stale save against it is still a conflict", stale.status, 409);
+    check("...handing back what is stored", Array.isArray((await json(stale) || {}).state));
+
+    const arrayOver = await fetch(sShape.base + "api/docs/stored-array", {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 4, state: [] })
+    });
+    eq("saving another array over it is refused too", arrayOver.status, 400);
+
+    const fixed = await fetch(sShape.base + "api/docs/stored-array", {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 4, state: { title: "Mended", rows: [] } })
+    });
+    eq("a save of an object at its rev replaces it", fixed.status, 200);
+    eq("...at the next rev", (await json(fixed)).rev, 5);
+    eq("...and the stored document is an object from then on",
+      JSON.parse(readFileSync(path, "utf8")).state.title, "Mended");
+  }
+
+  const cmtUrl = (docId) => sShape.base + "api/docs/" + docId + "/comments";
+  const note = (id) => ({
+    id, rowId: "r1", field: "audioText", anchorId: id,
+    quotedText: "there", author: "Host", body: "a note", kind: "anchor"
+  });
+
+  for (const [label, state] of NOT_DOCUMENTS) {
+    const id = "stored-" + label.replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
+    const path = stored(id, state);
+    const before = readFileSync(path, "utf8");
+    {
+      const res = await fetch(cmtUrl(id), {
+        method: "POST", headers: auth, body: JSON.stringify({ comment: note("k1") })
+      });
+      eq("a comment on a document stored as " + label + " is 409", res.status, 409);
+      eq("...saying no-state", (await json(res) || {}).error, "no-state");
+    }
+    {
+      const res = await fetch(cmtUrl(id), {
+        method: "POST", headers: auth,
+        body: JSON.stringify({ replyTo: "k1", reply: { id: "kr1", author: "Host", body: "and a reply" } })
+      });
+      eq("a reply on a document stored as " + label + " is 409", res.status, 409);
+      eq("...saying no-state", (await json(res) || {}).error, "no-state");
+    }
+    {
+      const res = await fetch(cmtUrl(id) + "/k1", {
+        method: "PATCH", headers: auth, body: JSON.stringify({ resolved: true })
+      });
+      eq("resolving a comment on a document stored as " + label + " is 409", res.status, 409);
+      eq("...saying no-state", (await json(res) || {}).error, "no-state");
+    }
+    eq("...and none of them writes to it", readFileSync(path, "utf8"), before);
+  }
+} finally {
+  sShape.stop();
+}
+
 const sCmt = await startServer({
   JOIN_PIN: PIN,
   REVIEW_PIN,
