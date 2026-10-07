@@ -97,7 +97,6 @@ export function noteRecovery(next: unknown): ValidatedDocument | null {
 }
 
 export function noteReload(content: ReloadedContent): ValidatedDocument | null {
-  followLiveDocument();
   return session.absorbReload(content);
 }
 
