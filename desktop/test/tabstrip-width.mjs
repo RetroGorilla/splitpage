@@ -167,9 +167,12 @@ async function connectCdp() {
   let wsUrl = null;
   for (let i = 0; i < 60; i++) {
     try {
+      const lines = fs.readFileSync(path.join(userDataDir, "DevToolsActivePort"), "utf8").split("\n");
+      const candidate = lines.length > 1 && /^\d+$/.test(lines[0]) ? Number(lines[0]) : 0;
+      cdpPort = candidate >= 1 && candidate <= 65535 ? candidate : 0;
       if (!cdpPort) {
-        const first = fs.readFileSync(path.join(userDataDir, "DevToolsActivePort"), "utf8").split("\n")[0];
-        cdpPort = Number(first);
+        await sleep(300);
+        continue;
       }
       const r = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
       const list = await r.json();
@@ -339,10 +342,17 @@ async function cleanup() {
     if (ws) ws.close();
   } catch {}
   try {
-    if (browserProc) browserProc.kill();
+    if (browserProc && browserProc.exitCode === null) {
+      const exited = new Promise((resolve) => browserProc.once("exit", resolve));
+      browserProc.kill();
+      await Promise.race([exited, sleep(5000)]);
+    }
   } catch {}
   try {
     if (server) server.close();
+  } catch {}
+  try {
+    if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
   } catch {}
 }
 
