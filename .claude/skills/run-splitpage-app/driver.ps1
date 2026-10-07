@@ -237,6 +237,7 @@ if (!/[?&]wizard=1(&|$)/.test(location.search)) {
 if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = true; }
 window.__splitpageNoRemote = true;
 '@ }
+  if ($FreezeCaches) { $null = Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = 'window.__splitpageFreezeRun = true;' } }
   $null = Send-Cdp 'Log.enable'
 }
 
@@ -704,13 +705,13 @@ try {
       catch { $exit = 1; if (Report-Error $_.Exception) { break } }
     }
   }
-  if ($FreezeCaches -and $script:Ws) {
-    try { $null = Invoke-Js '0' } catch {}
-    Test-FrozenWrites
-  }
   # A run that asserted nothing is a run that proved nothing.
   if ($script:Checks -eq 0 -and $script:Failures -eq 0) {
     Out1 'WARNING: no expect/wait assertions ran - this proved nothing.'
+  }
+  if ($FreezeCaches -and $script:Ws -and ($script:Checks -gt 0 -or $script:Failures -gt 0)) {
+    try { $null = Invoke-Js '0' } catch {}
+    Test-FrozenWrites
   }
   Out1 ''
   Out1 (Get-ResultLine)

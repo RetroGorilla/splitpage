@@ -279,6 +279,7 @@ if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = t
 window.__splitpageNoRemote = true;
 `,
   });
+  if (opts.freezeCaches) await send("Page.addScriptToEvaluateOnNewDocument", { source: "window.__splitpageFreezeRun = true;" });
   await send("Log.enable");
 }
 
@@ -642,7 +643,10 @@ async function main() {
         if (e.fatal) break;
       }
     }
-    if (opts.freezeCaches && ws) {
+    if (checks === 0 && failures === 0) {
+      out1("WARNING: no expect/wait assertions ran - this proved nothing.");
+    }
+    if (opts.freezeCaches && ws && (checks > 0 || failures > 0)) {
       try { await js("0"); } catch {}
       checks++;
       const hits = frozenWrites(consoleLines);
@@ -652,9 +656,6 @@ async function main() {
         out1("FAIL a write into a frozen cache value threw");
         for (const h of hits.slice(0, 5)) out1(`     ${h}`);
       }
-    }
-    if (checks === 0 && failures === 0) {
-      out1("WARNING: no expect/wait assertions ran - this proved nothing.");
     }
     const passed = checks - failures;
     let summary = `RESULT: ${passed}/${checks} checks passed`;

@@ -13,11 +13,14 @@ const {
   productionEntries,
   productionIndexStats,
   productionReaders,
-  resetProductionIndexStats
+  resetProductionIndexStats,
+  TAG_CATEGORIES
 } = await import("../js/07-production-tags.js");
 const { cellOf } = await import("../legacy/richtext.ts");
 const { cacheSeal, freezeCachesAsked } = await import("../legacy/cache-freeze.ts");
-const { deepFreeze } = await import("../core/document/freeze.ts");
+const { deepLock } = await import("../core/document/freeze.ts");
+const { runInThisContext } = await import("node:vm");
+const sloppyWrite = (body) => runInThisContext("(function (o) { " + body + " })");
 const { deriveProductionIndex } = await import("../core/production/tags.ts");
 const { seededHealRounds } = await import("./_heal-rounds.mjs");
 
@@ -44,7 +47,7 @@ function frozenThrough(value) {
 }
 
 test("the flag is read from the page's query: freeze-caches=1 and nothing else turns it on", () => {
-  assert.equal(cacheSeal, deepFreeze);
+  assert.equal(cacheSeal, deepLock);
   assert.equal(freezeCachesAsked("?freeze-caches=1"), true);
   assert.equal(freezeCachesAsked("?wizard=1&freeze-caches=1"), true);
   assert.equal(freezeCachesAsked(""), false);
@@ -92,6 +95,33 @@ test("with the flag, the index and the entries it presents are deep-frozen, and 
   entries.reverse();
   entries.push({ key: "junk" });
   assert.deepEqual(productionEntries().map((e) => e.key), ["prop kettle", "location kitchen"], "the array a caller gets is still its own");
+});
+
+test("with the flag, sloppy code's plain assignments, deletes and length writes into a cached value throw too", () => {
+  load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
+  const entry = productionEntries()[0];
+  const index = currentProductionIndex();
+  const cell = cellOf("<b>sloppy</b> probe");
+  const writes = [
+    [entry, "o.id = 'x';"],
+    [entry, "delete o.mentions;"],
+    [entry, "o.mentions.length = 0;"],
+    [index, "o.rowSig[0] = 'x';"],
+    [index, "o.tagSig.length = 3;"],
+    [cell, "o[0].text = 'x';"],
+    [cell, "delete o[0].marks.b;"]
+  ];
+  writes.forEach(([target, body]) => assert.throws(() => sloppyWrite(body)(target), TypeError, body));
+  assert.equal(productionEntries()[0].id, null);
+  assert.equal(cellOf("<b>sloppy</b> probe")[0].text, "sloppy");
+});
+
+test("with the flag, the shared tag categories an entry points to are not frozen; the entry holds a locked copy", () => {
+  load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
+  const entry = productionEntries()[0];
+  assert.ok(Object.isFrozen(entry.cat));
+  assert.deepEqual(entry.cat, TAG_CATEGORIES.find((c) => c.id === "prop"));
+  assert.equal(TAG_CATEGORIES.some((c) => Object.isFrozen(c)), false);
 });
 
 test("with the flag, prose edits keep the index without writing into it", () => {

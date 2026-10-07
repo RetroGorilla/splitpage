@@ -971,10 +971,24 @@ export function __init() {
   document.head.appendChild(iconStyle);
 
   window.__cacheTest = {
+    index: currentProductionIndex,
     frozen: function () {
       var html = "Put the " + '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle">kettle</span> on.';
       return [cellOf(html), productionReaders.tagsInField(html), productionReaders.cueNamesInField(html), currentProductionIndex()]
         .map(function (v) { return !!v && Object.isFrozen(v); });
+    },
+    writes: function () {
+      var html = '<strong>Probe</strong> the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="probe lamp">lamp</span>.';
+      var cell = cellOf(html), tags = productionReaders.tagsInField(html);
+      return [
+        function () { cell[0].text = "x"; },
+        function () { delete cell[0].marks.b; },
+        function () { cell.length = 0; },
+        function () { tags[0].name = "x"; },
+        function () { Object.defineProperty(tags[0], "text", { value: "x" }); }
+      ].map(function (write) {
+        try { write(); return false; } catch (e) { return e instanceof TypeError; }
+      });
     }
   };
 
