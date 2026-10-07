@@ -142,10 +142,11 @@ threw, is kept from the browser, as 3.1's handlers did by calling
 
 ## The legacy shim
 
-Until the bootstrap of milestone 7 exists, one registry instance lives in
-`src/legacy/app-actions.ts` for the numbered modules to share. Its `report`
-rethrows the error on a microtask, so a failing action still reaches the
-browser as an uncaught error, as it did before.
+Until the explicit wiring step of milestone 7 and the composition root of 4.x
+exist, one registry instance lives in `src/legacy/app-actions.ts` for the
+numbered modules to share. Its `report` rethrows the error on a microtask, so a
+failing action still reaches the browser as an uncaught error, as it did
+before.
 
 `src/legacy/this-document-actions.ts` (the command menu's "This document"
 group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts`,
