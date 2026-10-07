@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { deepFreeze, noFreeze } from "../../../src/core/document/freeze.ts";
 import type { ImageRef } from "../../../src/core/document/ports.ts";
 import { storedImageAttributes, storedImageMarkup } from "../../../src/core/document/text-policy.ts";
 import type { StoredImageRef } from "../../../src/core/document/text-policy.ts";
@@ -101,21 +102,36 @@ test("decode sanitises once, reports media, and hands its options to normalizeCe
 test("a cell reader decodes each HTML once and keeps what it read", () => {
   const ports = fakePorts();
   const rt = adapterWith(ports);
-  const read = rt.createCellReader();
+  const read = rt.createCellReader(noFreeze);
   const html = '<span class="cmt-anchor">a</span>';
   const first = read(html);
   assert.equal(read(html), first);
   assert.deepEqual(ports.log, [["id", "c"]]);
   assert.equal(read(null), read(""));
   assert.equal(read(42), read("42"));
-  const other = rt.createCellReader();
+  const other = rt.createCellReader(noFreeze);
   assert.notEqual(other(html), first);
   assert.deepEqual(ports.log, [["id", "c"], ["id", "c"]]);
+  assert.equal(Object.isFrozen(first), false);
+});
+
+test("with freezing on, a cell reader hands out its runs deep-frozen, and a write into them throws a TypeError", () => {
+  const read = adapterWith(fakePorts()).createCellReader(deepFreeze);
+  const html = '<strong>bold</strong> <span class="cmt-anchor" data-cmt="c1">said</span>';
+  const cell = read(html);
+  const before = JSON.stringify(cell);
+  assert.ok(cell.length >= 2);
+  assert.throws(() => { (cell as unknown[]).push({ text: "x", marks: {} }); }, TypeError);
+  assert.throws(() => { (cell[0] as { text: string }).text = "x"; }, TypeError);
+  assert.throws(() => { (cell[0]?.marks as { i?: true }).i = true; }, TypeError);
+  const withComment = cell.find((r) => r.marks.cmt);
+  assert.throws(() => { (withComment?.marks.cmt as string[]).push("c2"); }, TypeError);
+  assert.equal(JSON.stringify(read(html)), before);
 });
 
 test("a cell reader forgets everything once it holds more than two million characters", () => {
   const rt = adapterWith(fakePorts());
-  const read = rt.createCellReader();
+  const read = rt.createCellReader(deepFreeze);
   const atBudget = "x".repeat(2000000);
   const big = read(atBudget);
   const small = read("y");

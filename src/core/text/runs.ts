@@ -18,7 +18,7 @@ export type Marks = {
   cue?: true;
   href?: string;
   tag?: string;
-  cmt?: string[];
+  cmt?: readonly string[];
 };
 
 export type MarkName = keyof Marks;
@@ -83,7 +83,7 @@ export function sameMarks(a: Marks, b: Marks): boolean {
   for (let i = 0; i < ka.length; i++) {
     const k = ka[i] as MarkName;
     if (k === "cmt") {
-      const ac = a.cmt as string[];
+      const ac = a.cmt as readonly string[];
       if (!b.cmt || ac.length !== b.cmt.length) return false;
       for (let j = 0; j < ac.length; j++) if (ac[j] !== b.cmt[j]) return false;
     } else if (a[k] !== b[k]) {

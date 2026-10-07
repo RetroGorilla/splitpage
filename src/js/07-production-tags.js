@@ -42,7 +42,7 @@ import {
   missingRegistryTags as missingRegistryTagsIn,
   newRegistryTag,
   planRegistryHealing,
-  productionIndexFresh,
+  refreshedProductionIndex,
   registryEntry as registryEntryIn,
   registrySignature,
   retagCell,
@@ -51,6 +51,7 @@ import {
 } from "../core/production/tags.ts";
 import { replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 export {
@@ -237,14 +238,18 @@ function presentEntry(e) {
   };
 }
 
+function holdIndex(core, entries, state) {
+  prodIndex = { core: cacheSeal(core), entries: cacheSeal(entries), state: state };
+  return prodIndex;
+}
+
 function productionIndex() {
-  if (prodIndex && prodIndex.state === S.state && productionIndexFresh(prodIndex.core, S.state, productionReaders)) {
-    return prodIndex;
-  }
+  var kept = prodIndex && prodIndex.state === S.state ? refreshedProductionIndex(prodIndex.core, S.state, productionReaders) : null;
+  if (kept && kept === prodIndex.core) return prodIndex;
+  if (kept) return holdIndex(kept, prodIndex.entries, prodIndex.state);
   prodIndexDerived++;
   var core = deriveProductionIndex(S.state, productionReaders);
-  prodIndex = { core: core, entries: core.entries.map(presentEntry), state: S.state };
-  return prodIndex;
+  return holdIndex(core, core.entries.map(presentEntry), S.state);
 }
 
 export function productionEntries() {
@@ -261,13 +266,15 @@ function adoptRegisteredIds(ix) {
     var reg = registryEntry(t.catId, t.name);
     if (reg) ids[registryKey(t.catId, t.name)] = reg.id;
   });
-  ix.core.entries.forEach(function (e, i) {
-    if (!(e.key in ids)) return;
-    e.id = ids[e.key];
-    ix.entries[i].id = ids[e.key];
+  function withId(e) {
+    return e.key in ids ? Object.assign({}, e, { id: ids[e.key] }) : e;
+  }
+  var core = Object.assign({}, ix.core, {
+    entries: ix.core.entries.map(withId),
+    unregistered: [],
+    tagSig: registrySignature(S.state.productionTags)
   });
-  ix.core.unregistered = [];
-  ix.core.tagSig = registrySignature(S.state.productionTags);
+  holdIndex(core, ix.entries.map(withId), ix.state);
 }
 
 export function healTagRegistry() {

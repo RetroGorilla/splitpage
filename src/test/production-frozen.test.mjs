@@ -1,0 +1,130 @@
+import "./_dom.mjs";
+import test from "node:test";
+import assert from "node:assert/strict";
+
+globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1");
+
+const { S } = await import("../js/_state.js");
+const { migrateRows } = await import("../js/02-state.js");
+const {
+  currentProductionIndex,
+  healTagRegistry,
+  mintTagId,
+  productionEntries,
+  productionIndexStats,
+  productionReaders,
+  resetProductionIndexStats
+} = await import("../js/07-production-tags.js");
+const { cellOf } = await import("../legacy/richtext.ts");
+const { cacheSeal, freezeCachesAsked } = await import("../legacy/cache-freeze.ts");
+const { deepFreeze } = await import("../core/document/freeze.ts");
+const { deriveProductionIndex } = await import("../core/production/tags.ts");
+const { seededHealRounds } = await import("./_heal-rounds.mjs");
+
+const tag = (cat, name) =>
+  `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
+const row = (id, audioText, visualText) => ({ id, status: "todo", audioText, visualText });
+
+function load(rows, productionTags) {
+  S.state = migrateRows({ schema: 2, title: "Frozen", docId: "d" + "7".repeat(32), rows, comments: [] });
+  S.state.productionTags = productionTags;
+  resetProductionIndexStats();
+}
+
+function frozenThrough(value) {
+  const seen = new Set();
+  const open = [];
+  (function walk(v, path) {
+    if (!v || typeof v !== "object" || seen.has(v)) return;
+    seen.add(v);
+    if (!Object.isFrozen(v)) open.push(path);
+    for (const [k, x] of Object.entries(v)) walk(x, path + "." + k);
+  })(value, "value");
+  return open;
+}
+
+test("the flag is read from the page's query: freeze-caches=1 and nothing else turns it on", () => {
+  assert.equal(cacheSeal, deepFreeze);
+  assert.equal(freezeCachesAsked("?freeze-caches=1"), true);
+  assert.equal(freezeCachesAsked("?wizard=1&freeze-caches=1"), true);
+  assert.equal(freezeCachesAsked(""), false);
+  assert.equal(freezeCachesAsked("?freeze-caches=0"), false);
+  assert.equal(freezeCachesAsked("?freeze-caches"), false);
+  assert.equal(freezeCachesAsked("?freeze-caches=true"), false);
+});
+
+test("with the flag, the cell reader and every production reader hand out deep-frozen values, and a write throws a TypeError", () => {
+  const html = "<strong>Put</strong> the " + tag("prop", "kettle") + " on.<br>B-roll: steam " + tag("prop", "mug") +
+    '<br><span class="audio-cue">SFX: whistle</span>';
+  const values = {
+    cell: cellOf(html),
+    tags: productionReaders.tagsInField(html),
+    cues: productionReaders.cueNamesInField(html),
+    broll: productionReaders.brollInField(html),
+    props: productionReaders.brollPropsInField(html)
+  };
+  for (const [name, value] of Object.entries(values)) {
+    assert.ok(value.length > 0, name + " read something");
+    assert.deepEqual(frozenThrough(value), [], name + " is frozen all the way down");
+    assert.throws(() => { value.push(value[0]); }, TypeError, name);
+  }
+  assert.throws(() => { values.cell[0].text = "x"; }, TypeError);
+  assert.throws(() => { values.cell[0].marks.b = undefined; }, TypeError);
+  assert.throws(() => { values.tags[0].name = "x"; }, TypeError);
+  assert.throws(() => { values.broll[0].desc = "x"; }, TypeError);
+  assert.throws(() => { values.props[0].push("x"); }, TypeError);
+  assert.equal(cellOf(html), values.cell);
+  assert.equal(productionReaders.tagsInField(html), values.tags);
+});
+
+test("with the flag, the index and the entries it presents are deep-frozen, and a write throws a TypeError", () => {
+  load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "Wide on the " + tag("location", "kitchen"))],
+    [{ id: "t_kettle", cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
+  const entries = productionEntries();
+  const index = currentProductionIndex();
+  assert.deepEqual(frozenThrough(index), []);
+  entries.forEach((e) => assert.deepEqual(frozenThrough(e), [], e.key));
+  assert.throws(() => { index.entries[0].id = "x"; }, TypeError);
+  assert.throws(() => { index.rowSig[1] = "x"; }, TypeError);
+  assert.throws(() => { index.unregistered.push({}); }, TypeError);
+  assert.throws(() => { entries[0].id = "x"; }, TypeError);
+  assert.throws(() => { entries[0].mentions.push({}); }, TypeError);
+  entries.reverse();
+  entries.push({ key: "junk" });
+  assert.deepEqual(productionEntries().map((e) => e.key), ["prop kettle", "location kitchen"], "the array a caller gets is still its own");
+});
+
+test("with the flag, prose edits keep the index without writing into it", () => {
+  load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
+  const index = currentProductionIndex();
+  const sig = JSON.stringify(index);
+  S.state.rows[0].audioText = "Now put the " + tag("prop", "kettle") + " on, slowly.";
+  assert.doesNotThrow(() => productionEntries());
+  assert.equal(productionIndexStats().derived, 1, "a prose edit re-derived the index");
+  assert.equal(JSON.stringify(index), sig, "the index handed out before the edit is unchanged");
+  assert.equal(currentProductionIndex().rowSig[2], S.state.rows[0].audioText);
+  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
+});
+
+test("with the flag, a heal leaves what it handed out alone, and both views take the new ids (#326)", () => {
+  load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "Wide on the " + tag("location", "kitchen"))],
+    [{ id: "t_kitchen", cat: "location", name: "kitchen", owner: "", notes: "", status: "have" }]);
+  const shown = productionEntries();
+  const index = currentProductionIndex();
+  assert.equal(healTagRegistry(), 1);
+  assert.equal(productionIndexStats().derived, 1, "the heal re-derived the index");
+  assert.deepEqual(shown.map((e) => [e.key, e.id]), [["location kitchen", "t_kitchen"], ["prop kettle", null]]);
+  assert.deepEqual(index.entries.map((e) => e.id), ["t_kitchen", null]);
+  assert.equal(index.unregistered.length, 1);
+  assert.deepEqual(productionEntries().map((e) => [e.key, e.id]), [["location kitchen", "t_kitchen"], ["prop kettle", mintTagId("prop", "kettle")]]);
+  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
+  assert.deepEqual(frozenThrough(currentProductionIndex()), []);
+  assert.equal(healTagRegistry(), 0);
+});
+
+test("with the flag, seeded heals, edits and second heals throw nothing and both views agree with a fresh derivation (#326)", () => {
+  const { healedRounds, retitledRounds, idsMoved } = seededHealRounds(0x35, 80);
+  assert.ok(healedRounds >= 30, "only " + healedRounds + " rounds healed anything");
+  assert.ok(retitledRounds >= 10, "only " + retitledRounds + " rounds retitled a cue");
+  assert.ok(idsMoved >= 10, "only " + idsMoved + " second heals gave an entry a new id");
+});
