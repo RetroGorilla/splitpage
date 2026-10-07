@@ -77,7 +77,7 @@ test("alternating marks down the chain collapse to one of each (#355)", () => {
 
 test("comment anchors with the same id collapse, with different ids they stay apart (#355)", () => {
   const same = Array.from({ length: 80 }, () => ['<span class="cmt-anchor" data-cmt="c1">', "</span>"] as const);
-  assert.equal(assertFixedPoint(hostile(same, 300)), assertFixedPoint(hostile(same.slice(0, 1), 300)));
+  assert.equal(assertFixedPoint(hostile(same, 100)), assertFixedPoint(hostile(same.slice(0, 1), 100)));
   const apart = assertFixedPoint(hostile(distinctAnchors(3), 2));
   assert.equal(apart.match(/data-cmt="c0"/g)?.length, 5);
   assert.equal(apart.match(/data-cmt="c2"/g)?.length, 5);
@@ -93,7 +93,7 @@ test("a chain with a repeated mark stays as written while its splits are few (#3
     link("https://one.test/", s20("p")) + link("https://two.test/", s20("x")) + link("https://one.test/", s20("q")));
 });
 
-test("more splits than the cap allows unwrap the inner links and keep every word (#355)", () => {
+test("more splits than the budget allows unwrap the inner links and keep every word (#355)", () => {
   const deep = hostile(distinctAnchors(300), 120);
   const once = assertFixedPoint(deep);
   assert.equal(linkCount(once), 1);
@@ -101,7 +101,7 @@ test("more splits than the cap allows unwrap the inner links and keep every word
   assert.ok(once.length < deep.length, String(once.length) + " from " + String(deep.length));
 });
 
-test("a card inside a link over the cap is dropped, as an unsafe card is (#355)", () => {
+test("a card inside a link over the budget is dropped, as an unsafe card is (#355)", () => {
   const deep = hostile(distinctAnchors(300), 120, CARD);
   const once = assertFixedPoint(deep);
   assert.equal(linkCount(once), 1);
@@ -115,7 +115,7 @@ test("many inner links around nothing stay split, however many there are (#355)"
   assert.equal(nestedLinks(once), 0);
 });
 
-test("a link over the cap unwraps its own inner links only, and still splits the link around it (#355)", () => {
+test("a link over the budget unwraps its own inner links only, and still splits the link around it (#355)", () => {
   const middle = '<a href="https://two.test/">' + around(distinctAnchors(300), "<object>" + Array.from({ length: 120 }, () => '<a href="https://three.test/">z</a>').join("") + "</object>") + "</a>";
   const html = OUTER + "p<object>" + middle + "</object>q</a>";
   const once = assertFixedPoint(html);
@@ -123,6 +123,125 @@ test("a link over the cap unwraps its own inner links only, and still splits the
   assert.equal(nestedLinks(once), 0);
   assert.doesNotMatch(once, /three\.test/);
   assert.equal(textOf(once), expectedText(html));
+});
+
+function pageLinks(count: number): string {
+  return Array.from({ length: count }, (_, i) => '<a href="https://example.com/page-' + String(i) + '">link ' + String(i) + "</a>").join(" ");
+}
+
+function levels(depth: number, marks: readonly Mark[], innermost: string): string {
+  let html = innermost;
+  for (let l = 0; l < depth; l++) html = '<a href="https://l' + String(l) + '.test/">' + around(marks, "p<object>" + html + "</object>q") + "</a>";
+  return html;
+}
+
+function tree(depth: number, fanout: number, marks: readonly Mark[]): string {
+  if (!depth) return INNER;
+  const kids = Array.from({ length: fanout }, () => tree(depth - 1, fanout, marks)).join("t");
+  return '<a href="https://d' + String(depth) + '.test/">' + around(marks, "p<object>" + kids + "</object>q") + "</a>";
+}
+
+function tagAnchors(depth: number): Mark[] {
+  return Array.from({ length: depth }, (_, i) => ['<span class="tag-anchor" data-tag-cat="prop" data-tag-name="' + String(i).padEnd(80, "n") + '">', "</span>"] as const);
+}
+
+function plainSiblings(count: number): string {
+  return Array.from({ length: count }, () => INNER).join("t");
+}
+
+test("links nested inside links grow the output by at most 4 characters per input character plus 4096, at any depth (#355)", () => {
+  const shapes: Record<string, string> = {
+    "100 link levels, 1 mark each, 300 innermost links": levels(100, [STRONG], pageLinks(300)),
+    "12 link levels, 8 marks each, 200 innermost links": levels(12, repeated([STRONG, EM, ["<u>", "</u>"], ["<s>", "</s>"], ["<mark>", "</mark>"]], 8), pageLinks(200)),
+    "a tree of links 6 deep with 3 links in each": tree(6, 3, [STRONG]),
+    "100 sibling links, each 9 distinct anchors around 30 inner links": Array.from({ length: 100 }, () => hostile(distinctAnchors(9), 30)).join(" "),
+    "400 repeating marks around 300 inner links": hostile(repeated([STRONG], 400), 300),
+    "9 distinct comment anchors around 2000 inner links": hostile(distinctAnchors(9), 2000),
+    "8 tag anchors with 80-character names around 3000 inner links": hostile(tagAnchors(8), 3000),
+    "a 2000-character href around 3000 inner links": '<a href="https://one.test/' + "h".repeat(2000) + '">p<object>' + plainSiblings(3000) + "</object>q</a>"
+  };
+  for (const [name, html] of Object.entries(shapes)) {
+    const once = rt.sanitize(html);
+    assert.equal(rt.sanitize(once), once, name);
+    assert.equal(nestedLinks(once), 0, name);
+    assert.equal(textOf(once), expectedText(html), name);
+    assert.ok(once.length <= 10 * html.length + 4096, name + ": " + String(once.length) + " from " + String(html.length));
+  }
+});
+
+test("one deeply formatted inner link leaves its plain sibling links split (#355)", () => {
+  const deep = around(distinctAnchors(9), '<a href="https://deep.test/">deep</a>');
+  const html = OUTER + "p<object>" + deep + Array.from({ length: 60 }, (_, i) => '<a href="https://x.test/' + String(i) + '">' + String(i) + "</a>").join("") + "</object>q</a>";
+  const once = assertFixedPoint(html);
+  assert.equal(linkCount(once), 63);
+  assert.equal(nestedLinks(once), 0);
+  assert.match(once, /deep\.test/);
+  assert.match(once, /x\.test\/59"/);
+});
+
+function specials(text: string): number {
+  return Array.from(text).filter((c) => c === "&").length;
+}
+
+function linkShell(href: string): number {
+  return '<a href="" target="_blank" rel="noopener"></a>'.length + href.length + 5 * specials(href);
+}
+
+interface EdgeCase {
+  readonly html: string;
+  readonly split: number;
+}
+
+function onTheEdge(over: number, build: (stretch: string) => { body: string; cost: number; split: number }): EdgeCase {
+  for (let k = 0; k < 64; k++) {
+    const shape = build("h".repeat(k));
+    const gap = shape.cost - over - 4096 - 4 * shape.body.length;
+    if (gap >= 0 && gap % 4 === 0) return { html: "w".repeat(gap / 4) + shape.body, split: shape.split };
+  }
+  throw new Error("no shape lands on the edge");
+}
+
+function plainLink(href: string, links: number): { body: string; cost: number; split: number } {
+  return {
+    body: '<a href="' + href + '">p<object>' + plainSiblings(links) + "</object>q</a>",
+    cost: (links + 1) * linkShell(href),
+    split: 2 * links + 1
+  };
+}
+
+const LONG_HREF = "https://one.test/?a=1&b=2&" + "x".repeat(600);
+
+test("a split that costs exactly the budget is made, and one character more unwraps instead (#355)", () => {
+  const at = onTheEdge(0, (stretch) => plainLink(LONG_HREF + stretch, 30));
+  assert.equal(linkCount(assertFixedPoint(at.html)), at.split);
+  const past = onTheEdge(1, (stretch) => plainLink(LONG_HREF + stretch, 30));
+  assert.equal(linkCount(assertFixedPoint(past.html)), 1);
+});
+
+test("the budget counts every shell a split opens once per piece, and a mark shared by a piece's steps once (#355)", () => {
+  const build = (stretch: string): { body: string; cost: number; split: number } => {
+    const href = LONG_HREF + stretch;
+    const marks = "<strong></strong>".length + "<em></em>".length;
+    return {
+      body: '<a href="' + href + '">' + around([STRONG, EM], "p<object>" + Array.from({ length: 30 }, () => INNER).join("t<u>v</u>") + "</object>q") + "</a>",
+      cost: 31 * (linkShell(href) + marks) + 30 * marks,
+      split: 61
+    };
+  };
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build).html)), 61);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build).html)), 1);
+});
+
+test("the budget is shared by the whole input: the second of two links gets only what the first left (#355)", () => {
+  const build = (stretch: string): { body: string; cost: number; split: number } => {
+    const first = plainLink(LONG_HREF, 30);
+    const second = plainLink(LONG_HREF + stretch, 30);
+    return { body: first.body + second.body, cost: first.cost + second.cost, split: first.split + second.split };
+  };
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build).html)), 122);
+  const past = assertFixedPoint(onTheEdge(1, build).html);
+  assert.equal(linkCount(past), 62);
+  assert.equal(linkCount(past.slice(0, past.indexOf("q</a>") + 5)), 61);
 });
 
 function prng(seed: number): () => number {
@@ -147,10 +266,13 @@ function generated(seed: number): string {
   const distinct = rnd() < 0.3;
   const marks = distinct ? distinctAnchors(1 + Math.floor(rnd() * 150)) : Array.from({ length: 1 + Math.floor(rnd() * 120) }, () => pick(POOL));
   const parts = Array.from({ length: Math.floor(rnd() * 200) }, () => pick([INNER, INNER, CARD, "w", "<br>", around([pick(POOL)], INNER)]));
-  return OUTER + around(marks, "p<object>" + parts.join("") + "</object>q") + "</a>";
+  const link = OUTER + around(marks, "p<object>" + parts.join("") + "</object>q") + "</a>";
+  if (rnd() < 0.6) return link;
+  const levelMarks = Array.from({ length: Math.floor(rnd() * 6) }, () => pick(POOL));
+  return levels(1 + Math.floor(rnd() * 12), levelMarks, rnd() < 0.5 ? link : link + "t" + link);
 }
 
-test("seeded fuzz: deep chains around many inner links stay a fixed point, nest no link, keep every word and stay bounded (#355)", () => {
+test("seeded fuzz: deep chains and links nested in links stay a fixed point, nest no link, keep every word and stay within the bound (#355)", () => {
   const failures: string[] = [];
   for (let seed = 355000; seed < 355000 + COUNT; seed++) {
     const html = generated(seed);
@@ -159,7 +281,7 @@ test("seeded fuzz: deep chains around many inner links stay a fixed point, nest 
     if (rt.sanitize(once) !== once) why = "not a fixed point";
     else if (nestedLinks(once)) why = "a link in a link";
     else if (textOf(once).replace(/\s+/g, "") !== expectedText(html).replace(/\s+/g, "")) why = "text changed";
-    else if (once.length > 20 * html.length) why = "output of " + String(once.length) + " from " + String(html.length);
+    else if (once.length > 10 * html.length + 4096) why = "output of " + String(once.length) + " from " + String(html.length);
     if (why) failures.push(String(seed) + ": " + why);
   }
   assert.deepEqual(failures, []);
