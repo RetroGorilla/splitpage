@@ -149,7 +149,7 @@ function plainSiblings(count: number): string {
   return Array.from({ length: count }, () => INNER).join("t");
 }
 
-test("links nested inside links grow the output by at most 4 characters per input character plus 4096, at any depth (#355)", () => {
+test("links nested inside links keep the output within 14 code units per input code unit plus 4096, at any depth (#355)", () => {
   const shapes: Record<string, string> = {
     "100 link levels, 1 mark each, 300 innermost links": levels(100, [STRONG], pageLinks(300)),
     "12 link levels, 8 marks each, 200 innermost links": levels(12, repeated([STRONG, EM, ["<u>", "</u>"], ["<s>", "</s>"], ["<mark>", "</mark>"]], 8), pageLinks(200)),
@@ -165,7 +165,7 @@ test("links nested inside links grow the output by at most 4 characters per inpu
     assert.equal(rt.sanitize(once), once, name);
     assert.equal(nestedLinks(once), 0, name);
     assert.equal(textOf(once), expectedText(html), name);
-    assert.ok(once.length <= 10 * html.length + 4096, name + ": " + String(once.length) + " from " + String(html.length));
+    assert.ok(once.length <= 14 * html.length + 4096, name + ": " + String(once.length) + " from " + String(html.length));
   }
 });
 
@@ -179,12 +179,38 @@ test("one deeply formatted inner link leaves its plain sibling links split (#355
   assert.match(once, /x\.test\/59"/);
 });
 
+const TRACKING = "https://click.news.example.com/ls/click?utm_source=newsletter&utm_medium=email&utm_campaign=autumn&upn=".padEnd(400, "aZ3_9-Qx");
+
+function newsletter(cells: number, href: string): string {
+  const cell = (i: number): string => '<td>Shop the <a href="https://x.co/' + String(i) + '">range ' + String(i) + "</a> while it lasts</td>";
+  const rows = Array.from({ length: Math.ceil(cells / 5) }, (_, r) =>
+    "<tr>" + Array.from({ length: Math.min(5, cells - 5 * r) }, (_, c) => cell(5 * r + c)).join("") + "</tr>");
+  return '<a href="' + href.split("&").join("&amp;") + '"><table><tbody>' + rows.join("") + "</tbody></table></a>";
+}
+
+test("a newsletter's 400-character tracking link round a 50-cell table of product links keeps every link (#355)", () => {
+  const html = newsletter(50, TRACKING);
+  const once = assertFixedPoint(html);
+  assert.equal(linkCount(once), 101);
+  assert.equal(nestedLinks(once), 0);
+  assert.equal(once.split('href="https://x.co/').length - 1, 50);
+  assert.equal(once.split("&amp;upn=aZ3_9-Qx").length - 1, 51);
+  assert.equal(textOf(once), expectedText(html));
+});
+
+const NBSP = String.fromCharCode(0xa0);
+const ESCAPED: readonly string[] = ["&", '"', "<", ">", NBSP];
+
 function specials(text: string): number {
-  return Array.from(text).filter((c) => c === "&").length;
+  return Array.from(text).filter((c) => ESCAPED.includes(c)).length;
+}
+
+function shell(tag: string, attributes: readonly (readonly [string, string])[]): number {
+  return 2 * tag.length + 5 + attributes.reduce((n, [name, value]) => n + name.length + 4 + value.length + 5 * specials(value), 0);
 }
 
 function linkShell(href: string): number {
-  return '<a href="" target="_blank" rel="noopener"></a>'.length + href.length + 5 * specials(href);
+  return shell("a", [["href", href], ["target", "_blank"], ["rel", "noopener"]]);
 }
 
 interface Shape {
@@ -192,13 +218,27 @@ interface Shape {
   readonly cost: number;
 }
 
-function onTheEdge(over: number, build: (stretch: string) => Shape): string {
+interface Edge {
+  readonly html: string;
+  readonly stretch: string;
+}
+
+function edgeOf(over: number, build: (stretch: string) => Shape): Edge {
   for (let k = 0; k < 64; k++) {
-    const shape = build("h".repeat(k));
-    const gap = shape.cost - over - 4096 - 4 * shape.body.length;
-    if (gap >= 0 && gap % 4 === 0) return "w".repeat(gap / 4) + shape.body;
+    const stretch = "h".repeat(k);
+    const shape = build(stretch);
+    const gap = shape.cost - over - 4096 - 8 * shape.body.length;
+    if (gap >= 0 && gap % 8 === 0) return { html: "w".repeat(gap / 8) + shape.body, stretch };
   }
   throw new Error("no shape lands on the edge");
+}
+
+function onTheEdge(over: number, build: (stretch: string) => Shape): string {
+  return edgeOf(over, build).html;
+}
+
+function sanitisedLink(href: string, inner: string): string {
+  return '<a href="' + href.split("&").join("&amp;") + '" target="_blank" rel="noopener">' + inner + "</a>";
 }
 
 function plainLink(href: string, links: number): Shape {
@@ -216,7 +256,7 @@ test("a split that costs exactly the budget is made, and one character more unwr
   assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build))), 1);
 });
 
-test("the budget counts every shell a split opens once per piece, and a mark shared by a piece's steps once (#355)", () => {
+test("the budget counts every shell a split opens once per piece, and a mark shared by a piece's steps once, and the split built is the one counted (#355)", () => {
   const build = (stretch: string): Shape => {
     const href = LONG_HREF + stretch;
     const marks = "<strong></strong>".length + "<em></em>".length;
@@ -225,7 +265,30 @@ test("the budget counts every shell a split opens once per piece, and a mark sha
       cost: 31 * (linkShell(href) + marks) + 30 * marks
     };
   };
-  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build))), 61);
+  const edge = edgeOf(0, build);
+  const href = LONG_HREF + edge.stretch;
+  const marked = (inner: string): string => "<strong><em>" + inner + "</em></strong>";
+  const point = sanitisedLink("https://two.test/", marked("x"));
+  assert.equal(assertFixedPoint(edge.html), edge.html.slice(0, edge.html.indexOf("<a")) + sanitisedLink(href, marked("p")) + point +
+    (sanitisedLink(href, marked("t<u>v</u>")) + point).repeat(29) + sanitisedLink(href, marked("q")));
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build))), 1);
+});
+
+test("the budget counts each &, \", <, > and no-break space in a cloned attribute value as 6 code units (#355)", () => {
+  const name = '"t>a' + NBSP + "g&n<m";
+  const anchor = shell("span", [["class", "tag-anchor"], ["data-tag-cat", "prop"], ["data-tag-name", name], ["contenteditable", "false"]]);
+  const quoted = (value: string): string => "'" + value.split("&").join("&amp;").split(NBSP).join("&nbsp;") + "'";
+  const build = (stretch: string): Shape => {
+    const href = 'https://one.test/?q="a' + NBSP + "b&c<d>e&" + "x".repeat(600) + stretch;
+    return {
+      body: "<a href=" + quoted(href) + '><span class="tag-anchor" data-tag-cat="prop" data-tag-name=' + quoted(name) + ">p<object>" +
+        plainSiblings(30) + "</object>q</span></a>",
+      cost: 31 * (linkShell(href) + anchor) + 30 * anchor
+    };
+  };
+  const at = assertFixedPoint(onTheEdge(0, build));
+  assert.equal(linkCount(at), 61);
+  assert.equal(at.split("data-tag-name=").length - 1, 61);
   assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build))), 1);
 });
 
@@ -318,7 +381,7 @@ test("seeded fuzz: deep chains and links nested in links stay a fixed point, nes
     if (rt.sanitize(once) !== once) why = "not a fixed point";
     else if (nestedLinks(once)) why = "a link in a link";
     else if (textOf(once).replace(/\s+/g, "") !== expectedText(html).replace(/\s+/g, "")) why = "text changed";
-    else if (once.length > 10 * html.length + 4096) why = "output of " + String(once.length) + " from " + String(html.length);
+    else if (once.length > 14 * html.length + 4096) why = "output of " + String(once.length) + " from " + String(html.length);
     if (why) failures.push(String(seed) + ": " + why);
   }
   assert.deepEqual(failures, []);
