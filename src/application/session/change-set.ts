@@ -17,6 +17,7 @@ export interface ChangeSet {
   readonly runsMoved: boolean;
   readonly docFields: readonly string[];
   readonly derive: readonly string[];
+  readonly saveNow: boolean;
 }
 
 export interface SessionChange {
@@ -34,7 +35,8 @@ export const NO_CHANGES: ChangeSet = Object.freeze({
   rowsMoved: false,
   runsMoved: false,
   docFields: Object.freeze([]),
-  derive: Object.freeze([])
+  derive: Object.freeze([]),
+  saveNow: false
 });
 
 export const WHOLE_DOCUMENT: ChangeSet = Object.freeze({ ...NO_CHANGES, whole: true });
@@ -48,7 +50,8 @@ export function changeSet(parts: Partial<ChangeSet>): ChangeSet {
     rowsMoved: parts.rowsMoved ?? false,
     runsMoved: parts.runsMoved ?? false,
     docFields: Object.freeze((parts.docFields ?? []).slice()),
-    derive: Object.freeze((parts.derive ?? []).slice())
+    derive: Object.freeze((parts.derive ?? []).slice()),
+    saveNow: parts.saveNow ?? false
   });
 }
 

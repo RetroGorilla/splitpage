@@ -31,12 +31,26 @@ expect window.__hostedTest.reviewMode() === false
 expect document.body.classList.contains('is-review') === false
 expect document.getElementById('review-chip').hidden === true
 expect document.querySelectorAll('#rows .cell-editable[contenteditable="true"]').length == 4
+click #rows .row:nth-child(1) .row-read
+wait document.activeElement && document.activeElement.classList.contains('row-read-input')
+type 1:30
 
 # --- the server says this session is a review session ------------------------
 eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
 sleep 300
 expect window.__hostedTest.reviewMode() === true
 expect document.body.classList.contains('is-review')
+expect document.activeElement && document.activeElement.classList.contains('row-read-input')
+eval (function(){ window.__lenRow = JSON.stringify(window.__splitpageFormats.state().rows[0]); window.__lenUndo = JSON.stringify(window.__undoTest.sizes()); window.__lenDirty = window.__hostedTest.dirty(); document.getElementById('toast-host').textContent = ''; return true; })()
+key Enter
+sleep 300
+expect document.getElementById('toast-host').textContent === 'This is a review copy — comment on a scene instead of changing its length.'
+expect document.querySelectorAll('#toast-host .toast.warn').length === 1
+expect document.querySelector('#rows .row-read-input') === null
+expect document.activeElement === document.querySelector('#rows .row:nth-child(1) .row-read')
+expect JSON.stringify(window.__splitpageFormats.state().rows[0]) === window.__lenRow
+expect JSON.stringify(window.__undoTest.sizes()) === window.__lenUndo
+expect window.__hostedTest.dirty() === window.__lenDirty
 
 # --- and the editor says so, rather than silently dropping edits ------------
 expect document.getElementById('review-chip').hidden === false
