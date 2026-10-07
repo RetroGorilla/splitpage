@@ -1,8 +1,7 @@
-import type { StampPorts } from "../application/commands/scene-length.ts";
 import { createDocumentSession } from "../application/session/document-session.ts";
 import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView } from "../application/session/document-session.ts";
 import type { SessionChange } from "../application/session/change-set.ts";
-import type { Capability } from "../application/session/ports.ts";
+import type { Capability, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";

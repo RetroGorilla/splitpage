@@ -43,7 +43,7 @@ expect document.body.classList.contains('is-review')
 expect document.activeElement && document.activeElement.classList.contains('row-read-input')
 eval (function(){ window.__lenRow = JSON.stringify(window.__splitpageFormats.state().rows[0]); window.__lenUndo = JSON.stringify(window.__undoTest.sizes()); window.__lenDirty = window.__hostedTest.dirty(); document.getElementById('toast-host').textContent = ''; return true; })()
 key Enter
-sleep 300
+wait document.querySelectorAll('#toast-host .toast').length > 0
 expect document.getElementById('toast-host').textContent === 'This is a review copy — comment on a scene instead of changing its length.'
 expect document.querySelectorAll('#toast-host .toast.warn').length === 1
 expect document.querySelector('#rows .row-read-input') === null
