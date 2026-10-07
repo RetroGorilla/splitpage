@@ -116,7 +116,7 @@ async function restoreSnapshot(id, opts) {
 
     adoptRestoredState(parsed);
     resetProductionPanelState();
-    markDirty();
+    markAbsorbedDirty("recovery");
     render();
     closeHistoryPanel();
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
