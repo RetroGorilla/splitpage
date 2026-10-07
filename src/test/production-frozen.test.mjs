@@ -152,9 +152,11 @@ test("with the flag, a heal leaves what it handed out alone, and both views take
   assert.equal(healTagRegistry(), 0);
 });
 
-test("with the flag, seeded heals, edits and second heals throw nothing and both views agree with a fresh derivation (#326)", () => {
-  const { healedRounds, retitledRounds, idsMoved } = seededHealRounds(0x35, 80);
+test("with the flag, seeded heals, edits and second heals throw nothing and both views agree with a fresh derivation (#326, #377)", () => {
+  const { healedRounds, retitledRounds, idsMoved, refusedRounds, reorderedHeals } = seededHealRounds(0x35, 80);
   assert.ok(healedRounds >= 30, "only " + healedRounds + " rounds healed anything");
   assert.ok(retitledRounds >= 10, "only " + retitledRounds + " rounds retitled a cue");
   assert.ok(idsMoved >= 10, "only " + idsMoved + " second heals gave an entry a new id");
+  assert.ok(refusedRounds >= 30, "only " + refusedRounds + " rounds kept a name the registry refuses");
+  assert.ok(reorderedHeals >= 30, "only " + reorderedHeals + " heals moved a refused name after the names they took in");
 });

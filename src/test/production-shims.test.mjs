@@ -176,25 +176,43 @@ test("after a heal the cached index is what a fresh derivation of the healed doc
   assert.equal(productionIndexStats().derived, derivedBefore);
 });
 
-test("a name the registry refuses stays unregistered after a heal, in its place in both cached views (#326)", () => {
-  load({ rows: [row("r1", tag("prop", "kettle") + " " + tag("prop", "⁠") + " " + tag("prop", "mug"), "")] });
+test("a name the registry refuses stays unregistered after a heal, after the names it took in, as a fresh derivation lists it (#377)", () => {
+  const refused = String.fromCharCode(0x2060);
+  load({ rows: [row("r1", tag("prop", "kettle") + " " + tag("prop", refused) + " " + tag("prop", "mug"), "")] });
   S.state.productionTags = [];
   const shown = productionEntries();
-  assert.deepEqual(shown.map((e) => e.name), ["kettle", "⁠", "mug"]);
-  assert.equal(healTagRegistry(), 3);
+  assert.deepEqual(shown.map((e) => e.name), ["kettle", refused, "mug"]);
+  const derivedBefore = productionIndexStats().derived;
+  assert.equal(healTagRegistry(), 2, "the heal counts the names it took in, not the one the registry refused");
+  assert.equal(productionIndexStats().derived, derivedBefore, "the heal re-derived the index");
   assert.deepEqual(S.state.productionTags.map((t) => t.name), ["kettle", "mug"]);
-  const want = [["kettle", mintTagId("prop", "kettle")], ["⁠", null], ["mug", mintTagId("prop", "mug")]];
+  const want = [["kettle", mintTagId("prop", "kettle")], ["mug", mintTagId("prop", "mug")], [refused, null]];
   assert.deepEqual(currentProductionIndex().entries.map((e) => [e.name, e.id]), want);
   assert.deepEqual(productionEntries().map((e) => [e.name, e.id]), want);
-  assert.deepEqual(shown.map((e) => [e.name, e.id]), [["kettle", null], ["⁠", null], ["mug", null]], "the entries handed out before the heal keep the ids they were handed out with");
-  assert.deepEqual(currentProductionIndex().unregistered, []);
+  assert.deepEqual(currentProductionIndex().unregistered.map((t) => t.name), [refused]);
+  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
+  assert.deepEqual(shown.map((e) => [e.name, e.id]), [["kettle", null], [refused, null], ["mug", null]], "the entries handed out before the heal keep the ids they were handed out with");
   assert.equal(healTagRegistry(), 0);
+  assert.equal(productionIndexStats().derived, derivedBefore, "a heal with nothing to take in re-derived the index");
   assert.deepEqual(currentProductionIndex().entries.map((e) => [e.name, e.id]), want);
+  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
 });
 
-test("seeded documents: after a heal, and after an edit and a second heal, both index views agree with a fresh derivation, and entries handed out before keep their ids (#326)", () => {
-  const { healedRounds, retitledRounds, idsMoved } = seededHealRounds(326, 80);
+test("a heal that only meets names the registry refuses counts nothing and keeps the index (#377)", () => {
+  load({ rows: [row("r1", tag("prop", String.fromCharCode(0xad)) + " " + tag("cast", String.fromCharCode(0x200d)), tag("prop", "kettle"))] });
+  S.state.productionTags = [{ id: "t_kettle", cat: "prop", name: "kettle", owner: "", notes: "", status: "have" }];
+  const index = currentProductionIndex();
+  assert.equal(index.unregistered.length, 2);
+  assert.equal(healTagRegistry(), 0);
+  assert.equal(currentProductionIndex(), index, "a heal that took nothing in replaced the index");
+  assert.deepEqual(S.state.productionTags.map((t) => t.id), ["t_kettle"]);
+});
+
+test("seeded documents: after a heal, and after an edit and a second heal, both index views agree with a fresh derivation, entries handed out before keep their ids, and a heal right after counts nothing (#326, #377)", () => {
+  const { healedRounds, retitledRounds, idsMoved, refusedRounds, reorderedHeals } = seededHealRounds(326, 80);
   assert.ok(healedRounds >= 30, "only " + healedRounds + " rounds healed anything");
   assert.ok(retitledRounds >= 10, "only " + retitledRounds + " rounds retitled a cue");
   assert.ok(idsMoved >= 10, "only " + idsMoved + " second heals gave an entry a new id");
+  assert.ok(refusedRounds >= 30, "only " + refusedRounds + " rounds kept a name the registry refuses");
+  assert.ok(reorderedHeals >= 30, "only " + reorderedHeals + " heals moved a refused name after the names they took in");
 });
