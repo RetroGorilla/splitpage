@@ -278,6 +278,13 @@ export function rawDocument(r: Random): unknown {
   return JSON.parse(JSON.stringify(rawValue(r)));
 }
 
+export function rawObject(r: Random): object {
+  for (;;) {
+    const raw = rawDocument(r);
+    if (raw && typeof raw === "object") return raw;
+  }
+}
+
 function rawValue(r: Random): Json {
   if (chance(r, 0.04)) {
     return pick(r, [
@@ -407,10 +414,25 @@ export type FixedPoint =
   | { readonly kind: "trimmed at a cap"; readonly paths: readonly string[] }
   | { readonly kind: "changed"; readonly paths: readonly string[] };
 
+const CAPPED_NAMES: readonly (readonly [RegExp, number])[] = [
+  [/^\.people\[\d+\]\.name$/, 60],
+  [/^\.productionTags\[\d+\]\.name$/, 80],
+  [/^\.brollShots\[\d+\]\.name$/, 200],
+  [/^\.brollShots\[\d+\]\.(?:location|props\[\d+\]\.name)$/, 80],
+  [/^\.comments\[\d+\]\.(?:author|resolvedBy|assignee|replies\[\d+\]\.author)$/, 80],
+  [/^\.rows\[\d+\]\.updatedBy$/, 80],
+  [/^\.rows\[\d+\]\.(?:imageName|moreImages\[\d+\]\.name)$/, 200]
+];
+
+function capOf(at: string): number | null {
+  const found = CAPPED_NAMES.find(function ([path]) { return path.test(at); });
+  return found ? found[1] : null;
+}
+
 function compare(a: unknown, b: unknown, at: string, changed: string[], trimmed: string[]): void {
   if (JSON.stringify(a) === JSON.stringify(b)) return;
   if (typeof a === "string" && typeof b === "string") {
-    if (b === a.trimEnd() && CAPS.indexOf(a.length) !== -1) trimmed.push(at);
+    if (b === a.trimEnd() && a.length === capOf(at)) trimmed.push(at);
     else changed.push(at + " " + JSON.stringify(a).slice(0, 120) + " became " + JSON.stringify(b).slice(0, 120));
     return;
   }
@@ -438,12 +460,14 @@ export function fixedPointOf(doc: unknown, migrate: (raw: unknown) => unknown): 
   return { kind: "fixed" };
 }
 
-export const KNOWN_TRIM_AT_CAP = "migrateRows cuts a name at its cap after trimming it, so a space can end it";
-export const KNOWN_ARRAY_AS_OBJECT = "migrateRows takes an array for an object: as the document, or as a scene, comment, reply, person, tag or shot";
+export const KNOWN_TRIM_AT_CAP = "migrateRows cuts a name at its cap after trimming it, so a space can end it (#406)";
+export const KNOWN_ARRAY_AS_OBJECT = "migrateRows takes an array for an object: as the document, or as a scene, comment, reply, person, tag or shot (#407)";
 
-export const KNOWN_PRIMITIVE_THROW = "migrateRows throws a TypeError on an object whose toString or valueOf is not a function";
+export const KNOWN_PRIMITIVE_THROW = "migrateRows throws a TypeError on an object whose toString or valueOf is not a function (#408)";
 
-export const KNOWN_REPLY_TIME_THROW = "mergeStates throws a TypeError sorting the replies of a comment both sides hold when a reply's createdAt is not a string, which migrateRows keeps";
+export const KNOWN_REPLY_TIME_THROW = "mergeStates throws a TypeError sorting the replies of a comment both sides hold when a reply's createdAt is not a string, which migrateRows keeps (#409)";
+
+export const KNOWN_REV_NAN = "a merge with a raw theirs whose rev is not a number makes the merged rev NaN, which migrateRows keeps and JSON saves as null (#412)";
 
 export function knownThrow(error: unknown): string | null {
   if (!(error instanceof TypeError)) return null;
@@ -462,9 +486,15 @@ export function judge(doc: unknown, migrate: (raw: unknown) => unknown, allowed:
   const all = documentProblems(doc);
   let problems = all.filter(function (p) { return !p.endsWith(ARRAY); });
   if (problems.length < all.length) known.push(KNOWN_ARRAY_AS_OBJECT);
+  const nanRev = isBag(doc) && Number.isNaN(doc.rev);
+  if (nanRev) {
+    known.push(KNOWN_REV_NAN);
+    problems = problems.filter(function (p) { return p !== "rev"; });
+  }
   const fixed = fixedPointOf(doc, migrate);
   if (fixed.kind === "changed") {
     const unexplained = fixed.paths.filter(function (p) {
+      if (nanRev && p === ".rev") return false;
       const why = allowed(p);
       if (why && known.indexOf(why) === -1) known.push(why);
       return !why;

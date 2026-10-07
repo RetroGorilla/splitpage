@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import {
-  TABLE_304, chance, judge, knownThrow, pick, rawDocument, seeded, table304Document, text, upTo
+  KNOWN_REV_NAN, TABLE_304, chance, judge, knownThrow, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 
 await bootApp();
@@ -26,12 +26,10 @@ session.subscribe((c) => heard.push(c.kind));
 const held = () => session.read((doc) => doc);
 const migrate = (raw) => migrateRows(raw);
 
-const KNOWN_RELOAD_UNMIGRATED = "a reload in place writes the file's scenes into the held document without migrating them";
-const KNOWN_SHOT_AUDIO_REF = "the b-roll repair at render writes shots migrateRows then changes: an audioRef with angle brackets, or a shot with no name";
+const KNOWN_RELOAD_UNMIGRATED = "a reload in place writes the file's scenes into the held document without migrating them (#411)";
+const KNOWN_SHOT_AUDIO_REF = "the b-roll repair at render writes shots migrateRows then changes: an audioRef with angle brackets, or a shot with no name (#325)";
 
-const KNOWN_REV_NAN = "a merge with a raw theirs whose rev is not a number makes the merged rev NaN, which migrateRows keeps and JSON saves as null";
-
-const KNOWN_HALF_APPLIED = "a comment createdAt that is not a string makes render throw after applyMerge handed the document to the session and S.state, so the merge's report, dirty marking and autosave never run";
+const KNOWN_HALF_APPLIED = "a comment createdAt that is not a string makes render throw after applyMerge handed the document to the session and S.state, so the merge's report, dirty marking and autosave never run (#410)";
 
 const SHOT_AUDIO_REF = /^\.brollShots\[\d+\]\.audioRef "[^]*<[^]*>/;
 
@@ -132,12 +130,8 @@ async function through(name, raw, where, tally, spoilMine) {
   assert.equal(session.epoch(), epoch + (entry.opens ? 1 : 0), where + ": epoch");
   assert.equal(session.generation(), gen, where + ": generation");
   assert.equal(held(), S.state, where + ": the session holds the document the app shows");
-  if (name !== "draft") assert.equal(JSON.stringify(before), beforeText, where + ": the replaced document was not written into");
+  assert.equal(JSON.stringify(before), beforeText, where + ": the replaced document was not written into");
   let judged = S.state;
-  if (typeof judged.rev === "number" && !Number.isFinite(judged.rev)) {
-    bump(tally.known, KNOWN_REV_NAN);
-    judged = { ...judged, rev: 0 };
-  }
   if (Array.isArray(judged.brollShots) && judged.brollShots.some((b) => b && b.name === "")) {
     bump(tally.known, KNOWN_SHOT_AUDIO_REF);
     judged = { ...judged, brollShots: judged.brollShots.filter((b) => !b || b.name !== "") };
@@ -145,13 +139,6 @@ async function through(name, raw, where, tally, spoilMine) {
   const verdict = judge(judged, migrate, allowed);
   assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
   verdict.known.forEach((k) => bump(tally.known, k));
-}
-
-function rawObject(r) {
-  for (;;) {
-    const raw = rawDocument(r);
-    if (raw && typeof raw === "object") return raw;
-  }
 }
 
 test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point or a typed failure", async (t) => {
@@ -259,7 +246,7 @@ test("booted app: seeded files reloaded in place keep the epoch and generation, 
   assert.ok((tally.kinds.reload || 0) >= RELOADS / 2, JSON.stringify(tally));
 });
 
-test("today a reload in place leaves the reloaded scenes unmigrated: no status, so the held document is not a migrateRows fixed point", async () => {
+test("today a reload in place leaves the reloaded scenes unmigrated: no status, so the held document is not a migrateRows fixed point (#411)", async () => {
   await openImport();
   await reloadWith({ body: "Wide\tPut the #kettle on.\nClose\tTwo.", name: "reload.txt" });
   const doc = held();
@@ -270,7 +257,7 @@ test("today a reload in place leaves the reloaded scenes unmigrated: no status, 
   assert.deepEqual(migrateRows(cloneState(doc)).rows.map((row) => row.status), ["todo", "todo"]);
 });
 
-test("today a shot's audioRef taken from a line that reads like a tag keeps the brackets, and the next migration strips them", async () => {
+test("today a shot's audioRef taken from a line that reads like a tag keeps the brackets, and the next migration strips them (#325)", async () => {
   const raw = migrateRows({
     schema: 2, title: "Brackets", docId: "d" + "5".repeat(32),
     rows: [{ id: "r1", visualText: "B-roll: harbour", audioText: "Say &lt;b&gt;now&lt;/b&gt;", status: "todo" }]
@@ -282,7 +269,7 @@ test("today a shot's audioRef taken from a line that reads like a tag keeps the 
   assert.deepEqual(judge(held(), migrate, allowed), { problems: [], known: [KNOWN_SHOT_AUDIO_REF] });
 });
 
-test("today a bare \"B-roll:\" line makes the render-time repair add a shot with no name, which the next migration drops", async () => {
+test("today a bare \"B-roll:\" line makes the render-time repair add a shot with no name, which the next migration drops (#325)", async () => {
   const raw = migrateRows({
     schema: 2, title: "Bare", docId: "d" + "6".repeat(32),
     rows: [{ id: "r1", visualText: "B-roll:", audioText: "One.", status: "todo" }]
@@ -292,7 +279,7 @@ test("today a bare \"B-roll:\" line makes the render-time repair add a shot with
   assert.deepEqual(migrateRows(cloneState(held())).brollShots, []);
 });
 
-test("today seed 400's recovery still finds the shot with no name", async () => {
+test("today seed 400's recovery still finds the shot with no name (#325)", async () => {
   const tally = { kinds: {}, known: {}, typed: {} };
   const r = seeded(0x3100 + 400);
   settle(startingDocument("Seed 400"));
@@ -304,7 +291,7 @@ test("today seed 400's recovery still finds the shot with no name", async () => 
   assert.ok((tally.known[KNOWN_SHOT_AUDIO_REF] || 0) > 0, JSON.stringify(tally));
 });
 
-test("today a comment createdAt whose toString is not a function survives migration, and render then throws out of applyMerge after the session and S.state took the document", async () => {
+test("today a comment createdAt whose toString is not a function survives migration, and render then throws out of applyMerge after the session and S.state took the document (#410)", async () => {
   settle(startingDocument("Half"));
   const before = S.state;
   const theirs = table304Document("Theirs");
@@ -325,7 +312,7 @@ test("today a comment createdAt whose toString is not a function survives migrat
   settle(startingDocument("After half"));
 });
 
-test("today seed 467's recovery still finds the half-applied merge", async () => {
+test("today seed 467's recovery still finds the half-applied merge (#410)", async () => {
   const tally = { kinds: {}, known: {}, typed: {} };
   const r = seeded(0x3100 + 467);
   settle(startingDocument("Seed 467"));
@@ -337,7 +324,7 @@ test("today seed 467's recovery still finds the half-applied merge", async () =>
   assert.ok((tally.known[KNOWN_HALF_APPLIED] || 0) > 0, JSON.stringify(tally));
 });
 
-test("today a merge with a raw theirs whose rev is a string leaves the session holding rev NaN", async () => {
+test("today a merge with a raw theirs whose rev is a string leaves the session holding rev NaN (#412)", async () => {
   settle(startingDocument("Rev"));
   const theirs = table304Document("Theirs");
   theirs.rev = "seven";
@@ -348,7 +335,7 @@ test("today a merge with a raw theirs whose rev is a string leaves the session h
   assert.equal(migrateRows(cloneState(S.state)).rev, 0);
 });
 
-test("today seed 21's merge still finds the NaN rev", async () => {
+test("today seed 21's merge still finds the NaN rev (#412)", async () => {
   const tally = { kinds: {}, known: {}, typed: {} };
   const r = seeded(0x3100 + 21);
   settle(startingDocument("Seed 21"));
@@ -360,7 +347,7 @@ test("today seed 21's merge still finds the NaN rev", async () => {
   assert.ok((tally.known[KNOWN_REV_NAN] || 0) > 0, JSON.stringify(tally));
 });
 
-test("today the reload seed that found it still finds it", async () => {
+test("today the reload seed that found it still finds it (#411)", async () => {
   const r = seeded(0x3200 + 1);
   await openImport();
   await reloadWith(fileText(r));
