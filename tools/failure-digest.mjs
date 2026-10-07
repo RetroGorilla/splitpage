@@ -83,11 +83,11 @@ function selectLines(lines, blocks, limit) {
     for (const i of take) shown.set(i, "  . ");
   }
   const body = [...shown.keys()].sort((a, b) => a - b).map((i) => shown.get(i) + clip(lines[i]));
-  return { body, cut: mainTotal - mainShown + ctxTotal - ctxShown };
+  return { body, shown: new Set(shown.keys()), cut: mainTotal - mainShown + ctxTotal - ctxShown };
 }
 
-function tailLines(lines, count, prefix) {
-  return lines.flatMap((l, i) => (l.trim() === "" ? [] : [i])).slice(-count).map((i) => prefix + clip(lines[i]));
+function tailLines(lines, count, prefix, skip = new Set()) {
+  return lines.flatMap((l, i) => (l.trim() === "" ? [] : [i])).slice(-count).filter((i) => !skip.has(i)).map((i) => prefix + clip(lines[i]));
 }
 
 function failureSection(suite, lines, errLines, judged, v, logPath, limit) {
@@ -96,12 +96,12 @@ function failureSection(suite, lines, errLines, judged, v, logPath, limit) {
   const reason = judged.reason && !v.timedOut ?" (" + judged.reason + ")" : "";
   const out = [`== suite ${number ? number + " " : ""}${suite.name}: ${headline}${reason}`];
   const blocks = failureBlocks(lines);
-  const { body, cut } = selectLines(lines, blocks, limit);
+  const { body, shown, cut } = selectLines(lines, blocks, limit);
   out.push(...body);
   if (cut > 0) out.push(`  ... ${cut} more line(s) cut; full log: ${logPath}`);
   const abnormal = v.timedOut || suite.out === null || resultLine(lines) === null;
   if (abnormal || blocks.length === 0) {
-    out.push(...(suite.out === null ? ["  . (no log was written)"] : tailLines(lines, OUT_TAIL, "  . ")));
+    out.push(...(suite.out === null ? ["  . (no log was written)"] : tailLines(lines, OUT_TAIL, "  . ", shown)));
     if (abnormal) out.push(...tailLines(errLines, ERR_TAIL, "  e "));
   }
   return out;
@@ -154,11 +154,50 @@ export function buildDigest({ suites, logPath = (s) => s.name, limit = SECTION_L
   return { text: out.join("\n") + "\n", checks, failedChecks, failedSuites };
 }
 
+const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+const isCount = (v) => Number.isInteger(v) && v >= 0;
+
+export function validateVerdicts(verdicts, suiteNames = null) {
+  if (!isObject(verdicts)) throw new Error("verdicts must be a JSON object with a suites list");
+  const problems = [];
+  if (typeof verdicts.timeoutSec !== "number" || !Number.isFinite(verdicts.timeoutSec) || verdicts.timeoutSec < 0) problems.push('"timeoutSec" must be a non-negative number');
+  if (!Array.isArray(verdicts.suites)) problems.push('"suites" must be a list');
+  else {
+    verdicts.suites.forEach((s, i) => {
+      const at = `suites[${i}]` + (isObject(s) && typeof s.name === "string" && s.name !== "" ? ` (${s.name})` : "");
+      if (!isObject(s)) { problems.push(`${at} must be an object`); return; }
+      if (typeof s.name !== "string" || s.name === "") problems.push(`${at}: "name" must be a non-empty string`);
+      if (typeof s.failed !== "boolean") problems.push(`${at}: "failed" must be true or false`);
+      if (typeof s.timedOut !== "boolean") problems.push(`${at}: "timedOut" must be true or false`);
+      if (!isCount(s.checks)) problems.push(`${at}: "checks" must be a whole number, 0 or more`);
+      if (!isCount(s.failedChecks)) problems.push(`${at}: "failedChecks" must be a whole number, 0 or more`);
+      else if (isCount(s.checks) && s.failedChecks > s.checks) problems.push(`${at}: "failedChecks" is more than "checks"`);
+      if (s.failed === false && isCount(s.failedChecks) && s.failedChecks > 0) problems.push(`${at}: "failed" is false but "failedChecks" is ${s.failedChecks}`);
+      if (s.failed === false && s.timedOut === true) problems.push(`${at}: "timedOut" is true but "failed" is false`);
+    });
+    const seen = new Set();
+    const repeated = new Set();
+    for (const s of verdicts.suites) {
+      if (!isObject(s) || typeof s.name !== "string" || s.name === "") continue;
+      if (seen.has(s.name)) repeated.add(s.name);
+      seen.add(s.name);
+    }
+    for (const name of repeated) problems.push(`"${name}" has a verdict more than once`);
+    if (suiteNames !== null) {
+      const wanted = new Set(suiteNames);
+      for (const name of seen) if (!wanted.has(name)) problems.push(`"${name}" has a verdict but is not in the suite list`);
+      for (const name of wanted) if (!seen.has(name)) problems.push(`"${name}" is in the suite list but has no verdict`);
+    }
+  }
+  if (problems.length) throw new Error("invalid verdicts: " + problems.join("; "));
+}
+
 function readLog(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : null;
 }
 
 export function digestFromLogDir(dir, names, { limit = SECTION_LIMIT, verdicts = null } = {}) {
+  if (verdicts !== null) validateVerdicts(verdicts, names);
   const byName = new Map((verdicts?.suites ?? []).map((s) => [s.name, s]));
   const suites = names.map((name) => ({
     name,
@@ -167,6 +206,15 @@ export function digestFromLogDir(dir, names, { limit = SECTION_LIMIT, verdicts =
     verdict: byName.get(name)
   }));
   return buildDigest({ suites, logPath: (s) => join(dir, s.name + ".out.txt"), limit, timeoutSec: verdicts?.timeoutSec ?? null });
+}
+
+function readVerdicts(path) {
+  if (!existsSync(path)) throw new Error(`verdicts file not found: ${path}`);
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    throw new Error(`verdicts file is not valid JSON (${path}): ${error.message}`, { cause: error });
+  }
 }
 
 function parseCli(argv) {
@@ -181,7 +229,12 @@ if (isMain(import.meta.url)) {
     console.error("usage: node tools/failure-digest.mjs --logs DIR --out FILE --suites name1,name2 [--verdicts FILE]");
     process.exit(2);
   }
-  const verdicts = args.verdicts && existsSync(args.verdicts) ? JSON.parse(readFileSync(args.verdicts, "utf8")) : null;
-  const { text } = digestFromLogDir(args.logs, args.suites.split(",").filter(Boolean), { verdicts });
-  writeFileSync(args.out, text);
+  try {
+    const verdicts = args.verdicts ? readVerdicts(args.verdicts) : null;
+    const { text } = digestFromLogDir(args.logs, args.suites.split(",").filter(Boolean), { verdicts });
+    writeFileSync(args.out, text);
+  } catch (error) {
+    console.error("failure-digest: " + error.message);
+    process.exit(1);
+  }
 }
