@@ -207,7 +207,11 @@ async function openImport() {
 async function reloadWith(file) {
   disk = new File([file.body], file.name, { lastModified: Date.now() });
   handle.name = file.name;
+  const host = document.getElementById("toast-host");
+  const shown = new Set(host.children);
   await reloadFileFromDisk();
+  const failed = [...host.children].filter((el) => !shown.has(el) && el.classList.contains("error"));
+  assert.deepEqual(failed.map((el) => el.textContent), [], file.name + ": the reload threw and showed an error");
 }
 
 test("booted app: seeded files reloaded in place keep the epoch and generation, and end in the same document with the file's scenes or a typed refusal", async (t) => {
@@ -248,6 +252,26 @@ test("a reload in place migrates the reloaded scenes: each has its status, and t
   assert.equal(held(), doc);
   assert.deepEqual(doc.rows.map((row) => row.status), ["todo", "todo"]);
   assert.deepEqual(judge(doc, migrate, allowed), { problems: [], known: [] });
+});
+
+test("a reload in place takes the title from the file's first heading (#411)", async () => {
+  await openImport();
+  const doc = S.state;
+  assert.equal(doc.title, "reload");
+  await reloadWith({ body: "# Harbour at dawn\n\nWide\tOne.\nClose\tTwo.", name: "reload.md" });
+  assert.equal(S.state, doc);
+  assert.equal(held(), doc);
+  assert.equal(doc.title, "Harbour at dawn");
+});
+
+test("a reload in place of a file with no heading takes the title from the file's name (#411)", async () => {
+  await openImport();
+  const doc = S.state;
+  assert.equal(doc.title, "reload");
+  await reloadWith({ body: "Wide\tOne.\nClose\tTwo.", name: "Kettle notes.txt" });
+  assert.equal(S.state, doc);
+  assert.equal(held(), doc);
+  assert.equal(doc.title, "Kettle notes");
 });
 
 test("today a shot's audioRef taken from a line that reads like a tag keeps the brackets, and the next migration strips them (#325)", async () => {
