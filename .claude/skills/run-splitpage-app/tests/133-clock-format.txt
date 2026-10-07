@@ -57,7 +57,11 @@ expect localStorage.getItem('splitpage-clock') === null
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 key Escape
 wait !window.__settingsTest.isOpen()
-eval (function(){window.__setClock(26*3600000);window.__settingsTest.refreshSaveStatus();return true;})()
+eval (function(){window.__setClock(26*3600000);return true;})()
+expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
+mouse hover ({x: 5, y: 5})
+mouse hover (function(){var r=document.getElementById('save-status').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
+expect document.getElementById('btn-save').title.indexOf(window.__tip()) === 0
 expect window.__tip() === 'Last saved to clock.md at ' + new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(window.__savedAt)) + '.'
 eval (function(){Date.now = window.__realNow;return true;})()
 

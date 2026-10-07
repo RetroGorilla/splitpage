@@ -1537,6 +1537,9 @@ function init() {
   });
 
   document.getElementById("btn-save").addEventListener("click", saveFromButton);
+  ["btn-save", "save-status", "wr-save-status"].forEach(function (id) {
+    document.getElementById(id).addEventListener("mouseenter", updateSaveStatus);
+  });
   document.getElementById("btn-present").addEventListener("click", function () { runFromButton("present"); });
 
   document.getElementById("btn-file").addEventListener("click", function (e) {
