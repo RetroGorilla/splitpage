@@ -275,7 +275,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Tests:** browser `13-onboarding.txt` (cites "invariant #30").
 - **Owner:** `src/bootstrap` · **Milestone:** 7 · **Class:** keep
 - **Replacement:** —
-- **Acceptance:** `13-onboarding.txt` passes with the new composition root. Bootstrap test: when a document arrives by file, link or restore, the wizard is never constructed.
+- **Acceptance:** `13-onboarding.txt` passes with milestone 7's explicit wiring step. Bootstrap test: when a document arrives by file, link or restore, the wizard is never constructed.
 
 ### INV-31 — A `.splitpage` file is the migrated state, pictures inline
 
