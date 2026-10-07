@@ -450,9 +450,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
   if (opts.reload) {
     flushEdits();
-    S.state.rows = newRows;
-    S.state.title = openedTitle;
-    noteReload();
+    noteReload({ title: openedTitle, rows: newRows });
   } else {
     S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
     setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
