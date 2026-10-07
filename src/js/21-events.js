@@ -1131,7 +1131,7 @@ function init() {
     updateSaveStatus();
 
     if (applied.report) {
-      reportMerge(applied.report);
+      reportMerge(applied.report, { kind: "recovery" });
     } else if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
       showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
     }

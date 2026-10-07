@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import type { Command } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, cellEdit, changeSet } from "../../src/application/session/change-set.ts";
-import { harness, rawScript } from "./session-fakes.ts";
+import { harness, rawScript, runConfined, writesOutside } from "./session-fakes.ts";
 
 function setAudio(rowId: string, text: string): Command {
   return {
@@ -54,23 +54,23 @@ function audioOf(h: ReturnType<typeof harness>, rowId: string): unknown {
 
 test("E2: an accepted command makes one generation transition, records undo once and runs one effect pass, in that order", () => {
   const h = opened();
-  const out = h.session.run(setAudio("r1", "Every evening."));
+  const out = runConfined(h.session,setAudio("r1", "Every evening."));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: cellEdit("r1", "audioText", ["production"]) });
   assert.equal(h.session.generation(), 1);
   assert.equal(audioOf(h, "r1"), "Every evening.");
   assert.deepEqual(h.log, ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"]);
   assert.equal(h.published.length, 1);
   assert.deepEqual([h.published[0]?.kind, h.published[0]?.generation, h.published[0]?.epoch], ["edit", 1, 1]);
-  h.session.run(setAudio("r2", "Nets."));
+  runConfined(h.session,setAudio("r2", "Nets."));
   assert.equal(h.session.generation(), 2, "the next accepted command makes the next transition");
 });
 
 test("E2: a one-cell edit does not reconcile anchors; a change that inserts a row reconciles inside the transaction, before undo records it", () => {
   const h = opened();
-  h.session.run(setAudio("r1", "Every evening."));
+  runConfined(h.session,setAudio("r1", "Every evening."));
   assert.equal(h.log.includes("reconcile"), false);
   h.log.length = 0;
-  h.session.run(insertRow("r3"));
+  runConfined(h.session,insertRow("r3"));
   assert.deepEqual(h.log, ["reconcile", "undo.record", "dirty:2", "draft:2", "save:2", "publish:edit"]);
 });
 
@@ -85,7 +85,7 @@ test("removing or moving rows reconciles; a document-field or whole-document cha
   cases.forEach(function ([name, parts, reconciles]) {
     const h = opened();
     const command: Command = { name: name, needs: "edit", plan: function () { return { changes: changeSet(parts), apply: function () {} }; } };
-    assert.equal(h.session.run(command).kind, "applied", name);
+    assert.equal(runConfined(h.session,command).kind, "applied", name);
     assert.equal(h.session.generation(), 1, name);
     assert.equal(h.log.includes("reconcile"), reconciles, name);
   });
@@ -105,13 +105,13 @@ test("E3: a no-op, an empty change set, a refusal, a rejected capability, a fail
   const before = h.session.read(function (doc) { return JSON.stringify(doc); });
   const empty: Command = { name: "empty", needs: "edit", plan: function () { return { changes: NO_CHANGES, apply: function () { throw new Error("never applied"); } }; } };
   const failing: Command = { name: "failing", needs: "edit", plan: function () { throw new Error("broken plan"); } };
-  assert.deepEqual(h.session.run(setAudio("r1", "Every morning.")), { kind: "noop" });
-  assert.deepEqual(h.session.run(empty), { kind: "noop" });
-  assert.deepEqual(h.session.run(setAudio("zz", "x")), { kind: "rejected", reason: "no such scene" });
-  const failed = h.session.run(failing);
+  assert.deepEqual(runConfined(h.session,setAudio("r1", "Every morning.")), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session,empty), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session,setAudio("zz", "x")), { kind: "rejected", reason: "no such scene" });
+  const failed = runConfined(h.session,failing);
   assert.equal(failed.kind, "failed");
   h.deny("review");
-  assert.deepEqual(h.session.run(setAudio("r1", "Changed.")), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session,setAudio("r1", "Changed.")), { kind: "rejected", reason: "review" });
   h.deny(null);
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
@@ -128,8 +128,8 @@ test("E3: a command that only reads skips the capability check", () => {
   const h = opened();
   h.deny("review");
   const reading: Command = { name: "reading", needs: "nothing", plan: function () { return null; } };
-  assert.deepEqual(h.session.run(reading), { kind: "noop" });
-  assert.deepEqual(h.session.run(setAudio("r1", "x")), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session,reading), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session,setAudio("r1", "x")), { kind: "rejected", reason: "review" });
 });
 
 test("E4: adoption migrates the raw input, opens a new epoch and records nothing, even for the same document id", () => {
@@ -139,7 +139,7 @@ test("E4: adoption migrates the raw input, opens a new epoch and records nothing
   assert.equal(doc.rows[1]?.status, "todo", "the session holds the migrated document");
   assert.equal(h.session.epoch(), 1);
   assert.deepEqual(h.log, ["entry", "undo.adopt:Harbour", "publish:adopt"]);
-  h.session.run(setAudio("r1", "Every evening."));
+  runConfined(h.session,setAudio("r1", "Every evening."));
   h.log.length = 0;
   const again = h.session.adopt(rawScript("Harbour"));
   assert.equal(again?.docId, doc.docId, "the same document id");
@@ -154,7 +154,7 @@ test("E4: adoption migrates the raw input, opens a new epoch and records nothing
 
 test("E4: a server update and a reload keep the epoch, add no generation, record no undo and run no effects", () => {
   const h = opened();
-  h.session.run(setAudio("r1", "Mine."));
+  runConfined(h.session,setAudio("r1", "Mine."));
   h.clock.advance(1000);
   h.log.length = 0;
   h.published.length = 0;
@@ -172,7 +172,7 @@ test("E4: a server update and a reload keep the epoch, add no generation, record
 test("E4: user edits, server updates, reloads, recoveries and adoptions are published as distinct kinds", () => {
   const h = harness();
   h.session.adopt(rawScript("A"));
-  h.session.run(setAudio("r1", "x"));
+  runConfined(h.session,setAudio("r1", "x"));
   h.session.noteEdit();
   h.session.absorbServer(rawScript("B"));
   h.session.absorbReload();
@@ -255,7 +255,7 @@ test("E3: an apply that writes and then throws is rolled back: the document, gen
     const h = opened();
     const held = h.session.read(function (d) { return d; });
     const before = JSON.stringify(held);
-    const out = h.session.run(writesThenThrows(changeSet(parts)));
+    const out = runConfined(h.session,writesThenThrows(changeSet(parts)));
     assert.equal(out.kind, "failed", name);
     assert.equal(out.kind === "failed" && out.error instanceof Error ? out.error.message : "", "apply broke", name);
     assert.equal(h.session.read(function (d) { return d; }), held, name + ": the same object");
@@ -266,6 +266,61 @@ test("E3: an apply that writes and then throws is rolled back: the document, gen
     assert.deepEqual(h.log, [], name);
     assert.deepEqual(h.published, [], name);
   });
+});
+
+test("runConfined fails a command that writes outside its change set, applied or thrown, which the rollback cannot undo", () => {
+  const stamps: Command = {
+    name: "stamps-undeclared",
+    needs: "edit",
+    plan: function () {
+      return {
+        changes: cellEdit("r1", "status"),
+        apply: function (live) {
+          const row = live.rows[0];
+          if (row) { row.status = "ready"; row.updatedAt = "2026-10-07"; }
+          live.comments.push({ id: "c9" });
+        }
+      };
+    }
+  };
+  assert.throws(function () { runConfined(opened().session, stamps); }, /stamps-undeclared \(applied\) wrote outside its declared change set: rows\[r1\]\.updatedAt, comments/);
+  const elsewhere: Command = {
+    name: "writes-elsewhere-then-throws",
+    needs: "edit",
+    plan: function () {
+      return {
+        changes: changeSet({ rowsInserted: ["r3"] }),
+        apply: function (live) {
+          const other = live.rows[1];
+          if (other) other.audioText = "joined into r2";
+          throw new Error("broke");
+        }
+      };
+    }
+  };
+  assert.throws(function () { runConfined(opened().session, elsewhere); }, /\(failed\) wrote outside its declared change set: rows\[r2\]\.audioText/);
+  const declared: Command = {
+    name: "stamps-declared",
+    needs: "edit",
+    plan: function () {
+      return {
+        changes: changeSet({ cells: [{ rowId: "r1", field: "status" }, { rowId: "r1", field: "updatedAt" }] }),
+        apply: function (live) { const row = live.rows[0]; if (row) { row.status = "ready"; row.updatedAt = "2026-10-07"; } }
+      };
+    }
+  };
+  assert.equal(runConfined(opened().session, declared).kind, "applied");
+});
+
+test("writesOutside names undeclared document fields, rows, order and comment edits, and allows anchor moves only when the change set reconciles", () => {
+  const before = { title: "A", rows: [{ id: "r1", a: 1 }, { id: "r2", a: 2 }], comments: [{ id: "c1", rowId: "r1", field: "audioText" }] };
+  const after = { title: "B", extra: 1, rows: [{ id: "r2", a: 2 }, { id: "r3" }], comments: [{ id: "c1", rowId: "r2", field: "audioText" }] };
+  assert.deepEqual(writesOutside(before, after, NO_CHANGES), ["title", "extra", "rows[r3] inserted", "rows[r1] removed", "comments"]);
+  assert.deepEqual(writesOutside(before, after, changeSet({ docFields: ["title", "extra"], rowsInserted: ["r3"], rowsRemoved: ["r1"] })), []);
+  const moved = { title: "A", rows: [{ id: "r2", a: 2 }, { id: "r1", a: 1 }], comments: before.comments };
+  assert.deepEqual(writesOutside(before, moved, NO_CHANGES), ["rows order"]);
+  assert.deepEqual(writesOutside(before, moved, changeSet({ rowsMoved: true })), []);
+  assert.deepEqual(writesOutside(before, after, changeSet({ whole: true })), []);
 });
 
 test("E3: a reconciliation that moves anchors and then throws is rolled back with the apply before it", () => {
@@ -282,7 +337,7 @@ test("E3: a reconciliation that moves anchors and then throws is rolled back wit
   h.published.length = 0;
   const held = h.session.read(function (d) { return d; });
   const before = JSON.stringify(held);
-  const out = h.session.run(insertRow("r3"));
+  const out = runConfined(h.session,insertRow("r3"));
   assert.equal(out.kind, "failed");
   assert.equal(JSON.stringify(held), before);
   assert.equal(h.session.generation(), 0);
