@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { deepFreeze, noFreeze } from "../../../src/core/document/freeze.ts";
 import { createProductionReaders } from "../../../src/core/production/readers.ts";
 import { B, T, cue, mapDecoder, tag } from "./cells.ts";
 
 const cells = mapDecoder();
 cells.html([]);
-const readers = createProductionReaders(cells.decode);
+const readers = createProductionReaders(cells.decode, deepFreeze);
 
 const TAGGED = cells.html([
   T("Put the "), tag("prop", "  Kettle ", "kettle", { b: true }), tag("prop", "  Kettle ", " on"), T(" and the "),
@@ -55,7 +56,7 @@ test("brollInField and brollPropsInField read the b-roll lines and the props tag
 
 test("each reader decodes a cell once and answers again from its memo", () => {
   cells.decoded.length = 0;
-  const fresh = createProductionReaders(cells.decode);
+  const fresh = createProductionReaders(cells.decode, deepFreeze);
   const first = fresh.tagsInField(TAGGED);
   assert.equal(fresh.tagsInField(TAGGED), first);
   assert.equal(fresh.brollInField(BROLL), fresh.brollInField(BROLL));
@@ -67,7 +68,35 @@ test("each reader decodes a cell once and answers again from its memo", () => {
 });
 
 test("the readers share no memo with another set of readers", () => {
-  const a = createProductionReaders(cells.decode), b = createProductionReaders(cells.decode);
+  const a = createProductionReaders(cells.decode, deepFreeze), b = createProductionReaders(cells.decode, deepFreeze);
   assert.notEqual(a.tagsInField(TAGGED), b.tagsInField(TAGGED));
   assert.deepEqual(a.tagsInField(TAGGED), b.tagsInField(TAGGED));
+});
+
+test("with freezing on, a write into any value a reader hands out throws a TypeError, and the next read is unchanged", () => {
+  const frozen = createProductionReaders(cells.decode, deepFreeze);
+  const reads: (() => readonly unknown[])[] = [
+    () => frozen.tagsInField(TAGGED),
+    () => frozen.cueNamesInField(CUED),
+    () => frozen.brollInField(BROLL),
+    () => frozen.brollPropsInField(BROLL)
+  ];
+  for (const read of reads) {
+    const before = JSON.stringify(read());
+    const list = read() as unknown[];
+    assert.throws(() => { list.push("x"); }, TypeError);
+    assert.throws(() => { list[0] = "x"; }, TypeError);
+    assert.equal(JSON.stringify(read()), before);
+  }
+  assert.throws(() => { (frozen.tagsInField(TAGGED)[0] as { name: string }).name = "x"; }, TypeError);
+  assert.throws(() => { (frozen.brollInField(BROLL)[0] as { desc: string }).desc = "x"; }, TypeError);
+  assert.throws(() => { (frozen.brollPropsInField(BROLL)[0] as string[]).push("x"); }, TypeError);
+});
+
+test("with freezing off, the readers hand out the same values unfrozen", () => {
+  const open = createProductionReaders(cells.decode, noFreeze);
+  assert.equal(Object.isFrozen(open.tagsInField(TAGGED)), false);
+  assert.equal(open.tagsInField(TAGGED), open.tagsInField(TAGGED));
+  assert.deepEqual(open.tagsInField(TAGGED), readers.tagsInField(TAGGED));
+  assert.deepEqual(open.brollInField(BROLL), readers.brollInField(BROLL));
 });

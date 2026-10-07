@@ -123,6 +123,34 @@ leaves no readable `RESULT:` line is counted the same way.
 Logs land in `%TEMP%\splitpage-testlogs\`, screenshots in
 `%TEMP%\splitpage-shots\`.
 
+**Frozen caches.** With `SPLITPAGE_FREEZE_CACHES=1` in the environment,
+`run-tests.ps1` passes `-FreezeCaches` to every `driver.ps1`, and
+`tools/run-suites.mjs` passes `--freeze-caches` to every `driver.mjs`; either
+driver also reads the variable itself. The driver then adds `freeze-caches=1`
+to the query of every page it opens with `open`/`goto` (before any `#`
+fragment; a page that already names the flag, and an absolute `http(s)://`
+target, are left alone) and sets `window.__splitpageFreezeRun` on every page.
+The app's caches then hand out locked copies (`deepLock`), so a write into a
+cached value throws a `TypeError` even from the bundle's sloppy-mode code,
+instead of changing every later read. Each suite that asserted anything ends
+with one more check: no uncaught page exception was such a write. A write
+whose `TypeError` the app catches, and pages opened without the flag (the
+teleprompter pop-out, new tabs, absolute URLs), are not covered; testing.md
+lists the gaps. The run says so at its start and in its verdict, and each
+driver logs it to its `.err.txt`. A milestone gate runs the full regression
+twice, once plain and once with the variable set:
+
+```powershell
+$env:SPLITPAGE_FREEZE_CACHES = '1'
+powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
+Remove-Item Env:SPLITPAGE_FREEZE_CACHES
+```
+
+`380-frozen-caches.txt` checks, in either mode, that the page's query has the
+flag exactly when the driver says it is a freeze run, and that the caches it
+samples are locked, and sloppy writes into them throw, exactly then. What the
+flag locks is in [testing.md](../../../docs/architecture/testing.md#frozen-caches).
+
 At the end of every run `tools/failure-digest.mjs` writes `digest.txt` next to
 the logs and the runner prints its path as the last line. Read `digest.txt`
 first, and open a suite's log only when the digest does not explain the failure.
@@ -387,6 +415,7 @@ it is not the full gate; CI always runs them all.
 | `tests/289-script-cell-ime.txt` | IME composition in a script cell, in the split view and the Writer (4.0 milestone 3's characterisation before typing becomes a command), through the driver's `ime` verb (CDP `Input.imeSetComposition`, committed with `Input.insertText`): Edge fires compositionstart, then per update compositionupdate and `insertCompositionText` beforeinput/input with `isComposing`, and the commit's input before compositionend, with no keydown; every update is stored at once (no composition guard in script cells), the cell is never repainted under the composition (same text node, no `__renderTest` cell paint), a full `render()` in the middle of a composition keeps the composing text node, focus and caret, and the commit still lands; the caret sits after the composed text, a composition converted on commit (`kana` → `かな`) and one at the start of a cell are one undo step each, and a cancelled composition still leaves one step that changes nothing. Synthetic events cover what Edge does not send: a Ctrl+Z keydown with `isComposing` is taken by the document's undo (unlike a comment draft, 81), and Alt+Enter in the split view or Enter in the Writer with `isComposing` split the scene |
 | `tests/307-menu-dialogs-not-stacked.txt` | the desktop app's native menu commands that open a dialog (`D.runMenuCommand`; `OPENS_A_DIALOG`, src/legacy/screen.ts; #307): About, Settings, Servers, Paste a script, Google Doc link, Set up, User guide and Tagging reference open with nothing in front; during the tour, About, Settings, Servers, Collaborate, Paste, Google Doc link, Google Drive, Open from the server, Set up and Tagging reference are refused ("Finish or skip the tour first.") with no dialog opened under it, while User guide opens, puts the tour aside and gives it back on close; over About the same commands and User guide are refused ("Close the open dialog first.") with About the only dialog, as is About over Settings; a command over the setup wizard closes the wizard and runs, as before |
 | `tests/361-pin-prompt-to-servers.txt` | the join-PIN prompt hands off to Servers (#361), against two fake servers answered by a `fetch` stub: a tab pointed at a server it has no token for prompts for the PIN; About, Settings, Open from the server and Paste are still refused over the prompt, but Servers opens in front of it, a second Servers over the pair is refused, Escape closes Servers first and the focus goes back to the PIN field; during a tour started over the prompt Servers is refused; joining another server from Servers closes the prompt, and Open from the server then lists that server's document with no other dialog open; going back to this copy also closes it, while joining the same server leaves it open; a prompt opened from inside Servers (a bookmark's PIN button, Use this server on a server that asks for one) comes in front of Servers with the focus in its field (`elementFromPoint` at the panel's centre), and Escape closes it first; Servers stays refused during the tour and over About. Fails against the build before #361's fix |
+| `tests/380-frozen-caches.txt` | the cache-freezing flag reaches the page (M3 PR 3.5): the query has `freeze-caches=1` exactly when the driver set `window.__splitpageFreezeRun`; through `window.__cacheTest`, the cell reader, two production readers and the production index hand out locked values, and an assignment, a `delete`, a `length` write and a `defineProperty` from the bundle's sloppy code throw a `TypeError`, exactly in a freeze run. It passes in both full runs and fails if the driver drops the flag from the URL or freezing leaks into a plain run |
 
 ## The server's own tests
 

@@ -95,11 +95,17 @@ jobs:
       - name: Desktop tab strip width (headless Chromium)
         run: node desktop/test/tabstrip-width.mjs
 
+      - name: Pick this runner's port block
+        run: |
+          n=${RUNNER_NAME##*-}
+          case "$n" in ''|*[!0-9]*|?????*) n=1 ;; esac
+          echo "PORT_BASE=$(( (10#$n + 9) % 10 * 100 ))" >> "$GITHUB_ENV"
+
       - name: Browser suites 01 (core) and 52 (content security policy)
-        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2 --port-base "$PORT_BASE"
 
       - name: Browser suite 265 (drafts kept in IndexedDB and restored, persistence)
-        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites/persistence" '^265-browser-drafts\.txt$' --lanes 1
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites/persistence" '^265-browser-drafts\.txt$' --lanes 1 --port-base "$PORT_BASE"
 
       - name: Upload the suite logs
         if: failure()

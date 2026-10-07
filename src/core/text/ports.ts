@@ -1,3 +1,4 @@
+import type { Frozen } from "../document/freeze.ts";
 import type { NormalizeOptions, Run } from "./runs.ts";
 
 export type DecodedImage = {
@@ -14,4 +15,4 @@ export type DecodeOptions = NormalizeOptions & {
   onMedia?: ((media: DecodedMedia) => void) | null | undefined;
 };
 
-export type CellDecoder = (html: string) => readonly Run[];
+export type CellDecoder = (html: string) => Frozen<Run[]>;
