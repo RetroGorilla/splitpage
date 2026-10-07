@@ -34,7 +34,7 @@ export type BrollFound = {
   rowId: string;
   rowIndex: number;
   ordinal: number;
-  autoProps: string[];
+  autoProps: readonly string[];
 };
 
 export type BrollPropRef = { id?: string | undefined; name?: string | undefined };
