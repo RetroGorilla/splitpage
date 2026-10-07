@@ -352,7 +352,7 @@ export function planRegistryHealing(
 }
 
 export function planQuickAdd(state: ValidatedDocument, readers: ProductionReaders, raw: string, index?: ProductionIndex): QuickAddPlan {
-  const wanted: Record<string, string> = {}, order: string[] = [];
+  const wanted = idMap<string>(), order: string[] = [];
   raw.split(/\r\n|\r|\n/).forEach(function (line) {
     const name = plainText(line).trim().slice(0, 80);
     if (!name) return;
