@@ -161,7 +161,6 @@ expect __toasts() === 'Close the open dialog first.'
 key Escape
 wait __dialogs() === ''
 
-# --- the tour does not start over a dialog (#368) ------------------------------
 eval __run('about')
 wait __shown('about-modal')
 eval __tidy()

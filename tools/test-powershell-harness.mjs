@@ -240,6 +240,51 @@ function imeChecks() {
     ["ime needs: set <text> | commit <text> | cancel", [], "ime needs: set <text> | commit <text> | cancel", []]);
 }
 
+function freezeHarness() {
+  const file = join(work, "freeze.ps1");
+  writeFileSync(file, [
+    importParts(join(SKILL, "driver.ps1"), ["Add-FreezeFlag", "Test-FrozenWrites"], []),
+    importParts(join(SKILL, "run-tests.ps1"), ["Get-DriverArgs"], []),
+    "function Out1($m) { $script:Out += [string]$m }",
+    "function Writes($lines) { $script:Console = @($lines); $script:Checks = 0; $script:Failures = 0; $script:Out = @(); Test-FrozenWrites; Emit @{ checks = $script:Checks; failures = $script:Failures; out = @($script:Out) } }",
+    "Writes @('log: fine', 'error: Cannot assign to read only property ''id'' of object')",
+    "Writes @('log: fine', 'exception: TypeError: Cannot assign to read only property ''id'' of object ''#<Object>''', 'exception: TypeError: Cannot add property 3, object is not extensible', 'exception: ReferenceError: x is not defined')",
+    "$here = 'C:\\skill'; $Port = 100; $CdpPort = 200; $Headed = $false",
+    "$lane = [pscustomobject]@{ Index = 3; Tag = 'abc'; File = [pscustomobject]@{ FullName = 'C:\\s\\x.txt' } }",
+    "foreach ($u in @('http://localhost:1/index.html', 'http://localhost:1/index.html?wizard=1&teleprompter=1', 'http://localhost:1/index.html?teleprompter=1#script=ab&voice=1', 'http://localhost:1/index.html#review=abc', 'http://localhost:1/index.html?freeze-caches=0', 'http://localhost:1/index.html#a?b')) { Emit @{ url = (Add-FreezeFlag $u) } }",
+    "$FreezeCaches = $false; Emit @{ args = @(Get-DriverArgs $lane) }",
+    "$FreezeCaches = $true; Emit @{ args = @(Get-DriverArgs $lane) }",
+    "[Environment]::Exit(0)"
+  ].join("\n"));
+  return file;
+}
+
+function freezeChecks() {
+  console.log("\ncache freezing in driver.ps1 and run-tests.ps1:\n");
+  const all = powershell(freezeHarness()).records;
+  const [clean, thrown] = all.slice(0, 2);
+  eq("Test-FrozenWrites passes one check when no page exception is a write into a frozen value", [clean?.checks, clean?.failures, clean?.out], [1, 0, ["PASS no write into a frozen cache value threw"]]);
+  eq("and fails it, quoting each such exception and no other, when one is",
+    [thrown?.checks, thrown?.failures, thrown?.out], [1, 1, [
+      "FAIL a write into a frozen cache value threw",
+      "     exception: TypeError: Cannot assign to read only property 'id' of object '#<Object>'",
+      "     exception: TypeError: Cannot add property 3, object is not extensible"
+    ]]);
+  const r = all.slice(2);
+  eq("Add-FreezeFlag puts freeze-caches=1 in the query, after any query the page has and before any fragment, and leaves a page that names it alone",
+    r.slice(0, 6).map((x) => x.url), [
+      "http://localhost:1/index.html?freeze-caches=1",
+      "http://localhost:1/index.html?wizard=1&teleprompter=1&freeze-caches=1",
+      "http://localhost:1/index.html?teleprompter=1&freeze-caches=1#script=ab&voice=1",
+      "http://localhost:1/index.html?freeze-caches=1#review=abc",
+      "http://localhost:1/index.html?freeze-caches=0",
+      "http://localhost:1/index.html?freeze-caches=1#a?b"
+    ]);
+  const off = (r[6]?.args ?? []).flat(), on = (r[7]?.args ?? []).flat();
+  eq("with freezing off, run-tests.ps1 starts driver.ps1 as before", [off.includes("-FreezeCaches"), off.slice(-2)], [false, ["-RunId", "abc"]]);
+  eq("with it on, it adds -FreezeCaches once", [on.filter((a) => a === "-FreezeCaches").length, on.slice(0, -1)], [1, off]);
+}
+
 function laneSpec(name, lines, timedOut = false) {
   return { name, lines, timedOut };
 }
@@ -336,6 +381,7 @@ try {
   await serverChecks();
   driverStateChecks();
   imeChecks();
+  freezeChecks();
   runnerChecks();
 } catch (e) {
   check("the checks ran to the end", false, e instanceof Error ? e.stack : String(e));

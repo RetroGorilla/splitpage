@@ -135,7 +135,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
   }
 });
 
-test("the tour is refused over a dialog and starts over Present, the writer and the shot list", () => {
+test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
   const help = registerHelpActions(registry);
   try {
@@ -147,6 +147,9 @@ test("the tour is refused over a dialog and starts over Present, the writer and 
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = "";
     Object.assign(S, { prompterOpen: true });
+    assert.equal(refusal(registry, "tour", "menu"), null);
+    Object.assign(S, { prompterOpen: false });
+    document.body.innerHTML = '<div id="broll-page"></div>';
     assert.equal(refusal(registry, "tour", "menu"), null);
   } finally {
     help();

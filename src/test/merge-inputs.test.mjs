@@ -3,18 +3,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeStates } from "../js/03-sync.js";
 import { saveAuthorName } from "../js/10-comments.js";
+import { deepFreeze } from "../core/document/freeze.ts";
 import { freezeClockAndRandom, jsonCopy } from "./golden-helpers.mjs";
 import { mergeCorpus, mergeGoldenInputs } from "./_merge-corpus.mjs";
 
 freezeClockAndRandom(0x303);
 saveAuthorName("Merge Editor");
-
-function deepFreeze(value) {
-  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const v of Object.values(value)) deepFreeze(v);
-  return value;
-}
 
 function reachable(value, into) {
   if (!value || typeof value !== "object" || into.has(value)) return into;
