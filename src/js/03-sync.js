@@ -822,7 +822,7 @@ export function applyMerge(opts) {
     result = mergeStates(
       opts.base ? migrateRows(cloneState(opts.base)) : null,
       migrateRows(cloneState(opts.mine)),
-      opts.theirs
+      migrateRows(cloneState(opts.theirs))
     );
   }
   var next = result ? result.merged : opts.theirs;
@@ -840,8 +840,7 @@ export function applyMerge(opts) {
   var kind = opts.recovery || opts.source === "server-resume" ? "recovery" : "server";
 
   function adopt() {
-    if (kind === "recovery") noteRecovery(next);
-    else noteServerUpdate(next);
+    next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
     S.state = next;
     if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
     armUndoPoint(S.state.docId);

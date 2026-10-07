@@ -2,7 +2,7 @@ import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.js";
 import { BROLL_MARKER_RE } from "../../core/document/broll.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
 import { tagCategoryId } from "../../core/document/tags.ts";
-import { plainText, safeHref, safeId, safeImageSrc, storedImageAttributes } from "../../core/document/text-policy.ts";
+import { cappedText, safeHref, safeId, safeImageSrc, storedImageAttributes } from "../../core/document/text-policy.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
 
 export interface SanitizeContext {
@@ -237,7 +237,7 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
     }
     if (tag === "SPAN" && hasClass(el, "tag-anchor")) {
       const tcat = tagCategoryId(el.getAttribute("data-tag-cat"));
-      const tname = plainText(el.getAttribute("data-tag-name")).trim().slice(0, 80);
+      const tname = cappedText(el.getAttribute("data-tag-name"), 80);
       if (!tcat || !tname) { walkSanitize(el, destParent, ctx); return; }
       const tagSpan = doc.createElement("span");
       tagSpan.className = "tag-anchor";

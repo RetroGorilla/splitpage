@@ -236,6 +236,144 @@ test("migrateDocument: an embedded docId stays, a file derives one from its text
   assert.equal(migrateDocument({ rows: [] }, { kind: "fresh" }, fakeMigration().ports).docId, MINTED_DOC_ID);
 });
 
+function cutAt(cap: number): string {
+  return "n".repeat(cap - 1) + " x";
+}
+
+function keptAt(cap: number): string {
+  return "n".repeat(cap - 1);
+}
+
+const REF_A = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
+const REF_B = { sha256: "b".repeat(64), width: 4, height: 4, mime: "image/png" };
+
+function cappedDocument(f: ReturnType<typeof fakeMigration>, name: (cap: number) => string): Doc {
+  return {
+    schema: 2,
+    rows: [{
+      id: "r1", audioText: f.cell([T("the "), tagged("prop", name(80))]), updatedBy: name(80),
+      imageRef: REF_A, imageName: name(200), imageLinks: [{ name: name(200) }],
+      moreImages: [{ imageRef: REF_B, name: name(200), links: [{ name: name(200) }] }]
+    }],
+    comments: [{
+      id: "c1", rowId: "r1", author: name(80), resolved: true, resolvedBy: name(80), assignee: name(80),
+      replies: [{ id: "rp1", author: name(80) }]
+    }],
+    people: [{ id: "p1", name: name(60) }],
+    productionTags: [{ cat: "location", name: name(80) }],
+    brollShots: [{ id: "bs1", name: name(200), location: name(80), props: [name(80)] }]
+  };
+}
+
+function cappedNames(out: Doc): Record<string, unknown> {
+  const row = list(out, "rows")[0] as Item;
+  const more = (row.moreImages as Item[])[0] as Item;
+  const c = list(out, "comments")[0] as Item;
+  const shot = list(out, "brollShots")[0] as Item;
+  return {
+    updatedBy: row.updatedBy, imageName: row.imageName, imageLink: (row.imageLinks as Item[])[0]?.name,
+    moreName: more.name, moreLink: (more.links as Item[])[0]?.name,
+    author: c.author, resolvedBy: c.resolvedBy, assignee: c.assignee, replyAuthor: (c.replies as Item[])[0]?.author,
+    person: (list(out, "people")[0] as Item).name,
+    tags: list(out, "productionTags").map((t) => t.name),
+    shot: shot.name, location: shot.location, prop: (shot.props as Item[])[0]?.name
+  };
+}
+
+function cappedWant(name: (cap: number) => string): Record<string, unknown> {
+  return {
+    updatedBy: name(80), imageName: name(200), imageLink: name(200), moreName: name(200), moreLink: name(200),
+    author: name(80), resolvedBy: name(80), assignee: name(80), replyAuthor: name(80),
+    person: name(60), tags: [name(80), name(80)], shot: name(200), location: name(80), prop: name(80)
+  };
+}
+
+test("a name cut at its cap loses the space the cut leaves it ending in, so migrating it again keeps it (#406)", () => {
+  const f = fakeMigration();
+  const once = migrateRows(cappedDocument(f, cutAt), f.ports);
+  assert.deepEqual(cappedNames(once), cappedWant(keptAt));
+  const again = fakeMigration();
+  cappedDocument(again, cutAt);
+  const text = JSON.stringify(once);
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(once), again.ports)), text);
+});
+
+test("a name is still trimmed before it is cut, so leading spaces don't count toward the cap (#406)", () => {
+  const f = fakeMigration();
+  const full = (cap: number): string => "n".repeat(cap);
+  const out = migrateRows(cappedDocument(f, (cap) => "  " + full(cap) + " tail"), f.ports);
+  assert.deepEqual(cappedNames(out), cappedWant(full));
+});
+
+test("an array is no object: a top-level array migrates as no document, and an array in a list is dropped (#407)", () => {
+  const top = migrateRows([{ id: "r1", audioText: "x" }], fakeMigration().ports);
+  assert.equal(Array.isArray(top), false);
+  assert.equal(top.title, "Untitled Script");
+  assert.deepEqual(top.rows, []);
+  const out = migrateRows({
+    rows: [[], { id: "r1" }],
+    comments: [["c0"], { id: "c1", rowId: "r1", replies: [[], { id: "rp1" }] }],
+    people: [["Ann"], { id: "p1", name: "Ann" }],
+    productionTags: [[], { cat: "prop", name: "Kettle" }],
+    brollShots: [["Shot"], { id: "bs1", name: "Shot" }]
+  }, fakeMigration().ports);
+  assert.deepEqual(list(out, "rows").map((r) => r.id), ["r1"]);
+  assert.deepEqual(list(out, "comments").map((c) => [c.id, (c.replies as Item[]).map((r) => r.id)]), [["c1", ["rp1"]]]);
+  assert.deepEqual(list(out, "people").map((p) => p.id), ["p1"]);
+  assert.deepEqual(list(out, "productionTags").map((t) => t.name), ["Kettle"]);
+  assert.deepEqual(list(out, "brollShots").map((b) => b.id), ["bs1"]);
+});
+
+test("a value whose toString or valueOf is not a function is no text: it migrates as empty text and nothing throws (#408)", () => {
+  const raw: unknown = JSON.parse('{"title":{"toString":1},"rows":[{"id":{"toString":"r1"},"updatedBy":{"valueOf":null,"toString":null},' +
+    '"audioText":{"toString":1},"visualText":{"valueOf":null,"toString":null}}],' +
+    '"comments":[{"id":"c1","rowId":{"valueOf":null,"toString":null},"author":{"toString":1},"quotedText":{"toString":1},"body":{"toString":1},' +
+    '"replies":[{"id":{"toString":1},"author":{"toString":1},"body":{"toString":1}}]}],"people":[{"id":"p1","name":{"toString":1}},{"id":{"toString":1},"name":"Ann"}],' +
+    '"productionTags":[{"cat":"prop","name":"Kettle","notes":{"toString":1},"owner":{"toString":1},"id":{"toString":1}}],' +
+    '"brollShots":[{"id":"bs1","name":"Shot","location":{"toString":1},"owner":{"valueOf":null,"toString":null}}],"wordsPerMinute":{"toString":1}}');
+  const f = fakeMigration();
+  const out = migrateRows(raw, f.ports);
+  const row = list(out, "rows")[0] as Item;
+  const c = list(out, "comments")[0] as Item;
+  assert.equal(out.title, "");
+  assert.deepEqual([row.id, row.updatedBy, row.audioText, row.visualText], ["r-fake-1", "Anonymous", "", ""]);
+  assert.deepEqual([c.rowId, c.author, c.quotedText, c.body], ["r-fake-2", "Anonymous", "", ""]);
+  assert.deepEqual((c.replies as Item[]).map((r) => [r.id, r.author, r.body]), [["rp-fake-3", "Anonymous", ""]]);
+  assert.deepEqual(list(out, "people").map((p) => [p.id, p.name]), [["p-fake-4", "Ann"]]);
+  const tag = list(out, "productionTags")[0] as Item;
+  assert.deepEqual([tag.notes, tag.owner], ["", ""]);
+  assert.match(tag.id as string, /^t_[0-9a-z]+$/);
+  const shot = list(out, "brollShots")[0] as Item;
+  assert.deepEqual([shot.location, shot.owner], ["", ""]);
+  assert.equal(out.wordsPerMinute, DEFAULT_WPM);
+});
+
+test("a comment's and a reply's createdAt that is not a string becomes null, and updatedAt follows it (#409)", () => {
+  const out = migrateRows({
+    comments: [
+      { id: "c1", rowId: "r1", createdAt: 5, updatedAt: { toString: 1 }, replies: [
+        { id: "rp1", createdAt: "2026-10-07T09:00:00.000Z" }, { id: "rp2", createdAt: 5 }, { id: "rp3", createdAt: [] }, { id: "rp4" }, { id: "rp5", createdAt: null }
+      ] },
+      { id: "c2", rowId: "r1", createdAt: "2026-10-07T09:00:00.000Z", updatedAt: 7 },
+      { id: "c3", rowId: "r1", createdAt: "2026-10-07T09:00:00.000Z", updatedAt: "2026-10-08T09:00:00.000Z" }
+    ]
+  }, fakeMigration().ports);
+  const comments = list(out, "comments");
+  assert.deepEqual(comments.map((c) => [c.createdAt, c.updatedAt]), [
+    [null, null], ["2026-10-07T09:00:00.000Z", "2026-10-07T09:00:00.000Z"], ["2026-10-07T09:00:00.000Z", "2026-10-08T09:00:00.000Z"]
+  ]);
+  const replies = (comments[0] as Item).replies as Item[];
+  assert.deepEqual(replies.map((r) => r.createdAt), ["2026-10-07T09:00:00.000Z", null, null, undefined, null]);
+  assert.equal("createdAt" in (replies[3] as Item), false, "a reply with no createdAt gets none");
+});
+
+test("a rev that is not a finite number becomes 0 (#412)", () => {
+  for (const rev of [NaN, Infinity, -Infinity, "7", null, { valueOf: 7 }]) {
+    assert.equal(migrateRows({ rev: rev }, fakeMigration().ports).rev, 0, String(rev));
+  }
+  assert.equal(migrateRows({ rev: 7 }, fakeMigration().ports).rev, 7);
+});
+
 test("a migrated document is a fixed point: migrating it again changes nothing", () => {
   const f = fakeMigration();
   const cell = f.cell([T("a "), tagged("location", "Roof")]);
