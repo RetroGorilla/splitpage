@@ -128,8 +128,11 @@ const states = [];
 const reaped = new Set();
 const runners = [];
 
+const FIRST_FREE_BASE_TENS = 300;
+const LAST_BASE_TENS = 1299;
+
 function randomPortBase() {
-  return 10 * Math.floor(Math.random() * 1300);
+  return 10 * (FIRST_FREE_BASE_TENS + Math.floor(Math.random() * (LAST_BASE_TENS - FIRST_FREE_BASE_TENS + 1)));
 }
 
 function newState() {
@@ -400,6 +403,18 @@ function unitChecks() {
   const plan = portPlan(5000, 2);
   eq("lane 1 reserves HTTP + 1", plan[1]?.httpReserve, 23111);
   eq("lane 1 reserves CDP + 1", plan[1]?.cdpReserve, 24311);
+
+  const ciPorts = new Set([0, 100].flatMap((base) => portPlan(base, 2).flatMap((p) => [p.http, p.httpReserve, p.cdp, p.cdpReserve])));
+  const clashing = [];
+  for (let tens = FIRST_FREE_BASE_TENS; tens <= LAST_BASE_TENS; tens++) {
+    for (const offset of [0, 10, 1200]) {
+      const clash = portPlan(tens * 10 + offset, 2).flatMap((p) => [p.http, p.httpReserve, p.cdp, p.cdpReserve]).find((port) => ciPorts.has(port));
+      if (clash !== undefined) clashing.push(`${tens * 10}+${offset}`);
+    }
+  }
+  eq("no random self-test port block touches the CI blocks for PORT_BASE 0 and 100", clashing.join(), "");
+  const sampled = Array.from({ length: 200 }, randomPortBase);
+  check("random port bases are multiples of 10 inside the range", sampled.every((b) => b % 10 === 0 && b >= FIRST_FREE_BASE_TENS * 10 && b <= LAST_BASE_TENS * 10), sampled.join());
 
   console.log("\ncache freezing:\n");
 
