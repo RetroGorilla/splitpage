@@ -289,6 +289,26 @@ test("the healing plan registers each unregistered tag with an id minted after t
   assert.equal(Object.getPrototypeOf(plan.cues.cells), null, "the cells are keyed by scene id, in a map with no prototype");
 });
 
+test("the healing plan counts the names it takes in, not a name the registry refuses, which a fresh derivation still lists last as unregistered (#377)", () => {
+  const refused = String.fromCharCode(0x2060);
+  const row: ProductionRow = {
+    id: "r1",
+    visualText: EMPTY,
+    audioText: cells.html([tag("prop", "kettle", "kettle"), T(" "), tag("prop", refused, refused), T(" "), tag("prop", "mug", "mug")])
+  };
+  const state = doc({ docId: "d1", rows: [row], productionTags: [] });
+  const plan = planRegistryHealing(state, readers);
+  assert.equal(plan.count, 2);
+  assert.deepEqual(plan.register.map((t) => t.name), ["kettle", "mug"]);
+  const healed = doc({ docId: "d1", rows: [row], productionTags: plan.register });
+  const ix = deriveProductionIndex(healed, readers);
+  assert.deepEqual(ix.entries.map((e) => e.name), ["kettle", "mug", refused]);
+  assert.deepEqual(ix.unregistered.map((t) => t.name), [refused]);
+  assert.deepEqual(jsonCopy(planRegistryHealing(healed, readers, null, ix)), { cues: { docId: "d1", cells: {} }, count: 0, retitle: [], register: [] });
+  const onlyRefused = doc({ docId: "d1", rows: [{ id: "r1", visualText: EMPTY, audioText: cells.html([tag("cast", refused, refused)]) }], productionTags: [] });
+  assert.equal(planRegistryHealing(onlyRefused, readers).count, 0);
+});
+
 test("with nothing to register the plan is empty but still snapshots the cues", () => {
   const audio = cells.html([cue("Music: theme")]);
   const state = doc({ docId: "d2", rows: [{ id: "r1", visualText: EMPTY, audioText: audio }], productionTags: [registered("sound", "theme")] });
@@ -544,11 +564,25 @@ test("the quick-add plan adds each new line once, cleaned, with ids minted after
   assert.equal(plan.added, 3);
 });
 
-test("quick-add lines whose key is an Object property are skipped, and entries under those keys kept, as the plain-object lookup did", () => {
-  const state = gearState([registered("gear", "constructor"), registered("gear", "__proto__")]);
-  const plan = planQuickAdd(state, readers, "constructor\n__proto__\ntoString\nTripod");
+const OBJECT_PROPERTY_NAMES = ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"];
+
+test("quick-add lines named after Object's own properties are registered like any other name", () => {
+  const state = gearState();
+  const plan = planQuickAdd(state, readers, OBJECT_PROPERTY_NAMES.concat("Tripod").join("\n"));
   const kept = (state.productionTags as RegistryTag[]).filter((t) => t.name !== "Old lens" && t.name !== "Gimbal");
-  assert.deepEqual(plan, { remove: ["Old lens", "Gimbal"], register: minted(kept, "gear", ["toString"]), added: 1, removed: 2 });
+  assert.deepEqual(plan, {
+    remove: ["Old lens", "Gimbal"], register: minted(kept, "gear", OBJECT_PROPERTY_NAMES), added: 5, removed: 2
+  });
+});
+
+test("a registered gear entry named after an Object property survives while its line stays and goes when it is dropped", () => {
+  const state = gearState(OBJECT_PROPERTY_NAMES.map((name) => registered("gear", name)));
+  const kept = "Tripod\nSlider\n" + OBJECT_PROPERTY_NAMES.join("\n");
+  assert.deepEqual(planQuickAdd(state, readers, kept), { remove: ["Old lens", "Gimbal"], register: [], added: 0, removed: 2 });
+  assert.deepEqual(
+    planQuickAdd(state, readers, "Tripod\nSlider"),
+    { remove: ["Old lens", "Gimbal"].concat(OBJECT_PROPERTY_NAMES), register: [], added: 0, removed: 2 + OBJECT_PROPERTY_NAMES.length }
+  );
 });
 
 test("removing a line deletes every registry entry under that name", () => {
