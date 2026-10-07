@@ -173,12 +173,14 @@ test("03-sync applyMerge's adopt, after a merge: a migrateRows fixed point", asy
   assert.equal(fixedPoint(only(got, "03-sync.js#adopt")), true);
 });
 
-test("03-sync applyMerge's adopt, nothing to merge: theirs as handed over, unmigrated if it came that way", async () => {
+test("03-sync applyMerge's adopt, nothing to merge: theirs as handed over, migrated in place by the session as it enters", async () => {
   const fromMigrated = await drive(() => applyMerge({ theirs: migrated("Same"), source: "stash", unchanged: true, report: false }));
   assert.equal(fixedPoint(only(fromMigrated, "03-sync.js#adopt")), true);
   const raw = rawDoc("Raw");
   const fromRaw = await drive(() => applyMerge({ theirs: raw, source: "stash", unchanged: true, report: false }));
-  assert.equal(fixedPoint(only(fromRaw, "03-sync.js#adopt")), false, "applyMerge does not migrate an unchanged theirs");
+  const value = only(fromRaw, "03-sync.js#adopt");
+  assert.equal(fixedPoint(value), true, "the session's server update migrated the unchanged theirs before it was assigned");
+  assert.equal(fixedPoint(raw), true, "in place: the very object handed over is now a migrateRows fixed point");
 });
 
 test("13-hosted openServerDoc: migrateDocument's answer, a migrateRows fixed point", async () => {
