@@ -59,10 +59,34 @@ key Escape
 wait !window.__settingsTest.isOpen()
 eval (function(){window.__setClock(26*3600000);return true;})()
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
+eval window.__timed = 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
+eval window.__dated = 'Last saved to clock.md at ' + new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(window.__savedAt)) + '.'
+eval window.__center = function(id){var r=document.getElementById(id).getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}
+expect document.getElementById('btn-save').title === window.__timed + ' Click to save now.'
 mouse hover ({x: 5, y: 5})
-mouse hover (function(){var r=document.getElementById('save-status').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()
-expect document.getElementById('btn-save').title.indexOf(window.__tip()) === 0
-expect window.__tip() === 'Last saved to clock.md at ' + new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(window.__savedAt)) + '.'
+mouse hover window.__center('btn-save')
+expect document.getElementById('btn-save').title === window.__dated + ' Click to save now.'
+expect window.__tip() === window.__dated
+
+# --- keyboard focus: the same refresh --------------------------------------
+eval (function(){window.__setClock(0);return true;})()
+expect document.getElementById('btn-save').title === window.__dated + ' Click to save now.'
+eval document.getElementById('btn-save').focus()
+expect document.activeElement.id === 'btn-save'
+expect document.getElementById('btn-save').title === window.__timed + ' Click to save now.'
+eval document.activeElement.blur()
+
+# --- the Writer's status: the same refresh on hover ------------------------
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+eval (function(){window.__setClock(26*3600000);return true;})()
+expect document.getElementById('wr-save-status').title === window.__timed
+mouse hover ({x: 5, y: 5})
+mouse hover window.__center('wr-save-status')
+expect document.getElementById('wr-save-status').title === window.__dated
+jsclick #wr-close
+wait document.getElementById('writer').hidden
 eval (function(){Date.now = window.__realNow;return true;})()
 
 # --- History: a snapshot of this document, its time in the same clock -----
