@@ -1,3 +1,4 @@
+import type { Frozen } from "../document/freeze.ts";
 import type { CellDecoder } from "../text/ports.ts";
 
 export type FieldHtml = string | null | undefined;
@@ -8,10 +9,10 @@ export type BrollItem = { id: string; name: string; desc: string };
 
 export type ProductionReaders = {
   cellOf: CellDecoder;
-  tagsInField: (html: FieldHtml) => FieldTag[];
-  cueNamesInField: (html: FieldHtml) => string[];
-  brollInField: (html: FieldHtml) => BrollItem[];
-  brollPropsInField: (html: FieldHtml) => string[][];
+  tagsInField: (html: FieldHtml) => Frozen<FieldTag[]>;
+  cueNamesInField: (html: FieldHtml) => Frozen<string[]>;
+  brollInField: (html: FieldHtml) => Frozen<BrollItem[]>;
+  brollPropsInField: (html: FieldHtml) => Frozen<string[][]>;
   wordCount: (html: FieldHtml) => number;
 };
 
