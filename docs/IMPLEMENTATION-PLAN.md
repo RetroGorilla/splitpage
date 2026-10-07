@@ -36,9 +36,9 @@ A successful refactor makes a feature's rules, commands, view and tests discover
 
 Focused tests shorten feedback time. Shared contract and critical integration tests remain mandatory; the goal is not to eliminate regression testing.
 
-**4.0 scope:** Milestones 0–7 below: verification tools, core extraction, session/commands, saving/recovery, formats, feature ownership, and explicit frontend bootstrap/teardown. Unmodified server and desktop internals may remain legacy behind narrow adapters.
+**4.0 scope:** Milestones 0–7 below: verification tools, core extraction, session/commands, saving/recovery, formats, feature ownership, and (milestone 7) the explicit wiring of migrated owners with the named legacy initializer shim. The composition root as build entry, unused `S` fields and any remaining bridges are 4.x work (section 8) (Adam, 2026-10-07). Unmodified server and desktop internals may remain legacy behind narrow adapters.
 
-**4.x follow-up:** Server and desktop service extraction in section 8. Their existing functional, security and packaging checks remain release requirements even when their internal refactors are deferred. Describe remaining legacy debt honestly; do not declare the entire repository fully refactored at 4.0.
+**4.x follow-up:** The frontend bootstrap items and server and desktop service extraction in section 8. Their existing functional, security and packaging checks remain release requirements even when their internal refactors are deferred. Describe remaining legacy debt honestly; do not declare the entire repository fully refactored at 4.0.
 
 No UI framework replacement, editor-engine replacement, persisted document schema migration, collaboration algorithm replacement or new user feature is included. Keep 3.1 file/HTTP/IPC compatibility. Distinguish intentional distribution-version changes from file-format changes.
 
@@ -259,6 +259,10 @@ Move collaboration workflows behind application interfaces; retain modal stale-c
 
 Split recovery capture scheduling, store adapters, writer ownership and restore/adoption policy. Keep the existing injected IndexedDB draft store. Preserve browser hosted-edit scope, limits, credential-free keys/records, review exclusion and desktop recovery behavior. Define live-tab takeover with/without Web Locks. Permission loss preserves recoverable edits as an unsaved local copy and never authorizes a server write. Discard only the acknowledged draft generation owned by that writer.
 
+**Capture contract (Adam, 2026-10-07).** Save ownership cannot be established while a serializer the save paths call reads the live document, the current connection or mutable assets after an `await`. This milestone defines the captured document, the frozen `ExportDocument` of milestone 5, including the production, comment and b-roll read models that core already derives, so that a writer needs no legacy helper. The four serializers the save paths call, `buildSplitpageFile` and `buildMarkdownProject` (`20d-formats.js`), `standaloneHtmlFor` (`02b-doc-id.js`) and `toMarkdownDoc` (`14-export.js`), and `exportFacts` (`14b-export-kit.js`), which `toMarkdownDoc` reads the live document through even when handed one, take it. Accepting a document argument is not enough: a serializer run with the live document mutated after capture must produce the captured bytes, and a test asserts it.
+
+**Document-replacement lifecycle test.** A document or tab replacement leaves no session-level handler, timer, observer, subscription or object URL behind (section 6). The test calls the session owner's own dispose, advances the fake clock, lets every pending operation settle, and asserts that nothing from the old document touched the replacement. It does not rely on the app-test helper's own clearing of tracked timers and channels (`src/test/_app-boot.mjs`), which is test housekeeping and would mask missing production cleanup. It separates document-owned resources, which must go, from app-lifetime subscriptions, which must survive a switch, and names each of the latter.
+
 **Gate:** Controlled race matrix passes for document switch, same-ID reopen, changed destination/connection during serialization/upload, edits during writes, out-of-order completions, cancelled dialogs, permission revocation, 409 retries and write failure. Assert actual stored bytes, live document, dirty state, baseline and destination. Browser/desktop recovery tests cover multi-tab ownership, quota/unavailable/corrupt storage, offline images, restart and revoked links. Existing five repaired defects stay fixed.
 
 The blob registry (`02c-blobs.js`) moves into a store adapter here, so two criteria from the milestone 2 external review belong to this milestone:
@@ -280,6 +284,13 @@ Use a format registry declaring stable ID, label, supported operations/content, 
 
 Keep import decoding/sanitization separate from transaction adoption and writeback ownership. Exporting bytes alone does not acknowledge a project/server save; the save coordinator determines that meaning.
 
+**Order (Adam, 2026-10-07: the registry stays).** The capture contract itself and the serializers the save paths call land in milestone 4; this milestone extends them to the remaining exporters, in four steps:
+
+1. The remaining writers take the captured document. `buildDocx`, `buildCsv`, the XLSX builders, `buildPdf` and the narration, breakdown, b-roll and packing-list builders take milestone 4's `ExportDocument` as their argument, and every `S.state` read in `15-docx.js`, `16-csv.js`, `16b-xlsx.js`, `17-pdf.js` and `14b-export-kit.js` goes. Rendering a captured document leaves live content unchanged.
+2. The byte helpers `zipWrite`, `zipRead`, `strBytes`, `latin1Bytes`, `concatBytes`, `xmlEscape` and `htmlToRuns` move out of `14-export.js` into `src/adapters/formats/`. The writers leaving the import cycle is an acceptance result to verify, not a promise. Measured on `9dd5079`, the writers also import `05-render.js`, `07-production-tags.js`, `08-production-panels.js`, `08d-broll-panel.js` and `10-comments.js` for production, comment and b-roll facts (`16-csv` imports 08 and 10; `16b-xlsx` 08 and 08d; `17-pdf` 05, 07, 08d, 10 and 15; `14b-export-kit` 07, 08, 08c, 08d and 10). Those edges go only when the captured document carries the read models those helpers compute, which is why milestone 4's `ExportDocument` includes them. The PR records `--metrics` before and after; the four writers out of the cycle is the target, and a writer that stays in it is named with the edge that keeps it there.
+3. Import adoption. Decoding stays in `11-import.js`, `15-docx.js` and `16-csv.js`; adoption of the decoded rows goes through milestone 4's transition API, not through `S.state`.
+4. The format registry. Each format declares its stable ID, label, supported operations and content, options, accepted input and outcome; `buildFileData`'s dispatch table becomes the registry lookup; the export dialog (`18c-export-dialog.js`), the menu items and the command palette are drawn from the declaration. Per-format limits and warnings move into it. The gate's test exporter is a throwaway one in the test suite.
+
 **Gate:** Adding a small test exporter requires one provider and registration, with no edits to event routing or save coordination. Deterministic byte fixtures, Unicode/images/styles/comments/b-roll, project round trips and the human Markdown half remain stable. Verify representative output through independent readers/viewers. Rendering/exporting a captured document leaves live content unchanged.
 
 ### 6 — Finish feature ownership and editing migration
@@ -290,9 +301,16 @@ Keep import decoding/sanitization separate from transaction adoption and writeba
 
 Remove render-time tag repair and document work; ingestion/transactions enforce invariants. Use precise changed inputs for cached derivations. Add overlay/focus ownership preserving panel closure/restoration, stacking, Escape/Tab, Writer/Present behavior and pending composers.
 
-Split CSS into tokens/base/layout/components/features with deterministic aggregation. Preserve template ordering, sanitization and CSP. Do not introduce cascade layers or virtualization without equivalence/performance evidence. Preserve caret/selection and composition instead of rebuilding editable DOM indiscriminately.
+Split CSS as bounded below, with deterministic aggregation. Preserve template ordering, sanitization and CSP. Do not introduce cascade layers or virtualization without equivalence/performance evidence. Preserve caret/selection and composition instead of rebuilding editable DOM indiscriminately.
 
 Finish complex event handling only when the receiving owner exists, preserving priority among tag controls, modifier clicks, selection completion and drag types. Delete `21-events.js` when its real responsibilities have moved and tests pass, not by relocating it into another catch-all module.
+
+**Undo and redo (Adam, 2026-10-07).** Replay today writes `S.state` directly through `applyStepsLive` and reaches the session only afterwards, as `afterUndoApplied`'s `markDirty` ([session.md](architecture/session.md)). Acceptance: an undo or redo replay passes through the application's document-mutation boundary as a transaction kind of its own, preserving today's grouping, coalescing, `forget` and `foldIntoEdit`, draft undo (INV-55) and the owner re-pointing from #402. The undo algorithm, the diffing and the inversion stay.
+
+**Cleanup, bridges and CSS.**
+- Each feature's dispose test exercises production cleanup under the rule of milestone 4's lifecycle test: call the feature's own dispose, advance the fake clock, settle pending work, assert nothing reached the replacement, never rely on the app-test helper's housekeeping, and name the app-lifetime subscriptions that legitimately survive.
+- A bridge or duplicate implementation goes in the PR that migrates its last consumer. There is no standalone bridge-retirement milestone in 4.0, but a bridge with no importer left is removed, not kept.
+- The CSS split is a firm deliverable, bounded to the part that pays for UI work: the inline colour literals finished as tokens (spacing stays as px); `build.mjs` concatenating a declared list of files in a fixed order, added with the first feature that takes its styles; and per-feature files for migrated features only, each feature's rules moving into its folder when the feature does, with the rules of features that stay legacy staying in `app.css`. Sorting the remaining rules into base, layout and components, and spacing tokens, are 4.x (section 8). Every CSS move keeps the visual comparison under documented font and runtime conditions, responsive views, focus states and reduced motion, because cascade order can change what the user sees even when every declaration is identical.
 
 **Gate:** Migrated features contain no global state access, concrete platform services or direct live-document mutation. Remount/dispose tests find no duplicate handlers, owned timers, observers, subscriptions or object-URL leaks. Real-browser typing/IME/cut-paste/split-join/anchors/undo, focus, responsive/reduced-motion and representative visual checks pass. Independent feature changes do not require edits to unrelated feature internals.
 
@@ -300,13 +318,13 @@ Finish complex event handling only when the receiving owner exists, preserving p
 
 ### 7 — Complete frontend bootstrap, retire bridges and verify 4.0
 
-**Work:** Build an explicit composition root with named construction, registration and cleanup. Wire ports/services before mounting consumers. Preserve `PAGE_SHELL` capture before document DOM mutation, initial seed/identity ordering and build-time CSP hashes.
+**Work (narrowed, Adam, 2026-10-07):** One explicit wiring step in `src/bootstrap/` constructs the session, the bridge, the commands and the registries with their dependencies passed in, and `_entry.js` calls it, as it already calls `startActions`. A dependency-direction test alone cannot show independence from startup order, and the bridge shows why: `src/legacy/session-bridge.ts` creates the session at module evaluation with `dirty`, `draft` and `save` effects that do nothing, a capability that allows every edit and an editor named "Anonymous", until each legacy module calls `provideSessionEffects` or `provideRefreshRunner` as a side effect of being loaded. A module loaded in the wrong order, or not at all, leaves a session that accepts edits and fans out nothing. Tests cover startup (every owner is wired before anything mounts), a failed partial startup (a missing or throwing dependency reports and refuses to mount, rather than running half-wired with defaults) and cleanup (the wiring step's teardown releases what it built).
 
-Switch the build entry from `src/js/_entry.js` to the new root when ready. Remove replaced adapters, duplicate implementations and unused `S` fields. Any necessary untouched-legacy initializer list lives in a named, documented shim with its remaining owners; new features never depend on numbered load order. Migrated application/feature code cannot depend on that shim.
+`_entry.js` is the named, documented legacy initializer shim, with an owner per remaining module in `dependencies.md`. New features never depend on numbered load order, and a test shows that nothing under `src/application`, `src/features` or `src/bootstrap` imports the shim or registers into it. Preserve `PAGE_SHELL` capture before document DOM mutation, initial seed/identity ordering and build-time CSP hashes: `PAGE_SHELL`, the `sw.js` stamp and the CSP hashes stay as they are, since nothing moves them. The build entry does not switch and no `S` field is removed in 4.0; a bridge goes in the PR that migrates its last consumer (milestone 6), with no standalone retirement campaign.
 
 Keep generated `index.html` untracked, inlined/self-contained output, authoritative `VERSION`, the tracked worker stamp and supported offline/upgrade behavior. Scope cache cleanup to app-owned caches. Update both Docker recipes, portable staging, desktop staging/protocol allowlists, verification scripts and CI artifacts whenever runtime paths change. Test packages without a nearby checkout; some consumers still list individual server/shared files.
 
-**Gate:** Completed frontend areas have enforced acyclic dependencies, strict types, no authored comments and one document-mutation boundary. Named startup dependencies and teardown are tested for both app lifetime and document/tab replacement. Remaining legacy exceptions are exact and visible. Pass section 7's release matrix before declaring 4.0 ready.
+**Gate:** Completed frontend areas have enforced acyclic dependencies, strict types, no authored comments and one document-mutation boundary. The wiring step's startup, failed partial startup and cleanup tests pass, and so does the test that nothing migrated imports or registers into the shim. The resource-release test for document/tab replacement is part of milestone 4's gate for the session and milestone 6's for each feature. Remaining legacy exceptions are exact and visible. The Windows run and the dev smoke pass; the x64 packaged check is required only if the build entry changes, which this milestone avoids. Pass section 7's release matrix before declaring 4.0 ready.
 
 ## 6. Required ownership/race invariants
 
@@ -333,6 +351,8 @@ These are architectural contracts, not optional tests or comments to add to sour
 - Both Docker paths and the portable distribution start with fresh data and representative existing data, without importing unshipped source. Persistent sign-ins/links, permissions, offline app behavior and worker upgrade remain correct.
 - Test 4.0 client against the unchanged 3.1 server, and supported 3.1/4.0 project exchanges. If backend code changed, add old-client/new-server coverage. Keep existing IPC shapes and native capability checks.
 - No migrated frontend feature accesses global `S` or mutates live state. Forbidden edge sets shrink and contain no new violations; completed areas contain no cycles, including cycles through bridges. An increase in legitimate imports/module count is not automatically a defect.
+- The release names the legacy initializer shim, the count of numbered modules it still starts, and the bridge files that remain, with their owners, so the remaining legacy is described rather than declared gone.
+- The external review at the release gate covers milestones 5 and 7 together with milestone 6's own.
 - Source/format fixtures stay stable; performance/visual comparisons use documented runtime/font conditions. Any material change is explained and verified.
 - Architecture ownership map, invariant ledger, testing instructions and remaining legacy work accurately describe the delivered source.
 
@@ -343,6 +363,15 @@ Provide the concrete behavior preserved/fixed, ownership before/after, removed c
 Keep expected operational failures and missing execution environments visible. Continue unaffected work when a platform is unavailable, but do not bypass dependent milestone/release gates or claim those checks passed. Avoid repeat full test runs without new changes or unresolved concerns; use focused verification during PR work and full runs at the defined gates.
 
 ## 8. Follow-up refactors for 4.x
+
+### Frontend bootstrap
+
+In this order (Adam, 2026-10-07):
+
+1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own.
+2. Any bridge still standing after milestone 6, with the legacy modules that keep it.
+3. Unused `S` fields.
+4. CSS: sorting the remaining rules into base, layout and components, then spacing tokens.
 
 ### Server services
 
