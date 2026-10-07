@@ -187,59 +187,96 @@ function linkShell(href: string): number {
   return '<a href="" target="_blank" rel="noopener"></a>'.length + href.length + 5 * specials(href);
 }
 
-interface EdgeCase {
-  readonly html: string;
-  readonly split: number;
+interface Shape {
+  readonly body: string;
+  readonly cost: number;
 }
 
-function onTheEdge(over: number, build: (stretch: string) => { body: string; cost: number; split: number }): EdgeCase {
+function onTheEdge(over: number, build: (stretch: string) => Shape): string {
   for (let k = 0; k < 64; k++) {
     const shape = build("h".repeat(k));
     const gap = shape.cost - over - 4096 - 4 * shape.body.length;
-    if (gap >= 0 && gap % 4 === 0) return { html: "w".repeat(gap / 4) + shape.body, split: shape.split };
+    if (gap >= 0 && gap % 4 === 0) return "w".repeat(gap / 4) + shape.body;
   }
   throw new Error("no shape lands on the edge");
 }
 
-function plainLink(href: string, links: number): { body: string; cost: number; split: number } {
+function plainLink(href: string, links: number): Shape {
   return {
     body: '<a href="' + href + '">p<object>' + plainSiblings(links) + "</object>q</a>",
-    cost: (links + 1) * linkShell(href),
-    split: 2 * links + 1
+    cost: (links + 1) * linkShell(href)
   };
 }
 
 const LONG_HREF = "https://one.test/?a=1&b=2&" + "x".repeat(600);
 
 test("a split that costs exactly the budget is made, and one character more unwraps instead (#355)", () => {
-  const at = onTheEdge(0, (stretch) => plainLink(LONG_HREF + stretch, 30));
-  assert.equal(linkCount(assertFixedPoint(at.html)), at.split);
-  const past = onTheEdge(1, (stretch) => plainLink(LONG_HREF + stretch, 30));
-  assert.equal(linkCount(assertFixedPoint(past.html)), 1);
+  const build = (stretch: string): Shape => plainLink(LONG_HREF + stretch, 30);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build))), 61);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build))), 1);
 });
 
 test("the budget counts every shell a split opens once per piece, and a mark shared by a piece's steps once (#355)", () => {
-  const build = (stretch: string): { body: string; cost: number; split: number } => {
+  const build = (stretch: string): Shape => {
     const href = LONG_HREF + stretch;
     const marks = "<strong></strong>".length + "<em></em>".length;
     return {
       body: '<a href="' + href + '">' + around([STRONG, EM], "p<object>" + Array.from({ length: 30 }, () => INNER).join("t<u>v</u>") + "</object>q") + "</a>",
-      cost: 31 * (linkShell(href) + marks) + 30 * marks,
-      split: 61
+      cost: 31 * (linkShell(href) + marks) + 30 * marks
     };
   };
-  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build).html)), 61);
-  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build).html)), 1);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build))), 61);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build))), 1);
+});
+
+test("a repeated mark stays as written while the split fits the budget, and collapses one character past it (#355)", () => {
+  const build = (stretch: string): Shape => {
+    const href = LONG_HREF + stretch;
+    const marks = 2 * "<strong></strong>".length;
+    return {
+      body: '<a href="' + href + '">' + around([STRONG, STRONG], "p<object>" + plainSiblings(30) + "</object>q") + "</a>",
+      cost: 31 * (linkShell(href) + marks) + 30 * marks
+    };
+  };
+  const at = assertFixedPoint(onTheEdge(0, build));
+  assert.equal(linkCount(at), 61);
+  assert.match(at, /<strong><strong>x<\/strong><\/strong>/);
+  const past = assertFixedPoint(onTheEdge(1, build));
+  assert.equal(linkCount(past), 61);
+  assert.doesNotMatch(past, /<strong><strong>/);
+});
+
+function doubledStrong(href: string): Shape {
+  const strong = "<strong></strong>".length;
+  return {
+    body: '<a href="' + href + '">' + around([STRONG, STRONG], "p<object>" + plainSiblings(30) + "</object>q") + "</a>",
+    cost: 31 * (linkShell(href) + strong) + 30 * strong
+  };
+}
+
+test("after a collapse the collapsed split is what must fit and what is spent (#355)", () => {
+  const alone = (stretch: string): Shape => doubledStrong(LONG_HREF + stretch);
+  const fits = assertFixedPoint(onTheEdge(0, alone));
+  assert.equal(linkCount(fits), 61);
+  assert.doesNotMatch(fits, /<strong><strong>/);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, alone))), 1);
+  const pair = (stretch: string): Shape => {
+    const first = doubledStrong(LONG_HREF + stretch);
+    const second = plainLink("https://z.test/", 1);
+    return { body: first.body + second.body, cost: first.cost + second.cost };
+  };
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, pair))), 64);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, pair))), 62);
 });
 
 test("the budget is shared by the whole input: the second of two links gets only what the first left (#355)", () => {
-  const build = (stretch: string): { body: string; cost: number; split: number } => {
+  const build = (stretch: string): Shape => {
     const first = plainLink(LONG_HREF, 30);
     const second = plainLink(LONG_HREF + stretch, 30);
-    return { body: first.body + second.body, cost: first.cost + second.cost, split: first.split + second.split };
+    return { body: first.body + second.body, cost: first.cost + second.cost };
   };
-  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build).html)), 122);
-  const past = assertFixedPoint(onTheEdge(1, build).html);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build))), 122);
+  const past = assertFixedPoint(onTheEdge(1, build));
   assert.equal(linkCount(past), 62);
   assert.equal(linkCount(past.slice(0, past.indexOf("q</a>") + 5)), 61);
 });
