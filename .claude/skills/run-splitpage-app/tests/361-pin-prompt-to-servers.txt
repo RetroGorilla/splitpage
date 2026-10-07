@@ -44,16 +44,12 @@ wait !__shown('connect-modal')
 expect __dialogs() === 'pin-modal'
 expect document.activeElement && document.activeElement.id === 'pin-input'
 
-eval __run('tour')
-wait __shown('tour-overlay')
 eval __tidy()
-eval __run('servers')
+eval __run('tour')
 sleep 300
+expect !__shown('tour-overlay')
 expect __dialogs() === 'pin-modal'
-expect __toasts() === 'Finish or skip the tour first.'
-jsclick #tour-skip
-wait !__shown('tour-overlay')
-expect __dialogs() === 'pin-modal'
+expect __toasts() === 'Close the open dialog first.'
 
 eval __run('servers')
 wait __shown('connect-modal')
@@ -146,5 +142,24 @@ eval __run('servers')
 sleep 300
 expect __dialogs() === 'about-modal'
 expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+
+eval window.__hostedTest.pointTabAt(__fakeServers.X)
+eval window.__hostedTest.clearToken()
+eval __run('tour')
+wait __shown('tour-overlay')
+eval window.__hostedTest.detect()
+wait __shown('pin-modal')
+expect __dialogs() === 'pin-modal'
+expect __shown('tour-overlay')
+eval __tidy()
+eval __run('servers')
+sleep 300
+expect __dialogs() === 'pin-modal'
+expect __toasts() === 'Finish or skip the tour first.'
+jsclick #tour-skip
+wait !__shown('tour-overlay')
+expect __dialogs() === 'pin-modal'
 key Escape
 wait __dialogs() === ''
