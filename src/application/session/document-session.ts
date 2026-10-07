@@ -44,7 +44,9 @@ export interface SessionPorts {
   timing?: RefreshTiming | undefined;
 }
 
-export type SessionListener = (change: SessionChange) => void;
+export type AbsorbedKind = "server" | "reload" | "recovery";
+
+export type SessionListener =(change: SessionChange) => void;
 
 export interface DocumentSession {
   epoch: () => number;
@@ -52,7 +54,9 @@ export interface DocumentSession {
   read: <T>(select: (doc: DocumentView | null) => T) => T;
   adopt: (raw: unknown) => ValidatedDocument | null;
   absorbServer: (raw: unknown) => ValidatedDocument | null;
+  absorbRecovery: (raw: unknown) => ValidatedDocument | null;
   absorbReload: () => void;
+  settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
   refresh: (job: string) => void;
@@ -60,6 +64,57 @@ export interface DocumentSession {
 }
 
 export const NO_DOCUMENT = "no document";
+
+type Restore = () => void;
+type Bag = Record<string, unknown>;
+
+function copied(value: unknown): unknown {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function keepField(owner: Bag, key: string): Restore {
+  const had = Object.prototype.hasOwnProperty.call(owner, key);
+  const value = copied(owner[key]);
+  return function () {
+    if (had) owner[key] = value;
+    else Reflect.deleteProperty(owner, key);
+  };
+}
+
+function keepWhole(doc: ValidatedDocument): Restore {
+  const saved: unknown = JSON.parse(JSON.stringify(doc));
+  return function () {
+    Object.keys(doc).forEach(function (key) { Reflect.deleteProperty(doc, key); });
+    if (saved && typeof saved === "object") Object.assign(doc, saved);
+  };
+}
+
+function rollbackPoint(doc: ValidatedDocument, changes: ChangeSet): Restore {
+  if (changes.whole) return keepWhole(doc);
+  const undo: Restore[] = [];
+  changes.cells.forEach(function (cell) {
+    const row = doc.rows.find(function (r) { return r.id === cell.rowId; });
+    if (row) undo.push(keepField(row, cell.field));
+  });
+  changes.docFields.forEach(function (key) { undo.push(keepField(doc, key)); });
+  if (changes.rowsInserted.length || changes.rowsRemoved.length || changes.rowsMoved || changes.runsMoved) {
+    const rows = doc.rows.slice();
+    undo.push(function () { doc.rows.splice(0, doc.rows.length, ...rows); });
+  }
+  return function () { undo.reverse().forEach(function (restore) { restore(); }); };
+}
+
+function anchorPoint(doc: ValidatedDocument): Restore {
+  const comments = doc.comments.slice();
+  const places = comments.map(function (c) { return { rowId: c.rowId, field: c.field }; });
+  return function () {
+    doc.comments.splice(0, doc.comments.length, ...comments);
+    comments.forEach(function (c, i) {
+      const place = places[i];
+      if (place) { c.rowId = place.rowId; c.field = place.field; }
+    });
+  };
+}
 
 export function createDocumentSession(ports: SessionPorts): DocumentSession {
   const scheduler = createEffectScheduler(ports.effects, ports.timers, ports.timing);
@@ -91,24 +146,30 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
 
   function adopt(raw: unknown): ValidatedDocument | null {
     const doc = enter(raw);
+    ports.undo.adopt(doc);
     epoch++;
     document = doc;
-    ports.undo.adopt(doc);
     publish(changeOf("adopt", WHOLE_DOCUMENT));
     return doc;
   }
 
-  function absorbServer(raw: unknown): ValidatedDocument | null {
+  function absorb(kind: "server" | "recovery", raw: unknown): ValidatedDocument | null {
     const doc = enter(raw);
-    document = doc;
     ports.undo.absorbServer(doc);
-    publish(changeOf("server", WHOLE_DOCUMENT));
+    if (kind === "recovery") epoch++;
+    document = doc;
+    publish(changeOf(kind, WHOLE_DOCUMENT));
     return doc;
   }
 
   function absorbReload(): void {
     ports.undo.absorbReload();
     publish(changeOf("reload", WHOLE_DOCUMENT));
+  }
+
+  function settle(kind: AbsorbedKind): void {
+    ports.undo.record(WHOLE_DOCUMENT);
+    scheduler.pass(changeOf(kind, WHOLE_DOCUMENT));
   }
 
   function run(command: Command): CommandOutcome {
@@ -127,8 +188,23 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     if (!plan) return { kind: "noop" };
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     if (isEmpty(plan.changes)) return { kind: "noop" };
-    plan.apply(doc);
-    if (needsReconciliation(plan.changes)) ports.reconcile.anchors(doc);
+    const restore = rollbackPoint(doc, plan.changes);
+    try {
+      plan.apply(doc);
+    } catch (error) {
+      restore();
+      return { kind: "failed", error: error };
+    }
+    if (needsReconciliation(plan.changes)) {
+      const unanchor = anchorPoint(doc);
+      try {
+        ports.reconcile.anchors(doc);
+      } catch (error) {
+        unanchor();
+        restore();
+        return { kind: "failed", error: error };
+      }
+    }
     return { kind: "applied", generation: commit(plan.changes), changes: plan.changes };
   }
 
@@ -137,8 +213,10 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     generation: function () { return generation; },
     read: function (select) { return select(document); },
     adopt: adopt,
-    absorbServer: absorbServer,
+    absorbServer: function (raw) { return absorb("server", raw); },
+    absorbRecovery: function (raw) { return absorb("recovery", raw); },
     absorbReload: absorbReload,
+    settle: settle,
     run: run,
     noteEdit: function (changes) { commit(changes || WHOLE_DOCUMENT); },
     refresh: function (job) { scheduler.refresh(job); },

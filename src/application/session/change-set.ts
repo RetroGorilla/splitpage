@@ -1,7 +1,7 @@
 import { commentIds } from "../../core/text/runs.ts";
 import type { CellInput } from "../../core/text/runs.ts";
 
-export type TransactionKind = "edit" | "server" | "reload" | "adopt";
+export type TransactionKind = "edit" | "server" | "reload" | "recovery" | "adopt";
 
 export interface CellChange {
   readonly rowId: string;

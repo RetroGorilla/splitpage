@@ -1116,6 +1116,7 @@ function init() {
   S.state = null;
   S.initialStateReady = loadInitialState().then(function (loaded) {
     var applied = applyStashedWork(loaded, null, {
+      recovery: true,
       newBase: function () { return cloneState(loaded); },
       report: false
     });
