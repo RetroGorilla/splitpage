@@ -1,4 +1,4 @@
-import { deepFreeze, noFreeze } from "../core/document/freeze.ts";
+import { deepLock, noFreeze } from "../core/document/freeze.ts";
 import type { Seal } from "../core/document/freeze.ts";
 
 export const FREEZE_CACHES_PARAM = "freeze-caches";
@@ -15,4 +15,4 @@ function askedAtStart(): boolean {
   }
 }
 
-export const cacheSeal: Seal = askedAtStart() ? deepFreeze : noFreeze;
+export const cacheSeal: Seal = askedAtStart() ? deepLock : noFreeze;
