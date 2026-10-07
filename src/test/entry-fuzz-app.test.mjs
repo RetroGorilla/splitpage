@@ -26,7 +26,6 @@ session.subscribe((c) => heard.push(c.kind));
 const held = () => session.read((doc) => doc);
 const migrate = (raw) => migrateRows(raw);
 
-const KNOWN_RELOAD_UNMIGRATED = "a reload in place writes the file's scenes into the held document without migrating them (#411)";
 const KNOWN_SHOT_AUDIO_REF = "the b-roll repair at render writes shots migrateRows then changes: an audioRef with angle brackets, or a shot with no name (#325)";
 
 const KNOWN_HALF_APPLIED = "a comment createdAt that is not a string makes render throw after applyMerge handed the document to the session and S.state, so the merge's report, dirty marking and autosave never run (#410)";
@@ -131,14 +130,18 @@ async function through(name, raw, where, tally, spoilMine) {
   assert.equal(session.generation(), gen, where + ": generation");
   assert.equal(held(), S.state, where + ": the session holds the document the app shows");
   assert.equal(JSON.stringify(before), beforeText, where + ": the replaced document was not written into");
-  let judged = S.state;
+  const verdict = verdictOf(S.state, tally);
+  assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
+  verdict.known.forEach((k) => bump(tally.known, k));
+}
+
+function verdictOf(doc, tally) {
+  let judged = doc;
   if (Array.isArray(judged.brollShots) && judged.brollShots.some((b) => b && b.name === "")) {
     bump(tally.known, KNOWN_SHOT_AUDIO_REF);
     judged = { ...judged, brollShots: judged.brollShots.filter((b) => !b || b.name !== "") };
   }
-  const verdict = judge(judged, migrate, allowed);
-  assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
-  verdict.known.forEach((k) => bump(tally.known, k));
+  return judge(judged, migrate, allowed);
 }
 
 test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point or a typed failure", async (t) => {
@@ -192,15 +195,6 @@ function fileText(r) {
   return { body: lines.join(chance(r, 0.2) ? "\r\n" : "\n"), name: form === "csv" ? "reload.csv" : form === "table" ? "reload.md" : "reload.txt" };
 }
 
-function reloadedVerdict(doc) {
-  const verdict = judge(doc, migrate, allowed);
-  if (!verdict.problems.length) return { problems: [], known: verdict.known };
-  const healed = judge(migrateRows(cloneState(doc)), migrate, allowed);
-  const sameScenes = JSON.stringify(doc.rows.map((row) => row.id)) === JSON.stringify(migrateRows(cloneState(doc)).rows.map((row) => row.id));
-  if (!healed.problems.length && sameScenes) return { problems: [], known: [KNOWN_RELOAD_UNMIGRATED].concat(healed.known) };
-  return verdict;
-}
-
 let disk = null;
 const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
 
@@ -238,7 +232,7 @@ test("booted app: seeded files reloaded in place keep the epoch and generation, 
     }
     bump(tally.kinds, "reload");
     assert.deepEqual(heard, ["reload"], where);
-    const verdict = reloadedVerdict(S.state);
+    const verdict = verdictOf(S.state, tally);
     assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
     verdict.known.forEach((k) => bump(tally.known, k));
   }
@@ -246,15 +240,14 @@ test("booted app: seeded files reloaded in place keep the epoch and generation, 
   assert.ok((tally.kinds.reload || 0) >= RELOADS / 2, JSON.stringify(tally));
 });
 
-test("today a reload in place leaves the reloaded scenes unmigrated: no status, so the held document is not a migrateRows fixed point (#411)", async () => {
+test("a reload in place migrates the reloaded scenes: each has its status, and the held document is a migrateRows fixed point (#411)", async () => {
   await openImport();
+  const doc = S.state;
   await reloadWith({ body: "Wide\tPut the #kettle on.\nClose\tTwo.", name: "reload.txt" });
-  const doc = held();
-  assert.equal(doc, S.state);
-  assert.deepEqual(doc.rows.map((row) => "status" in row), [false, false]);
-  assert.deepEqual(judge(doc, migrate).problems.slice(0, 2), ["rows[0].status", "rows[1].status"]);
-  assert.deepEqual(reloadedVerdict(doc).known, [KNOWN_RELOAD_UNMIGRATED]);
-  assert.deepEqual(migrateRows(cloneState(doc)).rows.map((row) => row.status), ["todo", "todo"]);
+  assert.equal(S.state, doc);
+  assert.equal(held(), doc);
+  assert.deepEqual(doc.rows.map((row) => row.status), ["todo", "todo"]);
+  assert.deepEqual(judge(doc, migrate, allowed), { problems: [], known: [] });
 });
 
 test("today a shot's audioRef taken from a line that reads like a tag keeps the brackets, and the next migration strips them (#325)", async () => {
@@ -347,9 +340,9 @@ test("today seed 21's merge still finds the NaN rev (#412)", async () => {
   assert.ok((tally.known[KNOWN_REV_NAN] || 0) > 0, JSON.stringify(tally));
 });
 
-test("today the reload seed that found it still finds it (#411)", async () => {
+test("the reload seed that found #411 now ends in a migrateRows fixed point", async () => {
   const r = seeded(0x3200 + 1);
   await openImport();
   await reloadWith(fileText(r));
-  assert.deepEqual(reloadedVerdict(S.state).known.slice(0, 1), [KNOWN_RELOAD_UNMIGRATED]);
+  assert.deepEqual(judge(S.state, migrate, allowed), { problems: [], known: [] });
 });

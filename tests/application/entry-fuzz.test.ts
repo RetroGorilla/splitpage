@@ -111,7 +111,7 @@ function expectedLog(kind: Kind, migrated: boolean, outcome: CommandOutcome | nu
   if (kind === "adopt") return entered.concat(["undo.adopt", "publish:adopt"]);
   if (kind === "server" || kind === "merge") return entered.concat(["undo.server", "publish:server"]);
   if (kind === "recovery") return entered.concat(["undo.server", "publish:recovery"]);
-  if (kind === "reload") return ["undo.reload", "publish:reload"];
+  if (kind === "reload") return ["entry", "undo.reload", "publish:reload"];
   if (!outcome || outcome.kind !== "applied") return [];
   const effects = ["undo.record", "dirty:" + generation, "draft:" + generation, "save:" + generation, "publish:edit"];
   return kind === "insert" ? ["reconcile"].concat(effects) : effects;
@@ -156,6 +156,7 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
     h.log.length = 0;
     h.published.length = 0;
     let raw: unknown;
+    let reloaded: { title: unknown; rows: unknown } | null = null;
     let returned: ValidatedDocument | null | undefined;
     let outcome: CommandOutcome | null = null;
     let thrown: unknown = NOTHING;
@@ -172,7 +173,9 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
         assert.equal(JSON.stringify([ancestor, mine, theirs]), inputs, where + ": the merge wrote into an input");
         returned = session.absorbServer(result.merged);
       } else if (kind === "reload") {
-        session.absorbReload();
+        const file = rawObject(seeded(0x4110000 + seed * STEPS + step));
+        reloaded = { title: Reflect.get(file, "title"), rows: Reflect.get(file, "rows") };
+        returned = session.absorbReload(reloaded);
       } else if (kind === "edit") {
         outcome = runConfined(session, setAudio(rowIdOf(r), "Fuzzed " + seed + "-" + step + "."));
       } else {
@@ -210,7 +213,15 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
       assert.equal(now, held, where + ": a command keeps the document");
     } else if (kind === "reload") {
       assert.equal(now, held, where + ": a reload keeps the document");
-      assert.equal(JSON.stringify(now), heldText, where + ": the session writes nothing on a reload");
+      assert.equal(returned, held, where + ": and returns it");
+      if (Array.isArray(held)) {
+        bump(tally.known, KNOWN_ARRAY_AS_OBJECT);
+        continue;
+      }
+      const before: unknown = JSON.parse(heldText);
+      assert.ok(before && typeof before === "object" && reloaded, where);
+      const alone = migrate(jsonCopy({ ...before, title: reloaded.title, rows: reloaded.rows }));
+      assert.equal(JSON.stringify(now), JSON.stringify(alone), where + ": the held document is the reloaded title and scenes migrated over it");
     } else {
       assert.equal(now, returned, where + ": the session holds what it returned");
       assert.equal(returned === null, raw === null, where + ": only a missing document closes the session");
