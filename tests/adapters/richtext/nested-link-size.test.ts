@@ -88,6 +88,9 @@ test("a chain with a repeated mark stays as written while its splits are few (#3
   const link = (href: string, inner: string): string => '<a href="' + href + '" target="_blank" rel="noopener">' + inner + "</a>";
   assert.equal(assertFixedPoint(hostile(repeated([STRONG], 3), 1)),
     link("https://one.test/", s3("p")) + link("https://two.test/", s3("x")) + link("https://one.test/", s3("q")));
+  const s20 = (inner: string): string => "<strong>".repeat(20) + inner + "</strong>".repeat(20);
+  assert.equal(assertFixedPoint(hostile(repeated([STRONG], 20), 1)),
+    link("https://one.test/", s20("p")) + link("https://two.test/", s20("x")) + link("https://one.test/", s20("q")));
 });
 
 test("more splits than the cap allows unwrap the inner links and keep every word (#355)", () => {
