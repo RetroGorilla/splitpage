@@ -17,12 +17,12 @@ export interface SanitizeContext {
   readonly inLink?: boolean;
 }
 
-const SPLIT_CHARS_PER_INPUT_CHAR = 4;
+const SPLIT_UNITS_PER_INPUT_UNIT = 8;
 
-const FREE_SPLIT_CHARS = 4096;
+const FREE_SPLIT_UNITS = 4096;
 
 export function splitBudget(inputLength: number): SplitBudget {
-  return { left: SPLIT_CHARS_PER_INPUT_CHAR * inputLength + FREE_SPLIT_CHARS };
+  return { left: SPLIT_UNITS_PER_INPUT_UNIT * inputLength + FREE_SPLIT_UNITS };
 }
 
 type InlineStyle = {
@@ -103,7 +103,7 @@ function collapseChains(steps: readonly SplitStep[]): SplitStep[] {
   return steps.map(function (step) { return { node: step.node, chain: collapse(step.chain), point: step.point }; });
 }
 
-function attributeValueLength(value: string): number {
+function attributeValueBound(value: string): number {
   let n = value.length;
   for (let i = 0; i < value.length; i++) {
     const c = value.charCodeAt(i);
@@ -112,19 +112,19 @@ function attributeValueLength(value: string): number {
   return n;
 }
 
-function shellLength(el: Element): number {
+function shellBound(el: Element): number {
   let n = 2 * el.localName.length + 5;
-  Array.from(el.attributes).forEach(function (a) { n += a.name.length + 4 + attributeValueLength(a.value); });
+  Array.from(el.attributes).forEach(function (a) { n += a.name.length + 4 + attributeValueBound(a.value); });
   return n;
 }
 
 interface SplitPlan {
-  readonly length: number;
+  readonly bound: number;
   readonly kept: readonly number[];
 }
 
-function planSplit(link: Element, steps: readonly SplitStep[], lengthOf: (el: Element) => number): SplitPlan {
-  let length = 0;
+function planSplit(link: Element, steps: readonly SplitStep[], boundOf: (el: Element) => number): SplitPlan {
+  let bound = 0;
   let open: Element[] | null = null;
   const kept: number[] = [];
   for (const step of steps) {
@@ -132,10 +132,10 @@ function planSplit(link: Element, steps: readonly SplitStep[], lengthOf: (el: El
     if (step.point) {
       open = null;
       kept.push(0);
-      for (const el of chain) length += lengthOf(el);
+      for (const el of chain) bound += boundOf(el);
       continue;
     }
-    if (!open) { open = []; length += lengthOf(link); }
+    if (!open) { open = []; bound += boundOf(link); }
     let n = 0;
     while (n < open.length && n < chain.length && open[n] === chain[n]) n++;
     kept.push(n);
@@ -143,10 +143,10 @@ function planSplit(link: Element, steps: readonly SplitStep[], lengthOf: (el: El
     for (let i = n; i < chain.length; i++) {
       const el = chain[i] as Element;
       open.push(el);
-      length += lengthOf(el);
+      bound += boundOf(el);
     }
   }
-  return { length: length, kept: kept };
+  return { bound: bound, kept: kept };
 }
 
 function unwrapSplitPoints(steps: readonly SplitStep[]): void {
@@ -215,23 +215,23 @@ function buildSplit(link: Element, steps: readonly SplitStep[], kept: readonly n
 
 function splitLinkAround(link: Element, budget: SplitBudget): Node[] {
   if (!holdsSplitPoint(link)) return [link];
-  const lengths = new Map<Element, number>();
-  const lengthOf = function (el: Element): number {
-    let n = lengths.get(el);
-    if (n === undefined) { n = shellLength(el); lengths.set(el, n); }
+  const bounds = new Map<Element, number>();
+  const boundOf = function (el: Element): number {
+    let n = bounds.get(el);
+    if (n === undefined) { n = shellBound(el); bounds.set(el, n); }
     return n;
   };
   let steps = scanSplit(link);
-  let plan = planSplit(link, steps, lengthOf);
-  if (plan.length > budget.left) {
+  let plan = planSplit(link, steps, boundOf);
+  if (plan.bound > budget.left) {
     steps = collapseChains(steps);
-    plan = planSplit(link, steps, lengthOf);
-    if (plan.length > budget.left) {
+    plan = planSplit(link, steps, boundOf);
+    if (plan.bound > budget.left) {
       unwrapSplitPoints(steps);
       return [link];
     }
   }
-  budget.left -= plan.length;
+  budget.left -= plan.bound;
   return buildSplit(link, steps, plan.kept);
 }
 
