@@ -41,6 +41,78 @@ function holdsSplitPoint(node: Node): boolean {
   return false;
 }
 
+const FREE_SPLIT_COST = 500;
+
+interface SplitStep {
+  readonly node: Node;
+  readonly chain: readonly Element[];
+  readonly point: boolean;
+}
+
+function scanSplit(link: Element): SplitStep[] {
+  const steps: SplitStep[] = [];
+  function visit(parent: Node, chain: readonly Element[]): void {
+    Array.from(parent.childNodes).forEach(function (child) {
+      if (splitPoints.has(child)) { steps.push({ node: child, chain, point: true }); return; }
+      if (child.nodeType === 1 && holdsSplitPoint(child)) { visit(child, chain.concat(child as Element)); return; }
+      if (child.nodeType === 3 && !(child as Text).data) return;
+      steps.push({ node: child, chain, point: false });
+    });
+  }
+  visit(link, []);
+  return steps;
+}
+
+function markKey(el: Element): string {
+  return JSON.stringify([el.tagName, Array.from(el.attributes, function (a) { return [a.name, a.value]; })]);
+}
+
+function collapseChains(steps: readonly SplitStep[]): SplitStep[] {
+  const collapsed = new Map<readonly Element[], readonly Element[]>();
+  const keys = new Map<Element, string>();
+  function keyOf(el: Element): string {
+    let key = keys.get(el);
+    if (key === undefined) { key = markKey(el); keys.set(el, key); }
+    return key;
+  }
+  function collapse(chain: readonly Element[]): readonly Element[] {
+    let result = collapsed.get(chain);
+    if (!result) {
+      const seen = new Set<string>();
+      result = chain.filter(function (el) {
+        const key = keyOf(el);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      collapsed.set(chain, result);
+    }
+    return result;
+  }
+  return steps.map(function (step) { return { node: step.node, chain: collapse(step.chain), point: step.point }; });
+}
+
+function splitAffordable(steps: readonly SplitStep[]): boolean {
+  let points = 0, deepest = 0;
+  steps.forEach(function (step) {
+    if (step.point) points++;
+    if (step.chain.length > deepest) deepest = step.chain.length;
+  });
+  return (points + 1) * deepest <= Math.max(FREE_SPLIT_COST, 8 * steps.length);
+}
+
+function unwrapSplitPoints(steps: readonly SplitStep[]): void {
+  steps.forEach(function (step) {
+    if (!step.point) return;
+    const point = step.node as Element;
+    const parent = point.parentNode as Node;
+    if (isLinkPiece(point)) {
+      while (point.firstChild) parent.insertBefore(point.firstChild, point);
+    }
+    parent.removeChild(point);
+  });
+}
+
 function nestShells(chain: readonly Element[]): Element[] {
   const shells: Element[] = [];
   chain.forEach(function (c, i) {
@@ -57,6 +129,14 @@ function isLinkPiece(node: Element): boolean {
 
 function splitLinkAround(link: Element): Node[] {
   if (!holdsSplitPoint(link)) return [link];
+  let steps = scanSplit(link);
+  if (!splitAffordable(steps)) {
+    steps = collapseChains(steps);
+    if (!splitAffordable(steps)) {
+      unwrapSplitPoints(steps);
+      return [link];
+    }
+  }
   const result: Node[] = [];
   let piece: Element | null = null;
   let openSrc: Element[] = [];
@@ -98,16 +178,10 @@ function splitLinkAround(link: Element): Node[] {
     }
   }
 
-  function visit(parent: Node, chain: readonly Element[]): void {
-    Array.from(parent.childNodes).forEach(function (child) {
-      if (splitPoints.has(child)) { emit(child as Element, chain); return; }
-      if (child.nodeType === 1 && holdsSplitPoint(child)) { visit(child, chain.concat(child as Element)); return; }
-      if (child.nodeType === 3 && !(child as Text).data) return;
-      append(chain, child);
-    });
-  }
-
-  visit(link, []);
+  steps.forEach(function (step) {
+    if (step.point) emit(step.node as Element, step.chain);
+    else append(step.chain, step.node);
+  });
   closePiece();
   return result;
 }
