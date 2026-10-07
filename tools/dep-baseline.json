@@ -516,7 +516,6 @@
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.deleteCommentArmId"},
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.savedRange"},
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.savedRangeCell"},
-    {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.tagAddingPersonFor"},
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.tagDeleteArmId"},
     {"rule":"state-write","source":"src/js/05b-cell-edit.js","target":"global:S.state.*"},
