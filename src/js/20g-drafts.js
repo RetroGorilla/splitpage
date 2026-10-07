@@ -12,7 +12,7 @@ import {
 import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { browserDraftKey, createIdbDraftStore, draftBaseOf } from "./03d-drafts-idb.js";
 import { applyStashedWork } from "./14-export.js";
@@ -564,7 +564,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
-  markDirty();
+  markAbsorbedDirty("recovery");
   showToast(reasonText, "warn", true);
   return true;
 }
@@ -731,13 +731,14 @@ async function restoreFileDraft(t, mine, base, origin) {
     updateIdentityChip();
     updateFileChip();
     S.docIdWrittenOut = !!t.header.docIdWrittenOut;
-    markDirty();
+    markAbsorbedDirty("recovery");
     showToast("Restored your unsaved changes to " + (S.state.title || file.name) +
       (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
     return "applied";
   }
 
   await applyStashedWork(disk, { base: base, mine: mine }, {
+    recovery: true,
     awaitUndoPoint: true,
     keepLabel: "Your unsaved changes, recovered",
     newBase: diskCopy,
@@ -765,7 +766,7 @@ function adoptUntitledDraft(t, mine, base) {
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
-  markDirty();
+  markAbsorbedDirty("recovery");
   showToast("Restored your unsaved script" + (draftWhenText(t) ? " " + draftWhenText(t) : "") +
     " — it has never been saved, so save it somewhere.", "warn", true);
   return "applied";

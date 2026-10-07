@@ -15,7 +15,7 @@ import {
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
 
 S.saveButtonBusy = false;
 
@@ -55,6 +55,10 @@ export function setSaveButtons(text, disabled) {
 
 export function markDirty() {
   noteSessionEdit();
+}
+
+export function markAbsorbedDirty(kind) {
+  noteAbsorbedDirty(kind);
 }
 
 export function clearDirty() {

@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
-import { noteServerUpdate } from "../legacy/session-bridge.ts";
+import { noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
@@ -40,7 +40,7 @@ import {
   nowIso,
   saveAuthorName
 } from "./10-comments.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
 import { driveFormatSize, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
@@ -766,7 +766,7 @@ export function reportMerge(result, opts) {
   if (s.rowsAddedByThem) bits.push(s.rowsAddedByThem + " added by someone else");
 
   if (!bits.length && !result.conflicts.length) {
-    if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
+    if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
     return;
   }
 
@@ -794,7 +794,7 @@ export function reportMerge(result, opts) {
     if (el) el.classList.add("just-merged");
   });
 
-  if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
+  if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
 }
 
 function noteMergeAutoSave(opts) {
@@ -835,8 +835,11 @@ export function applyMerge(opts) {
     return { state: next, result: result, snapshot: snap };
   }
 
+  var kind = opts.recovery || opts.source === "server-resume" ? "recovery" : "server";
+
   function adopt() {
-    noteServerUpdate(next);
+    if (kind === "recovery") noteRecovery(next);
+    else noteServerUpdate(next);
     S.state = next;
     if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
     armUndoPoint(S.state.docId);
@@ -847,9 +850,9 @@ export function applyMerge(opts) {
     render();
     if (opts.chips) { updateIdentityChip(); updateFileChip(); }
     if (result) {
-      if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
+      if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave, kind: kind });
     } else if (opts.report !== false) {
-      markDirty();
+      markAbsorbedDirty(kind);
     }
     if (opts.toast) {
       var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;

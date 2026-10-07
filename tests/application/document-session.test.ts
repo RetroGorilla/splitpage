@@ -169,15 +169,125 @@ test("E4: a server update and a reload keep the epoch, add no generation, record
   assert.equal(h.clock.armed(), 0);
 });
 
-test("E4: user edits, server updates, reloads and adoptions are published as distinct kinds", () => {
+test("E4: user edits, server updates, reloads, recoveries and adoptions are published as distinct kinds", () => {
   const h = harness();
   h.session.adopt(rawScript("A"));
   h.session.run(setAudio("r1", "x"));
   h.session.noteEdit();
   h.session.absorbServer(rawScript("B"));
   h.session.absorbReload();
+  h.session.absorbRecovery(rawScript("C"));
   assert.deepEqual(h.published.map(function (c) { return c.kind + ":" + c.epoch + ":" + c.generation; }),
-    ["adopt:1:0", "edit:1:1", "edit:1:2", "server:1:2", "reload:1:2"]);
+    ["adopt:1:0", "edit:1:1", "edit:1:2", "server:1:2", "reload:1:2", "recovery:2:2"]);
+});
+
+test("E4: a recovery migrates the raw input, opens a new epoch, keeps the undo stack through the server path, and records and runs nothing", () => {
+  const h = opened();
+  const doc = h.session.absorbRecovery(rawScript("Recovered"));
+  assert.equal(doc?.rows[1]?.status, "todo");
+  assert.equal(h.session.epoch(), 2);
+  assert.equal(h.session.generation(), 0);
+  assert.equal(h.session.read(function (d) { return d; }), doc);
+  assert.deepEqual(h.log, ["entry", "undo.server:Recovered", "publish:recovery"]);
+  assert.equal(h.clock.armed(), 0);
+  const first = harness();
+  first.session.absorbRecovery(rawScript("At boot"));
+  assert.equal(first.session.epoch(), 1, "the first document can enter as a recovery, with an epoch of its own");
+});
+
+test("settling after a merge, reload or recovery runs the edit's effects and undo flush, adds no generation and publishes nothing", () => {
+  const h = opened();
+  h.session.absorbServer(rawScript("Merged"));
+  h.log.length = 0;
+  h.published.length = 0;
+  h.session.settle("server");
+  h.session.settle("reload");
+  h.session.settle("recovery");
+  assert.equal(h.session.generation(), 0);
+  assert.deepEqual(h.published, []);
+  assert.deepEqual(h.log, [
+    "undo.record", "dirty:0", "draft:0", "save:0",
+    "undo.record", "dirty:0", "draft:0", "save:0",
+    "undo.record", "dirty:0", "draft:0", "save:0"
+  ]);
+});
+
+test("an adoption the undo port starts inside a server update or recovery does not leave the session holding the older document", () => {
+  ["absorbServer", "absorbRecovery"].forEach(function (entry) {
+    const h = harness(undefined, { beforeUndo: function (s) { s.adopt(rawScript("Before the merge")); } });
+    const merged = entry === "absorbServer" ? h.session.absorbServer(rawScript("Merged")) : h.session.absorbRecovery(rawScript("Merged"));
+    assert.equal(h.session.read(function (d) { return d; }), merged, entry);
+    assert.equal(h.session.read(function (d) { return d && d.title; }), "Merged", entry);
+    assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", entry === "absorbServer" ? "server" : "recovery"], entry);
+  });
+  const h = harness(undefined, { beforeUndo: function (s) { s.adopt(rawScript("Inner")); } });
+  const outer = h.session.adopt(rawScript("Outer"));
+  assert.equal(h.session.read(function (d) { return d; }), outer, "and an adoption nested in an adoption leaves the outer one held");
+});
+
+function writesThenThrows(changes: ReturnType<typeof changeSet>): Command {
+  return {
+    name: "writes-then-throws",
+    needs: "edit",
+    plan: function () {
+      return {
+        changes: changes,
+        apply: function (live) {
+          const row = live.rows[0];
+          if (row) { row.audioText = "half-written"; row.extra = { nested: true }; }
+          live.title = "half-written";
+          live.added = 1;
+          live.rows.splice(1, 1);
+          live.rows.push({ id: "r9", visualText: "", audioText: "" });
+          throw new Error("apply broke");
+        }
+      };
+    }
+  };
+}
+
+test("E3: an apply that writes and then throws is rolled back: the document, generation, effects and undo are unchanged", () => {
+  const shapes: [string, Parameters<typeof changeSet>[0]][] = [
+    ["cells, title and rows", { cells: [{ rowId: "r1", field: "audioText" }, { rowId: "r1", field: "extra" }], docFields: ["title", "added"], rowsInserted: ["r9"], rowsRemoved: ["r2"] }],
+    ["the whole document", { whole: true }]
+  ];
+  shapes.forEach(function ([name, parts]) {
+    const h = opened();
+    const held = h.session.read(function (d) { return d; });
+    const before = JSON.stringify(held);
+    const out = h.session.run(writesThenThrows(changeSet(parts)));
+    assert.equal(out.kind, "failed", name);
+    assert.equal(out.kind === "failed" && out.error instanceof Error ? out.error.message : "", "apply broke", name);
+    assert.equal(h.session.read(function (d) { return d; }), held, name + ": the same object");
+    assert.equal(JSON.stringify(held), before, name + ": rolled back");
+    assert.equal(held !== null && "added" in held, false, name + ": a key the apply added is gone, not left undefined");
+    assert.equal(held !== null && held.rows[0] !== undefined && "extra" in held.rows[0], false, name + ": and so is a row field it added");
+    assert.equal(h.session.generation(), 0, name);
+    assert.deepEqual(h.log, [], name);
+    assert.deepEqual(h.published, [], name);
+  });
+});
+
+test("E3: a reconciliation that moves anchors and then throws is rolled back with the apply before it", () => {
+  const h = harness(undefined, {
+    reconcile: function (doc) {
+      const c = doc.comments[0];
+      if (c) { c.rowId = "r2"; c.field = "visualText"; }
+      doc.comments.push({ id: "stray" });
+      throw new Error("reconcile broke");
+    }
+  });
+  h.session.adopt(rawScript("Harbour"));
+  h.log.length = 0;
+  h.published.length = 0;
+  const held = h.session.read(function (d) { return d; });
+  const before = JSON.stringify(held);
+  const out = h.session.run(insertRow("r3"));
+  assert.equal(out.kind, "failed");
+  assert.equal(JSON.stringify(held), before);
+  assert.equal(h.session.generation(), 0);
+  assert.deepEqual(h.log, ["reconcile"]);
+  assert.deepEqual(h.published, []);
 });
 
 test("a legacy edit of unknown extent is one generation transition, one undo record and one effect pass, and reconciles nothing", () => {

@@ -180,7 +180,7 @@ test("03-sync applyMerge's adopt, nothing to merge: theirs as handed over, migra
   const fromRaw = await drive(() => applyMerge({ theirs: raw, source: "stash", unchanged: true, report: false }));
   const value = only(fromRaw, "03-sync.js#adopt");
   assert.equal(fixedPoint(value), true, "the session's server update migrated the unchanged theirs before it was assigned");
-  assert.deepEqual(raw, value, "in place: the object handed over is the one migrated");
+  assert.equal(fixedPoint(raw), true, "in place: the very object handed over is now a migrateRows fixed point");
 });
 
 test("13-hosted openServerDoc: migrateDocument's answer, a migrateRows fixed point", async () => {
