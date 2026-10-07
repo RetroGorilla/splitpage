@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Command } from "../../src/application/session/document-session.ts";
 import { cellEdit } from "../../src/application/session/change-set.ts";
 import { REFRESH_TIMING, createEffectScheduler } from "../../src/application/session/effects.ts";
-import { fakeClock, harness, rawScript } from "./session-fakes.ts";
+import { fakeClock, harness, rawScript, runConfined } from "./session-fakes.ts";
 
 function typeInto(rowId: string, text: string): Command {
   return {
@@ -25,7 +25,7 @@ function typing(h: ReturnType<typeof harness>, keys: number, gap: number): void 
   let text = "";
   for (let i = 0; i < keys; i++) {
     text += "a";
-    h.session.run(typeInto("r1", text));
+    runConfined(h.session, typeInto("r1", text));
     h.clock.advance(gap);
   }
 }

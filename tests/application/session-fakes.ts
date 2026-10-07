@@ -1,6 +1,7 @@
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
-import type { DocumentSession } from "../../src/application/session/document-session.ts";
-import type { SessionChange } from "../../src/application/session/change-set.ts";
+import type { Command, CommandOutcome, DocumentSession } from "../../src/application/session/document-session.ts";
+import { NO_CHANGES, needsReconciliation } from "../../src/application/session/change-set.ts";
+import type { ChangeSet, SessionChange } from "../../src/application/session/change-set.ts";
 import type { Capability, TimerPort } from "../../src/application/session/ports.ts";
 import type { RefreshTiming } from "../../src/application/session/effects.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
@@ -106,6 +107,78 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     clock: clock,
     deny: function (reason) { denied = reason; }
   };
+}
+
+type Bag = Record<string, unknown>;
+
+function snapshotOf(session: DocumentSession): Bag | null {
+  const text = session.read(function (doc) { return doc ? JSON.stringify(doc) : null; });
+  if (text === null) return null;
+  const parsed: unknown = JSON.parse(text);
+  return parsed && typeof parsed === "object" ? { ...parsed } : null;
+}
+
+function listOf(value: unknown): Bag[] {
+  return Array.isArray(value) ? value.filter(function (v): v is Bag { return !!v && typeof v === "object"; }) : [];
+}
+
+function same(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+export function writesOutside(before: Bag, after: Bag, changes: ChangeSet): string[] {
+  if (changes.whole) return [];
+  const out: string[] = [];
+  const declaredDoc = new Set(changes.docFields);
+  const keys = new Set(Object.keys(before).concat(Object.keys(after)));
+  keys.forEach(function (key) {
+    if (key === "rows" || key === "comments" || declaredDoc.has(key)) return;
+    if (!same(before[key], after[key])) out.push(key);
+  });
+  const cells = new Set(changes.cells.map(function (c) { return c.rowId + "\u0000" + c.field; }));
+  const was = listOf(before.rows), now = listOf(after.rows);
+  const wasById = new Map(was.map(function (r) { return [String(r.id), r]; }));
+  const nowById = new Map(now.map(function (r) { return [String(r.id), r]; }));
+  nowById.forEach(function (row, id) {
+    const old = wasById.get(id);
+    if (!old) {
+      if (changes.rowsInserted.indexOf(id) === -1) out.push("rows[" + id + "] inserted");
+      return;
+    }
+    new Set(Object.keys(old).concat(Object.keys(row))).forEach(function (field) {
+      if (!same(old[field], row[field]) && !cells.has(id + "\u0000" + field)) out.push("rows[" + id + "]." + field);
+    });
+  });
+  wasById.forEach(function (row, id) {
+    if (!nowById.has(id) && changes.rowsRemoved.indexOf(id) === -1) out.push("rows[" + id + "] removed");
+  });
+  const kept = (ids: Bag[]) => ids.map(function (r) { return String(r.id); }).filter(function (id) { return wasById.has(id) && nowById.has(id); });
+  if (!changes.rowsMoved && !same(kept(was), kept(now))) out.push("rows order");
+  if (!declaredDoc.has("comments")) {
+    const reconciles = needsReconciliation(changes);
+    const strip = function (c: Bag): Bag {
+      if (!reconciles) return c;
+      const rest: Bag = { ...c };
+      Reflect.deleteProperty(rest, "rowId");
+      Reflect.deleteProperty(rest, "field");
+      return rest;
+    };
+    if (!same(listOf(before.comments).map(strip), listOf(after.comments).map(strip))) out.push("comments");
+  }
+  return out;
+}
+
+export function runConfined(session: DocumentSession, command: Command): CommandOutcome {
+  const before = snapshotOf(session);
+  const outcome = session.run(command);
+  const after = snapshotOf(session);
+  if (!before || !after) return outcome;
+  const changes = outcome.kind === "applied" ? outcome.changes : NO_CHANGES;
+  const outside = writesOutside(before, after, changes);
+  if (outside.length) {
+    throw new Error("command " + command.name + " (" + outcome.kind + ") wrote outside its declared change set: " + outside.join(", "));
+  }
+  return outcome;
 }
 
 export function rawScript(title: string): Record<string, unknown> {
