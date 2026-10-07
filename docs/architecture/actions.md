@@ -203,6 +203,7 @@ started over one of them.
 | `servers` | a dialog other than the join-PIN prompt, the tour |
 | `collaborate`, `paste`, `gdoc-import`, `server-open` | still loading, a dialog, the tour (then their own state) |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
+| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide shot scenes still act in the writer, Present, the
@@ -230,7 +231,8 @@ back in its field. Once the tab moves to another server (joining or using
 one, or going back to this copy), the prompt for the old server closes;
 joining the same server leaves it open. Over the prompt alone, every other
 command that opens a dialog is still refused, and so is a second Servers
-over the pair.
+over the pair. The tour can no longer start over the prompt; a tour already
+showing when the prompt opens still refuses Servers.
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them

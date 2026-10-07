@@ -123,7 +123,7 @@ test("two or more entries for one tag name: a deleted owner gives way to the nex
   assert.equal(theirOwner(["pSam", "pCy", "pBo"], survives), "pBo");
   assert.equal(theirOwner(["pSam", "pAda", "pBo"], survives), "pAda");
   assert.equal(theirOwner(["", "pSam", "pBo"], survives), "pBo");
-  assert.equal(theirOwner(["pSam", "pBo"]), "pSam", "with no check, as the undo replay calls it, the first owner stays");
+  assert.equal(theirOwner(["pSam", "pBo"]), "pSam", "with no check, the first owner stays");
   assert.equal(theirOwner(["", "pSam", "pBo"]), "pSam");
   const mineOwner = (mine: string[], theirs: string[], check?: (id: string) => boolean) =>
     mergeProductionTags([], mine.map((o, i) => tag("tm" + i, "ladder", { owner: o })),
