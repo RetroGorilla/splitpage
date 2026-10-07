@@ -190,7 +190,16 @@ import {
   updateImportPreview
 } from "./11-import.js";
 import { markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { caretAfterStep, configureUndo, lastUndoEntry, redo, settleAfterApply, undo } from "./12a-undo.js";
+import {
+  caretAfterStep,
+  configureUndo,
+  dropEmptyStepSince,
+  lastUndoEntry,
+  redo,
+  settleAfterApply,
+  undo,
+  undoSerial
+} from "./12a-undo.js";
 import {
   armDriveDelete,
   armServerDelete,
@@ -793,8 +802,21 @@ function afterScriptCellChange(cellEl) {
   refreshPlainTag();
 }
 
+var composingIn = null;
+
+function onScriptComposition(e) {
+  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
+  if (!cellEl || !isScriptCell(cellEl)) return;
+  if (e.type === "compositionstart") {
+    composingIn = { cell: cellEl, since: undoSerial() };
+    return;
+  }
+  var started = composingIn;
+  composingIn = null;
+  if (started && started.cell === cellEl) dropEmptyStepSince(started.since);
+}
+
 function onRootFocusOut(e) {
-  if (S.cellRepainting) return;
   hideTagGhost();
   cancelPlainTag();
   hideUntaggedPrompt();
@@ -1174,6 +1196,8 @@ function init() {
   });
   rowsEl.addEventListener("beforeinput", onUndoBeforeInput);
   rowsEl.addEventListener("beforeinput", onFormatBeforeInput);
+  rowsEl.addEventListener("compositionstart", onScriptComposition);
+  rowsEl.addEventListener("compositionend", onScriptComposition);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
   rowsEl.addEventListener("dragover", onRootDragOver);
@@ -1701,6 +1725,8 @@ function init() {
   writerDocEl.addEventListener("keydown", onRootKeydown);
   writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
   writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
+  writerDocEl.addEventListener("compositionstart", onScriptComposition);
+  writerDocEl.addEventListener("compositionend", onScriptComposition);
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);
   writerDocEl.addEventListener("focusin", function (e) {
     if (e.target.classList && e.target.classList.contains("wr-para")) {

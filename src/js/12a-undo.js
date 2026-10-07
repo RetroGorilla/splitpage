@@ -292,6 +292,12 @@ export function createUndoHistory() {
     standing: standing,
     amend: amend,
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
+    dropEmptySince: function (since) {
+      var last = done[done.length - 1];
+      if (!last || last.n <= since || !last.steps.every(cosmetic)) return false;
+      done.pop();
+      return true;
+    },
     clear: function () { done.length = 0; undone.length = 0; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
     top: function () { return done[done.length - 1] || null; },
@@ -455,6 +461,10 @@ export function nextRedoEntry() { flushEdits(); return history.nextRedo(); }
 export function undoLifetime() { flushEdits(); return lifetime; }
 
 export function undoMark() { flushEdits(); history.breakCoalescing(); return history.mark(); }
+
+export function undoSerial() { flushEdits(); return history.mark(); }
+
+export function dropEmptyStepSince(since) { flushEdits(); return history.dropEmptySince(since); }
 
 export function caretAfterStep(step) {
   function domChars(h) {
