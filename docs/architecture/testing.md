@@ -37,6 +37,7 @@ narrows to the test files a change touched; `--only` is a local tool.
 | A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
 | Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`, `249-save-as-hosted.txt`, `265-browser-drafts.txt`, the collaboration suites `26[0-4]-collaborate-*.txt`) |
 | Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
+| A cache or a caller of one (`contentMemo`, the production readers, `cellOf`, 07's index) | Its unit tests, `production-frozen.test.mjs`, and the suites that read through it with `SPLITPAGE_FREEZE_CACHES=1` set ([Frozen caches](#frozen-caches)) |
 | Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
 | Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
 
@@ -60,6 +61,76 @@ A suite that ran 0 checks counts as a failure. A section is cut at about 60
 lines with a pointer to the full log, so a green run is a few lines and a red
 run stays small. The logic is `tools/failure-digest.mjs`, tested by
 `tools/test-failure-digest.mjs`.
+
+## Frozen caches
+
+A cache owns what it stores and hands the same value to every caller. A
+caller that needs to change it copies it first. Return types are `readonly`
+all the way down (`Frozen<T>` in `src/core/document/freeze.ts`), so a write
+from TypeScript is a type error; a write from legacy JavaScript is caught by
+freezing, which is for tests only (milestone 3, decisions D2 and D3).
+
+- **The switch.** `src/legacy/cache-freeze.ts` reads the page's query once,
+  when the bundle starts: `freeze-caches=1`, and nothing else, makes
+  `cacheSeal` core's `deepFreeze`; otherwise it is `noFreeze`, which hands the
+  value back untouched, so a build without the flag behaves and saves exactly
+  as before. It works in any build, like `?teleprompter=1`.
+  `SPLITPAGE_FREEZE_CACHES=1` makes `run-tests.ps1`, `driver.ps1`,
+  `driver.mjs` and `tools/run-suites.mjs` add the flag to every page a suite
+  opens, and in that mode each driver ends every suite with one more check:
+  no page exception was a write into a frozen value (`Cannot assign to read
+  only property`, `object is not extensible` and their kin). The run-splitpage-app
+  skill shows the commands. A milestone gate runs the full regression with
+  and without it (D4).
+- **The caches.** Each one seals a value once, when it stores it:
+  - `contentMemo` (`memo.ts`) takes the seal as its second argument, so every
+    memo does: the production readers (`readers.ts`: `tagsInField`,
+    `cueNamesInField`, `brollInField`, `brollPropsInField`, `wordCount`) and
+    the rundown's scene snippet (`05f-rundown.js`);
+  - the rich-text adapter's cell reader (`decode.ts`,
+    `createCellReader(decode, seal)`), which is `cellOf`; `CellReader` returns
+    `Frozen<Run[]>`, and a run's comment ids are `readonly string[]`;
+  - 07's production index: `currentProductionIndex()` and the entries
+    `productionEntries()` presents. The array `productionEntries()` returns is
+    the caller's own copy; its entries are shared.
+- **Only the owner replaces the index; nothing writes into one handed out.**
+  `refreshedProductionIndex` (core) returns the index it was given when
+  nothing it reads changed, a new index with a new row signature after a
+  prose edit, or `null` when the index must be derived again. A heal builds a
+  new index and new entries with the minted ids.
+- **The writers freezing met**, each fixed rather than excepted (none is left
+  as an exception):
+  1. A heal wrote the minted ids into the entries it had already handed out.
+     Now an entry handed out before a heal keeps the id it was handed out
+     with, and the next `productionEntries()` has the new ids. No caller
+     holds entries across a heal: the idle refresh heals, then draws from a
+     fresh read. Pinned on purpose by `production-index.test.mjs` (the first
+     test) and the #326 tests in `production-shims.test.mjs`, which flipped in
+     the same pull request.
+  2. A heal reassigned the cached index's `unregistered` and `tagSig`.
+  3. A heal wrote the minted ids into the cached core entries.
+  4. `productionIndexFresh` wrote the new HTML and tags into the cached row
+     signature on every prose edit; it is now `refreshedProductionIndex`.
+
+  `src/test/production-frozen.test.mjs` runs 07 with the flag set: every
+  cache's value is frozen all the way down and a write into it throws a
+  `TypeError`; prose edits, a heal and 80 seeded heal-edit-heal rounds
+  (`_heal-rounds.mjs`, shared with the plain #326 test) throw nothing, and
+  both views equal a fresh derivation. Against the base's 07 with only the
+  seal added, the prose edit and the heals throw. The core and adapter tests
+  build their readers with `deepFreeze`, and each cache's own test writes
+  into its value and expects a `TypeError`. `380-frozen-caches.txt` checks in
+  the browser that the cell reader, two readers and the index are frozen
+  exactly when the page's query has the flag.
+- **Merge inputs.** `src/test/merge-inputs.test.mjs` deep-freezes `base`,
+  `mine` and `theirs` with the same `deepFreeze`, runs every merge golden case
+  and a seeded corpus of 1,400 cases through `mergeStates`, and requires no
+  throw and no object in `merged` that an input can reach (#303).
+- **What freezing cannot reach.** A legacy write inside a `try` that swallows
+  the `TypeError` is not reported by the drivers' check; the unit tests above
+  are what cover the index and the readers directly. `53-service-worker.txt`
+  reloads the bare page with `location.replace` before it checks the service
+  worker's write-back, because the worker caches no page that has a query.
 
 ## Golden fixtures
 

@@ -970,4 +970,12 @@ export function __init() {
   iconStyle.textContent = tagIconCss();
   document.head.appendChild(iconStyle);
 
+  window.__cacheTest = {
+    frozen: function () {
+      var html = "Put the " + '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle">kettle</span> on.';
+      return [cellOf(html), productionReaders.tagsInField(html), productionReaders.cueNamesInField(html), currentProductionIndex()]
+        .map(function (v) { return !!v && Object.isFrozen(v); });
+    }
+  };
+
 }
