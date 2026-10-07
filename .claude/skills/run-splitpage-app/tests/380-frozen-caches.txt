@@ -1,0 +1,5 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+expect (window.__splitpageFreezeRun === true) === /[?&]freeze-caches=1(&|$)/.test(location.search)
+expect JSON.stringify(window.__cacheTest.frozen().map(function (f) { return f === (window.__splitpageFreezeRun === true); })) == [true,true,true,true]
+expect JSON.stringify(window.__cacheTest.writes().map(function (threw) { return threw === (window.__splitpageFreezeRun === true); })) == [true,true,true,true,true]
