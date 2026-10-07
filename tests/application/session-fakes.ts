@@ -3,6 +3,7 @@ import type { DocumentSession } from "../../src/application/session/document-ses
 import type { SessionChange } from "../../src/application/session/change-set.ts";
 import type { Capability, TimerPort } from "../../src/application/session/ports.ts";
 import type { RefreshTiming } from "../../src/application/session/effects.ts";
+import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 
@@ -51,19 +52,31 @@ export interface Harness {
   deny: (reason: string | null) => void;
 }
 
-export function harness(timing?: RefreshTiming): Harness {
+export interface HarnessHooks {
+  beforeUndo?: (session: DocumentSession) => void;
+  reconcile?: (doc: ValidatedDocument) => number;
+}
+
+export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harness {
   const log: string[] = [];
   const published: SessionChange[] = [];
   const refreshes: string[][] = [];
   const clock = fakeClock();
   const migration = fakeMigration();
   let denied: string | null = null;
-  const session = createDocumentSession({
+  let nesting = false;
+  function nested(): void {
+    if (!hooks.beforeUndo || nesting) return;
+    nesting = true;
+    hooks.beforeUndo(session);
+    nesting = false;
+  }
+  const session: DocumentSession = createDocumentSession({
     entry: function (raw) { log.push("entry"); return migrateRows(raw, migration.ports); },
     undo: {
-      adopt: function (doc) { log.push("undo.adopt:" + (doc ? doc.title : "none")); },
+      adopt: function (doc) { nested(); log.push("undo.adopt:" + (doc ? doc.title : "none")); },
       record: function () { log.push("undo.record"); },
-      absorbServer: function (doc) { log.push("undo.server:" + (doc ? doc.title : "none")); },
+      absorbServer: function (doc) { nested(); log.push("undo.server:" + (doc ? doc.title : "none")); },
       absorbReload: function () { log.push("undo.reload"); }
     },
     effects: {
@@ -75,7 +88,12 @@ export function harness(timing?: RefreshTiming): Harness {
     capability: {
       edit: function (): Capability { return denied === null ? { allowed: true } : { allowed: false, reason: denied }; }
     },
-    reconcile: { anchors: function () { log.push("reconcile"); return 0; } },
+    reconcile: {
+      anchors: function (doc) {
+        log.push("reconcile");
+        return hooks.reconcile ? hooks.reconcile(doc) : 0;
+      }
+    },
     timers: clock,
     timing: timing
   });
