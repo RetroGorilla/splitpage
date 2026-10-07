@@ -5,6 +5,7 @@ import {
   currentProductionIndex,
   healTagRegistry,
   productionEntries,
+  productionIndexStats,
   productionReaders
 } from "../js/07-production-tags.js";
 import { deriveProductionIndex } from "../core/production/tags.ts";
@@ -15,7 +16,7 @@ const row = (id, audioText, visualText) => ({ id, status: "todo", audioText, vis
 
 export function seededHealRounds(seed, rounds) {
   const cats = ["prop", "location", "cast", "vfx", "gear"];
-  const names = ["kettle", "Kettle", "mug", "pier", "Ada", "steam", "drone", "lamp"];
+  const names = ["kettle", "Kettle", "mug", "pier", "Ada", "steam", "drone", "lamp", String.fromCharCode(0x2060), String.fromCharCode(0xad)];
   const cues = ["slow", "rain", "door slam", "thunder"];
   const cue = (name) => `<span class="audio-cue">Music: ${name}</span>`;
   const rand = (n) => {
@@ -33,8 +34,15 @@ export function seededHealRounds(seed, rounds) {
     assert.deepEqual(productionEntries().map((e) => [e.key, e.id, e.name, e.orphaned]),
       fresh.entries.map((e) => [e.key, e.id, e.name, e.orphaned]), label);
     assert.deepEqual(handed.map((e) => e.id), handedIds, label + ": an entry handed out before the heal keeps its id");
+    const handedKeys = handed.map((e) => e.key), freshKeys = fresh.entries.map((e) => e.key);
+    if (fresh.unregistered.length && handedKeys.join("|") !== freshKeys.join("|") &&
+        handedKeys.slice().sort().join("|") === freshKeys.slice().sort().join("|")) reorderedHeals++;
+    const derived = productionIndexStats().derived;
+    assert.equal(healTagRegistry(), 0, label + ": a heal right after counted names again");
+    assert.equal(productionIndexStats().derived, derived, label + ": a heal right after re-derived the index");
+    assert.deepEqual(currentProductionIndex(), fresh, label + ": a heal right after changed the index");
   };
-  let healedRounds = 0, retitledRounds = 0, idsMoved = 0;
+  let healedRounds = 0, retitledRounds = 0, idsMoved = 0, refusedRounds = 0, reorderedHeals = 0;
   for (let round = 0; round < rounds; round++) {
     const rows = [];
     for (let r = 0; r < 1 + rand(4); r++) {
@@ -54,6 +62,7 @@ export function seededHealRounds(seed, rounds) {
     const firstIds = first.map((e) => e.id);
     if (healTagRegistry()) healedRounds++;
     check(first, firstIds, label + " first heal");
+    if (currentProductionIndex().unregistered.length) refusedRounds++;
 
     const target = S.state.rows[rand(rows.length)];
     const newCue = cues[rand(cues.length)] + [" piano", "s", " storm"][rand(3)];
@@ -67,5 +76,5 @@ export function seededHealRounds(seed, rounds) {
     if (productionEntries().some((e, i) => handed[i] && handed[i].key === e.key && handed[i].id !== e.id)) idsMoved++;
     check(handed, handedIds, label + " second heal");
   }
-  return { healedRounds, retitledRounds, idsMoved };
+  return { healedRounds, retitledRounds, idsMoved, refusedRounds, reorderedHeals };
 }
