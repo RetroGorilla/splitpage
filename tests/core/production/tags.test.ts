@@ -544,11 +544,25 @@ test("the quick-add plan adds each new line once, cleaned, with ids minted after
   assert.equal(plan.added, 3);
 });
 
-test("quick-add lines whose key is an Object property are skipped, and entries under those keys kept, as the plain-object lookup did", () => {
-  const state = gearState([registered("gear", "constructor"), registered("gear", "__proto__")]);
-  const plan = planQuickAdd(state, readers, "constructor\n__proto__\ntoString\nTripod");
+const OBJECT_PROPERTY_NAMES = ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"];
+
+test("quick-add lines named after Object's own properties are registered like any other name", () => {
+  const state = gearState();
+  const plan = planQuickAdd(state, readers, OBJECT_PROPERTY_NAMES.concat("Tripod").join("\n"));
   const kept = (state.productionTags as RegistryTag[]).filter((t) => t.name !== "Old lens" && t.name !== "Gimbal");
-  assert.deepEqual(plan, { remove: ["Old lens", "Gimbal"], register: minted(kept, "gear", ["toString"]), added: 1, removed: 2 });
+  assert.deepEqual(plan, {
+    remove: ["Old lens", "Gimbal"], register: minted(kept, "gear", OBJECT_PROPERTY_NAMES), added: 5, removed: 2
+  });
+});
+
+test("a registered gear entry named after an Object property survives while its line stays and goes when it is dropped", () => {
+  const state = gearState(OBJECT_PROPERTY_NAMES.map((name) => registered("gear", name)));
+  const kept = "Tripod\nSlider\n" + OBJECT_PROPERTY_NAMES.join("\n");
+  assert.deepEqual(planQuickAdd(state, readers, kept), { remove: ["Old lens", "Gimbal"], register: [], added: 0, removed: 2 });
+  assert.deepEqual(
+    planQuickAdd(state, readers, "Tripod\nSlider"),
+    { remove: ["Old lens", "Gimbal"].concat(OBJECT_PROPERTY_NAMES), register: [], added: 0, removed: 2 + OBJECT_PROPERTY_NAMES.length }
+  );
 });
 
 test("removing a line deletes every registry entry under that name", () => {

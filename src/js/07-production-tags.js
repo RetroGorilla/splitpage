@@ -18,6 +18,7 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import {
   TAG_CATEGORY_IDS,
@@ -865,7 +866,7 @@ export function renderTagCategories(selected) {
 }
 
 function refreshTagNameList() {
-  var names = {};
+  var names = idMap();
   productionEntries().forEach(function (t) { names[t.name] = true; });
   document.getElementById("tag-name-list").innerHTML =
     Object.keys(names).sort().map(function (n) {
