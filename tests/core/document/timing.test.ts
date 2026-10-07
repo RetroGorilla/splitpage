@@ -34,9 +34,10 @@ test("a stored reading speed is a whole number from 60 to 400, else the default"
   const cases: [unknown, number][] = [
     [60, 60], [400, 400], [59.9, DEFAULT_WPM], [400.1, DEFAULT_WPM], [59.5, DEFAULT_WPM], [60.4, 60], [399.6, 400],
     ["180", 180], [" 200 ", 200], ["", DEFAULT_WPM], [null, DEFAULT_WPM], [undefined, DEFAULT_WPM], [true, DEFAULT_WPM],
-    [NaN, DEFAULT_WPM], [Infinity, DEFAULT_WPM], ["abc", DEFAULT_WPM], [[200], 200], [{}, DEFAULT_WPM]
+    [NaN, DEFAULT_WPM], [Infinity, DEFAULT_WPM], ["abc", DEFAULT_WPM], [[200], DEFAULT_WPM], [{}, DEFAULT_WPM],
+    [JSON.parse('{"toString":1}'), DEFAULT_WPM], [JSON.parse('{"valueOf":null,"toString":null}'), DEFAULT_WPM]
   ];
-  for (const [input, want] of cases) assert.equal(normalizeWordsPerMinute(input), want, String(input));
+  for (const [input, want] of cases) assert.equal(normalizeWordsPerMinute(input), want, JSON.stringify(input));
 });
 
 test("a scene has a set length only when it holds a whole day or less", () => {

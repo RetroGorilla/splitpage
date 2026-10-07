@@ -12,7 +12,7 @@ import type { IdSource, ImageSource } from "./document/ports.ts";
 import { TAG_CATEGORY_IDS, TAG_STATUS_IDS, ensureTagIds, tagCategoryId, tagStatusId } from "./document/tags.ts";
 import type { TagRecord } from "./document/tags.ts";
 import type { ValidatedDocument } from "./document/validated.ts";
-import { legacyMdToHtml, plainName, plainText, safeId, safeImageSrc, storedImageHtml } from "./document/text-policy.ts";
+import { cappedText, legacyMdToHtml, plainName, plainText, safeId, safeImageSrc, storedImageHtml, textOf } from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
 import { collectTagsFromRows, missingRegistryTags } from "./production/tags.ts";
@@ -42,7 +42,11 @@ export interface DocumentOrigin {
 type Bag = Record<string, unknown>;
 
 function isObject(v: unknown): v is Bag {
-  return !!v && typeof v === "object";
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function stampOrNull(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
 }
 
 const MEDIA_FIELDS: readonly MediaField[] = ["visualText", "audioText"];
@@ -55,8 +59,7 @@ function moveMediaOutOfCell(row: Bag, field: MediaField, ports: MigratePorts): M
 }
 
 export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocument {
-  let s = input as Bag;
-  if (!s || typeof s !== "object") s = { title: "Untitled Script", rows: [], comments: [] };
+  const s: Bag = isObject(input) ? input : { title: "Untitled Script", rows: [], comments: [] };
   const fields = ports.fields || STATE_FIELDS;
   const ids = ports.ids;
   const legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;
@@ -75,8 +78,8 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     r.status = rowStatusId(r.status) ? r.status : "todo";
     const setLength = normalizeSceneLength(r.lengthSeconds);
     if (setLength === undefined) delete r.lengthSeconds; else r.lengthSeconds = setLength;
-    r.visualText = ports.sanitize(legacy ? legacyMdToHtml(r.visualText || "") : (r.visualText || ""));
-    r.audioText = ports.sanitize(legacy ? legacyMdToHtml(r.audioText || "") : (r.audioText || ""));
+    r.visualText = ports.sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
+    r.audioText = ports.sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));
     const legacyImage = safeImageSrc(r.visualImage);
     const interned = legacyImage ? ports.images.fromDataUrl(legacyImage) : null;
     r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
@@ -114,14 +117,16 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     c.replies = (c.replies as unknown[]).filter(isObject);
     (c.replies as Bag[]).forEach(function (rep) {
       rep.id = safeId(rep.id, "rp", ids);
-      rep.body = ports.sanitize(rep.body || "");
+      rep.body = ports.sanitize(textOf(rep.body || ""));
       rep.author = plainName(rep.author);
+      if (rep.createdAt !== undefined) rep.createdAt = stampOrNull(rep.createdAt);
     });
-    c.body = ports.sanitize(c.body || "");
+    c.body = ports.sanitize(textOf(c.body || ""));
     c.quotedText = plainText(c.quotedText);
     if (typeof c.resolved !== "boolean") c.resolved = false;
     c.author = plainName(c.author);
-    if (!c.updatedAt) c.updatedAt = c.createdAt || null;
+    if (c.createdAt !== undefined) c.createdAt = stampOrNull(c.createdAt);
+    c.updatedAt = stampOrNull(c.updatedAt) || c.createdAt || null;
     if (c.kind !== "conflict") c.kind = "anchor";
     if (c.kind === "conflict" && c.field === "visualImage") {
       const bodyImg = /<img\b[^>]*\sdata-blob="([0-9a-f]{64})"/.exec(c.body as string);
@@ -135,11 +140,11 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
       c.resolvedBy = null;
       c.resolvedAt = null;
     } else {
-      const resolvedByClean = c.resolvedBy ? plainText(c.resolvedBy).trim().slice(0, 80) : "";
+      const resolvedByClean = c.resolvedBy ? cappedText(c.resolvedBy, 80) : "";
       c.resolvedBy = resolvedByClean || null;
       c.resolvedAt = (c.resolvedBy && typeof c.resolvedAt === "string" && c.resolvedAt) ? c.resolvedAt : null;
     }
-    c.assignee = c.assignee ? plainText(c.assignee).trim().slice(0, 80) : "";
+    c.assignee = c.assignee ? cappedText(c.assignee, 80) : "";
   });
   syncCommentAnchors(s as ValidatedDocument, ports.readers.cellOf);
 
@@ -147,7 +152,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   s.people = (s.people as unknown[]).filter(isObject);
   (s.people as Bag[]).forEach(function (p) {
     p.id = safeId(p.id, "p", ids);
-    p.name = plainText(p.name).trim().slice(0, 60);
+    p.name = cappedText(p.name, 60);
   });
   s.people = (s.people as Bag[]).filter(function (p) { return p.name; });
   const knownPeople: Record<string, boolean> = Object.create(null);
@@ -161,9 +166,9 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   s.productionTags = (s.productionTags as unknown[]).filter(isObject);
   (s.productionTags as Bag[]).forEach(function (t) {
     t.cat = tagCategoryId(t.cat) || TAG_CATEGORY_IDS[0];
-    t.name = plainText(t.name).trim().slice(0, 80);
+    t.name = cappedText(t.name, 80);
     t.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
-    t.owner = knownPeople[t.owner as string] ? t.owner : "";
+    t.owner = typeof t.owner === "string" && knownPeople[t.owner] ? t.owner : "";
     t.notes = plainText(t.notes).slice(0, 2000);
   });
   s.productionTags = (s.productionTags as Bag[]).filter(function (t) { return t.name; });
@@ -176,14 +181,14 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   s.brollShots = (s.brollShots as unknown[]).filter(isObject);
   (s.brollShots as Bag[]).forEach(function (b) {
     b.id = safeId(b.id, "bs", ids);
-    b.name = plainText(b.name).trim().slice(0, 200);
+    b.name = cappedText(b.name, 200);
     b.desc = plainText(b.desc).slice(0, 2000);
     b.status = brollStatusId(b.status) || BROLL_STATUS_IDS[0];
     b.reshoot = b.reshoot === true;
     b.notes = plainText(b.notes).slice(0, 2000);
     b.audioRef = plainText(b.audioRef).slice(0, 2000);
-    b.location = plainText(b.location).trim().slice(0, 80);
-    b.owner = knownPeople[b.owner as string] ? b.owner : "";
+    b.location = cappedText(b.location, 80);
+    b.owner = typeof b.owner === "string" && knownPeople[b.owner] ? b.owner : "";
     b.origin = b.origin === "list" ? "list" : "script";
     b.props = normalizeBrollProps(b.props, s.productionTags as TagRecord[]);
   });
@@ -197,7 +202,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   });
 
   s.title = plainText(s.title).slice(0, 300);
-  if (typeof s.rev !== "number") s.rev = 0;
+  if (!Number.isFinite(s.rev)) s.rev = 0;
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;
   return s as ValidatedDocument;

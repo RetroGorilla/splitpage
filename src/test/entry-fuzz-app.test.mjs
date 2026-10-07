@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import {
-  KNOWN_REV_NAN, TABLE_304, chance, judge, knownThrow, pick, rawObject, seeded, table304Document, text, upTo
+  TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 
 await bootApp();
@@ -28,8 +28,6 @@ const migrate = (raw) => migrateRows(raw);
 
 const KNOWN_RELOAD_UNMIGRATED = "a reload in place writes the file's scenes into the held document without migrating them (#411)";
 const KNOWN_SHOT_AUDIO_REF = "the b-roll repair at render writes shots migrateRows then changes: an audioRef with angle brackets, or a shot with no name (#325)";
-
-const KNOWN_HALF_APPLIED = "a comment createdAt that is not a string makes render throw after applyMerge handed the document to the session and S.state, so the merge's report, dirty marking and autosave never run (#410)";
 
 const SHOT_AUDIO_REF = /^\.brollShots\[\d+\]\.audioRef "[^]*<[^]*>/;
 
@@ -92,33 +90,16 @@ async function through(name, raw, where, tally, spoilMine) {
   errors.length = 0;
   const epoch = session.epoch(), gen = session.generation();
   heard.length = 0;
-  let outcome, thrown = null;
+  let outcome;
   try {
     outcome = await entry.run(raw, base, mine);
   } catch (e) {
-    thrown = e;
+    assert.fail(where + " threw: " + (e && e.stack));
   }
-  if (thrown || outcome === "failed" || outcome === "nothing-unsaved") {
-    if (thrown) {
-      const known = knownThrow(thrown);
-      assert.ok(known, where + " threw: " + (thrown && thrown.stack));
-      bump(tally.known, known);
-      if (S.state !== before) {
-        assert.match(String(thrown.stack), /\n\s+at render \(/, where + ": only render throws once the document is in: " + thrown.stack);
-        assert.equal(held(), S.state, where + ": the session holds what the app shows");
-        bump(tally.known, KNOWN_HALF_APPLIED);
-        settle(startingDocument("After " + where));
-        return;
-      }
-    } else {
-      bump(tally.typed, name + ":" + outcome);
-      errors.forEach((e) => {
-        const known = knownThrow(e);
-        assert.ok(known, where + " failed on: " + (e && e.stack));
-        bump(tally.known, known);
-      });
-    }
-    assert.equal(S.state, before, where + ": a failed entry keeps the document" + (thrown ? " (" + thrown.stack + ")" : ""));
+  if (outcome === "failed" || outcome === "nothing-unsaved") {
+    bump(tally.typed, name + ":" + outcome);
+    assert.deepEqual(errors.map((e) => String((e && e.stack) || e)), [], where + " failed on an error");
+    assert.equal(S.state, before, where + ": a failed entry keeps the document");
     assert.equal(JSON.stringify(S.state), beforeText, where + ": and leaves it as it was");
     assert.equal(held(), S.state, where + ": the session still holds it");
     assert.deepEqual([session.epoch(), session.generation()], [epoch, gen], where + ": no epoch, no generation");
@@ -139,6 +120,18 @@ async function through(name, raw, where, tally, spoilMine) {
   const verdict = judge(judged, migrate, allowed);
   assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
   verdict.known.forEach((k) => bump(tally.known, k));
+}
+
+async function seedEntries(seed) {
+  const tally = { kinds: {}, known: {}, typed: {} };
+  const r = seeded(0x3100 + seed);
+  settle(startingDocument("Seed " + seed));
+  for (const name of Object.keys(ENTRIES)) {
+    if (!chance(r, 0.75)) continue;
+    await through(name, rawObject(r), "seed " + seed + " " + name, tally);
+    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset " + seed));
+  }
+  return tally;
 }
 
 test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point or a typed failure", async (t) => {
@@ -280,18 +273,11 @@ test("today a bare \"B-roll:\" line makes the render-time repair add a shot with
 });
 
 test("today seed 400's recovery still finds the shot with no name (#325)", async () => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  const r = seeded(0x3100 + 400);
-  settle(startingDocument("Seed 400"));
-  for (const name of Object.keys(ENTRIES)) {
-    if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed 400 " + name, tally);
-    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset 400"));
-  }
+  const tally = await seedEntries(400);
   assert.ok((tally.known[KNOWN_SHOT_AUDIO_REF] || 0) > 0, JSON.stringify(tally));
 });
 
-test("today a comment createdAt whose toString is not a function survives migration, and render then throws out of applyMerge after the session and S.state took the document (#410)", async () => {
+test("a comment createdAt whose toString is not a function migrates to null, so applyMerge renders, reports the merge and marks it unsaved (#410)", async () => {
   settle(startingDocument("Half"));
   const before = S.state;
   const theirs = table304Document("Theirs");
@@ -302,49 +288,46 @@ test("today a comment createdAt whose toString is not a function survives migrat
   const epoch = session.epoch();
   heard.length = 0;
   S.dirty = false;
-  assert.throws(() => applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true }),
-    (e) => knownThrow(e) !== null && /\n\s+at render \(/.test(e.stack));
+  applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true, noAutoSave: true });
   assert.notEqual(S.state, before);
   assert.equal(held(), S.state);
-  assert.deepEqual(heard, ["recovery"]);
+  assert.equal(heard[0], "recovery");
   assert.equal(session.epoch(), epoch + 1);
-  assert.equal(S.dirty, false, "the merge was never reported, so nothing marked it unsaved");
+  assert.equal(S.dirty, true, "the merge was reported, so it is marked unsaved");
+  assert.equal(S.state.comments.find((c) => c.id === "c2").createdAt, null);
+  assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
   settle(startingDocument("After half"));
 });
 
-test("today seed 467's recovery still finds the half-applied merge (#410)", async () => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  const r = seeded(0x3100 + 467);
-  settle(startingDocument("Seed 467"));
-  for (const name of Object.keys(ENTRIES)) {
-    if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed 467 " + name, tally);
-    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset 467"));
-  }
-  assert.ok((tally.known[KNOWN_HALF_APPLIED] || 0) > 0, JSON.stringify(tally));
+test("seed 467's entries, whose recovery found #410, now all land in a valid fixed point", async () => {
+  const tally = await seedEntries(467);
+  assert.ok(tally.kinds.recovery, JSON.stringify(tally));
 });
 
-test("today a merge with a raw theirs whose rev is a string leaves the session holding rev NaN (#412)", async () => {
-  settle(startingDocument("Rev"));
+test("a merge whose raw theirs has a string rev migrates theirs first, so the merged rev is one past mine's (#412)", async () => {
+  const start = startingDocument("Rev");
+  start.rev = 5;
+  settle(start);
   const theirs = table304Document("Theirs");
   theirs.rev = "seven";
   applyMerge({ base: cloneState(S.state), mine: cloneState(S.state), theirs: theirs, source: "server-conflict", report: false });
   assert.equal(held(), S.state);
-  assert.equal(Number.isNaN(S.state.rev), true);
-  assert.equal(JSON.parse(JSON.stringify(S.state)).rev, null);
-  assert.equal(migrateRows(cloneState(S.state)).rev, 0);
+  assert.equal(S.state.rev, 6);
+  assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
 });
 
-test("today seed 21's merge still finds the NaN rev (#412)", async () => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  const r = seeded(0x3100 + 21);
-  settle(startingDocument("Seed 21"));
-  for (const name of Object.keys(ENTRIES)) {
-    if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed 21 " + name, tally);
-    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset 21"));
-  }
-  assert.ok((tally.known[KNOWN_REV_NAN] || 0) > 0, JSON.stringify(tally));
+test("seed 21's entries, whose merge found #412, now all land in a valid fixed point", async () => {
+  const tally = await seedEntries(21);
+  assert.ok(tally.kinds.merge, JSON.stringify(tally));
+});
+
+test("applyMerge shows the document the session took: a raw theirs that is an array is no document, so an empty script is both on screen and held (#407)", async () => {
+  settle(startingDocument("Array"));
+  applyMerge({ theirs: [{ id: "r1", audioText: "x" }], source: "server-conflict", unchanged: true, report: false });
+  assert.equal(held(), S.state);
+  assert.equal(Array.isArray(S.state), false);
+  assert.deepEqual([S.state.title, S.state.rows], ["Untitled Script", []]);
+  settle(startingDocument("After array"));
 });
 
 test("today the reload seed that found it still finds it (#411)", async () => {
