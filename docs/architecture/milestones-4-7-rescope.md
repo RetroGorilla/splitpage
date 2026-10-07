@@ -72,4 +72,39 @@ Dropped to 4.x: the new composition root as the build entry, the removal of unus
 | 6 | Keep as written, the CSS split included (Adam, 2026-10-07), with each feature's styles moving alongside its migration | Windows run + dev smoke + external review |
 | 7 | Keep the resource-release tests (in 4 and 6) and the named initializer shim with its test; drop the entry switch, `S` field removal and bridge retirement to 4.x | Windows run + dev smoke; the x64 packaged check only if the build entry changes, which this proposal avoids |
 
-If approved: plan §5's milestone 5 section gains the order above, its milestone 7 section is rewritten to this, §7's checklist gains the milestone 7 "lost" line, and `actions.md`'s references to a milestone 7 bootstrap are updated (its milestone 5 registry references stand).
+If approved: plan §5's milestone 5 section gains the order above, its milestone 6 section gains the CSS bound below, its milestone 7 section is rewritten to this, §7's checklist gains the milestone 7 "lost" line, and `actions.md`'s references to a milestone 7 bootstrap are updated (its milestone 5 registry references stand).
+
+## The CSS bound in milestone 6
+
+`src/app.css` is one file of 7,211 lines, substituted into the page by one marker in `build.mjs`. It already defines 174 custom properties and uses them 2,247 times; 239 hex and 37 rgba/hsl colour literals, 3,752 px literals and 65 media queries remain inline. The split in 4.0 is bounded to the part that pays for UI work:
+
+- **Colour tokens finished:** the inline colour literals become existing or new tokens, in one PR checked with screenshots under the plan's documented font and runtime conditions. Spacing stays as px.
+- **Deterministic aggregation:** `build.mjs` concatenates a declared list of files in a fixed order, added with the first feature that takes its styles.
+- **Per-feature files for migrated features only:** a feature's rules move into its folder when the feature does. Rules of features that stay legacy stay in `app.css`.
+
+Deferred to 4.x: sorting the remaining rules into base, layout and components, and spacing tokens. Both are reorganisation with the cascade-order risk (equal-weight rules resolve by file order) and no behaviour change.
+
+## Updated spec for the rest of 4.0
+
+This section is the spec Adam asked for on 2026-10-07, in one place. Rules that apply to every PR come from plan §2 and review.md and are repeated here only where the decisions of 2026-10-07 changed them.
+
+**Rules.**
+- Sonnet by default; Opus for PRs touching state ingress or serialization, durable storage, the preload/IPC boundary, close/quit code, the merge algorithms, or the editing hot path and the undo adapter. Every review is Opus, one independent review per PR. Each milestone doc marks its PRs.
+- A fail-first regression test for every bug. Characterisation-only PRs for hot paths and multi-file moves; a small move carries its own characterisation tests in its first commit, with the base sha they passed on in the PR body.
+- The dependency and comment gates, review.md §2 (where bugs get fixed) and §5 (extra verification by risk), the base-merge rule and the CHANGELOG-in-one-docs-PR rule are unchanged.
+- Gates: milestones 3 and 4 full (two Windows runs, freeze off and on; dev smoke; x64 packaged check; external review). From milestone 5: the full Windows run (freeze off and on, since both take about 3 minutes) and the dev smoke; milestone 6 adds the external review; the x64 packaged check returns only if packaging inputs move. The 4.0 release gate is plan §7 in full.
+- An as-built doc for each new owner lands as its own docs PR when the owner's first commands exist; the milestone's closing PR revises it.
+
+**Milestone 3, remainder.** 3.12 typing (Opus, running), then 3.13 split/join and 3.14 cut/paste in parallel (Sonnet; a PR that must change the undo adapter becomes Opus), then 3.15 (Sonnet: revise `session.md`, this doc's as-built section with `--metrics` and `--prune`, ledger rows INV-02 part, 06, 07, 10, 17, 18, 53 and 55 with `HANDOFF.md` pointers, pinned-defects rows, the perf rerun, and the corrections to milestone-3.md that `session.md` and PR #423's review found). Then the gate as milestone-3.md states it, with its record as a separate docs PR.
+
+**Milestone 4, as written, plus one test.** Per-destination confirmed generations and baselines; the operation context captured before serialization, blob transfer or any other await; writes serialized per destination with the transport instance owning the operation; one transition API for open, new, restore and publish adoption, which closes the nine modules that assign `S.state` outside the session; identity and fork rules preserved; collaboration behind application interfaces; recovery split into capture scheduling, store adapters, writer ownership and restore policy; the blob registry into a store adapter with byte ownership; #320 measured against `d18adde` and trimmed if over 10%. Added from milestone 7: the test that a document or tab replacement leaves no session-level handler, timer, observer, subscription or object URL behind. Gate: the full gate and the plan's race matrix. Mostly Opus by the rule.
+
+**Milestone 5, in full, in this order.** (1) The captured `ExportDocument` into `exportFacts`, the four writers and the Markdown writers (Opus). (2) The byte helpers out of `14-export.js` into `src/adapters/formats/`, taking the four writers out of the cycle (Sonnet). (3) Import decoding unchanged, adoption of decoded rows through the transition API (Sonnet). (4) The format registry: stable id, label, supported operations and content, options, accepted input, outcome, limits and warnings per format; `buildFileData`'s table becomes the lookup; the export dialog, menus and command palette are drawn from it; a throwaway test exporter proves one provider and one registration suffice (Sonnet, Opus if the save coordinator is touched). Gate: Windows run and dev smoke; goldens and INV-60 are the writers' differential, the export suites the dialog's.
+
+**Milestone 6, as written, with the CSS bound above.** One feature at a time through the commands, selectors and ports milestone 3 proved: the remaining editor paths in `05-render.js`, `05b`, `05c`, `06-rows.js` and `19-writer.js` (Opus, the hot path); `21-events.js` delegation moved only as each receiving owner exists, then deleted; tags and b-roll (`07`, `08`, `08c`, `08d`), comments (`10`), find (`09`), panels, settings, gallery and prompter views (Sonnet where the move is well specified). Render-time repair removed (#325), #308 and #350 fixed in their owners, the media-cell typed HTML variant resolved. Overlay and focus ownership. Each feature owns mount and dispose, with the per-feature resource-release test from milestone 7. CSS: colour tokens, aggregation, per-feature files for migrated features. Gate: Windows run, dev smoke, external review.
+
+**Milestone 7, narrowed (Adam's confirmation pending).** `_entry.js` named as the documented legacy initializer shim with an owner per remaining module in `dependencies.md`, and a test that nothing under `src/application`, `src/features` or `src/bootstrap` imports or registers into it (one Sonnet PR). Plan §7's checklist gains the line naming the shim, the count of numbered modules in it and the bridge files that remain. No entry switch, no `S` field removal, no bridge retirement in 4.0.
+
+**4.0 release gate.** Plan §7 in full: the Linux full run, the native ARM64 packaged check, both Docker recipes and the portable package, the 3.1 server and project exchange checks, the x64 packaged check, and the external review covering milestones 5 and 7 together with 6's own.
+
+**4.x, in this order.** The composition root and build-entry switch as the first 4.x milestone, with the packaged check and an external review of its own; bridge retirement as importers disappear; unused `S` fields; CSS base, layout and components, then spacing tokens; server and desktop service extraction (plan §8); the parked enhancement issues, decided per issue by the integration owner.
