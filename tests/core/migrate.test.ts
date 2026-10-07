@@ -325,7 +325,7 @@ test("an array is no object: a top-level array migrates as no document, and an a
 });
 
 test("a value whose toString or valueOf is not a function is no text: it migrates as empty text and nothing throws (#408)", () => {
-  const raw: unknown = JSON.parse('{"title":{"toString":1},"rows":[{"id":{"toString":"r1"},"updatedBy":{"valueOf":null,"toString":null},' +
+  const raw: unknown = JSON.parse('{"schema":2,"title":{"toString":1},"rows":[{"id":{"toString":"r1"},"updatedBy":{"valueOf":null,"toString":null},' +
     '"audioText":{"toString":1},"visualText":{"valueOf":null,"toString":null}}],' +
     '"comments":[{"id":"c1","rowId":{"valueOf":null,"toString":null},"author":{"toString":1},"quotedText":{"toString":1},"body":{"toString":1},' +
     '"replies":[{"id":{"toString":1},"author":{"toString":1},"body":{"toString":1}}]}],"people":[{"id":"p1","name":{"toString":1}},{"id":{"toString":1},"name":"Ann"}],' +
