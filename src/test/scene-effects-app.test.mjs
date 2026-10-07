@@ -136,3 +136,38 @@ test("in review mode a click on a scene's length opens no editor and shows the l
     "This is a review copy — comment on a scene instead of changing its length.");
   assert.equal(document.querySelector("#rows .row-read-input"), null);
 });
+
+function backToEditMode() {
+  window.__hostedTest.setSession({ role: "edit", docId: null });
+  const host = document.getElementById("toast-host");
+  host.textContent = "";
+  return host;
+}
+
+test("in edit mode a click on a scene's length opens the editor and shows no toast", async () => {
+  const { flushEdits } = await import("../js/12a-undo.js");
+  const host = backToEditMode();
+  flushEdits();
+  const target = document.querySelector('#rows .row[data-id="r1"] .row-read');
+  assert.ok(target, "the length button is on the page");
+  target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.ok(document.querySelector("#rows .row-read-input"), "the editor is open");
+  assert.equal(host.querySelectorAll(".toast").length, 0);
+  document.querySelector("#rows .row-read-input").dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  assert.equal(document.querySelector("#rows .row-read-input"), null);
+  assert.equal(host.querySelectorAll(".toast").length, 0);
+});
+
+test("in edit mode a click on the status button cycles the status and shows no toast", async () => {
+  const { flushEdits } = await import("../js/12a-undo.js");
+  const host = backToEditMode();
+  flushEdits();
+  const target = document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]');
+  assert.ok(target, "the status button is on the page");
+  const statusOf = () => S.state.rows.find(r => r.id === "r1").status;
+  const before = statusOf(), seq = S.editSeq;
+  target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  assert.notEqual(statusOf(), before);
+  assert.equal(S.editSeq, seq + 1);
+  assert.equal(host.querySelectorAll(".toast").length, 0);
+});
