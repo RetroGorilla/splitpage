@@ -36,7 +36,7 @@ import {
   normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import {
   linkTurnedOff,
   onServerDoc,
@@ -468,8 +468,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     size: file.size || null
   });
 
-  if (opts.reload) markAbsorbedDirty("reload");
-  else markDirty();
+  markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   imported.dirty = false;
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   render();

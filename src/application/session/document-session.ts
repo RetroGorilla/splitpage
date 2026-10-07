@@ -44,9 +44,9 @@ export interface SessionPorts {
   timing?: RefreshTiming | undefined;
 }
 
-export type AbsorbedKind = "server" | "reload" | "recovery";
+export type AbsorbedKind = "server" | "reload" | "recovery" | "adopt";
 
-export type SessionListener =(change: SessionChange) => void;
+export type SessionListener = (change: SessionChange) => void;
 
 export interface DocumentSession {
   epoch: () => number;

@@ -9,7 +9,7 @@ await bootApp();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
-const { applyMerge, cloneState } = await import("../js/03-sync.js");
+const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../js/07-production-tags.js");
 const { markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
@@ -209,6 +209,39 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
   heard.length = 0;
   await applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(script("Untitled draft")) });
+  assert.deepEqual(heard, ["adopt"]);
+  assert.equal(session.epoch(), epoch + 1);
+  assert.equal(session.generation(), gen);
+  assert.equal(S.editSeq, seq + 1);
+  assert.equal(S.dirty, true);
+  assert.equal(held(), S.state);
+});
+
+test("importing a file is an adoption that marks the document dirty and advances S.editSeq as before, with no edit generation", async () => {
+  const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
+  heard.length = 0;
+  await openProjectFile(new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), null, { skipSnapshot: true });
+  assert.deepEqual(heard, ["adopt"]);
+  assert.equal(session.epoch(), epoch + 1);
+  assert.equal(session.generation(), gen);
+  assert.equal(S.editSeq, seq + 1);
+  assert.equal(S.dirty, true);
+  assert.equal(held(), S.state);
+});
+
+test("restoring a version from history is an adoption that marks the document dirty as before, with no edit generation", async () => {
+  S.state = cloneState(script("History"));
+  flushEdits();
+  const point = cloneState(S.state);
+  point.rows[0].audioText = "As it was.";
+  const ticket = pushSnapshot("A point to go back to", point);
+  await ticket.done;
+  const button = document.createElement("button");
+  button.setAttribute("data-id", ticket.id);
+  const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
+  heard.length = 0;
+  assert.equal(await restoreSnapshotFromCard(button), "restored");
+  assert.equal(S.state.rows[0].audioText, "As it was.");
   assert.deepEqual(heard, ["adopt"]);
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
