@@ -127,6 +127,20 @@ test("in review mode a status click only warns, with hidden shot scenes too; no 
   assert.deepEqual(stubs.calls, []);
 });
 
+test("a status click whose command fails throws to the caller, leaves the row as it was and paints nothing", () => {
+  stubs.resetFanout({ hideShot: true });
+  const before = JSON.stringify(lengthDoc([{ id: "r1", status: "ready" }]));
+  bridge.provideSessionEffects({ editorName: function () { throw new Error("no editor"); } });
+  try {
+    assert.throws(() => cycleRowStatus("r1"), /no editor/);
+  } finally {
+    bridge.provideSessionEffects({ editorName: function () { return "Anonymous"; } });
+  }
+  assert.deepEqual(stubs.calls, []);
+  assert.equal(JSON.stringify(S.state), before);
+  assert.deepEqual(published, []);
+});
+
 test("a scene length: the command sets and stamps the row, one effect pass with an immediate save, then the view repaints one row and the stats", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
