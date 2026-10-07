@@ -31,6 +31,8 @@ Adam's answers to the first draft (relayed by the coordinator):
 | D8 | Status toast wording | "This is a review copy — comment on a scene instead of changing its status." (`warn`) | 3.9 |
 | D9 | `setSceneLength` in review mode | Matches status: refuses with "This is a review copy — comment on a scene instead of changing its length." (`warn`), in the same form as D8 | 3.8 |
 | D10 | Scene cut-paste | Out of M3. M3 takes cell-level cut-paste only for INV-18; moving whole scenes goes with the later bulk commands | 3.14 |
+| D11 | Lane models (2026-10-07) | The plan's rule in [§2](../IMPLEMENTATION-PLAN.md#lane-models-and-characterisation): Sonnet by default, Opus for the editing hot path and the undo adapter among others. 3.12 stays Opus; 3.13, 3.14 and 3.15 are Sonnet. Reviews stay Opus | 3.12–3.15 |
+| D12 | As-built doc (2026-10-07) | `session.md` describes the session, the effect scheduler and the command shape as built after 3.9, as its own docs PR before 3.12 merges. 3.15 revises it | 3.15 |
 
 ## Exit criteria (plan §5, milestone 3)
 
@@ -107,12 +109,12 @@ The slice today:
 | 3.9 | Scene status command, with the review-mode toast | 3.8 | 3.10 | opus |
 | 3.10 | Tests only: raw-input fuzz through the session's entry points | 3.6 | 3.7–3.9 | opus |
 | 3.11 | Text characterisation: tests and suites only | 3.0 | 3.1–3.10 | opus |
-| 3.12 | Typing command (`cell-text.ts`; `syncFieldFromDom` as a view) | 3.9, 3.7, 3.11 | — | opus |
-| 3.13 | Split and join commands (`06-rows.js` split, `19-writer.js` split/join) | 3.12 | 3.14 | opus |
-| 3.14 | Cut-paste command (`05c-clipboard.js`) | 3.12 | 3.13 | opus |
-| 3.15 | Docs: as-built, ledger rows, `HANDOFF.md` pointers, metrics, perf record | all | — | haiku |
+| 3.12 | Typing command (`cell-text.ts`; `syncFieldFromDom` as a view) | 3.9, 3.7, 3.11 | — | opus (D11: the hot path) |
+| 3.13 | Split and join commands (`06-rows.js` split, `19-writer.js` split/join) | 3.12 | 3.14 | sonnet (D11) |
+| 3.14 | Cut-paste command (`05c-clipboard.js`) | 3.12 | 3.13 | sonnet (D11) |
+| 3.15 | Docs: revise `session.md`, ledger rows, `HANDOFF.md` pointers, metrics, perf record | all | — | sonnet (D11) |
 
-The busiest point is 3.1 to 3.4 with 3.11: five lanes, within the budget of about six test-running agents (check RAM first). After that, at most three run at once. Each PR runs `npm run verify` and its suites, and lanes run `--prune` after merging the base. Reviews use opus. 3.12 waits for 3.7 because typing goes through the same undo adapter path.
+The busiest point is 3.1 to 3.4 with 3.11: five lanes, within the budget of about six test-running agents (check RAM first). After that, at most three run at once. Each PR runs `npm run verify` and its suites, and lanes run `--prune` after merging the base. Reviews use opus. 3.12 waits for 3.7 because typing goes through the same undo adapter path. 3.0 to 3.11 ran on opus before D11; the rows above keep that record.
 
 ## Per PR
 
@@ -209,7 +211,7 @@ These pin today's behaviour for 3.12–3.14.
 - Seeded fuzz over paste HTML, because it is a transformation (review.md §5).
 
 **3.15 Close.**
-- As-built sections, `--metrics` before and after, and `--prune`.
+- Revise `docs/architecture/session.md` (D12) for what 3.12 to 3.14 changed in the command shape, and add this doc's as-built section with `--metrics` before and after, and `--prune`.
 - Ledger rows INV-02 (part), 06, 07 (change sets), 10, 17, 18, 53 and 55, with `HANDOFF.md` pointers for the rows absorbed.
 - The perf record rerun under 3.0's conditions.
 - pinned-defects.md updates.
