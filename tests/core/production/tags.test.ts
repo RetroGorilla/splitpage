@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { mintTagId } from "../../../src/core/document/tags.ts";
 import {
   bulkTagCell,
@@ -12,7 +13,7 @@ import {
   newRegistryTag,
   planQuickAdd,
   planRegistryHealing,
-  productionIndexFresh,
+  refreshedProductionIndex,
   registryEntry,
   registryIndex,
   retagCell,
@@ -237,22 +238,40 @@ test("deriveProductionIndex lists registry entries in order, then the live tags 
   assert.deepEqual(ix.tagSig.slice(18, 24), [null, null, null, null, null, null]);
 });
 
-test("an index stays fresh through prose edits and goes stale when what it reads changes", () => {
+test("an index is kept through prose edits and goes stale when what it reads changes", () => {
   const state = tagState();
   const ix = deriveProductionIndex(state, readers);
-  assert.equal(productionIndexFresh(ix, state, readers), true);
+  assert.equal(refreshedProductionIndex(ix, state, readers), ix, "nothing changed, so the same index comes back");
   const reworded = cells.html([T("Now fill the "), tag("prop", "Kettle", "kettle"), T(" slowly.")]);
   const edited = Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: reworded }), R2] });
-  assert.equal(productionIndexFresh(ix, edited, readers), true);
-  assert.equal(ix.rowSig[2], reworded, "the signature follows the prose edit");
+  const kept = refreshedProductionIndex(ix, edited, readers);
+  assert.ok(kept && kept !== ix);
+  assert.equal(kept.rowSig[2], reworded, "the signature follows the prose edit");
+  assert.equal(kept.entries, ix.entries);
+  assert.equal(kept.unregistered, ix.unregistered);
+  assert.equal(kept.tagSig, ix.tagSig);
+  assert.equal(refreshedProductionIndex(kept, edited, readers), kept);
   const retexted = cells.html([T("Fill the "), tag("prop", "Kettle", "big kettle")]);
-  assert.equal(productionIndexFresh(ix, Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: retexted }), R2] }), readers), false);
-  assert.equal(productionIndexFresh(deriveProductionIndex(state, readers), Object.assign({}, state, { rows: [R2, R1] }), readers), false);
+  assert.equal(refreshedProductionIndex(ix, Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: retexted }), R2] }), readers), null);
+  assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), Object.assign({}, state, { rows: [R2, R1] }), readers), null);
   const restatused = jsonCopy(state);
   (restatused.productionTags[0] as RegistryTag).status = "sourcing";
-  assert.equal(productionIndexFresh(deriveProductionIndex(state, readers), restatused, readers), false);
+  assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), restatused, readers), null);
   const grown = Object.assign({}, state, { productionTags: state.productionTags.concat([registered("cast", "Ada")]) });
-  assert.equal(productionIndexFresh(deriveProductionIndex(state, readers), grown, readers), false);
+  assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), grown, readers), null);
+});
+
+test("keeping an index through a prose edit writes nothing into the index it was given", () => {
+  const state = tagState();
+  const ix = deepFreeze(deriveProductionIndex(state, readers));
+  const before = JSON.stringify(ix);
+  const reworded = cells.html([T("Now fill the "), tag("prop", "Kettle", "kettle"), T(" slowly.")]);
+  const reshot = cells.html([T("Wide on the "), tag("location", "Kitchen", "kitchen"), T(", then close.")]);
+  const edited = Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: reworded, visualText: reshot }), R2] });
+  const kept = refreshedProductionIndex(ix, edited, readers);
+  assert.equal(JSON.stringify(ix), before);
+  assert.ok(kept);
+  assert.deepEqual(kept, deriveProductionIndex(edited, readers));
 });
 
 test("the healing plan registers each unregistered tag with an id minted after the ones before it, and writes nothing", () => {

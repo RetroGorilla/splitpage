@@ -1,3 +1,4 @@
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
 import { createProductionReaders } from "../../../src/core/production/readers.ts";
 import type { ProductionReaders } from "../../../src/core/production/ports.ts";
@@ -48,7 +49,7 @@ export function mapDecoder(): MapDecoder {
 }
 
 export function readersOver(cells: MapDecoder): ProductionReaders {
-  return createProductionReaders(cells.decode);
+  return createProductionReaders(cells.decode, deepFreeze);
 }
 
 export function countingIds(prefix?: string): IdSource & { minted: string[] } {
