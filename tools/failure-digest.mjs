@@ -157,7 +157,7 @@ export function buildDigest({ suites, logPath = (s) => s.name, limit = SECTION_L
 const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 const isCount = (v) => Number.isInteger(v) && v >= 0;
 
-export function validateVerdicts(verdicts) {
+export function validateVerdicts(verdicts, suiteNames = null) {
   if (!isObject(verdicts)) throw new Error("verdicts must be a JSON object with a suites list");
   const problems = [];
   if (typeof verdicts.timeoutSec !== "number" || !Number.isFinite(verdicts.timeoutSec) || verdicts.timeoutSec < 0) problems.push('"timeoutSec" must be a non-negative number');
@@ -172,7 +172,22 @@ export function validateVerdicts(verdicts) {
       if (!isCount(s.checks)) problems.push(`${at}: "checks" must be a whole number, 0 or more`);
       if (!isCount(s.failedChecks)) problems.push(`${at}: "failedChecks" must be a whole number, 0 or more`);
       else if (isCount(s.checks) && s.failedChecks > s.checks) problems.push(`${at}: "failedChecks" is more than "checks"`);
+      if (s.failed === false && isCount(s.failedChecks) && s.failedChecks > 0) problems.push(`${at}: "failed" is false but "failedChecks" is ${s.failedChecks}`);
+      if (s.failed === false && s.timedOut === true) problems.push(`${at}: "timedOut" is true but "failed" is false`);
     });
+    const seen = new Set();
+    const repeated = new Set();
+    for (const s of verdicts.suites) {
+      if (!isObject(s) || typeof s.name !== "string" || s.name === "") continue;
+      if (seen.has(s.name)) repeated.add(s.name);
+      seen.add(s.name);
+    }
+    for (const name of repeated) problems.push(`"${name}" has a verdict more than once`);
+    if (suiteNames !== null) {
+      const wanted = new Set(suiteNames);
+      for (const name of seen) if (!wanted.has(name)) problems.push(`"${name}" has a verdict but is not in the suite list`);
+      for (const name of wanted) if (!seen.has(name)) problems.push(`"${name}" is in the suite list but has no verdict`);
+    }
   }
   if (problems.length) throw new Error("invalid verdicts: " + problems.join("; "));
 }
@@ -182,7 +197,7 @@ function readLog(path) {
 }
 
 export function digestFromLogDir(dir, names, { limit = SECTION_LIMIT, verdicts = null } = {}) {
-  if (verdicts !== null) validateVerdicts(verdicts);
+  if (verdicts !== null) validateVerdicts(verdicts, names);
   const byName = new Map((verdicts?.suites ?? []).map((s) => [s.name, s]));
   const suites = names.map((name) => ({
     name,
