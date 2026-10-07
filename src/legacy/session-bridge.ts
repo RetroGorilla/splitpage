@@ -1,7 +1,7 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
 import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView } from "../application/session/document-session.ts";
 import type { SessionChange } from "../application/session/change-set.ts";
-import type { Capability, StampPorts } from "../application/session/ports.ts";
+import type { Capability, CellTextPorts, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
@@ -34,6 +34,12 @@ const given: LegacyEffects = {
 export const sessionStamps: StampPorts = Object.freeze({
   clock: systemClock,
   editor: Object.freeze({ name: function () { return given.editorName(); } })
+});
+
+export const sessionTextPorts: CellTextPorts = Object.freeze({
+  clock: sessionStamps.clock,
+  editor: sessionStamps.editor,
+  cells: function (html: string) { return cellOf(html); }
 });
 
 let refreshRunner: (jobs: ReadonlySet<string>) => void = nothing;
