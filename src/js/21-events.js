@@ -802,18 +802,18 @@ function afterScriptCellChange(cellEl) {
   refreshPlainTag();
 }
 
-var composingIn = null;
+var composingSince = null;
 
 function onScriptComposition(e) {
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
   if (!cellEl || !isScriptCell(cellEl)) return;
   if (e.type === "compositionstart") {
-    composingIn = { cell: cellEl, since: undoSerial() };
+    composingSince = undoSerial();
     return;
   }
-  var started = composingIn;
-  composingIn = null;
-  if (started && started.cell === cellEl) dropEmptyStepSince(started.since);
+  var since = composingSince;
+  composingSince = null;
+  if (since !== null) dropEmptyStepSince(since);
 }
 
 function onRootFocusOut(e) {

@@ -216,6 +216,33 @@ test("#380: a cancelled composition that began its own undo step leaves no step 
   assert.deepEqual(undoSizes(), sizes, "no empty step for Ctrl+Z to spend");
 });
 
+test("#380: in the Writer too, a cancelled composition leaves no step", async () => {
+  await open();
+  writer.openWriter();
+  try {
+    const p = document.querySelector('#writer-doc .wr-para[data-id="r3"]');
+    p.focus();
+    flushEdits();
+    const sizes = undoSizes();
+    compose(p, "compositionstart", "");
+    clock += 5;
+    typeChar(p, "x", { inputType: "insertCompositionText", isComposing: true });
+    assert.equal(row("r3").audioText, "Three.x");
+    await settle();
+    const node = lastText(p);
+    node.data = "Three.";
+    caretAt(node, node.data.length);
+    input(p, null, { inputType: "deleteCompositionText", isComposing: true });
+    await settle();
+    compose(p, "compositionend", "");
+    await settle();
+    assert.equal(row("r3").audioText, "Three.");
+    assert.deepEqual(undoSizes(), sizes);
+  } finally {
+    writer.closeWriter();
+  }
+});
+
 test("#380: a cancelled composition that joined earlier typing keeps that typing's step, unchanged", async () => {
   await open();
   const el = cellOf("r1", "audioText");
