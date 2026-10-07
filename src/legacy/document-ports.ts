@@ -8,9 +8,10 @@ import type { MigratePorts } from "../core/migrate.ts";
 import { createProductionReaders } from "../core/production/readers.ts";
 import type { ProductionReaders } from "../core/production/ports.ts";
 import { intern, queuePersist, recordFor } from "../js/02c-blobs.js";
+import { cacheSeal } from "./cache-freeze.ts";
 import { cellOf } from "./richtext.ts";
 
-export const productionReaders: ProductionReaders = createProductionReaders(cellOf);
+export const productionReaders: ProductionReaders = createProductionReaders(cellOf, cacheSeal);
 
 function keepPending(images: ImageIngestion): void {
   const pending = images.pending();

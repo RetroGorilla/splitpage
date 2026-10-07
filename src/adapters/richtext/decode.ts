@@ -1,3 +1,4 @@
+import type { Frozen, Seal } from "../../core/document/freeze.ts";
 import type { DecodeOptions } from "../../core/text/ports.ts";
 import { defaultTagId, normalizeCell } from "../../core/text/runs.ts";
 import type { Run, RunInput } from "../../core/text/runs.ts";
@@ -15,7 +16,7 @@ type DecodedMarks = {
   cmt?: (string | null)[];
 };
 
-export type CellReader = (html: unknown) => Run[];
+export type CellReader = (html: unknown) => Frozen<Run[]>;
 
 const CELL_CACHE_BUDGET = 2000000;
 
@@ -76,14 +77,14 @@ export function decodeBody(body: Node, opts?: DecodeOptions | null): Run[] {
   return normalizeCell(runs, options);
 }
 
-export function createCellReader(decode: (html: string) => Run[]): CellReader {
-  const cellCache = new Map<string, Run[]>();
+export function createCellReader(decode: (html: string) => Run[], seal: Seal): CellReader {
+  const cellCache = new Map<string, Frozen<Run[]>>();
   let cellCacheChars = 0;
   return function cellOf(html) {
     const key = html == null ? "" : String(html);
     const hit = cellCache.get(key);
     if (hit !== undefined) return hit;
-    const cell = decode(key);
+    const cell = seal(decode(key));
     if (cellCacheChars > CELL_CACHE_BUDGET) { cellCache.clear(); cellCacheChars = 0; }
     cellCache.set(key, cell);
     cellCacheChars += key.length;

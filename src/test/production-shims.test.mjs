@@ -18,6 +18,7 @@ import { deriveProductionIndex } from "../core/production/tags.ts";
 import { __init as initBroll, brollEntries, newBrollRecord, updateBrollBadge } from "../js/08c-broll.js";
 import { htmlToPlainText } from "../js/14-export.js";
 import { brollEntries as readBrollEntries } from "../core/production/broll.ts";
+import { seededHealRounds } from "./_heal-rounds.mjs";
 
 initBroll();
 
@@ -162,13 +163,15 @@ test("after a heal the cached index is what a fresh derivation of the healed doc
     { id: "t_ladder", cat: "prop", name: "Ladder", owner: "", notes: "n", status: "needed" }
   ];
   const shown = productionEntries();
+  const shownIds = shown.map((e) => e.id);
   const derivedBefore = productionIndexStats().derived;
   assert.equal(healTagRegistry(), 5);
   assert.equal(productionIndexStats().derived, derivedBefore, "the heal re-derived the index");
   const fresh = deriveProductionIndex(S.state, productionReaders);
   assert.deepEqual(currentProductionIndex(), fresh);
   assert.deepEqual(productionEntries().map((e) => [e.key, e.id]), fresh.entries.map((e) => [e.key, e.id]));
-  assert.deepEqual(shown.map((e) => e.id), fresh.entries.map((e) => e.id), "an entry already handed out keeps its old id");
+  assert.notDeepEqual(shownIds, fresh.entries.map((e) => e.id));
+  assert.deepEqual(shown.map((e) => e.id), shownIds, "an entry already handed out keeps its old id: the heal writes into no entry it handed out");
   assert.equal(healTagRegistry(), 0);
   assert.equal(productionIndexStats().derived, derivedBefore);
 });
@@ -183,66 +186,15 @@ test("a name the registry refuses stays unregistered after a heal, in its place 
   const want = [["kettle", mintTagId("prop", "kettle")], ["⁠", null], ["mug", mintTagId("prop", "mug")]];
   assert.deepEqual(currentProductionIndex().entries.map((e) => [e.name, e.id]), want);
   assert.deepEqual(productionEntries().map((e) => [e.name, e.id]), want);
-  assert.deepEqual(shown.map((e) => [e.name, e.id]), want);
+  assert.deepEqual(shown.map((e) => [e.name, e.id]), [["kettle", null], ["⁠", null], ["mug", null]], "the entries handed out before the heal keep the ids they were handed out with");
   assert.deepEqual(currentProductionIndex().unregistered, []);
   assert.equal(healTagRegistry(), 0);
   assert.deepEqual(currentProductionIndex().entries.map((e) => [e.name, e.id]), want);
 });
 
-test("seeded documents: after a heal, and after an edit and a second heal, both index views agree with a fresh derivation (#326)", () => {
-  const cats = ["prop", "location", "cast", "vfx", "gear"];
-  const names = ["kettle", "Kettle", "mug", "pier", "Ada", "steam", "drone", "lamp"];
-  const cues = ["slow", "rain", "door slam", "thunder"];
-  const cue = (name) => `<span class="audio-cue">Music: ${name}</span>`;
-  let seed = 326;
-  const rand = (n) => {
-    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
-    return (seed >>> 16) % n;
-  };
-  const tags = () => {
-    let html = "";
-    for (let k = 0; k < rand(4); k++) html += "x " + tag(cats[rand(cats.length)], names[rand(names.length)]) + " ";
-    return html;
-  };
-  const check = (handed, label) => {
-    const fresh = deriveProductionIndex(S.state, productionReaders);
-    assert.deepEqual(currentProductionIndex(), fresh, label);
-    assert.deepEqual(productionEntries().map((e) => [e.key, e.id, e.name, e.orphaned]),
-      fresh.entries.map((e) => [e.key, e.id, e.name, e.orphaned]), label);
-    const freshIds = new Map(fresh.entries.map((e) => [e.key, e.id]));
-    handed.filter((e) => freshIds.has(e.key)).forEach((e) => {
-      assert.equal(e.id, freshIds.get(e.key), label + ": handed-out " + e.key);
-    });
-  };
-  let healedRounds = 0, retitledRounds = 0;
-  for (let round = 0; round < 80; round++) {
-    const rows = [];
-    for (let r = 0; r < 1 + rand(4); r++) {
-      let audio = tags();
-      if (rand(2)) audio += "<br>" + cue(cues[rand(cues.length)]);
-      rows.push(row("r" + r, audio, tags()));
-    }
-    const productionTags = [];
-    for (let t = 0; t < rand(4); t++) {
-      const cat = cats[rand(cats.length)], name = names[rand(names.length)];
-      productionTags.push({ id: "t_" + round + "_" + t, cat, name, owner: "", notes: "", status: "needed" });
-    }
-    load({ rows });
-    S.state.productionTags = productionTags;
-    const label = "round " + round;
-    if (healTagRegistry()) healedRounds++;
-    check(productionEntries(), label + " first heal");
-
-    const target = S.state.rows[rand(rows.length)];
-    const newCue = cues[rand(cues.length)] + [" piano", "s", " storm"][rand(3)];
-    target.audioText = target.audioText.replace(/<br><span class="audio-cue">.*<\/span>$/, "") + "<br>" + cue(newCue);
-    if (rand(2)) target.visualText += tag(cats[rand(cats.length)], names[rand(names.length)]);
-    const handed = productionEntries();
-    const namesBefore = new Map(S.state.productionTags.map((t) => [t.id, t.name]));
-    healTagRegistry();
-    if (S.state.productionTags.some((t) => namesBefore.has(t.id) && namesBefore.get(t.id) !== t.name)) retitledRounds++;
-    check(handed, label + " second heal");
-  }
+test("seeded documents: after a heal, and after an edit and a second heal, both index views agree with a fresh derivation, and entries handed out before keep their ids (#326)", () => {
+  const { healedRounds, retitledRounds, idsMoved } = seededHealRounds(326, 80);
   assert.ok(healedRounds >= 30, "only " + healedRounds + " rounds healed anything");
   assert.ok(retitledRounds >= 10, "only " + retitledRounds + " rounds retitled a cue");
+  assert.ok(idsMoved >= 10, "only " + idsMoved + " second heals gave an entry a new id");
 });
