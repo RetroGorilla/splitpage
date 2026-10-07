@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { SCENE_LENGTH_DERIVES, sceneAt, sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
-import type { StampPorts } from "../../src/application/commands/scene-length.ts";
+import type { StampPorts } from "../../src/application/session/ports.ts";
 import { harness, rawScript, runConfined } from "./session-fakes.ts";
 
 const STAMP = "2026-10-07T12:00:00.000Z";
@@ -117,7 +117,7 @@ test("E3: in review mode the command is refused before it plans, with no effects
 
 test("E3: with no document open the command is refused", () => {
   const h = harness();
-  assert.deepEqual(h.session.run(sceneLengthCommand("r1", 30, stamps())), { kind: "rejected", reason: NO_DOCUMENT });
+  assert.deepEqual(runConfined(h.session, sceneLengthCommand("r1", 30, stamps())), { kind: "rejected", reason: NO_DOCUMENT });
   assert.deepEqual(h.log, []);
 });
 

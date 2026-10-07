@@ -4,16 +4,7 @@ import type { DocumentRow } from "../../core/document/validated.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DeepReadonly, DocumentView } from "../session/document-session.ts";
-import type { Clock } from "../session/ports.ts";
-
-export interface EditorPort {
-  readonly name: () => string;
-}
-
-export interface StampPorts {
-  readonly clock: Clock;
-  readonly editor: EditorPort;
-}
+import type { StampPorts } from "../session/ports.ts";
 
 export interface SceneAt {
   readonly index: number;
