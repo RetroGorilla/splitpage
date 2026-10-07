@@ -309,25 +309,13 @@
           "Slider",
           "needed",
           ""
-        ],
-        [
-          "t_ctor",
-          "constructor",
-          "needed",
-          ""
-        ],
-        [
-          "t_proto",
-          "__proto__",
-          "needed",
-          ""
         ]
       ],
       "otherTagsUntouched": true,
       "toasts": [
-        "Gear list updated — removed 6."
+        "Gear list updated — removed 8."
       ],
-      "boxAfter": "__proto__\nconstructor\nSlider\nTripod",
+      "boxAfter": "Slider\nTripod",
       "dirty": true,
       "personColors": null
     },
@@ -348,6 +336,18 @@
           ""
         ],
         [
+          "t_a30syj8irqu",
+          "constructor",
+          "needed",
+          ""
+        ],
+        [
+          "t_51yo2kb6x097",
+          "__proto__",
+          "needed",
+          ""
+        ],
+        [
           "t_obtw56d24pz7",
           "toString",
           "needed",
@@ -356,9 +356,9 @@
       ],
       "otherTagsUntouched": true,
       "toasts": [
-        "Gear list updated — added 1, removed 1."
+        "Gear list updated — added 3, removed 1."
       ],
-      "boxAfter": "Slider\ntoString\nTripod",
+      "boxAfter": "__proto__\nconstructor\nSlider\ntoString\nTripod",
       "dirty": true,
       "personColors": null
     },
@@ -381,7 +381,7 @@
       ],
       "otherTagsUntouched": true,
       "toasts": [
-        "Gear list updated — removed 1."
+        "Gear list updated — removed 3."
       ],
       "boxAfter": "Slider\nTripod",
       "dirty": true,

@@ -9,13 +9,14 @@ import {
   autoSaveHalt,
   autoSaveTarget,
   clearAutoSaveTimers,
+  queueAutoSave,
   resumeAutoSave,
   scheduleAutoSave
 } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
 
 S.saveButtonBusy = false;
 
@@ -28,14 +29,15 @@ provideSessionEffects({
   draft: function () {
     if (typeof noteDraftChange === "function") noteDraftChange();
   },
-  save: function () {
+  save: function (change) {
     if (!S.saveButtonBusy) setSaveButtons("Save •");
     scheduleAutoSave();
     if (home.kind === "import") { home.dirty = true; updateFileChip(); }
     else if (onServerDoc()) { updateFileChip(); }
+    if (change.changes.saveNow) queueAutoSave();
   },
   edit: function () {
-    return reviewMode() ? { allowed: false, reason: "review" } : { allowed: true };
+    return reviewMode() ? { allowed: false, reason: REVIEW_ONLY } : { allowed: true };
   }
 });
 
