@@ -101,7 +101,7 @@
       false,
       "c"
     ],
-    "output": "false"
+    "output": "{minted:c}"
   },
   {
     "case": "empty: minted with the prefix",
