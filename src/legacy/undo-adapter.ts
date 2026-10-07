@@ -13,3 +13,7 @@ export function createUndoAdapter(): UndoPort {
 export function watchUndoAdoption(adopted: (doc: unknown) => void): void {
   configureUndo({ adopted: adopted });
 }
+
+export function followLiveDocument(): void {
+  trackDocument();
+}

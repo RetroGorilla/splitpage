@@ -1,19 +1,23 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, DocumentSession } from "../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView } from "../application/session/document-session.ts";
 import type { SessionChange } from "../application/session/change-set.ts";
-import type { Capability } from "../application/session/ports.ts";
+import type { Capability, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
+import { systemClock } from "../adapters/identity/ids.ts";
 import { migrateRows } from "../js/02-state.js";
 import { cellOf } from "./richtext.ts";
-import { createUndoAdapter, watchUndoAdoption } from "./undo-adapter.ts";
+import { createUndoAdapter, followLiveDocument, watchUndoAdoption } from "./undo-adapter.ts";
 
 export interface LegacyEffects {
   dirty: (change: SessionChange) => void;
   draft: (change: SessionChange) => void;
   save: (change: SessionChange) => void;
   edit: () => Capability;
+  editorName: () => string;
 }
+
+export const REVIEW_ONLY = "review";
 
 const ALLOWED: Capability = Object.freeze({ allowed: true });
 
@@ -23,8 +27,14 @@ const given: LegacyEffects = {
   dirty: nothing,
   draft: nothing,
   save: nothing,
-  edit: function () { return ALLOWED; }
+  edit: function () { return ALLOWED; },
+  editorName: function () { return "Anonymous"; }
 };
+
+export const sessionStamps: StampPorts = Object.freeze({
+  clock: systemClock,
+  editor: Object.freeze({ name: function () { return given.editorName(); } })
+});
 
 let refreshRunner: (jobs: ReadonlySet<string>) => void = nothing;
 
@@ -57,6 +67,17 @@ export function provideSessionEffects(effects: Partial<LegacyEffects>): void {
   if (effects.draft) given.draft = effects.draft;
   if (effects.save) given.save = effects.save;
   if (effects.edit) given.edit = effects.edit;
+  if (effects.editorName) given.editorName = effects.editorName;
+}
+
+export function readSession<T>(select: (doc: DocumentView | null) => T): T {
+  followLiveDocument();
+  return session.read(select);
+}
+
+export function runCommand(command: Command): CommandOutcome {
+  followLiveDocument();
+  return session.run(command);
 }
 
 export function provideRefreshRunner(run: (jobs: ReadonlySet<string>) => void): void {

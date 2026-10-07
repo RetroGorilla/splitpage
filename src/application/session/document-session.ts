@@ -72,12 +72,29 @@ function copied(value: unknown): unknown {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
+function owns(owner: Bag, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(owner, key);
+}
+
 function keepField(owner: Bag, key: string): Restore {
-  const had = Object.prototype.hasOwnProperty.call(owner, key);
+  const had = owns(owner, key);
   const value = copied(owner[key]);
+  const keys = Object.keys(owner);
+  const later = had ? keys.slice(keys.indexOf(key) + 1) : [];
   return function () {
-    if (had) owner[key] = value;
-    else Reflect.deleteProperty(owner, key);
+    if (!had) {
+      Reflect.deleteProperty(owner, key);
+      return;
+    }
+    const gone = !owns(owner, key);
+    owner[key] = value;
+    if (!gone) return;
+    later.forEach(function (next) {
+      if (!owns(owner, next)) return;
+      const kept = owner[next];
+      Reflect.deleteProperty(owner, next);
+      owner[next] = kept;
+    });
   };
 }
 
