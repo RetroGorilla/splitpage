@@ -287,7 +287,7 @@
   {
     "case": "false",
     "input": false,
-    "output": "false"
+    "output": ""
   },
   {
     "case": "NaN",
@@ -300,13 +300,13 @@
       1,
       "<b>2</b>"
     ],
-    "output": "1,2"
+    "output": ""
   },
   {
     "case": "an object",
     "input": {
       "a": 1
     },
-    "output": "[object Object]"
+    "output": ""
   }
 ]
