@@ -122,7 +122,10 @@ under the test-only freeze flag (milestone 3, decisions D2 and D3).
   `refreshedProductionIndex` (core) returns the index it was given when
   nothing it reads changed, a new index with a new row signature after a
   prose edit, or `null` when the index must be derived again. A heal builds a
-  new index and new entries with the minted ids.
+  new index and new entries with the minted ids, equal to a fresh derivation
+  of the healed document: a name the registry refuses stays in
+  `unregistered`, after the names the heal took in, and the next heal counts
+  nothing and keeps the index (#377).
 - **The writers freezing met**, each fixed rather than excepted (none is left
   as an exception):
   1. A heal wrote the minted ids into the entries it had already handed out.
