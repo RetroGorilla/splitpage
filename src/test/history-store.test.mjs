@@ -517,7 +517,10 @@ test("strict mode: a stray non-tx await inside exclusive() fails, as IndexedDB w
 
   await assert.rejects(backend.exclusive(async (tx) => {
     await tx.list();
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    const stray = new Promise((resolve) => macrotask(resolve));
+    const until = performance.now() + 8;
+    while (performance.now() < until);
+    await stray;
     await tx.put("def", "text");
   }), { name: "TransactionInactiveError" });
   assert.equal(backend.hasBody("def"), false);
