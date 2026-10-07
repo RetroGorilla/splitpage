@@ -8,6 +8,7 @@ import { fakeMigration } from "../core/migrate-ports.ts";
 
 export interface FakeClock extends TimerPort {
   advance: (ms: number) => void;
+  stall: (ms: number) => void;
   armed: () => number;
 }
 
@@ -36,6 +37,7 @@ export function fakeClock(): FakeClock {
     start: function (run, ms) { const id = next++; due.set(id, { at: now + ms, run: run }); return id; },
     stop: function (handle) { due.delete(handle as number); },
     advance: advance,
+    stall: function (ms) { now += ms; },
     armed: function () { return due.size; }
   };
 }

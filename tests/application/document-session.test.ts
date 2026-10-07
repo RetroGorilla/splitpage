@@ -74,6 +74,32 @@ test("E2: a one-cell edit does not reconcile anchors; a change that inserts a ro
   assert.deepEqual(h.log, ["reconcile", "undo.record", "dirty:2", "draft:2", "save:2", "publish:edit"]);
 });
 
+test("removing or moving rows reconciles; a document-field or whole-document change is an edit that does not", () => {
+  const cases: [string, Parameters<typeof changeSet>[0], boolean][] = [
+    ["remove", { rowsRemoved: ["r2"] }, true],
+    ["move", { rowsMoved: true }, true],
+    ["runs", { runsMoved: true }, true],
+    ["title", { docFields: ["title"] }, false],
+    ["whole", { whole: true }, false]
+  ];
+  cases.forEach(function ([name, parts, reconciles]) {
+    const h = opened();
+    const command: Command = { name: name, needs: "edit", plan: function () { return { changes: changeSet(parts), apply: function () {} }; } };
+    assert.equal(h.session.run(command).kind, "applied", name);
+    assert.equal(h.session.generation(), 1, name);
+    assert.equal(h.log.includes("reconcile"), reconciles, name);
+  });
+});
+
+test("a legacy edit that names its changes publishes them and schedules their derivations", () => {
+  const h = opened();
+  const changes = cellEdit("r1", "audioText", ["production"]);
+  h.session.noteEdit(changes);
+  assert.equal(h.published[0]?.changes, changes);
+  h.clock.advance(180);
+  assert.deepEqual(h.refreshes, [["production"]]);
+});
+
 test("E3: a no-op, an empty change set, a refusal, a rejected capability, a failure and a missing document have no effects", () => {
   const h = opened();
   const before = h.session.read(function (doc) { return JSON.stringify(doc); });
