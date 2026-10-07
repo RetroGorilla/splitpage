@@ -1,3 +1,6 @@
+import { commentIds } from "../../core/text/runs.ts";
+import type { CellInput } from "../../core/text/runs.ts";
+
 export type TransactionKind = "edit" | "server" | "reload" | "adopt";
 
 export interface CellChange {
@@ -51,6 +54,12 @@ export function changeSet(parts: Partial<ChangeSet>): ChangeSet {
 
 export function cellEdit(rowId: string, field: string, derive: readonly string[] = []): ChangeSet {
   return changeSet({ cells: [{ rowId: rowId, field: field }], derive: derive });
+}
+
+export function cellTextEdit(rowId: string, field: string, before: CellInput, after: CellInput, derive: readonly string[] = []): ChangeSet {
+  const was = commentIds(before), now = commentIds(after);
+  const same = was.length === now.length && was.every(function (id, i) { return id === now[i]; });
+  return changeSet({ cells: [{ rowId: rowId, field: field }], runsMoved: !same, derive: derive });
 }
 
 export function isEmpty(changes: ChangeSet): boolean {
