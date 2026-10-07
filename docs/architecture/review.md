@@ -133,10 +133,10 @@ Merge with `gh pr merge N --merge --match-head-commit <sha>`.
 ## 8. Milestone gates
 
 - The runs required by [section 4 of the implementation plan](../IMPLEMENTATION-PLAN.md#4-verification-baseline-and-ci-policy), on the exact merged tree:
-  - full browser regression on Windows; on Linux too at the 4.0 release gate only
-  - real Electron smoke
-  - Windows x64 packaged check; the native ARM64 one too at the 4.0 release gate only
+  - full browser regression on Windows, at every gate; on Linux too at the 4.0 release gate only
+  - real Electron smoke, dev target, at every gate
+  - Windows x64 packaged check, at the gates of milestones 3 and 4, at the gate of a milestone that switches the build entry or changes packaging inputs, and at the 4.0 release gate; the native ARM64 one too at the 4.0 release gate only
 
   Their recorded output is attached to the closing PR. A run that can't be done here is recorded as a blocker, and Adam decides whether the milestone closes without it.
-- **External review** of the integrated milestone: by a different model or a person where possible, otherwise by a fresh agent not involved in building or reviewing it. The review states which kind it was. It covers the integrated architecture, behavior across modules, and the milestone's requirements in the plan. Its findings are handled under §6.
+- **External review** of the integrated milestone, at the gates of milestones 3, 4 and 6 and at the 4.0 release gate (Adam, 2026-10-07): by a different model or a person where possible, otherwise by a fresh agent not involved in building or reviewing it. The review states which kind it was. It covers the integrated architecture, behavior across modules, and the milestone's requirements in the plan. Its findings are handled under §6. At the release gate it also covers the milestones that had no review of their own.
 - The milestone doc's "as built" section is updated and the dependency baseline is pruned.
