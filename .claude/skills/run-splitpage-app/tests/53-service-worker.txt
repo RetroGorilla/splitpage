@@ -73,8 +73,10 @@ expect window.__swEntries.indexOf('/icon-maskable.svg') !== -1
 eval (async function(){ var c = await caches.open(window.__swCaches[0]); await c.put('/index.html', new Response('<!doctype html><title>SW53-POISON</title><body>not from the server', { headers: { 'Content-Type': 'text/html; charset=utf-8' } })); var hit = await c.match('/index.html'); window.__poisoned = (await hit.text()).indexOf('SW53-POISON') !== -1; return window.__poisoned; })()
 expect window.__poisoned
 
-goto /index.html
-wait navigator.serviceWorker.controller
+eval window.__leaving = true
+eval setTimeout(function () { location.replace(location.origin + '/index.html'); }, 0)
+wait !window.__leaving && document.readyState === 'complete' && navigator.serviceWorker.controller
+expect location.search === ''
 expect document.querySelectorAll('#rows .row').length > 0
 expect document.title.indexOf('SW53-POISON') === -1
 
