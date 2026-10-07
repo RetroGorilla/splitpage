@@ -38,13 +38,13 @@ What milestone 4 needs from this area comes first: a writer must not read live s
 
 Nothing in this milestone stays legacy, so plan §7's checklist loses nothing here. **Gate:** the full Windows run and the dev smoke (the decided lighter gate); the goldens and INV-60 are the differential for the writers, and the dialog's browser suites (`98-export-dialog`, `17-formats`, `03-exports`, `41-export-polish`, `284-exports-from-a-fixture`) are the differential for the registry.
 
-## Milestone 6: keep, with one question
+## Milestone 6: keep, as written
 
 Source: the six named editing modules, 4,327 lines, all in the cycle, 20 counted writes under `S.state`; plus the 53 numbered modules no milestone names, 22,350 lines, 33 of them in the cycle, with 307 `S.state` references. Eighteen ledger rows target this milestone, the most of any, and #325, #308 and #350 are dispositioned here, with the media-cell typed HTML variant from milestone 3.
 
 Does it make the next ordinary change easier? Yes, more than any other milestone. The post-milestone-2 queue was almost entirely editor, overlay, tag and b-roll bugs, which is the code this milestone gives owners. Keep it, feature by feature as the plan says, on the commands milestone 3 proved.
 
-One question for Adam. The plan's milestone 6 also splits the CSS into tokens, base, layout, components and features. That split changes no behaviour and no bug in the queue needs it. I suggest it becomes the last item of milestone 6 and is dropped if the gate is reached without it, rather than cut now.
+**Decided by Adam, 2026-10-07: the CSS split stays a firm deliverable.** He intends to keep improving the UI, and the split into tokens, base, layout, components and feature files is what makes a visual change local: a colour or spacing change becomes one token edit, and a feature's styles move with its folder when the feature does. The split changes no behaviour, so its evidence is the plan's representative visual checks under documented font and runtime conditions, plus the deterministic aggregation order the plan requires, and it lands feature by feature alongside each feature's migration rather than as one big move at the end.
 
 ## Milestone 7: keep the contract, drop the rewrite
 
@@ -69,7 +69,7 @@ Dropped to 4.x: the new composition root as the build entry, the removal of unus
 | --- | --- | --- |
 | 4 | Keep as written | Full gate |
 | 5 | Keep in full (Adam, 2026-10-07), in this order: captured `ExportDocument` into the writers, byte helpers into an adapter, import adoption through the transition API, then the format registry with the dialog, menus and palette drawn from it | Windows run + dev smoke |
-| 6 | Keep as written; CSS split last and droppable (Adam's call) | Windows run + dev smoke + external review |
+| 6 | Keep as written, the CSS split included (Adam, 2026-10-07), with each feature's styles moving alongside its migration | Windows run + dev smoke + external review |
 | 7 | Keep the resource-release tests (in 4 and 6) and the named initializer shim with its test; drop the entry switch, `S` field removal and bridge retirement to 4.x | Windows run + dev smoke; the x64 packaged check only if the build entry changes, which this proposal avoids |
 
 If approved: plan §5's milestone 5 section gains the order above, its milestone 7 section is rewritten to this, §7's checklist gains the milestone 7 "lost" line, and `actions.md`'s references to a milestone 7 bootstrap are updated (its milestone 5 registry references stand).
