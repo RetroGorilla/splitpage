@@ -177,11 +177,27 @@ for (const [what, patch] of [
   ["a negative check count", { checks: -1 }],
   ["a null failed-check count", { failedChecks: null }],
   ["more failed checks than checks", { checks: 2, failedChecks: 3 }],
+  ["a passing suite that has failed checks", { failed: false, failedChecks: 1 }],
+  ["a timed-out suite that is not marked failed", { failed: false, timedOut: true, checks: 1, failedChecks: 0 }],
   ["an empty name", { name: "" }],
   ["a numeric name", { name: 7 }]
 ]) {
   eq(`${what} is refused`, problem(bad(patch)) !== null, true);
 }
+eq("a failed suite with no failed checks is still accepted", problem({ timeoutSec: 9, suites: [{ ...good, failed: true }] }), null);
+eq("a timed-out failed suite is accepted", problem({ timeoutSec: 9, suites: [{ ...good, failed: true, timedOut: true, checks: 1, failedChecks: 1 }] }), null);
+const namesProblem = (verdicts, names) => {
+  try { validateVerdicts(verdicts, names); return null; } catch (e) { return String(e.message); }
+};
+const second = { ...good, name: "02-prod" };
+eq("verdicts that cover every named suite exactly once are accepted", namesProblem({ timeoutSec: 9, suites: [good, second] }, ["01-core", "02-prod"]), null);
+const duplicated = namesProblem({ timeoutSec: 9, suites: [{ ...second, failed: true, failedChecks: 1 }, second] }, ["02-prod"]);
+check("a duplicate suite name is refused and named", duplicated !== null && duplicated.includes("02-prod") && duplicated.includes("more than once"), duplicated);
+const unknown = namesProblem({ timeoutSec: 9, suites: [good, { ...second, name: "03-ghost", failed: true, timedOut: true, checks: 1, failedChecks: 1 }] }, ["01-core"]);
+check("a verdict for a suite that is not in the suite list is refused and named", unknown !== null && unknown.includes("03-ghost") && unknown.includes("not in the suite list"), unknown);
+const missing = namesProblem({ timeoutSec: 9, suites: [good] }, ["01-core", "02-prod"]);
+check("a named suite with no verdict is refused and named", missing !== null && missing.includes("02-prod") && missing.includes("no verdict"), missing);
+eq("names are not cross-checked when no suite list is given", namesProblem({ timeoutSec: 9, suites: [good, second] }), null);
 eq("every bad entry is reported, not only the first", (problem({ timeoutSec: 9, suites: [{ name: "a" }, { name: "b" }] }).match(/suites\[\d\]/g) ?? []).length >= 2, true);
 for (const [what, value] of [
   ["a null file", null],
@@ -235,6 +251,15 @@ try {
   eq("a verdicts file that is not JSON exits 1 with a plain message", [broken.status, broken.written, broken.stderr.includes("verdicts") && !broken.stderr.includes("    at ")], [1, false, true]);
   const absent = refuse("absent.json");
   eq("a verdicts file that does not exist exits 1", [absent.status, absent.written], [1, false]);
+  const entry = (name, patch) => ({ name, failed: false, timedOut: false, checks: 2, failedChecks: 0, ...patch });
+  const dup = refuse("dup.json", JSON.stringify({ timeoutSec: 9, suites: [entry("01-core"), entry("02-bad", { failed: true, failedChecks: 2, checks: 3 }), entry("02-bad")] }));
+  eq("a duplicated suite name in the verdicts exits 1 and writes no digest", [dup.status, dup.written, dup.stderr.includes("02-bad")], [1, false, true]);
+  const ghost = refuse("ghost.json", JSON.stringify({ timeoutSec: 9, suites: [entry("01-core"), entry("02-bad", { failed: true, failedChecks: 2, checks: 3 }), entry("03-ghost", { failed: true, timedOut: true, checks: 1, failedChecks: 1 })] }));
+  eq("a verdict for a suite not on the command line exits 1 and writes no digest", [ghost.status, ghost.written, ghost.stderr.includes("03-ghost")], [1, false, true]);
+  const lonely = refuse("lonely.json", JSON.stringify({ timeoutSec: 9, suites: [entry("01-core")] }));
+  eq("a suite on the command line with no verdict exits 1 and writes no digest", [lonely.status, lonely.written, lonely.stderr.includes("02-bad")], [1, false, true]);
+  const contradictory = refuse("contradictory.json", JSON.stringify({ timeoutSec: 9, suites: [entry("01-core", { failedChecks: 1 }), entry("02-bad", { failed: true, failedChecks: 2, checks: 3 })] }));
+  eq("a passing verdict with failed checks exits 1 and writes no digest", [contradictory.status, contradictory.written], [1, false]);
   const okVerdicts = refuse("ok.json", JSON.stringify({ timeoutSec: 9, suites: [{ name: "01-core", failed: false, timedOut: false, checks: 2, failedChecks: 0 }, { name: "02-bad", failed: true, timedOut: false, checks: 3, failedChecks: 2 }] }));
   eq("a complete verdicts file still writes the digest", [okVerdicts.status, okVerdicts.written], [0, true]);
   check("digestFromLogDir refuses an incomplete verdicts object too", (() => { try { digestFromLogDir(work, ["01-core"], { verdicts: { timeoutSec: 9, suites: [{ name: "01-core" }] } }); return false; } catch { return true; } })(), "");
