@@ -3,6 +3,7 @@ import { STATE_FIELDS } from "./02-state.js";
 import { STATE_FIELDS as FIELD_POLICIES } from "../core/document/fields.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { mergeCells } from "../core/merge/cells.ts";
+import { personIdRemap, personSurvives, repointOwners } from "../core/merge/lists.ts";
 import { toHtml } from "../core/text/html.ts";
 import { normalizeCell } from "../core/text/runs.ts";
 import { applySteps, invertSteps } from "../core/text/steps.ts";
@@ -99,6 +100,36 @@ function resolveCell(live, step) {
   return { value: toHtml(normalizeCell(r.cell)) };
 }
 
+function listOf(v) { return Array.isArray(v) ? v : []; }
+
+function resolveDoc(state, p, survives) {
+  var live = state[p.key];
+  if (same(live, p.step.before)) { p.value = clone(p.step.after); return; }
+  p.value = listMergeFor(p.key)(clone(p.step.before), clone(live), clone(p.step.after), survives);
+  p.merged = true;
+}
+
+function resolveDocFields(state, plan) {
+  var docs = plan.filter(function (p) { return p.op === "doc"; });
+  if (!docs.length) return null;
+  var people = docs.filter(function (p) { return p.key === "people"; })[0];
+  if (people) resolveDoc(state, people);
+  var sides = listOf(state.people).concat(people ? listOf(people.step.after) : []);
+  var kept = people ? people.value : state.people;
+  var survives = personSurvives(sides, kept);
+  docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives); });
+  return people && people.merged ? personIdRemap(sides, kept) : null;
+}
+
+function repointLists(state, remap) {
+  ["productionTags", "brollShots"].forEach(function (key) {
+    if (!Array.isArray(state[key])) return;
+    var copy = clone(state[key]);
+    repointOwners([copy], remap);
+    if (!same(copy, state[key])) state[key] = copy;
+  });
+}
+
 export function applyStepsLive(state, steps) {
   var order = state.rows.map(function (r) { return r.id; });
   var byId = idMap();
@@ -120,12 +151,8 @@ export function applyStepsLive(state, steps) {
         plan.push({ op: "set", row: row, key: s.key, value: clone(s.after) });
       }
     } else if (s.op === "docField") {
-      var live = state[s.key];
-      var value;
-      if (same(live, s.before)) value = clone(s.after);
-      else if (listMergeFor(s.key)) value = listMergeFor(s.key)(clone(s.before), clone(live), clone(s.after));
-      else return { ok: false, reason: "it has changed since" };
-      plan.push({ op: "doc", key: s.key, value: value });
+      if (!same(state[s.key], s.before) && !listMergeFor(s.key)) return { ok: false, reason: "it has changed since" };
+      plan.push({ op: "doc", key: s.key, step: s });
     } else if (s.op === "insertRow") {
       if (s.index < 0 || s.index > order.length || byId[s.row.id] && order.indexOf(s.row.id) !== -1) {
         return { ok: false, reason: "the scene list has changed since" };
@@ -147,6 +174,7 @@ export function applyStepsLive(state, steps) {
       return { ok: false, reason: "unknown step" };
     }
   }
+  var remap = resolveDocFields(state, plan);
   plan.forEach(function (p) {
     if (p.op === "set") {
       if (p.value === undefined) delete p.row[p.key]; else p.row[p.key] = p.value;
@@ -160,6 +188,7 @@ export function applyStepsLive(state, steps) {
       state.rows.splice(p.to, 0, state.rows.splice(p.from, 1)[0]);
     }
   });
+  if (remap) repointLists(state, remap);
   return { ok: true };
 }
 
