@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import {
   estimatedSeconds,
   formatDuration,
@@ -7,46 +6,38 @@ import {
   rowSeconds,
   updateScriptStats
 } from "./01-scene-status.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import { render, renderRow } from "./05-render.js";
-import { scheduleProductionRefresh } from "./07-production-tags.js";
-import { scheduleBrollRefresh } from "./08c-broll.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { redo, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
-import { queueAutoSave } from "./14-export.js";
+import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";
+import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+
+var REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its length.";
 
 var editing = null;
 
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
 export function setSceneLength(rowId, seconds) {
-  if (!S.state || reviewMode()) return false;
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return false;
-  var row = S.state.rows[idx];
-  var before = hasSetLength(row) ? row.lengthSeconds : null;
-  var after = seconds == null ? null : seconds;
-  if (before === after) return false;
-  if (after === null) delete row.lengthSeconds; else row.lengthSeconds = after;
-  stampRow(row);
-  markDirty();
-  if (!renderRow(row.id)) render();
+  var outcome = runCommand(sceneLengthCommand(rowId, seconds, sessionStamps));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(REVIEW_REFUSAL, "warn");
+  if (outcome.kind !== "applied") return false;
+  if (!renderRow(rowId)) render();
   updateScriptStats();
-  scheduleProductionRefresh();
-  scheduleBrollRefresh();
-  queueAutoSave();
   return true;
 }
 
 export function openReadTimeEditor(btn) {
-  if (!btn || !S.state || reviewMode()) return;
+  if (!btn || reviewMode()) return;
   var rowId = btn.getAttribute("data-id");
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
+  var scene = readSession(sceneAt(rowId));
+  if (!scene) return;
   closeReadTimeEditor(false);
-  var row = S.state.rows[idx];
+  var row = scene.row;
+  var idx = scene.index;
   var wasSet = hasSetLength(row);
   var prefill = wasSet || rowSeconds(row) >= 0.5 ? formatDuration(rowSeconds(row)) : "";
   var input = document.createElement("input");
