@@ -1,3 +1,4 @@
+import type { Seal } from "../../core/document/freeze.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
 import type { DecodeOptions } from "../../core/text/ports.ts";
@@ -19,7 +20,7 @@ export interface RichText {
   inertBody: (html: unknown) => HTMLElement;
   sanitize: (html: unknown) => string;
   decode: (html: unknown, opts?: DecodeOptions | null) => Run[];
-  createCellReader: () => CellReader;
+  createCellReader: (seal: Seal) => CellReader;
   storedHtmlFromDom: <T>(html: T) => T | string;
   htmlToMarkdown: (html: unknown) => string;
   videoCardElement: (href: string) => HTMLAnchorElement;
@@ -82,7 +83,7 @@ export function createRichText(ports: RichTextPorts): RichText {
     inertBody: inertBody,
     sanitize: sanitize,
     decode: decode,
-    createCellReader: function () { return createCellReader(decode); },
+    createCellReader: function (seal) { return createCellReader(decode, seal); },
     storedHtmlFromDom: storedHtmlFromDom,
     htmlToMarkdown: htmlToMarkdown,
     videoCardElement: cardElement,

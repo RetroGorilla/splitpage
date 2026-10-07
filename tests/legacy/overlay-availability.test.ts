@@ -135,6 +135,28 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
   }
 });
 
+test("the tour is refused over a dialog and starts over Present and the shot list", () => {
+  const { registry, restore } = loadedRegistry();
+  const help = registerHelpActions(registry);
+  try {
+    assert.equal(refusal(registry, "tour", "menu"), null);
+    document.body.innerHTML = '<div class="modal-backdrop"></div>';
+    assert.equal(refusal(registry, "tour", "menu"), "Close the open dialog first");
+    assert.equal(refusal(registry, "tour"), "Close the open dialog first");
+    document.body.innerHTML = '<div class="modal-backdrop" hidden></div>';
+    assert.equal(refusal(registry, "tour", "menu"), null);
+    document.body.innerHTML = "";
+    Object.assign(S, { prompterOpen: true });
+    assert.equal(refusal(registry, "tour", "menu"), null);
+    Object.assign(S, { prompterOpen: false });
+    document.body.innerHTML = '<div id="broll-page"></div>';
+    assert.equal(refusal(registry, "tour", "menu"), null);
+  } finally {
+    help();
+    restore();
+  }
+});
+
 test("the open command menu refuses what its shortcut refused, and not Find, Hide shot scenes or itself", () => {
   const { registry, restore } = loadedRegistry();
   try {

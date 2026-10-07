@@ -18,6 +18,7 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
+import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import {
   TAG_CATEGORY_IDS,
@@ -42,7 +43,7 @@ import {
   missingRegistryTags as missingRegistryTagsIn,
   newRegistryTag,
   planRegistryHealing,
-  productionIndexFresh,
+  refreshedProductionIndex,
   registryEntry as registryEntryIn,
   registrySignature,
   retagCell,
@@ -51,8 +52,10 @@ import {
 } from "../core/production/tags.ts";
 import { replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { provideRefreshRunner, requestRefresh } from "../legacy/session-bridge.ts";
 export {
   contentMemo,
   ensureTagIds,
@@ -237,14 +240,18 @@ function presentEntry(e) {
   };
 }
 
+function holdIndex(core, entries, state) {
+  prodIndex = { core: cacheSeal(core), entries: cacheSeal(entries), state: state };
+  return prodIndex;
+}
+
 function productionIndex() {
-  if (prodIndex && prodIndex.state === S.state && productionIndexFresh(prodIndex.core, S.state, productionReaders)) {
-    return prodIndex;
-  }
+  var kept = prodIndex && prodIndex.state === S.state ? refreshedProductionIndex(prodIndex.core, S.state, productionReaders) : null;
+  if (kept && kept === prodIndex.core) return prodIndex;
+  if (kept) return holdIndex(kept, prodIndex.entries, prodIndex.state);
   prodIndexDerived++;
   var core = deriveProductionIndex(S.state, productionReaders);
-  prodIndex = { core: core, entries: core.entries.map(presentEntry), state: S.state };
-  return prodIndex;
+  return holdIndex(core, core.entries.map(presentEntry), S.state);
 }
 
 export function productionEntries() {
@@ -256,18 +263,27 @@ export function currentProductionIndex() {
 }
 
 function adoptRegisteredIds(ix) {
-  var ids = Object.create(null);
+  var ids = Object.create(null), left = Object.create(null);
   ix.core.unregistered.forEach(function (t) {
+    var key = registryKey(t.catId, t.name);
     var reg = registryEntry(t.catId, t.name);
-    if (reg) ids[registryKey(t.catId, t.name)] = reg.id;
+    if (reg) ids[key] = reg.id;
+    else left[key] = true;
   });
-  ix.core.entries.forEach(function (e, i) {
-    if (!(e.key in ids)) return;
-    e.id = ids[e.key];
-    ix.entries[i].id = ids[e.key];
+  function withId(e) {
+    return e.key in ids ? Object.assign({}, e, { id: ids[e.key] }) : e;
+  }
+  function registeredFirst(entries) {
+    var stay = [], after = [];
+    entries.forEach(function (e) { (e.key in left ? after : stay).push(withId(e)); });
+    return stay.concat(after);
+  }
+  var core = Object.assign({}, ix.core, {
+    entries: registeredFirst(ix.core.entries),
+    unregistered: ix.core.unregistered.filter(function (t) { return registryKey(t.catId, t.name) in left; }),
+    tagSig: registrySignature(S.state.productionTags)
   });
-  ix.core.unregistered = [];
-  ix.core.tagSig = registrySignature(S.state.productionTags);
+  holdIndex(core, registeredFirst(ix.entries), ix.state);
 }
 
 export function healTagRegistry() {
@@ -311,33 +327,22 @@ export function tagsByCategory(all) {
   }).filter(function (g) { return g.items.length; });
 }
 
-var IDLE_REFRESH_MS = 180;
-var IDLE_REFRESH_MAX_MS = 1000;
-var idlePending = { production: false, writerStats: false, untagged: false, broll: false };
-var idleTimer = null;
-var idleSince = 0;
 var idleFlushes = 0;
 
 export function scheduleIdleRefresh(job) {
-  idlePending[job] = true;
-  var now = Date.now();
-  if (idleTimer) clearTimeout(idleTimer);
-  else idleSince = now;
-  var wait = Math.max(0, Math.min(IDLE_REFRESH_MS, idleSince + IDLE_REFRESH_MAX_MS - now));
-  idleTimer = setTimeout(runIdleRefresh, wait);
+  requestRefresh(job);
 }
 
-function runIdleRefresh() {
-  idleTimer = null;
-  var p = idlePending;
-  idlePending = { production: false, writerStats: false, untagged: false, broll: false };
+function runIdleRefresh(jobs) {
   if (!S.state) return;
   idleFlushes++;
-  if (p.production) refreshProductionNow();
-  if (p.writerStats) updateWriterStats();
-  if (p.untagged) scanUntaggedMentions();
-  if (p.broll) runBrollRefresh();
+  if (jobs.has("production")) refreshProductionNow();
+  if (jobs.has("writerStats")) updateWriterStats();
+  if (jobs.has("untagged")) scanUntaggedMentions();
+  if (jobs.has("broll")) runBrollRefresh();
 }
+
+provideRefreshRunner(runIdleRefresh);
 
 function refreshProductionNow() {
   healTagRegistry();
@@ -858,7 +863,7 @@ export function renderTagCategories(selected) {
 }
 
 function refreshTagNameList() {
-  var names = {};
+  var names = idMap();
   productionEntries().forEach(function (t) { names[t.name] = true; });
   document.getElementById("tag-name-list").innerHTML =
     Object.keys(names).sort().map(function (n) {
@@ -962,5 +967,27 @@ export function __init() {
   iconStyle.id = "tag-icon-style";
   iconStyle.textContent = tagIconCss();
   document.head.appendChild(iconStyle);
+
+  window.__cacheTest = {
+    index: currentProductionIndex,
+    frozen: function () {
+      var html = "Put the " + '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle">kettle</span> on.';
+      return [cellOf(html), productionReaders.tagsInField(html), productionReaders.cueNamesInField(html), currentProductionIndex()]
+        .map(function (v) { return !!v && Object.isFrozen(v); });
+    },
+    writes: function () {
+      var html = '<strong>Probe</strong> the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="probe lamp">lamp</span>.';
+      var cell = cellOf(html), tags = productionReaders.tagsInField(html);
+      return [
+        function () { cell[0].text = "x"; },
+        function () { delete cell[0].marks.b; },
+        function () { cell.length = 0; },
+        function () { tags[0].name = "x"; },
+        function () { Object.defineProperty(tags[0], "text", { value: "x" }); }
+      ].map(function (write) {
+        try { write(); return false; } catch (e) { return e instanceof TypeError; }
+      });
+    }
+  };
 
 }
