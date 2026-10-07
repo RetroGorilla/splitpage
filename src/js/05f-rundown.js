@@ -11,6 +11,7 @@ import { escapeHtml } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { cellOf } from "../legacy/richtext.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
@@ -350,7 +351,7 @@ function sceneSnippet(row) {
     snippetOf = contentMemo(function (html) {
       var text = toPlainText(cellOf(html)).replace(/\s+/g, " ").trim();
       return text.length > 90 ? text.slice(0, 90) : text;
-    });
+    }, cacheSeal);
   }
   return snippetOf(row.audioText || "") || snippetOf(row.visualText || "");
 }

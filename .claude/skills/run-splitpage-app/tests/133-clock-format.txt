@@ -13,6 +13,7 @@ eval (function(){window.F=window.__splitpageFormats;localStorage.removeItem('spl
 eval window.__sys = function(d){return new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(d);}
 eval window.__status = function(){return document.getElementById('btn-save').getAttribute('data-status');}
 eval window.__tip = function(){return document.getElementById('save-status').title;}
+eval (function(){window.__realNow = window.__realNow || Date.now;var d=new Date();d.setHours(12,0,30,0);window.__pinOff = d.getTime() - window.__realNow();window.__setClock = function(extra){Date.now = function(){return window.__realNow() + window.__pinOff + extra;};return true;};return window.__setClock(0);})()
 
 # --- a document with a file, saved ----------------------------------------
 eval (function(){window.__md = F.buildMarkdown();window.__t0 = Date.now() - 100000;window.__fakeHandle = {name:'clock.md',_mtime: window.__t0,createWritable: async function(){return {write: async function(b){window.__body = b;}, close: async function(){window.__fakeHandle._mtime = Date.now();}};},getFile: async function(){return new File([window.__md],'clock.md',{type:'text/markdown', lastModified: window.__fakeHandle._mtime});}};return true;})()
@@ -28,7 +29,7 @@ eval window.__savedAt = Date.now()
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 
 # --- two minutes later: no age in the words, the time in the tooltip ---------
-eval (function(){window.__realNow = window.__realNow || Date.now;var off = 2*60000;Date.now = function(){return window.__realNow() + off;};window.__settingsTest.refreshSaveStatus();return window.__status();})()
+eval (function(){window.__setClock(2*60000);window.__settingsTest.refreshSaveStatus();return window.__status();})()
 expect window.__status() === 'All changes saved'
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 expect document.getElementById('btn-save').title.indexOf(window.__tip()) === 0
@@ -56,6 +57,8 @@ expect localStorage.getItem('splitpage-clock') === null
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 key Escape
 wait !window.__settingsTest.isOpen()
+eval (function(){window.__setClock(26*3600000);window.__settingsTest.refreshSaveStatus();return true;})()
+expect window.__tip() === 'Last saved to clock.md at ' + new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(window.__savedAt)) + '.'
 eval (function(){Date.now = window.__realNow;return true;})()
 
 # --- History: a snapshot of this document, its time in the same clock -----

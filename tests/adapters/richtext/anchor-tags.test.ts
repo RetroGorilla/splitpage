@@ -84,7 +84,7 @@ test("decoding a combined span reads the comment and the tag on the same words (
   const html = 'pick up <span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">the lamp</span> now';
   const nested = "pick up " + cmt("c1", tagged("the lamp")) + " now";
   assert.deepEqual(rt.decode(html, { onMedia: () => undefined }), rt.decode(nested, { onMedia: () => undefined }));
-  const marked = rt.decode(html, { onMedia: () => undefined }).filter((r) => (r as { marks?: { cmt?: unknown[] } }).marks?.cmt?.length);
+  const marked = rt.decode(html, { onMedia: () => undefined }).filter((r) => (r as { marks?: { cmt?: readonly unknown[] } }).marks?.cmt?.length);
   assert.equal(marked.length, 1);
 });
 
