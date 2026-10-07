@@ -76,6 +76,7 @@ The slice today:
   - `ports.ts`: `UndoPort`, `EffectPort`, `CapabilityPort`, with `Clock`/`IdSource` reused;
   - `effects.ts`: the scheduler;
   - `change-set.ts`.
+- [`session.md`](session.md): the session, effect scheduler and command shape as built after 3.9.
 - `src/application/commands/`: `scene-length.ts`, `scene-status.ts`, `cell-text.ts`, `split-join.ts`, `clipboard.ts`.
 - `src/legacy/session-bridge.ts`: implements the ports over legacy code. Legacy modules in the cycle hand their effect functions to it at `__init`, as `configureUndo` already takes hooks, so the bridge never joins the cycle. The gate refuses a cycle through a migrated folder.
 - `src/legacy/undo-adapter.ts`: an `UndoPort` over 12a's history, diff and inversion, kept as they are.
