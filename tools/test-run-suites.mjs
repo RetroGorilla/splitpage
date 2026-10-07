@@ -4,12 +4,13 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { frozenWrites, withFreezeFlag } from "../.claude/skills/run-splitpage-app/freeze-flag.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNNER = join(REPO, "tools", "run-suites.mjs");
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 const WRAPPER = join(REPO, ".claude", "handoff", "direction-b", "run-all-suites.mjs");
-const { classify, STATUS, EXIT, parseArgs, portPlan, ConfigError } = await import(pathToFileURL(RUNNER).href);
+const { classify, STATUS, EXIT, parseArgs, portPlan, driverCommand, ConfigError } = await import(pathToFileURL(RUNNER).href);
 
 const POSIX = process.platform !== "win32";
 const BAD_RESULT = "BAD-RESULT";
@@ -399,6 +400,36 @@ function unitChecks() {
   const plan = portPlan(5000, 2);
   eq("lane 1 reserves HTTP + 1", plan[1]?.httpReserve, 23111);
   eq("lane 1 reserves CDP + 1", plan[1]?.cdpReserve, 24311);
+
+  console.log("\ncache freezing:\n");
+
+  eq("caches are not frozen by default", parsed(["o"], {}).freezeCaches, false);
+  eq("SPLITPAGE_FREEZE_CACHES=1 freezes them", parsed(["o"], { SPLITPAGE_FREEZE_CACHES: "1" }).freezeCaches, true);
+  eq("any other value does not", [parsed(["o"], { SPLITPAGE_FREEZE_CACHES: "0" }).freezeCaches, parsed(["o"], { SPLITPAGE_FREEZE_CACHES: "true" }).freezeCaches].join(), "false,false");
+  const command = (env) => {
+    const config = parsed(["o"], env);
+    return driverCommand({ ...config, ports: portPlan(0, 1) }, "x.txt", 0).args;
+  };
+  eq("with freezing on, the driver gets --freeze-caches once", command({ SPLITPAGE_FREEZE_CACHES: "1" }).filter((a) => a === "--freeze-caches").length, 1);
+  eq("with it off, the driver's arguments are as before", command({}).includes("--freeze-caches"), false);
+  eq("the flag goes into the query", withFreezeFlag("http://localhost:1/index.html"), "http://localhost:1/index.html?freeze-caches=1");
+  eq("after a query the page already has", withFreezeFlag("http://localhost:1/index.html?wizard=1&teleprompter=1"), "http://localhost:1/index.html?wizard=1&teleprompter=1&freeze-caches=1");
+  eq("and before the fragment", withFreezeFlag("http://localhost:1/index.html?teleprompter=1#script=ab&voice=1"), "http://localhost:1/index.html?teleprompter=1&freeze-caches=1#script=ab&voice=1");
+  eq("a fragment with no query", withFreezeFlag("http://localhost:1/index.html#review=abc"), "http://localhost:1/index.html?freeze-caches=1#review=abc");
+  eq("a page that names the flag itself is left as it is", withFreezeFlag("http://localhost:1/index.html?freeze-caches=0"), "http://localhost:1/index.html?freeze-caches=0");
+  eq("a question mark inside the fragment is not a query", withFreezeFlag("http://localhost:1/index.html#a?b"), "http://localhost:1/index.html?freeze-caches=1#a?b");
+  eq("only page exceptions that write into a frozen value are frozen writes", JSON.stringify(frozenWrites([
+    "log: fine",
+    "error: Cannot assign to read only property 'id' of object",
+    "exception: TypeError: Cannot assign to read only property 'id' of object '#<Object>'",
+    "exception: TypeError: Cannot add property 3, object is not extensible",
+    "exception: TypeError: Cannot delete property 'x' of #<Object>",
+    "exception: ReferenceError: x is not defined"
+  ])), JSON.stringify([
+    "exception: TypeError: Cannot assign to read only property 'id' of object '#<Object>'",
+    "exception: TypeError: Cannot add property 3, object is not extensible",
+    "exception: TypeError: Cannot delete property 'x' of #<Object>"
+  ]));
 }
 
 async function processChecks() {

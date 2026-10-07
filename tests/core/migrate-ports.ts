@@ -1,4 +1,5 @@
 import type { StateField } from "../../src/core/document/fields.ts";
+import { deepFreeze } from "../../src/core/document/freeze.ts";
 import { createImageIngestion } from "../../src/core/document/media.ts";
 import type { ImageIngestion } from "../../src/core/document/media.ts";
 import type { ImageRef } from "../../src/core/document/ports.ts";
@@ -81,7 +82,7 @@ export function fakeMigration(registry?: Record<string, ImageRef>, fields?: read
       log.push("videoCard");
       return '<a class="video-embed-card" href="' + href + '">card</a>';
     },
-    readers: createProductionReaders(cellOf),
+    readers: createProductionReaders(cellOf, deepFreeze),
     ids: ids,
     fields: fields
   };
