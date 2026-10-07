@@ -56,6 +56,7 @@ export interface Harness {
 export interface HarnessHooks {
   beforeUndo?: (session: DocumentSession) => void;
   reconcile?: (doc: ValidatedDocument) => number;
+  entry?: (raw: unknown) => ValidatedDocument;
 }
 
 export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harness {
@@ -73,7 +74,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     nesting = false;
   }
   const session: DocumentSession = createDocumentSession({
-    entry: function (raw) { log.push("entry"); return migrateRows(raw, migration.ports); },
+    entry: function (raw) { log.push("entry"); return hooks.entry ? hooks.entry(raw) : migrateRows(raw, migration.ports); },
     undo: {
       adopt: function (doc) { nested(); log.push("undo.adopt:" + (doc ? doc.title : "none")); },
       record: function () { log.push("undo.record"); },
