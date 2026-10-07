@@ -290,6 +290,25 @@ test("E3: a field the apply deleted before it threw comes back in its place, so 
   assert.equal(h.session.read(function (d) { return JSON.stringify(d); }), before);
   assert.equal(h.session.generation(), 0);
   assert.deepEqual(h.log, []);
+
+  const undeclared: Command = {
+    name: "deletes-undeclared-then-throws",
+    needs: "edit",
+    plan: function () {
+      return {
+        changes: changeSet({ cells: [{ rowId: "r1", field: "visualText" }] }),
+        apply: function (live) {
+          const row = live.rows[0];
+          if (row) { Reflect.deleteProperty(row, "visualText"); Reflect.deleteProperty(row, "audioText"); }
+          throw new Error("apply broke");
+        }
+      };
+    }
+  };
+  assert.equal(h.session.run(undeclared).kind, "failed");
+  const row = h.session.read(function (d) { return d && d.rows[0]; });
+  assert.equal(row && row.visualText, "Wide", "the declared field comes back");
+  assert.equal(row !== null && row !== undefined && "audioText" in row, false, "an undeclared field stays as the apply left it, with no key put back for it");
 });
 
 test("runConfined fails a command that writes outside its change set, applied or thrown, which the rollback cannot undo", () => {
