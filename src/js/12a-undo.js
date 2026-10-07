@@ -300,18 +300,21 @@ var tracked = null;
 var flushQueued = false;
 var applying = false;
 var commentsAreSent = function () { return false; };
-var hooks = { afterApply: null, onRefused: null };
+var hooks = { afterApply: null, onRefused: null, adopted: null };
 
 export function configureUndo(opts) {
   if (opts.commentsAreSent) commentsAreSent = opts.commentsAreSent;
   if (opts.afterApply) hooks.afterApply = opts.afterApply;
   if (opts.onRefused) hooks.onRefused = opts.onRefused;
+  if (opts.adopted) hooks.adopted = opts.adopted;
 }
 
 function restart() {
+  var was = tracked;
   history.clear();
   lifetime++;
   tracked = S.state || null;
+  if (hooks.adopted && tracked !== was) hooks.adopted(tracked);
   base = tracked ? clone(tracked) : null;
 }
 

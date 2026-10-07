@@ -54,6 +54,7 @@ import { namedTagId, projection } from "../core/text/runs.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { provideRefreshRunner, requestRefresh } from "../legacy/session-bridge.ts";
 export {
   contentMemo,
   ensureTagIds,
@@ -318,33 +319,22 @@ export function tagsByCategory(all) {
   }).filter(function (g) { return g.items.length; });
 }
 
-var IDLE_REFRESH_MS = 180;
-var IDLE_REFRESH_MAX_MS = 1000;
-var idlePending = { production: false, writerStats: false, untagged: false, broll: false };
-var idleTimer = null;
-var idleSince = 0;
 var idleFlushes = 0;
 
 export function scheduleIdleRefresh(job) {
-  idlePending[job] = true;
-  var now = Date.now();
-  if (idleTimer) clearTimeout(idleTimer);
-  else idleSince = now;
-  var wait = Math.max(0, Math.min(IDLE_REFRESH_MS, idleSince + IDLE_REFRESH_MAX_MS - now));
-  idleTimer = setTimeout(runIdleRefresh, wait);
+  requestRefresh(job);
 }
 
-function runIdleRefresh() {
-  idleTimer = null;
-  var p = idlePending;
-  idlePending = { production: false, writerStats: false, untagged: false, broll: false };
+function runIdleRefresh(jobs) {
   if (!S.state) return;
   idleFlushes++;
-  if (p.production) refreshProductionNow();
-  if (p.writerStats) updateWriterStats();
-  if (p.untagged) scanUntaggedMentions();
-  if (p.broll) runBrollRefresh();
+  if (jobs.has("production")) refreshProductionNow();
+  if (jobs.has("writerStats")) updateWriterStats();
+  if (jobs.has("untagged")) scanUntaggedMentions();
+  if (jobs.has("broll")) runBrollRefresh();
 }
+
+provideRefreshRunner(runIdleRefresh);
 
 function refreshProductionNow() {
   healTagRegistry();
