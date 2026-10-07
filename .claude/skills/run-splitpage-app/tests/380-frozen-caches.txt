@@ -1,0 +1,3 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+expect JSON.stringify(window.__cacheTest.frozen().map(function (f) { return f === /[?&]freeze-caches=1(&|$)/.test(location.search); })) == [true,true,true,true]

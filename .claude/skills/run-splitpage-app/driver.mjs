@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
+import { freezeAsked, frozenWrites, withFreezeFlag } from "./freeze-flag.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,6 +14,7 @@ function parseArgs(argv) {
     port: 8791, cdpPort: 9333, root: path.resolve(HERE, "..", "..", ".."),
     shotDir: path.join(os.tmpdir(), "splitpage-shots"),
     headed: false, script: null, runId: null, chrome: null, bind: "127.0.0.1",
+    freezeCaches: freezeAsked(process.env),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -28,8 +30,9 @@ function parseArgs(argv) {
       case "chrome": out.chrome = argv[++i]; break;
       case "bind": out.bind = argv[++i]; break;
       case "headed": out.headed = true; break;
+      case "freezecaches": case "freeze-caches": out.freezeCaches = true; break;
       case "h": case "help":
-        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed]");
+        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed] [--freeze-caches]");
         process.exit(0);
         break;
       default: throw new Error(`unknown option: ${a}`);
@@ -43,6 +46,7 @@ if (!opts.runId) opts.runId = Math.random().toString(16).slice(2, 10);
 fs.mkdirSync(opts.shotDir, { recursive: true });
 
 const log = (m) => process.stderr.write(`[driver] ${m}\n`);
+if (opts.freezeCaches) log("cache freezing on: every page opened here gets freeze-caches=1");
 const out1 = (m) => process.stdout.write(`${m}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -355,9 +359,11 @@ async function waitFor(expr, timeoutMs = 15000) {
 }
 
 async function go(target) {
-  const url = /^https?:\/\//.test(target) ? target
+  const absolute = /^https?:\/\//.test(target);
+  const local = absolute ? target
     : target.startsWith("/") ? `http://localhost:${opts.port}${target}`
     : `http://localhost:${opts.port}/${target}`;
+  const url = opts.freezeCaches && !absolute ? withFreezeFlag(local) : local;
   await send("Page.navigate", { url });
   await waitFor('document.readyState === "complete"', 30000);
   out1(`at ${url}`);
@@ -634,6 +640,17 @@ async function main() {
         else out1(`ERROR: ${e.message}`);
         failures++; exit = 1;
         if (e.fatal) break;
+      }
+    }
+    if (opts.freezeCaches && ws) {
+      try { await js("0"); } catch {}
+      checks++;
+      const hits = frozenWrites(consoleLines);
+      if (hits.length === 0) out1("PASS no write into a frozen cache value threw");
+      else {
+        failures++;
+        out1("FAIL a write into a frozen cache value threw");
+        for (const h of hits.slice(0, 5)) out1(`     ${h}`);
       }
     }
     if (checks === 0 && failures === 0) {
