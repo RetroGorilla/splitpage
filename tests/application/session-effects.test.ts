@@ -88,6 +88,20 @@ test("the scheduler's refresh waits the idle time, never past the cap measured f
   assert.equal(ran.length, 3);
 });
 
+test("a request after the cap has passed, while a late timer is still pending, runs at once", () => {
+  const clock = fakeClock();
+  const ran: string[][] = [];
+  const scheduler = createEffectScheduler({
+    dirty: function () {}, draft: function () {}, save: function () {},
+    refresh: function (jobs) { ran.push(Array.from(jobs)); }
+  }, clock);
+  scheduler.refresh("production");
+  clock.stall(1500);
+  scheduler.refresh("broll");
+  clock.advance(0);
+  assert.deepEqual(ran, [["production", "broll"]]);
+});
+
 test("an effect pass runs dirty, draft and save once each, in that order, and hands its derivations to the refresh", () => {
   const clock = fakeClock();
   const log: string[] = [];
