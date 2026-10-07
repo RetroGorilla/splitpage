@@ -31,7 +31,8 @@ export function setSceneLength(rowId, seconds) {
 }
 
 export function openReadTimeEditor(btn) {
-  if (!btn || reviewMode()) return;
+  if (!btn) return;
+  if (reviewMode()) { showToast(REVIEW_REFUSAL, "warn"); return; }
   var rowId = btn.getAttribute("data-id");
   var scene = readSession(sceneAt(rowId));
   if (!scene) return;
@@ -137,7 +138,7 @@ export function __init() {
   });
   rowsEl.addEventListener("click", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");
-    if (!btn || btn.getAttribute("aria-disabled") === "true") return;
+    if (!btn) return;
     e.preventDefault();
     openReadTimeEditor(btn);
   });
