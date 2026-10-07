@@ -484,6 +484,9 @@ export function onRootClick(e) {
   var statusBtn = e.target.closest('[data-action="cycle-status"]');
   if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
 
+  var statusLamp = e.target.closest("#rows .row .status-btn.is-static");
+  if (statusLamp) { cycleRowStatus(statusLamp.closest(".row").getAttribute("data-id")); return; }
+
   var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
   if (expandShotBtn) { expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids")); return; }
 
