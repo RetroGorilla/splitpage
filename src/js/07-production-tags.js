@@ -263,20 +263,27 @@ export function currentProductionIndex() {
 }
 
 function adoptRegisteredIds(ix) {
-  var ids = Object.create(null);
+  var ids = Object.create(null), left = Object.create(null);
   ix.core.unregistered.forEach(function (t) {
+    var key = registryKey(t.catId, t.name);
     var reg = registryEntry(t.catId, t.name);
-    if (reg) ids[registryKey(t.catId, t.name)] = reg.id;
+    if (reg) ids[key] = reg.id;
+    else left[key] = true;
   });
   function withId(e) {
     return e.key in ids ? Object.assign({}, e, { id: ids[e.key] }) : e;
   }
+  function registeredFirst(entries) {
+    var stay = [], after = [];
+    entries.forEach(function (e) { (e.key in left ? after : stay).push(withId(e)); });
+    return stay.concat(after);
+  }
   var core = Object.assign({}, ix.core, {
-    entries: ix.core.entries.map(withId),
-    unregistered: [],
+    entries: registeredFirst(ix.core.entries),
+    unregistered: ix.core.unregistered.filter(function (t) { return registryKey(t.catId, t.name) in left; }),
     tagSig: registrySignature(S.state.productionTags)
   });
-  holdIndex(core, ix.entries.map(withId), ix.state);
+  holdIndex(core, registeredFirst(ix.entries), ix.state);
 }
 
 export function healTagRegistry() {

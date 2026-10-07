@@ -289,6 +289,26 @@ test("the healing plan registers each unregistered tag with an id minted after t
   assert.equal(Object.getPrototypeOf(plan.cues.cells), null, "the cells are keyed by scene id, in a map with no prototype");
 });
 
+test("the healing plan counts the names it takes in, not a name the registry refuses, which a fresh derivation still lists last as unregistered (#377)", () => {
+  const refused = String.fromCharCode(0x2060);
+  const row: ProductionRow = {
+    id: "r1",
+    visualText: EMPTY,
+    audioText: cells.html([tag("prop", "kettle", "kettle"), T(" "), tag("prop", refused, refused), T(" "), tag("prop", "mug", "mug")])
+  };
+  const state = doc({ docId: "d1", rows: [row], productionTags: [] });
+  const plan = planRegistryHealing(state, readers);
+  assert.equal(plan.count, 2);
+  assert.deepEqual(plan.register.map((t) => t.name), ["kettle", "mug"]);
+  const healed = doc({ docId: "d1", rows: [row], productionTags: plan.register });
+  const ix = deriveProductionIndex(healed, readers);
+  assert.deepEqual(ix.entries.map((e) => e.name), ["kettle", "mug", refused]);
+  assert.deepEqual(ix.unregistered.map((t) => t.name), [refused]);
+  assert.deepEqual(jsonCopy(planRegistryHealing(healed, readers, null, ix)), { cues: { docId: "d1", cells: {} }, count: 0, retitle: [], register: [] });
+  const onlyRefused = doc({ docId: "d1", rows: [{ id: "r1", visualText: EMPTY, audioText: cells.html([tag("cast", refused, refused)]) }], productionTags: [] });
+  assert.equal(planRegistryHealing(onlyRefused, readers).count, 0);
+});
+
 test("with nothing to register the plan is empty but still snapshots the cues", () => {
   const audio = cells.html([cue("Music: theme")]);
   const state = doc({ docId: "d2", rows: [{ id: "r1", visualText: EMPTY, audioText: audio }], productionTags: [registered("sound", "theme")] });
