@@ -283,6 +283,50 @@ test("#380: a committed composition is still its one step, and a cancel in anoth
   assert.equal(lastUndoEntry().steps[0].after, "Hello thereか");
 });
 
+test("only a composition's own step is dropped: an empty step left by typing and deleting a letter stays, as it does today", async () => {
+  await open();
+  const el = cellOf("r3", "audioText");
+  clock += 5;
+  typeChar(el, "x");
+  await settle();
+  const node = lastText(el);
+  node.data = "Three.";
+  caretAt(node, node.data.length);
+  clock += 5;
+  input(el, null, { inputType: "deleteContentBackward" });
+  await settle();
+  assert.equal(row("r3").audioText, "Three.");
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+  assert.equal(lastUndoEntry().steps[0].before, lastUndoEntry().steps[0].after, "the step changes nothing");
+  el.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" }));
+  compose(el, "compositionstart", "");
+  compose(el, "compositionend", "");
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "neither a stray compositionend nor a composition that typed nothing takes it");
+});
+
+test("a typing command that fails is thrown from the view and leaves the cell, the edit count and undo as they were", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  flushEdits();
+  const seq = S.editSeq, generation = liveSession().generation(), sizes = undoSizes();
+  const before = JSON.stringify(S.state);
+  const real = Date.prototype.toISOString;
+  Date.prototype.toISOString = function () { throw new Error("no clock"); };
+  try {
+    el.focus();
+    lastText(el).data += "!";
+    assert.throws(() => syncFieldFromDom(el), /no clock/);
+  } finally {
+    Date.prototype.toISOString = real;
+  }
+  await settle();
+  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(S.editSeq, seq);
+  assert.equal(liveSession().generation(), generation);
+  assert.deepEqual(undoSizes(), sizes);
+});
+
 function seeded(seed) {
   let s = Math.imul(seed, 2654435761) >>> 0 || 1;
   return () => {
