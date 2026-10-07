@@ -45,6 +45,10 @@ function isObject(v: unknown): v is Bag {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
+export function isDocumentObject(raw: unknown): raw is Record<string, unknown> {
+  return isObject(raw);
+}
+
 function stampOrNull(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
@@ -59,7 +63,7 @@ function moveMediaOutOfCell(row: Bag, field: MediaField, ports: MigratePorts): M
 }
 
 export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocument {
-  const s: Bag = isObject(input) ? input : { title: "Untitled Script", rows: [], comments: [] };
+  const s: Bag = isDocumentObject(input) ? input : { title: "Untitled Script", rows: [], comments: [] };
   const fields = ports.fields || STATE_FIELDS;
   const ids = ports.ids;
   const legacy = typeof s.schema !== "number" || s.schema < SCHEMA_VERSION;

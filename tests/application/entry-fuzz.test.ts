@@ -129,6 +129,10 @@ function bump(into: Record<string, number>, key: string): void {
   into[key] = (into[key] || 0) + 1;
 }
 
+function noDocument(raw: unknown): boolean {
+  return raw !== null && raw !== undefined && (typeof raw !== "object" || Array.isArray(raw));
+}
+
 function rowIdOf(r: Random): (doc: DocumentView) => string | null {
   const roll = r();
   return function (doc) {
@@ -181,11 +185,13 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
     bump(tally.kinds, kind);
     const now = session.read(function (d) { return d; });
     const applied = !!outcome && outcome.kind === "applied";
-    const opens = kind === "adopt" || kind === "recovery";
+    const refused = noDocument(raw);
+    const opens = (kind === "adopt" || kind === "recovery") && !refused;
     assert.equal(session.epoch(), epoch + (opens ? 1 : 0), where + ": epoch");
     assert.equal(session.generation(), generation + (applied ? 1 : 0), where + ": generation");
     const migrated = kind === "merge" || (raw !== null && raw !== undefined);
-    assert.deepEqual(plain(h.log), expectedLog(kind, migrated, outcome, session.generation()), where + ": ports and publication");
+    const wanted = refused ? [] : expectedLog(kind, migrated, outcome, session.generation());
+    assert.deepEqual(plain(h.log), wanted, where + ": ports and publication");
     if (kind === "edit" || kind === "insert") {
       const want = !held ? "rejected" : kind === "edit" && !held.rows.length ? "rejected" : "applied";
       assert.equal(outcome && outcome.kind, want, where + ": command outcome");
@@ -197,6 +203,11 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
     } else if (kind === "reload") {
       assert.equal(now, held, where + ": a reload keeps the document");
       assert.equal(JSON.stringify(now), heldText, where + ": the session writes nothing on a reload");
+    } else if (refused) {
+      assert.equal(returned, held, where + ": a value that is no document is refused, and the session answers what it holds");
+      assert.equal(now, held, where + ": a refusal keeps the document");
+      assert.equal(JSON.stringify(now), heldText, where + ": a refusal changes nothing");
+      bump(tally.typed, "refused");
     } else {
       assert.equal(now, returned, where + ": the session holds what it returned");
       assert.equal(returned === null, raw === null, where + ": only a missing document closes the session");
@@ -219,6 +230,7 @@ test("seeded raw inputs through adoption, server updates, merges, recoveries, re
   t.diagnostic(JSON.stringify(tally));
   assert.equal(tally.steps, SEEDS * STEPS);
   KINDS.forEach(function (k) { assert.ok((tally.kinds[k] || 0) > SEEDS / 2, "every entry point is exercised: " + k); });
+  assert.ok((tally.typed.refused || 0) > 0, "a value that is no document reaches an entry: " + JSON.stringify(tally.typed));
 });
 
 function spoiledPair(spoil: (d: { [key: string]: Json }) => void): { mine: Json; theirs: Json } {
@@ -351,13 +363,30 @@ FOUND.forEach(function ([seed, issue]) {
   });
 });
 
-test("an array is no document: adopting one opens an empty script, and an array scene is dropped (#407)", () => {
+test("an array, or any value that is not an object, is no document: adoption, a server update and a recovery each refuse it and change nothing (#407)", () => {
   const h = fuzzHarness();
-  const held = h.session.adopt([{ id: "r1", audioText: "x" }]);
+  const values: readonly unknown[] = [[{ id: "r1", audioText: "x" }], [], 0, 7, "doc", true, false];
+  const entries = [
+    function (raw: unknown) { return h.session.adopt(raw); },
+    function (raw: unknown) { return h.session.absorbServer(raw); },
+    function (raw: unknown) { return h.session.absorbRecovery(raw); }
+  ];
+  for (const raw of values) for (const take of entries) assert.equal(take(raw), null, "no document held: " + JSON.stringify(raw));
+  assert.deepEqual([h.log, h.published.length, h.session.epoch(), h.session.generation()], [[], 0, 0, 0]);
+  assert.deepEqual(h.session.run(setAudio(function () { return "r1"; }, "x")), { kind: "rejected", reason: NO_DOCUMENT });
+  const held = h.session.adopt(table304Document("Kept"));
   assert.ok(held);
-  assert.equal(Array.isArray(held), false);
-  assert.deepEqual([held.title, held.rows], ["Untitled Script", []]);
-  assert.deepEqual(judge(held, migrate), { problems: [], known: [] });
+  const text = JSON.stringify(held);
+  h.log.length = 0;
+  h.published.length = 0;
+  for (const raw of values) for (const take of entries) assert.equal(take(raw), held, "a document held: " + JSON.stringify(raw));
+  assert.equal(h.session.read(function (d) { return d; }), held);
+  assert.equal(JSON.stringify(held), text);
+  assert.deepEqual([h.log, h.published.length, h.session.epoch(), h.session.generation()], [[], 0, 1, 0]);
+});
+
+test("an array scene is dropped (#407)", () => {
+  const h = fuzzHarness();
   const scene = h.session.absorbServer({ rows: [[], { id: "r2" }] });
   assert.ok(scene);
   assert.equal(JSON.stringify(scene.rows), '[{"id":"r2","status":"todo","visualText":"","audioText":"","imageRef":null,"updatedAt":"","updatedBy":null}]');

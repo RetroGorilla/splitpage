@@ -5,7 +5,7 @@ import type { StateField } from "../../src/core/document/fields.ts";
 import { deriveDocId, mediaCommentId } from "../../src/core/document/ids.ts";
 import { storedImageHtml } from "../../src/core/document/text-policy.ts";
 import { DEFAULT_WPM } from "../../src/core/document/timing.ts";
-import { migrateDocument, migrateRows } from "../../src/core/migrate.ts";
+import { isDocumentObject, migrateDocument, migrateRows } from "../../src/core/migrate.ts";
 import { T } from "./text/cells.ts";
 import { fakeMigration, jsonCopy, pngDataUrl } from "./migrate-ports.ts";
 
@@ -305,11 +305,18 @@ test("a name is still trimmed before it is cut, so leading spaces don't count to
   assert.deepEqual(cappedNames(out), cappedWant(full));
 });
 
-test("an array is no object: a top-level array migrates as no document, and an array in a list is dropped (#407)", () => {
+test("only a plain object is a document: an array, null and every primitive are refused like no document (#407)", () => {
+  for (const raw of [[], [{ id: "r1", audioText: "x" }], null, undefined, 0, 1, "doc", true, false]) {
+    assert.equal(isDocumentObject(raw), false, JSON.stringify(raw));
+  }
+  assert.equal(isDocumentObject({}), true);
+  assert.equal(isDocumentObject({ rows: [] }), true);
+  assert.equal(isDocumentObject(JSON.parse('{"__proto__":[]}')), true);
   const top = migrateRows([{ id: "r1", audioText: "x" }], fakeMigration().ports);
-  assert.equal(Array.isArray(top), false);
-  assert.equal(top.title, "Untitled Script");
-  assert.deepEqual(top.rows, []);
+  assert.deepEqual([Array.isArray(top), top.title, top.rows], [false, "Untitled Script", []], "migrateRows itself stays total; the entries refuse before they call it");
+});
+
+test("an array is no object: an array in a list is dropped (#407)", () => {
   const out = migrateRows({
     rows: [[], { id: "r1" }],
     comments: [["c0"], { id: "c1", rowId: "r1", replies: [[], { id: "rp1" }] }],
