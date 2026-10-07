@@ -168,6 +168,8 @@ Recording stubs pin the fan-out order for both commands. 3.0 also characterises 
 
 **3.7 #353 part 1.** In the undo adapter's replay path, a list merge re-points owners with `personIdRemap` and `repointOwners` from `core/merge/lists.ts`. Fail-first test from the issue's repro. Suites 73 and 267. Suggested CHANGELOG line required.
 
+**Every command (3.8–3.14).** Its tests run it through `runConfined` from `tests/application/session-fakes.ts`, which fails when a command writes anything its change set does not declare, stamps and comments included. The session rolls a throwing command back only over what its change set declares (3.6).
+
 **3.8 Scene length.**
 - `commands/scene-length.ts`; 05r reads through selectors. Preserve 271 exactly, plus the toasts, focus return and Ctrl+Z on the button. Stamping goes through the `Clock` and editor ports.
 - Expected: `S` importers 56 → 55 and writers 33 → 32 (05r's only `S` uses), with the cycle unchanged.

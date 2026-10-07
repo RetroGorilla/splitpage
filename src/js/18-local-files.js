@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
-import { absorbRemoteChange, flushEdits } from "./12a-undo.js";
+import { flushEdits } from "./12a-undo.js";
+import { noteReload } from "../legacy/session-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
@@ -35,7 +36,7 @@ import {
   normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import {
   linkTurnedOff,
   onServerDoc,
@@ -449,7 +450,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     flushEdits();
     S.state.rows = newRows;
     S.state.title = openedTitle;
-    absorbRemoteChange();
+    noteReload();
   } else {
     S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
     setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
@@ -467,7 +468,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     size: file.size || null
   });
 
-  markDirty();
+  markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   imported.dirty = false;
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   render();
