@@ -30,7 +30,7 @@ No app module (outside `src/test`) subscribes to the session today (`subscribe` 
 
 ## 2. Lifecycle
 
-A document enters through one of four methods. Each calls the `DocumentEntry` port first. In the app that port is `migrateRows` from `02-state.js`, which migrates the object it is given in place and returns it as a `ValidatedDocument`, so the session holds the very object `S.state` holds. A value that is not an object becomes a new empty script. `null` and `undefined` skip the port and mean no document. If the port throws, nothing in the session has changed.
+A document enters through one of four methods. Each calls the `DocumentEntry` port first. In the app that port is `migrateRows` from `02-state.js`, which migrates the object it is given in place and returns it as a `ValidatedDocument`, so the session holds the very object `S.state` holds. `null` and `undefined` skip the port and mean no document. Any other value that is not a plain object (an array, a number, a string or a boolean) is refused before the port, as `isDocumentObject` in `core/migrate.ts` decides: `adopt`, `absorbServer` and `absorbRecovery` then call no port, open no epoch, publish nothing and return the document the session already holds (Adam's decision of 2026-10-07 on #407). The app's entries refuse such a value before they reach the session, each through its own existing "no document" path. If the port throws, nothing in the session has changed.
 
 | Method | Called from | Epoch | Undo port call | Published kind |
 | --- | --- | --- | --- | --- |
@@ -220,8 +220,8 @@ View-level refusals need the booted app, because the toast and the click routing
 | Rollback covers only the declared change set | By design (INV-06); `runConfined` is the guard |
 | A one-cell edit can move an anchor when its comment ids change, so `cellTextEdit` sets `runsMoved` then | Correction of the plan's claim, from #384 |
 | `S.editSeq` and the generation diverge after a merge, reload or recovery | By design (INV-53) |
-| `applyMerge` passes a raw `theirs` to `mergeStates`. The validated type guards `.ts` callers only; the session migrates the merged result as it enters, which is redundant when `mergeStates` already migrated it (measured at a median 23.6 ms on the long demo, in #384) | #415 (#304); open PR #417 makes `applyMerge` migrate `theirs` first |
-| `migrateRows` and `mergeStates` fail or are not a fixed point on some raw inputs, pinned as "today" tests in `entry-fuzz.test.ts` | #406, #407, #408, #409, #412 (hardening in open PR #417) |
+| `applyMerge` migrates `theirs` before `mergeStates` (#417), and refuses a `theirs` or `mine` that is no document. The session still migrates the merged result as it enters, which is redundant when `mergeStates` already migrated it (measured at a median 23.6 ms on the long demo, in #384) | #415 (#304); the doc-row corrections stay with 3.15 |
+| The server still stores a `state` that is an array; every client entry refuses it as no document | Server-side refusal is its own PR (Adam's decision of 2026-10-07 on #417) |
 | A render that throws after a merge or adoption half-applies it | #418 |
 | Undo or redo of an owner assignment after a merge folds the owner keeps the dropped id | #391 |
 | The replay counts a live id as alive when `step.after` holds a person with the same name, though nothing re-points it | Accepted in #402 |
