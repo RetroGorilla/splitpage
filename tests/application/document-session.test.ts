@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import type { Command } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, cellEdit, changeSet } from "../../src/application/session/change-set.ts";
+import type { ValidatedDocument } from "../../src/core/document/validated.ts";
+import { migrateRows } from "../../src/core/migrate.ts";
+import { fakeMigration } from "../core/migrate-ports.ts";
+import { judge } from "./raw-inputs.ts";
 import { harness, rawScript, runConfined, writesOutside } from "./session-fakes.ts";
+
+function migrateFake(raw: unknown): ValidatedDocument {
+  return migrateRows(raw, fakeMigration().ports);
+}
 
 function setAudio(rowId: string, text: string): Command {
   return {
@@ -161,10 +169,10 @@ test("E4: a server update and a reload keep the epoch, add no generation, record
   const merged = h.session.absorbServer(rawScript("Merged"));
   assert.equal(merged?.title, "Merged");
   assert.equal(h.session.read(function (doc) { return doc && doc.title; }), "Merged");
-  h.session.absorbReload();
+  assert.equal(h.session.absorbReload({ title: "Reloaded", rows: [{ id: "f1", visualText: "Wide", audioText: "Again." }] }), merged);
   assert.equal(h.session.epoch(), 1);
   assert.equal(h.session.generation(), 1);
-  assert.deepEqual(h.log, ["entry", "undo.server:Merged", "publish:server", "undo.reload", "publish:reload"]);
+  assert.deepEqual(h.log, ["entry", "undo.server:Merged", "publish:server", "entry", "undo.reload", "publish:reload"]);
   assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["server", "reload"]);
   assert.equal(h.clock.armed(), 0);
 });
@@ -175,7 +183,7 @@ test("E4: user edits, server updates, reloads, recoveries and adoptions are publ
   runConfined(h.session,setAudio("r1", "x"));
   h.session.noteEdit();
   h.session.absorbServer(rawScript("B"));
-  h.session.absorbReload();
+  h.session.absorbReload({ title: "B", rows: [] });
   h.session.absorbRecovery(rawScript("C"));
   assert.deepEqual(h.published.map(function (c) { return c.kind + ":" + c.epoch + ":" + c.generation; }),
     ["adopt:1:0", "edit:1:1", "edit:1:2", "server:1:2", "reload:1:2", "recovery:2:2"]);
@@ -193,6 +201,75 @@ test("E4: a recovery migrates the raw input, opens a new epoch, keeps the undo s
   const first = harness();
   first.session.absorbRecovery(rawScript("At boot"));
   assert.equal(first.session.epoch(), 1, "the first document can enter as a recovery, with an epoch of its own");
+});
+
+function reloadedScenes(): Record<string, unknown>[] {
+  return [
+    { id: "f1", visualText: "Wide", audioText: "Put the kettle on.", updatedAt: "2026-10-07T09:00:00.000Z" },
+    { id: "f2", visualText: "Close", audioText: "Two." }
+  ];
+}
+
+test("E4: a reload migrates the reloaded title and scenes over the held document in place, keeps its other fields, and leaves a migrateRows fixed point (#411)", () => {
+  const h = opened();
+  const held = h.session.read(function (d) { return d; });
+  assert.ok(held);
+  const comments = JSON.stringify(held.comments);
+  const docId = held.docId;
+  const rows = reloadedScenes();
+  const rowsText = JSON.stringify(rows);
+  const doc = h.session.absorbReload({ title: "Reloaded", rows: rows });
+  assert.equal(doc, held, "reloaded in place");
+  assert.equal(h.session.read(function (d) { return d; }), held);
+  assert.equal(held.title, "Reloaded");
+  assert.deepEqual(held.rows.map(function (r) { return [r.id, r.status, r.imageRef, r.updatedBy]; }), [["f1", "todo", null, null], ["f2", "todo", null, null]]);
+  assert.equal(held.rows[0]?.updatedAt, "2026-10-07T09:00:00.000Z");
+  assert.equal(JSON.stringify(held.comments), comments);
+  assert.equal(held.docId, docId);
+  assert.equal(JSON.stringify(rows), rowsText, "the reloaded scenes were not written into");
+  assert.notEqual(held.rows[0], rows[0]);
+  assert.deepEqual(judge(held, migrateFake), { problems: [], known: [] });
+  assert.deepEqual([h.session.epoch(), h.session.generation()], [1, 0]);
+  assert.deepEqual(h.log, ["entry", "undo.reload", "publish:reload"]);
+});
+
+test("E4: a reload keeps the held document's unchanged fields as the same objects and its key order", () => {
+  const h = opened();
+  const held = h.session.read(function (d) { return d; });
+  assert.ok(held);
+  const comments = held.comments;
+  const keys = Object.keys(held);
+  h.session.absorbReload({ title: "Reloaded", rows: reloadedScenes() });
+  assert.equal(held.comments, comments);
+  assert.deepEqual(Object.keys(held), keys);
+});
+
+test("E4: a reload whose migration throws leaves the held document, the epoch and the generation as they were, and reaches no other port", () => {
+  const h = harness(undefined, {
+    entry: function (raw) {
+      const rows = raw && typeof raw === "object" ? Reflect.get(raw, "rows") : null;
+      if (Array.isArray(rows) && rows.length === 1) throw new TypeError("refused");
+      return migrateFake(raw);
+    }
+  });
+  const held = h.session.adopt(rawScript("Harbour"));
+  assert.ok(held);
+  const heldText = JSON.stringify(held);
+  h.log.length = 0;
+  h.published.length = 0;
+  assert.throws(function () { h.session.absorbReload({ title: "Reloaded", rows: [{ id: "f1" }] }); }, TypeError);
+  assert.equal(h.session.read(function (d) { return d; }), held);
+  assert.equal(JSON.stringify(held), heldText);
+  assert.deepEqual([h.session.epoch(), h.session.generation()], [1, 0]);
+  assert.deepEqual(h.log, ["entry"]);
+});
+
+test("E4: a reload with no document held changes nothing and publishes nothing", () => {
+  const h = harness();
+  assert.equal(h.session.absorbReload({ title: "Reloaded", rows: reloadedScenes() }), null);
+  assert.equal(h.session.read(function (d) { return d; }), null);
+  assert.deepEqual([h.session.epoch(), h.session.generation()], [0, 0]);
+  assert.deepEqual(h.log, []);
 });
 
 test("settling after a merge, reload or recovery runs the edit's effects and undo flush, adds no generation and publishes nothing", () => {
