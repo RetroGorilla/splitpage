@@ -268,6 +268,30 @@ test("E3: an apply that writes and then throws is rolled back: the document, gen
   });
 });
 
+test("E3: a field the apply deleted before it threw comes back in its place, so the rolled-back document is byte-identical", () => {
+  const h = opened();
+  const before = h.session.read(function (d) { return JSON.stringify(d); });
+  const deletes: Command = {
+    name: "deletes-then-throws",
+    needs: "edit",
+    plan: function () {
+      return {
+        changes: changeSet({ cells: [{ rowId: "r1", field: "visualText" }, { rowId: "r1", field: "status" }], docFields: ["title"] }),
+        apply: function (live) {
+          const row = live.rows[0];
+          if (row) { Reflect.deleteProperty(row, "visualText"); Reflect.deleteProperty(row, "status"); }
+          Reflect.deleteProperty(live, "title");
+          throw new Error("apply broke");
+        }
+      };
+    }
+  };
+  assert.equal(runConfined(h.session, deletes).kind, "failed");
+  assert.equal(h.session.read(function (d) { return JSON.stringify(d); }), before);
+  assert.equal(h.session.generation(), 0);
+  assert.deepEqual(h.log, []);
+});
+
 test("runConfined fails a command that writes outside its change set, applied or thrown, which the rollback cannot undo", () => {
   const stamps: Command = {
     name: "stamps-undeclared",
