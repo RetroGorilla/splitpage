@@ -21,21 +21,22 @@ Source: nine modules, 7,390 lines, six of them in the cycle, 26 counted writes u
 
 Does it make the next ordinary change easier? Yes. Today a change to saving, drafts or recovery crosses `13-hosted`, `18-local-files`, `14-export` and `20g-drafts`, and the race matrix in the plan's gate cannot be run in isolation because the destination, generation and connection are read from `S` at the moment of the write. Nine ledger rows target this milestone (INV-20, 29, 36, 39, 40, 41, 51, 52, 62), #320 has its acceptance criterion here, and the 14 `S.state` assignment sites that bypass the session close through its transition API. Gate: the full gate, as decided.
 
-## Milestone 5: narrow to what milestone 4 needs
+## Milestone 5: keep, sequenced around what milestone 4 needs
+
+**Decided by Adam, 2026-10-07: the registry stays.** He expects to change how the exports work now and to keep adjusting them, and the registry is what makes a change to a format's options and variants one edit instead of three (the dialog, the dispatch table and the menus). The milestone keeps the plan's full scope; the proposal below only fixes the order, so that the part milestone 4 depends on lands first and the registry is built on the captured document rather than before it.
 
 Source: eight modules, 5,125 lines, all eight in the cycle, 42 `S.state` reads and one write (in `11-import.js`). The writers take no document: `15-docx`, `16-csv`, `16b-xlsx` and `17-pdf` read `S.state` for the title, rows, comments and words per minute, directly or through `exportFacts` in `14b-export-kit.js`, and read the blob registry for pictures. They are in the cycle only because they import the byte helpers back from `14-export.js`. Coverage is already strong: 12 browser suites by name, 18 by content, 13 unit test files, and INV-60 pins that an export is the same bytes all day.
 
-Does the milestone as written make the next ordinary change easier? Only partly. A change inside one format is already local to one file and verified by its goldens. What is not local is adding a format, which touches `buildFileData`, `18c-export-dialog.js`, `20d-formats.js` and the menu items, and that is what the plan's gate measures. That gate buys a 4.x convenience, not a 4.0 need: no open issue asks for a new format, and the plan allows no new feature in 4.0.
+Does the milestone make the next ordinary change easier? For the content of a format, a change is already local to one writer file and verified by its goldens; what makes that change safe to check in isolation is the captured document, because a writer that takes a document as input can be run on a fixed script in Node and compared byte for byte. For a format's options, variants and limits, the change today touches `buildFileData`, `18c-export-dialog.js`, `20d-formats.js` and the menu items, and the dialog reads `S.state` in 15 places to decide what to show; the registry makes that one declaration that the dialog, the menus and the command palette are drawn from. Adam expects many such changes, so both halves pass the question.
 
-What milestone 4 needs from this area is one thing: a writer must not read live state after an `await`, because a save that captures bytes while the document changes is exactly the race milestone 4 exists to close. So:
+What milestone 4 needs from this area comes first: a writer must not read live state after an `await`, because a save that captures bytes while the document changes is exactly the race milestone 4 exists to close. The order:
 
-- **Keep (3 PRs, Sonnet unless the first touches `14-export.js`'s save path, which is Opus):**
-  1. One captured, frozen `ExportDocument` built from the session's document and the export options, and `exportFacts`, the four writers and the Markdown writers taking it as their argument. Rendering a captured document leaves live content unchanged (INV-57 absorbed; the plan's gate sentence stays).
-  2. The byte helpers (`zipWrite`, `zipRead`, `strBytes`, `latin1Bytes`, `concatBytes`, `xmlEscape`, `htmlToRuns`) out of `14-export.js` into `src/adapters/formats/`, which takes the four writers out of the cycle.
-  3. Import decoding stays in `11-import.js`, `15-docx.js` and `16-csv.js`, and adoption of the decoded rows goes through milestone 4's transition API, not through `S.state` (the one write).
-- **Stay legacy behind a narrow adapter:** `buildFileData`'s dispatch table, `18c-export-dialog.js`, `20d-formats.js`'s save-file builders, and the menu entries. The adapter is the dispatch function itself, named in `dependencies.md`, so `src/application` never imports a numbered format module. The format registry and registry-driven dialogs move to 4.x.
-- **Lost from plan §7's checklist:** "adding a small test exporter requires one provider and registration" is not met at 4.0. The checklist says so.
-- **Gate:** the full Windows run and the dev smoke (the decided lighter gate); the goldens and INV-60 are the differential for the writers.
+1. **Captured document** (Opus, because it touches `14-export.js`'s save path): one frozen `ExportDocument` built from the session's document and the export options, and `exportFacts`, the four writers and the Markdown writers taking it as their argument. Rendering a captured document leaves live content unchanged (INV-57 absorbed; the plan's gate sentence stays).
+2. **Byte helpers** (Sonnet): `zipWrite`, `zipRead`, `strBytes`, `latin1Bytes`, `concatBytes`, `xmlEscape` and `htmlToRuns` out of `14-export.js` into `src/adapters/formats/`, which takes the four writers out of the cycle.
+3. **Import adoption** (Sonnet): decoding stays in `11-import.js`, `15-docx.js` and `16-csv.js`; adoption of the decoded rows goes through milestone 4's transition API, not through `S.state` (the one write).
+4. **Format registry** (Sonnet for the registry and its tests; Opus if the dialog PR touches the save coordinator): each format declares its stable id, label, supported operations and content, options, accepted input and outcome; `buildFileData`'s dispatch table becomes the registry lookup; `18c-export-dialog.js`, the menu items and the command palette consume the declaration. Per-format limits and warnings move into the declaration. The plan's gate sentence, "adding a small test exporter requires one provider and registration", is met and tested with a throwaway exporter in the test suite.
+
+Nothing in this milestone stays legacy, so plan §7's checklist loses nothing here. **Gate:** the full Windows run and the dev smoke (the decided lighter gate); the goldens and INV-60 are the differential for the writers, and the dialog's browser suites (`98-export-dialog`, `17-formats`, `03-exports`, `41-export-polish`, `284-exports-from-a-fixture`) are the differential for the registry.
 
 ## Milestone 6: keep, with one question
 
@@ -67,8 +68,8 @@ Dropped to 4.x: the new composition root as the build entry, the removal of unus
 | Milestone | Proposal | Gate |
 | --- | --- | --- |
 | 4 | Keep as written | Full gate |
-| 5 | Three PRs: captured `ExportDocument` into the writers, byte helpers into an adapter, import adoption through the transition API. Dispatch, dialogs and menus stay legacy behind the dispatch function. Registry to 4.x | Windows run + dev smoke |
+| 5 | Keep in full (Adam, 2026-10-07), in this order: captured `ExportDocument` into the writers, byte helpers into an adapter, import adoption through the transition API, then the format registry with the dialog, menus and palette drawn from it | Windows run + dev smoke |
 | 6 | Keep as written; CSS split last and droppable (Adam's call) | Windows run + dev smoke + external review |
 | 7 | Keep the resource-release tests (in 4 and 6) and the named initializer shim with its test; drop the entry switch, `S` field removal and bridge retirement to 4.x | Windows run + dev smoke; the x64 packaged check only if the build entry changes, which this proposal avoids |
 
-If approved: plan §5's milestone 5 and 7 sections are rewritten to this, §7's checklist gains the two "lost" lines, and `actions.md`'s four references to a milestone 5 registry and a milestone 7 bootstrap are updated.
+If approved: plan §5's milestone 5 section gains the order above, its milestone 7 section is rewritten to this, §7's checklist gains the milestone 7 "lost" line, and `actions.md`'s references to a milestone 7 bootstrap are updated (its milestone 5 registry references stand).
