@@ -1116,6 +1116,7 @@ function init() {
   S.state = null;
   S.initialStateReady = loadInitialState().then(function (loaded) {
     var applied = applyStashedWork(loaded, null, {
+      recovery: true,
       newBase: function () { return cloneState(loaded); },
       report: false
     });
@@ -1130,7 +1131,7 @@ function init() {
     updateSaveStatus();
 
     if (applied.report) {
-      reportMerge(applied.report);
+      reportMerge(applied.report, { kind: "recovery" });
     } else if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
       showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
     }
