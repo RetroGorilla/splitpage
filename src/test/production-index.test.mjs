@@ -28,8 +28,9 @@ test("reading the breakdown never writes the registry; healTagRegistry does, wit
 
   assert.equal(healTagRegistry(), 1);
   assert.deepEqual(S.state.productionTags, [{ id: mintTagId("prop", "kettle"), cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
-  assert.deepEqual(productionEntries(), before);
+  assert.deepEqual(productionEntries().map((e) => Object.assign({}, e, { id: null })), before);
   assert.equal(productionEntries()[0].id, mintTagId("prop", "kettle"));
+  assert.equal(before[0].id, null, "the entry handed out before the heal keeps the id it was handed out with");
   assert.equal(productionIndexStats().derived, 1, "healing re-derived the index");
   assert.equal(healTagRegistry(), 0);
 });

@@ -1,10 +1,12 @@
 import { randomIds } from "../adapters/identity/ids.ts";
 import { createRichText } from "../adapters/richtext/richtext.ts";
 import type { CellReader, RichText } from "../adapters/richtext/richtext.ts";
+import type { Frozen } from "../core/document/freeze.ts";
 import type { StoredImageRef } from "../core/document/text-policy.ts";
 import type { DecodeOptions } from "../core/text/ports.ts";
 import type { Run } from "../core/text/runs.ts";
 import { registryImages } from "../js/02c-blobs.js";
+import { cacheSeal } from "./cache-freeze.ts";
 
 let shared: RichText | null = null;
 let readCell: CellReader | null = null;
@@ -46,7 +48,7 @@ export function fromHtml(html: unknown, opts?: DecodeOptions | null): Run[] {
   return richText().decode(html, opts);
 }
 
-export function cellOf(html: unknown): Run[] {
-  if (!readCell) readCell = richText().createCellReader();
+export function cellOf(html: unknown): Frozen<Run[]> {
+  if (!readCell) readCell = richText().createCellReader(cacheSeal);
   return readCell(html);
 }
