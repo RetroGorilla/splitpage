@@ -16,17 +16,17 @@ The code lives in `src/application/session/` (`document-session.ts`, `change-set
 | Transaction kinds | `TransactionKind`: `edit`, `server`, `reload`, `recovery`, `adopt` |
 | Capability | Whether an edit is allowed, asked of the `CapabilityPort` before a command plans |
 | Change sets | `ChangeSet`: what a transaction touched, published as a `SessionChange` |
-| Selectors | `read(select)` hands a function a deep-readonly `DocumentView` or `null`. The selector functions themselves (`sceneAt`, `sceneStatus`) live in the command modules, not in `document-session.ts` as the milestone's layout says |
+| Selectors | `read(select)` hands a function the live document typed as a deep-readonly `DocumentView`, or `null`; the type is compile-time only. The selector functions themselves (`sceneAt`, `sceneStatus`) live in the command modules, not in `document-session.ts` as the milestone's layout says |
 
 It does not own these yet:
 
 - **Legacy writers that bypass it.** Typing, split, join and cut-paste still write `S.state.rows` themselves and then call `markDirty`, which is `noteSessionEdit()`: an edit of unknown extent, published as a whole-document change set with no reconciliation. Only scene length and scene status are commands.
 - **The 14 `S.state` assignment sites** (nine modules). The session learns of a document assigned to `S.state` when 12a's `restart()` reports it, or through a `noteServerUpdate`, `noteRecovery` or `noteReload` call, not at the assignment.
 - **Adoption at `trackDocument`.** `render()` in `05-render.js` still calls 12a's `trackDocument()` directly. The session's adoption is a callback from 12a (section 2).
-- **Undo and redo replay.** Ctrl+Z and Ctrl+Y call 12a's `undo()` and `redo()` from `21-events.js`. The replay writes `S.state` itself and publishes nothing.
+- **Undo and redo replay.** Ctrl+Z and Ctrl+Y call 12a's `undo()` and `redo()` from `21-events.js`. The replay writes `S.state` itself, outside the session. After a step applies, `afterUndoApplied` in `21-events.js` calls `markDirty`, so the session sees it as a legacy whole-document edit (one generation, one effect pass, an `edit` publication), not as an undo.
 - **The `S.editSeq` counter.** It increments in the dirty effect on every effect pass, including passes with no generation. The generation and `S.editSeq` therefore diverge after a merge, reload or recovery.
 
-No code under `src` subscribes to the session today (`subscribe` is used by tests), and `liveSession()` in the bridge exists for tests.
+No app module (outside `src/test`) subscribes to the session today (`subscribe` is used by tests), and `liveSession()` in the bridge exists for tests.
 
 ## 2. Lifecycle
 
@@ -41,7 +41,7 @@ A document enters through one of four methods. Each calls the `DocumentEntry` po
 
 All four publish `WHOLE_DOCUMENT`. None advances the generation, records undo or runs the effect pass. Each stores its document, and for adoption and recovery bumps the epoch, only after the undo port returns. 12a can start an adoption of its own inside `adopt` or `absorbServer` (a document swapped in before a render), so the outer call stores last and the session ends holding the outer document. `absorbReload` touches no document: the reload edits `S.state` in place and the session keeps what it held.
 
-How a document reaches `adopt`: 12a's `restart()` calls the `adopted` hook (registered with `configureUndo` by `watchUndoAdoption`) whenever it re-bases undo on a document it was not tracking. That covers `render()`'s `trackDocument()`, a document swapped in before a render, `resetUndo`, and `absorbRemoteChange` over an untracked document. The undo adapter's own `adopt` calls `trackDocument()` and ignores its argument, which is idempotent because 12a has tracked the document by then.
+How a document reaches `adopt`: 12a's `restart()` calls the `adopted` hook (registered with `configureUndo` by `watchUndoAdoption`) whenever it re-bases undo on a document it was not tracking. That covers `render()`'s `trackDocument()`, a document swapped in before a render, and `absorbRemoteChange` over an untracked document. `resetUndo` re-bases through the same `restart()`, but only tests call it. The undo adapter's own `adopt` calls `trackDocument()` and ignores its argument, which is idempotent because 12a has tracked the document by then.
 
 `runCommand` and `readSession` in the bridge call `followLiveDocument()` (12a's `trackDocument()`) before they run. A document assigned to `S.state` and not yet rendered is therefore adopted before a command writes or a view reads, and when the session already holds `S.state` the call is one identity comparison. This is how a command avoids writing into the previous document.
 
@@ -51,7 +51,7 @@ Recovery that enters by assignment is published as `adopt`, not `recovery`. That
 
 "No document" is the session holding `null`: before the first adoption, or after an adoption of `null`, which is what 12a's `restart()` reports when `S.state` is empty. `run` then returns `{ kind: "rejected", reason: NO_DOCUMENT }` (`"no document"`) for any command, and selectors receive `null`. Commands are not asked for capability in that state.
 
-Boot recovery of unsaved work (`21-events.js` passes `recovery: true` to `applyMerge`) goes through the same `noteRecovery`, and is one `recovery` change at epoch 1, generation 0, with no undo entry.
+Boot recovery of unsaved work (`21-events.js` passes `recovery: true` to `applyStashedWork` in `14-export.js`, which forwards it to `applyMerge` only when there is a stash) goes through the same `noteRecovery`, and is one `recovery` change at epoch 1, generation 0, with no undo entry.
 
 ## 3. The command shape
 
@@ -60,7 +60,7 @@ A `Command` has a `name`, `needs` (`"edit"` or `"nothing"`) and `plan(doc)`, whi
 The five steps of an accepted command, in order:
 
 1. **Capability.** If `needs` is `"edit"`, `CapabilityPort.edit()` is asked. A refusal ends the command before it plans.
-2. **One transaction.** `plan` runs against the read-only view, then `apply` against the live document. If the change set calls for it (`needsReconciliation`), `ReconcilePort.anchors` runs inside the same transaction, after `apply`.
+2. **One transaction.** `plan` runs against the live document typed as a read-only `DocumentView`, then `apply` against the live document. If the change set calls for it (`needsReconciliation`), `ReconcilePort.anchors` runs inside the same transaction, after `apply`.
 3. **One generation advance.** `generation++`, once per accepted command.
 4. **Undo recording.** `UndoPort.record(changes)`, once.
 5. **Change set publish.** One effect pass (section 4), then one frozen `SessionChange` (`kind`, `epoch`, `generation`, `changes`) to every listener.
@@ -99,7 +99,7 @@ A rejected, no-op or failed command leaves the generation, dirty state, undo sta
 
 ### Rollback on a throwing command
 
-A throwing `plan` changes nothing, since it sees only the read-only view. If `apply` throws, `rollbackPoint` restores what the change set names, taken before `apply` ran:
+`plan` gets the live document typed as `DocumentView`. The compiler, not the runtime, stops it writing, and `runConfined` catches a plan that writes. The rollback point is taken after `plan` returns, so a write made inside `plan` is not undone. If `apply` throws, `rollbackPoint` restores what the change set names, taken before `apply` ran:
 
 - each declared cell, through `keepField(row, field)`;
 - each declared document field, through `keepField(doc, key)`;
@@ -136,7 +136,7 @@ What each effect does in the app (all handed in by `12-dirty-toast.js` through `
 | `save` | Sets the save buttons to "Save •" unless a save is running, calls `scheduleAutoSave()`, marks the imported file's home dirty and updates the file chip (or the chip alone on a server document), and calls `queueAutoSave()` last when the change set has `saveNow` |
 | `refresh` | `runIdleRefresh` in `07-production-tags.js`, handed in through `provideRefreshRunner` |
 
-`S.editSeq` rises once per pass, so one command, one `markDirty`, and one `settle` each raise it once (suites 185 and 187 count this).
+`S.editSeq` rises once per pass, so one command, one `markDirty`, and one `settle` each raise it once (`src/test/session-bridge-app.test.mjs` counts it for `markDirty` and `settle`, `src/test/scene-effects-app.test.mjs` for the two commands; browser suites 185 and 187 check that each such edit autosaves).
 
 ### Coalescing
 
@@ -147,7 +147,7 @@ What each effect does in the app (all handed in by `12-dirty-toast.js` through `
 
 ### The rule
 
-A command never fans out by hand. It declares `derive` and `saveNow` and the scheduler does the rest. The view that called it repaints only (`renderRow`, falling back to `render`, then `updateScriptStats`) and returns focus. It does not call `markDirty`, the refresh scheduler or `queueAutoSave`.
+A command never fans out by hand. It declares `derive` and `saveNow` and the scheduler does the rest. The view that called it repaints only (`renderRow`, falling back to `render`, then `updateScriptStats`); the length editor's close, not the command, puts focus back on the button. It does not call `markDirty`, the refresh scheduler or `queueAutoSave`.
 
 ## 5. Ports
 
@@ -157,7 +157,7 @@ All port types are in `ports.ts`. `SessionPorts` in `document-session.ts` bundle
 | --- | --- | --- |
 | `DocumentEntry` | `(raw) => ValidatedDocument` | `session-bridge.ts` (`migrateRows` of `02-state.js`); fakes (`migrateRows` from `src/core/migrate.ts` with `fakeMigration` ports, or a `hooks.entry`) |
 | `UndoPort` | `adopt`, `record`, `absorbServer`, `absorbReload` | `undo-adapter.ts` (`createUndoAdapter`); fakes log the call |
-| `EffectPort` | `dirty`, `draft`, `save`, `refresh` | `session-bridge.ts`, which forwards to the functions that `12-dirty-toast.js` (dirty, draft, save) and `07-production-tags.js` (refresh) hand in; fakes log with the generation |
+| `EffectPort` | `dirty`, `draft`, `save`, `refresh` | `session-bridge.ts`, which forwards to the functions that `12-dirty-toast.js` (dirty, draft, save) and `07-production-tags.js` (refresh) hand in; fakes log dirty, draft and save with the generation and refresh without it |
 | `Capability`, `CapabilityPort` | `edit()` gives `{ allowed: true }` or `{ allowed: false, reason }` | `session-bridge.ts`, with the check handed in by `12-dirty-toast.js` (`reviewMode()`); the fake's `deny(reason)` |
 | `ReconcilePort` | `anchors(doc)` returns the count moved | `session-bridge.ts` (`syncCommentAnchors` from `core/text/anchors.ts` with the legacy `cellOf`); fakes log `reconcile` and call an optional hook |
 | `TimerPort` | `now`, `start`, `stop` | `session-bridge.ts` (`Date.now`, `setTimeout`, `clearTimeout`); `fakeClock` |
@@ -192,20 +192,20 @@ Two more adapter exports: `watchUndoAdoption`, which registers the `adopted` hoo
 
 Replay and owner re-pointing (#402, 3.7): when a live `people`, `productionTags` or `brollShots` list no longer matches a step's `before`, `applyStepsLive` merges that list. It now resolves the document-field steps after the loop, people first. If the people list was merged, it re-points owners in `productionTags` and `brollShots` from each folded id to the person kept, with `personIdRemap` and `repointOwners` from `core/merge/lists.ts`, after the whole plan has been applied. A list is replaced by a re-pointed copy only when something changed. The tag and shot merges also get `personSurvives(sides, peopleAfterReplay)`, judged against the people the replay leaves, so an owner that did not survive gives way to the other side's live owner. Refusals, row steps and non-list fields are unchanged. The adapter file itself did not change for this: the replay is in 12a.
 
-Outside the adapter: the replay path above (it does not go through the session); `foldIntoEdit`; comment and reply draft undo (INV-55), which is untouched; the `undo()`/`redo()` calls from `21-events.js`; and 12a's own `restart()`, which is how the session learns of adoption.
+Outside the adapter: the replay path above (it reaches the session only afterwards, as `afterUndoApplied`'s `markDirty`); `foldIntoEdit`; comment and reply draft undo (INV-55), which is untouched; the `undo()`/`redo()` calls from `21-events.js`; and 12a's own `restart()`, which is how the session learns of adoption.
 
 ## 7. Testing a command
 
 `tests/application/session-fakes.ts` holds the harness.
 
 - **`fakeClock()`** is a `TimerPort` with a clock that starts at 1,000. `advance(ms)` runs due timers in time order, setting `now` to each timer's time. `stall(ms)` moves `now` without running timers, which tests the maximum window. `armed()` counts pending timers.
-- **`harness(timing?, hooks?)`** builds a real `DocumentSession` over fake ports and returns `session`, `log`, `published`, `refreshes`, `clock` and `deny(reason | null)`. The log is an ordered list of strings (`entry`, `undo.adopt:<title>`, `undo.record`, `reconcile`, `dirty:<generation>`, `draft:<generation>`, `save:<generation>`, `refresh`, `publish:<kind>`), which is what pins the commit order. Hooks: `beforeUndo` (to start an adoption inside an undo call), `reconcile` and `entry`.
+- **`harness(timing?, hooks?)`** builds a real `DocumentSession` over fake ports and returns `session`, `log`, `published`, `refreshes`, `clock` and `deny(reason | null)`. The log is an ordered list of strings (`entry`, `undo.adopt:<title>`, `undo.server:<title>`, `undo.reload`, `undo.record`, `reconcile`, `dirty:<generation>`, `draft:<generation>`, `save:<generation>`, `refresh`, `publish:<kind>`), which is what pins the commit order. Hooks: `beforeUndo` (to start an adoption inside an undo call), `reconcile` and `entry`.
 - **`rawScript(title)`** gives a small raw document with a comment anchor.
 - **`runConfined(session, command)`** snapshots the document as JSON, runs the command, snapshots again and calls `writesOutside` with the applied outcome's change set, or with `NO_CHANGES` for any other outcome. It throws, naming the command, the outcome kind and each place, if the command wrote outside what it declared. A `noop`, `rejected` or `failed` command therefore must change nothing at all, which also catches an incomplete rollback. `writesOutside` checks undeclared document fields, undeclared row fields, inserted and removed rows, row order, and comments (their `rowId` and `field` are ignored when the set reconciles). Every command's tests from 3.8 on run through it, including a command with a stamp port that throws.
 
 What fails a test: an undeclared write (applied or thrown), a generation, effect, publication or refresh that appears for a no-op, refusal or failure, and a document that is not byte-identical after a rollback. The fake clock itself fails on nothing.
 
-The application tests (`document-session.test.ts`, `session-effects.test.ts`, `session-anchors.test.ts`, `scene-length.test.ts`, `scene-status.test.ts`, `entry-fuzz.test.ts`) use these fakes. `src/test/undo-adapter-differential.test.mjs` runs the real adapter against 12a over seeded sequences.
+The application tests (`document-session.test.ts`, `session-effects.test.ts`, `scene-length.test.ts`, `scene-status.test.ts`, `entry-fuzz.test.ts`) use these fakes. `session-anchors.test.ts` checks `cellTextEdit` and `needsReconciliation` against `syncCommentAnchors` directly, without the harness. `src/test/undo-adapter-differential.test.mjs` runs the real adapter against 12a over seeded sequences.
 
 View-level refusals need the booted app, because the toast and the click routing live in the views. `src/test/_app-boot.mjs` (`bootApp`, `closeApp`) loads the page and `_entry.js` under jsdom, records every `S.state` assignment in `seen`, and `closeApp` clears the timers and channels it tracked. `scene-effects-app.test.mjs` boots once, switches the session with `window.__hostedTest.setSession({ role: "review", docId })`, calls `cycleRowStatus` or `setSceneLength` or sends real click events on the lamp or the length button, and asserts exactly one `warn` toast with the right text and that the document, `S.editSeq`, dirty state, generation (read through `liveSession()`) and undo stack are unchanged. Browser suite `43-review-mode.txt` covers the same in a real browser, including the forced-button case that the click guard refuses.
 
@@ -220,7 +220,7 @@ View-level refusals need the booted app, because the toast and the click routing
 | Rollback covers only the declared change set | By design (INV-06); `runConfined` is the guard |
 | A one-cell edit can move an anchor when its comment ids change, so `cellTextEdit` sets `runsMoved` then | Correction of the plan's claim, from #384 |
 | `S.editSeq` and the generation diverge after a merge, reload or recovery | By design (INV-53) |
-| `applyMerge` passes a raw `theirs` to `mergeStates`. The validated type guards `.ts` callers only; the session migrates the merged result as it enters, which is redundant when `mergeStates` already migrated it (measured at a median 23.6 ms on the long demo) | #415 (#304); open PR #417 makes `applyMerge` migrate `theirs` first |
+| `applyMerge` passes a raw `theirs` to `mergeStates`. The validated type guards `.ts` callers only; the session migrates the merged result as it enters, which is redundant when `mergeStates` already migrated it (measured at a median 23.6 ms on the long demo, in #384) | #415 (#304); open PR #417 makes `applyMerge` migrate `theirs` first |
 | `migrateRows` and `mergeStates` fail or are not a fixed point on some raw inputs, pinned as "today" tests in `entry-fuzz.test.ts` | #406, #407, #408, #409, #412 (hardening in open PR #417) |
 | A render that throws after a merge or adoption half-applies it | #418 |
 | Undo or redo of an owner assignment after a merge folds the owner keeps the dropped id | #391 |
