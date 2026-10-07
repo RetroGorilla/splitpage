@@ -1,18 +1,17 @@
 import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
 import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
-import { productionReaders, scheduleProductionRefresh } from "./07-production-tags.js";
-import { markDirty } from "./12-dirty-toast.js";
-import { queueAutoSave } from "./14-export.js";
+import { productionReaders } from "./07-production-tags.js";
+import { showToast } from "./12-dirty-toast.js";
+import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
+import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import {
   DEFAULT_WPM,
   ROW_STATUS_IDS,
   SCENE_LENGTH_MAX,
   hasSetLength,
-  nextRowStatus,
   normalizeSceneLength,
   normalizeTargetLength,
   parseSceneLength,
@@ -123,22 +122,21 @@ export function updateScriptStats() {
   text.textContent = shot + "/" + S.state.rows.length + " shot";
 }
 
+var STATUS_REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its status.";
+
 export function cycleRowStatus(rowId) {
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
-  var row = S.state.rows[idx];
-  var wasShot = row.status === "shot";
-  row.status = nextRowStatus(row.status);
-  stampRow(row);
-  markDirty();
+  var before = readSession(sceneStatus(rowId));
+  var outcome = runCommand(sceneStatusCommand(rowId, sessionStamps));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(STATUS_REVIEW_REFUSAL, "warn");
+  if (outcome.kind !== "applied") return;
   if (hideShotScenes) {
-    if (!wasShot && row.status === "shot") armShotHideGrace(row.id);
-    else if (wasShot && row.status !== "shot") clearShotHideGrace(row.id);
+    var grace = shotGrace(before, readSession(sceneStatus(rowId)));
+    if (grace === "arm") armShotHideGrace(rowId);
+    else if (grace === "clear") clearShotHideGrace(rowId);
   }
-  if (!renderRow(row.id)) render();
+  if (!renderRow(rowId)) render();
   updateScriptStats();
-  scheduleProductionRefresh();
-  queueAutoSave();
 }
 
 export function __init() {

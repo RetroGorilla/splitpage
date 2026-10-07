@@ -27,6 +27,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$FreezeCaches = $env:SPLITPAGE_FREEZE_CACHES -eq '1'
 $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
@@ -126,6 +127,7 @@ if ($autoPort -or $autoCdp) {
   Write-Host "auto-picked port bases: Port=$Port CdpPort=$CdpPort"
 }
 Write-Host ("running {0} suite(s), {1} at a time" -f $files.Count, $Parallel)
+if ($FreezeCaches) { Write-Host 'cache freezing on (SPLITPAGE_FREEZE_CACHES=1): every suite opens the app with freeze-caches=1' }
 
 # One lane record per suite. Lanes are started in file order as slots free
 # up; results are printed in the order lanes FINISH, each line prefixed with
@@ -142,14 +144,20 @@ foreach ($f in $files) {
   }
 }
 
-function Start-Lane($lane) {
-  Remove-Item $lane.Out, $lane.Err -ErrorAction SilentlyContinue
+function Get-DriverArgs($lane) {
   $a = @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f (Join-Path $here 'driver.ps1')),
     '-Port', ($Port + $lane.Index), '-CdpPort', ($CdpPort + $lane.Index), '-Script', ('"{0}"' -f $lane.File.FullName),
     '-RunId', $lane.Tag
   )
   if ($Headed) { $a += '-Headed' }
+  if ($FreezeCaches) { $a += '-FreezeCaches' }
+  return ,$a
+}
+
+function Start-Lane($lane) {
+  Remove-Item $lane.Out, $lane.Err -ErrorAction SilentlyContinue
+  $a = Get-DriverArgs $lane
   Write-Host ("--- {0} (started)" -f $lane.File.Name)
   $lane.Proc = Start-Process powershell -ArgumentList $a -RedirectStandardOutput $lane.Out `
                -RedirectStandardError $lane.Err -PassThru -NoNewWindow
@@ -264,6 +272,7 @@ Clear-SplitpageEdge $RunId
 function Write-Verdict([int]$SuiteCount) {
   Write-Host ''
   $passed = $script:totalChecks - $script:totalFail
+  if ($FreezeCaches) { Write-Host 'caches were frozen (freeze-caches=1) for every suite' }
   if ($script:suiteFail -gt 0) {
     Write-Host "FAILED - $passed/$($script:totalChecks) checks passed across $SuiteCount suite(s), $($script:suiteFail) suite(s) failed" -ForegroundColor Red
     if ($script:notStarted.Count -gt 0) {

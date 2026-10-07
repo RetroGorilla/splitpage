@@ -484,6 +484,9 @@ export function onRootClick(e) {
   var statusBtn = e.target.closest('[data-action="cycle-status"]');
   if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
 
+  var statusLamp = e.target.closest("#rows .row .status-btn.is-static");
+  if (statusLamp) { cycleRowStatus(statusLamp.closest(".row").getAttribute("data-id")); return; }
+
   var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
   if (expandShotBtn) { expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids")); return; }
 
@@ -1116,6 +1119,7 @@ function init() {
   S.state = null;
   S.initialStateReady = loadInitialState().then(function (loaded) {
     var applied = applyStashedWork(loaded, null, {
+      recovery: true,
       newBase: function () { return cloneState(loaded); },
       report: false
     });
@@ -1130,7 +1134,7 @@ function init() {
     updateSaveStatus();
 
     if (applied.report) {
-      reportMerge(applied.report);
+      reportMerge(applied.report, { kind: "recovery" });
     } else if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
       showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
     }
@@ -1537,6 +1541,9 @@ function init() {
   });
 
   document.getElementById("btn-save").addEventListener("click", saveFromButton);
+  document.getElementById("btn-save").addEventListener("mouseenter", updateSaveStatus);
+  document.getElementById("btn-save").addEventListener("focus", updateSaveStatus);
+  document.getElementById("wr-save-status").addEventListener("mouseenter", updateSaveStatus);
   document.getElementById("btn-present").addEventListener("click", function () { runFromButton("present"); });
 
   document.getElementById("btn-file").addEventListener("click", function (e) {

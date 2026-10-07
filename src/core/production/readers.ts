@@ -1,3 +1,4 @@
+import type { Seal } from "../document/freeze.ts";
 import { contentMemo } from "../document/memo.ts";
 import type { TagName } from "../document/tags.ts";
 import { cuesInCell } from "../text/cues.ts";
@@ -42,13 +43,13 @@ function countWords(cellOf: CellDecoder, html: string): number {
   return text ? text.split(/\s+/).filter(Boolean).length : 0;
 }
 
-export function createProductionReaders(cellOf: CellDecoder): ProductionReaders {
+export function createProductionReaders(cellOf: CellDecoder, seal: Seal): ProductionReaders {
   return {
     cellOf: cellOf,
-    tagsInField: contentMemo(function (html) { return readTags(cellOf, html); }),
-    cueNamesInField: contentMemo(function (html) { return readCueNames(cellOf, html); }),
-    brollInField: contentMemo(function (html) { return brollInCell(cellOf(html)); }),
-    brollPropsInField: contentMemo(function (html) { return brollPropsInCell(cellOf(html)); }),
-    wordCount: contentMemo(function (html) { return countWords(cellOf, html); })
+    tagsInField: contentMemo(function (html) { return readTags(cellOf, html); }, seal),
+    cueNamesInField: contentMemo(function (html) { return readCueNames(cellOf, html); }, seal),
+    brollInField: contentMemo(function (html) { return brollInCell(cellOf(html)); }, seal),
+    brollPropsInField: contentMemo(function (html) { return brollPropsInCell(cellOf(html)); }, seal),
+    wordCount: contentMemo(function (html) { return countWords(cellOf, html); }, seal)
   };
 }

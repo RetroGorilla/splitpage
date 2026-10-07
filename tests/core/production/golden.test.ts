@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
 import { ensureTagIds, registryKey } from "../../../src/core/document/tags.ts";
 import { plainText } from "../../../src/core/document/text-policy.ts";
@@ -17,7 +18,7 @@ import {
   planRegistryHealing,
   tagOccurrences
 } from "../../../src/core/production/tags.ts";
-import type { CueSnapshot, HealingPlan, MediaTagWriter, ProductionEntry, RegistryTag } from "../../../src/core/production/tags.ts";
+import type { CueSnapshot, HealingPlan, MediaTagWriter, ProductionIndex, RegistryTag } from "../../../src/core/production/tags.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
 import { maskTokens, newTokens } from "../../../src/test/golden-helpers.mjs";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
@@ -31,7 +32,7 @@ type Live = Doc & ValidatedDocument;
 type Out = Record<string, unknown>;
 
 const stored = storedDecoder();
-const readers = createProductionReaders(stored.decode);
+const readers = createProductionReaders(stored.decode, deepFreeze);
 const NO_MEDIA: MediaTagWriter = function () { throw new Error("no golden document cell holds media"); };
 const MINTED_SHOT = /\bbs[0-9a-z]{6,}\b/g;
 const PRESENTATION_ONLY = ["demoSha256", "byCategory", "shotsByProp"];
@@ -48,7 +49,7 @@ function demo(): Live {
   return migratedThenSet(doc);
 }
 
-function entriesView(entries: readonly ProductionEntry[]): unknown[] {
+function entriesView(entries: ProductionIndex["entries"]): unknown[] {
   return entries.map((e) => ({
     key: e.key, id: e.id, cat: e.catId, name: e.name, mentions: e.mentions, orphaned: e.orphaned, owner: e.owner, notes: e.notes, status: e.status
   }));

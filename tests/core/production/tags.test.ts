@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { mintTagId } from "../../../src/core/document/tags.ts";
 import {
   bulkTagCell,
@@ -12,7 +13,7 @@ import {
   newRegistryTag,
   planQuickAdd,
   planRegistryHealing,
-  productionIndexFresh,
+  refreshedProductionIndex,
   registryEntry,
   registryIndex,
   retagCell,
@@ -237,22 +238,40 @@ test("deriveProductionIndex lists registry entries in order, then the live tags 
   assert.deepEqual(ix.tagSig.slice(18, 24), [null, null, null, null, null, null]);
 });
 
-test("an index stays fresh through prose edits and goes stale when what it reads changes", () => {
+test("an index is kept through prose edits and goes stale when what it reads changes", () => {
   const state = tagState();
   const ix = deriveProductionIndex(state, readers);
-  assert.equal(productionIndexFresh(ix, state, readers), true);
+  assert.equal(refreshedProductionIndex(ix, state, readers), ix, "nothing changed, so the same index comes back");
   const reworded = cells.html([T("Now fill the "), tag("prop", "Kettle", "kettle"), T(" slowly.")]);
   const edited = Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: reworded }), R2] });
-  assert.equal(productionIndexFresh(ix, edited, readers), true);
-  assert.equal(ix.rowSig[2], reworded, "the signature follows the prose edit");
+  const kept = refreshedProductionIndex(ix, edited, readers);
+  assert.ok(kept && kept !== ix);
+  assert.equal(kept.rowSig[2], reworded, "the signature follows the prose edit");
+  assert.equal(kept.entries, ix.entries);
+  assert.equal(kept.unregistered, ix.unregistered);
+  assert.equal(kept.tagSig, ix.tagSig);
+  assert.equal(refreshedProductionIndex(kept, edited, readers), kept);
   const retexted = cells.html([T("Fill the "), tag("prop", "Kettle", "big kettle")]);
-  assert.equal(productionIndexFresh(ix, Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: retexted }), R2] }), readers), false);
-  assert.equal(productionIndexFresh(deriveProductionIndex(state, readers), Object.assign({}, state, { rows: [R2, R1] }), readers), false);
+  assert.equal(refreshedProductionIndex(ix, Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: retexted }), R2] }), readers), null);
+  assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), Object.assign({}, state, { rows: [R2, R1] }), readers), null);
   const restatused = jsonCopy(state);
   (restatused.productionTags[0] as RegistryTag).status = "sourcing";
-  assert.equal(productionIndexFresh(deriveProductionIndex(state, readers), restatused, readers), false);
+  assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), restatused, readers), null);
   const grown = Object.assign({}, state, { productionTags: state.productionTags.concat([registered("cast", "Ada")]) });
-  assert.equal(productionIndexFresh(deriveProductionIndex(state, readers), grown, readers), false);
+  assert.equal(refreshedProductionIndex(deriveProductionIndex(state, readers), grown, readers), null);
+});
+
+test("keeping an index through a prose edit writes nothing into the index it was given", () => {
+  const state = tagState();
+  const ix = deepFreeze(deriveProductionIndex(state, readers));
+  const before = JSON.stringify(ix);
+  const reworded = cells.html([T("Now fill the "), tag("prop", "Kettle", "kettle"), T(" slowly.")]);
+  const reshot = cells.html([T("Wide on the "), tag("location", "Kitchen", "kitchen"), T(", then close.")]);
+  const edited = Object.assign({}, state, { rows: [Object.assign({}, R1, { audioText: reworded, visualText: reshot }), R2] });
+  const kept = refreshedProductionIndex(ix, edited, readers);
+  assert.equal(JSON.stringify(ix), before);
+  assert.ok(kept);
+  assert.deepEqual(kept, deriveProductionIndex(edited, readers));
 });
 
 test("the healing plan registers each unregistered tag with an id minted after the ones before it, and writes nothing", () => {
@@ -268,6 +287,26 @@ test("the healing plan registers each unregistered tag with an id minted after t
   assert.equal(plan.register[0]?.id, mintTagId("location", "Kitchen") + "-2");
   assert.deepEqual(jsonCopy(plan.cues), { docId: "d1", cells: {} });
   assert.equal(Object.getPrototypeOf(plan.cues.cells), null, "the cells are keyed by scene id, in a map with no prototype");
+});
+
+test("the healing plan counts the names it takes in, not a name the registry refuses, which a fresh derivation still lists last as unregistered (#377)", () => {
+  const refused = String.fromCharCode(0x2060);
+  const row: ProductionRow = {
+    id: "r1",
+    visualText: EMPTY,
+    audioText: cells.html([tag("prop", "kettle", "kettle"), T(" "), tag("prop", refused, refused), T(" "), tag("prop", "mug", "mug")])
+  };
+  const state = doc({ docId: "d1", rows: [row], productionTags: [] });
+  const plan = planRegistryHealing(state, readers);
+  assert.equal(plan.count, 2);
+  assert.deepEqual(plan.register.map((t) => t.name), ["kettle", "mug"]);
+  const healed = doc({ docId: "d1", rows: [row], productionTags: plan.register });
+  const ix = deriveProductionIndex(healed, readers);
+  assert.deepEqual(ix.entries.map((e) => e.name), ["kettle", "mug", refused]);
+  assert.deepEqual(ix.unregistered.map((t) => t.name), [refused]);
+  assert.deepEqual(jsonCopy(planRegistryHealing(healed, readers, null, ix)), { cues: { docId: "d1", cells: {} }, count: 0, retitle: [], register: [] });
+  const onlyRefused = doc({ docId: "d1", rows: [{ id: "r1", visualText: EMPTY, audioText: cells.html([tag("cast", refused, refused)]) }], productionTags: [] });
+  assert.equal(planRegistryHealing(onlyRefused, readers).count, 0);
 });
 
 test("with nothing to register the plan is empty but still snapshots the cues", () => {
@@ -525,11 +564,25 @@ test("the quick-add plan adds each new line once, cleaned, with ids minted after
   assert.equal(plan.added, 3);
 });
 
-test("quick-add lines whose key is an Object property are skipped, and entries under those keys kept, as the plain-object lookup did", () => {
-  const state = gearState([registered("gear", "constructor"), registered("gear", "__proto__")]);
-  const plan = planQuickAdd(state, readers, "constructor\n__proto__\ntoString\nTripod");
+const OBJECT_PROPERTY_NAMES = ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"];
+
+test("quick-add lines named after Object's own properties are registered like any other name", () => {
+  const state = gearState();
+  const plan = planQuickAdd(state, readers, OBJECT_PROPERTY_NAMES.concat("Tripod").join("\n"));
   const kept = (state.productionTags as RegistryTag[]).filter((t) => t.name !== "Old lens" && t.name !== "Gimbal");
-  assert.deepEqual(plan, { remove: ["Old lens", "Gimbal"], register: minted(kept, "gear", ["toString"]), added: 1, removed: 2 });
+  assert.deepEqual(plan, {
+    remove: ["Old lens", "Gimbal"], register: minted(kept, "gear", OBJECT_PROPERTY_NAMES), added: 5, removed: 2
+  });
+});
+
+test("a registered gear entry named after an Object property survives while its line stays and goes when it is dropped", () => {
+  const state = gearState(OBJECT_PROPERTY_NAMES.map((name) => registered("gear", name)));
+  const kept = "Tripod\nSlider\n" + OBJECT_PROPERTY_NAMES.join("\n");
+  assert.deepEqual(planQuickAdd(state, readers, kept), { remove: ["Old lens", "Gimbal"], register: [], added: 0, removed: 2 });
+  assert.deepEqual(
+    planQuickAdd(state, readers, "Tripod\nSlider"),
+    { remove: ["Old lens", "Gimbal"].concat(OBJECT_PROPERTY_NAMES), register: [], added: 0, removed: 2 + OBJECT_PROPERTY_NAMES.length }
+  );
 });
 
 test("removing a line deletes every registry entry under that name", () => {

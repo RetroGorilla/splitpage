@@ -57,6 +57,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       group: "Help",
       icon: "i-compass",
       words: "tutorial walkthrough introduction",
+      availability: () => availableUnless(["dialog"], screenNow()),
       run: () => { startTour(); }
     },
     {

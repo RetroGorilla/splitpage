@@ -9,8 +9,9 @@ import { spawn, execFileSync } from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(HERE, "..", "tabstrip", "tabstrip.css");
-const PORT = 8798;
-const CDP_PORT = 9345;
+let port = 0;
+let cdpPort = 0;
+let userDataDir = "";
 
 const log = (m) => process.stderr.write(`[tabstrip-width] ${m}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -97,7 +98,10 @@ function startServer(stripWidth) {
       res.end(harnessHtml(stripWidth));
     });
     server.once("error", reject);
-    server.listen(PORT, "127.0.0.1", resolve);
+    server.listen(0, "127.0.0.1", () => {
+      port = server.address().port;
+      resolve();
+    });
   });
 }
 
@@ -131,10 +135,10 @@ function findBrowser() {
 let browserProc = null;
 function startBrowser() {
   const exe = findBrowser();
-  const userDataDir = path.join(os.tmpdir(), `splitpage-tabstrip-test-${Math.random().toString(16).slice(2, 10)}`);
+  userDataDir = path.join(os.tmpdir(), `splitpage-tabstrip-test-${Math.random().toString(16).slice(2, 10)}`);
   const args = [
     "--headless=new",
-    `--remote-debugging-port=${CDP_PORT}`,
+    "--remote-debugging-port=0",
     `--user-data-dir=${userDataDir}`,
     "--no-first-run",
     "--no-default-browser-check",
@@ -163,7 +167,14 @@ async function connectCdp() {
   let wsUrl = null;
   for (let i = 0; i < 60; i++) {
     try {
-      const r = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`);
+      const lines = fs.readFileSync(path.join(userDataDir, "DevToolsActivePort"), "utf8").split("\n");
+      const candidate = lines.length > 1 && /^\d+$/.test(lines[0]) ? Number(lines[0]) : 0;
+      cdpPort = candidate >= 1 && candidate <= 65535 ? candidate : 0;
+      if (!cdpPort) {
+        await sleep(300);
+        continue;
+      }
+      const r = await fetch(`http://127.0.0.1:${cdpPort}/json/list`);
       const list = await r.json();
       const page = list.find((t) => t.type === "page");
       if (page) {
@@ -173,7 +184,7 @@ async function connectCdp() {
     } catch {}
     await sleep(300);
   }
-  if (!wsUrl) throw new Error(`no CDP page target on port ${CDP_PORT}`);
+  if (!wsUrl) throw new Error(`no CDP page target on port ${cdpPort}`);
   ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => {
     ws.addEventListener("open", resolve, { once: true });
@@ -253,7 +264,7 @@ async function main() {
   await startServer(1440);
   startBrowser();
   await connectCdp();
-  await navigate(`http://127.0.0.1:${PORT}/`);
+  await navigate(`http://127.0.0.1:${port}/`);
 
   const titles = ["Ad", "Promo cut", "Penguin doc ep 1", "Penguin documentary episode 1"];
   const others = ["Ad", "Ad"];
@@ -293,7 +304,7 @@ async function main() {
   );
 
   await startServer2(900);
-  await navigate(`http://127.0.0.1:${PORT}/`);
+  await navigate(`http://127.0.0.1:${port}/`);
   const manyTitles = [];
   for (let i = 0; i < 12; i++) manyTitles.push(`Tab ${i}`);
   await evaluate(`window.buildTabs(${JSON.stringify(manyTitles)})`);
@@ -331,10 +342,17 @@ async function cleanup() {
     if (ws) ws.close();
   } catch {}
   try {
-    if (browserProc) browserProc.kill();
+    if (browserProc && browserProc.exitCode === null) {
+      const exited = new Promise((resolve) => browserProc.once("exit", resolve));
+      browserProc.kill();
+      await Promise.race([exited, sleep(5000)]);
+    }
   } catch {}
   try {
     if (server) server.close();
+  } catch {}
+  try {
+    if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
   } catch {}
 }
 

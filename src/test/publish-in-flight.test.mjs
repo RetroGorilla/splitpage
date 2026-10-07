@@ -19,9 +19,11 @@ const realFetch = globalThis.fetch;
 const realSetTimeout = globalThis.setTimeout;
 const realNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 
-function doc(docId, title, audio) {
+const DOC_IDS = { "doc-a": "d" + "a".repeat(32), "doc-b": "d" + "b".repeat(32) };
+
+function doc(name, title, audio) {
   return {
-    title, docId, rev: 1, comments: [], productionTags: [], people: [], brollShots: [],
+    title, docId: DOC_IDS[name], rev: 1, comments: [], productionTags: [], people: [], brollShots: [],
     rows: [{ id: "r1", status: "todo", visualText: "", audioText: audio }]
   };
 }
@@ -108,7 +110,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   assert.equal(homeMod.home, bHome, "B's home is still B's file");
   assert.equal(S.baseState, bBase, "B's base is untouched");
   assert.equal(S.state, b);
-  assert.equal(S.state.docId, "doc-b");
+  assert.equal(S.state.docId, DOC_IDS["doc-b"]);
   assert.equal(S.dirty, true, "B's unsaved work is still unsaved");
   assert.equal(S.docIdWrittenOut, true);
   assert.equal(calls.filter((c) => c.method === "PUT").length, 0, "nothing was saved anywhere on B's behalf");
@@ -147,7 +149,7 @@ test("#247: the fork's new id is not put on the document that replaced this one"
 
   postGate();
   assert.equal(await p, false);
-  assert.equal(S.state.docId, "doc-b");
+  assert.equal(S.state.docId, DOC_IDS["doc-b"]);
 });
 
 test("#247: a share link is not made for the document that replaced the one published", async () => {

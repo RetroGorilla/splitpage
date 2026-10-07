@@ -73,6 +73,15 @@ expect document.querySelectorAll('#gear-list .tag-entity').length == 2
 expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === 'wireless lav mic'; })
 expect document.querySelector('#rows .tag-anchor[data-tag-cat="gear"]') !== null
 
+eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='wireless lav mic\n24-70mm lens\nconstructor\n__proto__';return box.value;})()
+jsclick #gear-quickadd-save
+wait document.querySelectorAll('#gear-list .tag-entity').length === 4
+expect ['constructor', '__proto__'].every(function (n) { return Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).some(function (e) { return e.textContent === n; }); })
+eval (function(){var box=document.getElementById('gear-quickadd-input');box.value='wireless lav mic\n24-70mm lens';return box.value;})()
+jsclick #gear-quickadd-save
+wait document.querySelectorAll('#gear-list .tag-entity').length === 2
+expect Array.from(document.querySelectorAll('#gear-list .tag-entity-name')).every(function (e) { return e.textContent !== 'constructor' && e.textContent !== '__proto__'; })
+
 shot 12-gear-panel
 
 # --- grouping by scene --------------------------------------------------

@@ -1,3 +1,4 @@
+import type { Frozen } from "../document/freeze.ts";
 import { idMap } from "../document/id-map.ts";
 import { plainText } from "../document/text-policy.ts";
 import {
@@ -58,15 +59,15 @@ export type ProductionEntry = {
 
 export type RowSigSlot = FieldHtml | readonly FieldTag[];
 
-export type ProductionIndex = {
+export type ProductionIndex = Frozen<{
   entries: ProductionEntry[];
   unregistered: TagGroup[];
   rowCount: number;
   rowSig: RowSigSlot[];
   tagSig: unknown[];
-};
+}>;
 
-export type CueSnapshot = { docId: unknown; cells: Record<string, string[]> };
+export type CueSnapshot = { docId: unknown; cells: Record<string, readonly string[]> };
 
 export type CueRetitle = { at: number; from: string; name: string };
 
@@ -172,22 +173,25 @@ function sameFieldTags(a: readonly FieldTag[], b: readonly FieldTag[]): boolean 
 
 const ROW_SIG_SLOTS = 5;
 
-export function productionIndexFresh(ix: ProductionIndex, state: TagState, readers: ProductionReaders): boolean {
+export function refreshedProductionIndex(ix: ProductionIndex, state: TagState, readers: ProductionReaders): ProductionIndex | null {
   const rows = state.rows, tags = state.productionTags;
-  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 6) return false;
-  const rs = ix.rowSig;
+  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 6) return null;
+  const was = ix.rowSig;
+  let rs: RowSigSlot[] | null = null;
   for (let i = 0, j = 0; i < rows.length; i++, j += ROW_SIG_SLOTS) {
     const r = rows[i] as ProductionRow;
-    if (rs[j] !== r.id) return false;
-    if (rs[j + 1] !== r.visualText) {
+    if (was[j] !== r.id) return null;
+    if (was[j + 1] !== r.visualText) {
       const vTags = readers.tagsInField(r.visualText);
-      if (!sameFieldTags(rs[j + 3] as readonly FieldTag[], vTags)) return false;
+      if (!sameFieldTags(was[j + 3] as readonly FieldTag[], vTags)) return null;
+      rs = rs || was.slice();
       rs[j + 1] = r.visualText;
       rs[j + 3] = vTags;
     }
-    if (rs[j + 2] !== r.audioText) {
+    if (was[j + 2] !== r.audioText) {
       const aTags = readers.tagsInField(r.audioText);
-      if (!sameFieldTags(rs[j + 4] as readonly FieldTag[], aTags)) return false;
+      if (!sameFieldTags(was[j + 4] as readonly FieldTag[], aTags)) return null;
+      rs = rs || was.slice();
       rs[j + 2] = r.audioText;
       rs[j + 4] = aTags;
     }
@@ -195,11 +199,12 @@ export function productionIndexFresh(ix: ProductionIndex, state: TagState, reade
   const ts = ix.tagSig;
   for (let i = 0, j = 0; i < tags.length; i++, j += 6) {
     const t = tags[i];
-    if (!t) { if (ts[j] !== null) return false; continue; }
+    if (!t) { if (ts[j] !== null) return null; continue; }
     if (ts[j] !== t.cat || ts[j + 1] !== t.name || ts[j + 2] !== t.owner ||
-        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id) return false;
+        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id) return null;
   }
-  return true;
+  if (!rs) return ix;
+  return { entries: ix.entries, unregistered: ix.unregistered, rowCount: ix.rowCount, rowSig: rs, tagSig: ix.tagSig };
 }
 
 export function deriveProductionIndex(state: ValidatedDocument, readers: ProductionReaders): ProductionIndex {
@@ -257,7 +262,7 @@ export function deriveProductionIndex(state: ValidatedDocument, readers: Product
 }
 
 export function snapshotCues(state: TagState, readers: ProductionReaders): CueSnapshot {
-  const cells = idMap<string[]>();
+  const cells = idMap<readonly string[]>();
   state.rows.forEach(function (r) {
     const names = readers.cueNamesInField(r.audioText);
     if (names.length) cells[r.id] = names;
@@ -279,7 +284,7 @@ function retitleEditedCues(
   Object.keys(now.cells).forEach(function (rowId) {
     const before = Object.prototype.hasOwnProperty.call(was.cells, rowId) ? was.cells[rowId] : undefined;
     if (!before) return;
-    cueEditPairs(before, now.cells[rowId] as string[]).forEach(function (pair) {
+    cueEditPairs(before, now.cells[rowId] as readonly string[]).forEach(function (pair) {
       const oldName = pair[0], newName = pair[1];
       const oldKey = registryKey("sound", oldName), newKey = registryKey("sound", newName);
       if (!fresh[newKey] || !orphan[oldKey]) return;
@@ -334,7 +339,6 @@ export function planRegistryHealing(
   const ix = index || deriveProductionIndex(state, readers);
   const plan: HealingPlan = { cues: snapshotCues(state, readers), count: 0, retitle: [], register: [] };
   if (!ix.unregistered.length) return plan;
-  plan.count = ix.unregistered.length;
   const work = state.productionTags.slice();
   plan.retitle = retitleEditedCues(was, plan.cues, ix, work);
   ix.unregistered.forEach(function (t) {
@@ -343,11 +347,12 @@ export function planRegistryHealing(
     work.push(rec);
     plan.register.push(rec);
   });
+  plan.count = plan.retitle.length + plan.register.length;
   return plan;
 }
 
 export function planQuickAdd(state: ValidatedDocument, readers: ProductionReaders, raw: string, index?: ProductionIndex): QuickAddPlan {
-  const wanted: Record<string, string> = {}, order: string[] = [];
+  const wanted = idMap<string>(), order: string[] = [];
   raw.split(/\r\n|\r|\n/).forEach(function (line) {
     const name = plainText(line).trim().slice(0, 80);
     if (!name) return;

@@ -9,15 +9,37 @@ import {
   autoSaveHalt,
   autoSaveTarget,
   clearAutoSaveTimers,
+  queueAutoSave,
   resumeAutoSave,
   scheduleAutoSave
 } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteEdit } from "./12a-undo.js";
+import { REVIEW_ONLY, noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
 
 S.saveButtonBusy = false;
+
+provideSessionEffects({
+  dirty: function () {
+    S.dirty = true;
+    S.editSeq++;
+    if (!reviewMode()) recordMyColor(S.state);
+  },
+  draft: function () {
+    if (typeof noteDraftChange === "function") noteDraftChange();
+  },
+  save: function (change) {
+    if (!S.saveButtonBusy) setSaveButtons("Save •");
+    scheduleAutoSave();
+    if (home.kind === "import") { home.dirty = true; updateFileChip(); }
+    else if (onServerDoc()) { updateFileChip(); }
+    if (change.changes.saveNow) queueAutoSave();
+  },
+  edit: function () {
+    return reviewMode() ? { allowed: false, reason: REVIEW_ONLY } : { allowed: true };
+  }
+});
 
 export function setSaveButtons(text, disabled) {
   ["btn-save", "wr-save"].forEach(function (id) {
@@ -34,15 +56,11 @@ export function setSaveButtons(text, disabled) {
 }
 
 export function markDirty() {
-  S.dirty = true;
-  S.editSeq++;
-  if (!reviewMode()) recordMyColor(S.state);
-  noteEdit();
-  if (typeof noteDraftChange === "function") noteDraftChange();
-  if (!S.saveButtonBusy) setSaveButtons("Save •");
-  scheduleAutoSave();
-  if (home.kind === "import") { home.dirty = true; updateFileChip(); }
-  else if (onServerDoc()) { updateFileChip(); }
+  noteSessionEdit();
+}
+
+export function markAbsorbedDirty(kind) {
+  noteAbsorbedDirty(kind);
 }
 
 export function clearDirty() {
