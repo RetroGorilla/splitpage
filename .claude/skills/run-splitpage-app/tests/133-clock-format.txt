@@ -79,7 +79,7 @@ eval document.activeElement.blur()
 # --- the Writer's status: the same refresh on hover ------------------------
 jsclick #btn-write
 wait !document.getElementById('writer').hidden
-sleep 600
+wait !document.getElementById('wr-save-status').hidden && document.getElementById('wr-save-status').getBoundingClientRect().width > 0
 eval (function(){window.__setClock(26*3600000);return true;})()
 expect document.getElementById('wr-save-status').title === window.__timed
 mouse hover ({x: 5, y: 5})
