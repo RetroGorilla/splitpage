@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView } from "../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, ReloadedContent } from "../application/session/document-session.ts";
 import type { SessionChange } from "../application/session/change-set.ts";
 import type { Capability, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
@@ -96,8 +96,9 @@ export function noteRecovery(next: unknown): ValidatedDocument | null {
   return session.absorbRecovery(next);
 }
 
-export function noteReload(): void {
-  session.absorbReload();
+export function noteReload(content: ReloadedContent): ValidatedDocument | null {
+  followLiveDocument();
+  return session.absorbReload(content);
 }
 
 export function noteAbsorbedDirty(kind: AbsorbedKind): void {
