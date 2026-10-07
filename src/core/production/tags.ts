@@ -339,7 +339,6 @@ export function planRegistryHealing(
   const ix = index || deriveProductionIndex(state, readers);
   const plan: HealingPlan = { cues: snapshotCues(state, readers), count: 0, retitle: [], register: [] };
   if (!ix.unregistered.length) return plan;
-  plan.count = ix.unregistered.length;
   const work = state.productionTags.slice();
   plan.retitle = retitleEditedCues(was, plan.cues, ix, work);
   ix.unregistered.forEach(function (t) {
@@ -348,6 +347,7 @@ export function planRegistryHealing(
     work.push(rec);
     plan.register.push(rec);
   });
+  plan.count = plan.retitle.length + plan.register.length;
   return plan;
 }
 
