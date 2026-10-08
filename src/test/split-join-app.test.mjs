@@ -659,7 +659,7 @@ test("a join of a commented phrase cut in two by a split gives one anchor back, 
   writer.closeWriter();
 });
 
-test("a Writer split still edits when the session turns review with the Writer open: no capability check runs today", async () => {
+test("a Writer split is refused when the session turns review with the Writer open: no scene, no undo step, no new generation", async () => {
   await open();
   writer.openWriter();
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
@@ -667,9 +667,9 @@ test("a Writer split still edits when the session turns review with the Writer o
   p.focus();
   selectText(p, 5, 5);
   const got = observe(() => key(p, "Enter"));
-  assert.equal(got.undo, 1);
-  assert.equal(got.generation, 1);
-  assert.equal(S.state.rows.length, 5);
+  assert.equal(got.undo, 0);
+  assert.equal(got.generation, 0);
+  assert.equal(S.state.rows.length, 4);
   window.__hostedTest.setSession({ role: "edit", docId: null });
   writer.closeWriter();
 });

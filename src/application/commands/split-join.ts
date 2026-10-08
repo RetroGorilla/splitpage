@@ -82,7 +82,7 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
 export function splitSceneCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts): Command {
   return {
     name: "split-scene",
-    needs: "nothing",
+    needs: "edit",
     plan: function (doc): Plan | null {
       if (SPLIT_FIELDS.indexOf(field) === -1) return null;
       const row = doc.rows.find(function (r) { return r.id === rowId; });
@@ -141,7 +141,7 @@ function joinChanges(prevId: string, curId: string, takesVisual: boolean, raises
 export function joinScenesCommand(intoId: string, ports: JoinPorts): Command {
   return {
     name: "join-scenes",
-    needs: "nothing",
+    needs: "edit",
     plan: function (doc): Plan | Refusal | null {
       const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
       const prev = doc.rows[at], cur = doc.rows[at + 1];
