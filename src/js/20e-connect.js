@@ -16,6 +16,7 @@ import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
 
@@ -73,6 +74,7 @@ export function openPinDialog(opts) {
   opts = opts || {};
   var modal = document.getElementById("pin-modal");
   if (!modal) return;
+  interruptTourForDialog();
   pinRequest = {
     base: opts.base === undefined ? conn.serverUrl : opts.base,
     onDone: opts.onDone || null
@@ -102,8 +104,10 @@ function frontmostOf(ids) {
 
 function closePinDialog() {
   var modal = document.getElementById("pin-modal");
+  var wasOpen = !!modal && !modal.hidden;
   if (modal) modal.hidden = true;
   pinRequest = null;
+  if (wasOpen) offerTourResumeAfterDialog();
 }
 
 function closePinDialogForAnotherServer() {
