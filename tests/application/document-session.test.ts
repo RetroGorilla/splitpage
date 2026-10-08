@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import type { Command } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, cellEdit, changeSet } from "../../src/application/session/change-set.ts";
+import type { Capability } from "../../src/application/session/ports.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
@@ -138,6 +139,25 @@ test("E3: a command that only reads skips the capability check", () => {
   const reading: Command = { name: "reading", needs: "nothing", plan: function () { return null; } };
   assert.deepEqual(runConfined(h.session,reading), { kind: "noop" });
   assert.deepEqual(runConfined(h.session,setAudio("r1", "x")), { kind: "rejected", reason: "review" });
+});
+
+test("a plan is handed the capability port, so a command that needs nothing can still refuse what it may not do", () => {
+  const h = opened();
+  const seen: Capability[] = [];
+  const asking: Command = {
+    name: "asking",
+    needs: "nothing",
+    plan: function (doc, capability) {
+      const can = capability.edit();
+      seen.push(can);
+      return can.allowed ? null : { refused: "asked: " + can.reason };
+    }
+  };
+  assert.deepEqual(runConfined(h.session, asking), { kind: "noop" });
+  h.deny("review");
+  assert.deepEqual(runConfined(h.session, asking), { kind: "rejected", reason: "asked: review" });
+  assert.deepEqual(seen, [{ allowed: true }, { allowed: false, reason: "review" }]);
+  assert.deepEqual(h.log, []);
 });
 
 test("E4: adoption migrates the raw input, opens a new epoch and records nothing, even for the same document id", () => {
