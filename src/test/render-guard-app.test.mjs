@@ -663,6 +663,18 @@ test("Redraw with a Writer opened since the screen went stale does not focus the
   }
 });
 
+test("Redraw with the focus in a Writer paragraph when the screen went stale puts it back in that paragraph (#443)", async () => {
+  try {
+    await staleScreen(() => { openTheWriter(); const p = inWriter("r1"); p.focus(); select(p, 3); });
+    await pressRedraw();
+    const para = inWriter("r1");
+    assert.equal(document.activeElement, para, "the focus is back in the Writer paragraph");
+    assert.deepEqual(cellSelection(para), { from: 3, to: 3 });
+  } finally {
+    closeTheWriter();
+  }
+});
+
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const PASTE_REFUSED = "Could not paste — press Redraw first.";
 const pasteRefusals = () => shown().filter((el) => toastText(el) === PASTE_REFUSED);
