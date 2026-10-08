@@ -10,7 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
-import { cappedName, unitCutName } from "../document/text-policy.ts";
+import { cappedLongText, cappedName, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
@@ -188,7 +188,7 @@ export function brollInCell(cell: readonly Run[]): BrollItem[] {
     if (open) open.desc.push(brollLineText(line.items));
   });
   return out.map(function (item) {
-    return { id: item.id, name: item.name, desc: item.desc.join("\n").replace(/\s+$/, "").slice(0, BROLL_TEXT_MAX) };
+    return { id: item.id, name: item.name, desc: cappedLongText(item.desc.join("\n").replace(/\s+$/, ""), BROLL_TEXT_MAX) };
   });
 }
 
@@ -247,12 +247,14 @@ export type BrollCutRename = { key: string | null; name: string };
 
 export type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
 
-export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): BrollCutRenames {
+export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders, shotIds: readonly string[]): BrollCutRenames {
   const live = collectBrollFromRows(rows, readers);
+  const stored: Record<string, boolean> = Object.create(null);
+  shotIds.forEach(function (id) { stored[id] = true; });
   const lines: BrollCutRename[] = [];
   const texts: Record<number, string[]> = Object.create(null);
   live.forEach(function (found) {
-    if (found.id || found.name.length < BROLL_NAME_MAX - 3) return;
+    if ((found.id && stored[found.id]) || found.name.length < BROLL_NAME_MAX - 3) return;
     if (found.name.length < BROLL_NAME_MAX) { lines.push({ key: null, name: found.name }); return; }
     if (!texts[found.rowIndex]) {
       const row = (rows as readonly ProductionRow[])[found.rowIndex] as ProductionRow;
@@ -276,7 +278,7 @@ function brollRow(rows: readonly ProductionRow[], rowId: string): ProductionRow 
 }
 
 export function brollSeedRef(row: ProductionRow | null | undefined, plainTextOf: FieldText): string {
-  return row ? plainTextOf(row.audioText).trim().slice(0, BROLL_TEXT_MAX) : "";
+  return row ? cappedLongText(plainTextOf(row.audioText).trim(), BROLL_TEXT_MAX) : "";
 }
 
 export function brollSeedLocation(row: ProductionRow | null | undefined, readers: ProductionReaders): string {

@@ -37,6 +37,7 @@ import {
   shortHost,
   updateConnectMenu
 } from "./20e-connect.js";
+import { cappedLongText, cappedName } from "../core/document/text-policy.ts";
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
@@ -299,11 +300,12 @@ function appDataMergeBookmarks(list) {
     if (byUrl[url]) { out.skipped++; return; }
     var id = (typeof b.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(b.id)) ? b.id : "";
     while (!id || ids[id]) id = newBookmarkId();
-    var name = typeof b.name === "string" && b.name.trim() ? b.name.trim().slice(0, 200) : shortHost(url);
+    var name = (typeof b.name === "string" && cappedName(b.name, 200)) || shortHost(url);
     var bookmark = { id: id, name: name, url: url };
-    if (appDataIsPlainObject(b.ssh) && typeof b.ssh.userHost === "string" && b.ssh.userHost.trim()) {
+    var userHost = appDataIsPlainObject(b.ssh) && typeof b.ssh.userHost === "string" ? cappedName(b.ssh.userHost, 300) : "";
+    if (userHost) {
       bookmark.ssh = {
-        userHost: b.ssh.userHost.trim().slice(0, 300),
+        userHost: userHost,
         remotePort: connectPortOr(b.ssh.remotePort, 8791),
         localPort: connectPortOr(b.ssh.localPort, 8791)
       };
@@ -364,7 +366,7 @@ function appDataMergePrefs(prefs) {
     Object.keys(inc).forEach(function (k) {
       var v = inc[k];
       if (n >= 20 || k === "__proto__" || k.length > 40) return;
-      if (typeof v === "string") { clean[k] = v.slice(0, 200); n++; }
+      if (typeof v === "string") { clean[k] = cappedLongText(v, 200); n++; }
       else if (typeof v === "boolean" || (typeof v === "number" && isFinite(v))) { clean[k] = v; n++; }
     });
     var rawLocal = appDataReadRaw(ONBOARD_KEY);

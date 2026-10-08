@@ -463,7 +463,7 @@ test("a cut is one entry and one dirty; its comment keeps its last place until t
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
 });
 
-test("pasting that cut elsewhere is one entry holding the cell and the comment, and dirties twice", async () => {
+test("pasting that cut elsewhere is one entry holding the cell and the comment, and dirties once", async () => {
   await open();
   const el = cellOf("r2", "audioText");
   el.focus();
@@ -473,7 +473,7 @@ test("pasting that cut elsewhere is one entry holding the cell and the comment, 
   to.focus();
   selectText(to, 11, 11);
   const got = record(() => clip("paste", to, store));
-  assert.deepEqual(got, { seq: 2, render: 0, undo: 1, steps: ["rowField:r4.audioText", "docField:comments"] });
+  assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["rowField:r4.audioText", "docField:comments"] });
   assert.equal(row("r4").audioText, "Four " + cmt("c2", "words") + "." + cmt("c1", "bravo charlie"));
   assert.deepEqual(anchors(), [["c1", "r4", "audioText"], ["c2", "r4", "audioText"]]);
   assert.equal(undo().ok, true);
@@ -595,7 +595,7 @@ test("a composition straight after typing in the same cell joins the typing's en
   assert.equal(lastUndoEntry().steps[0].after, "Hello thereab\u304B");
 });
 
-test("any same-tab cut then paste counts two edits in one entry, even with no comment in it", async () => {
+test("any same-tab cut then paste counts one edit in one entry, even with no comment in it", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   el.focus();
@@ -607,6 +607,6 @@ test("any same-tab cut then paste counts two edits in one entry, even with no co
   to.focus();
   selectText(to, 6, 6);
   const got = record(() => clip("paste", to, store));
-  assert.deepEqual(got, { seq: 2, render: 0, undo: 1, steps: ["rowField:r3.audioText"] });
+  assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["rowField:r3.audioText"] });
   assert.equal(row("r3").audioText, "Three.Hello ");
 });

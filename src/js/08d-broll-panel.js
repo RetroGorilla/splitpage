@@ -35,7 +35,7 @@ import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
-import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
+import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
@@ -1111,11 +1111,11 @@ function onBrollFocusOut(e) {
   var rec = brollRecord(id);
   if (!rec) return;
   if (el.classList.contains("broll-notes-input")) {
-    var notes = plainText(el.value).slice(0, BROLL_TEXT_MAX);
+    var notes = cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
     if (rec.notes !== notes) updateRecord(id, { notes: notes });
   } else if (el.classList.contains("broll-ref-input")) {
     editingRefFor = null;
-    var ref = plainText(el.value).slice(0, BROLL_TEXT_MAX);
+    var ref = cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
     if (rec.audioRef !== ref) updateRecord(id, { audioRef: ref });
     else renderBrollViews();
   } else if (el.classList.contains("broll-loc-input")) {
