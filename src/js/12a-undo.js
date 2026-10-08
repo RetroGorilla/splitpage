@@ -363,7 +363,10 @@ export function createUndoHistory() {
     var r = applyStepsLive(state, steps);
     if (r.ok) to.push(entry);
     else parked = null;
-    if (current && !current.ended && entry.n <= current.n) remark(state);
+    if (current && !current.ended) {
+      if (entry.n <= current.n) remark(state);
+      if (r.ok) current.ended = true;
+    }
     return r.ok ? { ok: true, steps: steps } : { ok: false, reason: r.reason, steps: steps };
   }
 
