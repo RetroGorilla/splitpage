@@ -305,6 +305,26 @@ test("a name is still trimmed before it is cut, so leading spaces don't count to
   assert.deepEqual(cappedNames(out), cappedWant(full));
 });
 
+test("a name is cut by code point, so an emoji across the cap stays whole, and migrating it again keeps it (#344)", () => {
+  const grin = "\u{1F600}";
+  const across = (cap: number): string => "a".repeat(cap - 1) + grin + " tail";
+  const whole = (cap: number): string => "a".repeat(cap - 1) + grin;
+  const f = fakeMigration();
+  const once = migrateRows(cappedDocument(f, across), f.ports);
+  assert.deepEqual(cappedNames(once), cappedWant(whole));
+  const again = fakeMigration();
+  cappedDocument(again, across);
+  const text = JSON.stringify(once);
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(once), again.ports)), text);
+});
+
+test("a name left with half an emoji by an earlier cut loses the half (#344)", () => {
+  const half = (cap: number): string => "a".repeat(cap - 1) + "\uD83D";
+  const f = fakeMigration();
+  const out = migrateRows(cappedDocument(f, half), f.ports);
+  assert.deepEqual(cappedNames(out), cappedWant((cap) => "a".repeat(cap - 1)));
+});
+
 test("only a plain object is a document: an array, null and every primitive are refused like no document (#407)", () => {
   for (const raw of [[], [{ id: "r1", audioText: "x" }], null, undefined, 0, 1, "doc", true, false]) {
     assert.equal(isDocumentObject(raw), false, JSON.stringify(raw));

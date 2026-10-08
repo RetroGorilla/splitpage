@@ -14,7 +14,7 @@ eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undo
 eval (function(){ var s = JSON.parse(F.buildSplitpage()); s.title = 'Emoji tag'; s.rows = [ { id: 'r1', status: 'todo', visualText: 'x'.repeat(79) + GRIN + ' more', audioText: '' }, { id: 'r2', status: 'todo', visualText: 'Close on the lake.', audioText: '' } ]; s.productionTags = [ { cat: 'prop', name: NAME, owner: '', notes: '', status: 'needed' } ]; s.comments = []; s.brollShots = []; F.openFile(new File([JSON.stringify(s)], 'emoji.splitpage')); return true; })()
 wait F.state().title === 'Emoji tag' && document.querySelectorAll('#rows .row').length === 2
 sleep 400
-expect F.state().productionTags.some(function (t) { return t.name === NAME; })
+expect F.state().productionTags.some(function (t) { return t.name === 'x'.repeat(79); }) && !F.state().productionTags.some(function (t) { return LONE.test(t.name); })
 expect loose() === 0
 eval (function(){ U.flush(); window.__before = F.state().rows[0].visualText; window.__n = U.sizes().undo; return true; })()
 

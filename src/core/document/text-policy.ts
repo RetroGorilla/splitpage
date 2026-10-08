@@ -25,8 +25,28 @@ export function plainText(v: unknown): string {
   return textOf(v).replace(/<[^>]*>/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 }
 
+const SURROGATE_RE = /[\uD800-\uDFFF]/;
+const LONE_SURROGATES_RE = /\p{Cs}/gu;
+
+export function withoutLoneSurrogates(s: string): string {
+  return SURROGATE_RE.test(s) ? s.replace(LONE_SURROGATES_RE, "") : s;
+}
+
+export function codePointPrefix(s: string, max: number): string {
+  if (s.length <= max) return s;
+  let end = 0;
+  for (let n = 0; n < max && end < s.length; n++) {
+    end += (s.codePointAt(end) as number) > 0xffff ? 2 : 1;
+  }
+  return s.slice(0, end);
+}
+
+export function cappedName(s: string, max: number): string {
+  return codePointPrefix(withoutLoneSurrogates(s).trim(), max).trimEnd();
+}
+
 export function cappedText(v: unknown, max: number): string {
-  return plainText(v).trim().slice(0, max).trimEnd();
+  return cappedName(plainText(v), max);
 }
 
 export function plainName(v: unknown): string {

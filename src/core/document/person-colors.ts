@@ -1,3 +1,5 @@
+import { cappedName } from "./text-policy.ts";
+
 export type PersonColors = Record<string, string>;
 
 export const PERSON_COLORS: readonly string[] = [
@@ -25,7 +27,7 @@ export function normalizePersonColors(raw: unknown): PersonColors | null {
   let n = 0;
   Object.keys(map).forEach(function (name) {
     if (n >= PERSON_MAP_MAX) return;
-    const clean = String(name).replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, PERSON_NAME_MAX).trimEnd();
+    const clean = cappedName(String(name).replace(/[\x00-\x1f\x7f]/g, ""), PERSON_NAME_MAX);
     const color = paletteColor(map[name]);
     if (!clean || !color || clean === "__proto__" || clean === "constructor" || clean === "prototype") return;
     const key = personKey(clean);

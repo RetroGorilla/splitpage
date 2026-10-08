@@ -45,6 +45,15 @@ test("edits to different words both land, whatever script the words are in", () 
   }
 });
 
+test("a word both sides keep merges its marks one character at a time and keeps each emoji whole (#344)", () => {
+  const base = [T("a" + GRIN + " " + TECHNOLOGIST + " end")];
+  const mine = [T("a" + GRIN, { b: true }), T(" " + TECHNOLOGIST + " end")];
+  const theirs = [T("a" + GRIN + " "), T(TECHNOLOGIST, { i: true }), T(" end more")];
+  const r = mergeCells(base, mine, theirs);
+  assert.equal(r.conflict, false);
+  assert.deepEqual(r.cell, [T("a" + GRIN, { b: true }), T(" "), T(TECHNOLOGIST, { i: true }), T(" end more")]);
+});
+
 test("the same words changed two ways is a conflict, and theirs stays", () => {
   const o = [T("meet at " + GRIN + " today")];
   const mine = replaceText(o, 8, 10, "noon");

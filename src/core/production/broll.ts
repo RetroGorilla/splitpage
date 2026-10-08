@@ -10,6 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
+import { cappedName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
@@ -179,7 +180,7 @@ export function brollInCell(cell: readonly Run[]): BrollItem[] {
       const name = marker.rest
         ? brollLineText(marker.rest)
         : brollLineText(line.items).slice(marker.strip);
-      open = { id: marker.id, name: name.trim().slice(0, BROLL_NAME_MAX), desc: [] };
+      open = { id: marker.id, name: cappedName(name, BROLL_NAME_MAX), desc: [] };
       out.push(open);
       return;
     }
@@ -204,7 +205,7 @@ export function brollPropsInCell(cell: readonly Run[]): string[][] {
     line.items.forEach(function (it) {
       const t = !it.atom && it.marks && it.marks.tag ? tagNameOf(it.marks.tag) : null;
       if (!t || t.cat !== "prop") return;
-      const name = t.name.trim().slice(0, BROLL_PROP_NAME_MAX);
+      const name = cappedName(t.name, BROLL_PROP_NAME_MAX);
       const key = normalizeTagName(name);
       if (!name || seen[key]) return;
       seen[key] = true;
@@ -263,7 +264,7 @@ export function brollSeedLocation(row: ProductionRow | null | undefined, readers
       if (!found && t.catId === "location") found = t.name;
     });
   });
-  return found.slice(0, 80);
+  return cappedName(found, 80);
 }
 
 function brollMatchRecord(

@@ -196,20 +196,28 @@ test("#322: the reported repro keeps the emoji whole", () => {
   assert.deepEqual(setMark(cell, 0, 2, "b", true), [T("a" + GRIN, { b: true }), T("b")], "a mark over half the pair covers the emoji");
 });
 
-test("lone surrogates already in a cell are not pairs: positions beside them do not move", () => {
+test("a lone surrogate never stays in a cell, so positions count only whole characters (#344)", () => {
   const high = [T("x\ud83dab")];
+  assert.equal(projection(high), "xab");
   assert.equal(clamp(high, 2), 2);
-  assert.deepEqual(clampRange(high, 2, 3), { from: 2, to: 3 });
-  assert.equal(projection(insertText(high, 2, "y")), "x\ud83dyab");
-  assert.equal(projection(deleteRange(high, 2, 3)), "x\ud83db");
-  assert.equal(projection(deleteRange(high, 1, 2)), "xab");
+  assert.deepEqual(clampRange(high, 1, 2), { from: 1, to: 2 });
+  assert.equal(projection(insertText(high, 1, "y")), "xyab");
+  assert.equal(projection(deleteRange(high, 1, 2)), "xb");
   const low = [T("a\ude00b")];
-  assert.equal(clamp(low, 1), 1);
-  assert.deepEqual(clampRange(low, 0, 1), { from: 0, to: 1 });
-  assert.equal(projection(insertText(low, 1, "y")), "ay\ude00b");
-  assert.equal(projection(deleteRange(low, 0, 1)), "\ude00b");
-  assert.equal(projection(deleteRange(low, 1, 2)), "ab");
-  assert.deepEqual(splitCell(low, 1), [[T("a")], [T("\ude00b")]]);
+  assert.equal(projection(low), "ab");
+  assert.equal(projection(insertText(low, 1, "y")), "ayb");
+  assert.deepEqual(splitCell(low, 1), [[T("a")], [T("b")]]);
+});
+
+test("text put into a cell drops each lone half it brings, and the end of a tag counts what went in (#344)", () => {
+  assert.equal(projection(insertText([T("ab")], 1, "\ud83d")), "ab");
+  assert.equal(projection(insertText([T("ab")], 1, "y\ude00z")), "ayzb");
+  assert.equal(projection(insertText([T("ab")], 1, GRIN)), "a" + GRIN + "b");
+  assert.equal(projection(replaceText([T("abc")], 1, 2, "x\ud83d")), "axc");
+  const r = replaceWithTag([T("say mug now")], 4, 7, "x".repeat(79) + "\ud83d", "t:prop:x");
+  assert.equal(r.end, 4 + 79);
+  assert.deepEqual(r.cell, [T("say "), T("x".repeat(79), { tag: "t:prop:x" }), T(" now")]);
+  wholeCodePoints(r.cell, "replaceWithTag");
 });
 
 test("insertCell puts a cell in at a caret, once, and a caret inside a pair puts it after the character", () => {
