@@ -411,7 +411,7 @@ function headOf(doc) {
     if (key !== "state") head[key] = doc[key];
   }
   const state = doc.state || {};
-  head.title = String(state.title || "Untitled Script").slice(0, HEAD_TITLE_MAX);
+  head.title = codePointPrefix(String(state.title || "Untitled Script"), HEAD_TITLE_MAX);
   head.rows = Array.isArray(state.rows) ? state.rows.length : 0;
   return head;
 }
@@ -608,9 +608,18 @@ function sweepPresence(now) {
   }
 }
 
+function codePointPrefix(text, max) {
+  let end = 0;
+  for (let n = 0; n < max && end < text.length; n++) {
+    end += text.codePointAt(end) > 0xffff ? 2 : 1;
+  }
+  return text.slice(0, end);
+}
+
 function presenceWord(value, max) {
   /* eslint-disable-next-line no-control-regex -- stripping them is the job. */
-  return String(value == null ? "" : value).replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, max);
+  const text = String(value == null ? "" : value).replace(/[\x00-\x1f\x7f]/g, "").replace(/\p{Cs}/gu, "").trim();
+  return codePointPrefix(text, max).trimEnd();
 }
 
 function presenceColor(value) {
@@ -650,12 +659,11 @@ function commentText(value, max) {
 }
 
 function commentName(value, max) {
-  const text = commentText(value, Infinity).replace(/\p{Cs}/gu, "").trim();
-  let end = 0;
-  for (let n = 0; n < max && end < text.length; n++) {
-    end += text.codePointAt(end) > 0xffff ? 2 : 1;
-  }
-  return text.slice(0, end).trimEnd();
+  return codePointPrefix(commentText(value, Infinity).replace(/\p{Cs}/gu, "").trim(), max).trimEnd();
+}
+
+function commentQuote(value, max) {
+  return codePointPrefix(commentText(String(value == null ? "" : value).replace(/\p{Cs}/gu, ""), Infinity), max);
 }
 
 function commentIdOf(value) {
@@ -678,7 +686,7 @@ function cleanComment(input, now, fallbackAuthor) {
     field: onTitle ? "title"
       : (input.field === "visualText" || input.field === "visualImage") ? input.field : "audioText",
     anchorId: onTitle ? null : (commentIdOf(input.anchorId) || id),
-    quotedText: commentText(input.quotedText, COMMENT_QUOTE_MAX),
+    quotedText: commentQuote(input.quotedText, COMMENT_QUOTE_MAX),
     author: commentName(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
     body,
     resolved: false,

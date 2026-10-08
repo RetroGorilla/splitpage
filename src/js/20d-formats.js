@@ -30,7 +30,7 @@ import {
   toggleAutoSave
 } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
-import { plainText, safeImageSrc } from "../core/document/text-policy.ts";
+import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 
 export function fileStateFor(s) {
@@ -228,7 +228,7 @@ export function finishMarkdownRowChoice(choice) {
 
 export async function applyMarkdownProject(proj, opts) {
   var s = proj.state;
-  if (proj.title && proj.title !== s.title) s.title = plainText(proj.title).slice(0, 300);
+  if (proj.title && proj.title !== s.title) s.title = cappedLongText(plainText(proj.title), 300);
 
   if (proj.table.length === s.rows.length) {
     reconcileMarkdownRows(s, proj.table);

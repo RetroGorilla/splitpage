@@ -831,6 +831,18 @@ try {
       body.here.every((p) => p.field !== "nonsense"));
   }
   {
+    const grin = String.fromCodePoint(0x1F600);
+    const names = [
+      ["x".repeat(39) + grin + "y", "x".repeat(39) + grin], [grin.repeat(41), grin.repeat(40)],
+      ["x".repeat(39) + " y", "x".repeat(39)], ["\uD83DAnn\uDE00 ", "Ann"], ["x".repeat(39) + "\uD83D" + "yz", "x".repeat(39) + "y"]
+    ];
+    for (let i = 0; i < names.length; i++) await beat(editToken, { docId: "names-doc", id: "pn" + i, name: names[i][0] });
+    const body = await json(await beat(editToken, { docId: "names-doc", id: "pq" }));
+    const got = names.map((n, i) => ((body.here || []).find((p) => p.id === "pn" + i) || {}).name);
+    check("a presence name is cut at 40 by code point, with no half emoji (#434)",
+      JSON.stringify(got) === JSON.stringify(names.map((n) => n[1])), JSON.stringify(got));
+  }
+  {
     await beat(editToken, { docId: "shared-doc", id: "p4", name: "Ana", color: "#80bdfb" });
     await beat(editToken, { docId: "shared-doc", id: "p5", name: "Bo", color: "red;background:url(x)" });
     const body = await json(await beat(editToken, { docId: "shared-doc", id: "p3" }));
@@ -1092,6 +1104,13 @@ try {
     eq("...and the line moves with the document", head.rev, 2);
     eq("...including the title", head.title, "Head line, saved");
     eq("...and the scene count", head.rows, 1);
+    const grin = String.fromCodePoint(0x1F600);
+    const long = await fetch(sHead.base + "api/docs/" + made.id, {
+      method: "PUT", headers: auth,
+      body: JSON.stringify({ baseRev: 2, state: { title: "x".repeat(511) + grin + "y", rows: [] } })
+    });
+    eq("a save with a long title is 200", long.status, 200);
+    eq("...and the line cuts it at 512 by code point, keeping the emoji whole (#434)", headOfFile(file).title, "x".repeat(511) + grin);
     check("a save leaves no temp file behind",
       !readdirSync(sHead.dataDir).some((n) => n.endsWith(".tmp")),
       readdirSync(sHead.dataDir).join(", "));
@@ -1563,6 +1582,21 @@ try {
     }
     const stored = (await readDocAs(doc.id, editToken)).state.comments.filter((c) => /^nm/.test(c.id));
     check("...and stored that way", JSON.stringify(stored.map((c) => c.author)) === JSON.stringify(want));
+  }
+
+  {
+    const grin = String.fromCodePoint(0x1F600);
+    const quotes = [
+      ["x".repeat(1999) + grin + "y", "x".repeat(1999) + grin], [grin.repeat(2001), grin.repeat(2000)],
+      [" say\uD83D hi \uDE00", "say hi"], ["x".repeat(1998) + "\uD83D" + "yz", "x".repeat(1998) + "yz"], ["\uD83D", ""]
+    ];
+    const got = [];
+    for (let i = 0; i < quotes.length; i++) {
+      const made = await json(await post(doc.id, editToken, { comment: note("nq" + i, { quotedText: quotes[i][0] }) }));
+      got.push(made && made.comment.quotedText);
+    }
+    check("a comment's quoted text is cut at 2000 by code point, with no half emoji (#434)",
+      JSON.stringify(got) === JSON.stringify(quotes.map((q) => q[1])), JSON.stringify(got));
   }
 
   {

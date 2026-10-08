@@ -556,6 +556,18 @@ export function bulkTagCell(
   return { hits: res.hits, inTags: inTags, skipped: skipped + found.length - res.hits, html: res.html };
 }
 
+export function retagMarks(html: string, cat: string, renames: Readonly<Record<string, string>>, readers: CellReader): string {
+  let cell = readers.cellOf(html), changed = false;
+  tagIds(cell).forEach(function (id) {
+    const t = tagNameOf(id);
+    const name = t && t.cat === cat ? renames[normalizeTagName(t.name)] : undefined;
+    if (name === undefined) return;
+    cell = retag(cell, id, namedTagId(cat, name));
+    changed = true;
+  });
+  return changed ? toHtml(cell) : html;
+}
+
 export function retagCell(html: string, cat: string, target: string, toId: string | null, readers: CellReader): string {
   let cell = readers.cellOf(html);
   tagIds(cell).forEach(function (id) {

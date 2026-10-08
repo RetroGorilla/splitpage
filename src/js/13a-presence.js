@@ -19,7 +19,7 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
-import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
+import { cappedName, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 
 var presenceLastActive;
 
@@ -100,11 +100,11 @@ export function recordMyColor(state) {
   return true;
 }
 
-function presenceInitials(name) {
+export function presenceInitials(name) {
   var words = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "?";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+  if (words.length === 1) return codePointPrefix(words[0], 2).toUpperCase();
+  return (codePointPrefix(words[0], 1) + codePointPrefix(words[words.length - 1], 1)).toUpperCase();
 }
 
 function presenceWanted() {

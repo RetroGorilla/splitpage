@@ -20,6 +20,7 @@ import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
 import { randomHexBytes } from "../adapters/identity/ids.ts";
+import { cappedLongText } from "../core/document/text-policy.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
@@ -410,7 +411,7 @@ export function newScriptFromSelection() {
   if (!clip || !startNewScript()) return;
   var first = S.state.rows[0];
   pasteClip(clip, first ? first.id : null, {
-    title: (title + " — " + count(ids.length)).slice(0, 300),
+    title: cappedLongText(title + " — " + count(ids.length), 300),
     message: "New script with " + count(ids.length) + " — the one before is in Version history"
   });
 }
