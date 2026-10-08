@@ -510,12 +510,13 @@ function sameEdits(now, before, label) {
   assert.deepEqual(untimed(now), untimed(before), label);
 }
 
-async function staleScreen(setup) {
+async function staleScreen(setup, change) {
   fresh("Stale screen");
   if (setup) await setup();
   const theirs = cloneState(S.state);
   theirs.title = "Theirs";
-  theirs.rows[1].audioText = THEIRS;
+  if (change) change(theirs);
+  else theirs.rows[1].audioText = THEIRS;
   const unbreak = breakRender("early");
   let out;
   try {
@@ -525,7 +526,7 @@ async function staleScreen(setup) {
   }
   await idle();
   assert.deepEqual(out.logged, [BROKE]);
-  assert.equal(S.state.rows[1].audioText, THEIRS);
+  if (!change) assert.equal(S.state.rows[1].audioText, THEIRS);
   assert.notEqual(cellOf("r2", "audioText").textContent.indexOf("Mara mends nets."), -1, "r2 still shows the old text");
   assert.equal(redrawToasts().length, 1);
 }
@@ -626,54 +627,118 @@ test("a stale screen makes the script, the titles and the editing controls inert
   assert.deepEqual(inertParts().filter((p) => p[1]), [], "nothing is inert once Redraw draws");
   assert.deepEqual(dimmedParts().filter((p) => p[1]), [], "nothing is dimmed once Redraw draws");
   assert.equal(document.activeElement, cellOf("r1", "audioText"), "the focus is back in the cell it left");
-  assert.deepEqual(cellSelection(cellOf("r1", "audioText")), { from: 3, to: 7 }, "with the selection it had");
+  assert.deepEqual(cellSelection(cellOf("r1", "audioText")), { from: 14, to: 14 }, "with the caret at its end, not the selection it had");
   assert.equal(cellOf("r2", "audioText").textContent.indexOf(THEIRS), 0);
 });
 
-test("Redraw does not put the old selection onto a cell the update changed: the caret goes to the end of the new text and nothing of it is selected (#443)", async () => {
-  await staleScreen(() => { const c = cellOf("r2", "audioText"); c.focus(); select(c, 3, 7); });
-  await pressRedraw();
-  const cell = cellOf("r2", "audioText");
-  assert.equal(cell.textContent.indexOf(THEIRS), 0);
-  assert.equal(document.activeElement, cell, "the focus is back in the cell");
-  assert.equal(window.getSelection().toString(), "", "no part of the new text is selected");
-  assert.deepEqual(cellSelection(cell), { from: THEIRS.length, to: THEIRS.length }, "the caret is at the end");
-});
+function caretAtEnd(cell, end, label) {
+  assert.equal(document.activeElement, cell, label + ": the focus is in the scene's cell");
+  assert.equal(window.getSelection().toString(), "", label + ": nothing is selected");
+  assert.deepEqual(cellSelection(cell), { from: end, to: end }, label + ": a collapsed caret at the end");
+}
 
-test("Redraw with a Writer opened since the screen went stale does not focus the scene under it (#443)", async () => {
-  const focused = [];
-  const realFocus = window.HTMLElement.prototype.focus;
-  try {
-    await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3); });
-    openTheWriter();
-    window.getSelection().removeAllRanges();
-    redrawToasts()[0].querySelector(".toast-action").focus();
-    window.HTMLElement.prototype.focus = function (...args) {
-      if (this.closest && this.closest("#rows")) focused.push(this);
-      return realFocus.apply(this, args);
-    };
-    await pressRedraw();
-    assert.deepEqual(focused, [], "no scene under the Writer was focused");
-    const active = document.activeElement;
-    assert.equal(!!(active && active.closest && active.closest("#rows")), false, "the focus is not in a scene the Writer hides");
-    assert.equal(cellSelection(cellOf("r1", "audioText")), null, "and no range was put in it");
-  } finally {
-    window.HTMLElement.prototype.focus = realFocus;
-    closeTheWriter();
-  }
-});
+const noCellFocused = () => !(document.activeElement && document.activeElement.closest && document.activeElement.closest(".cell-editable"));
 
-test("Redraw with the focus in a Writer paragraph when the screen went stale puts it back in that paragraph (#443)", async () => {
-  try {
-    await staleScreen(() => { openTheWriter(); const p = inWriter("r1"); p.focus(); select(p, 3); });
-    await pressRedraw();
-    const para = inWriter("r1");
-    assert.equal(document.activeElement, para, "the focus is back in the Writer paragraph");
-    assert.deepEqual(cellSelection(para), { from: 3, to: 3 });
-  } finally {
-    closeTheWriter();
+function nothingInHiddenWriter() {
+  const sel = window.getSelection();
+  assert.ok(!sel.rangeCount || !document.getElementById("writer").contains(sel.getRangeAt(0).startContainer), "no range is in the hidden Writer");
+  assert.ok(!document.getElementById("writer").contains(document.activeElement), "nothing in the hidden Writer has the focus");
+}
+
+const WRITER_CLOSED = [
+  {
+    name: "a cell the update left as it was gets a caret at its end, not the old selection",
+    setup: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3, 7); },
+    check: () => caretAtEnd(cellOf("r1", "audioText"), 14, "unchanged cell")
+  },
+  {
+    name: "a cell the update rewrote gets a caret at its end, so no range covers the collaborator's text",
+    setup: () => { const c = cellOf("r2", "audioText"); c.focus(); select(c, 3, 7); },
+    check: () => {
+      assert.equal(cellOf("r2", "audioText").textContent.indexOf(THEIRS), 0);
+      caretAtEnd(cellOf("r2", "audioText"), THEIRS.length, "rewritten cell");
+    }
+  },
+  {
+    name: "a cell where the update only added a line break before the selected words gets a caret at its end, so no range covers the line break",
+    setup: () => { const c = cellOf("r2", "audioText"); c.focus(); select(c, 5, 10); },
+    change: (t) => { t.rows[1].audioText = "Mara <br>mends nets."; },
+    check: () => {
+      assert.equal(cellOf("r2", "audioText").querySelectorAll("br").length, 1, "the line break is drawn");
+      caretAtEnd(cellOf("r2", "audioText"), 17, "line break");
+    }
+  },
+  {
+    name: "a cell whose scene the update removed: nothing is focused and nothing throws",
+    setup: () => { const c = cellOf("r2", "audioText"); c.focus(); select(c, 5, 10); },
+    change: (t) => { t.rows.splice(1, 1); },
+    check: () => {
+      assert.equal(cellOf("r2", "audioText"), null);
+      assert.ok(noCellFocused(), "no cell has the focus");
+    }
+  },
+  {
+    name: "a Writer paragraph, with the Writer closed since, gets the scene's narration cell with a caret at its end",
+    setup: () => { openTheWriter(); const p = inWriter("r1"); p.focus(); select(p, 3, 7); },
+    closeWriter: true,
+    check: () => caretAtEnd(cellOf("r1", "audioText"), 14, "Writer paragraph")
+  },
+  {
+    name: "a Writer paragraph whose scene the update removed, with the Writer closed since: nothing is focused",
+    setup: () => { openTheWriter(); const p = inWriter("r2"); p.focus(); select(p, 3, 7); },
+    change: (t) => { t.rows.splice(1, 1); },
+    closeWriter: true,
+    check: () => assert.ok(noCellFocused(), "no cell has the focus")
   }
-});
+];
+
+for (const place of WRITER_CLOSED) {
+  test("Redraw with the Writer closed: " + place.name + " (#443)", async () => {
+    try {
+      await staleScreen(place.setup, place.change);
+      assert.equal(document.activeElement, redrawToasts()[0].querySelector(".toast-action"));
+      if (place.closeWriter) closeTheWriter();
+      await pressRedraw();
+      place.check();
+      nothingInHiddenWriter();
+    } finally {
+      closeTheWriter();
+    }
+  });
+}
+
+const WRITER_OPEN = [
+  {
+    name: "a cell in the script, with the Writer opened since",
+    setup: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3, 7); },
+    openWriter: true
+  },
+  {
+    name: "a Writer paragraph the update left as it was",
+    setup: () => { openTheWriter(); const p = inWriter("r1"); p.focus(); select(p, 3, 7); }
+  }
+];
+
+for (const place of WRITER_OPEN) {
+  test("Redraw with the Writer open leaves the focus to the Writer's own trap, which keeps it inside the Writer, and restores no range: " + place.name + " (#443)", async () => {
+    try {
+      await staleScreen(place.setup);
+      if (place.openWriter) {
+        openTheWriter();
+        redrawToasts()[0].querySelector(".toast-action").focus();
+      }
+      await pressRedraw();
+      const active = document.activeElement;
+      assert.notEqual(active, document.body, "the focus is not left on the page");
+      assert.ok(document.getElementById("writer").contains(active), "the focus is inside the Writer");
+      assert.equal(window.getSelection().toString(), "", "no old range is put back");
+      const sel = window.getSelection();
+      assert.ok(!sel.rangeCount || !document.getElementById("rows").contains(sel.getRangeAt(0).startContainer), "no range is left in the script under the Writer");
+    } finally {
+      closeTheWriter();
+    }
+  });
+}
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const PASTE_REFUSED = "Could not paste — press Redraw first.";

@@ -14,7 +14,7 @@ import { blobImgHtml } from "./02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { cellSelection, editCell, setCellSelection } from "./05b-cell-edit.js";
+import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
 import { trackDocument } from "./12a-undo.js";
@@ -709,9 +709,7 @@ function offerRedraw(failed) {
 function focusPlace(el) {
   var cellEl = el.closest(".cell-editable[data-id][data-field]");
   if (!cellEl) return el.id ? { id: el.id } : null;
-  return { root: cellEl.closest("#writer-doc") ? "#writer-doc" : "#rows",
-           row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"),
-           text: cellEl.textContent, sel: cellSelection(cellEl) };
+  return { row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
 }
 
 function markStaleParts(on) {
@@ -742,16 +740,11 @@ function releaseStaleScreen() {
   staleFocus = null;
   var active = document.activeElement;
   if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
-  var target = place.id ? document.getElementById(place.id) : document.querySelector(place.root +
-    ' .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
+  var target = place.id ? document.getElementById(place.id) : document.querySelector(
+    '#rows .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
   if (!target) return;
-  if (place.root === "#rows" && writerOpen) return;
   target.focus();
-  if (!place.sel) return;
-  if (target.textContent === place.text) {
-    setCellSelection(target, place.sel.from, place.sel.to);
-    return;
-  }
+  if (place.id || document.activeElement !== target) return;
   var end = window.getSelection();
   var caret = document.createRange();
   caret.selectNodeContents(target);
