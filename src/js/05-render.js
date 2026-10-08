@@ -689,23 +689,86 @@ export function render() {
 
 var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 var redrawToast = null;
+var screenStale = false;
+var staleFocus = null;
+var STALE_PARTS = "#rows, .add-row-bar, #doc-title, #writer-title, #writer-doc, #writer .wr-fmt, " +
+  "#replace-input, #find-replace, #find-replace-all, #find-tag-go, #tag-ghost, #tag-suggest";
+var STALE_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart",
+  "compositionstart", "pointerdown", "mousedown", "click"];
+
+function offerRedraw() {
+  if (redrawToast && redrawToast.isConnected && !redrawToast.classList.contains("is-leaving")) return;
+  redrawToast = showActionToast(REDRAW_FAILED, "error", "Redraw", renderAbsorbed, true);
+  redrawToast.removeEventListener("click", redrawToast.dismiss);
+  redrawToast.removeAttribute("title");
+  redrawToast.classList.add("is-held");
+  redrawToast.setAttribute("role", "alert");
+}
+
+function focusPlace(el) {
+  var cellEl = el.closest(".cell-editable[data-id][data-field]");
+  if (!cellEl) return el.id ? { id: el.id } : null;
+  return { root: cellEl.closest("#writer-doc") ? "#writer-doc" : "#rows",
+           row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
+}
+
+function holdStaleScreen() {
+  var active = document.activeElement;
+  var inPart = !!(active && active.closest && active.closest(STALE_PARTS));
+  var onRedraw = !!(redrawToast && active && redrawToast.contains(active));
+  if (!screenStale && inPart) staleFocus = focusPlace(active);
+  screenStale = true;
+  document.querySelectorAll(STALE_PARTS).forEach(function (el) { el.setAttribute("inert", ""); });
+  offerRedraw();
+  if (inPart || onRedraw) redrawToast.querySelector(".toast-action").focus();
+}
+
+function releaseStaleScreen() {
+  if (!screenStale) return;
+  screenStale = false;
+  document.querySelectorAll(STALE_PARTS).forEach(function (el) { el.removeAttribute("inert"); });
+  var place = staleFocus;
+  staleFocus = null;
+  var active = document.activeElement;
+  if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
+  var target = place.id ? document.getElementById(place.id) : document.querySelector(place.root +
+    ' .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
+  if (target) target.focus();
+}
+
+function refuseOnStaleScreen(e) {
+  if (!screenStale) return;
+  var t = e.target;
+  var inPart = !!(t && t.closest && t.closest(STALE_PARTS));
+  if (!inPart && !(e.type === "keydown" && isUndoChord(e) && !ownsTyping(t))) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
+
+function isUndoChord(e) {
+  var k = String(e.key || "").toLowerCase();
+  return (e.ctrlKey || e.metaKey) && !e.altKey && (k === "z" || k === "y");
+}
+
+function ownsTyping(t) {
+  return !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable));
+}
 
 export function renderAbsorbed() {
   try {
     render();
+    releaseStaleScreen();
     if (redrawToast && redrawToast.isConnected) redrawToast.dismiss();
     return true;
   } catch (e) {
     if (window.console) console.error(e);
-    if (!redrawToast || !redrawToast.isConnected || redrawToast.classList.contains("is-leaving")) {
-      redrawToast = showActionToast(REDRAW_FAILED, "error", "Redraw", renderAbsorbed, true);
-    }
+    holdStaleScreen();
     return false;
   }
 }
 
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying) return;
+  if (!cellEl.isConnected || S.undoApplying || screenStale) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
@@ -1134,4 +1197,5 @@ export function __init() {
       resetProductionIndexStats();
     }
   };
+  STALE_EVENTS.forEach(function (type) { window.addEventListener(type, refuseOnStaleScreen, true); });
 }
