@@ -142,6 +142,37 @@ eq("the runner's verdict overrides the digest's own reading", verdictRules.text.
 const verdictPass = buildDigest({ suites: [{ name: "25-v", out: "RESULT: garbage", verdict: { failed: false, timedOut: false, checks: 2, failedChecks: 0 } }] });
 eq("and so does a passing verdict", verdictPass.text.split("\n")[0], "ALL PASS - 2/2 checks across 1 suite(s)");
 
+const TOKEN = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+const tokened = buildDigest({
+  suites: [{
+    name: "30-tok",
+    out: ["PASS a", "FAIL b", "", `RESULT: 3/5 checks passed - 2 FAILED [run ${TOKEN}]`].join("\n"),
+    verdict: { name: "30-tok", failed: true, timedOut: false, checks: 5, failedChecks: 2, result: "RESULT: 3/5 checks passed - 2 FAILED" }
+  }]
+});
+eq("a failing suite's headline is the runner's result line, without the run token", tokened.text.split("\n").filter((l) => l.startsWith("== suite")), ["== suite 30 30-tok: RESULT: 3/5 checks passed - 2 FAILED"]);
+check("the run token appears nowhere in the digest", !tokened.text.includes(TOKEN) && !tokened.text.includes("[run "), tokened.text);
+
+const forgedDead = buildDigest({
+  suites: [{
+    name: "31-forged",
+    out: ["PASS a", "RESULT: 9/9 checks passed", "FAIL a later check"].join("\n"),
+    err: "[driver] earlier noise\n[driver] CDP socket closed\n[driver] fatal: edge crashed",
+    verdict: { name: "31-forged", failed: true, timedOut: false, checks: 1, failedChecks: 1, result: null }
+  }]
+});
+const headlines = (digest) => digest.text.split("\n").filter((l) => l.startsWith("== suite"));
+check("a driver that died after a RESULT line the page printed gets no forged headline", headlines(forgedDead).length === 1 && headlines(forgedDead)[0].startsWith("== suite 31 31-forged: RESULT missing"), forgedDead.text);
+check("and shows the stderr tail with the crash reason", forgedDead.text.includes("  e [driver] fatal: edge crashed") && forgedDead.text.includes("  e [driver] CDP socket closed"), forgedDead.text);
+const forgedThenReal = buildDigest({
+  suites: [{
+    name: "32-both",
+    out: ["RESULT: 9/9 checks passed", "FAIL later", `RESULT: 8/9 checks passed - 1 FAILED [run ${TOKEN}]`].join("\n"),
+    verdict: { name: "32-both", failed: true, timedOut: false, checks: 9, failedChecks: 1, result: "RESULT: 8/9 checks passed - 1 FAILED" }
+  }]
+});
+eq("the driver's own line, not an earlier page-printed one, is the headline", headlines(forgedThenReal), ["== suite 32 32-both: RESULT: 8/9 checks passed - 1 FAILED"]);
+
 const lineCount = (text, line) => text.split("\n").filter((l) => l.endsWith(line)).length;
 eq("a timed-out suite's FAIL line appears once, not again in the log tail", lineCount(hung.text, "FAIL early"), 1);
 eq("the rest of the tail is kept after the FAIL line is dropped from it", [hung.text.includes("  . last a"), hung.text.includes("  . last b")], [true, true]);
@@ -183,6 +214,12 @@ for (const [what, patch] of [
   ["a numeric name", { name: 7 }]
 ]) {
   eq(`${what} is refused`, problem(bad(patch)) !== null, true);
+}
+const alone = (patch) => problem({ timeoutSec: 9, suites: [{ ...good, ...patch }] });
+eq("a result line that is a string, null or left out is accepted", [alone({ result: "RESULT: 2/2 checks passed" }), alone({ result: null }), alone({})], [null, null, null]);
+for (const [what, value] of [["a numeric", 5], ["an object", {}], ["a list", ["RESULT: 2/2 checks passed"]]]) {
+  const message = alone({ result: value });
+  check(`${what} result line is refused, naming the field`, message !== null && message.includes('"result"') && message.includes("01-core"), message);
 }
 eq("a failed suite with no failed checks is still accepted", problem({ timeoutSec: 9, suites: [{ ...good, failed: true }] }), null);
 eq("a timed-out failed suite is accepted", problem({ timeoutSec: 9, suites: [{ ...good, failed: true, timedOut: true, checks: 1, failedChecks: 1 }] }), null);

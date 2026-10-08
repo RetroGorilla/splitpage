@@ -132,23 +132,27 @@ if ($FreezeCaches) { Write-Host 'cache freezing on (SPLITPAGE_FREEZE_CACHES=1): 
 # One lane record per suite. Lanes are started in file order as slots free
 # up; results are printed in the order lanes FINISH, each line prefixed with
 # the suite name so interleaving is never ambiguous.
-$lanes = @()
-$i = 0
-foreach ($f in $files) {
-  $i++
-  $lanes += [pscustomobject]@{
-    Index = $i; File = $f; Tag = ('{0}s{1:d2}' -f $RunId, $i)
+function New-Lane($f, [int]$n) {
+  return [pscustomobject]@{
+    Index = $n; File = $f; Tag = ('{0}s{1:d2}' -f $RunId, $n); Token = [guid]::NewGuid().ToString('N')
     Out = Join-Path $logs ($f.BaseName + '.out.txt')
     Err = Join-Path $logs ($f.BaseName + '.err.txt')
     Proc = $null; Watch = $null; Done = $false; DoneAt = $null; Reported = $false; TimedOut = $false
   }
 }
 
+$lanes = @()
+$i = 0
+foreach ($f in $files) {
+  $i++
+  $lanes += New-Lane $f $i
+}
+
 function Get-DriverArgs($lane) {
   $a = @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f (Join-Path $here 'driver.ps1')),
     '-Port', ($Port + $lane.Index), '-CdpPort', ($CdpPort + $lane.Index), '-Script', ('"{0}"' -f $lane.File.FullName),
-    '-RunId', $lane.Tag
+    '-ResultToken', $lane.Token, '-RunId', $lane.Tag
   )
   if ($Headed) { $a += '-Headed' }
   if ($FreezeCaches) { $a += '-FreezeCaches' }
@@ -174,7 +178,7 @@ function Test-LaneFinished($lane) {
     if (((Get-Date) - $lane.DoneAt).TotalSeconds -ge 5) { try { $lane.Proc.Kill() } catch {}; return $true }
     return $false
   }
-  $resultSeen = (Test-Path $lane.Out) -and (Select-String -Path $lane.Out -Pattern '^RESULT:' -Quiet)
+  $resultSeen = (Test-Path $lane.Out) -and (Select-String -Path $lane.Out -Pattern ('^RESULT:.* \[run ' + [regex]::Escape($lane.Token) + '\]$') -Quiet)
   if ($resultSeen -or ($lane.Proc.HasExited -and $lane.Watch.Elapsed.TotalSeconds -gt 3)) {
     $lane.Done = $true; $lane.DoneAt = Get-Date
     return (Test-LaneFinished $lane)
@@ -206,13 +210,16 @@ function Report-Lane($lane) {
   if ($lane.TimedOut) {
     Write-Host ("--- {0}: TIMED OUT after {1}s" -f $name, $TimeoutSec) -ForegroundColor Red
     Count-FailedSuite
-    $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = $true; timedOut = $true; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0 }
+    $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = $true; timedOut = $true; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0; result = $null }
     if (Test-Path $lane.Out) { Get-Content $lane.Out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
     return
   }
 
   $lines = @(Get-Content $lane.Out -ErrorAction SilentlyContinue)
-  $result = ($lines | Where-Object { $_ -match '^RESULT:' } | Select-Object -Last 1)
+  $tail = ' [run ' + $lane.Token + ']'
+  $result = ($lines | Where-Object { $_ -match '^RESULT:' -and $_.EndsWith($tail) } | Select-Object -Last 1)
+  if ($result) { $result = $result.Substring(0, $result.Length - $tail.Length) }
+  $driverResult = if ($result) { [string]$result } else { $null }
   $failed = ($result -match 'FAILED') -or (-not $result)
   Write-Host ("--- {0}" -f $name)
   foreach ($l in $lines) {
@@ -245,7 +252,7 @@ function Report-Lane($lane) {
     Write-Host "    $result" -ForegroundColor Red
   }
   else { Write-Host "    $result" -ForegroundColor Green }
-  $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = ($script:suiteFail -gt $s0); timedOut = $false; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0 }
+  $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = ($script:suiteFail -gt $s0); timedOut = $false; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0; result = $driverResult }
 }
 
 $pending = [System.Collections.Generic.Queue[object]]::new()
@@ -293,7 +300,10 @@ function Write-Digest {
   [IO.File]::WriteAllText($verdicts, $json, (New-Object System.Text.UTF8Encoding $false))
   $module = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $here))) 'tools\failure-digest.mjs'
   $names = ($files | ForEach-Object { $_.BaseName }) -join ','
-  try { & node $module --logs $logs --out $digest --suites $names --verdicts $verdicts }
+  try {
+    & node $module --logs $logs --out $digest --suites $names --verdicts $verdicts
+    if ($LASTEXITCODE -ne 0) { Write-Host "digest not written: failure-digest.mjs exited with code $LASTEXITCODE (see stderr)" -ForegroundColor Yellow }
+  }
   catch { Write-Host "digest not written: $($_.Exception.Message)" -ForegroundColor Yellow }
   if (Test-Path $digest) { Write-Host $digest }
 }
