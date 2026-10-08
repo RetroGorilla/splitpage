@@ -422,6 +422,7 @@ test("past the first bound, a comment, a bogus comment and a doctype end where t
   }
   assert.notEqual(boundedMarkup(TRIP), TRIP);
   assert.equal(rt.sanitize(TRIP + "<b id=1 x"), rt.sanitize(TRIP));
+  assert.equal(rt.sanitize(TRIP + "<b title=\"x>y"), rt.sanitize(TRIP));
 });
 
 test("past the first bound, bold keeps exactly the style declarations that can decide its weight, as written or re-quoted (#420)", () => {

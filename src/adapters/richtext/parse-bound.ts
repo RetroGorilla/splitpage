@@ -113,14 +113,21 @@ function readTag(html: string, at: number, from: number, stop: number): Tag | nu
   for (; i < html.length; i++) {
     if (i >= stop) return null;
     const c = html.charCodeAt(i);
-    if (c === 62 && state !== DOUBLE_QUOTED && state !== SINGLE_QUOTED) break;
+    if (c === 62) break;
     const next = step(state, c);
     const current = attributes[attributes.length - 1] as Attribute;
     if (state === NAME && next !== NAME) nameEnd = i;
     if (next === ATTR_NAME && state !== ATTR_NAME) attributes.push([i, -1, -1]);
     else if (state === ATTR_NAME && next !== ATTR_NAME) { current[1] = i; current[2] = i; }
     else if (state === UNQUOTED && next !== UNQUOTED) current[2] = i;
-    else if ((state === DOUBLE_QUOTED || state === SINGLE_QUOTED) && next === AFTER_QUOTED) current[2] = i + 1;
+    else if (next === DOUBLE_QUOTED || next === SINGLE_QUOTED) {
+      const close = html.indexOf(next === DOUBLE_QUOTED ? "\"" : "'", i + 1);
+      if (close < 0) { i = html.length; break; }
+      i = close;
+      current[2] = i + 1;
+      state = AFTER_QUOTED;
+      continue;
+    }
     state = next;
   }
   const last = attributes[attributes.length - 1];
