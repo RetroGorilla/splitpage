@@ -24,6 +24,7 @@ import {
   updateIdentityChip
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
+import { normalizeEditorName } from "../core/document/fields.ts";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
 import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
@@ -311,6 +312,12 @@ var REVIEW_SAFE_ACTIONS = {
   "tag-expand": 1, "bulk-clear": 1,
   "export-breakdown": 1, "export-packing-gear": 1
 };
+
+export function toastLastEditor(loaded) {
+  if (loaded.lastEditedBy && loaded.lastEditedBy !== normalizeEditorName(getEditorName())) {
+    showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
+  }
+}
 
 export function onRootClick(e) {
   if (reviewMode()) {
@@ -1178,8 +1185,8 @@ function init() {
 
     if (applied.report) {
       reportMerge(applied.report, { kind: "recovery" });
-    } else if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
-      showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
+    } else {
+      toastLastEditor(loaded);
     }
 
     if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {

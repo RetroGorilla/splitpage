@@ -28,7 +28,7 @@ export interface StateField {
   undo: boolean;
 }
 
-function normalizeEditorName(v: unknown): string | undefined {
+export function normalizeEditorName(v: unknown): string | undefined {
   return typeof v === "string" ? cappedName(v, PERSON_NAME_MAX) || undefined : undefined;
 }
 
