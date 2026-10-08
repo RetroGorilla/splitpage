@@ -123,7 +123,7 @@ test("a prompt that reopens replaces the earlier offer and keeps the step", () =
   assert.equal(stepText(), "Step 3 of 5");
 });
 
-test("taking the tour again from the menu starts at step 1 and drops the pending offer", () => {
+test("invoking the tour action again starts at step 1 and drops the pending offer", () => {
   tourTo(3);
   openPinDialog();
   closePrompt();
@@ -149,6 +149,33 @@ test("a tour already set aside for Help is interrupted too, so it does not come 
   assert.deepEqual(toasts(), ["The tour was paused."]);
   click(toastEls()[0].querySelector("button"));
   assert.equal(stepText(), "Step 2 of 5");
+});
+
+test("a Resume that is refused and then dismissed leaves no step behind for a later tour", () => {
+  tourTo(2);
+  openPinDialog();
+  closePrompt();
+  const other = document.createElement("div");
+  other.className = "modal-backdrop test-dialog";
+  document.body.append(other);
+  click(pausedToasts()[0].querySelector("button"));
+  assert.equal(tourOverlay().hidden, true);
+  assert.equal(pausedToasts().length, 1);
+  other.remove();
+  click(pausedToasts()[0]);
+  assert.equal(pausedToasts().length, 0);
+  assert.equal(appActions.invoke("tour", "button").kind, "ran");
+  assert.equal(tourOverlay().hidden, false);
+  assert.equal(stepText(), "Step 1 of 5");
+});
+
+test("a join prompt that interrupts the tour at the tagging step also closes the tagging reference", () => {
+  tourTo(2);
+  const taggingHelp = document.getElementById("tagging-help");
+  assert.equal(taggingHelp.hidden, false);
+  openPinDialog();
+  assert.equal(pinModal().hidden, false);
+  assert.equal(taggingHelp.hidden, true);
 });
 
 test("skipping the tour is not an interruption", () => {
