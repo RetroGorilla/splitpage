@@ -321,7 +321,6 @@
     {"rule":"cycle-edge","source":"src/js/20b-onboarding.js","target":"src/js/12-dirty-toast.js"},
     {"rule":"cycle-edge","source":"src/js/20b-onboarding.js","target":"src/js/13-hosted.js"},
     {"rule":"cycle-edge","source":"src/js/20b-onboarding.js","target":"src/js/18-local-files.js"},
-    {"rule":"cycle-edge","source":"src/js/20b-onboarding.js","target":"src/js/20c-help.js"},
     {"rule":"cycle-edge","source":"src/js/20b-onboarding.js","target":"src/js/20e-connect.js"},
     {"rule":"cycle-edge","source":"src/js/20b-onboarding.js","target":"src/js/20g-drafts.js"},
     {"rule":"cycle-edge","source":"src/js/20c-help.js","target":"src/js/03b-side-panels.js"},
