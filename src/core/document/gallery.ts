@@ -1,7 +1,7 @@
 import { normalizeImageRef } from "../../../shared/blob-policy.js";
 import { rowImage } from "./media.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
-import { plainText, safeHref, safeImageSrc, settledNames } from "./text-policy.ts";
+import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames } from "./text-policy.ts";
 
 export interface VideoLink {
   href?: string;
@@ -128,7 +128,9 @@ function normalizeMark(input: unknown): Mark | null {
     const size = fraction(m.size, 0.01, 0.3);
     const tx = fraction(m.x, 0, 1), ty = fraction(m.y, 0, 1);
     if (size === null || tx === null || ty === null || typeof m.text !== "string") return null;
-    const text = m.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000B-\u001F\u007F]+/g, " ").slice(0, MAX_TEXT);
+    const raw = m.text.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000B-\u001F\u007F]+/g, " ");
+    const cut = cappedLongText(raw, MAX_TEXT);
+    const text = cut.trim() ? cut : codePointPrefix(raw, MAX_TEXT);
     if (!text.trim()) return null;
     return { kind: "text", color: color, size: size, x: tx, y: ty, text: text };
   }
