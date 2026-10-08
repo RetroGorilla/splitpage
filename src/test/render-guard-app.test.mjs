@@ -630,17 +630,35 @@ test("a stale screen makes the script, the titles and the editing controls inert
   assert.equal(cellOf("r2", "audioText").textContent.indexOf(THEIRS), 0);
 });
 
-test("Redraw with a Writer opened since the screen went stale leaves the focus in the Writer, not in a scene under it (#443)", async () => {
+test("Redraw does not put the old selection onto a cell the update changed: the caret goes to the end of the new text and nothing of it is selected (#443)", async () => {
+  await staleScreen(() => { const c = cellOf("r2", "audioText"); c.focus(); select(c, 3, 7); });
+  await pressRedraw();
+  const cell = cellOf("r2", "audioText");
+  assert.equal(cell.textContent.indexOf(THEIRS), 0);
+  assert.equal(document.activeElement, cell, "the focus is back in the cell");
+  assert.equal(window.getSelection().toString(), "", "no part of the new text is selected");
+  assert.deepEqual(cellSelection(cell), { from: THEIRS.length, to: THEIRS.length }, "the caret is at the end");
+});
+
+test("Redraw with a Writer opened since the screen went stale does not focus the scene under it (#443)", async () => {
+  const focused = [];
+  const realFocus = window.HTMLElement.prototype.focus;
   try {
     await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3); });
     openTheWriter();
     window.getSelection().removeAllRanges();
     redrawToasts()[0].querySelector(".toast-action").focus();
+    window.HTMLElement.prototype.focus = function (...args) {
+      if (this.closest && this.closest("#rows")) focused.push(this);
+      return realFocus.apply(this, args);
+    };
     await pressRedraw();
+    assert.deepEqual(focused, [], "no scene under the Writer was focused");
     const active = document.activeElement;
     assert.equal(!!(active && active.closest && active.closest("#rows")), false, "the focus is not in a scene the Writer hides");
-    assert.equal(!!(active && active.closest && active.closest("#writer")), true, "the focus is in the Writer");
+    assert.equal(cellSelection(cellOf("r1", "audioText")), null, "and no range was put in it");
   } finally {
+    window.HTMLElement.prototype.focus = realFocus;
     closeTheWriter();
   }
 });

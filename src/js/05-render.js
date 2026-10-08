@@ -711,7 +711,7 @@ function focusPlace(el) {
   if (!cellEl) return el.id ? { id: el.id } : null;
   return { root: cellEl.closest("#writer-doc") ? "#writer-doc" : "#rows",
            row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"),
-           sel: cellSelection(cellEl) };
+           text: cellEl.textContent, sel: cellSelection(cellEl) };
 }
 
 function markStaleParts(on) {
@@ -745,8 +745,19 @@ function releaseStaleScreen() {
   var target = place.id ? document.getElementById(place.id) : document.querySelector(place.root +
     ' .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
   if (!target) return;
+  if (place.root === "#rows" && writerOpen) return;
   target.focus();
-  if (place.sel) setCellSelection(target, place.sel.from, place.sel.to);
+  if (!place.sel) return;
+  if (target.textContent === place.text) {
+    setCellSelection(target, place.sel.from, place.sel.to);
+    return;
+  }
+  var end = window.getSelection();
+  var caret = document.createRange();
+  caret.selectNodeContents(target);
+  caret.collapse(false);
+  end.removeAllRanges();
+  end.addRange(caret);
 }
 
 function refuseOnStaleScreen(e) {
