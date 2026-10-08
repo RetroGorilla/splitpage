@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import {
-  KNOWN_REV_NAN, TABLE_304, chance, judge, knownThrow, pick, rawObject, seeded, table304Document, text, upTo
+  TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 
 await bootApp();
@@ -12,6 +12,8 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
 const { flushEdits } = await import("../js/12a-undo.js");
+const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
+const { browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../js/03d-drafts-idb.js");
 const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 
@@ -28,8 +30,6 @@ const migrate = (raw) => migrateRows(raw);
 
 const KNOWN_SHOT_AUDIO_REF = "the b-roll repair at render writes shots migrateRows then changes: an audioRef with angle brackets, or a shot with no name (#325)";
 
-const KNOWN_HALF_APPLIED = "a comment createdAt that is not a string makes render throw after applyMerge handed the document to the session and S.state, so the merge's report, dirty marking and autosave never run (#410)";
-
 const SHOT_AUDIO_REF = /^\.brollShots\[\d+\]\.audioRef "[^]*<[^]*>/;
 
 function allowed(path) {
@@ -39,9 +39,10 @@ function allowed(path) {
 const errors = [];
 
 async function quietly(run) {
-  const was = window.console.error;
-  window.console.error = (e) => { errors.push(e); };
-  try { return await run(); } finally { window.console.error = was; }
+  const consoles = [...new Set([window.console, globalThis.console])];
+  const was = consoles.map((c) => c.error);
+  consoles.forEach((c) => { c.error = (e) => { errors.push(e); }; });
+  try { return await run(); } finally { consoles.forEach((c, i) => { c.error = was[i]; }); }
 }
 
 function settle(doc) {
@@ -54,6 +55,10 @@ function bump(into, key) {
   into[key] = (into[key] || 0) + 1;
 }
 
+function noDocument(raw) {
+  return raw === null || raw === undefined || typeof raw !== "object" || Array.isArray(raw);
+}
+
 function startingDocument(title) {
   return migrateRows(table304Document(title));
 }
@@ -62,7 +67,7 @@ const ENTRIES = {
   draft: {
     kind: "adopt",
     opens: true,
-    run: (raw) => quietly(() => applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(raw) }))
+    run: (raw) => applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(raw) })
   },
   server: {
     kind: "server",
@@ -91,33 +96,18 @@ async function through(name, raw, where, tally, spoilMine) {
   errors.length = 0;
   const epoch = session.epoch(), gen = session.generation();
   heard.length = 0;
-  let outcome, thrown = null;
+  let outcome;
   try {
-    outcome = await entry.run(raw, base, mine);
+    outcome = await quietly(() => entry.run(raw, base, mine));
   } catch (e) {
-    thrown = e;
+    assert.fail(where + " threw: " + (e && e.stack));
   }
-  if (thrown || outcome === "failed" || outcome === "nothing-unsaved") {
-    if (thrown) {
-      const known = knownThrow(thrown);
-      assert.ok(known, where + " threw: " + (thrown && thrown.stack));
-      bump(tally.known, known);
-      if (S.state !== before) {
-        assert.match(String(thrown.stack), /\n\s+at render \(/, where + ": only render throws once the document is in: " + thrown.stack);
-        assert.equal(held(), S.state, where + ": the session holds what the app shows");
-        bump(tally.known, KNOWN_HALF_APPLIED);
-        settle(startingDocument("After " + where));
-        return;
-      }
-    } else {
-      bump(tally.typed, name + ":" + outcome);
-      errors.forEach((e) => {
-        const known = knownThrow(e);
-        assert.ok(known, where + " failed on: " + (e && e.stack));
-        bump(tally.known, known);
-      });
-    }
-    assert.equal(S.state, before, where + ": a failed entry keeps the document" + (thrown ? " (" + thrown.stack + ")" : ""));
+  const refused = noDocument(raw);
+  assert.deepEqual(errors.map((e) => String((e && e.stack) || e)), [], where + " logged an error");
+  if (refused || outcome === "failed" || outcome === "nothing-unsaved") {
+    bump(tally.typed, name + ":" + (refused ? "no document" : outcome));
+    if (refused && name === "draft") assert.equal(outcome, "failed", where + ": a draft that is no document is a typed failure");
+    assert.equal(S.state, before, where + ": a failed entry keeps the document");
     assert.equal(JSON.stringify(S.state), beforeText, where + ": and leaves it as it was");
     assert.equal(held(), S.state, where + ": the session still holds it");
     assert.deepEqual([session.epoch(), session.generation()], [epoch, gen], where + ": no epoch, no generation");
@@ -144,18 +134,19 @@ function verdictOf(doc, tally) {
   return judge(judged, migrate, allowed);
 }
 
-test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point or a typed failure", async (t) => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  for (let seed = 1; seed <= SEEDS; seed++) {
-    const r = seeded(0x3100 + seed);
-    settle(startingDocument("Seed " + seed));
-    for (const name of Object.keys(ENTRIES)) {
-      if (!chance(r, 0.75)) continue;
-      const raw = rawObject(r);
-      await through(name, raw, "seed " + seed + " " + name, tally);
-      if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset " + seed));
-    }
+async function seedEntries(seed, tally = { kinds: {}, known: {}, typed: {} }) {
+  const r = seeded(0x3100 + seed);
+  settle(startingDocument("Seed " + seed));
+  for (const name of Object.keys(ENTRIES)) {
+    if (!chance(r, 0.75)) continue;
+    await through(name, rawObject(r), "seed " + seed + " " + name, tally);
   }
+  return tally;
+}
+
+test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point, a typed failure or a refusal that changes nothing", async (t) => {
+  const tally = { kinds: {}, known: {}, typed: {} };
+  for (let seed = 1; seed <= SEEDS; seed++) await seedEntries(seed, tally);
   flushEdits();
   t.diagnostic(JSON.stringify(tally));
   for (const name of Object.keys(ENTRIES)) assert.ok((tally.kinds[name] || 0) >= SEEDS / 4, "every entry point lands: " + name + " " + JSON.stringify(tally.kinds));
@@ -297,18 +288,11 @@ test("today a bare \"B-roll:\" line makes the render-time repair add a shot with
 });
 
 test("today seed 400's recovery still finds the shot with no name (#325)", async () => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  const r = seeded(0x3100 + 400);
-  settle(startingDocument("Seed 400"));
-  for (const name of Object.keys(ENTRIES)) {
-    if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed 400 " + name, tally);
-    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset 400"));
-  }
+  const tally = await seedEntries(400);
   assert.ok((tally.known[KNOWN_SHOT_AUDIO_REF] || 0) > 0, JSON.stringify(tally));
 });
 
-test("today a comment createdAt whose toString is not a function survives migration, and render then throws out of applyMerge after the session and S.state took the document (#410)", async () => {
+test("a comment createdAt whose toString is not a function migrates to null, so applyMerge renders, reports the merge and marks it unsaved (#410)", async () => {
   settle(startingDocument("Half"));
   const before = S.state;
   const theirs = table304Document("Theirs");
@@ -319,49 +303,97 @@ test("today a comment createdAt whose toString is not a function survives migrat
   const epoch = session.epoch();
   heard.length = 0;
   S.dirty = false;
-  assert.throws(() => applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true }),
-    (e) => knownThrow(e) !== null && /\n\s+at render \(/.test(e.stack));
+  applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true, noAutoSave: true });
   assert.notEqual(S.state, before);
   assert.equal(held(), S.state);
-  assert.deepEqual(heard, ["recovery"]);
+  assert.equal(heard[0], "recovery");
   assert.equal(session.epoch(), epoch + 1);
-  assert.equal(S.dirty, false, "the merge was never reported, so nothing marked it unsaved");
+  assert.equal(S.dirty, true, "the merge was reported, so it is marked unsaved");
+  assert.equal(S.state.comments.find((c) => c.id === "c2").createdAt, null);
+  assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
   settle(startingDocument("After half"));
 });
 
-test("today seed 467's recovery still finds the half-applied merge (#410)", async () => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  const r = seeded(0x3100 + 467);
-  settle(startingDocument("Seed 467"));
-  for (const name of Object.keys(ENTRIES)) {
-    if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed 467 " + name, tally);
-    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset 467"));
-  }
-  assert.ok((tally.known[KNOWN_HALF_APPLIED] || 0) > 0, JSON.stringify(tally));
+test("seed 467's entries, whose recovery found #410, now all land in a valid fixed point", async () => {
+  const tally = await seedEntries(467);
+  assert.ok(tally.kinds.recovery, JSON.stringify(tally));
 });
 
-test("today a merge with a raw theirs whose rev is a string leaves the session holding rev NaN (#412)", async () => {
-  settle(startingDocument("Rev"));
+test("a merge whose raw theirs has a string rev migrates theirs first, so the merged rev is one past mine's (#412)", async () => {
+  const start = startingDocument("Rev");
+  start.rev = 5;
+  settle(start);
   const theirs = table304Document("Theirs");
   theirs.rev = "seven";
   applyMerge({ base: cloneState(S.state), mine: cloneState(S.state), theirs: theirs, source: "server-conflict", report: false });
   assert.equal(held(), S.state);
-  assert.equal(Number.isNaN(S.state.rev), true);
-  assert.equal(JSON.parse(JSON.stringify(S.state)).rev, null);
-  assert.equal(migrateRows(cloneState(S.state)).rev, 0);
+  assert.equal(S.state.rev, 6);
+  assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
 });
 
-test("today seed 21's merge still finds the NaN rev (#412)", async () => {
-  const tally = { kinds: {}, known: {}, typed: {} };
-  const r = seeded(0x3100 + 21);
-  settle(startingDocument("Seed 21"));
-  for (const name of Object.keys(ENTRIES)) {
-    if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed 21 " + name, tally);
-    if (Array.isArray(S.state) || !Array.isArray(S.state.rows)) settle(startingDocument("Reset 21"));
+test("seed 21's entries, whose merge found #412, now all land in a valid fixed point", async () => {
+  const tally = await seedEntries(21);
+  assert.ok(tally.kinds.merge, JSON.stringify(tally));
+});
+
+function twoScenes(title) {
+  const doc = startingDocument(title);
+  settle(doc);
+  const mine = cloneState(doc);
+  mine.rows[0].audioText = "Mine, edited.";
+  return { doc: doc, base: cloneState(doc), mine: mine, text: JSON.stringify(doc) };
+}
+
+function unchangedBy(where, start, epoch, gen) {
+  assert.equal(S.state, start.doc, where + ": the document on screen is kept");
+  assert.equal(JSON.stringify(S.state), start.text, where + ": and changes nothing");
+  assert.equal(held(), S.state, where + ": the session still holds it");
+  assert.deepEqual([session.epoch(), session.generation()], [epoch, gen], where + ": no epoch, no generation");
+  assert.deepEqual(heard, [], where + ": nothing published");
+}
+
+const NOT_DOCUMENTS = [[{ id: "r1", audioText: "x" }], [], 7, "doc", true, null];
+
+test("applyMerge refuses a theirs or a mine that is no document, and nothing changes: an array no longer merges in as an empty script that deletes the scenes mine didn't touch (#407)", () => {
+  const calls = {
+    server: (raw) => ({ theirs: raw, source: "server-conflict", unchanged: true, report: false }),
+    merge: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "server-conflict", report: true, undoPoint: cloneState(start.doc) }),
+    recovery: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "server-resume", report: true }),
+    mine: (raw, start) => ({ base: start.base, mine: raw, theirs: table304Document("Theirs"), source: "server-conflict", report: true })
+  };
+  for (const raw of NOT_DOCUMENTS) {
+    for (const [name, call] of Object.entries(calls)) {
+      const start = twoScenes("Refused " + name);
+      const opts = call(raw, start);
+      const where = name + " " + JSON.stringify(raw);
+      const epoch = session.epoch(), gen = session.generation();
+      const undo = S.lastMergeUndo;
+      heard.length = 0;
+      S.dirty = false;
+      const out = applyMerge(opts);
+      unchangedBy(where, start, epoch, gen);
+      assert.deepEqual([out.state, out.result, out.snapshot], [S.state, null, null], where + ": answers the document it kept");
+      assert.equal(S.dirty, false, where + ": not marked unsaved");
+      assert.equal(S.lastMergeUndo, undo, where + ": no merge to undo");
+      assert.deepEqual(S.state.rows.map((row) => row.id), ["r1", "r2"], where + ": both scenes stay");
+    }
   }
-  assert.ok((tally.known[KNOWN_REV_NAN] || 0) > 0, JSON.stringify(tally));
+  settle(startingDocument("After refusals"));
+});
+
+test("applyMerge takes a base that is no document as no base, the way it takes a missing one (#407)", () => {
+  const merged = (base) => {
+    const start = twoScenes("Base");
+    const theirs = table304Document("Untitled Script");
+    theirs.rows[1].audioText = "Theirs, edited.";
+    const out = applyMerge({ base: base === "start" ? start.base : base, mine: start.mine, theirs: theirs, source: "server-conflict", mergeOnly: true });
+    return { title: out.state.title, stats: out.result.stats, conflicts: out.result.conflicts.map((c) => c.field), rows: out.state.rows.map((row) => [row.id, row.audioText]) };
+  };
+  const none = merged(null);
+  assert.deepEqual([none.title, none.conflicts.includes("title")], ["Untitled Script", true], "with no base, both titles count as changed");
+  for (const raw of [[{ id: "r1", audioText: "x" }], [], 7, "doc", true]) assert.deepEqual(merged(raw), none, JSON.stringify(raw));
+  assert.notDeepEqual(merged("start"), none, "a real base still makes a three-way merge");
+  settle(startingDocument("After bases"));
 });
 
 test("the reload seed that found #411 now ends in a migrateRows fixed point", async () => {
@@ -369,4 +401,202 @@ test("the reload seed that found #411 now ends in a migrateRows fixed point", as
   await openImport();
   await reloadWith(fileText(r));
   assert.deepEqual(judge(S.state, migrate, allowed), { problems: [], known: [] });
+});
+
+const toastHost = () => document.getElementById("toast-host");
+const toasts = () => Array.from(toastHost().querySelectorAll(".toast")).map((t) => t.textContent);
+const idle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+function reply(status, body) {
+  return { status: status, ok: status >= 200 && status < 300, redirected: false, headers: { get: () => "application/json" }, json: async () => body };
+}
+
+async function withServer(answer, run) {
+  const was = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url, init) => {
+    const path = String(url).replace(/^.*?(?=api\/)/, "");
+    const method = (init && init.method) || "GET";
+    asked.push(method + " " + path);
+    return answer(method + " " + path) || reply(404, { error: "not-found" });
+  };
+  try { return await run(asked); } finally { globalThis.fetch = was; }
+}
+
+function holding(title) {
+  twoScenes(title);
+  heard.length = 0;
+  toastHost().textContent = "";
+  return { doc: S.state, text: JSON.stringify(S.state), epoch: session.epoch(), gen: session.generation() };
+}
+
+test("opening a legacy .html file whose state is no document is refused as not a Splitpage file, as a .splitpage file already is, and nothing changes (#407)", async () => {
+  for (const raw of NOT_DOCUMENTS) {
+    for (const [name, body] of [
+      ["old.html", '<!doctype html><html><body><script id="state-data" type="application/json">' + JSON.stringify(raw) + "</script></body></html>"],
+      ["old.splitpage", JSON.stringify(raw)]
+    ]) {
+      const start = holding("Open " + name);
+      const opened = await openProjectFile(new File([body], name, { lastModified: 1 }), null, {});
+      assert.equal(opened, false, name + " " + JSON.stringify(raw));
+      assert.deepEqual(toasts(), [name + " doesn't look like a Splitpage file."]);
+      unchangedBy(name + " " + JSON.stringify(raw), start, start.epoch, start.gen);
+    }
+  }
+});
+
+test("opening a server document whose state is no document is refused like an empty one, and nothing changes (#407)", async () => {
+  for (const raw of NOT_DOCUMENTS) {
+    const start = holding("Server open");
+    const opened = await withServer((ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: raw }) : null, () => openServerDoc("doc-open"));
+    assert.equal(opened, false, JSON.stringify(raw));
+    assert.deepEqual(toasts(), ["That document is empty."]);
+    unchangedBy("open " + JSON.stringify(raw), start, start.epoch, start.gen);
+  }
+});
+
+test("a server update whose state is no document is refused like one with no state: no merge, and the rev the tab knows stays (#407)", async () => {
+  for (const raw of NOT_DOCUMENTS) {
+    twoScenes("Pull");
+    window.__hostedTest.setSession({ docId: "doc-pull", rev: 1 });
+    const start = { doc: S.state, text: JSON.stringify(S.state) };
+    const epoch = session.epoch(), gen = session.generation();
+    heard.length = 0;
+    await withServer((ask) => ask === "GET api/docs/doc-pull" ? reply(200, { id: "doc-pull", rev: 2, state: raw, updatedBy: "Ann" }) : null, async (asked) => {
+      window.__hostedTest.noteRev({ docId: "doc-pull", rev: 2 });
+      await idle();
+      assert.deepEqual(asked, ["GET api/docs/doc-pull"]);
+    });
+    unchangedBy("pull " + JSON.stringify(raw), start, epoch, gen);
+    assert.equal(window.__hostedTest.home().rev, 1);
+  }
+  window.__hostedTest.setSession({ docId: null });
+});
+
+test("a save conflict whose state is no document is not merged: the save fails as a conflict with no state does, and both scenes stay (#407)", async () => {
+  for (const raw of NOT_DOCUMENTS) {
+    twoScenes("Conflict");
+    window.__hostedTest.setSession({ docId: "doc-save", rev: 1 });
+    const doc = S.state, rows = JSON.stringify(S.state.rows);
+    const epoch = session.epoch(), gen = session.generation();
+    heard.length = 0;
+    toastHost().textContent = "";
+    const saved = await withServer((ask) => ask === "PUT api/docs/doc-save" ? reply(409, { error: "conflict", rev: 3, state: raw }) : null, () => saveToServer());
+    assert.equal(saved, false, JSON.stringify(raw));
+    assert.equal(S.state, doc);
+    assert.equal(JSON.stringify(S.state.rows), rows);
+    assert.equal(held(), S.state);
+    assert.deepEqual([session.epoch(), session.generation(), heard], [epoch, gen, []]);
+    assert.deepEqual(toasts().map((t) => t.split(" — ")[0]), ["Could not save to the server"]);
+    assert.equal(window.__hostedTest.home().rev, 1);
+  }
+  window.__hostedTest.setSession({ docId: null });
+});
+
+test("reopening a server document after a reload refuses a state that is no document as a server open does: \"That document is empty.\", nothing changes and the reopen stays pending (#407)", async () => {
+  for (const me of [{ role: "edit" }, { role: "edit", scope: "doc-resume" }]) {
+    for (const raw of NOT_DOCUMENTS) {
+      const where = "resume " + JSON.stringify(me) + " " + JSON.stringify(raw);
+      const start = holding("Resume");
+      const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
+      sessionStorage.setItem(SERVER_RESUME_KEY, pending);
+      await withServer((ask) => ask === "GET api/me" ? reply(200, me) : ask === "GET api/docs/doc-resume" ? reply(200, { id: "doc-resume", rev: 2, state: raw }) : null, async (asked) => {
+        await finishServerDetect();
+        await idle();
+        assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"], where);
+      });
+      assert.deepEqual(toasts(), ["That document is empty."], where);
+      unchangedBy(where, start, start.epoch, start.gen);
+      assert.notEqual(window.__hostedTest.home().kind, "server");
+      assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending);
+      sessionStorage.removeItem(SERVER_RESUME_KEY);
+    }
+  }
+  window.__hostedTest.setSession({ docId: null });
+  settle(startingDocument("After the server"));
+});
+
+test("a reopen after a reload whose fetch fails still falls back to the link's document", async () => {
+  const start = holding("Resume offline");
+  sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "doc-resume", rev: 1 }));
+  await withServer((ask) => {
+    if (ask === "GET api/me") return reply(200, { role: "edit", scope: "doc-resume" });
+    if (ask === "GET api/docs/doc-resume") throw new Error("offline");
+    return null;
+  }, async (asked) => {
+    await finishServerDetect();
+    await idle();
+    assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume", "GET api/docs/doc-resume"]);
+  });
+  assert.equal(S.state, start.doc);
+  sessionStorage.removeItem(SERVER_RESUME_KEY);
+  window.__hostedTest.setSession({ docId: null });
+  settle(startingDocument("After the server"));
+});
+
+test("a reopen after a reload that is refused as no document does not stop the document the link names from opening", async () => {
+  for (const link of [{ role: "edit", scope: "doc-other" }, { role: "edit", scope: "doc-resume" }]) {
+    const opensOther = link.scope === "doc-other";
+    const where = "reopen " + JSON.stringify(link);
+    const start = holding("Resume then link");
+    const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
+    sessionStorage.setItem(SERVER_RESUME_KEY, pending);
+    await withServer((ask) => {
+      if (ask === "GET api/me") return reply(200, link);
+      if (ask === "GET api/docs/doc-resume") return reply(200, { id: "doc-resume", rev: 2, state: [] });
+      if (ask === "GET api/docs/doc-other") return reply(200, { id: "doc-other", rev: 5, state: startingDocument("Other") });
+      return null;
+    }, async (asked) => {
+      await finishServerDetect();
+      await idle();
+      assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"].concat(opensOther ? ["GET api/docs/doc-other"] : []), where);
+    });
+    if (opensOther) {
+      assert.equal(toasts().length, 2, where);
+      assert.equal(toasts()[0], "That document is empty.", where);
+      assert.match(toasts()[1], /^Opened .* from the server — \d+ scenes?$/, where);
+      assert.equal(window.__hostedTest.home().kind, "server", where);
+      assert.equal(window.__hostedTest.home().id, "doc-other", where);
+      assert.notEqual(S.state, start.doc, where);
+    } else {
+      assert.deepEqual(toasts(), ["That document is empty."], where);
+      assert.equal(S.state, start.doc, where);
+    }
+    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, where);
+    sessionStorage.removeItem(SERVER_RESUME_KEY);
+    window.__hostedTest.setSession({ docId: null });
+    settle(startingDocument("After the server"));
+  }
+});
+
+test("a server open that takes a pending browser draft and finds a state that is no document answers not opened: the picker stays open and the message shows once", async () => {
+  const store = createIdbDraftStore();
+  const key = browserDraftKey(draftBaseOf("", window.location.href), "doc-draft");
+  const draft = JSON.stringify(startingDocument("Draft"));
+  const put = await store.put({
+    key: key, base: draftBaseOf("", window.location.href), docId: "doc-draft", rev: 1, title: "Draft",
+    writerId: "another-tab", editSeq: 1, schema: 2, docIdWrittenOut: true, stateJson: draft, baseJson: draft
+  });
+  assert.equal(put.ok, true);
+  const start = holding("Server pick");
+  const modal = document.getElementById("server-modal");
+  modal.hidden = false;
+  S.serverMode.checked = true;
+  const opened = await withServer((ask) => ask === "GET api/docs/doc-draft" ? reply(200, { id: "doc-draft", rev: 2, state: [] }) : null, async (asked) => {
+    const result = await openServerDoc("doc-draft");
+    assert.deepEqual(asked, ["GET api/docs/doc-draft"]);
+    return result;
+  });
+  assert.ok(S.draftServerResume, "the browser draft was taken");
+  assert.equal(opened, false);
+  assert.deepEqual(toasts(), ["That document is empty."]);
+  assert.equal(modal.hidden, false);
+  unchangedBy("server open with a draft", start, start.epoch, start.gen);
+  assert.notEqual(window.__hostedTest.home().kind, "server");
+  S.draftServerResume.onDone("not-found");
+  await idle();
+  await store.remove(key);
+  modal.hidden = true;
+  window.__hostedTest.setSession({ docId: null });
+  settle(startingDocument("After the server"));
 });

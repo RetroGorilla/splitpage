@@ -75,6 +75,7 @@ import {
   makeDesktopHandle, notifyDesktopDocumentState
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { isDocumentObject } from "../core/migrate.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { cellOf } from "../legacy/richtext.ts";
@@ -310,6 +311,7 @@ export async function parseProjectFileState(file, opts) {
     } catch (e) {
       return { error: "not-splitpage" };
     }
+    if (!isDocumentObject(legacy)) return { error: "not-splitpage" };
     var legacyEmbedded = docIdEmbeddedIn(legacy);
     return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
   }

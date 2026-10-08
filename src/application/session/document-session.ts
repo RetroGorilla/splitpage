@@ -1,4 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { isDocumentObject } from "../../core/migrate.ts";
 import { WHOLE_DOCUMENT, isEmpty, needsReconciliation } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
 import { createEffectScheduler } from "./effects.ts";
@@ -163,6 +164,10 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return raw === null || raw === undefined ? null : ports.entry(raw);
   }
 
+  function refuses(raw: unknown): boolean {
+    return raw !== null && raw !== undefined && !isDocumentObject(raw);
+  }
+
   function changeOf(kind: TransactionKind, changes: ChangeSet): SessionChange {
     return Object.freeze({ kind: kind, epoch: epoch, generation: generation, changes: changes });
   }
@@ -181,6 +186,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
   }
 
   function adopt(raw: unknown): ValidatedDocument | null {
+    if (refuses(raw)) return document;
     const doc = enter(raw);
     ports.undo.adopt(doc);
     epoch++;
@@ -190,6 +196,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
   }
 
   function absorb(kind: "server" | "recovery", raw: unknown): ValidatedDocument | null {
+    if (refuses(raw)) return document;
     const doc = enter(raw);
     ports.undo.absorbServer(doc);
     if (kind === "recovery") epoch++;

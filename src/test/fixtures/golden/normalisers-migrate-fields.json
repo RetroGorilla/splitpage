@@ -1149,7 +1149,7 @@
     "field": "rev",
     "case": "NaN",
     "input": "<NaN>",
-    "output": "<NaN>"
+    "output": 0
   },
   {
     "field": "rev",

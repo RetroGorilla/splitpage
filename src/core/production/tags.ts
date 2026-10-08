@@ -1,6 +1,6 @@
 import type { Frozen } from "../document/freeze.ts";
 import { idMap } from "../document/id-map.ts";
-import { plainText } from "../document/text-policy.ts";
+import { cappedText, plainText } from "../document/text-policy.ts";
 import {
   TAG_STATUS_IDS,
   mintTagId,
@@ -142,7 +142,7 @@ export function missingRegistryTags(
   (registry || []).forEach(function (t) { if (t && t.name) have[registryKey(t.cat, t.name)] = true; });
   const out: MissingRegistryTag[] = [];
   collectTagsFromRows(rows, readers).forEach(function (t) {
-    const name = plainText(t.name).trim().slice(0, 80);
+    const name = cappedText(t.name, 80);
     if (!name) return;
     const key = registryKey(t.catId, name);
     if (have[key]) return;

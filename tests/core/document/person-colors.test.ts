@@ -54,6 +54,10 @@ test("a colour map refuses the names that would reach Object.prototype", () => {
 test("a colour map cuts names to their limit and stops at its size", () => {
   const long = "x".repeat(PERSON_NAME_MAX + 5);
   assert.deepEqual(normalizePersonColors({ [long]: BLUE }), { ["x".repeat(PERSON_NAME_MAX)]: BLUE });
+  const spaced = "x".repeat(PERSON_NAME_MAX - 1) + " y";
+  const cut = normalizePersonColors({ [spaced]: BLUE });
+  assert.deepEqual(cut, { ["x".repeat(PERSON_NAME_MAX - 1)]: BLUE }, "the space the cut leaves is trimmed (#406)");
+  assert.deepEqual(normalizePersonColors(cut), cut);
   const many: Record<string, string> = {};
   for (let i = 0; i < PERSON_MAP_MAX + 5; i++) many["P" + i] = BLUE;
   const out = normalizePersonColors(many) as Record<string, string>;
