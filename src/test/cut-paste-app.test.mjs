@@ -15,6 +15,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render, syncFieldFromDom } = await import("../js/05-render.js");
 const { cellSelection } = await import("../js/05b-cell-edit.js");
+const { armDeleteComment } = await import("../js/10-comments.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 
 after(closeApp);
@@ -461,6 +462,21 @@ test("a cut undone and pasted before its own restored words brings no second anc
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
 });
 
+test("a cut undone and pasted after its own restored words brings no second anchor", async () => {
+  await open();
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 19);
+  const cut = clip("cut", el);
+  undo();
+  const again = cellOf("r2", "audioText");
+  again.focus();
+  selectText(again, 25, 25);
+  clip("paste", again, cut.store);
+  assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo charlie") + " deltabravo charlie");
+  assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
+});
+
 test("a cut undone from a picture cell and pasted brings no second anchor", async () => {
   const doc = fixture();
   doc.rows[1].visualText = "Close " + cmt("c1", "bravo charlie") + " up";
@@ -531,6 +547,23 @@ test("a cut undone and pasted over the same offsets in another scene, or in the 
     assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo charlie") + " delta");
     assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
   }
+});
+
+test("a cut whose comment was deleted before the paste brings the words with no mark", async () => {
+  await open();
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 19);
+  const cut = clip("cut", el);
+  armDeleteComment(null, "c1");
+  armDeleteComment(null, "c1");
+  assert.deepEqual(anchors(), [["c2", "r4", "audioText"]]);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  clip("paste", to, cut.store);
+  assert.equal(row("r3").audioText, "Three.bravo charlie");
+  assert.deepEqual(anchors(), [["c2", "r4", "audioText"]]);
 });
 
 test("a cut of part of a comment's words pastes them plain and the comment stays on the rest", async () => {
