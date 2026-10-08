@@ -5,11 +5,24 @@ import { tagCategoryId } from "../../core/document/tags.ts";
 import { cappedText, safeHref, safeId, safeImageSrc, storedImageAttributes } from "../../core/document/text-policy.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
 
+export interface SplitBudget {
+  left: number;
+}
+
 export interface SanitizeContext {
   readonly doc: Document;
   readonly images: ImageSource;
   readonly ids: IdSource;
+  readonly split: SplitBudget;
   readonly inLink?: boolean;
+}
+
+const SPLIT_UNITS_PER_INPUT_UNIT = 8;
+
+const FREE_SPLIT_UNITS = 4096;
+
+export function splitBudget(inputLength: number): SplitBudget {
+  return { left: SPLIT_UNITS_PER_INPUT_UNIT * inputLength + FREE_SPLIT_UNITS };
 }
 
 type InlineStyle = {
@@ -41,6 +54,113 @@ function holdsSplitPoint(node: Node): boolean {
   return false;
 }
 
+interface SplitStep {
+  readonly node: Node;
+  readonly chain: readonly Element[];
+  readonly point: boolean;
+}
+
+function scanSplit(link: Element): SplitStep[] {
+  const steps: SplitStep[] = [];
+  function visit(parent: Node, chain: readonly Element[]): void {
+    Array.from(parent.childNodes).forEach(function (child) {
+      if (splitPoints.has(child)) { steps.push({ node: child, chain, point: true }); return; }
+      if (child.nodeType === 1 && holdsSplitPoint(child)) { visit(child, chain.concat(child as Element)); return; }
+      if (child.nodeType === 3 && !(child as Text).data) return;
+      steps.push({ node: child, chain, point: false });
+    });
+  }
+  visit(link, []);
+  return steps;
+}
+
+function markKey(el: Element): string {
+  return JSON.stringify([el.tagName, Array.from(el.attributes, function (a) { return [a.name, a.value]; })]);
+}
+
+function collapseChains(steps: readonly SplitStep[]): SplitStep[] {
+  const collapsed = new Map<readonly Element[], readonly Element[]>();
+  const keys = new Map<Element, string>();
+  function keyOf(el: Element): string {
+    let key = keys.get(el);
+    if (key === undefined) { key = markKey(el); keys.set(el, key); }
+    return key;
+  }
+  function collapse(chain: readonly Element[]): readonly Element[] {
+    let result = collapsed.get(chain);
+    if (!result) {
+      const seen = new Set<string>();
+      result = chain.filter(function (el) {
+        const key = keyOf(el);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      collapsed.set(chain, result);
+    }
+    return result;
+  }
+  return steps.map(function (step) { return { node: step.node, chain: collapse(step.chain), point: step.point }; });
+}
+
+function attributeValueBound(value: string): number {
+  let n = value.length;
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 34 || c === 38 || c === 60 || c === 62 || c === 160) n += 5;
+  }
+  return n;
+}
+
+function shellBound(el: Element): number {
+  let n = 2 * el.localName.length + 5;
+  Array.from(el.attributes).forEach(function (a) { n += a.name.length + 4 + attributeValueBound(a.value); });
+  return n;
+}
+
+interface SplitPlan {
+  readonly bound: number;
+  readonly kept: readonly number[];
+}
+
+function planSplit(link: Element, steps: readonly SplitStep[], boundOf: (el: Element) => number): SplitPlan {
+  let bound = 0;
+  let open: Element[] | null = null;
+  const kept: number[] = [];
+  for (const step of steps) {
+    const chain = step.chain;
+    if (step.point) {
+      open = null;
+      kept.push(0);
+      for (const el of chain) bound += boundOf(el);
+      continue;
+    }
+    if (!open) { open = []; bound += boundOf(link); }
+    let n = 0;
+    while (n < open.length && n < chain.length && open[n] === chain[n]) n++;
+    kept.push(n);
+    open.length = n;
+    for (let i = n; i < chain.length; i++) {
+      const el = chain[i] as Element;
+      open.push(el);
+      bound += boundOf(el);
+    }
+  }
+  return { bound: bound, kept: kept };
+}
+
+function unwrapSplitPoints(steps: readonly SplitStep[]): void {
+  steps.forEach(function (step) {
+    if (!step.point) return;
+    const point = step.node as Element;
+    const parent = point.parentNode as Node;
+    if (isLinkPiece(point)) {
+      while (point.firstChild) parent.insertBefore(point.firstChild, point);
+    }
+    parent.removeChild(point);
+  });
+}
+
 function nestShells(chain: readonly Element[]): Element[] {
   const shells: Element[] = [];
   chain.forEach(function (c, i) {
@@ -55,61 +175,64 @@ function isLinkPiece(node: Element): boolean {
   return node.tagName === "A" && !hasClass(node, "video-embed-card");
 }
 
-function splitLinkAround(link: Element): Node[] {
-  if (!holdsSplitPoint(link)) return [link];
+function wrapPoint(point: Element, chain: readonly Element[]): Node {
+  if (!chain.length) return point;
+  const shells = nestShells(chain);
+  const innermost = shells[shells.length - 1] as Element;
+  if (isLinkPiece(point)) {
+    while (point.firstChild) innermost.appendChild(point.firstChild);
+    point.appendChild(shells[0] as Element);
+    return point;
+  }
+  innermost.appendChild(point);
+  return shells[0] as Element;
+}
+
+function buildSplit(link: Element, steps: readonly SplitStep[], kept: readonly number[]): Node[] {
   const result: Node[] = [];
   let piece: Element | null = null;
-  let openSrc: Element[] = [];
-  let openClone: Element[] = [];
-
-  function append(chain: readonly Element[], leaf: Node): void {
-    const target: Element = piece || (link.cloneNode(false) as Element);
-    if (!piece) { piece = target; openSrc = []; openClone = []; }
-    let n = 0;
-    while (n < openSrc.length && n < chain.length && openSrc[n] === chain[n]) n++;
-    openSrc.length = n;
-    openClone.length = n;
-    for (let i = n; i < chain.length; i++) {
-      const shell = (chain[i] as Element).cloneNode(false) as Element;
-      (openClone[i - 1] || target).appendChild(shell);
-      openSrc.push(chain[i] as Element);
-      openClone.push(shell);
+  let open: Element[] = [];
+  for (let s = 0; s < steps.length; s++) {
+    const step = steps[s] as SplitStep;
+    if (step.point) {
+      if (piece) result.push(piece);
+      piece = null;
+      result.push(wrapPoint(step.node as Element, step.chain));
+      continue;
     }
-    (openClone[openClone.length - 1] || target).appendChild(leaf);
-  }
-
-  function closePiece(): void {
-    if (piece) result.push(piece);
-    piece = null;
-  }
-
-  function emit(point: Element, chain: readonly Element[]): void {
-    closePiece();
-    if (!chain.length) { result.push(point); return; }
-    const shells = nestShells(chain);
-    const innermost = shells[shells.length - 1] as Element;
-    if (isLinkPiece(point)) {
-      while (point.firstChild) innermost.appendChild(point.firstChild);
-      point.appendChild(shells[0] as Element);
-      result.push(point);
-    } else {
-      innermost.appendChild(point);
-      result.push(shells[0] as Element);
+    if (!piece) { piece = link.cloneNode(false) as Element; open = []; }
+    open.length = kept[s] as number;
+    for (let i = open.length; i < step.chain.length; i++) {
+      const shell = (step.chain[i] as Element).cloneNode(false) as Element;
+      (open[i - 1] || piece).appendChild(shell);
+      open.push(shell);
     }
+    (open[open.length - 1] || piece).appendChild(step.node);
   }
-
-  function visit(parent: Node, chain: readonly Element[]): void {
-    Array.from(parent.childNodes).forEach(function (child) {
-      if (splitPoints.has(child)) { emit(child as Element, chain); return; }
-      if (child.nodeType === 1 && holdsSplitPoint(child)) { visit(child, chain.concat(child as Element)); return; }
-      if (child.nodeType === 3 && !(child as Text).data) return;
-      append(chain, child);
-    });
-  }
-
-  visit(link, []);
-  closePiece();
+  if (piece) result.push(piece);
   return result;
+}
+
+function splitLinkAround(link: Element, budget: SplitBudget): Node[] {
+  if (!holdsSplitPoint(link)) return [link];
+  const bounds = new Map<Element, number>();
+  const boundOf = function (el: Element): number {
+    let n = bounds.get(el);
+    if (n === undefined) { n = shellBound(el); bounds.set(el, n); }
+    return n;
+  };
+  let steps = scanSplit(link);
+  let plan = planSplit(link, steps, boundOf);
+  if (plan.bound > budget.left) {
+    steps = collapseChains(steps);
+    plan = planSplit(link, steps, boundOf);
+    if (plan.bound > budget.left) {
+      unwrapSplitPoints(steps);
+      return [link];
+    }
+  }
+  budget.left -= plan.bound;
+  return buildSplit(link, steps, plan.kept);
 }
 
 function imageDimAttr(v: string | null): number {
@@ -290,7 +413,7 @@ export function walkSanitize(srcParent: Node, destParent: Node, ctx: SanitizeCon
         a.setAttribute("target", "_blank");
         a.setAttribute("rel", "noopener");
         walkSanitize(el, a, { ...ctx, inLink: true });
-        splitLinkAround(a).forEach(function (piece) {
+        splitLinkAround(a, ctx.split).forEach(function (piece) {
           if (ctx.inLink) splitPoints.add(piece);
           destParent.appendChild(piece);
         });
