@@ -282,6 +282,27 @@ test("a split of a cell holding a video card cuts the live DOM and stores both s
   assert.match(row(created).audioText, /^ore <a class="video-embed-card"[^>]*>.*<\/a> after$/);
 });
 
+test("a split of a visual cell holding a video card cuts the live DOM and stores both sanitised halves in the visual field", async () => {
+  await open();
+  const el = cellOf("r1", "visualText");
+  storeMedia(el, "Before " + CARD + " after");
+  assert.match(row("r1").visualText, /^Before <a class="video-embed-card"/);
+  flushEdits();
+  const at = textNodeAt(el, 3);
+  const r = document.createRange();
+  r.setStart(at[0], at[1]);
+  r.collapse(true);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(r);
+  const got = observe(() => key(el, "Enter", { altKey: true }));
+  const created = S.state.rows[1].id;
+  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.visualText", "insertRow:" + created] });
+  assert.equal(row("r1").visualText, "Bef");
+  assert.match(row(created).visualText, /^ore <a class="video-embed-card"[^>]*>.*<\/a> after$/);
+  assert.equal(row(created).audioText, "");
+  assert.equal(row("r1").audioText, "Hello there");
+});
+
 test("an Alt+Enter with no caret in the cell does nothing at all", async () => {
   await open();
   const el = cellOf("r1", "audioText");

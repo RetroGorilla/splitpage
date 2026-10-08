@@ -503,7 +503,7 @@ function randomDoc(r: Random, seed: number): Fixture {
   return doc;
 }
 
-test("E9 (seeded): split and join leave every comment where reconciliation would put it, in one undo record, and the cut halves rejoin to the text", () => {
+test("E9 (seeded): split and join leave every comment where reconciliation would put it, in one undo record", () => {
   let splits = 0, joins = 0, refused = 0, moved = 0;
   for (let seed = 1; seed <= 300; seed++) {
     const r = seeded(seed);
