@@ -688,24 +688,106 @@ export function render() {
 }
 
 var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
+var FIRST_DRAW_FAILED = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";
 var redrawToast = null;
+var screenStale = false;
+var staleFocus = null;
+var STALE_PARTS = "#rows, .add-row-bar, #doc-title, #writer-title, #writer-doc, #writer .wr-fmt, " +
+  "#replace-input, #find-replace, #find-replace-all, #find-tag-go, #tag-ghost, #tag-suggest";
+var STALE_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart",
+  "compositionstart", "pointerdown", "mousedown", "click"];
 
-export function renderAbsorbed() {
+function offerRedraw(failed) {
+  if (redrawToast && redrawToast.isConnected && !redrawToast.classList.contains("is-leaving")) return;
+  redrawToast = showActionToast(failed, "error", "Redraw", function () { absorbRender(failed); }, true);
+  redrawToast.removeEventListener("click", redrawToast.dismiss);
+  redrawToast.removeAttribute("title");
+  redrawToast.classList.add("is-held");
+  redrawToast.setAttribute("role", "alert");
+}
+
+function focusPlace(el) {
+  var cellEl = el.closest(".cell-editable[data-id][data-field]");
+  if (!cellEl) return el.id ? { id: el.id } : null;
+  return { row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
+}
+
+function markStaleParts(on) {
+  document.querySelectorAll(STALE_PARTS).forEach(function (el) {
+    el.toggleAttribute("inert", on);
+    el.classList.toggle("is-stale-part", on);
+  });
+}
+
+function holdStaleScreen(failed) {
+  var active = document.activeElement;
+  var inPart = !!(active && active.closest && active.closest(STALE_PARTS));
+  var onRedraw = !!(redrawToast && active && redrawToast.contains(active));
+  if (!screenStale && inPart) staleFocus = focusPlace(active);
+  screenStale = true;
+  document.body.classList.add("is-stale-screen");
+  markStaleParts(true);
+  offerRedraw(failed);
+  if (inPart || onRedraw) redrawToast.querySelector(".toast-action").focus();
+}
+
+function releaseStaleScreen() {
+  if (!screenStale) return;
+  screenStale = false;
+  document.body.classList.remove("is-stale-screen");
+  markStaleParts(false);
+  var place = staleFocus;
+  staleFocus = null;
+  var active = document.activeElement;
+  if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
+  var target = place.id ? document.getElementById(place.id) : document.querySelector(
+    '#rows .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
+  if (!target) return;
+  target.focus();
+  if (place.id || document.activeElement !== target) return;
+  var end = window.getSelection();
+  var caret = document.createRange();
+  caret.selectNodeContents(target);
+  caret.collapse(false);
+  end.removeAllRanges();
+  end.addRange(caret);
+}
+
+function refuseOnStaleScreen(e) {
+  if (!screenStale) return;
+  var t = e.target;
+  if (!(t && t.closest && t.closest(STALE_PARTS))) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
+
+export function screenIsStale() {
+  return screenStale;
+}
+
+function absorbRender(failed) {
   try {
     render();
+    releaseStaleScreen();
     if (redrawToast && redrawToast.isConnected) redrawToast.dismiss();
     return true;
   } catch (e) {
     if (window.console) console.error(e);
-    if (!redrawToast || !redrawToast.isConnected || redrawToast.classList.contains("is-leaving")) {
-      redrawToast = showActionToast(REDRAW_FAILED, "error", "Redraw", renderAbsorbed, true);
-    }
+    holdStaleScreen(failed);
     return false;
   }
 }
 
+export function renderAbsorbed() {
+  return absorbRender(REDRAW_FAILED);
+}
+
+export function renderFirstDraw() {
+  return absorbRender(FIRST_DRAW_FAILED);
+}
+
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying) return;
+  if (!cellEl.isConnected || S.undoApplying || screenStale) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
@@ -1134,4 +1216,5 @@ export function __init() {
       resetProductionIndexStats();
     }
   };
+  STALE_EVENTS.forEach(function (type) { window.addEventListener(type, refuseOnStaleScreen, true); });
 }
