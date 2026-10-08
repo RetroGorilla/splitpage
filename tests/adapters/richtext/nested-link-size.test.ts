@@ -344,6 +344,19 @@ test("the budget is shared by the whole input: the second of two links gets only
   assert.equal(linkCount(past.slice(0, past.indexOf("q</a>") + 5)), 61);
 });
 
+test("what an inner link spent before its outer link unwraps stays spent (#355)", () => {
+  const big = "https://big.test/" + "y".repeat(1000);
+  const spent = 2 * linkShell("https://two.test/");
+  const unwrapped = '<a href="' + big + '">p<object><a href="https://two.test/">x<object><a href="https://three.test/">z</a></object>y</a>' +
+    plainSiblings(400) + "</object>q</a>";
+  const build = (stretch: string): Shape => {
+    const second = plainLink(LONG_HREF + stretch, 400);
+    return { body: unwrapped + second.body, cost: spent + second.cost };
+  };
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(0, build))), 802);
+  assert.equal(linkCount(assertFixedPoint(onTheEdge(1, build))), 2);
+});
+
 function prng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
