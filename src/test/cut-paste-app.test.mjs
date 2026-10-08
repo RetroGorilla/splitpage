@@ -12,7 +12,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { pasteIntoCell } = await import("../js/05c-clipboard.js");
+const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render, syncFieldFromDom } = await import("../js/05-render.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 
@@ -238,7 +238,7 @@ test("the same video link pasted again is dirtied and stamped but makes no secon
   assert.notEqual(row("r1").updatedAt, stamp, "the stamp still moves");
 });
 
-test("words with a video link inside are typed in and the link is attached too: two dirties, one entry", async () => {
+test("words with a video link inside are typed in and the link is attached too: one dirty, one entry", async () => {
   await open();
   const to = cellOf("r1", "audioText");
   to.focus();
@@ -247,7 +247,7 @@ test("words with a video link inside are typed in and the link is attached too: 
   assert.equal(row("r1").audioText, "Hello there see https://youtu.be/abc123 now");
   assert.deepEqual(row("r1").imageLinks, [{ href: "https://youtu.be/abc123", poster: true }]);
   assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo, steps: got.steps },
-    { seq: 2, generation: 2, undo: 1, steps: ["rowField:r1.audioText", "rowField:r1.imageLinks"] });
+    { seq: 1, generation: 1, undo: 1, steps: ["rowField:r1.audioText", "rowField:r1.imageLinks"] });
   assert.equal(undo().ok, true);
   assert.equal(row("r1").audioText, "Hello there");
   assert.equal(row("r1").imageLinks, undefined);
@@ -306,7 +306,7 @@ test("a pasted picture or video card is taken out of the words; in a visual cell
   assert.equal(row("r4").visualText.indexOf("video-embed-card"), -1);
   assert.match(row("r4").visualText, /^drone \(pans\) hum/);
   assert.deepEqual(row("r4").imageLinks, [{ href: "https://youtu.be/abc", poster: true }]);
-  assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo }, { seq: 2, generation: 2, undo: 1 });
+  assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo }, { seq: 1, generation: 1, undo: 1 });
 });
 
 test("a cut b-roll key pasted back in the same tab: one entry, no second shot record, undo and redo keep the shot list", async () => {
@@ -320,7 +320,7 @@ test("a cut b-roll key pasted back in the same tab: one entry, no second shot re
   selectAll(to);
   const got = record(() => clip("paste", to, cut.store));
   assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo, steps: got.steps },
-    { seq: 2, generation: 2, undo: 1, steps: ["rowField:r4.visualText"] });
+    { seq: 1, generation: 1, undo: 1, steps: ["rowField:r4.visualText"] });
   assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA"]);
   assert.equal(row("r4").visualText, KEY("bsA") + " gulls");
   assert.equal(undo().ok, true);
@@ -353,7 +353,7 @@ test("a copied b-roll key gets a fresh id and a shot record seeded from the scen
   assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA", id]);
 });
 
-test("a cut's comment follows its words into the next paste, which is one dirty for the cell and one for the move", async () => {
+test("a cut's comment follows its words into the next paste, which is one dirty for the cell and the move", async () => {
   await open();
   const el = cellOf("r2", "audioText");
   el.focus();
@@ -365,7 +365,7 @@ test("a cut's comment follows its words into the next paste, which is one dirty 
   selectText(to, 6, 6);
   const got = record(() => clip("paste", to, cut.store));
   assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo, steps: got.steps },
-    { seq: 2, generation: 2, undo: 1, steps: ["rowField:r3.audioText", "docField:comments"] });
+    { seq: 1, generation: 1, undo: 1, steps: ["rowField:r3.audioText", "docField:comments"] });
   assert.equal(row("r3").audioText, "Three." + cmt("c1", "bravo charlie"));
   assert.deepEqual(anchors(), [["c1", "r3", "audioText"], ["c2", "r4", "audioText"]]);
 });
@@ -454,4 +454,187 @@ test("in review mode a cut only copies and a paste is ignored: the words stay, n
   } finally {
     window.__hostedTest.setSession({ role: "edit", docId: null });
   }
+});
+test("the undo entry of a cut or a paste is on the stack as soon as the call returns, which the Undo toast relies on", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  selectText(el, 0, 6);
+  flushEdits();
+  const start = lastUndoEntry();
+  const cut = clip("cut", el);
+  const cutEntry = lastUndoEntry();
+  assert.notEqual(cutEntry, start);
+  assert.deepEqual(cutEntry.steps.map((s) => s.key), ["audioText"]);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  flushEdits();
+  clip("paste", to, { "text/plain": "https://vimeo.com/76979871" });
+  const attachEntry = lastUndoEntry();
+  assert.notEqual(attachEntry, cutEntry);
+  assert.deepEqual(attachEntry.steps.map((s) => s.key), ["imageLinks"]);
+  to.focus();
+  selectText(to, 6, 6);
+  clip("paste", to, cut.store);
+  const wordsEntry = lastUndoEntry();
+  assert.notEqual(wordsEntry, attachEntry);
+  assert.deepEqual(wordsEntry.steps.map((s) => s.key), ["audioText"]);
+});
+test("pasteIntoCell reports the moved comments of this tab's cut, and none for another tab's", async () => {
+  await open();
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 19);
+  const cut = clip("cut", el);
+  const foreign = cut.store["text/html"].replace(/data-splitpage-cut="[0-9a-f]+"/, 'data-splitpage-cut="ffff"');
+  const other = cellOf("r1", "audioText");
+  other.focus();
+  selectText(other, 11, 11);
+  assert.equal(pasteIntoCell(other, foreign, "bravo charlie", null).movedComments, false);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  const mine = pasteIntoCell(to, cut.store["text/html"], cut.store["text/plain"], null);
+  assert.equal(mine.movedComments, true);
+  assert.equal(pasteIntoCell(to, cut.store["text/html"], cut.store["text/plain"], null).movedComments, false, "the cut is spent");
+});
+
+test("an attach-only paste leaves its undo entry on the stack by the time pasteIntoCell returns", async () => {
+  await open();
+  const to = cellOf("r1", "audioText");
+  flushEdits();
+  const before = lastUndoEntry();
+  const res = pasteIntoCell(to, "", "", { attach: [{ kind: "video", href: "https://vimeo.com/1" }] });
+  assert.equal(res.done, true);
+  assert.notEqual(lastUndoEntry(), before);
+  assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["imageLinks"]);
+});
+
+test("plain text pasted at the end of bold words carries on in bold, as typing does; pasted HTML keeps its own marks", async () => {
+  const doc = fixture();
+  doc.rows[0].audioText = "Hello <strong>there</strong>";
+  await open(doc);
+  const to = cellOf("r1", "audioText");
+  to.focus();
+  selectText(to, 11, 11);
+  clip("paste", to, { "text/plain": " again" });
+  assert.equal(row("r1").audioText, "Hello <strong>there again</strong>");
+  to.focus();
+  selectText(to, 17, 17);
+  clip("paste", to, { "text/html": "plain", "text/plain": "plain" });
+  assert.equal(row("r1").audioText, "Hello <strong>there again</strong>plain");
+});
+test("a stamp that throws fails a paste or a cut whole: the call throws and the scene, its gallery, the shot list and the counters are as they were", async () => {
+  await open();
+  const to = cellOf("r4", "visualText");
+  to.focus();
+  selectAll(to);
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  selectText(el, 0, 6);
+  flushEdits();
+  const before = JSON.stringify(S.state);
+  const seq = S.editSeq, generation = session.generation(), entries = undoSizes().undo;
+  const real = Date.prototype.toISOString;
+  Date.prototype.toISOString = function () { throw new Error("no clock"); };
+  try {
+    to.focus();
+    selectAll(to);
+    assert.throws(() => pasteIntoCell(to, KEY("bsA") + " gulls", "x", { attach: [{ kind: "video", href: "https://vimeo.com/1" }] }), /no clock/);
+    el.focus();
+    selectText(el, 0, 6);
+    const event = { clipboardData: { setData() {} }, preventDefault() {} };
+    assert.throws(() => copyFromCell(event, el, true, false), /no clock/);
+  } finally {
+    Date.prototype.toISOString = real;
+  }
+  flushEdits();
+  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(S.editSeq, seq);
+  assert.equal(session.generation(), generation);
+  assert.equal(undoSizes().undo, entries);
+});
+function typeChar(el, ch) {
+  el.focus();
+  const walker = document.createTreeWalker(el, 4);
+  let last = null;
+  while (walker.nextNode()) last = walker.currentNode;
+  last.data += ch;
+  const r = document.createRange();
+  r.setStart(last, last.data.length);
+  r.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+  el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
+}
+
+test("a paste or a cut is never merged into the typing before it or after it, even inside the 1,000 ms window", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  clock += 10;
+  typeChar(el, "!");
+  flushEdits();
+  const typed = undoSizes().undo;
+  selectText(el, 12, 12);
+  clock += 10;
+  clip("paste", el, { "text/plain": "?" });
+  flushEdits();
+  assert.equal(undoSizes().undo, typed + 1, "the paste is an entry of its own");
+  assert.equal(row("r1").audioText, "Hello there!?");
+  clock += 10;
+  typeChar(cellOf("r1", "audioText"), "#");
+  flushEdits();
+  assert.equal(undoSizes().undo, typed + 2, "and typing after it starts another");
+  assert.equal(undo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!?");
+  assert.equal(undo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
+  clock += 10;
+  const fresh = cellOf("r1", "audioText");
+  selectText(fresh, 0, 5);
+  clip("cut", fresh);
+  flushEdits();
+  assert.equal(undoSizes().undo, typed + 1, "the cut is an entry of its own too");
+  assert.equal(undo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
+});
+test("an attach-only paste right after typing, in the same tick, is an entry of its own", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  clock += 10;
+  typeChar(el, "!");
+  flushEdits();
+  const base = undoSizes().undo;
+  clock += 10;
+  typeChar(el, "?");
+  pasteIntoCell(el, "", "", { attach: [{ kind: "video", href: "https://vimeo.com/1" }] });
+  flushEdits();
+  assert.equal(undoSizes().undo, base + 1, "the second key joined the first word's entry, the attach is the one new entry");
+  assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["imageLinks"]);
+  assert.equal(undo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!?");
+});
+
+test("a paste first takes in what the cell shows but the model has not heard yet", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  el.firstChild.data = "Hello there+";
+  selectText(el, 12, 12);
+  clip("paste", el, { "text/plain": "X" });
+  assert.equal(row("r1").audioText, "Hello there+X");
+});
+
+test("a paste that ends in a tag leaves the caret spot after it, so typing can go on", async () => {
+  await open();
+  const to = cellOf("r4", "visualText");
+  to.focus();
+  selectAll(to);
+  const tag = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="mug" contenteditable="false">mug</span>';
+  clip("paste", to, { "text/html": "a mug: " + tag, "text/plain": "a mug: mug" });
+  const last = cellOf("r4", "visualText").lastChild;
+  assert.equal(last.nodeType, 3);
+  assert.equal(last.data, String.fromCharCode(0x200b));
 });

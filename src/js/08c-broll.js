@@ -28,6 +28,7 @@ import {
   BROLL_STATUS_IDS,
   BROLL_TEXT_MAX,
   brollPropKey,
+  newBrollShot,
   normalizeBrollProps
 } from "../core/document/broll.ts";
 import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -145,21 +146,13 @@ export function brollRecord(id) {
 }
 
 export function newBrollRecord(fields) {
-  var rec = {
-    id: makeId("bs"),
-    name: "", desc: "",
-    status: BROLL_STATUSES[0].id,
-    reshoot: false,
-    notes: "",
-    owner: "",
-    audioRef: "",
-    location: "",
-    props: [],
-    origin: "script"
-  };
-  Object.keys(fields || {}).forEach(function (k) { rec[k] = fields[k]; });
+  var rec = newBrollShot(makeId("bs"), fields || {});
   S.state.brollShots.push(rec);
   return rec;
+}
+
+export function brollSeedOf(row) {
+  return { audioRef: seedRef(row), location: seedLocation(row) };
 }
 
 export function recordPastedBroll(rowId, cell, ids) {
