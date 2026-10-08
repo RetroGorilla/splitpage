@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
 import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex, withPageHead } from "../core/document/ids.ts";
-import { plainText } from "../core/document/text-policy.ts";
+import { cappedLongText, plainText } from "../core/document/text-policy.ts";
 import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
@@ -116,7 +116,7 @@ export function reassignDocId(toId, opts) {
   S.docIdWrittenOut = false;
   copyDocHistorySafe(fromId, toId);
   syncDocIdentity();
-  var other = plainText(opts.otherTitle == null ? "" : opts.otherTitle).trim().slice(0, 300) || "Untitled Script";
+  var other = cappedLongText(plainText(opts.otherTitle == null ? "" : opts.otherTitle).trim(), 300) || "Untitled Script";
   showToast('This file is a copy of "' + other + '", which is open in another tab. ' +
     "It now has its own version history. Save it to keep them separate.", "warn", true);
   return true;
@@ -151,7 +151,7 @@ function currentDocIdClaim(type) {
   var home = docHomeKey();
   if (!docId || home.indexOf("file:") !== 0) return null;
   return { type: type, docId: docId, home: home, at: identityAdoptedAt, nonce: PAGE_NONCE,
-           title: plainText(S.state.title || "").slice(0, 300) };
+           title: cappedLongText(plainText(S.state.title || ""), 300) };
 }
 
 function announceDocIdentity() {
@@ -174,7 +174,7 @@ function onDocIdentityMessage(msg) {
     home: String(msg.home == null ? "" : msg.home),
     at: Number(msg.at) || 0,
     nonce: String(msg.nonce == null ? "" : msg.nonce),
-    title: plainText(msg.title == null ? "" : String(msg.title)).slice(0, 300)
+    title: cappedLongText(plainText(msg.title == null ? "" : String(msg.title)), 300)
   };
   var loser = decideDuplicateLoser(mine, theirs);
   if (!loser) return;

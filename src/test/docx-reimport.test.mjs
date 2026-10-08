@@ -338,6 +338,13 @@ test("the package says what it is: a title Word shows, Splitpage, the day; page 
   assert.equal(Array.from(footer.getElementsByTagNameNS(W, "t")).map((t) => t.textContent).join(""), "Round trip, then and nowPage 1 of 1");
 });
 
+test("a title cut short in the footer never ends in half an emoji (#434)", async () => {
+  const grin = String.fromCodePoint(0x1F600);
+  S.state = migrateRows({ schema: 2, title: "x".repeat(88) + grin + "tail", rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });
+  const { text, xml } = await parts(buildDocx());
+  assert.equal(xml(await text("word/footer1.xml")).getElementsByTagNameNS(W, "t")[0].textContent, "x".repeat(88) + "…");
+});
+
 test("a long title wraps on the page and is cut short in the footer; an empty script reopens empty", async () => {
   const long = "A title that goes on and on: " + "and on ".repeat(20).trim();
   S.state = migrateRows({ schema: 2, title: long, rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });

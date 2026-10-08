@@ -10,13 +10,13 @@ import { csvToRows } from "./16-csv.js";
 import { fileKindFromName } from "./18-local-files.js";
 import { MD_IMAGE_PREFIX_RE } from "./20d-formats.js";
 import { makeId } from "../adapters/identity/ids.ts";
-import { escapeHtml, legacyMdToHtml } from "../core/document/text-policy.ts";
+import { escapeHtml, legacyMdToHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 
 S.importModeTouched = false;
 
 export function truncateForPreview(s, n) {
   s = s || "";
-  return s.length > n ? s.slice(0, n) + "…" : s;
+  return s.length > n ? unitSafePrefix(s, n) + "…" : s;
 }
 
 function splitImportText(text, mode) {

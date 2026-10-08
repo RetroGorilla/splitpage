@@ -4,6 +4,7 @@ import { brollTable } from "./08d-broll-panel.js";
 import { strBytes, tagPrintColor, xmlEscape, zipWrite } from "./14-export.js";
 import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT } from "./14b-export-kit.js";
 import { scriptTable } from "./16-csv.js";
+import { unitSafePrefix } from "../core/document/text-policy.ts";
 
 var NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 var NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -93,7 +94,7 @@ function stringTable() {
 
 function cellText(v) {
   var s = String(v == null ? "" : v).replace(/\r\n?/g, "\n");
-  return s.length > MAX_CELL ? s.slice(0, MAX_CELL - 1) + "…" : s;
+  return s.length > MAX_CELL ? unitSafePrefix(s, MAX_CELL - 1) + "…" : s;
 }
 
 function sheetXml(sheet, index, strings) {
@@ -301,7 +302,7 @@ var CUTS_CHARS = 90;
 function opening(s) {
   s = String(s || "");
   if (s.length <= CUTS_CHARS) return s;
-  var cut = s.slice(0, CUTS_CHARS);
+  var cut = unitSafePrefix(s, CUTS_CHARS);
   var sp = cut.lastIndexOf(" ");
   return (sp > CUTS_CHARS / 2 ? cut.slice(0, sp) : cut).replace(/[\s.,;:!?—–-]+$/, "") + "…";
 }

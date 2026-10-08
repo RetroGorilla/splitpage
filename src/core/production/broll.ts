@@ -10,7 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
-import { cappedName, unitCutName } from "../document/text-policy.ts";
+import { cappedLongText, cappedName, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
@@ -188,7 +188,7 @@ export function brollInCell(cell: readonly Run[]): BrollItem[] {
     if (open) open.desc.push(brollLineText(line.items));
   });
   return out.map(function (item) {
-    return { id: item.id, name: item.name, desc: item.desc.join("\n").replace(/\s+$/, "").slice(0, BROLL_TEXT_MAX) };
+    return { id: item.id, name: item.name, desc: cappedLongText(item.desc.join("\n").replace(/\s+$/, ""), BROLL_TEXT_MAX) };
   });
 }
 
@@ -278,7 +278,7 @@ function brollRow(rows: readonly ProductionRow[], rowId: string): ProductionRow 
 }
 
 export function brollSeedRef(row: ProductionRow | null | undefined, plainTextOf: FieldText): string {
-  return row ? plainTextOf(row.audioText).trim().slice(0, BROLL_TEXT_MAX) : "";
+  return row ? cappedLongText(plainTextOf(row.audioText).trim(), BROLL_TEXT_MAX) : "";
 }
 
 export function brollSeedLocation(row: ProductionRow | null | undefined, readers: ProductionReaders): string {
