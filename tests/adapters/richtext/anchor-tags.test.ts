@@ -56,6 +56,14 @@ test("a combined span sanitises to the nesting toHtml writes, whatever the class
   }
 });
 
+test("a tag name cut at its cap of 80 loses the space the cut leaves, so sanitising it again keeps it (#406)", () => {
+  const span = (name: string): string => `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="${name}" contenteditable="false">x</span>`;
+  const once = rt.sanitize(span("n".repeat(79) + " lamp"));
+  assert.equal(once, span("n".repeat(79)));
+  assert.equal(rt.sanitize(once), once);
+  assert.equal(rt.sanitize(span("  " + "n".repeat(80) + " lamp")), span("n".repeat(80)));
+});
+
 test("a mark the sanitiser refuses still leaves the comment (#280)", () => {
   assert.equal(rt.sanitize('a <span class="cmt-anchor tag-anchor" data-cmt="c3" data-tag-cat="nope" data-tag-name="">b</span>'),
     "a " + cmt("c3", "b"));

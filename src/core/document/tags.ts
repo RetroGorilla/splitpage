@@ -80,7 +80,7 @@ function tagKeyHash(key: string): string {
 
 export function mintTagId(cat: string, name: unknown, taken?: readonly (TagIdHolder | null | undefined)[] | null): string {
   const used: Record<string, boolean> = Object.create(null);
-  (taken || []).forEach(function (t) { if (t && t.id) used[t.id] = true; });
+  (taken || []).forEach(function (t) { if (t && typeof t.id === "string" && t.id) used[t.id] = true; });
   const base = "t_" + tagKeyHash(registryKey(cat, name)).slice(0, 16);
   if (!used[base]) return base;
   for (let n = 2; ; n++) if (!used[base + "-" + n]) return base + "-" + n;
