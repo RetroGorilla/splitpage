@@ -33,7 +33,7 @@ with milestone 2's "about 3 minutes".
 | Measured metrics | dependency metrics re-run on `645df99`; typing performance referenced from [milestone-3.md, 3.15](milestone-3.md#as-built) (measured at `391bda6`, see below) | referenced |
 | Windows ARM64 packaged check | native check moved to the 4.0 release gate | not run here |
 | Linux full browser run | moved to the 4.0 release gate (#314) | not run here |
-| External review | Codex (decision D7) | Pending: external review (Codex, coordinator) |
+| External review | Codex, GPT-6-Astra (High), on `645df99`: keep the refactor; 3 should-fix findings and 1 suggestion, all accepted (#477 to #480); no new regression, nothing warranting a rollback | recorded ([below](#external-review)) |
 
 No flake and no rerun in any step.
 
@@ -183,15 +183,62 @@ commands' undo and anchor behaviour.
 
 | | |
 | --- | --- |
-| Reviewer | Pending: external review (Codex, coordinator) |
-| Kind | Not yet stated |
-| Snapshot | `645df99` |
-| Date | Not yet |
-| Verdict | Not yet |
+| Reviewer | Codex (GPT-6-Astra, reasoning effort High): an independent AI review session that took no part in building or reviewing milestone 3, and a different model from the Opus reviewers of its PRs |
+| Kind | A different model, the first of the kinds section 8 allows |
+| Snapshot | `645df99`, a read-only copy with this gate record supplied as an untracked file. The reviewer read source, tests, docs and history; it did not install dependencies or run tests, and says so. Files were left unchanged |
+| Date | 2026-10-08 |
+| Verdict | Keep the refactor. "A successful partial migration, not yet a single-owner editor." Three should-fix findings and one suggestion; no new milestone 3 regression; nothing warranting a rollback. The text commands' undo and anchor behaviour was covered (E2, E3 and E9 below) |
+| Vetting | Fable, 2026-10-08, for the coordinator: every claim checked against the base at `2b3aa86` (#466, #467, #472 and #474 merged after the snapshot); F2's re-entrant path reproduced in jsdom. The verdicts below, issues #477 to #480 and this record are the disposition under section 6 of review.md |
+
+The review's architecture opinion matches the milestone's own record: environment-independent core, explicit command ports, bounded rollback, transactional anchor reconciliation and owned caches are real, and its qualifications (`migrateRows` migrates in place, `ValidatedDocument` proves passage through migration, `DocumentView` is a compile-time type, the bridge is a module-evaluation singleton with permissive defaults, undo replay and the legacy writers mutate outside the transaction, and #391, #459 and #460 stand) are the ones [session.md](session.md) sections 1, 3 and 8 already state. Its risk ranking puts render and browser events first, undo second, save and recovery third, which is the order the findings and milestone 4 follow.
+
+### Findings
+
+| ID | Severity | Finding | Verified | Verdict |
+| --- | --- | --- | --- | --- |
+| F1 | should-fix | A delayed media paste or drop (`insertIntoScriptCell`, `21-events.js`) keeps only the row id, the field and the old element; when the files finish reading it resolves the target in whatever document is live, and reads the selection then, not when the paste began | Confirmed on `2b3aa86`. Inherited: the same continuation exists at the milestone 3 start; `handleImageFile` (`06-rows.js`) has the same shape | Accept: #478, fixed in milestone 4 under operation identity ([plan §5, milestone 4](../IMPLEMENTATION-PLAN.md#4--centralize-save-completion-session-transitions-and-recovery)) |
+| F2 | should-fix | A render's own focus changes fire `focusout` on editable cells, and `focusout` commits the cell's DOM through the typing command: `restoreRenderFocus` focuses the grid cell under a focused Writer paragraph, and `paintRow` and `renderWriter` remove focused cells. `syncFieldFromDom`'s guard knows disconnection, `undoApplying` and a stale screen, not a render in progress | Confirmed, in edit mode (#466 refuses it only in review mode). In jsdom one `render()` with a Writer paragraph focused made two edit transactions, the first writing the paragraph's old text over the incoming change, and left focus on the page body. Chromium also fires `focusout` on a removed focused node (verified by the #466 review), which makes the overwrite persistent in the grid and in the Writer's first paragraph. Plausible loss of a collaborator's change, saved back under this editor's name | Accept, as a bug fix now, not a milestone item: #477. #463 (milestone 4) keeps the invariant, which [plan §6](../IMPLEMENTATION-PLAN.md#6-required-ownershiprace-invariants) now states |
+| F3 | should-fix | The dirty effect calls `recordMyColor`, which writes `personColors` (`12-dirty-toast.js`, `13a-presence.js`): persisted, merged document data that no command declares, written after the transaction, outside the rollback, unseen by `runConfined` | Confirmed. Harmless today, since nothing reads declared fields; one visible effect is that the first edit after setting a colour undoes the colour with it | Accept: #479, in milestone 4 with the dirty and save effect rework |
+| F4 | suggestion | `runConfined` compares the document before and after the whole command, so a `plan` that writes a declared field and returns an empty `apply` passes, and the rollback point is taken after `plan` | Confirmed; no production command does it | Accept, tests only: #480. session.md's sentence is narrowed in this PR |
+
+### Acceptance criteria
+
+| The review's point | Verdict |
+| --- | --- |
+| E2 and E3: "one history entry" and "every failure stage" need qualification. `UndoPort.record` delegates to 12a's deferred diff, so one call is not by itself one entry, and a throw in undo recording, an effect or publication happens after the mutation, outside the rollback | Accept-doc. E2's evidence is the fake-port tests plus the booted tests that count 12a's entries (session.md §7), which the as-built row names. The post-commit failure becomes a distinct, reported outcome in milestone 4 (plan §5) |
+| E4: assignment-based recovery published as `adopt` is a compatibility decision, not full separation | Already recorded (session.md §2 and §8). No change |
+| E5: the plan's "no migrated view imports `S`" was narrowed to the commands and session modules; the participating views still import it | Accept-doc. Milestone 3 migrated no view: its target layout keeps 05r, 01, `syncFieldFromDom`, 06, 19 and 05c as legacy views calling commands, and the full form is milestone 6's gate. The as-built row in milestone-3.md now says so |
+| E8: the literal "no document-wide work per keystroke" is not shown. 12a's `flushEdits` runs `diffStates(base, S.state)` over every row after each edit, and suite 67 counts renders and derivations, not that scan | Accept-doc. INV-06 and the E8 row now name the retained scan with its measured cost: 0.58 ms median and 1.32 ms p95 per edit on the 30-scene demo in jsdom (`flushEdits`, diff and base update, on `2b3aa86`); the browser typing p50 of 4 to 7 ms in the [performance record](performance-record.md) includes it. The scan goes with milestone 6's undo transaction |
+| The review policy should keep its exception for inherited defects a PR depends on or exposes; "preserve behaviour during extraction" must not certify a boundary more strongly than its integration permits | Agreed; review.md §6 already says the first, and this record practises the second. No change |
+
+What the gates still miss, in the review's words, is coverage composition: incoming updates while an editable cell owns focus, focus events generated by rendering, delayed media reads followed by document replacement, commands run with the real effects and non-default preferences, failures in post-commit effects, and production disposal. Each has an owner: #477 and #471 (the harness's focus emulation), #478, #479, the milestone 4 outcome above, and milestone 4's lifecycle test.
+
+### Advice for milestones 4 to 7
+
+| Advice | Verdict |
+| --- | --- |
+| M4, first: pull the explicit session construction, readiness and disposal forward from milestone 7, so the new save owner cannot run with the bridge's permissive and no-op defaults | Partly accept. Milestone 4's lifecycle test already requires the session's own dispose. The plan now says the owners milestone 4 adds are constructed by explicit functions that take their ports, never as module-evaluation singletons with defaults; the wiring step itself stays in milestone 7 as Adam approved. Pulling the whole step forward reorders the approved scope and is left for Adam (below) |
+| M4, second: epoch ownership for delayed clipboard work, thumbnails, recovery and other document-scoped callbacks, not only saves | Accept: plan §5 milestone 4 names them (#478) |
+| M4, third: remove document mutation from effects; capture the read models before asynchronous work | Accept (#479). The capture half is the existing capture contract |
+| M4, fourth: destination-specific queues, acknowledgements and recovery ownership | Already milestone 4 as written |
+| M4, fifth: render failure isolation and browser coverage. For #463, define the invariant before the mechanism; a detached render plan does not stop synchronous focus events during the commit; use a guarded commit, explicit focus restoration and a recoverable presentation failure; do not rebuild every editable node | Accept: the invariant is in plan §6 and on #463, #477 is today's bug, #471 is the harness |
+| M4: pull #325's transaction ownership of render-time repairs forward where capture depends on it | Defer to milestone 6 as planned. The b-roll repair runs in the scheduler's refresh before any capture, and the capture contract snapshots the derived read models, so capture does not depend on moving it |
+| M5: captured exporters before the registry; independence from live mutation, options, image availability and connection changes during awaits; independent readers; a measured cycle exit | Already the approved order and gate wording. No change |
+| M6: selection and capability foundations first. #464's selection defines the epoch, scene and field, direction and affinity, atoms, mapping through edits, split and join, undo and incoming changes, and the vanished scene; focus is separate from selection; composition gets a lifetime tied to its cell and session | Accept-doc: the points are on #464, and plan §5 milestone 6 puts the selection model and the undo/redo transaction before the panel and CSS moves. That is an order inside the approved scope, not a change to it |
+| M6: undo/redo through the boundary early; fix or disposition #391, #450, #451, #459 and #460 before claiming editor ownership complete | #460 is fixed (#467), #450 is fixed (#466), #391 is in PR #469, #451 is open for milestone 6, #459 is a recorded limit. The order is in the plan |
+| M6: separate reviewer annotation from unrestricted text editing | Defer to milestone 6's comments migration. #466 already refuses every non-anchor change without edit capability; a distinct annotate command replaces that exception when comments migrate (plan §5 milestone 6) |
+| M7: keep the narrowed scope; prove partial startup and cleanup; remove bridges with their last consumer; keep the inventory of remaining legacy | Already the approved scope. No change |
 
 ## Blockers for Adam
 
 None from the runs: every run section 8 requires on this machine passed on the
 exact merged tree, and the ARM64 and Linux checks are moved to the 4.0 release
-gate by decision. Milestone 3 closes when the external review above is
-recorded and its findings are handled under section 6 of review.md.
+gate by decision. The external review is recorded above and its findings have
+their disposition (#477 to #480 and this record), so milestone 3 closes with
+this PR.
+
+One question from the review's advice, not applied: whether milestone 7's
+explicit wiring step (constructing the session, the bridge, the commands and
+the registries from `src/bootstrap/`) should move into milestone 4, before the
+save coordinator is built. The plan keeps the approved order, with the
+construction rule above as the compromise, until Adam says otherwise.
