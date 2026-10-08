@@ -164,7 +164,16 @@ also shows the tails of its `.out.txt` and `.err.txt`.
 
 The runner deletes the old `digest.txt` when it starts. If it did not print the
 digest path as its last line, there is no digest: the run aborted, so read the
-console output.
+console output. If the digest tool refused the run's verdicts, the runner says
+`digest not written: failure-digest.mjs exited with code N (see stderr)` on
+stdout, in yellow, and the reason is on stderr.
+
+`run-tests.ps1` gives every suite's `driver.ps1` a fresh `-ResultToken`, which
+the driver appends to its own last line as `RESULT: n/m checks passed [run
+<token>]`. The runner takes as a suite's verdict only a `RESULT:` line that
+ends with that token, so a `RESULT:` line printed by the page or an `eval` can
+neither end a suite early nor pass for its verdict. A driver started without
+`-ResultToken` prints the plain line.
 
 ## The unit tests
 
