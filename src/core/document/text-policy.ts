@@ -89,29 +89,39 @@ function keptAsStored(text: string, healed: string, max: number): string {
 export type NameKey = (name: string, at: number) => string;
 
 export function settledNames(texts: readonly string[], max: number, keyOf: NameKey, wanted?: readonly (string | undefined)[]): string[] {
-  const out: string[] = [], taken: Record<string, boolean> = Object.create(null), asked: Record<string, boolean> = Object.create(null);
+  const out: string[] = [], stored: string[] = [];
+  const taken: Record<string, string> = Object.create(null), asked: Record<string, string> = Object.create(null);
   const open: number[] = [], heal: number[] = [];
+  function hold(map: Record<string, string>, at: number): void {
+    if (!out[at]) return;
+    const key = keyOf(out[at] as string, at), was = map[key];
+    map[key] = was === undefined || was === stored[at] ? stored[at] as string : "";
+  }
+  function free(map: Record<string, string>, key: string, at: number): boolean {
+    const was = map[key];
+    return was === undefined || was === stored[at];
+  }
   texts.forEach(function (text, at) {
-    const name = cappedName(text, max);
-    out.push(name);
+    out.push(cappedName(text, max));
+    stored.push(hasLoneSurrogate(text) ? keyOf(text.trim(), at) : "\u0000" + at);
     if (wanted && wanted[at]) open.push(at);
     else if (hasLoneSurrogate(text)) heal.push(at);
-    else if (name) taken[keyOf(name, at)] = true;
+    else hold(taken, at);
   });
-  function settle(at: number, want: string, blocked: Record<string, boolean>): void {
+  function settle(at: number, want: string, blocked: Record<string, string>): void {
     const text = texts[at] as string, healed = out[at] as string;
-    if (want && !taken[keyOf(want, at)] && !blocked[keyOf(want, at)]) { out[at] = want; return; }
+    if (want && free(taken, keyOf(want, at), at) && free(blocked, keyOf(want, at), at)) { out[at] = want; return; }
     out[at] = hasLoneSurrogate(text) ? keptAsStored(text.trim(), healed, max) : healed;
-    if (out[at]) taken[keyOf(out[at] as string, at)] = true;
+    hold(taken, at);
   }
-  const none: Record<string, boolean> = Object.create(null);
+  const none: Record<string, string> = Object.create(null);
   open.forEach(function (at) {
     settle(at, (wanted as readonly (string | undefined)[])[at] as string, none);
-    if (out[at]) asked[keyOf(out[at] as string, at)] = true;
+    hold(asked, at);
   });
   heal.forEach(function (at) {
     settle(at, out[at] as string, asked);
-    if (out[at]) taken[keyOf(out[at] as string, at)] = true;
+    hold(taken, at);
   });
   return out;
 }
