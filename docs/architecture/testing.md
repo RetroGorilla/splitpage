@@ -37,6 +37,8 @@ narrows to the test files a change touched; `--only` is a local tool.
 | A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
 | Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`, `249-save-as-hosted.txt`, `265-browser-drafts.txt`, the collaboration suites `26[0-4]-collaborate-*.txt`) |
 | Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
+| A script-cell command (`cell-text.ts`, `split-join.ts`, `clipboard.ts`), or the views that call them (`syncFieldFromDom`, `splitRowFieldCore`, `mergeWriterRows`, `pasteIntoCell`, `copyFromCell`) | The command's application test (`tests/application/`, every command test through `runConfined`) and its booted-app test (`src/test/cell-text-app`, `split-join-app`, `cut-paste-app`, `text-editing-app`), then the text-command suite set of [milestone-3.md](milestone-3.md#the-text-command-suite-set), run plain and with `SPLITPAGE_FREEZE_CACHES=1`. A change to 12a's grouping also runs `src/test/undo.test.mjs`. Add 186 when the change reaches picture-or-video paste or its dirty marking |
+| The rich-text sanitiser (`src/adapters/richtext/sanitize.ts`) | `tests/adapters/richtext/*.test.ts`, then browser suites 01, 69, 77, 80, 81, 86, 92, 155 and both 280 suites (the set #413 ran) |
 | A cache or a caller of one (`contentMemo`, the production readers, `cellOf`, 07's index) | Its unit tests, `production-frozen.test.mjs`, and the suites that read through it with `SPLITPAGE_FREEZE_CACHES=1` set ([Frozen caches](#frozen-caches)) |
 | Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
 | Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
@@ -89,8 +91,13 @@ under the test-only freeze flag (milestone 3, decisions D2 and D3).
   objects the value was built from stay writable: 07's entries point at a
   locked copy of the shared tag category, and `TAG_CATEGORIES` itself is never
   frozen. Only arrays and plain objects are locked; anything else (a `Date`, a
-  `Map`) is handed out as it is. Core and adapter unit tests run as strict
-  modules, so they use the plainer `deepFreeze`.
+  `Map`) is handed out as it is. A lock is a snapshot: it is made when the
+  cache stores the value, and a later change to the original does not show
+  through it. A locked value is a `Proxy`, so `structuredClone` and
+  `postMessage` refuse it with a `DataCloneError`; a caller that needs to clone
+  one copies it first (`JSON.parse(JSON.stringify(value))`, `slice`). Core and
+  adapter unit tests run as strict modules, so they use the plainer
+  `deepFreeze`.
 - **The runs.** `SPLITPAGE_FREEZE_CACHES=1` makes `run-tests.ps1`,
   `driver.ps1`, `driver.mjs` and `tools/run-suites.mjs` add the flag to every
   page a suite opens with `open` or `goto`, and set
@@ -399,6 +406,11 @@ What the rule does not refuse, each shown as a known gap in
   new G(raw)`;
 - a `never` that comes out somewhere the rule does not look, such as a
   computed element key or a signature declared in a type alias and cast to;
+- a `never` taken out by destructuring: `const { v } = { v: raw } as { v:
+  never }`, then `use(v)`, type-checks and is not refused, because the rule
+  checks property and element accesses and not binding patterns. Found in
+  milestone 3 by a one-off check against the rule; it is not yet a fixture in
+  `tools/test-brand-casts.mjs`;
 - a laundering call given any branded argument or receiver, which exempts it
   (`pick<ValidatedDocument>(doc, raw)`);
 - a class method override that narrows its parameter to the brand
