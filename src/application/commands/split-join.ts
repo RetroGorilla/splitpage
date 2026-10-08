@@ -26,7 +26,7 @@ export interface MediaHalves {
 
 export type SplitAt = TextCut | MediaHalves;
 
-export const BOTH_VISUALS = "both scenes have a visual";
+const BOTH_VISUALS = "both scenes have a visual";
 
 const SPLIT_FIELDS: readonly string[] = Object.freeze(["visualText", "audioText"]);
 const VISUAL_CELLS: readonly string[] = Object.freeze([

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
-import { BOTH_VISUALS, bothScenesHaveVisual, cellHtml, joinScenesCommand, mediaHalves, splitSceneCommand, textCut } from "../../src/application/commands/split-join.ts";
+import { bothScenesHaveVisual, cellHtml, joinScenesCommand, mediaHalves, splitSceneCommand, textCut } from "../../src/application/commands/split-join.ts";
 import type { JoinPorts } from "../../src/application/commands/split-join.ts";
 import { syncCommentAnchors } from "../../src/core/text/anchors.ts";
 import { clampRange } from "../../src/core/text/edits.ts";
@@ -355,6 +355,22 @@ test("a join into a scene with no visual takes the later scene's visual text and
   });
 });
 
+test("a join takes a whole gallery of pictures: the first picture, its name and annotation, and the further ones", () => {
+  const ref = (c: string) => ({ sha256: c.repeat(64), width: 10, height: 8, mime: "image/png" });
+  const marks = [{ kind: "arrow" }];
+  const h = opened(() => joinOf(scene("a", "One."), scene("b", "Two.", {
+    imageRef: ref("a"), imageName: "first", imageAnnotation: { imageRef: ref("c"), marks: marks },
+    moreImages: [{ imageRef: ref("b"), name: "second" }]
+  })));
+  const out = runConfined(h.session, joinScenesCommand("a", ports()));
+  assert.equal(out.kind, "applied");
+  const a = rowOf(h, "a");
+  assert.deepEqual(a?.imageRef, ref("a"));
+  assert.equal(a?.imageName, "first");
+  assert.deepEqual(a?.imageAnnotation, { imageRef: ref("c"), marks: marks });
+  assert.deepEqual(a?.moreImages, [{ imageRef: ref("b"), name: "second" }]);
+});
+
 test("a join into a scene that has the visual keeps it, and does not declare the visual cells", () => {
   const h = opened(() => joinOf(scene("a", "One.", { visualText: "Keep", imageLinks: LINKS }), scene("b", "Two.")));
   const out = runConfined(h.session, joinScenesCommand("a", ports()));
@@ -387,7 +403,7 @@ test("E3: two scenes with visuals are refused with no effect at all, whatever th
     const h = opened(() => joinOf(scene("a", "One.", s[1]), scene("b", "Two.", s[2])));
     const before = snapshot(h);
     const p = ports();
-    assert.deepEqual(runConfined(h.session, joinScenesCommand("a", p)), { kind: "rejected", reason: BOTH_VISUALS }, s[0]);
+    assert.deepEqual(runConfined(h.session, joinScenesCommand("a", p)), { kind: "rejected", reason: "both scenes have a visual" }, s[0]);
     assert.equal(snapshot(h), before, s[0]);
     assert.equal(p.asked(), 0, s[0]);
     assert.deepEqual(h.log, [], s[0]);

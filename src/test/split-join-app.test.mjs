@@ -570,6 +570,40 @@ test("a join ends the typing group: typing then joining are two entries", async 
   writer.closeWriter();
 });
 
+test("a join ends the typing group even when the key it follows has not been recorded yet", async () => {
+  await open(joinDoc(["todo", "todo"]));
+  writer.openWriter();
+  const p1 = para("j1");
+  clock += 5;
+  typeChar(p1, "!");
+  const p2 = para("j2");
+  p2.focus();
+  selectText(p2, 0, 0);
+  key(p2, "Backspace");
+  flushEdits();
+  assert.equal(undoSizes().undo, 2);
+  assert.equal(undo().ok, true);
+  assert.equal(row("j1").audioText, "Line 1.!");
+  assert.deepEqual(ids(), ["j1", "j2"]);
+  writer.closeWriter();
+});
+
+test("a Writer split stores text the cell holds but the model does not yet, as its own edit, before it splits", async () => {
+  await open();
+  writer.openWriter();
+  const p = para("r1");
+  p.focus();
+  p.appendChild(document.createTextNode("?"));
+  selectText(p, 3, 3);
+  const got = observe(() => key(p, "Enter"));
+  assert.equal(got.seq, 2);
+  assert.equal(got.generation, 2);
+  assert.equal(got.undo, 2);
+  assert.equal(row("r1").audioText, "Hel");
+  assert.equal(S.state.rows[1].audioText, "lo there?");
+  writer.closeWriter();
+});
+
 test("a join by Delete at the end of the earlier scene is the same edit as Backspace at the start of the later one", async () => {
   await open(joinDoc(["ready", "todo", "shot"]));
   writer.openWriter();
