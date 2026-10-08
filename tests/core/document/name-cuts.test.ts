@@ -132,6 +132,7 @@ test("unitCutName is the cut older builds made: trimmed, cut at max UTF-16 units
 test("picture and file-link names are cut by code point at 200 (#344)", () => {
   assert.equal(normalizePictureName(x(199) + GRIN + "y"), x(199) + GRIN);
   assert.equal(normalizePictureName(x(199) + HIGH), x(199));
+  assert.equal(normalizePictureName(" " + HIGH + " "), HIGH, "a name of only half an emoji is kept as stored, not lost");
   assert.equal(normalizePictureName(x(199) + " y"), x(199));
   assert.deepEqual(normalizeVideoLink({ name: x(199) + GRIN + "y" }), { name: x(199) + GRIN });
 });
