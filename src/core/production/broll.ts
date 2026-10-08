@@ -243,7 +243,7 @@ export function collectBrollFromRows(rows: readonly ProductionRow[] | null | und
   return out;
 }
 
-export type BrollCutRename = { key: string; name: string };
+export type BrollCutRename = { key: string | null; name: string };
 
 export type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
 
@@ -252,14 +252,15 @@ export function brollCutRenames(rows: readonly ProductionRow[] | null | undefine
   const lines: BrollCutRename[] = [];
   const texts: Record<number, string[]> = Object.create(null);
   live.forEach(function (found) {
-    if (found.id || found.name.length < BROLL_NAME_MAX) return;
+    if (found.id || found.name.length < BROLL_NAME_MAX - 3) return;
+    if (found.name.length < BROLL_NAME_MAX) { lines.push({ key: null, name: found.name }); return; }
     if (!texts[found.rowIndex]) {
       const row = (rows as readonly ProductionRow[])[found.rowIndex] as ProductionRow;
       texts[found.rowIndex] = brollMarkerLines(readers.cellOf(row.visualText as string)).map(function (m) { return brollMarkerText(m.line, m.marker); });
     }
     const text = (texts[found.rowIndex] as string[])[found.ordinal] as string;
     const old = unitCutName(text, BROLL_NAME_MAX);
-    if (old !== found.name) lines.push({ key: normalizeTagName(old), name: found.name });
+    lines.push({ key: old !== found.name ? normalizeTagName(old) : null, name: found.name });
   });
   return { held: brollHeldIds(live), lines: lines };
 }
