@@ -15,7 +15,7 @@ await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5, lastE
 
 const { migrateRows } = await import("../js/02-state.js");
 const { getEditorName, promptForName } = await import("../js/03-sync.js");
-const { getSavedAuthorName, toggleReplyComposer } = await import("../js/10-comments.js");
+const { getSavedAuthorName, openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../js/10-comments.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../js/20s-settings.js");
 const { render } = await import("../js/05-render.js");
@@ -106,12 +106,31 @@ test("the reply name field takes 30 characters and never half an emoji", () => {
   assert.equal(typeInto(field, NAME_33), NAME_33.slice(0, 30));
 });
 
+test("a reply posted with a longer name than the field allows is stored under 30 characters", () => {
+  const field = document.querySelector(".reply-composer .reply-name-input");
+  field.value = NAME_33;
+  document.querySelector(".reply-composer .cell-editable").innerHTML = "hello";
+  postReply("c1");
+  assert.equal(S.state.comments[0].replies[0].author, NAME_33.slice(0, 30).trimEnd());
+  assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
+});
+
+test("a comment posted with a longer name than the field allows is stored under 30 characters", () => {
+  openCommentComposer({ id: "c9", rowId: "r1", field: "audioText", quotedText: "mug" });
+  document.getElementById("comment-name").value = NAME_33;
+  document.getElementById("comment-body-editable").innerHTML = "hello";
+  postComment();
+  const posted = S.state.comments.find((c) => c.id === "c9");
+  assert.equal(posted.author, NAME_33.slice(0, 30).trimEnd());
+  assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
+});
+
 test("the identity chip's name field takes 30 characters and saves them", () => {
   localStorage.setItem(NAME_KEY, "Sam");
   promptForName();
   const field = document.getElementById("identity-input");
   assert.equal(typeInto(field, "x".repeat(29) + GRIN + "tail"), NAME_30_EMOJI);
-  typeInto(field, NAME_33);
+  field.value = NAME_33;
   document.getElementById("identity-save").click();
   assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
 });
@@ -123,7 +142,7 @@ test("the Settings name field takes 30 characters and saves them", () => {
   assert.equal(typeInto(field, "x".repeat(29) + GRIN + "tail"), NAME_30_EMOJI);
   field.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.equal(localStorage.getItem(NAME_KEY), NAME_30_EMOJI);
-  typeInto(field, NAME_33);
+  field.value = NAME_33;
   field.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
 });
