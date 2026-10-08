@@ -1234,6 +1234,16 @@ try {
     eq("...moving on to the next one", (await json(res)).rev, 3);
   }
 
+  for (const [label, state] of NOT_DOCUMENTS) {
+    const before = readFileSync(file, "utf8");
+    const res = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 1, state })
+    });
+    eq("a stale save of " + label + " is 400, not a conflict", res.status, 400);
+    eq("...saying bad-state", (await json(res) || {}).error, "bad-state");
+    eq("...and leaves the stored document as it was", readFileSync(file, "utf8"), before);
+  }
+
   const stored = (id, state) => {
     const path = join(sShape.dataDir, id + ".json");
     writeFileSync(path, JSON.stringify({
@@ -1282,6 +1292,11 @@ try {
     eq("...at the next rev", (await json(fixed)).rev, 5);
     eq("...and the stored document is an object from then on",
       JSON.parse(readFileSync(path, "utf8")).state.title, "Mended");
+
+    const doomed = stored("stored-array-doomed", [{ title: "Array script" }]);
+    const gone = await fetch(sShape.base + "api/docs/stored-array-doomed", { method: "DELETE", headers: auth });
+    eq("a document stored as an array can be deleted", gone.status, 200);
+    check("...and its file is gone", !existsSync(doomed));
   }
 
   const cmtUrl = (docId) => sShape.base + "api/docs/" + docId + "/comments";
