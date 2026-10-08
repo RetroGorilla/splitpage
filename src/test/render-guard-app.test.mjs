@@ -14,7 +14,7 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const autosave = await import("../js/14-export.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
-const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { openProjectFile, reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
 const { openLongDemo } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 
@@ -90,11 +90,18 @@ function fresh(title) {
   flushEdits();
   render();
   clearDirty();
+  updateFileChip();
+  document.getElementById("identity-name").textContent = "Stale name";
   S.lastMergeUndo = null;
   for (const id of ["merge-banner", "merge-undo", "merge-review"]) document.getElementById(id).hidden = true;
   document.querySelectorAll("#rows .just-merged").forEach((el) => el.classList.remove("just-merged"));
   quiet();
   return S.state;
+}
+
+function chipText(chipId, partIds) {
+  const chip = document.getElementById(chipId);
+  return chip.hidden ? null : partIds.map((id) => document.getElementById(id).textContent).join(" ");
 }
 
 function bookkeeping() {
@@ -110,6 +117,8 @@ function bookkeeping() {
     undoPoint: !!S.lastMergeUndo,
     highlighted: Array.from(document.querySelectorAll("#rows .row.just-merged")).map((el) => el.getAttribute("data-id")),
     sessionHoldsIt: held() === S.state,
+    fileChip: chipText("file-chip", ["file-chip-name", "file-chip-state"]),
+    identityChip: chipText("identity-chip", ["identity-name"]),
     heard: heard.slice(),
     server: asked.filter((a) => /^(GET|PUT) api\/docs\//.test(a)),
     title: S.state.title,
@@ -290,6 +299,8 @@ test("opening a server document whose render throws still opens it and says so (
   }, () => openServerDoc("doc-open"));
   assert.equal(seen.value, true);
   assert.deepEqual(seen.more, ["server", "doc-open"]);
+  assert.equal(seen.book.fileChip, "On the server · v4, everyone sees this");
+  assert.notEqual(seen.book.identityChip, "Stale name");
   assert.deepEqual(seen.book.toasts, ["Opened Hosted from the server — # scenes"]);
 });
 
@@ -352,6 +363,35 @@ test("the redraw toast is a sticky error with a Redraw button: Redraw while rend
   assert.equal(redrawToasts().length, 0);
   assert.equal(document.getElementById("doc-title").value, "Redrawn");
   assert.equal(cell().textContent, "Theirs, redrawn.");
+});
+
+test("a redraw toast still on screen goes away when a later update draws cleanly, and a toast of another kind stays (#418)", async () => {
+  const doc = fresh("Stale toast");
+  const theirs = cloneState(doc);
+  theirs.title = "Drawn later";
+  const unbreak = breakRender("early");
+  try {
+    await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+  } finally {
+    unbreak();
+  }
+  assert.equal(redrawToasts().length, 1);
+  const other = document.createElement("div");
+  other.className = "toast ok";
+  other.textContent = "Another toast";
+  toastHost().appendChild(other);
+  const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+  assert.deepEqual(clean.logged, []);
+  assert.equal(document.getElementById("doc-title").value, "Drawn later");
+  assert.equal(redrawToasts().length, 0, "the redraw toast is gone after a clean draw");
+  assert.ok(shown().includes(other), "another toast is untouched");
+  const unbreakAgain = breakRender("early");
+  try {
+    await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+  } finally {
+    unbreakAgain();
+  }
+  assert.equal(redrawToasts().length, 1, "a later failure offers Redraw again");
 });
 
 test("a desktop file draft over an untouched file whose render throws still restores the changes and marks them unsaved (#418)", async () => {

@@ -692,6 +692,7 @@ var redrawToast = null;
 export function renderAbsorbed() {
   try {
     render();
+    if (redrawToast && redrawToast.isConnected) redrawToast.dismiss();
     return true;
   } catch (e) {
     if (window.console) console.error(e);
