@@ -405,6 +405,10 @@ function guardWriterEdit(e) {
   e.preventDefault();
   e.stopPropagation();
   refuseWriterEdit();
+  if (e.type === "input") {
+    renderWriter();
+    document.getElementById("writer-title").value = S.state.title || "";
+  }
 }
 
 export function __init() {

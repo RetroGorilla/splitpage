@@ -444,3 +444,110 @@ test("back in edit mode the Writer types, splits and formats again", async () =>
   await settle();
   writer.closeWriter();
 });
+
+function composeInto(p, text) {
+  p.setAttribute("contenteditable", "true");
+  p.focus();
+  p.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+  const node = lastText(p);
+  node.data += text;
+  const r = document.createRange();
+  r.setStart(node, node.data.length);
+  r.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+  p.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: text, isComposing: true }));
+  const now = para(p.getAttribute("data-id"));
+  now.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: text }));
+}
+
+const COMPOSED = String.fromCharCode(0x3042);
+
+test("composition text that lands in a Writer paragraph not yet redrawn read-only is put back, so a focusout saves nothing", async () => {
+  await writerInReview();
+  untouched(() => {
+    composeInto(para("r1"), COMPOSED);
+    para("r1").dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+  });
+  assert.equal(S.state.rows[0].audioText, "Hello there");
+  assert.equal(para("r1").textContent, "Hello there");
+  assert.equal(para("r1").getAttribute("contenteditable"), "false");
+  toEdit();
+  writer.closeWriter();
+});
+
+test("composition text that lands in a Writer paragraph not yet redrawn read-only is put back, so closing the Writer saves nothing", async () => {
+  await writerInReview();
+  untouched(() => {
+    composeInto(para("r2"), COMPOSED);
+    writer.closeWriter();
+  });
+  assert.equal(writer.writerOpen, false);
+  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  toEdit();
+});
+
+test("a refused composition in the Writer title not yet redrawn read-only gives the title back from the model", async () => {
+  await writerInReview();
+  const title = document.getElementById("writer-title");
+  title.readOnly = false;
+  title.focus();
+  assert.equal(document.activeElement, title);
+  untouched(() => {
+    title.value = "Writer in review" + COMPOSED;
+    title.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: COMPOSED, isComposing: true }));
+  });
+  oneRefusal();
+  assert.equal(title.value, "Writer in review");
+  assert.equal(title.readOnly, true);
+  assert.equal(S.state.title, "Writer in review");
+  assert.equal(document.getElementById("doc-title").value, "Writer in review");
+  toEdit();
+  writer.closeWriter();
+});
+
+test("cutting and pasting with the selection inside bold text in the Writer in review mode are refused", async () => {
+  await writerInReview();
+  const p = para("r2");
+  p.innerHTML = "Alpha <b>bravo</b>";
+  const bold = p.querySelector("b");
+  p.focus();
+  selectText(p, 7, 10);
+  const cutStore = untouched(() => clip("cut", bold));
+  oneRefusal();
+  assert.equal(cutStore["text/plain"], undefined);
+  clock += 3_000;
+  selectText(p, 7, 10);
+  untouched(() => clip("paste", bold, { "text/plain": "PASTED", "text/html": "<i>PASTED</i>" }));
+  oneRefusal();
+  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  toEdit();
+  writer.closeWriter();
+});
+
+test("the gutter-mode and export buttons keep working in the Writer in review mode: no toast", async () => {
+  await writerInReview();
+  const writerEl = document.getElementById("writer");
+  const before = writerEl.getAttribute("data-gutter");
+  host().textContent = "";
+  document.getElementById("wr-gutter-mode").click();
+  assert.notEqual(writerEl.getAttribute("data-gutter"), before);
+  assert.equal(toasts().length, 0);
+  document.getElementById("wr-gutter-mode").click();
+  document.getElementById("wr-gutter-mode").click();
+  assert.equal(writerEl.getAttribute("data-gutter"), before);
+  const realDesktop = S.DESKTOP;
+  let asked = 0;
+  S.DESKTOP = { saveFileDialog: async () => { asked++; return null; } };
+  try {
+    document.getElementById("wr-export").click();
+    for (let i = 0; i < 400 && !asked; i++) await settle();
+  } finally {
+    S.DESKTOP = realDesktop;
+  }
+  assert.equal(asked, 1);
+  assert.equal(toasts().length, 0);
+  toEdit();
+  writer.closeWriter();
+});
