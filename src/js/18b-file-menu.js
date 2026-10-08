@@ -4,7 +4,7 @@ import { readDefaultWpm, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
+import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
@@ -348,7 +348,7 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   S.docIdWrittenOut = false;
   resetProductionPanelState();
   clearDirty();
-  render();
+  renderAbsorbed();
   applyReviewMode();
   updateIdentityChip();
   updateFileChip();

@@ -1,8 +1,8 @@
 import { S } from "./_state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
+import { findRowIndex, getEditorName } from "./03-sync.js";
 import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
-import { clampRange, deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
+import { syncCommentAnchors } from "./04c-doc-model.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
@@ -12,6 +12,8 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
+import { cellHtml, mediaHalves, splitSceneCommand, textCut } from "../application/commands/split-join.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../core/document/gallery.ts";
@@ -48,29 +50,19 @@ export function addRowAndFocus(afterId, field) {
 }
 
 export function splitRowFieldCore(cellEl) {
-  var idx = findRowIndex(cellEl.getAttribute("data-id"));
+  var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
-  if (idx === -1 || (field !== "visualText" && field !== "audioText")) return null;
+  if (findRowIndex(id) === -1 || (field !== "visualText" && field !== "audioText")) return null;
   syncFieldFromDom(cellEl);
   var sel = cellSelection(cellEl);
   if (!sel) return null;
   breakUndoCoalescing();
-  var row = S.state.rows[idx];
-  var html = row[field] || "";
-  var cell = fromHtml(html);
-  var cut = clampRange(cell, sel.from, sel.to);
-  var halves = /<img|video-embed-card/.test(html)
-    ? splitMediaCellInDom(cellEl)
-    : splitCell(deleteRange(cell, cut.from, cut.to), cut.from).map(function (c) { return toHtml(c); });
-
-  row[field] = halves[0];
-  stampRow(row);
-  var created = { id: makeId(), visualText: "", imageRef: null, audioText: "",
-                   status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
-  created[field] = halves[1];
-  S.state.rows.splice(idx + 1, 0, created);
-  syncCommentAnchors(S.state);
-  return { idx: idx, created: created, field: field };
+  var html = readSession(cellHtml(id, field)) || "";
+  var at = /<img|video-embed-card/.test(html) ? splitMediaCellInDom(cellEl) : textCut(sel.from, sel.to);
+  var createdId = makeId();
+  var outcome = runCommand(splitSceneCommand(id, field, at, createdId, sessionTextPorts));
+  if (outcome.kind === "failed") throw outcome.error;
+  return outcome.kind === "applied" ? { id: createdId, field: field } : null;
 }
 
 function splitMediaCellInDom(cellEl) {
@@ -81,15 +73,14 @@ function splitMediaCellInDom(cellEl) {
   tail.setEnd(cellEl, cellEl.childNodes.length);
   var holder = document.createElement("div");
   holder.appendChild(tail.extractContents());
-  return [sanitizeHtml(cellEl.innerHTML), sanitizeHtml(holder.innerHTML)];
+  return mediaHalves(sanitizeHtml(cellEl.innerHTML), sanitizeHtml(holder.innerHTML));
 }
 
 export function splitCellField(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  markDirty();
   render();
-  focusRowField(res.created.id, res.field, 0);
+  focusRowField(res.id, res.field, 0);
 }
 
 export function focusRowField(rowId, field, offset) {

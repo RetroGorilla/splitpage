@@ -32,7 +32,7 @@ import {
   sidePanelOpening
 } from "./03b-side-panels.js";
 import { safeId } from "./04-richtext.js";
-import { render } from "./05-render.js";
+import { render, renderAbsorbed } from "./05-render.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import {
@@ -120,7 +120,7 @@ async function restoreSnapshot(id, opts) {
     adoptRestoredState(parsed);
     resetProductionPanelState();
     markAbsorbedDirty("recovery");
-    render();
+    renderAbsorbed();
     closeHistoryPanel();
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
     if (!opts.local) queueAutoSave();
@@ -853,7 +853,7 @@ export function applyMerge(opts) {
       baseStateWhy = "merge: " + (opts.source || "");
       S.baseState = typeof opts.newBase === "function" ? opts.newBase() : opts.newBase;
     }
-    render();
+    renderAbsorbed();
     if (opts.chips) { updateIdentityChip(); updateFileChip(); }
     if (result) {
       if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave, kind: kind });
