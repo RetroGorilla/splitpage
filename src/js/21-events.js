@@ -24,7 +24,6 @@ import {
   updateIdentityChip
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
-import { normalizeEditorName } from "../core/document/fields.ts";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
 import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
@@ -162,12 +161,14 @@ import {
   toggleBulkTag
 } from "./09-find-replace.js";
 import {
+  AUTHOR_NAME_FIELDS,
   armDeleteComment,
   captureReplyDrafts,
   closeCommentComposer,
   closeCommentsPanel,
   jumpToAnchor,
   jumpToComment,
+  limitAuthorNameField,
   openCommentsPanel,
   postComment,
   postReply,
@@ -314,7 +315,7 @@ var REVIEW_SAFE_ACTIONS = {
 };
 
 export function toastLastEditor(loaded) {
-  if (loaded.lastEditedBy && loaded.lastEditedBy !== normalizeEditorName(getEditorName())) {
+  if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
     showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
   }
 }
@@ -1203,6 +1204,10 @@ function init() {
       detectServer();
       return applyTakenDraft(t);
     });
+  });
+
+  document.addEventListener("input", function (e) {
+    if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
   });
 
   var rowsEl = document.getElementById("rows");

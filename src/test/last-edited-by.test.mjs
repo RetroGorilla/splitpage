@@ -19,13 +19,13 @@ for (const [label, value] of [["a number", 42], ["an object", { name: "Sam" }], 
   });
 }
 
-test("lastEditedBy: a very long name is cut to 80 characters", () => {
-  assert.equal(load("x".repeat(5000)).lastEditedBy, "x".repeat(80));
+test("lastEditedBy: a very long name is cut to 30 characters", () => {
+  assert.equal(load("x".repeat(5000)).lastEditedBy, "x".repeat(30));
 });
 
 test("lastEditedBy: a cut never lands inside an emoji", () => {
-  const name = load("x".repeat(79) + GRIN + " tail").lastEditedBy;
-  assert.equal(name, "x".repeat(79) + GRIN);
+  const name = load("x".repeat(29) + GRIN + " tail").lastEditedBy;
+  assert.equal(name, "x".repeat(29) + GRIN);
   assert.doesNotMatch(name, LONE);
 });
 
@@ -53,7 +53,7 @@ test("lastEditedBy: loading never throws", () => {
 });
 
 test("lastEditedBy: a second load changes nothing", () => {
-  for (const v of ["x".repeat(500), "Sam " + GRIN.slice(0, 1), "x".repeat(79) + GRIN + "y", 7, null, "Ann"]) {
+  for (const v of ["x".repeat(500), "Sam " + GRIN.slice(0, 1), "x".repeat(29) + GRIN + "y", 7, null, "Ann"]) {
     const once = load(v);
     const twice = migrateRows(JSON.parse(JSON.stringify(once)));
     assert.equal(JSON.stringify(twice), JSON.stringify(once));
@@ -70,7 +70,7 @@ test("lastEditedBy: a merge carries a cleaned name from the other side", () => {
   const mine = { ...base, rev: 2, lastEditedBy: "Mine" };
   const theirs = { ...base, rev: 3, lastEditedBy: "x".repeat(300) + GRIN.slice(0, 1) };
   const merged = mergeStates(base, mine, theirs);
-  assert.equal(merged.merged.lastEditedBy, "x".repeat(80));
+  assert.equal(merged.merged.lastEditedBy, "x".repeat(30));
 });
 
 test("lastEditedBy: the name the opening toast shows is a sane name", async () => {
@@ -81,7 +81,7 @@ test("lastEditedBy: the name the opening toast shows is a sane name", async () =
   document.body.appendChild(el);
   try {
     const loaded = await loadInitialState();
-    assert.equal(loaded.lastEditedBy, "x".repeat(80));
+    assert.equal(loaded.lastEditedBy, "x".repeat(30));
   } finally {
     el.remove();
   }

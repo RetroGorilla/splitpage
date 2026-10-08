@@ -1,4 +1,4 @@
-import { normalizePersonColors, PERSON_NAME_MAX } from "./person-colors.ts";
+import { normalizePersonColors } from "./person-colors.ts";
 import { cappedName } from "./text-policy.ts";
 import { DEFAULT_WPM, normalizeTargetLength, normalizeWordsPerMinute } from "./timing.ts";
 
@@ -28,8 +28,10 @@ export interface StateField {
   undo: boolean;
 }
 
+export const EDITOR_NAME_MAX = 30;
+
 export function normalizeEditorName(v: unknown): string | undefined {
-  return typeof v === "string" ? cappedName(v, PERSON_NAME_MAX) || undefined : undefined;
+  return typeof v === "string" ? cappedName(v, EDITOR_NAME_MAX) || undefined : undefined;
 }
 
 const FIELDS: StateField[] = [
