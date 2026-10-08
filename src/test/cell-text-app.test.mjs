@@ -11,7 +11,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { syncFieldFromDom, handleToolbarCmd } = await import("../js/05-render.js");
-const { undo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
+const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
@@ -485,6 +485,76 @@ test("#380: a composition start that never ended does not reach back past the ne
   compose(el, "compositionend", "");
   await settle();
   assert.deepEqual(undoSizes(), { undo: 2, redo: 0 }, "the typing before the second composition keeps its two steps");
+});
+
+async function undoneBang() {
+  clock += 5;
+  typeChar(cellOf("r1", "audioText"), "!");
+  await settle();
+  clock += 5000;
+  assert.equal(undo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there");
+}
+
+test("after an undo, typing a letter and deleting it within a second gives redo back, so Ctrl+Y redoes; typing that stays still clears it", async () => {
+  await open();
+  await undoneBang();
+  const sizes = undoSizes();
+  assert.equal(sizes.redo, 1);
+  const el = cellOf("r3", "audioText");
+  clock += 5;
+  typeChar(el, "x");
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: sizes.undo + 1, redo: 0 });
+  clock += 5;
+  setText(el, "Three.", { inputType: "deleteContentBackward" });
+  await settle();
+  assert.deepEqual(undoSizes(), sizes);
+  assert.equal(redo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
+  assert.equal(undo().ok, true);
+  clock += 5000;
+  typeChar(el, "y");
+  await settle();
+  clock += 5;
+  typeChar(el, "z");
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: sizes.undo + 1, redo: 0 }, "typing that leaves a step clears redo, as before");
+});
+
+for (const end of ["edge", "firefox", "safari"]) {
+  test(`after an undo, a slow cancelled composition gives redo back (${end} event order)`, async () => {
+    await open();
+    await undoneBang();
+    const sizes = undoSizes();
+    const el = cellOf("r3", "audioText");
+    el.focus();
+    await slowComposition(el, "Three.", ["ね", "ねこ"], end);
+    assert.equal(row("r3").audioText, "Three.");
+    assert.deepEqual(undoSizes(), sizes);
+    assert.equal(redo().ok, true);
+    assert.equal(row("r1").audioText, "Hello there!");
+  });
+}
+
+test("after an undo, a slow cancelled composition that joined earlier typing gives redo back and leaves that typing as its one step", async () => {
+  await open();
+  const el = cellOf("r3", "audioText");
+  clock += 5;
+  typeChar(el, "a");
+  await settle();
+  clock += 10;
+  typeChar(cellOf("r1", "audioText"), "!");
+  await settle();
+  clock += 10;
+  assert.equal(undo().ok, true);
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 1 });
+  await slowComposition(el, "Three.a", ["ね", "ねこ"], "edge", 5);
+  assert.equal(row("r3").audioText, "Three.a");
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 1 });
+  assert.equal(lastUndoEntry().steps[0].after, "Three.a");
+  assert.equal(redo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
 });
 
 const scriptCell = (where, id) => where === "writer" ? document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]') : cellOf(id, "audioText");
