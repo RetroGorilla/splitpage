@@ -238,7 +238,7 @@ export function createUndoHistory() {
   }
 
   function unpark(text) {
-    if (!backAtPark(text)) return;
+    if (undone.length || !backAtPark(text)) return;
     for (var i = 0; i < parked.redo.length; i++) undone.push(parked.redo[i]);
     parked = null;
   }
