@@ -198,8 +198,7 @@ function onlyCell(steps) {
   return s.op === "rowField" && TEXT_KEYS[s.key] ? s.rowId + "\u0000" + s.key : null;
 }
 
-function insertedText(step) {
-  var a = projectionOf(step.before), b = projectionOf(step.after);
+function insertedText(a, b) {
   var p = 0;
   while (p < a.length && p < b.length && a[p] === b[p]) p++;
   var sa = a.length, sb = b.length;
@@ -222,18 +221,38 @@ export function createUndoHistory() {
     undone.length = 0;
     var cell = onlyCell(steps);
     var last = done[done.length - 1];
+    var from = cell ? projectionOf(steps[0].before) : "", to = cell ? projectionOf(steps[0].after) : "";
+    var ins = cell ? insertedText(from, to) : "";
     if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
-      var ins = insertedText(steps[0]);
       var startsWord = /\S/.test(ins) && last.endsInSpace;
       if (!startsWord) {
         last.steps[0].after = steps[0].after;
         last.at = now;
         if (ins) last.endsInSpace = /\s$/.test(ins);
+        if (last.from === to && cosmetic(last.steps[0])) dropFrom(done.length - 1);
         return;
       }
     }
-    done.push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: cell ? /\s$/.test(insertedText(steps[0])) : false });
-    if (done.length > MAX_ENTRIES) done.shift();
+    var entry = { n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null };
+    done.push(entry);
+    if (done.length > MAX_ENTRIES) entry.evicted = done.shift();
+  }
+
+  function dropFrom(k) {
+    var gone = done.splice(k);
+    for (var i = gone.length - 1; i >= 0; i--) if (gone[i].evicted) done.unshift(gone[i].evicted);
+  }
+
+  function dropEmptySince(since) {
+    var k = done.length;
+    while (k > 0 && done[k - 1].n > since) k--;
+    if (k === done.length) return false;
+    var first = done[k], cell = onlyCell(first.steps);
+    for (var i = k; i < done.length; i++) if (!cell || onlyCell(done[i].steps) !== cell) return false;
+    var whole = { op: "rowField", key: first.steps[0].key, before: first.steps[0].before, after: done[done.length - 1].steps[0].after };
+    if (!cosmetic(whole)) return false;
+    dropFrom(k);
+    return true;
   }
 
   function step(from, to, state, invert) {
@@ -261,6 +280,7 @@ export function createUndoHistory() {
     }
     keep(done);
     keep(undone);
+    done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });
   }
 
   function standing(entry, hits) {
@@ -292,12 +312,7 @@ export function createUndoHistory() {
     standing: standing,
     amend: amend,
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
-    dropEmptySince: function (since) {
-      var last = done[done.length - 1];
-      if (!last || last.n <= since || !last.steps.every(cosmetic)) return false;
-      done.pop();
-      return true;
-    },
+    dropEmptySince: dropEmptySince,
     clear: function () { done.length = 0; undone.length = 0; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
     top: function () { return done[done.length - 1] || null; },
@@ -464,7 +479,7 @@ export function undoMark() { flushEdits(); history.breakCoalescing(); return his
 
 export function undoSerial() { flushEdits(); return history.mark(); }
 
-export function dropEmptyStepSince(since) { flushEdits(); return history.dropEmptySince(since); }
+export function dropEmptyStepsSince(since) { flushEdits(); return history.dropEmptySince(since); }
 
 export function caretAfterStep(step) {
   function domChars(h) {

@@ -436,6 +436,11 @@ One stack per tab, of step lists (§4). What counts as one entry:
 
 - **Typing** coalesces into one entry per word or per pause of 1 s, split
   also by caret jumps and by switching cells.
+- A typing entry that coalesces back to where it began (the same runs) is
+  dropped, so typing a letter and deleting it leaves no entry. A cancelled
+  IME composition drops every entry it made in its cell, however long its
+  updates took, whether `compositionend` comes before or after the input
+  that reverts the cell (#380, PR #427).
 - Every intercepted action is one entry:
   - a paste
   - a format

@@ -25,7 +25,7 @@ import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
 import { truncateForPreview } from "./11-import.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark } from "./12a-undo.js";
+import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
 import { htmlToPlainText } from "./14-export.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
 import { gallerySize, rowSlots, setRowSlots } from "../core/document/gallery.ts";
@@ -364,13 +364,13 @@ export function writerUndoStep(dir) {
     if (top && top.n > writerUndoMark) return false;
     var mark = writerUndoMark;
     closeWriter();
-    reopenOnRedo = { top: lastUndoEntry(), mark: mark, lifetime: undoLifetime() };
+    reopenOnRedo = { top: lastUndoEntry(), mark: mark, lifetime: undoLifetime(), serial: undoSerial() };
     return true;
   }
   var pending = reopenOnRedo;
   reopenOnRedo = null;
   if (!pending || dir !== "redo") return false;
-  if (undoLifetime() !== pending.lifetime || lastUndoEntry() !== pending.top) return false;
+  if (undoLifetime() !== pending.lifetime || lastUndoEntry() !== pending.top || undoSerial() !== pending.serial) return false;
   openWriter(pending.mark);
   return true;
 }
