@@ -1,16 +1,21 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 
+window.Element.prototype.scrollBy = function () {};
+window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
-const { render } = await import("../js/05-render.js");
-const { flushEdits } = await import("../js/12a-undo.js");
+const { renderAbsorbed, syncFieldFromDom } = await import("../js/05-render.js");
+const { flushEdits, lastUndoEntry, nextRedoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
+const writer = await import("../js/19-writer.js");
+const find = await import("../js/09-find-replace.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const autosave = await import("../js/14-export.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
@@ -88,7 +93,7 @@ function fresh(title) {
   answer = () => null;
   S.state = migrateRows(table304Document(title));
   flushEdits();
-  render();
+  renderAbsorbed();
   clearDirty();
   updateFileChip();
   document.getElementById("identity-name").textContent = "Stale name";
@@ -418,4 +423,264 @@ test("a desktop file draft over an untouched file whose render throws still rest
   assert.equal(seen.book.rows[0], "Typed before the crash.");
   assert.equal(seen.book.toasts.length, 1);
   assert.match(seen.book.toasts[0], /^Restored your unsaved changes to On disk/);
+});
+
+const STALE_PARTS = ["#rows", ".add-row-bar", "#doc-title", "#writer-title", "#writer-doc", "#writer .wr-fmt",
+  "#replace-input", "#find-replace", "#find-replace-all", "#find-tag-go", "#tag-ghost", "#tag-suggest"];
+const THEIRS = "Theirs, not drawn yet.";
+const cellOf = (id, field, root = "#rows") => document.querySelector(root + ' .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
+const inertParts = () => STALE_PARTS.flatMap((sel) => Array.from(document.querySelectorAll(sel)).map((el) => [sel, el.hasAttribute("inert")]));
+
+function textNodes(el) {
+  const walker = document.createTreeWalker(el, 4);
+  const out = [];
+  while (walker.nextNode()) out.push(walker.currentNode);
+  return out;
+}
+
+function select(el, from, to) {
+  const node = textNodes(el)[0];
+  const r = document.createRange();
+  r.setStart(node, from);
+  r.setEnd(node, to === undefined ? from : to);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+function typeChar(el, ch) {
+  el.focus();
+  const nodes = textNodes(el);
+  const node = nodes[nodes.length - 1];
+  node.data += ch;
+  const r = document.createRange();
+  r.setStart(node, node.data.length);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(r);
+  el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
+}
+
+function key(el, name, mods) {
+  el.dispatchEvent(new window.KeyboardEvent("keydown", Object.assign({ key: name, bubbles: true, cancelable: true }, mods || {})));
+}
+
+function carrying(type, el, field, data) {
+  const store = Object.assign({}, data);
+  const ev = new window.Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, field, {
+    value: { getData: (t) => store[t] || "", setData: (t, v) => { store[t] = v; }, files: [], types: Object.keys(store) }
+  });
+  el.dispatchEvent(ev);
+}
+
+function retitle(el, value) {
+  el.focus();
+  el.value = value;
+  el.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
+function findAndReplace(needle, replacement) {
+  find.openFindBar();
+  document.getElementById("find-input").value = needle;
+  document.getElementById("find-input").dispatchEvent(new window.Event("input", { bubbles: true }));
+  document.getElementById("replace-input").value = replacement;
+}
+
+function editState() {
+  return {
+    doc: JSON.stringify(S.state),
+    undo: undoSizes(),
+    top: JSON.stringify(lastUndoEntry() || null),
+    redo: JSON.stringify(nextRedoEntry() || null),
+    dirty: S.dirty,
+    saving: autosave.autoSaveIdleTimer,
+    heard: heard.slice()
+  };
+}
+
+const untimed = (s) => Object.assign({}, s, { saving: null });
+
+function sameEdits(now, before, label) {
+  assert.equal(now.saving, before.saving, label + ": autosave");
+  assert.deepEqual(untimed(now), untimed(before), label);
+}
+
+async function staleScreen(setup) {
+  fresh("Stale screen");
+  if (setup) await setup();
+  const theirs = cloneState(S.state);
+  theirs.title = "Theirs";
+  theirs.rows[1].audioText = THEIRS;
+  const unbreak = breakRender("early");
+  let out;
+  try {
+    out = await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+  } finally {
+    unbreak();
+  }
+  await idle();
+  assert.deepEqual(out.logged, [BROKE]);
+  assert.equal(S.state.rows[1].audioText, THEIRS);
+  assert.notEqual(cellOf("r2", "audioText").textContent.indexOf("Mara mends nets."), -1, "r2 still shows the old text");
+  assert.equal(redrawToasts().length, 1);
+}
+
+async function pressRedraw() {
+  const out = await logging(() => redrawToasts()[0].querySelector(".toast-action").click());
+  await idle();
+  assert.deepEqual(out.logged, []);
+  assert.equal(redrawToasts().length, 0);
+}
+
+function typedOnce() {
+  typeChar(cellOf("r1", "visualText"), "!");
+  flushEdits();
+  assert.equal(undoSizes().undo, 1);
+}
+
+const inWriter = (id) => cellOf(id, "audioText", "#writer-doc");
+const openTheWriter = () => { writer.openWriter(); };
+const closeTheWriter = () => { if (writer.writerOpen) writer.closeWriter(); };
+
+const EDITS = [
+  { name: "typing into the scene the update changed", act: () => typeChar(cellOf("r2", "audioText"), "x") },
+  { name: "pasting into a cell", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 5); carrying("paste", c, "clipboardData", { "text/plain": "Pasted " }); } },
+  { name: "cutting from a cell", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 0, 6); carrying("cut", c, "clipboardData", {}); } },
+  { name: "dropping text on a cell", act: () => carrying("drop", cellOf("r1", "audioText"), "dataTransfer", { "text/plain": "Dropped " }) },
+  { name: "splitting a scene (Alt+Enter)", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 6); key(c, "Enter", { altKey: true }); } },
+  { name: "moving a scene (Alt+Up)", act: () => { const c = cellOf("r2", "audioText"); c.focus(); select(c, 2); key(c, "ArrowUp", { altKey: true }); } },
+  { name: "adding a scene (Ctrl+Enter)", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 2); key(c, "Enter", { ctrlKey: true }); } },
+  { name: "a line break (Enter)", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 6); key(c, "Enter"); } },
+  { name: "bold (Ctrl+B)", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 0, 5); key(c, "b", { ctrlKey: true }); } },
+  { name: "the cell toolbar's Bold", act: () => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 0, 5); c.closest(".field-wrap").querySelector('.mini-toolbar [data-cmd="bold"]').click(); } },
+  { name: "the add-scene bar", act: () => document.querySelector(".add-row-bar .add-row-btn").click() },
+  { name: "typing a title", act: () => retitle(document.getElementById("doc-title"), "Typed title") },
+  { name: "undo (Ctrl+Z)", setup: typedOnce, act: () => key(document.body, "z", { ctrlKey: true }) },
+  { name: "redo (Ctrl+Y)", setup: () => { typedOnce(); undo(); }, act: () => key(document.body, "y", { ctrlKey: true }) },
+  { name: "redo (Ctrl+Shift+Z)", setup: () => { typedOnce(); undo(); }, act: () => key(document.body, "Z", { ctrlKey: true, shiftKey: true }) },
+  { name: "Replace in the find bar", act: () => { findAndReplace("Wide", "Far"); document.getElementById("find-replace").click(); }, teardown: () => find.closeFindBar() },
+  { name: "Enter in the find bar's replace box", act: () => { findAndReplace("Wide", "Far"); key(document.getElementById("replace-input"), "Enter"); }, teardown: () => find.closeFindBar() },
+  { name: "Replace all", act: () => { findAndReplace("Wide", "Far"); document.getElementById("find-replace-all").click(); }, teardown: () => find.closeFindBar() },
+  { name: "Tag all as… in the find bar", act: () => { findAndReplace("Wide", ""); find.openBulkTag(); find.pickBulkTagCat("prop"); document.getElementById("find-tag-go").click(); }, teardown: () => find.closeFindBar() },
+  { name: "typing in the Writer", setup: openTheWriter, act: () => typeChar(inWriter("r1"), "x"), teardown: closeTheWriter },
+  { name: "a new scene in the Writer (Enter)", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 6); key(p, "Enter"); }, teardown: closeTheWriter },
+  { name: "joining scenes in the Writer (Backspace)", setup: openTheWriter, act: () => { const p = inWriter("r2"); p.focus(); select(p, 0); key(p, "Backspace"); }, teardown: closeTheWriter },
+  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); S.writerLastCell = p; document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter },
+  { name: "typing the Writer's title", setup: openTheWriter, act: () => retitle(document.getElementById("writer-title"), "Writer title"), teardown: closeTheWriter }
+];
+
+for (const edit of EDITS) {
+  test("while the screen is stale after a failed render, " + edit.name + " is refused and changes nothing; after Redraw it edits (#443)", async () => {
+    try {
+      await staleScreen(edit.setup);
+      const before = editState();
+      const refused = await logging(async () => { await edit.act(); await idle(); });
+      assert.equal(refused.threw, null, edit.name + " threw: " + (refused.threw && refused.threw.stack));
+      assert.deepEqual(refused.logged, []);
+      sameEdits(editState(), before, edit.name + " on the stale screen");
+      assert.equal(redrawToasts().length, 1, "Redraw is still offered");
+      if (edit.teardown) edit.teardown();
+      await pressRedraw();
+      const drawn = editState();
+      const allowed = await logging(async () => { await edit.act(); await idle(); });
+      assert.equal(allowed.threw, null, edit.name + " threw after Redraw: " + (allowed.threw && allowed.threw.stack));
+      const now = editState();
+      assert.ok(now.saving !== drawn.saving || !isDeepStrictEqual(untimed(now), untimed(drawn)), edit.name + " edits once the screen is redrawn");
+    } finally {
+      if (edit.teardown) edit.teardown();
+    }
+  });
+}
+
+test("a stale screen makes the script, the titles and the editing controls inert and moves the focus from the script to Redraw, which keeps it until a Redraw draws and then gives it back (#443)", async () => {
+  await staleScreen(() => cellOf("r1", "audioText").focus());
+  const parts = inertParts();
+  assert.equal(parts.length, STALE_PARTS.length + 4, "every part is on the page: " + JSON.stringify(parts));
+  assert.deepEqual(parts.filter((p) => !p[1]), [], "every part is inert");
+  const toast = redrawToasts()[0];
+  assert.equal(toast.getAttribute("role"), "alert");
+  assert.equal(toast.hasAttribute("title"), false);
+  assert.equal(document.activeElement, toast.querySelector(".toast-action"));
+  toast.click();
+  await idle();
+  assert.deepEqual(redrawToasts(), [toast], "clicking the message does not dismiss it: only a Redraw that draws does");
+  const unbreak = breakRender("early");
+  let failed;
+  try {
+    failed = await logging(() => document.activeElement.click());
+  } finally {
+    unbreak();
+  }
+  assert.deepEqual(failed.logged, [BROKE]);
+  const again = redrawToasts();
+  assert.equal(again.length, 1);
+  assert.equal(document.activeElement, again[0].querySelector(".toast-action"), "the focus moves to the Redraw offered again");
+  assert.deepEqual(inertParts().filter((p) => !p[1]), [], "still inert");
+  await pressRedraw();
+  assert.deepEqual(inertParts().filter((p) => p[1]), [], "nothing is inert once Redraw draws");
+  assert.equal(document.activeElement, cellOf("r1", "audioText"), "the focus is back in the cell it left");
+  assert.equal(cellOf("r2", "audioText").textContent.indexOf(THEIRS), 0);
+});
+
+test("on a stale screen no editing event reaches the script's parts, while one aimed elsewhere does, and undo keys still reach a text box (#443)", async () => {
+  await staleScreen();
+  const TYPES = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart", "compositionstart", "pointerdown", "mousedown", "click"];
+  const reached = [];
+  const note = (e) => reached.push((e.currentTarget.id || e.currentTarget.className) + ":" + e.type);
+  const outside = document.createElement("div");
+  outside.id = "outside-the-script";
+  document.body.appendChild(outside);
+  const targets = STALE_PARTS.map((sel) => document.querySelector(sel)).concat([outside]);
+  try {
+    for (const el of targets) for (const type of TYPES) el.addEventListener(type, note);
+    for (const el of targets) for (const type of TYPES) el.dispatchEvent(new window.Event(type, { bubbles: true, cancelable: true }));
+    assert.deepEqual(reached, TYPES.map((type) => "outside-the-script:" + type), "only the element outside the script heard them");
+  } finally {
+    for (const el of targets) for (const type of TYPES) el.removeEventListener(type, note);
+    outside.remove();
+  }
+  const box = document.getElementById("find-input");
+  box.focus();
+  const ev = new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true });
+  box.dispatchEvent(ev);
+  assert.equal(ev.defaultPrevented, false, "a text box keeps its own undo");
+  await pressRedraw();
+});
+
+test("a later update that draws cleanly lifts the block without Redraw, and neither a failure nor the clean draw takes focus the user put outside the script (#443)", async () => {
+  await staleScreen(() => cellOf("r1", "audioText").focus());
+  const save = document.getElementById("btn-save");
+  save.focus();
+  const theirs = cloneState(S.state);
+  theirs.title = "Drawn by the next update";
+  const unbreak = breakRender("early");
+  try {
+    await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+  } finally {
+    unbreak();
+  }
+  assert.equal(redrawToasts().length, 1);
+  assert.equal(document.activeElement, save, "a second failure leaves the focus outside the script alone");
+  const clean = await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+  await idle();
+  assert.deepEqual(clean.logged, []);
+  assert.equal(redrawToasts().length, 0);
+  assert.deepEqual(inertParts().filter((p) => p[1]), []);
+  assert.equal(document.activeElement, document.getElementById("btn-save"));
+  typeChar(cellOf("r2", "audioText"), "x");
+  await idle();
+  assert.equal(S.state.rows[1].audioText, THEIRS + "x");
+});
+
+test("on a stale screen nothing copies a cell's stale text into the script, even a sync no refused event led to (#443)", async () => {
+  await staleScreen();
+  const cell = cellOf("r2", "audioText");
+  cell.textContent = "Mara mends nets. And more.";
+  const before = editState();
+  syncFieldFromDom(cell);
+  await idle();
+  sameEdits(editState(), before, "syncing the stale cell");
+  assert.equal(S.state.rows[1].audioText, THEIRS);
+  await pressRedraw();
+  assert.equal(cellOf("r2", "audioText").textContent, THEIRS);
 });

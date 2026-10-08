@@ -1730,6 +1730,7 @@
   .toast.warn::before { background: var(--accent); }
   .toast.error::before { background: var(--danger); }
   .toast.is-sticky { cursor: pointer; max-width: 340px; }
+  .toast.is-sticky.is-held { cursor: default; }
   .toast.has-action { gap: 12px; padding-right: 8px; }
   .toast-action {
     flex: none;
