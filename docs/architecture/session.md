@@ -124,6 +124,8 @@ The bridge supplies `CapabilityPort.edit` from `12-dirty-toast.js`: `reviewMode(
 - opening the length editor is not a command, so `openReadTimeEditor` shows D9's toast from its own `reviewMode()` check. The two refusals share the predicate and the wording;
 - the visible status lamp in a review copy has no `data-action`, so `onRootClick` in `21-events.js` routes a click on it to `cycleRowStatus`, and the command's refusal shows the toast. A forced or stale `cycle-status` button is still refused by the click guard with "Viewing only", and `REVIEW_SAFE_ACTIONS` is unchanged (Adam's decision (a) on #414).
 
+- the Writer refuses every edit in review mode with the shared "Viewing only" toast, one per two-second burst: typing, paste, cut, Enter, Backspace and Delete, the format buttons and chords, undo and redo, and the title. A capture listener on `#writer` in `19-writer.js` cancels the event before `21-events.js` sees it, asking `editAllowed()` (the bridge's `given.edit()`, live). Split and join are `needs: "edit"` as well, so a refusal that gets past the listener is `rejected` with `REVIEW_ONLY`. A composition `input` cannot be cancelled, so a refused `input` redraws the Writer and gives the title back from the model, which stops a later focusout or close from saving the composed text. The typing command stays `needs: "nothing"`.
+
 The capability check runs before planning, so in review mode a no-op or a scene that is gone also shows the toast.
 
 ### The text commands
@@ -133,8 +135,8 @@ Typing, split, join, paste and cut came in with 3.12 to 3.14. Each view decides 
 | Command (`name`) | `needs` | Plan returns `null`, or refuses, when | Declares |
 | --- | --- | --- | --- |
 | `cellTextCommand` (`set-cell-text`) | `nothing` | The scene is gone, or the stored string already equals the new one | The field, `updatedAt`, `updatedBy`; `derive` `production` and `broll`; `runsMoved` when the cell's comment ids change |
-| `splitSceneCommand` (`split-scene`) | `nothing` | The field is not `visualText` or `audioText`, or the scene is gone | The field and the two stamps; `rowsInserted` with the new scene's id |
-| `joinScenesCommand` (`join-scenes`) | `nothing` | Either scene is missing. Two scenes that both have a visual are refused (`both scenes have a visual`) | On the earlier scene: `audioText` and the two stamps, plus the seven visual cells when the later scene's visual is taken, plus `status` when the later status ranks higher; `rowsRemoved` with the later scene |
+| `splitSceneCommand` (`split-scene`) | `edit` | The field is not `visualText` or `audioText`, or the scene is gone | The field and the two stamps; `rowsInserted` with the new scene's id |
+| `joinScenesCommand` (`join-scenes`) | `edit` | Either scene is missing. Two scenes that both have a visual are refused (`both scenes have a visual`) | On the earlier scene: `audioText` and the two stamps, plus the seven visual cells when the later scene's visual is taken, plus `status` when the later status ranks higher; `rowsRemoved` with the later scene |
 | `pasteCommand` (`paste-into-cell`) | `edit` | The scene is gone, or the paste changes no text, attaches nothing and records no shot | The field when its text changes, the gallery fields when something attaches, the two stamps; `docFields` `brollShots` when a pasted key gets a record; `derive` `production` and `broll`; `runsMoved` for a cut's own comments |
 | `cutCommand` (`cut-from-cell`) | `edit` | The range is empty, the scene is gone, or the deletion changes nothing | The field and the two stamps; `derive` `production` and `broll`; never `runsMoved` |
 
@@ -278,7 +280,6 @@ View-level refusals need the booted app, because the toast and the click routing
 | The hide-shot grace is view state driven by the applied outcome, not an effect | By design (#414). The runtime cycle has 411 edges. At 3.9 it had 413, not the planned 412, because 01 still imports `12-dirty-toast.js` for the toast |
 | Effects and refresh functions are handed in at module evaluation, not `__init`; adoption hooks into 12a's `restart()`, not only `render()`'s `trackDocument()` | Differences from milestone-3.md's 3.6 wording, kept for the reasons in sections 2 and 5 |
 | Media cells cannot be expressed as runs, so the typing command takes `SanitisedMediaHtml` for them. `sanitisedMediaHtml()` does not sanitise; its only caller, `syncFieldFromDom`, does | Milestone 6 retires the variant (INV-10) |
-| Split and join are `needs: "nothing"`, and the Writer has no review-mode guard, so a Writer left open when the session turns to review still splits and joins | #450 (pinned by a test) |
 | A Writer split or join declares no `derive`, so it requests no production or b-roll refresh (the grid gets them from `render()`) | #451 |
 | Cut, then Ctrl+Z, then paste of that cut leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut. Same on the base | #460 |
 | An undo or redo of a composition's own updates and then a cancel can give back a redo that shows the cancelled text, in a browser whose composition survives Ctrl+Z (Firefox, Safari; Chromium ends it first). A co-editor's change reaching the cell during a composition makes the cancel keep its entries as made | #459; DOCUMENT-MODEL.md §7 records both. #436 and #446 are fixed by #448 |
