@@ -1,4 +1,4 @@
-import { cappedName } from "./text-policy.ts";
+import { settledNames } from "./text-policy.ts";
 
 export type PersonColors = Record<string, string>;
 
@@ -24,10 +24,12 @@ export function normalizePersonColors(raw: unknown): PersonColors | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const map = raw as Record<string, unknown>;
   const out: PersonColors = {}, seen: Record<string, boolean> = Object.create(null);
+  const keys = Object.keys(map).filter(function (name) { return !!paletteColor(map[name]); });
+  const names = settledNames(keys.map(function (name) { return name.replace(/[\x00-\x1f\x7f]/g, ""); }), PERSON_NAME_MAX, personKey);
   let n = 0;
-  Object.keys(map).forEach(function (name) {
+  keys.forEach(function (name, at) {
     if (n >= PERSON_MAP_MAX) return;
-    const clean = cappedName(String(name).replace(/[\x00-\x1f\x7f]/g, ""), PERSON_NAME_MAX);
+    const clean = names[at] as string;
     const color = paletteColor(map[name]);
     if (!clean || !color || clean === "__proto__" || clean === "constructor" || clean === "prototype") return;
     const key = personKey(clean);

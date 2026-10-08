@@ -6,6 +6,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { cappedText } from "../src/core/document/text-policy.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SERVER = join(ROOT, "server", "server.js");
@@ -1536,6 +1537,32 @@ try {
     eq("resolving a comment that is not there is 404", missing.status, 404);
     const nonsense = await patch(doc.id, editToken, "n1", { resolved: "yes" });
     eq("...and a resolve that is not a boolean is 400", nonsense.status, 400);
+  }
+
+  {
+    const grin = String.fromCodePoint(0x1F600);
+    const names = [
+      "a" + grin.repeat(50), "x".repeat(79) + grin + "y", "x".repeat(79) + " y", "  pad " + grin.repeat(90),
+      "x".repeat(79) + "\uD83D", "\uD83DAnn \uDE00", "<b>Bo</b>\u0001 " + grin, "\uD83D", "x".repeat(200)
+    ];
+    const want = names.map((n) => cappedText(n, 80) || "Anonymous");
+    const got = { author: [], assignee: [], reply: [], resolvedBy: [] };
+    for (let i = 0; i < names.length; i++) {
+      const id = "nm" + i;
+      const made = await json(await post(doc.id, editToken, { comment: note(id, { author: names[i], assignee: names[i] }) }));
+      got.author.push(made && made.comment.author);
+      got.assignee.push(made && (made.comment.assignee || "Anonymous"));
+      const replied = await json(await post(doc.id, editToken, { replyTo: id, reply: { id: "nr" + i, author: names[i], body: "r" } }));
+      got.reply.push(replied && replied.comment.replies[0].author);
+      const resolved = await json(await patch(doc.id, editToken, id, { resolved: true, by: names[i] }));
+      got.resolvedBy.push(resolved && (resolved.comment.resolvedBy || "Anonymous"));
+    }
+    for (const field of Object.keys(got)) {
+      check("a comment's " + field + " is cut by code point, the same as the app's cappedText (#344)",
+        JSON.stringify(got[field]) === JSON.stringify(want), JSON.stringify(got[field]));
+    }
+    const stored = (await readDocAs(doc.id, editToken)).state.comments.filter((c) => /^nm/.test(c.id));
+    check("...and stored that way", JSON.stringify(stored.map((c) => c.author)) === JSON.stringify(want));
   }
 
   {

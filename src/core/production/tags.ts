@@ -1,6 +1,6 @@
 import type { Frozen } from "../document/freeze.ts";
 import { idMap } from "../document/id-map.ts";
-import { cappedName, cappedText } from "../document/text-policy.ts";
+import { cappedName, cappedText, unitCutName } from "../document/text-policy.ts";
 import {
   TAG_STATUS_IDS,
   mintTagId,
@@ -12,7 +12,7 @@ import {
 } from "../document/tags.ts";
 import type { TagCategoryId, TagName, TagStatusId } from "../document/tags.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
-import { editCues } from "../text/cues.ts";
+import { cuesInCell, editCues } from "../text/cues.ts";
 import { retag, setMark } from "../text/edits.ts";
 import type { CellRange } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
@@ -148,6 +148,22 @@ export function missingRegistryTags(
     if (have[key]) return;
     have[key] = true;
     out.push({ cat: t.catId, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] });
+  });
+  return out;
+}
+
+export function cueCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): Record<string, string> {
+  const out: Record<string, string> = Object.create(null);
+  (rows || []).forEach(function (row) {
+    TAG_FIELDS.forEach(function (field) {
+      const html = row[field];
+      if (!readers.cueNamesInField(html).some(function (name) { return name.length >= 80; })) return;
+      cuesInCell(readers.cellOf(html as string)).forEach(function (c) {
+        const old = unitCutName(c.name, 80), name = cappedName(c.name, 80);
+        const key = normalizeTagName(old);
+        if (old !== name && key && !(key in out)) out[key] = name;
+      });
+    });
   });
   return out;
 }

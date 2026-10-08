@@ -11,7 +11,7 @@ const { applyTag, findOrAddPerson, openTagComposer, renameTag } = await import("
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
 const { addBrollProp } = await import("../js/08c-broll.js");
 const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
-const { COMMENT_NAME_KEY, setCommentAssignee } = await import("../js/10-comments.js");
+const { COMMENT_NAME_KEY, renderComments, setCommentAssignee } = await import("../js/10-comments.js");
 const { PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
 const { recordMyColor } = await import("../js/13a-presence.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
@@ -166,6 +166,46 @@ test("13a my colour is recorded under my name cut by code point (#344)", () => {
   const state = { personColors: null };
   assert.ok(recordMyColor(state));
   assert.deepEqual(state.personColors, { [x(79) + GRIN]: PERSON_COLORS[1] });
+});
+
+const OLD_CUTS = [
+  ["half an emoji", (n) => x(n - 1) + "\uD83D", (n) => x(n - 1) + GRIN + " tail", (n) => x(n - 1) + GRIN],
+  ["whole emoji only", (n) => GRIN.repeat(n / 2), (n) => GRIN.repeat(n), (n) => GRIN.repeat(n)]
+];
+
+function migrated(doc) {
+  S.state = migrateRows(Object.assign({ schema: 2, title: "Old cuts", comments: [], people: [{ id: "p1", name: "Ann" }], productionTags: [], brollShots: [] }, doc));
+  render();
+}
+
+for (const [what, stored, line, whole] of OLD_CUTS) {
+  test("a sound cue whose tag an older build cut by UTF-16 unit stays one tag, keeping its owner and notes: " + what + " (#344)", () => {
+    migrated({
+      rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: ' + line(80) + "</span>", visualText: "" }],
+      productionTags: [{ id: "t_old1", cat: "sound", name: stored(80), status: "have", owner: "p1", notes: "keep me" }]
+    });
+    const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+    assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", whole(80), "have", "p1", "keep me"]]);
+  });
+
+  test("an unkeyed B-roll line whose shot an older build cut by UTF-16 unit stays one shot, keeping its notes: " + what + " (#344)", () => {
+    migrated({
+      rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + line(200) }],
+      brollShots: [{ id: "bs1", name: stored(200), notes: "keep me", status: "shot", origin: "script" }]
+    });
+    assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes, b.status]), [["bs1", whole(200), "keep me", "shot"]]);
+  });
+}
+
+test("a comment over text that held a lone half is not marked Changed once the half is gone (#344)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: 'say <span class="cmt-anchor" data-cmt="c1">hi\uD83D there</span> now', visualText: "" }],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "hi\uD83D there", author: "Ann", body: "x", createdAt: "2026-10-01T10:00:00Z", kind: "anchor", replies: [] }]
+  });
+  renderComments();
+  assert.ok(document.querySelector('.comment-card[data-id="c1"]'), "the card is drawn");
+  assert.equal(document.querySelector('.comment-card[data-id="c1"] .comment-quote.changed'), null);
+  assert.equal(S.state.comments[0].quotedText, "hi there");
 });
 
 test("07 the tag composer offers the selected words cut by code point (#344)", () => {
