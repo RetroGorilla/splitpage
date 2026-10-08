@@ -204,6 +204,21 @@ function commentAnchoredAs(id) {
   });
 }
 
+function anchoredInText(id, target) {
+  return readSession(function (doc) {
+    return !!doc && doc.rows.some(function (row) {
+      return ["visualText", "audioText"].some(function (field) {
+        var cell = cellOf(typeof row[field] === "string" ? row[field] : "");
+        if (target && target.rowId === row.id && target.field === field && target.sel) {
+          var len = cellLength(cell);
+          cell = sliceCell(cell, 0, Math.min(target.sel.from, len)).concat(sliceCell(cell, Math.min(target.sel.to, len), len));
+        }
+        return commentIds(cell).indexOf(id) !== -1;
+      });
+    });
+  });
+}
+
 function liveCellHtml(cellEl) {
   var html = cellEl.innerHTML;
   if (html.indexOf("\u200B") !== -1) html = html.replace(/\u200B/g, "");
@@ -257,7 +272,8 @@ function pasteRequest(rowId, field, range, pasted, got, attach) {
 
 export function pasteIntoCell(cellEl, html, text, extra) {
   extra = extra || {};
-  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs, skipImages: !!extra.skipImages });
+  var target = { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), sel: cellSelection(cellEl) };
+  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: function (id) { return commentAnchoredAs(id) && !anchoredInText(id, target); }, skipImages: !!extra.skipImages });
   var attach = (extra.attach || []).slice();
   got.attach.forEach(function (item) { addAttachment(attach, item); });
   var rowId = cellEl.getAttribute("data-id");
