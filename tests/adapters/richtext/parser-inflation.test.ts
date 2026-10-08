@@ -63,11 +63,13 @@ test("the parsed paste is at most 8 code units per input code unit plus 4096, so
   }
 });
 
-test("a long link the parser reopens in every paragraph keeps its words and a line break per paragraph (#420)", () => {
-  const html = '<p><a href="https://x.test/' + "h".repeat(2000) + '">x' + "<p>y".repeat(500);
+test("a long link the parser reopens in every paragraph keeps its words and line breaks, as the paste would without the link (#420)", () => {
+  const lead = "<p><br></p><div>d</div><p></p><div><p>e</p></div>";
+  const html = lead + '<p><a href="https://x.test/' + "h".repeat(2000) + '">x' + "<p>y".repeat(500);
   const once = rt.sanitize(html);
   assert.ok(once.length <= 14 * html.length + 4096, String(once.length));
-  assert.equal(once, "x<br>" + "y<br>".repeat(500));
+  assert.equal(once, rt.sanitize(lead + "<p>x" + "<p>y".repeat(500)));
+  assert.equal(once, "<br>d<br><br>e<br><br>x<br>" + "y<br>".repeat(500));
 });
 
 test("formatting reopened across a few paragraphs is kept in each of them, as before (#420)", () => {
@@ -94,29 +96,36 @@ function closed(open: string, name: string): string {
   return open + "t</" + name + ">";
 }
 
+const DELIMITERS: readonly string[] = [" ", "\t", "\n", "\f", "\r", "/"];
+
+function quotedGreaterThan(i: number): string {
+  const forms = ['<b title="a>#">', '<b title = "a>#">', "<b title='a>#'>", "<b title= 'a>#'>"];
+  return (forms[Math.floor(i / 4)] as string).replace("#", String(i % 4));
+}
+
 function tierOne(lines: number): string {
   return [
-    Array.from({ length: 40 }, (_, i) => closed("<b id=" + String(i) + ">", "b")).join(""),
+    Array.from({ length: 42 }, (_, i) => closed("<" + (i % 7 ? "b" : "B") + (DELIMITERS[i % 6] as string) + "id=" + String(i) + ">", "b")).join(""),
     closed("<b>", "b").repeat(4),
     Array.from({ length: 3 }, (_, i) => closed('<a href="https://l.test/' + String(i) + '">', "a")).join(""),
-    Array.from({ length: 4 }, (_, i) => closed('<b title="a>' + String(i) + '">', "b")).join(""),
+    Array.from({ length: 16 }, (_, i) => closed(quotedGreaterThan(i), "b")).join(""),
     closed("<i x<y>", "i").repeat(4),
     "<br>".repeat(lines)
   ].join("");
 }
 
 test("formatting tags are parsed as written while their reopen bound is at most 8 per input code unit plus 4096, and lose the attributes the sanitiser never reads one code unit shorter (#420)", () => {
-  const at = onReopenEdge(52, tierOne, 0);
+  const at = onReopenEdge(66, tierOne, 0);
   const kept = rt.inertBody(at);
-  assert.equal(kept.querySelectorAll("b[id]").length, 40);
-  assert.equal(kept.querySelectorAll("b[title]").length, 4);
+  assert.equal(kept.querySelectorAll("b[id]").length, 42);
+  assert.equal(kept.querySelectorAll("b[title]").length, 16);
   assert.equal(kept.querySelectorAll("i").length, 4);
-  const short = onReopenEdge(52, tierOne, 1);
+  const short = onReopenEdge(66, tierOne, 1);
   const plain = rt.inertBody(short);
   assert.equal(plain.querySelectorAll("b[id], b[title]").length, 0);
-  assert.equal(plain.querySelectorAll("b").length, 44);
+  assert.equal(plain.querySelectorAll("b").length, 46);
   assert.equal(plain.querySelectorAll("i").length, 0);
-  assert.equal(count(rt.sanitize(short), /<strong>t<\/strong>/g), 44);
+  assert.equal(count(rt.sanitize(short), /<strong>t<\/strong>/g), 46);
   assert.equal(words(rt.sanitize(short)), words(short));
 });
 
@@ -131,20 +140,26 @@ function tierTwo(lines: number): string {
 }
 
 test("past the bound, formatting is kept while the tags without unread attributes fit it, and dropped, keeping every word, one code unit shorter (#420)", () => {
-  const at = rt.sanitize(onReopenEdge(34, tierTwo, 0));
+  const atHtml = onReopenEdge(34, tierTwo, 0);
+  const at = rt.sanitize(atHtml);
   assert.equal(count(at, /<em>t<\/em>/g), 60);
   assert.equal(count(at, /<strong>t<\/strong>/g), 30);
+  const unkept = Array.from(rt.inertBody(atHtml).querySelectorAll("code-"));
+  assert.deepEqual(unkept.map((el) => el.textContent), ["t", "t", "t", "t"]);
   const shortHtml = onReopenEdge(34, tierTwo, 1);
   const short = rt.sanitize(shortHtml);
   assert.equal(count(short, /<em>|<strong>/g), 0);
   assert.equal(count(short, /<a /g), 2);
   assert.equal(words(short), words(shortHtml));
+  const dropped = Array.from(rt.inertBody(shortHtml).querySelectorAll("b-, i-, code-"));
+  assert.equal(dropped.length, 94);
+  assert.ok(dropped.every((el) => el.textContent === "t"));
 });
 
 test("a bold tag that cancels its weight still does once its other attributes are dropped (#420)", () => {
   const trip = Array.from({ length: 300 }, (_, i) => "<i id=" + String(i) + ">t</i>").join("") + "<br>".repeat(300);
   for (const cancel of ['<b style="font-weight:normal;" id="docs-internal-guid-1">', "<STRONG class=y STYLE='font-weight: 400'>",
-    "<b style=font-weight:300 style=font-weight:bold>"]) {
+    "<b style=font-weight:normal style=font-weight:bold>"]) {
     const once = rt.sanitize(trip + cancel + "plain</b></strong>");
     assert.match(once, /<\/em>(<br>)+plain$/);
   }
