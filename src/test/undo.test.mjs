@@ -229,8 +229,9 @@ test("history: a merge that forgets the entry a drop would put back keeps it for
 
 test("history: dropEmptySince drops every entry since the mark when they are one cell's typing that ends where it began", () => {
   const h = createUndoHistory();
+  const early = h.markCell("r1", "audioText", "Third.");
   h.record(status("r9"), 0);
-  const mark = h.mark();
+  const mark = h.markCell("r1", "audioText", "Third.");
   h.record(typed("Third.", "Third.ね"), 5000);
   h.record(typed("Third.ね", "Third.ねこ"), 6100);
   h.record(typed("Third.ねこ", "Third."), 7200);
@@ -239,7 +240,7 @@ test("history: dropEmptySince drops every entry since the mark when they are one
   assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
   assert.deepEqual(h.top().steps, status("r9"));
   assert.equal(h.dropEmptySince(mark), false, "nothing is left since the mark");
-  assert.equal(h.dropEmptySince(0), false, "an entry older than the mark is never dropped");
+  assert.equal(h.dropEmptySince(early), false, "an entry older than the mark is never dropped");
   assert.equal(h.sizes().undo, 1);
 });
 
@@ -252,7 +253,7 @@ test("history: dropEmptySince keeps entries that end somewhere else, span two ce
   for (const steps of cases) {
     const h = createUndoHistory();
     h.record(status("r8"), 0);
-    const mark = h.mark();
+    const mark = h.markCell("r1", "audioText", "a");
     steps.forEach((s, i) => h.record(s, 5000 + i * 2000));
     const sizes = h.sizes();
     assert.equal(h.dropEmptySince(mark), false, JSON.stringify(steps));
@@ -263,7 +264,7 @@ test("history: dropEmptySince keeps entries that end somewhere else, span two ce
 test("history: dropEmptySince puts back the entries the dropped ones pushed out of 200", () => {
   const h = createUndoHistory();
   for (let i = 0; i < 200; i++) h.record(status("s" + i), i * 2000);
-  const mark = h.mark();
+  const mark = h.markCell("r1", "audioText", "a");
   h.record(typed("a", "ak"), 500000);
   h.record(typed("ak", "aか"), 502000);
   h.record(typed("aか", "a"), 504000);
@@ -276,6 +277,51 @@ test("history: dropEmptySince puts back the entries the dropped ones pushed out 
   assert.equal(h.undo(live).ok, true);
   assert.equal(h.undo(live).ok, true);
   assert.deepEqual(live.rows.slice(0, 3).map((r) => r.status), ["todo", "todo", "todo"]);
+});
+
+test("history: dropEmptySince decides against the cell's value at the mark, so a composition whose first update joined earlier typing drops its own entries and gives that typing back its own end", () => {
+  const h = createUndoHistory();
+  h.record(typed("Three.", "Three.か"), 0);
+  const mark = h.markCell("r1", "audioText", "Three.か");
+  h.record(typed("Three.か", "Three.かね"), 100);
+  h.record(typed("Three.かね", "Three.かねこ"), 1200);
+  h.record(typed("Three.かねこ", "Three.か"), 2300);
+  assert.equal(h.sizes().undo, 3);
+  assert.equal(h.dropEmptySince(mark), true);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  assert.deepEqual(h.top().steps, typed("Three.", "Three.か"));
+  h.record(typed("Three.か", "Three.かx"), 600);
+  assert.equal(h.sizes().undo, 1, "the typing's own time is back too, so a keystroke right after it still joins it");
+  const live = doc([row("r1", "Three.かx")]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Three.");
+  assert.equal(h.undo(live).empty, true);
+});
+
+test("history: dropEmptySince against the value at the mark keeps a joined composition that ends somewhere else, or reaches another cell", () => {
+  const h = createUndoHistory();
+  h.record(typed("Three.", "Three.か"), 0);
+  const mark = h.markCell("r1", "audioText", "Three.か");
+  h.record(typed("Three.か", "Three.かね"), 100);
+  h.record(typed("Three.かね", "Three."), 1200);
+  assert.equal(h.dropEmptySince(mark), false, "back to before the earlier typing is not back to the mark");
+  assert.equal(h.sizes().undo, 2);
+  const g = createUndoHistory();
+  g.record(typed("Three.", "Three.か"), 0);
+  const m2 = g.markCell("r1", "visualText", "");
+  g.record(typed("Three.か", "Three.かね"), 100);
+  g.record(typed("Three.かね", "Three.か"), 1200);
+  assert.equal(g.dropEmptySince(m2), false, "the mark was taken in another cell");
+  assert.equal(g.sizes().undo, 2);
+});
+
+test("history: an entry that pushes one out of 200 keeps only that one, not the chain of every entry pushed out before it", () => {
+  const h = createUndoHistory();
+  for (let i = 0; i < 2000; i++) h.record(typed("c" + i, "c" + i + "x", i % 2 ? "visualText" : "audioText").map((s) => Object.assign(s, { rowId: "r" + (i % 7) })), i * 2000);
+  assert.equal(h.sizes().undo, 200);
+  let depth = 0;
+  for (let e = h.top(); e.evicted; e = e.evicted) depth++;
+  assert.equal(depth, 1);
 });
 
 test("caretAfterStep: the end of what differs, in the DOM's text", () => {

@@ -370,10 +370,10 @@ test("Ctrl+Y after the Ctrl+Z that closed the Writer reopens it, but not once ty
   }
 });
 
-async function slowComposition(el, start, updates, end) {
+async function slowComposition(el, start, updates, end, firstGap) {
   compose(el, "compositionstart", "");
-  for (const text of updates) {
-    clock += 1100;
+  for (const [i, text] of updates.entries()) {
+    clock += i === 0 && firstGap !== undefined ? firstGap : 1100;
     setText(el, start + text, { inputType: "insertCompositionText", isComposing: true });
     await settle();
   }
@@ -486,6 +486,100 @@ test("#380: a composition start that never ended does not reach back past the ne
   await settle();
   assert.deepEqual(undoSizes(), { undo: 2, redo: 0 }, "the typing before the second composition keeps its two steps");
 });
+
+const scriptCell = (where, id) => where === "writer" ? document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]') : cellOf(id, "audioText");
+
+async function inPlace(where, fn) {
+  await open();
+  if (where === "writer") writer.openWriter();
+  try {
+    const el = scriptCell(where, "r3");
+    el.focus();
+    flushEdits();
+    await fn(el);
+  } finally {
+    if (writer.writerOpen) writer.closeWriter();
+  }
+}
+
+async function commitKa(el) {
+  compose(el, "compositionstart", "");
+  clock += 5;
+  setText(el, "Three.か", { inputType: "insertCompositionText", isComposing: true });
+  compose(el, "compositionend", "か");
+  await settle();
+}
+
+for (const [where, end] of [["grid", "edge"], ["grid", "firefox"], ["grid", "safari"], ["writer", "edge"]]) {
+  test(`#380: a slow cancelled composition that began right after a committed one in the same cell leaves that one as its only step, and Ctrl+Z does not bring the cancelled text back (${where}, ${end} event order)`, async () => {
+    await inPlace(where, async (el) => {
+      await commitKa(el);
+      assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+      await slowComposition(el, "Three.か", ["ね", "ねこ"], end, 5);
+      assert.equal(row("r3").audioText, "Three.か");
+      assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "the committed か is still exactly one step");
+      assert.equal(lastUndoEntry().steps[0].after, "Three.か");
+      assert.equal(undo().ok, true);
+      assert.equal(row("r3").audioText, "Three.");
+    });
+  });
+}
+
+for (const where of ["grid", "writer"]) {
+  for (const key of [null, 229]) {
+    test(`#380: a committed composition, then deleting it more than a second later ${key ? "with a keydown of keyCode 229 (Android)" : "with no keydown (the context menu's Delete)"}, keeps both steps (${where})`, async () => {
+      await inPlace(where, async (el) => {
+        await commitKa(el);
+        clock += 3000;
+        if (key) keydown(el, "Unidentified", key);
+        setText(el, "Three.", { inputType: "deleteContentBackward" });
+        await settle();
+        assert.equal(row("r3").audioText, "Three.");
+        assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+        assert.equal(undo().ok, true);
+        assert.equal(row("r3").audioText, "Three.か");
+      });
+    });
+  }
+
+  test(`#380: an end that committed nothing but left its text, then a real key's delete more than a second later, keeps the steps (${where})`, async () => {
+    await inPlace(where, async (el) => {
+      compose(el, "compositionstart", "");
+      clock += 1100;
+      setText(el, "Three.x", { inputType: "insertCompositionText", isComposing: true });
+      await settle();
+      compose(el, "compositionend", "");
+      await settle();
+      clock += 1100;
+      keydown(el, "Backspace", 8);
+      setText(el, "Three.", { inputType: "deleteContentBackward" });
+      await settle();
+      assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+    });
+  });
+
+  test(`#380: once the input after an end has been checked, later inputs with no key of their own are not checked against that composition again (${where})`, async () => {
+    await inPlace(where, async (el) => {
+      compose(el, "compositionstart", "");
+      clock += 5;
+      setText(el, "Three.x", { inputType: "insertCompositionText", isComposing: true });
+      await settle();
+      clock += 5;
+      compose(el, "compositionend", "");
+      setText(el, "Three.", { inputType: "deleteCompositionText", isComposing: false });
+      await settle();
+      assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
+      clock += 1100;
+      setText(el, "Three.y", { inputType: "insertFromPaste" });
+      await settle();
+      clock += 1100;
+      keydown(el, "Unidentified", 229);
+      setText(el, "Three.", { inputType: "deleteContentBackward" });
+      await settle();
+      assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+    });
+  });
+}
 
 test("every zero-width caret spot is stripped, not just the first: a cell with two video cards", async () => {
   await open();
