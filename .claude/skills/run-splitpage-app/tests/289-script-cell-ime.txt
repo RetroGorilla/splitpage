@@ -61,7 +61,7 @@ expect __cell('r3').textContent === 'Third.'
 expect __live('r3').audioText === 'Third.'
 eval U.flush()
 expect U.sizes().undo - window.__u0 === 0
-expect U.sizes().redo === 2
+expect U.sizes().redo === 1
 expect __ev.slice(-1).join(',') === 'compositionend'
 
 caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
@@ -74,7 +74,7 @@ ime cancel
 expect __live('r3').audioText === 'Third.'
 eval U.flush()
 expect U.sizes().undo - window.__u0 === 0
-expect U.sizes().redo === 2
+expect U.sizes().redo === 1
 key ctrl KeyZ
 expect __live('r3').audioText === 'Third.'
 expect __cell('r3').textContent === 'Third.'

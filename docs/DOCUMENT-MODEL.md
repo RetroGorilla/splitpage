@@ -445,9 +445,15 @@ One stack per tab, of step lists (§4). What counts as one entry:
   typing keeps its own entry as it was (#380, PR #427). A slow composition
   that replaced a selection keeps its entries when it is cancelled in a
   browser that doesn't put the selection back, such as Chromium (#436).
-  Typing that leaves no entry this way also gives back the redo it
-  cleared, even when that typing was undone or redone in between. If it
-  was undone, its own redo comes back on top of the older redo.
+  Typing that leaves a real step clears redo. Typing that leaves no entry
+  this way gives back only the redo that this same typing cleared, even
+  when that typing was undone or redone in between. Redo that earlier
+  typing cleared stays cleared: if a typed step was undone and a later
+  typing then drops, Ctrl+Y redoes that step and stops, because the
+  change undone before it belongs to a history without it. Known
+  limitation: if only part of the typing was undone before it drops (a
+  word-start entry, or a slow composition's later update), nothing comes
+  back and redo stays cleared, as it did before drops gave any back.
 - Every intercepted action is one entry:
   - a paste
   - a format

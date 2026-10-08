@@ -229,9 +229,8 @@ export function createUndoHistory() {
   }
 
   function park(top) {
-    var redo = backAtPark() ? parked.redo.concat(undone) : undone.slice();
     parked = {
-      redo: redo.length > MAX_ENTRIES ? redo.slice(redo.length - MAX_ENTRIES) : redo, top: top || null,
+      redo: undone.slice(), top: top || null,
       after: top && top.steps[0].after,
       text: top && onlyCell(top.steps) ? projectionOf(top.steps[0].after) : null
     };
