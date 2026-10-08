@@ -121,9 +121,9 @@ function soundRenames(tags: readonly Bag[], names: readonly string[], wanted: re
     if (t.cat === "sound" && names[at]) kept[nameKey(names[at] as string)] = true;
   });
   wanted.forEach(function (name, at) {
-    if (!name || names[at] !== name) return;
+    if (!name) return;
     const old = nameKey(cappedText((tags[at] as Bag).name, 80));
-    if (!old || kept[old]) return;
+    if (kept[old]) return;
     out[old] = name;
     any = true;
   });
@@ -134,8 +134,7 @@ function retagRenamedSounds(rows: readonly Bag[], renames: Record<string, string
   if (!renames) return;
   rows.forEach(function (r) {
     TAG_FIELDS.forEach(function (field) {
-      const html = r[field] as string;
-      if (html.indexOf("data-tag-name") !== -1) r[field] = retagMarks(html, "sound", renames, readers);
+      r[field] = retagMarks(r[field] as string, "sound", renames, readers);
     });
   });
 }
