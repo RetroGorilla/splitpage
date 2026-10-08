@@ -47,6 +47,12 @@ breakdown for props/locations/cast/VFX/sound.
   an ESM import binding is read-only, so they are properties of one exported
   object `S`. `src/js/_entry.js` is the bundle entry and the evaluation
   order.
+- **Seven edits go through `DocumentSession`** (milestone 3): scene length,
+  scene status, typing, split, join, cut and paste are commands in
+  `src/application/commands/`, run through `src/legacy/session-bridge.ts`.
+  Every other writer still assigns into `S.state` and calls `markDirty()`.
+  [docs/architecture/session.md](docs/architecture/session.md) describes the
+  session, the effect scheduler and the command shape as built.
 - **The shipped app must stay one self-contained file.** Save writes
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
   spliced into `#state-data` (`buildPublishHtml`, `PAGE_SHELL`). That's why
@@ -655,7 +661,10 @@ document. Only two operations change the row list: **`splitWriterRow()`**
 (Enter, via shared `splitRowFieldCore()`, §3.10) and **`mergeWriterRows()`**
 (Backspace/Delete at an edge; refuses when both rows have a visual; status
 accumulates by rank; the narration joined as models by `joinCells`, whose
-glue space stays inside a comment both sides are in). `caretAtEdge()` must not count empty inline wrappers —
+glue space stays inside a comment both sides are in). Both are views since
+milestone 3: they decide what the user asked, run `splitSceneCommand` or
+`joinScenesCommand` (`src/application/commands/split-join.ts`) through the
+session, and repaint. `caretAtEdge()` must not count empty inline wrappers —
 `Range.cloneContents()`'s empty `<strong></strong>` clone looked like
 content, blocking join on any scene starting with formatting.
 
@@ -675,10 +684,11 @@ original row. **`splitRowFieldCore(cellEl)`** is the shared core (reads
 `field` off `data-field`); `splitWriterRow()`/`splitCellField()` each add
 their own render/refocus. It splits the cell's model (#85): the caret as a
 model position (`cellSelection`), a selection deleted first, `splitCell`,
-each half written back with `toHtml`, the comments re-pointed by
-`syncCommentAnchors` (invariant #18) — one undo entry with the caller's
-`markDirty()`. A cell still holding a picture (pasted before design D7) is
-the one case still cut by a DOM range. Alt+Enter never reaches `onRootKeydown` inside the
+each half written back with `toHtml`, the comments re-pointed by the
+session's reconciliation (invariant #18) — one undo entry, written by
+`splitSceneCommand`, not by the caller. A cell still holding a picture
+(pasted before design D7) is the one case still cut by a DOM range
+(`splitMediaCellInDom`, which hands the two sanitised halves to the command). Alt+Enter never reaches `onRootKeydown` inside the
 writer (its capture handler treats every Enter as a split).
 
 `keepCaretInView(cellEl)` is a near-always-no-op scroll (only fires outside a
@@ -1511,11 +1521,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
    matches inside one.
 4. Absorbed in milestone 2.5: see INV-04 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-04--every-top-level-field-survives-migration-and-merge).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
-6. **Don't run document-wide scans per keystroke.** Wire expensive refreshes
-   through the one idle refresh (`scheduleIdleRefresh()` and its four
-   `schedule*()` wrappers, 180ms debounce, §3.16); `contentMemo()` keys on
-   the field's own HTML (never stale); the production index is derived once
-   per change (§3.4).
+6. Absorbed in milestone 3: see INV-06 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-06--no-document-wide-work-per-keystroke).
 7. **Repaint a row, don't re-render the document** for a single-row
    change: `renderRow(rowId)`, which repaints only the parts whose markup
    changed and never a field whose text did not (§3.16). `cycleRowStatus()`
@@ -1577,21 +1583,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     checks every panel against both modes. Writer and Present sit at
     `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
-18. **A comment's anchor is its `cmt` mark in the script; `rowId`/`field`
-    only say where that is, and one function keeps them saying it** (#85,
-    design §3.2). The mark is the `.cmt-anchor` span, and it moves with its
-    words because every path that moves words between rows moves them as
-    runs: a split (`splitRowFieldCore()`, `splitCell`), a join
-    (`mergeWriterRows()`, `joinCells`), a cut then paste
-    (05c-clipboard.js). Each then calls **`syncCommentAnchors(state)`**
-    (04c-doc-model.js) in the same undo entry, which points every comment
-    whose mark is somewhere at the first cell holding it, in document
-    order; a comment whose words are gone keeps what it had (detached).
-    `migrateRows()` calls it too, so every load and every merge — which
-    can bring one side's split against the other side's old `rowId` —
-    comes out in step. A new path that moves words between rows calls it;
-    nothing else may write a comment's `rowId`/`field` for an anchored
-    comment.
+18. Absorbed in milestone 3: see INV-18 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-18--a-comment-is-anchored-by-its-mark). A new path that moves words between rows is a session command that declares what it changes (`docs/architecture/session.md`); the scene-level paths of 05g, 05h and 06-rows still call `syncCommentAnchors(state)` themselves.
 19. **A full-screen overlay must own the focus and the stacking, not just
     the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
     `#writer` lets modals/toasts through.
@@ -1841,16 +1833,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
       stores blobs before snapshots (#49); file writers inline everything
       (#31, #32). Capture stays synchronous (#39) — only the job awaits.
 
-53. **Every edit of the document ends in `markDirty()`, and nothing that is
-    not an edit is recorded as one** (#85, `12a-undo.js`). The undo stack
-    learns about an edit by diffing after `markDirty()`, so an edit path
-    needs no undo code of its own — and a change that is not somebody's
-    edit must say so, or Ctrl+Z will take it back: a new document is
-    picked up by `render()` (`trackDocument`), someone else's merge by
-    `noteRemoteChange()` (called in `applyMerge`), a reload in place by
-    `absorbRemoteChange()`, and what an undo's own repaint heals by
-    `settleAfterApply()`. On a server document, a change to the comments
-    is never recorded (design D5).
+53. Absorbed in milestone 3: see INV-53 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-53--every-edit-is-recorded-once-nothing-else-is-recorded). The seven session commands record themselves; every other edit path still ends in `markDirty()`, and a change that is not somebody's edit must say so (the ledger row lists how).
 54. **A b-roll key's id is one line's** (`docs/DOCUMENT-MODEL.md` §3.3):
     `state.brollShots` records are found by it, so two keys sharing one
     make two lines claim one shot. A path that brings a key into the
@@ -1886,8 +1869,8 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     same edit). The merge is a base-aware set per shot (`mergeBrollProps`,
     03-sync.js): both sides' additions kept, a removal kept unless the
     other side still has it and did not have it in the base. A pasted copy
-    of a shot's line gets none of them (`recordPastedBroll` makes a fresh
-    record), exactly as it gets none of the status, notes or owner. A new
+    of a shot's line gets none of them (`pasteCommand`'s `pastedShots`, and
+    `recordPastedBroll` for a scene paste, make a fresh record), exactly as it gets none of the status, notes or owner. A new
     field on a shot record needs `migrateRows`, `mergeBrollShots` (which
     clones a shot whole and folds the other side in field by field) and
     `newBrollRecord`; `state-fields.test.mjs` checks the record's keys
@@ -1987,11 +1970,11 @@ evaluation order via `_entry.js`):
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
 | `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, `toMarkdown`, …), edits, steps and `mergeCells` |
-| `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
-| `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
+| `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept (it still writes the cell and calls `markDirty` itself, #452); `openCellEdit`/`closeCellEdit`, the DOM half the cut and paste commands share; `domToPos`/`posToDom` |
+| `05c-clipboard.js` | copy, cut, paste and drop in a script cell: the view of `pasteCommand` and `cutCommand` (`src/application/commands/clipboard.ts`, run through the session; an attachments-only paste runs outside `openCellEdit` and `closeCellEdit`, between its own undo-grouping breaks); a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
-| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
+| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync (`syncFieldFromDom`, the view of the typing command), rich-text commands (§3.16) |
 | `05g-scene-clip.js` | whole scenes on the clipboard (#204): the payload (`application/x-splitpage-scenes` JSON — the scenes and everything they name, comments, b-roll records, breakdown entries, owners, picture bytes up to `SCENE_BLOB_CAP`, 16 MiB, the rest by reference), the two-column table (the payload without bytes on its `data-splitpage-scenes` attribute) and labelled plain text; reading it back through `migrateRows`; `insertScenes` (fresh row/comment/reply ids, anchors renamed, a b-roll key's id kept only when free — invariant #54 — with its record, a live cut in the same document a move while none of its scenes are in it, so it follows undo) and `removeScenes` (comments re-pointed at words that stay) |
 | `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from 21-events.js's paste), each change one undo entry; a server document's pasted comments a second, unrecorded step (design D5) |
 | `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
