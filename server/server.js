@@ -401,6 +401,10 @@ const DOC_HEAD_MAX = 8192;
 
 const HEAD_TITLE_MAX = 512;
 
+function isDocState(state) {
+  return !!state && typeof state === "object" && !Array.isArray(state);
+}
+
 function headOf(doc) {
   const head = {};
   for (const key of Object.keys(doc)) {
@@ -823,7 +827,7 @@ async function openForComment(id) {
   const doc = await readDoc(id);
   if (!doc) return { error: { status: 404, body: { error: "not-found" } } };
   const state = doc.state;
-  if (!state || typeof state !== "object") {
+  if (!isDocState(state)) {
     return { error: { status: 409, body: { error: "no-state" } } };
   }
   if (!Array.isArray(state.comments)) state.comments = [];
@@ -1331,7 +1335,7 @@ async function handleApi(req, res, url) {
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
     if (scope) return sendJson(res, 403, { error: "owner-only" });
     const body = await readBody(req);
-    if (!body || typeof body.state !== "object" || body.state === null) {
+    if (!body || !isDocState(body.state)) {
       return sendJson(res, 400, { error: "bad-state" });
     }
     const createRefs = refsIn(body.state);
@@ -1492,7 +1496,7 @@ async function handleApi(req, res, url) {
       if (held && held.size) return sendJson(res, 426, { error: "client-too-old" });
     }
     const body = await readBody(req);
-    if (!body || typeof body.state !== "object" || body.state === null) {
+    if (!body || !isDocState(body.state)) {
       return sendJson(res, 400, { error: "bad-state" });
     }
     const putRefs = refsIn(body.state);
