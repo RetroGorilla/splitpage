@@ -144,11 +144,16 @@ Redraw draws", in `src/js/05-render.js`, `05b-cell-edit.js` and
   Against 3.15's end column, the only differences are one more frontend module
   and one more migrated module (`parse-bound.ts`, #453). The dependency gate
   passed in `npm run verify`.
-- Did not re-run the typing performance record. Typing p50 and p95 are
-  recorded at `391bda6`, not at `645df99`, and #456 touched the render path (the full runs and smokes above did run on that code).
-  Suite 67 (`67-render-perf.txt`) passed in both full runs above (43/43 plain,
+- Typing performance after #456 is covered by two comparisons, and this gate
+  did not take a separate re-measure (coordinator decision). #456's own typing
+  comparison against its base (round 1) showed no difference beyond run-to-run
+  noise. #466's comparison against `645df99` gives short p50 5.3 to 5.5 ms and
+  p95 14.9 to 15.6 ms, and long p50 7.3 to 7.7 ms and p95 20.2 to 15.8 ms.
+  These are within the run-to-run spread, with no long tasks. #453 does not
+  touch the typing path.
+- Suite 67 (`67-render-perf.txt`) passed in both full runs above (43/43 plain,
   44/44 frozen), but that is a pass/fail check, not the p50 and p95
-  comparison. Whether to re-measure is the coordinator's call.
+  comparison.
 
 ## Closing suite set
 
