@@ -1,4 +1,5 @@
-import { normalizePersonColors } from "./person-colors.ts";
+import { normalizePersonColors, PERSON_NAME_MAX } from "./person-colors.ts";
+import { cappedName } from "./text-policy.ts";
 import { DEFAULT_WPM, normalizeTargetLength, normalizeWordsPerMinute } from "./timing.ts";
 
 export const SCHEMA_VERSION = 2;
@@ -27,6 +28,10 @@ export interface StateField {
   undo: boolean;
 }
 
+function normalizeEditorName(v: unknown): string | undefined {
+  return typeof v === "string" ? cappedName(v, PERSON_NAME_MAX) || undefined : undefined;
+}
+
 const FIELDS: StateField[] = [
   { key: "title",          def: function () { return ""; }, merge: "title", undo: true },
   { key: "docId",          merge: "doc-id", undo: false },
@@ -37,7 +42,7 @@ const FIELDS: StateField[] = [
   { key: "brollShots",     def: function () { return []; }, merge: "list-union-with-base", undo: true },
   { key: "wordsPerMinute", def: function () { return DEFAULT_WPM; }, normalize: normalizeWordsPerMinute, merge: "changed-side-wins", undo: true },
   { key: "rev",            def: function () { return 0; }, merge: "max-plus-one", undo: false },
-  { key: "lastEditedBy",   merge: "theirs-wins", undo: false },
+  { key: "lastEditedBy",   normalize: normalizeEditorName, merge: "theirs-wins", undo: false },
   { key: "lastEditedAt",   merge: "theirs-wins", undo: false },
   { key: "personColors",   normalize: function (v) { return normalizePersonColors(v) || undefined; }, merge: "person-colors", undo: false },
   { key: "targetSeconds",  normalize: normalizeTargetLength, merge: "target-length", undo: true },
