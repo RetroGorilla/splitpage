@@ -7,7 +7,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { applyTag, findOrAddPerson, openTagComposer, renameTag } = await import("../js/07-production-tags.js");
+const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag, renameTag } = await import("../js/07-production-tags.js");
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
 const { addBrollProp } = await import("../js/08c-broll.js");
 const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
@@ -218,6 +218,14 @@ test("a comment over text that held a lone half is not marked Changed once the h
   assert.ok(document.querySelector('.comment-card[data-id="c1"]'), "the card is drawn");
   assert.equal(document.querySelector('.comment-card[data-id="c1"] .comment-quote.changed'), null);
   assert.equal(S.state.comments[0].quotedText, "hi there");
+});
+
+test("07 registerProductionTag cuts by code point and refuses a name that cleans to nothing (#344, #437)", () => {
+  load();
+  registerProductionTag("prop", "\uD83D");
+  registerProductionTag("prop", " " + x(79) + GRIN + " tail");
+  registerProductionTag("prop", "kettle\uD83D");
+  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["Kettle", x(79) + GRIN]);
 });
 
 test("07 the tag composer offers the selected words cut by code point (#344)", () => {

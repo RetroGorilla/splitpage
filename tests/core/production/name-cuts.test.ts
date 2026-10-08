@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { brollInCell, brollPropsInCell, brollSeedLocation } from "../../../src/core/production/broll.ts";
-import { bulkTagCell, missingRegistryTags, planQuickAdd, retagCell, tagFieldOccurrences } from "../../../src/core/production/tags.ts";
+import { bulkTagCell, missingRegistryTags, newRegistryTag, planQuickAdd, retagCell, tagFieldOccurrences } from "../../../src/core/production/tags.ts";
 import type { MediaTagWriter, TagState } from "../../../src/core/production/tags.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { toHtml } from "../../../src/core/text/html.ts";
@@ -19,6 +19,16 @@ const NO_MEDIA: MediaTagWriter = function () { throw new Error("no cell here hol
 function emptyDoc(): TagState & ValidatedDocument {
   return migratedThenSet({ rows: [{ id: "r1", visualText: EMPTY, audioText: EMPTY }], productionTags: [] } as TagState);
 }
+
+test("a new registry tag is named by cappedName, and a name that cleans to nothing is refused like an empty one (#344, #437)", () => {
+  const mug = [{ id: "t_mug", cat: "prop", name: "mug", owner: "", notes: "", status: "needed" }];
+  assert.equal(newRegistryTag([], "prop", "\uD83D"), null);
+  assert.equal(newRegistryTag([], "prop", " \uDE00 \uD83D "), null);
+  assert.equal(newRegistryTag(mug, "prop", "mug\uD83D"), null, "already in the registry once cleaned");
+  assert.equal(newRegistryTag([], "prop", " " + x(79) + GRIN + " tail")?.name, x(79) + GRIN);
+  assert.equal(newRegistryTag([], "prop", x(79) + "\uD83D")?.name, x(79));
+  assert.equal(newRegistryTag([], "prop", x(79) + " y")?.name, x(79));
+});
 
 test("a quick-add line is cut by code point, and a cut after a space keeps no space (#344, #419)", () => {
   const plan = planQuickAdd(emptyDoc(), readers, x(79) + GRIN + " tail\n" + x(78) + "z y\n" + x(77) + "\uD83D");
