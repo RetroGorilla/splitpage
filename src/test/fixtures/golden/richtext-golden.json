@@ -2217,22 +2217,16 @@
     },
     "lone surrogates": {
       "input": "x\ud800y \udc00z <b>\ud83d</b>",
-      "sanitized": "x\ud800y \udc00z <strong>\ud83d</strong>",
+      "sanitized": "xy z <strong></strong>",
       "fromHtml": [
         {
-          "text": "x\ud800y \udc00z ",
+          "text": "xy z ",
           "marks": {}
-        },
-        {
-          "text": "\ud83d",
-          "marks": {
-            "b": true
-          }
         }
       ],
       "media": [],
-      "toHtml": "x\ud800y \udc00z <strong>\ud83d</strong>",
-      "markdown": "x\ud800y \udc00z **\ud83d**",
+      "toHtml": "xy z ",
+      "markdown": "xy z ****",
       "markdownOfInput": "x\ud800y \udc00z **\ud83d**",
       "storedFromDom": "x\ud800y \udc00z <b>\ud83d</b>"
     },
