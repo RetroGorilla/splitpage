@@ -8,6 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createDialogHelpers, modalShownExpr } from "./smoke-dialogs.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, "..");
@@ -1017,7 +1018,8 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
       !!refusalToast && (await dialogsSeen(cdp)) === dialogsBeforeRefusal && !fs.existsSync(newSplitpagePath),
       "toast=" + JSON.stringify(refusalToast));
 
-    await evalPage(cdp, "document.getElementById('file-conflict-cancel').click()");
+    const conflictCancelClicked = await evalPage(cdp, "(function(){ if (!" + modalShownExpr("file-conflict-modal") + ") return false; document.getElementById('file-conflict-cancel').click(); return true; })()");
+    record(tag + ": the conflict dialog is still shown behind the refused Save As, and Cancel is clicked", conflictCancelClicked === true);
     const conflictClosed = await poll(cdp, "document.getElementById('file-conflict-modal').hidden === true", 5000).catch(() => false);
     record(tag + ": cancelling the conflict dialog closes it", !!conflictClosed);
     await poll(cdp, "document.querySelectorAll('.toast.error, .toast.warn').length === 0", 8000).catch(() => null);
@@ -4914,41 +4916,7 @@ async function presenceOthers(srv, token, docId) {
 
 const connOf = (cdp) => evalPage(cdp, "window.__hostedTest.conn()");
 
-async function connectTabViaDialog(cdp, srv, opts) {
-  const o = opts || {};
-  const js = "(function(){" +
-    "document.querySelector('#file-menu [data-file-action=\"servers\"]').click();" +
-    (o.mustShow ? "if (document.getElementById('connect-modal').hidden) return false;" : "") +
-    "document.getElementById('connect-name').value=" + JSON.stringify(o.name || ("Srv " + srv.port)) + ";" +
-    "document.getElementById('connect-url').value=" + JSON.stringify(srv.url) + ";" +
-    "document.getElementById('connect-pin').value=" + JSON.stringify(srv.pin || "") + ";" +
-    "document.getElementById('connect-remember').checked=" + (o.remember ? "true" : "false") + ";" +
-    (o.ssh
-      ? "var t=document.getElementById('connect-ssh-toggle');t.checked=true;t.dispatchEvent(new Event('change'));" +
-        "document.getElementById('connect-ssh-userhost').value=" + JSON.stringify(o.ssh.userHost) + ";" +
-        "document.getElementById('connect-ssh-remote').value=" + JSON.stringify(String(o.ssh.remotePort)) + ";" +
-        "document.getElementById('connect-ssh-local').value=" + JSON.stringify(String(o.ssh.localPort)) + ";"
-      : "") +
-    "document.querySelector('#connect-modal [data-connect-action=\"add\"]').click(); return true; })()";
-  const shown = await evalPage(cdp, js, { awaitPromise: false });
-  if (o.mustShow && shown !== true) return false;
-  const ok = await poll(cdp, "(function(){ var c = window.__hostedTest.conn(); return c.serverUrl === " +
-    JSON.stringify(srv.url) + " && c.hasToken && !document.getElementById('menu-server-open').hidden; })()", 20000)
-    .catch(() => false);
-  await evalPage(cdp, "(function(){ var b = document.querySelector('#connect-modal [data-connect-action=\"close\"]'); if (b) b.click(); return true; })()", { awaitPromise: false });
-  return !!ok;
-}
-
-async function openViaPicker(cdp, docId, opts) {
-  const o = opts || {};
-  await evalPage(cdp, "(function(){ document.getElementById('menu-server-open').click(); return true; })()", { awaitPromise: false });
-  const sel = "#server-modal [data-action=\"server-open\"][data-id=" + JSON.stringify(docId) + "]";
-  const visible = o.mustShow ? " && !document.getElementById('server-modal').hidden && document.querySelectorAll('.modal-backdrop:not([hidden])').length === 1" : "";
-  const listed = await poll(cdp, "!!document.querySelector(" + JSON.stringify(sel) + ")" + visible, 15000).catch(() => false);
-  if (!listed) return false;
-  await evalPage(cdp, "(function(){ document.querySelector(" + JSON.stringify(sel) + ").click(); return true; })()", { awaitPromise: false });
-  return true;
-}
+const { connectTabViaDialog, openViaPicker, submitPin } = createDialogHelpers({ evalPage, poll });
 
 async function saveTabNow(cdp) {
   await evalPage(cdp, "(function(){ document.getElementById('btn-save').click(); return true; })()", { awaitPromise: false });
@@ -4985,8 +4953,8 @@ async function caseTwoServersSideBySide(target) {
     await waitForRows(cdp1, 20000);
     const tab1Id = await tabIdOfTarget(cdp1);
 
-    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX, { mustShow: true }));
-    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id, { mustShow: true }));
+    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX));
+    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id));
     record(tag + ": tab 1 shows X's script", !!(await poll(cdp1, titleExpr("Twin On X"), 15000).catch(() => false)));
 
     const tab2Id = await shell(cdp1, "createTab", {});
@@ -4997,9 +4965,9 @@ async function caseTwoServersSideBySide(target) {
 
     record(tag + ": tab 2 asks for server X's PIN, the server it inherited without a token",
       !!(await poll(cdp2, "!document.getElementById('pin-modal').hidden", 15000).catch(() => false)));
-    record(tag + ": tab 2 joins server Y through the Servers dialog, opened over that PIN prompt", await connectTabViaDialog(cdp2, srvY, { mustShow: true }));
+    record(tag + ": tab 2 joins server Y through the Servers dialog, opened over that PIN prompt", await connectTabViaDialog(cdp2, srvY));
     record(tag + ": tab 2's PIN prompt for X closed once it joined Y", await evalPage(cdp2, "document.getElementById('pin-modal').hidden"));
-    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id, { mustShow: true }));
+    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id));
     record(tag + ": tab 2 shows Y's script, not a switch to tab 1",
       !!(await poll(cdp2, titleExpr("Twin On Y"), 15000).catch(() => false)));
 
@@ -5233,8 +5201,7 @@ async function caseRestoreServerTabs(target) {
       JSON.stringify([rX, rY]));
     record(tag + ": a server tab whose address is not http(s) is not restored", !tabRow(listing, badTabId));
 
-    await evalPage(cdpY, "(function(){ document.getElementById('pin-input').value=" + JSON.stringify(srvY.pin) +
-      "; document.querySelector('#pin-modal [data-connect-action=\"pin-submit\"]').click(); return true; })()", { awaitPromise: false });
+    await submitPin(cdpY, srvY.pin);
     record(tag + ": after the PIN, the Y tab reopens Y's document", !!(await poll(cdpY, titleExpr("Restore On Y"), 20000).catch(() => false)));
     const after = readDesktopStateFile(userDataDir);
     record(tag + ": the rewritten desktop-state.json holds no planted token", !!after && !JSON.stringify(after).includes(PLANT));
@@ -5266,8 +5233,7 @@ async function caseRestoreServerTabs(target) {
     record(tag + ": a remembered token the restarted server no longer takes brings the PIN back", !!stale);
     if (stale) {
       cdpX = stale;
-      await evalPage(cdpX, "(function(){ document.getElementById('pin-input').value=" + JSON.stringify(srvX.pin) +
-        "; document.querySelector('#pin-modal [data-connect-action=\"pin-submit\"]').click(); return true; })()", { awaitPromise: false });
+      await submitPin(cdpX, srvX.pin);
       record(tag + ": after the new PIN the X tab reopens its document",
         !!(await poll(cdpX, titleExpr("Restore On X"), 20000).catch(() => false)));
     }

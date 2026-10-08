@@ -164,7 +164,19 @@ also shows the tails of its `.out.txt` and `.err.txt`.
 
 The runner deletes the old `digest.txt` when it starts. If it did not print the
 digest path as its last line, there is no digest: the run aborted, so read the
-console output.
+console output. If the digest tool refused the run's verdicts, the runner says
+`digest not written: failure-digest.mjs exited with code N (see stderr)` on
+stdout, in yellow, and the reason is on stderr.
+
+`run-tests.ps1` gives every suite's `driver.ps1` a fresh `-ResultToken`, which
+the driver appends to its own last line as `RESULT: n/m checks passed [run
+<token>]`. The runner takes as a suite's verdict only a `RESULT:` line that
+ends with that token, so a `RESULT:` line printed by the page or an `eval` can
+neither end a suite early nor pass for its verdict. A driver started without
+`-ResultToken` prints the plain line. The runner records that line, with the
+token stripped, as `result` in `verdicts.json`, and the digest takes each failed
+suite's headline from it (and treats a suite with no such line as one that died,
+so the `.err.txt` tail is shown) instead of reading the log again.
 
 ## The unit tests
 
@@ -533,7 +545,8 @@ on Windows, then `chromium`/`google-chrome` on `PATH`. Running as root it adds
 Everything the suites depend on is deliberately identical: the onboarding
 suppression injected before every navigation, `text=`/`text*=` selector
 resolution, the key map, the pass/fail wording, and the `RESULT: n/m checks
-passed` line. Two quirks are ported rather than fixed, because ~120 existing
+passed` line (`driver.ps1` adds ` [run <token>]` to it when `run-tests.ps1` hands
+it a `-ResultToken`; `driver.mjs` never does). Two quirks are ported rather than fixed, because ~120 existing
 assertions are written against them:
 
 - **A literal comparison is case-insensitive.** PowerShell prints a bool as
