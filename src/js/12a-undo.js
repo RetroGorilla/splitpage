@@ -216,6 +216,7 @@ export function createUndoHistory() {
   var done = [], undone = [];
   var serial = 0;
   var parked = null;
+  var marks = 0, lowStep = Infinity;
 
   function backAtPark(text) {
     var top = done[done.length - 1] || null;
@@ -265,7 +266,10 @@ export function createUndoHistory() {
         return;
       }
     }
-    var entry = { n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null };
+    push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null });
+  }
+
+  function push(entry) {
     done.push(entry);
     if (done.length > MAX_ENTRIES) {
       entry.evicted = done.shift();
@@ -280,13 +284,15 @@ export function createUndoHistory() {
 
   function markCell(rowId, key, value) {
     var top = done[done.length - 1] || null;
+    lowStep = Infinity;
     return {
-      n: serial, cell: rowId + "\u0000" + key, key: key, value: value,
+      n: serial, gen: ++marks, cell: rowId + "\u0000" + key, key: key, value: value,
       top: top, after: top && top.steps[0].after, at: top && top.at, endsInSpace: top && top.endsInSpace
     };
   }
 
-  function dropEmptySince(mark) {
+  function dropEmptySince(mark, cancelled) {
+    if (mark.gen !== marks || lowStep <= mark.n) return false;
     var k = done.length;
     while (k > 0 && done[k - 1].n > mark.n) k--;
     var top = mark.top;
@@ -295,12 +301,24 @@ export function createUndoHistory() {
     if (k === done.length && !joined) return false;
     for (var i = k; i < done.length; i++) if (onlyCell(done[i].steps) !== mark.cell) return false;
     var end = k < done.length ? done[done.length - 1] : top;
-    if (!cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: end.steps[0].after })) return false;
+    var after = end.steps[0].after;
+    var back = cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: after });
+    if (!back && (!cancelled || k === done.length)) return false;
+    var from = projectionOf(mark.value);
+    var one = back ? null : {
+      n: done[k].n,
+      steps: [{ op: "rowField", rowId: end.steps[0].rowId, key: mark.key, before: mark.value, after: after }],
+      at: end.at, cell: mark.cell, endsInSpace: /\s$/.test(insertedText(from, projectionOf(after))), from: from, evicted: null
+    };
     dropFrom(k);
     if (joined) {
       top.steps[0].after = mark.after;
       top.at = mark.at;
       top.endsInSpace = mark.endsInSpace;
+    }
+    if (one) {
+      push(one);
+      return false;
     }
     unpark();
     return true;
@@ -309,6 +327,7 @@ export function createUndoHistory() {
   function step(from, to, state, invert) {
     var entry = from.pop();
     if (!entry) return { ok: false, empty: true };
+    if (entry.n < lowStep) lowStep = entry.n;
     var steps = invert ? invertSteps(entry.steps) : entry.steps;
     var r = applyStepsLive(state, steps);
     if (!r.ok) {
@@ -544,7 +563,7 @@ export function compositionUndoMark(rowId, key) {
   return history.markCell(rowId, key, value);
 }
 
-export function dropEmptyStepsSince(mark) { flushEdits(); return history.dropEmptySince(mark); }
+export function dropEmptyStepsSince(mark, cancelled) { flushEdits(); return history.dropEmptySince(mark, cancelled); }
 
 export function caretAfterStep(step) {
   function domChars(h) {
