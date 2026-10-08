@@ -435,6 +435,7 @@ test("past the first bound, bold keeps exactly the style declarations that can d
     ["<b id=k style=\"color: 'a\nb; font-weight: 300'\">", "<b style=\" font-weight: 300'\">"],
     ["<b id=k style=\"color: 'a; font-weight: 300; b'; x: y\">", "<b style=\"color: 'a; font-weight: 300; b'\">"],
     ['<b id=k style="font-family: &quot;A&amp;B&quot;; x: y">', '<b style="font-family: &quot;A&amp;B&quot;">'],
+    ['<b id=k style="font-family: &#39;A&#39;; x: y">', "<b style=\"font-family: 'A'\">"],
     ['<b id=k style="font-weight: &#x33;00; x: y">', '<b style="font-weight: &#x33;00; x: y">']
   ];
   for (const [tag, plain] of reduced) {
