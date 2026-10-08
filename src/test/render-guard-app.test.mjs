@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
+import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 
@@ -13,6 +14,9 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { renderAbsorbed, syncFieldFromDom } = await import("../js/05-render.js");
+const { cellSelection, editCell, openCellEdit } = await import("../js/05b-cell-edit.js");
+const { pasteIntoCell } = await import("../js/05c-clipboard.js");
+const annotate = await import("../js/05w-annotate.js");
 const { flushEdits, lastUndoEntry, nextRedoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
 const find = await import("../js/09-find-replace.js");
@@ -430,6 +434,7 @@ const STALE_PARTS = ["#rows", ".add-row-bar", "#doc-title", "#writer-title", "#w
 const THEIRS = "Theirs, not drawn yet.";
 const cellOf = (id, field, root = "#rows") => document.querySelector(root + ' .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 const inertParts = () => STALE_PARTS.flatMap((sel) => Array.from(document.querySelectorAll(sel)).map((el) => [sel, el.hasAttribute("inert")]));
+const dimmedParts = () => STALE_PARTS.flatMap((sel) => Array.from(document.querySelectorAll(sel)).map((el) => [sel, el.classList.contains("is-stale-part")]));
 
 function textNodes(el) {
   const walker = document.createTreeWalker(el, 4);
@@ -593,10 +598,11 @@ for (const edit of EDITS) {
 }
 
 test("a stale screen makes the script, the titles and the editing controls inert and moves the focus from the script to Redraw, which keeps it until a Redraw draws and then gives it back (#443)", async () => {
-  await staleScreen(() => cellOf("r1", "audioText").focus());
+  await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3, 7); });
   const parts = inertParts();
   assert.equal(parts.length, STALE_PARTS.length + 4, "every part is on the page: " + JSON.stringify(parts));
   assert.deepEqual(parts.filter((p) => !p[1]), [], "every part is inert");
+  assert.deepEqual(dimmedParts().filter((p) => !p[1]), [], "every part is dimmed");
   const toast = redrawToasts()[0];
   assert.equal(toast.getAttribute("role"), "alert");
   assert.equal(toast.hasAttribute("title"), false);
@@ -618,8 +624,158 @@ test("a stale screen makes the script, the titles and the editing controls inert
   assert.deepEqual(inertParts().filter((p) => !p[1]), [], "still inert");
   await pressRedraw();
   assert.deepEqual(inertParts().filter((p) => p[1]), [], "nothing is inert once Redraw draws");
+  assert.deepEqual(dimmedParts().filter((p) => p[1]), [], "nothing is dimmed once Redraw draws");
   assert.equal(document.activeElement, cellOf("r1", "audioText"), "the focus is back in the cell it left");
+  assert.deepEqual(cellSelection(cellOf("r1", "audioText")), { from: 3, to: 7 }, "with the selection it had");
   assert.equal(cellOf("r2", "audioText").textContent.indexOf(THEIRS), 0);
+});
+
+test("Redraw does not put the focus back into a scene under a Writer opened since the screen went stale (#443)", async () => {
+  try {
+    await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3); });
+    openTheWriter();
+    redrawToasts()[0].querySelector(".toast-action").focus();
+    await pressRedraw();
+    const active = document.activeElement;
+    assert.equal(!!(active && active.closest && active.closest("#rows")), false, "the focus is not in a scene the Writer hides");
+  } finally {
+    closeTheWriter();
+  }
+});
+
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const PASTE_REFUSED = "Could not paste — press Redraw first.";
+const pasteRefusals = () => shown().filter((el) => toastText(el) === PASTE_REFUSED);
+
+test("on a stale screen a paste that reaches the stale cell late changes nothing, even with words selected there (#443)", async () => {
+  await staleScreen();
+  const cell = cellOf("r2", "audioText");
+  select(cell, 0, 4);
+  const before = editState();
+  let res;
+  const out = await logging(async () => { res = pasteIntoCell(cell, "", "XYZ", {}); await idle(); });
+  assert.equal(out.threw, null, out.threw && out.threw.stack);
+  sameEdits(editState(), before, "a late paste on the stale screen");
+  assert.equal(S.state.rows[1].audioText, THEIRS);
+  assert.equal(res.done, false);
+  let called = false;
+  assert.equal(editCell(cell, () => { called = true; return null; }), null);
+  assert.equal(called, false, "editCell does not run its edit on a stale cell");
+  assert.equal(openCellEdit(cell), null);
+  sameEdits(editState(), before, "editCell on the stale screen");
+  await pressRedraw();
+});
+
+test("a paste with a file that is still being read when the screen goes stale changes nothing and says to press Redraw first (#443)", async () => {
+  fresh("Late paste");
+  const cell = cellOf("r2", "audioText");
+  cell.focus();
+  select(cell, 0, 4);
+  const store = { "text/plain": "XYZ" };
+  const ev = new window.Event("paste", { bubbles: true, cancelable: true });
+  const file = new window.File(["not really a video"], "clip.mp4", { type: "video/mp4" });
+  Object.defineProperty(ev, "clipboardData", { value: { getData: (t) => store[t] || "", files: [file], types: ["text/plain", "Files"] } });
+  cell.dispatchEvent(ev);
+  const theirs = cloneState(S.state);
+  theirs.rows[1].audioText = THEIRS;
+  const unbreak = breakRender("early");
+  let merged;
+  try {
+    merged = logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+  } finally {
+    unbreak();
+  }
+  assert.deepEqual((await merged).logged, [BROKE]);
+  assert.equal(redrawToasts().length, 1);
+  const before = editState();
+  for (let i = 0; i < 100 && !pasteRefusals().length; i++) await new Promise((r) => setTimeout(r, 50));
+  await idle();
+  sameEdits(editState(), before, "the late paste");
+  assert.equal(S.state.rows[1].audioText, THEIRS);
+  assert.equal(pasteRefusals().length, 1, "the refused paste says why: " + JSON.stringify(shown().map(toastText)));
+  assert.equal(pasteRefusals()[0].classList.contains("error"), true);
+  await pressRedraw();
+});
+
+function noCanvas() {
+  const real = window.HTMLCanvasElement.prototype.getContext;
+  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : k === "measureText" ? () => ({ width: 0 }) : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
+  window.HTMLCanvasElement.prototype.getContext = () => ctx;
+  const realUrl = URL.createObjectURL;
+  URL.createObjectURL = () => "blob:annotate-test";
+  return () => { window.HTMLCanvasElement.prototype.getContext = real; URL.createObjectURL = realUrl; };
+}
+
+function pointer(el, type) {
+  const ev = new window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 0, clientY: 0 });
+  Object.defineProperty(ev, "pointerId", { value: 7 });
+  Object.defineProperty(ev, "pointerType", { value: "pen" });
+  el.dispatchEvent(ev);
+}
+
+test("on a stale screen the picture annotator's Ctrl+Z and Ctrl+Y still undo and redo its own strokes, while the script's undo is refused (#443)", async () => {
+  const restore = noCanvas();
+  try {
+    await staleScreen(async () => {
+      const doc = table304Document("Annotate on a stale screen");
+      doc.rows[0].visualImage = PNG;
+      S.state = migrateRows(doc);
+      flushEdits();
+      renderAbsorbed();
+      clearDirty();
+      quiet();
+      typedOnce();
+      assert.equal(annotate.openAnnotator("r1", 0), true);
+      await idle();
+      const img = document.getElementById("annotate-img");
+      assert.equal(typeof img.onload, "function", "the picture is loading");
+      img.onload();
+      await idle();
+      const frame = document.getElementById("annotate-frame");
+      pointer(frame, "pointerdown");
+      pointer(frame, "pointerup");
+      assert.equal(window.__annotateTest.state().marks.length, 1, "one stroke drawn");
+    });
+    const tool = document.querySelector('#annotate-modal [data-aact="tool"]');
+    tool.focus();
+    const before = editState();
+    key(tool, "z", { ctrlKey: true });
+    assert.deepEqual([window.__annotateTest.state().marks.length, window.__annotateTest.state().redo], [0, 1], "Ctrl+Z took the stroke back");
+    key(tool, "y", { ctrlKey: true });
+    assert.deepEqual([window.__annotateTest.state().marks.length, window.__annotateTest.state().undo], [1, 1], "Ctrl+Y put it back");
+    sameEdits(editState(), before, "the annotator's own undo");
+    annotate.closeAnnotator();
+    const save = document.getElementById("btn-save");
+    save.focus();
+    const held = editState();
+    assert.equal(held.undo.undo, 1, "the script has a step to undo");
+    key(save, "z", { ctrlKey: true });
+    key(save, "y", { ctrlKey: true });
+    sameEdits(editState(), held, "the script's undo and redo outside the script");
+    await pressRedraw();
+  } finally {
+    annotate.closeAnnotator();
+    restore();
+  }
+});
+
+test("on a stale screen an open comment box keeps its own Ctrl+Z and Ctrl+Y (#443)", async () => {
+  await staleScreen();
+  const box = document.getElementById("comment-body-editable");
+  box.innerHTML = "";
+  box.focus();
+  box.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+  box.dispatchEvent(new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "Draft" }));
+  box.textContent = "Draft";
+  box.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "Draft" }));
+  const before = editState();
+  key(box, "z", { ctrlKey: true });
+  assert.equal(box.textContent, "", "Ctrl+Z undid the typing in the comment box");
+  key(box, "y", { ctrlKey: true });
+  assert.equal(box.textContent, "Draft", "Ctrl+Y redid it");
+  sameEdits(editState(), before, "the comment box's own undo");
+  box.textContent = "";
+  await pressRedraw();
 });
 
 test("on a stale screen no editing event reaches the script's parts, while one aimed elsewhere does, and undo keys still reach a text box (#443)", async () => {
@@ -698,4 +854,11 @@ test("a failed render marks the page as a stale screen, and Redraw or a later cl
   await idle();
   assert.deepEqual(clean.logged, []);
   assert.equal(document.body.classList.contains("is-stale-screen"), false, "a later clean update takes the mark off");
+});
+
+test("the dimming in app.css follows the blocked parts the page marks, so the list of parts lives in one place (#443)", () => {
+  const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
+  const rules = css.split("}").filter((r) => /is-stale/.test(r));
+  assert.equal(rules.length, 1, "one stale-screen rule: " + JSON.stringify(rules));
+  assert.match(rules[0], /^\s*\.is-stale-part\s*\{\s*opacity:\s*0\.5;\s*$/);
 });

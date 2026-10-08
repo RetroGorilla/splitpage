@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 
-const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
+const REDRAW = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";
 const BROKE = "the boot render broke (#442)";
 
 const seedTitle = JSON.parse(SEED_TEXT).title;
@@ -60,7 +60,8 @@ test("a boot render that throws still finishes start-up: the document is loaded,
   assert.equal(bootError, null, "start-up did not fail: " + (bootError && bootError.stack));
   assert.deepEqual(logged, [BROKE]);
   assert.equal(S.state.title, seedTitle);
-  assert.equal(redrawToasts().length, 1, "Redraw is offered");
+  assert.equal(redrawToasts().length, 1, "Redraw is offered with the start-up text");
+  assert.equal(Array.from(document.querySelectorAll("#toast-host .toast.error:not(.is-leaving)")).length, 1, "and with no other error toast");
   assert.equal(document.getElementById("rows").hasAttribute("inert"), true);
   assert.equal(document.getElementById("rows").children.length, 0, "nothing was drawn");
   const afterThrow = events.slice(events.indexOf("threw") + 1);
