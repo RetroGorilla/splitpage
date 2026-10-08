@@ -304,6 +304,7 @@ import {
   draftRestorePending
 } from "./20g-drafts.js";
 import { appActions } from "../legacy/app-actions.ts";
+import { editAllowed } from "../legacy/session-bridge.ts";
 
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
@@ -839,6 +840,16 @@ function settleEndedComposition(e) {
   var since = endedSince;
   endedSince = null;
   if (since !== null) dropEmptyStepsSince(since, COMPOSITION_INPUTS[e.inputType] === true);
+}
+
+function takeTitle(input) {
+  if (!S.state) return false;
+  if (!editAllowed()) {
+    input.value = S.state.title || "";
+    return false;
+  }
+  S.state.title = input.value;
+  return true;
 }
 
 function onRootFocusOut(e) {
@@ -1592,8 +1603,7 @@ function init() {
   });
 
   document.getElementById("doc-title").addEventListener("input", function (e) {
-    if (!S.state) return;
-    S.state.title = e.target.value;
+    if (!takeTitle(e.target)) return;
     syncPageTitle();
     markDirty();
   });
@@ -1783,8 +1793,7 @@ function init() {
   });
 
   document.getElementById("writer-title").addEventListener("input", function (e) {
-    if (!S.state) return;
-    S.state.title = e.target.value;
+    if (!takeTitle(e.target)) return;
     document.getElementById("doc-title").value = e.target.value;
     markDirty();
   });

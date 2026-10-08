@@ -68,6 +68,7 @@ import { closeNewTabPage } from "./20j-newtab.js";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
+import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 
 var sharedDocId;
@@ -879,7 +880,7 @@ export function applyReviewMode() {
   if (title) title.readOnly = on;
 }
 
-export var VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
+export { VIEWING_ONLY };
 
 export function reviewBlocked() {
   if (!reviewMode()) return false;

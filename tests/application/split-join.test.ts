@@ -207,9 +207,16 @@ test("E3: a scene that is gone, a field that is not a script field, and no docum
   assert.deepEqual(runConfined(empty.session, joinScenesCommand("r1", ports())), { kind: "rejected", reason: NO_DOCUMENT });
 });
 
-test("neither command asks for edit capability: the Writer has never refused in review mode", () => {
+test("both commands ask for edit capability: a denied session rejects them before they plan and changes nothing", () => {
   const h = opened();
+  const before = snapshot(h);
   h.deny("review");
+  assert.deepEqual(runConfined(h.session, splitSceneCommand("r3", "audioText", textCut(2, 2), "n", ports())), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session, joinScenesCommand("r3", ports())), { kind: "rejected", reason: "review" });
+  assert.equal(snapshot(h), before);
+  assert.deepEqual(h.log, []);
+  assert.equal(h.session.generation(), 0);
+  h.deny(null);
   assert.equal(runConfined(h.session, splitSceneCommand("r3", "audioText", textCut(2, 2), "n", ports())).kind, "applied");
   assert.equal(runConfined(h.session, joinScenesCommand("r3", ports())).kind, "applied");
 });

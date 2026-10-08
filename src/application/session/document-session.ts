@@ -26,7 +26,7 @@ export interface Refusal {
 export interface Command {
   readonly name: string;
   readonly needs: "edit" | "nothing";
-  readonly plan: (doc: DocumentView) => Plan | Refusal | null;
+  readonly plan: (doc: DocumentView, capability: CapabilityPort) => Plan | Refusal | null;
 }
 
 export type CommandOutcome =
@@ -229,7 +229,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     }
     let plan: Plan | Refusal | null;
     try {
-      plan = command.plan(doc);
+      plan = command.plan(doc, ports.capability);
     } catch (error) {
       return { kind: "failed", error: error };
     }
