@@ -65,6 +65,54 @@ test("find: case sensitivity, and characters whose lowercase is longer", () => {
   assert.deepEqual(find("İx mug", "mug"), [{ from: 3, to: 6 }]);
 });
 
+test("find: a needle's lone surrogate never matches half of an emoji", () => {
+  const emoji = String.fromCharCode(0xd83d, 0xde00);
+  const high = String.fromCharCode(0xd83d);
+  const low = String.fromCharCode(0xde00);
+  const cell = "a" + emoji + "b";
+  assert.deepEqual(find(cell, high), []);
+  assert.deepEqual(find(cell, low), []);
+  assert.deepEqual(find(cell, high, true), []);
+  assert.deepEqual(find(cell, low, true), []);
+  assert.deepEqual(find(cell, emoji), [{ from: 1, to: 3 }]);
+  assert.deepEqual(find(cell, "a" + high + "b"), []);
+  assert.deepEqual(find("ab a" + emoji + "b", "a" + high + "b"), [{ from: 0, to: 2 }]);
+  assert.deepEqual(find(cell, high + high + emoji), [{ from: 1, to: 3 }]);
+  const tag = tagSpan("prop", "Smile", "smile " + emoji);
+  const rows = [
+    { id: "r1", visualText: cell, audioText: "x" + emoji },
+    { id: "r2", visualText: "the " + tag, audioText: "" }
+  ];
+  assert.deepEqual(findInRows(rows, high, false), { matches: [], inTags: 0 });
+  assert.deepEqual(findInRows(rows, low, true), { matches: [], inTags: 0 });
+  assert.equal(countInTags(cellOf(tag), high, false), 0);
+  assert.equal(countInTags(cellOf(tag), low, true), 0);
+  assert.equal(countInTags(cellOf(tag), emoji, false), 1);
+  assert.equal(countInTags(cellOf(tag), "smile " + high, false), 1);
+  assert.deepEqual(findInRows(rows, emoji, false).inTags, 1);
+});
+
+test("replace: a needle's lone surrogate changes nothing, for one match or for all", () => {
+  const emoji = String.fromCharCode(0xd83d, 0xde00);
+  const high = String.fromCharCode(0xd83d);
+  const low = String.fromCharCode(0xde00);
+  const html = "a" + emoji + "b " + emoji;
+  assert.deepEqual(replace(html, high, "X"), { html, changed: 0 });
+  assert.deepEqual(replace(html, low, "X"), { html, changed: 0 });
+  assert.deepEqual(replace(html, high, "X", 0), { html, changed: 0 });
+  assert.deepEqual(replace(html, high, "X", -1, true), { html, changed: 0 });
+  assert.deepEqual(replace(html, emoji, "X"), { html: "aXb X", changed: 2 });
+  const pic = '<img class="comment-img" data-blob="' + "a".repeat(64) + '">';
+  assert.deepEqual(replace(pic + html, low, "X"), { html: pic + html, changed: 0 });
+});
+
+test("find: case folding stays simple, so s does not match the long s", () => {
+  assert.deepEqual(find("ſ s S", "s"), [{ from: 2, to: 3 }, { from: 4, to: 5 }]);
+  assert.deepEqual(find("ſ", "s"), []);
+  assert.deepEqual(find("s", "ſ"), []);
+  assert.deepEqual(replace("ſ s", "s", "x"), { html: "ſ x", changed: 1 });
+});
+
 test("replace keeps the marks of the first replaced character", () => {
   assert.equal(replace("<strong>bold</strong> text", "bold", "heavy").html, "<strong>heavy</strong> text");
   assert.equal(replace("bo<strong>ld</strong> move", "bold", "brave").html, "brave move");
