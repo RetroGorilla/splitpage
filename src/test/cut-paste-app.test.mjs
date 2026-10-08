@@ -496,6 +496,79 @@ test("a cut undone and redone, then pasted, still moves the comment with its wor
   assert.deepEqual(anchors(), [["c1", "r3", "audioText"], ["c2", "r4", "audioText"]]);
 });
 
+test("a cut undone and pasted over its restored words that the model has not heard moved yet keeps the comment on them", async () => {
+  await open();
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 19);
+  const cut = clip("cut", el);
+  undo();
+  const again = cellOf("r2", "audioText");
+  again.focus();
+  again.firstChild.data = "XX" + again.firstChild.data;
+  selectText(again, 8, 21);
+  clip("paste", again, cut.store);
+  assert.equal(row("r2").audioText, "XXAlpha " + cmt("c1", "bravo charlie") + " delta");
+  assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
+});
+
+test("a cut undone and pasted over the same offsets in another scene, or in the other cell of its own scene, brings no second anchor", async () => {
+  for (const [rowId, field] of [["r1", "audioText"], ["r2", "visualText"]]) {
+    const doc = fixture();
+    doc.rows[0].audioText = "Hello there, all of you";
+    doc.rows[1].visualText = "Close shot of the harbour";
+    await open(doc);
+    const el = cellOf("r2", "audioText");
+    el.focus();
+    selectText(el, 6, 19);
+    const cut = clip("cut", el);
+    undo();
+    const to = cellOf(rowId, field);
+    to.focus();
+    selectText(to, 6, 19);
+    clip("paste", to, cut.store);
+    assert.equal(row(rowId)[field].indexOf("cmt-anchor"), -1, rowId + "." + field);
+    assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo charlie") + " delta");
+    assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
+  }
+});
+
+test("a cut of part of a comment's words pastes them plain and the comment stays on the rest", async () => {
+  await open();
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 11);
+  const cut = clip("cut", el);
+  const kept = row("r2").audioText;
+  assert.match(kept, /data-cmt="c1"/);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  const got = record(() => clip("paste", to, cut.store));
+  assert.equal(row("r3").audioText, "Three.bravo");
+  assert.deepEqual(got.steps, ["rowField:r3.audioText"]);
+  assert.equal(row("r2").audioText, kept);
+  assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
+});
+
+test("a cut of one of two cells holding a comment pastes its words plain and the other cell keeps the comment", async () => {
+  const doc = fixture();
+  doc.rows[1].audioText = "Alpha " + cmt("c1", "bravo");
+  doc.rows[2].audioText = cmt("c1", "charlie") + " delta";
+  await open(doc);
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 11);
+  const cut = clip("cut", el);
+  const to = cellOf("r1", "audioText");
+  to.focus();
+  selectText(to, 11, 11);
+  clip("paste", to, cut.store);
+  assert.equal(row("r1").audioText, "Hello therebravo");
+  assert.equal(row("r3").audioText, cmt("c1", "charlie") + " delta");
+  assert.equal(S.state.comments.filter((c) => c.id === "c1").length, 1);
+});
+
 test("a paste of another tab's cut, or of a cut whose comment no longer exists, brings the words and no comment", async () => {
   await open();
   const el = cellOf("r2", "audioText");
