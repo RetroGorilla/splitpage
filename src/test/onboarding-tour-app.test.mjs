@@ -19,9 +19,12 @@ function pressTourButton() {
   button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
 }
 
+const wizardSetting = () => JSON.parse(localStorage.getItem("splitpage-onboarding"));
+
 afterEach(() => {
-  tourOverlay().hidden = true;
+  if (!tourOverlay().hidden) document.getElementById("tour-skip").click();
   wizard().hidden = true;
+  localStorage.removeItem("splitpage-onboarding");
   for (const extra of document.querySelectorAll(".test-dialog")) extra.remove();
   for (const toast of document.querySelectorAll("#toast-host .toast")) toast.remove();
 });
@@ -33,6 +36,8 @@ test("the wizard's tour button closes the wizard and starts the tour", () => {
   assert.equal(wizard().hidden, true);
   assert.equal(tourOverlay().hidden, false);
   assert.deepEqual(toasts(), []);
+  assert.equal(wizardSetting().done, true);
+  assert.equal(wizardSetting().skipped, false);
 });
 
 test("the wizard's tour button obeys the tour's availability rule", () => {
@@ -44,4 +49,6 @@ test("the wizard's tour button obeys the tour's availability rule", () => {
   assert.equal(wizard().hidden, true);
   assert.equal(tourOverlay().hidden, true);
   assert.ok(toasts().includes("Close the open dialog first."), toasts().join("|"));
+  assert.equal(wizardSetting().done, true);
+  assert.equal(wizardSetting().skipped, false);
 });
