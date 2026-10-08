@@ -28,7 +28,8 @@ import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMa
 import { htmlToPlainText } from "./14-export.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
-import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 
@@ -58,7 +59,8 @@ function writerBlockHtml(row, i) {
         rowId: row.id,
         field: "audioText",
         value: row.audioText,
-        placeholder: "Write what gets said…"
+        placeholder: "Write what gets said…",
+        readOnly: !editAllowed()
       }) +
     '</div>';
 }
@@ -81,6 +83,7 @@ export function renderWriter() {
   var caret = writerCaretState();
   var titleEl = document.getElementById("writer-title");
   if (document.activeElement !== titleEl) titleEl.value = S.state.title || "";
+  titleEl.readOnly = !editAllowed();
   if (!S.state.rows.length) {
     doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
   } else {
@@ -369,4 +372,46 @@ export function jumpFromWriterToRow(rowId) {
   target.classList.add("just-merged");
 }
 
-export function __init() {}
+var REFUSAL_BURST_MS = 2000;
+var EDIT_CHORDS = ["z", "y", "b", "i", "u"];
+var GUARDED_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "click"];
+var lastRefusalAt = 0;
+
+function refuseWriterEdit() {
+  var now = Date.now();
+  if (now - lastRefusalAt > REFUSAL_BURST_MS) showToast(VIEWING_ONLY, "warn");
+  lastRefusalAt = now;
+}
+
+function isEditKey(e) {
+  var name = String(e.key || "");
+  var chord = e.ctrlKey || e.metaKey;
+  if (name === "Enter" || name === "Backspace" || name === "Delete") return true;
+  if (chord) return EDIT_CHORDS.indexOf(name.toLowerCase()) !== -1;
+  if (e.altKey) return name === "ArrowUp" || name === "ArrowDown";
+  return name.length === 1 && name !== " ";
+}
+
+function attemptsEdit(e) {
+  var target = e.target;
+  if (!target || !target.closest) return false;
+  if (e.type === "click") return !!target.closest(".wr-fmt");
+  if (!target.closest(".wr-para") && target.id !== "writer-title") return false;
+  return e.type !== "keydown" || isEditKey(e);
+}
+
+function guardWriterEdit(e) {
+  if (editAllowed() || !attemptsEdit(e)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  refuseWriterEdit();
+  if (e.type === "input") {
+    renderWriter();
+    document.getElementById("writer-title").value = S.state.title || "";
+  }
+}
+
+export function __init() {
+  var root = document.getElementById("writer");
+  GUARDED_EVENTS.forEach(function (type) { root.addEventListener(type, guardWriterEdit, true); });
+}
