@@ -192,13 +192,13 @@ import {
 import { markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   caretAfterStep,
+  compositionUndoMark,
   configureUndo,
   dropEmptyStepsSince,
   lastUndoEntry,
   redo,
   settleAfterApply,
-  undo,
-  undoSerial
+  undo
 } from "./12a-undo.js";
 import {
   armDriveDelete,
@@ -810,13 +810,13 @@ function onScriptComposition(e) {
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
   if (!cellEl || !isScriptCell(cellEl)) return;
   if (e.type === "compositionstart") {
-    composingSince = undoSerial();
+    composingSince = compositionUndoMark(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
     return;
   }
   var since = composingSince;
   composingSince = null;
   if (since === null || dropEmptyStepsSince(since)) return;
-  endedSince = since;
+  endedSince = e.data ? null : since;
 }
 
 function onCompositionKeydown(e) {
