@@ -168,7 +168,7 @@ test("a bold tag that cancels its weight still does once its other attributes ar
 
 function parsedEdge(over: number): string {
   const build = (pad: number, stretch: number): string =>
-    "w".repeat(pad) + '<p><a href="https://x.test/' + "h".repeat(stretch) + '">x' + "<p>y".repeat(400);
+    "<!--" + "w".repeat(pad) + '--><p><a href="https://x.test/' + "h".repeat(stretch) + '">x' + "<p>y".repeat(400);
   for (let stretch = 0; stretch < 64; stretch++) {
     const html = build(0, stretch);
     const gap = parsedSize(rawBody(html)) - 8 * html.length - 4096;
@@ -182,7 +182,7 @@ test("a parse of exactly 8 code units per input code unit plus 4096 is kept, and
   assert.equal(count(at, /<a /g), 401);
   const short = rt.sanitize(parsedEdge(1));
   assert.equal(count(short, /<a /g), 0);
-  assert.match(short, /^w+x<br>(y<br>){400}$/);
+  assert.equal(short, "x<br>" + "y<br>".repeat(400));
 });
 
 test("formatting the parser reopens inside a template counts towards the bound (#420)", () => {
