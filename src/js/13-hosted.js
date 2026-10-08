@@ -41,7 +41,7 @@ import {
 } from "./02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
-import { render } from "./05-render.js";
+import { render, renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import {
   captureReplyDrafts,
@@ -575,7 +575,7 @@ async function resumeServerDoc() {
     S.state = theirs;
     setBaseState(cloneState(S.state), "resumeServerDoc: reopened as the server has it, nothing to merge");
     clearDirty();
-    render();
+    renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
     showToast("Signed back in — reopened " + (S.state.title || body.id), "ok");
@@ -983,7 +983,7 @@ export async function openServerDoc(id) {
 
   clearDirty();
   applyReviewMode();
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   closeServerPicker();
