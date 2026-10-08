@@ -77,7 +77,10 @@ test("normalize: four fields carry one, and undefined from it means the field go
   assert.equal(norm("lastEditedBy", "Ada"), "Ada");
   assert.equal(norm("lastEditedBy", 7), undefined);
   assert.equal(norm("lastEditedBy", " "), undefined);
-  assert.equal(norm("lastEditedBy", "x".repeat(100)), "x".repeat(80));
+  assert.equal(norm("lastEditedBy", "x".repeat(100)), "x".repeat(30));
+  assert.equal(norm("lastEditedBy", "x".repeat(31)), "x".repeat(30));
+  assert.equal(norm("lastEditedBy", "x".repeat(29) + "\u{1F600}"), "x".repeat(29) + "\u{1F600}");
+  assert.equal(norm("lastEditedBy", "x".repeat(30) + "\u{1F600}"), "x".repeat(30));
   assert.equal(norm("targetSeconds", 59.6), 60);
   assert.equal(norm("targetSeconds", 0), undefined);
   assert.equal(norm("targetSeconds", "60"), undefined);

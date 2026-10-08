@@ -25,7 +25,7 @@ import {
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
-import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments } from "./10-comments.js";
+import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, cleanAuthorName, getSavedAuthorName, renderComments } from "./10-comments.js";
 import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   COLLAB_SERVER_KEY,
@@ -323,7 +323,7 @@ function applyChange(target) {
     return;
   }
   if (id === "settings-name") {
-    var v = (target.value || "").trim();
+    var v = cleanAuthorName(target.value);
     if (!v || v === getSavedAuthorName()) { target.value = getSavedAuthorName(); return; }
     writePref(COMMENT_NAME_KEY, v);
     updateIdentityChip();
