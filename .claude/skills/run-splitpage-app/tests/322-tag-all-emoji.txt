@@ -1,7 +1,3 @@
-# An edit never splits an emoji (#322; src/core/text/edits.ts): a tag name cut
-# at 80 UTF-16 units can end in half an emoji, and the Production panel's
-# "Tag all N mentions" then tags a range that ends between the two halves.
-# The tag takes the whole emoji, so no half is left in or out of the tag.
 # Then a caret or a selection set by code inside a pair: paste, cut, Alt+Enter
 # and a paste into a comment box each keep the emoji single and whole.
 #
