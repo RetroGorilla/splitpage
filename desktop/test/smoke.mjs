@@ -8,7 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDialogHelpers } from "./smoke-dialogs.mjs";
+import { createDialogHelpers, modalShownExpr } from "./smoke-dialogs.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, "..");
@@ -1018,7 +1018,8 @@ async function caseOpenSaveConflictExport(target, fixturesDir) {
       !!refusalToast && (await dialogsSeen(cdp)) === dialogsBeforeRefusal && !fs.existsSync(newSplitpagePath),
       "toast=" + JSON.stringify(refusalToast));
 
-    await evalPage(cdp, "document.getElementById('file-conflict-cancel').click()");
+    const conflictCancelClicked = await evalPage(cdp, "(function(){ if (!" + modalShownExpr("file-conflict-modal") + ") return false; document.getElementById('file-conflict-cancel').click(); return true; })()");
+    record(tag + ": the conflict dialog is still shown behind the refused Save As, and Cancel is clicked", conflictCancelClicked === true);
     const conflictClosed = await poll(cdp, "document.getElementById('file-conflict-modal').hidden === true", 5000).catch(() => false);
     record(tag + ": cancelling the conflict dialog closes it", !!conflictClosed);
     await poll(cdp, "document.querySelectorAll('.toast.error, .toast.warn').length === 0", 8000).catch(() => null);

@@ -16,10 +16,20 @@ export function createDialogHelpers(deps) {
     return !!(await poll(cdp, modalShownExpr(id), shownTimeoutMs).catch(() => false));
   }
 
+  async function openViaFileMenu(cdp, modalId, itemSelector) {
+    const js = "(function(){ var m = document.getElementById(" + JSON.stringify(modalId) + "); if (!m || !m.hidden) return false;" +
+      " var menu = document.getElementById('file-menu'); var btn = document.getElementById('btn-file'); if (!menu || !btn) return false;" +
+      " if (menu.hidden) btn.click();" +
+      " var item = document.querySelector(" + JSON.stringify(itemSelector) + ");" +
+      " if (!item || item.disabled || item.closest('[hidden]')) return false;" +
+      " item.click(); return true; })()";
+    if ((await run(cdp, js)) !== true) return false;
+    return waitModalShown(cdp, modalId);
+  }
+
   async function connectTabViaDialog(cdp, srv, opts) {
     const o = opts || {};
-    await run(cdp, "(function(){ document.querySelector('#file-menu [data-file-action=\"servers\"]').click(); return true; })()");
-    if (!(await waitModalShown(cdp, "connect-modal"))) return false;
+    if (!(await openViaFileMenu(cdp, "connect-modal", "#file-menu [data-file-action=\"servers\"]"))) return false;
     const js = "(function(){" + requireShown("connect-modal") +
       "document.getElementById('connect-name').value=" + JSON.stringify(o.name || ("Srv " + srv.port)) + ";" +
       "document.getElementById('connect-url').value=" + JSON.stringify(srv.url) + ";" +
@@ -41,8 +51,7 @@ export function createDialogHelpers(deps) {
   }
 
   async function openViaPicker(cdp, docId) {
-    await run(cdp, "(function(){ document.getElementById('menu-server-open').click(); return true; })()");
-    if (!(await waitModalShown(cdp, "server-modal"))) return false;
+    if (!(await openViaFileMenu(cdp, "server-modal", "#file-menu #menu-server-open"))) return false;
     const sel = "#server-modal [data-action=\"server-open\"][data-id=" + JSON.stringify(docId) + "]";
     const listed = await poll(cdp, "!!document.querySelector(" + JSON.stringify(sel) + ")", listedTimeoutMs).catch(() => false);
     if (!listed) return false;
