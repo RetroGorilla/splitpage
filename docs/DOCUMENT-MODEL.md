@@ -453,8 +453,9 @@ One stack per tab, of step lists (§4). What counts as one entry:
   entry back under its own step (PR #448). An input with no key of its own
   after a cancel, such as a spelling fix or a drop, is its own entry. An
   undo or redo during the composition that moves an entry from before
-  `compositionstart` makes the cell as it leaves it the new start, so a
-  later cancel works from there; an undo of typing that the composition's
+  `compositionstart` makes the cell as it leaves it the new start, but the
+  render ends the composition, so no later cancel in the app works from
+  there; an undo of typing that the composition's
   first update joined puts that typing on redo without the composition's
   text (#446, PR #448). Known limitations: an undo or redo of the
   composition's own updates during it, then a cancel, can give back a redo
