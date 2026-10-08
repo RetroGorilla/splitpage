@@ -21,7 +21,7 @@ import {
   updateIdentityChip
 } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "./04b-busy.js";
-import { pad2, render } from "./05-render.js";
+import { pad2, renderAbsorbed } from "./05-render.js";
 import {
   productionEntries,
   resetProductionPanelState,
@@ -355,7 +355,7 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
 
   S.docIdWrittenOut = true;
   clearDirty();
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   var commentNote = S.state.comments.length
@@ -471,7 +471,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   imported.dirty = false;
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   if (typeof syncDocIdentity === "function") syncDocIdentity();

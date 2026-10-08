@@ -10,7 +10,7 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
+import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
@@ -560,7 +560,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   setHome("none");
   resetProductionPanelState();
   S.docIdWrittenOut = wasUntitled ? !!t.header.docIdWrittenOut : false;
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
@@ -727,7 +727,7 @@ async function restoreFileDraft(t, mine, base, origin) {
   if (sameDocContent(base, disk)) {
     S.state = mine;
     setBaseState(diskCopy, "restoreFileDraft: the file, untouched since the draft's own base");
-    render();
+    renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
     S.docIdWrittenOut = !!t.header.docIdWrittenOut;
@@ -762,7 +762,7 @@ function adoptUntitledDraft(t, mine, base) {
   setHome("none");
   resetProductionPanelState();
   S.docIdWrittenOut = !!t.header.docIdWrittenOut;
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
