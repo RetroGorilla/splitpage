@@ -17,6 +17,7 @@ Everything listed here goes inside the asar.
 | `ipc-channels.js` | The IPC channel table. `main.js` requires it at startup, and both preloads read it over `splitpage:ipc-table-sync`, so a packaged build without it has no bridge at all. |
 | `prompter-share.js` | The teleprompter's loopback listener (#86). |
 | `google-drive.js` | Google Drive through a loopback OAuth redirect (#10). |
+| `bind-host.js` | Which address the document server listens on: every interface under `--host`, loopback otherwise and always in a test run, so test runs cause no firewall prompts. |
 | `blob-store.js` | The content-addressed folder where images live (#82). |
 | `voice-helper.js` | Follow My Voice's listener process (#8). The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
