@@ -143,7 +143,7 @@ export function setCellSelection(cellEl, from, to) {
   sel.addRange(range);
 }
 
-export function editCell(cellEl, fn) {
+export function openCellEdit(cellEl) {
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(rowId);
@@ -154,26 +154,33 @@ export function editCell(cellEl, fn) {
   if (/<img|video-embed-card/.test(html)) return null;
   var sel = cellSelection(cellEl);
   breakUndoCoalescing();
-  var out = fn(fromHtml(html), sel);
-  if (!out || !out.cell) return null;
-  var next = toHtml(out.cell);
-  if (next !== html) {
-    row[field] = next;
-    stampRow(row);
-    markDirty();
-  }
-  if (out.also) {
-    out.also();
-    markDirty();
-  }
+  return { rowId: rowId, field: field, html: html, sel: sel };
+}
+
+export function closeCellEdit(cellEl, next, sel) {
   cellEl.innerHTML = next;
   ensureTrailingCaretSpot(cellEl);
   syncFieldFromDom(cellEl);
   cellEl.focus({ preventScroll: true });
-  if (out.sel) setCellSelection(cellEl, out.sel.from, out.sel.to);
+  if (sel) setCellSelection(cellEl, sel.from, sel.to);
   flushEdits();
   breakUndoCoalescing();
   return cellEl;
+}
+
+export function editCell(cellEl, fn) {
+  var open = openCellEdit(cellEl);
+  if (!open) return null;
+  var out = fn(fromHtml(open.html), open.sel);
+  if (!out || !out.cell) return null;
+  var next = toHtml(out.cell);
+  if (next !== open.html) {
+    var row = S.state.rows[findRowIndex(open.rowId)];
+    row[open.field] = next;
+    stampRow(row);
+    markDirty();
+  }
+  return closeCellEdit(cellEl, next, out.sel);
 }
 
 export function __init() {}
