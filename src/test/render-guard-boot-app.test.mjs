@@ -80,3 +80,32 @@ test("a boot render that throws still finishes start-up: the document is loaded,
   assert.equal(document.getElementById("rows").hasAttribute("inert"), false);
   assert.deepEqual(logged, [BROKE]);
 });
+
+test("Redraw from the start-up message that fails again shows a new message with the same start-up text, and a Redraw that draws takes it away (#442)", async () => {
+  const { renderFirstDraw } = await import("../js/05-render.js");
+  const breaking = () => {
+    document.querySelectorAll = function (selector) {
+      if (String(selector).indexOf("#rows .gutter-btn") === 0) throw new Error(BROKE);
+      return Document.prototype.querySelectorAll.call(this, selector);
+    };
+  };
+  breaking();
+  try {
+    assert.equal(renderFirstDraw(), false);
+    assert.equal(redrawToasts().length, 1, "the start-up text is offered");
+    const first = redrawToasts()[0];
+    first.querySelector(".toast-action").click();
+    await idle();
+    const again = redrawToasts();
+    assert.equal(again.length, 1, "one start-up message is shown again");
+    assert.notEqual(again[0], first, "a new message, not the old one");
+    assert.equal(Array.from(document.querySelectorAll("#toast-host .toast.error:not(.is-leaving)")).length, 1, "and no other error message");
+    assert.equal(document.getElementById("rows").hasAttribute("inert"), true, "the script stays blocked");
+  } finally {
+    delete document.querySelectorAll;
+  }
+  redrawToasts()[0].querySelector(".toast-action").click();
+  await idle();
+  assert.equal(redrawToasts().length, 0);
+  assert.equal(document.getElementById("rows").hasAttribute("inert"), false);
+});
