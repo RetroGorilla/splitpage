@@ -1,5 +1,6 @@
 import type { Seal } from "../../core/document/freeze.ts";
 import type { IdSource, ImageSource } from "../../core/document/ports.ts";
+import { withoutLoneSurrogates } from "../../core/document/text-policy.ts";
 import type { StoredImageRef } from "../../core/document/text-policy.ts";
 import type { DecodeOptions } from "../../core/text/ports.ts";
 import type { Run } from "../../core/text/runs.ts";
@@ -47,7 +48,7 @@ export function createRichText(ports: RichTextPorts): RichText {
     const doc = body.ownerDocument;
     const out = doc.createElement("div");
     walkSanitize(body, out, { doc: doc, images: images, ids: ids, split: splitBudget(text.length) });
-    return out.innerHTML;
+    return withoutLoneSurrogates(out.innerHTML);
   }
 
   function decode(html: unknown, opts?: DecodeOptions | null): Run[] {

@@ -25,8 +25,104 @@ export function plainText(v: unknown): string {
   return textOf(v).replace(/<[^>]*>/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 }
 
+const SURROGATE_RE = /[\uD800-\uDFFF]/;
+const LONE_SURROGATE_RE = /\p{Cs}/u;
+const LONE_SURROGATES_RE = /\p{Cs}/gu;
+
+export function hasLoneSurrogate(s: string): boolean {
+  return SURROGATE_RE.test(s) && LONE_SURROGATE_RE.test(s);
+}
+
+export function withoutLoneSurrogates(s: string): string {
+  return hasLoneSurrogate(s) ? s.replace(LONE_SURROGATES_RE, "") : s;
+}
+
+export function codePointPrefix(s: string, max: number): string {
+  if (s.length <= max) return s;
+  let end = 0;
+  for (let n = 0; n < max && end < s.length; n++) {
+    end += (s.codePointAt(end) as number) > 0xffff ? 2 : 1;
+  }
+  return s.slice(0, end);
+}
+
+export function cappedName(s: string, max: number): string {
+  return codePointPrefix(withoutLoneSurrogates(s).trim(), max).trimEnd();
+}
+
 export function cappedText(v: unknown, max: number): string {
-  return plainText(v).trim().slice(0, max).trimEnd();
+  return cappedName(plainText(v), max);
+}
+
+export function unitCutName(s: string, max: number): string {
+  return s.trim().slice(0, max).trimEnd();
+}
+
+export function brokenCutOf(stored: string, name: string, max: number): boolean {
+  const s = stored.trim();
+  if (s.length < max - 3 || !hasLoneSurrogate(s)) return false;
+  const kept = withoutLoneSurrogates(s).trimStart();
+  return name.length > kept.trimEnd().length && name.startsWith(kept);
+}
+
+const LONE_ONE_RE = /^\p{Cs}$/u;
+const SPACE_RE = /^\s$/;
+
+function keptAsStored(text: string, healed: string, max: number): string {
+  if (!healed) return codePointPrefix(text, max).trimEnd();
+  let seen = 0, end = 0;
+  for (const ch of text) {
+    end += ch.length;
+    if (LONE_ONE_RE.test(ch) || (!seen && SPACE_RE.test(ch))) continue;
+    seen += ch.length;
+    if (seen >= healed.length) break;
+  }
+  let keep = end;
+  for (const ch of text.slice(end)) {
+    if (LONE_ONE_RE.test(ch)) { end += 1; keep = end; continue; }
+    if (!SPACE_RE.test(ch)) break;
+    end += ch.length;
+  }
+  return text.slice(0, keep);
+}
+
+export type NameKey = (name: string, at: number) => string;
+
+export function settledNames(texts: readonly string[], max: number, keyOf: NameKey, wanted?: readonly (string | undefined)[]): string[] {
+  const out: string[] = [], stored: string[] = [];
+  const taken: Record<string, string> = Object.create(null), asked: Record<string, string> = Object.create(null);
+  const open: number[] = [], heal: number[] = [];
+  function hold(map: Record<string, string>, at: number): void {
+    if (!out[at]) return;
+    map[keyOf(out[at] as string, at)] = stored[at] as string;
+  }
+  function free(map: Record<string, string>, key: string, at: number): boolean {
+    const was = map[key];
+    return was === undefined || was === stored[at];
+  }
+  texts.forEach(function (text, at) {
+    out.push(cappedName(text, max));
+    stored.push(hasLoneSurrogate(text) ? keyOf(text.trim(), at) : "\u0000" + at);
+    if (wanted && wanted[at]) open.push(at);
+    else if (hasLoneSurrogate(text)) heal.push(at);
+    else hold(taken, at);
+  });
+  function settle(at: number, want: string, blocked: Record<string, string>): void {
+    const text = texts[at] as string, healed = out[at] as string;
+    if (want && free(taken, keyOf(want, at), at) && free(blocked, keyOf(want, at), at)) { out[at] = want; return; }
+    out[at] = hasLoneSurrogate(text) ? keptAsStored(text.trim(), healed, max) : healed;
+    hold(taken, at);
+  }
+  const none: Record<string, string> = Object.create(null);
+  open.forEach(function (at) {
+    settle(at, (wanted as readonly (string | undefined)[])[at] as string, none);
+    hold(asked, at);
+  });
+  heal.forEach(function (at) {
+    settle(at, out[at] as string, asked);
+    hold(taken, at);
+  });
+  return out;
 }
 
 export function plainName(v: unknown): string {

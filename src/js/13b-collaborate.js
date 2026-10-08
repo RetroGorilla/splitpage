@@ -29,7 +29,7 @@ import { updateFileChip } from "./18-local-files.js";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
@@ -872,13 +872,13 @@ function closeGuestName() {
 
 function saveGuestName() {
   var input = document.getElementById("guest-name");
-  var v = input ? input.value.trim() : "";
+  var v = input ? cappedName(input.value, 80) : "";
   if (!v) { if (input) input.focus(); return; }
-  writePref(COMMENT_NAME_KEY, v.slice(0, 80));
+  writePref(COMMENT_NAME_KEY, v);
   updateIdentityChip();
   if (S.state) render();
   closeGuestName();
-  showToast("Hi " + v.slice(0, 80) + " — that's how the others will see you.", "ok");
+  showToast("Hi " + v + " — that's how the others will see you.", "ok");
 }
 
 function wireGuest(m) {

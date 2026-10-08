@@ -33,7 +33,7 @@ import {
 } from "../core/document/comments.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
 export { nowIso };
 
 var commentFilter;
@@ -251,7 +251,7 @@ export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   if (reviewBlocked()) { renderComments(); return; }
-  S.state.comments[idx].assignee = plainText(name || "").trim().slice(0, 80);
+  S.state.comments[idx].assignee = cappedText(name || "", 80);
   S.state.comments[idx].updatedAt = nowIso();
   markDirty();
   render();

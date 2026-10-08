@@ -9,13 +9,27 @@ import { deriveDocId, docIdEmbeddedIn } from "./document/ids.ts";
 import { mediaComments } from "./document/media.ts";
 import type { CellMedia, MediaComment, MediaField, MediaRow } from "./document/media.ts";
 import type { IdSource, ImageSource } from "./document/ports.ts";
-import { TAG_CATEGORY_IDS, TAG_STATUS_IDS, ensureTagIds, tagCategoryId, tagStatusId } from "./document/tags.ts";
+import { TAG_CATEGORY_IDS, TAG_STATUS_IDS, ensureTagIds, normalizeTagName, tagCategoryId, tagKey, tagStatusId } from "./document/tags.ts";
 import type { TagRecord } from "./document/tags.ts";
 import type { ValidatedDocument } from "./document/validated.ts";
-import { cappedText, legacyMdToHtml, plainName, plainText, safeId, safeImageSrc, storedImageHtml, textOf } from "./document/text-policy.ts";
+import {
+  brokenCutOf,
+  cappedName,
+  cappedText,
+  legacyMdToHtml,
+  plainName,
+  plainText,
+  safeId,
+  safeImageSrc,
+  settledNames,
+  storedImageHtml,
+  textOf,
+  withoutLoneSurrogates
+} from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
+import { brollCutRenames } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
-import { collectTagsFromRows, missingRegistryTags } from "./production/tags.ts";
+import { collectTagsFromRows, cueCutRenames, missingRegistryTags } from "./production/tags.ts";
 import { syncCommentAnchors } from "./text/anchors.ts";
 import { toHtml } from "./text/html.ts";
 import type { DecodeOptions } from "./text/ports.ts";
@@ -60,6 +74,65 @@ function moveMediaOutOfCell(row: Bag, field: MediaField, ports: MigratePorts): M
   const cell = ports.decode(row[field] as string, { onMedia: function (m) { found.push(m); } });
   row[field] = toHtml(cell);
   return mediaComments(row as unknown as MediaRow, field, found, ports.images, ports.videoCardHtml);
+}
+
+function textOfName(item: Bag): string {
+  return plainText(item.name);
+}
+
+function nameKey(name: string): string {
+  return normalizeTagName(name);
+}
+
+function cueRenamesFor(tags: readonly Bag[], rows: readonly ProductionRow[], readers: ProductionReaders): (string | undefined)[] | undefined {
+  if (!tags.some(function (t) { return t.cat === "sound"; })) return undefined;
+  const renames = cueCutRenames(rows, readers);
+  const claimed: Record<string, boolean> = Object.create(null), used: Record<string, boolean> = Object.create(null);
+  tags.forEach(function (t) {
+    if (t.cat !== "sound") return;
+    claimed[nameKey(textOfName(t))] = true;
+    claimed[nameKey(cappedText(t.name, 80))] = true;
+  });
+  const first: boolean[] = [];
+  const wanted = tags.map(function (t) {
+    const key = t.cat === "sound" ? nameKey(textOfName(t)) : "";
+    first.push(!!key && !used[key]);
+    if (!key || used[key]) return undefined;
+    used[key] = true;
+    const name = renames.byOldCut[key];
+    if (name) claimed[nameKey(name)] = true;
+    return name;
+  });
+  return wanted.map(function (name, at) {
+    if (name || !first[at]) return name;
+    const text = textOfName(tags[at] as Bag);
+    const hit = renames.long.find(function (n) { return !claimed[nameKey(n)] && brokenCutOf(text, n, 80); });
+    if (hit) claimed[nameKey(hit)] = true;
+    return hit;
+  });
+}
+
+function shotRenamesFor(shots: readonly Bag[], rows: readonly ProductionRow[], readers: ProductionReaders): (string | undefined)[] | undefined {
+  if (!shots.length) return undefined;
+  const renames = brollCutRenames(rows, readers);
+  if (!renames.lines.length) return undefined;
+  const wanted: (string | undefined)[] = shots.map(function () { return undefined; });
+  const texts = shots.map(textOfName), named: Record<string, boolean> = Object.create(null);
+  texts.forEach(function (text) {
+    named[nameKey(text)] = true;
+    named[nameKey(cappedName(text, 200))] = true;
+  });
+  renames.lines.forEach(function (line) {
+    const free = !named[nameKey(line.name)];
+    for (let at = 0; at < shots.length; at++) {
+      const text = texts[at] as string;
+      if (wanted[at] || renames.held[(shots[at] as Bag).id as string]) continue;
+      if (!(line.key && nameKey(text) === line.key) && !(free && brokenCutOf(text, line.name, 200))) continue;
+      wanted[at] = line.name;
+      return;
+    }
+  });
+  return wanted;
 }
 
 export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocument {
@@ -126,7 +199,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
       if (rep.createdAt !== undefined) rep.createdAt = stampOrNull(rep.createdAt);
     });
     c.body = ports.sanitize(textOf(c.body || ""));
-    c.quotedText = plainText(c.quotedText);
+    c.quotedText = withoutLoneSurrogates(plainText(c.quotedText));
     if (typeof c.resolved !== "boolean") c.resolved = false;
     c.author = plainName(c.author);
     if (c.createdAt !== undefined) c.createdAt = stampOrNull(c.createdAt);
@@ -156,8 +229,9 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   s.people = (s.people as unknown[]).filter(isObject);
   (s.people as Bag[]).forEach(function (p) {
     p.id = safeId(p.id, "p", ids);
-    p.name = cappedText(p.name, 60);
   });
+  const peopleNames = settledNames((s.people as Bag[]).map(textOfName), 60, nameKey);
+  (s.people as Bag[]).forEach(function (p, at) { p.name = peopleNames[at]; });
   s.people = (s.people as Bag[]).filter(function (p) { return p.name; });
   const knownPeople: Record<string, boolean> = Object.create(null);
   (s.people as Bag[]).forEach(function (p) { knownPeople[p.id as string] = true; });
@@ -168,9 +242,13 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     });
   }
   s.productionTags = (s.productionTags as unknown[]).filter(isObject);
-  (s.productionTags as Bag[]).forEach(function (t) {
-    t.cat = tagCategoryId(t.cat) || TAG_CATEGORY_IDS[0];
-    t.name = cappedText(t.name, 80);
+  const tags = s.productionTags as Bag[];
+  tags.forEach(function (t) { t.cat = tagCategoryId(t.cat) || TAG_CATEGORY_IDS[0]; });
+  const tagNames = settledNames(tags.map(textOfName), 80, function (name, at) {
+    return tagKey((tags[at] as Bag).cat as string, name);
+  }, cueRenamesFor(tags, s.rows as ProductionRow[], ports.readers));
+  tags.forEach(function (t, at) {
+    t.name = tagNames[at];
     t.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
     t.owner = typeof t.owner === "string" && knownPeople[t.owner] ? t.owner : "";
     t.notes = plainText(t.notes).slice(0, 2000);
@@ -183,9 +261,11 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
 
   if (!Array.isArray(s.brollShots)) s.brollShots = [];
   s.brollShots = (s.brollShots as unknown[]).filter(isObject);
-  (s.brollShots as Bag[]).forEach(function (b) {
-    b.id = safeId(b.id, "bs", ids);
-    b.name = cappedText(b.name, 200);
+  const shots = s.brollShots as Bag[];
+  shots.forEach(function (b) { b.id = safeId(b.id, "bs", ids); });
+  const shotNames = settledNames(shots.map(textOfName), 200, nameKey, shotRenamesFor(shots, s.rows as ProductionRow[], ports.readers));
+  shots.forEach(function (b, at) {
+    b.name = shotNames[at];
     b.desc = plainText(b.desc).slice(0, 2000);
     b.status = brollStatusId(b.status) || BROLL_STATUS_IDS[0];
     b.reshoot = b.reshoot === true;
