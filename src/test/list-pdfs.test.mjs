@@ -427,6 +427,16 @@ function shotsDoc(n) {
   });
 }
 
+test("a shot's Cuts against opening never ends in half an emoji (#434)", () => {
+  shotsDoc(0);
+  groupBy("person");
+  S.state.brollShots[0].audioRef = "Every " + "x".repeat(77) + String.fromCodePoint(0x1F600) + "tail";
+  const all = pagesOf(buildShotListPdf(brollShotListForPrint())).map(textsOf).flat();
+  const joined = all.map((t) => t.str).join("");
+  assert.ok(joined.includes("x".repeat(20)), "the opening is drawn");
+  assert.ok(!joined.includes("?"), joined);
+});
+
 test("by person: a shot's description on its own lines, its props with their status, a note, and Flagged with none", () => {
   shotsDoc(0);
   groupBy("person");

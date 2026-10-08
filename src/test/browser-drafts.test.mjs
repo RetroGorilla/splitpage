@@ -56,6 +56,16 @@ test("eviction: expired first, then the oldest past the count or the bytes, neve
   assert.deepEqual(planDraftEviction([null, { key: 5 }, m("ok", 1)], now), []);
 });
 
+test("a draft's title is cut at 500 by code point, with no half emoji (#434)", async () => {
+  const grin = String.fromCodePoint(0x1F600);
+  const store = createIdbDraftStore({ indexedDB: new IDBFactory() });
+  const a = browserDraftKey("https://s.test/", "doc-1"), b = browserDraftKey("https://s.test/", "doc-2");
+  await store.put(rec(a, { title: "x".repeat(499) + grin + "y" }));
+  await store.put(rec(b, { docId: "doc-2", title: "a\uD83D b" }));
+  const titles = (await store.list()).map((m) => [m.docId, m.title]).sort();
+  assert.deepEqual(titles, [["doc-1", "x".repeat(499) + grin], ["doc-2", "a b"]]);
+});
+
 test("put and get: the draft comes back whole, with its scalars and its ancestor", async () => {
   const store = createIdbDraftStore({ indexedDB: new IDBFactory() });
   assert.equal(await store.available(), true);
