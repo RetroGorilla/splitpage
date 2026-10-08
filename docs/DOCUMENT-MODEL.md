@@ -440,9 +440,14 @@ One stack per tab, of step lists (§4). What counts as one entry:
   dropped, so typing a letter and deleting it leaves no entry. A cancelled
   IME composition drops every entry it made in its cell, however long its
   updates took, whether `compositionend` comes before or after the input
-  that reverts the cell; if its first update joined earlier typing, that
-  typing keeps its own entry as it was (#380, PR #427). Typing that leaves
-  no entry this way also gives back the redo it cleared.
+  that reverts the cell, as long as the cancel leaves the cell as it was at
+  `compositionstart`; if its first update joined earlier typing, that
+  typing keeps its own entry as it was (#380, PR #427). A slow composition
+  that replaced a selection keeps its entries when it is cancelled in a
+  browser that doesn't put the selection back, such as Chromium (#436).
+  Typing that leaves no entry this way also gives back the redo it
+  cleared, even when that typing was undone or redone in between. If it
+  was undone, its own redo comes back on top of the older redo.
 - Every intercepted action is one entry:
   - a paste
   - a format
