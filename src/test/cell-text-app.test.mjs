@@ -580,6 +580,20 @@ async function commitKa(el) {
   await settle();
 }
 
+test("#380: a stray compositionend long after a committed composition does not reach back to that composition's start", async () => {
+  await inPlace("grid", async (el) => {
+    await commitKa(el);
+    clock += 3000;
+    keydown(el, "Backspace", 8);
+    setText(el, "Three.", { inputType: "deleteContentBackward" });
+    await settle();
+    assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+    compose(el, "compositionend", "");
+    await settle();
+    assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+  });
+});
+
 for (const [where, end] of [["grid", "edge"], ["grid", "firefox"], ["grid", "safari"], ["writer", "edge"]]) {
   test(`#380: a slow cancelled composition that began right after a committed one in the same cell leaves that one as its only step, and Ctrl+Z does not bring the cancelled text back (${where}, ${end} event order)`, async () => {
     await inPlace(where, async (el) => {
