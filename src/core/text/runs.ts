@@ -1,5 +1,5 @@
 import { BROLL_MARKER_RE } from "../document/broll.ts";
-import { safeHref, withoutLoneSurrogates } from "../document/text-policy.ts";
+import { hasLoneSurrogate, safeHref, withoutLoneSurrogates } from "../document/text-policy.ts";
 import type { TagName } from "../document/tags.ts";
 
 export const FORMAT_MARKS = Object.freeze(["hl", "b", "i", "u", "s"] as const);
@@ -62,7 +62,7 @@ export function cleanText(t: unknown): string {
 }
 
 function holdsLoneSurrogate(r: Run): boolean {
-  return !r.atom && withoutLoneSurrogates(r.text) !== r.text;
+  return !r.atom && hasLoneSurrogate(r.text);
 }
 
 function withoutLoneHalves(r: Run): Run {
@@ -184,7 +184,7 @@ export function normalizeCell(cell: CellInput, opts?: NormalizeOptions | null): 
       out.push(r);
     }
   });
-  return out.some(holdsLoneSurrogate) ? normalizeCell(out.map(withoutLoneHalves), opts) : out;
+  return out.some(holdsLoneSurrogate) ? normalizeCell(out.map(withoutLoneHalves)) : out;
 }
 
 export function settleCues(runs: Run[]): Run[] {
