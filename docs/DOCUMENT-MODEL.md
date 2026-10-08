@@ -436,6 +436,24 @@ One stack per tab, of step lists (§4). What counts as one entry:
 
 - **Typing** coalesces into one entry per word or per pause of 1 s, split
   also by caret jumps and by switching cells.
+- A typing entry that coalesces back to where it began (the same runs) is
+  dropped, so typing a letter and deleting it leaves no entry. A cancelled
+  IME composition drops every entry it made in its cell, however long its
+  updates took, whether `compositionend` comes before or after the input
+  that reverts the cell, as long as the cancel leaves the cell as it was at
+  `compositionstart`; if its first update joined earlier typing, that
+  typing keeps its own entry as it was (#380, PR #427). A slow composition
+  that replaced a selection keeps its entries when it is cancelled in a
+  browser that doesn't put the selection back, such as Chromium (#436).
+  Typing that leaves a real step clears redo. Typing that leaves no entry
+  this way gives back only the redo that this same typing cleared, even
+  when that typing was undone or redone in between. Redo that earlier
+  typing cleared stays cleared: if a typed step was undone and a later
+  typing then drops, Ctrl+Y redoes that step and stops, because the
+  change undone before it belongs to a history without it. Known
+  limitation: if only part of the typing was undone before it drops (a
+  word-start entry, or a slow composition's later update), the redo from
+  before the typing does not come back, as before drops gave any back.
 - Every intercepted action is one entry:
   - a paste
   - a format
