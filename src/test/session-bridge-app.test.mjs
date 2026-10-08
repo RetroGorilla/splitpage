@@ -6,7 +6,7 @@ import { S } from "../js/_state.js";
 
 await bootApp();
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
@@ -148,6 +148,22 @@ test("a reload in place is its own kind: same epoch, no generation, S.editSeq an
   assert.equal(S.dirty, true);
   flushEdits();
   assert.equal(undoSizes().undo, 0, "the reloaded text is not an undo step");
+});
+
+test("a reload into a document swapped in with no flush lands in the document the app shows", () => {
+  const before = held();
+  const beforeText = JSON.stringify(before);
+  S.state = cloneState(script("Swapped"));
+  const doc = S.state;
+  heard.length = 0;
+  const taken = noteReload({ title: "Reloaded", rows: [{ id: "r1", visualText: "Wide", audioText: "Reloaded." }] });
+  assert.equal(S.state, doc);
+  assert.equal(taken, doc);
+  assert.equal(held(), doc);
+  assert.equal(doc.title, "Reloaded");
+  assert.deepEqual(doc.rows.map((row) => [row.audioText, row.status]), [["Reloaded.", "todo"]]);
+  assert.deepEqual(heard, ["adopt", "reload"], "the bridge adopts the swapped-in document, then the reload lands in it");
+  assert.equal(JSON.stringify(before), beforeText, "the document held before is not written into");
 });
 
 test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kept, no generation, no undo entry", () => {

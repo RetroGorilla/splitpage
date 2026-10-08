@@ -48,6 +48,11 @@ export type AbsorbedKind = "server" | "reload" | "recovery" | "adopt";
 
 export type SessionListener = (change: SessionChange) => void;
 
+export interface ReloadedContent {
+  readonly title: unknown;
+  readonly rows: unknown;
+}
+
 export interface DocumentSession {
   epoch: () => number;
   generation: () => number;
@@ -55,7 +60,7 @@ export interface DocumentSession {
   adopt: (raw: unknown) => ValidatedDocument | null;
   absorbServer: (raw: unknown) => ValidatedDocument | null;
   absorbRecovery: (raw: unknown) => ValidatedDocument | null;
-  absorbReload: () => void;
+  absorbReload: (content: ReloadedContent) => ValidatedDocument | null;
   settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
@@ -104,6 +109,20 @@ function keepWhole(doc: ValidatedDocument): Restore {
     Object.keys(doc).forEach(function (key) { Reflect.deleteProperty(doc, key); });
     if (saved && typeof saved === "object") Object.assign(doc, saved);
   };
+}
+
+function takeInPlace(doc: ValidatedDocument, next: ValidatedDocument): void {
+  const taken = new Map<string, unknown>();
+  Object.keys(next).forEach(function (key) {
+    const was: unknown = Reflect.get(doc, key);
+    const value: unknown = Reflect.get(next, key);
+    const same = Object.prototype.hasOwnProperty.call(doc, key) && JSON.stringify(was) === JSON.stringify(value);
+    taken.set(key, same ? was : value);
+  });
+  Object.keys(doc).forEach(function (key) { Reflect.deleteProperty(doc, key); });
+  taken.forEach(function (value, key) {
+    Object.defineProperty(doc, key, { value: value, enumerable: true, writable: true, configurable: true });
+  });
 }
 
 function rollbackPoint(doc: ValidatedDocument, changes: ChangeSet): Restore {
@@ -179,9 +198,14 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return doc;
   }
 
-  function absorbReload(): void {
+  function absorbReload(content: ReloadedContent): ValidatedDocument | null {
+    const doc = document;
+    if (!doc) return null;
+    const next = ports.entry(copied({ ...doc, title: content.title, rows: content.rows }));
+    takeInPlace(doc, next);
     ports.undo.absorbReload();
     publish(changeOf("reload", WHOLE_DOCUMENT));
+    return doc;
   }
 
   function settle(kind: AbsorbedKind): void {
