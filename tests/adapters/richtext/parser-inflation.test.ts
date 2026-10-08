@@ -221,7 +221,8 @@ const BLOCKS: readonly string[] = ["<p>", "</p>", "<div>", "</div>", "<li>", "<h
 const FLAT_BLOCKS: readonly string[] = ["<p>", "</p>", "<br>", "<hr>", "<li>", "<h2>", "</h2>", "<div>x</div>", "<p><table><td>x</table>"];
 const WORDS: readonly string[] = ["x", " ", "&nbsp;", "w", "&amp;", "q"];
 const OTHERS: readonly string[] = ["<!-- <b id=99> -->", "<template><p><i id=7>t<p>u</template>", "<svg><font color=red>s</font></svg>",
-  '<span style="font-weight:bold">', "</span>", "</b>", "</i>", "</a>", "</strong>", "</font>", "</nobr>"];
+  '<span style="font-weight:bold">', "</span>", "</b>", "</i>", "</a>", "</strong>", "</font>", "</nobr>", '<span title="<b q">w</span>',
+  "<textarea><b id=5>t</textarea>", "<!-- <a x y z> -->", "<script><!--<script></script><i id=6>--></script>"];
 
 export function inflating(seed: number, scale = 1): string {
   const rnd = prng(seed);
@@ -234,6 +235,7 @@ export function inflating(seed: number, scale = 1): string {
     const attribute = styled && rnd() < 0.7 ? ' style="color:#' + String(serial) + '"' : pick(["", "", " id=" + String(serial), ' class="c' + String(serial % 4) + '"',
       ' style="font-weight:' + pick(["normal", "bold", "300", "700"]) + '"', ' style="color:#' + String(serial) + '"',
       ' title="a>' + String(serial) + '"', " x<y" + String(serial), " title='q\"" + String(serial % 3) + "'", " /",
+      manyAttributes(Math.floor(rnd() * 60)), ' style="color:#' + String(serial) + ';font-weight:' + pick(["300", "700"]) + '"',
       ' href="https://x.test/' + "h".repeat(Math.floor(rnd() * 400)) + '"']);
     return "<" + (rnd() < 0.2 ? name.toUpperCase() : name) + attribute + ">";
   };
@@ -272,10 +274,13 @@ test("seeded fuzz: pastes the parser would reopen formatting in stay within the 
     const n = html.length;
     const body = rt.inertBody(html);
     const once = rt.sanitize(html);
-    const parsed = elementsIn(rawBody(boundedMarkup(html)));
+    const bounded = rawBody(boundedMarkup(html));
+    const parsed = elementsIn(bounded);
+    const copies = attributeCopies(bounded);
     let why: string | null = null;
     if (parsedSize(body) > 8 * n + 4096) why = "parsed " + String(parsedSize(body));
     else if (parsed > 8 * n + 4096 + (tagsIn(html) + 1)) why = String(parsed) + " elements";
+    else if (copies > 9 * n + 4096) why = String(copies) + " attributes";
     else if (rt.sanitize(once) !== once) why = "not a fixed point";
     else if (once.length > 56 * n + 28672) why = "output of " + String(once.length);
     else if (words(once) !== words(html)) why = "words changed";
@@ -284,7 +289,115 @@ test("seeded fuzz: pastes the parser would reopen formatting in stay within the 
   assert.deepEqual(failures, []);
 });
 
-const COUNTED_NAMES: readonly string[] = ["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
+function attributeCopies(root: Node): number {
+  let attributes = 0;
+  const stack: Node[] = [root];
+  while (stack.length) {
+    (stack.pop() as Node).childNodes.forEach((child) => {
+      if (child.nodeType !== 1) return;
+      attributes += (child as Element).attributes.length;
+      stack.push(child);
+      const content = (child as Partial<HTMLTemplateElement>).content;
+      if (content) stack.push(content);
+    });
+  }
+  return attributes;
+}
+
+function manyAttributes(count: number): string {
+  return Array.from({ length: count }, (_, i) => " a" + i.toString(36)).join("");
+}
+
+test("a reopened tag with many attributes is reopened without them, so the parser copies at most 8 attributes per input code unit plus 4096 (#420)", () => {
+  const extra = manyAttributes(400);
+  const shapes: readonly (readonly [string, string])[] = [
+    ["<p><b" + extra + ">", "<p><b>"],
+    ['<p><b title="<>"' + extra + ">", '<p><b title="<>">'],
+    ['<p><a href="https://x.test/"' + extra + ">", '<p><a href="https://x.test/">']
+  ];
+  for (const [open, plain] of shapes) {
+    const html = open + "<p>x".repeat(400);
+    const copies = attributeCopies(rawBody(boundedMarkup(html)));
+    assert.ok(copies <= 8 * html.length + 4096, String(copies) + " from " + String(html.length));
+    assert.equal(rt.sanitize(html), rt.sanitize(plain + "<p>x".repeat(400)));
+  }
+});
+
+test("a tag scan that would step through more than 8 code units per input code unit plus 4096 takes the first tier (#420)", () => {
+  const shape = (inner: number): string => "<b/t=".repeat(9) + "x".repeat(inner) + ">";
+  assert.equal(boundedMarkup(shape(4230)), shape(4230));
+  assert.equal(boundedMarkup(shape(4231)), "<b>");
+});
+
+function strongLines(lines: number): string {
+  return Array.from({ length: lines }, (_, i) => "<p>Line " + String(i) + ' has <strong style="color: rgb(' + String(i % 256) + ", " +
+    String(Math.floor(i / 256)) + ', 0);">a word</strong> in it.</p>').join("");
+}
+
+test("bold with a colour of its own on every line keeps its bold however many lines there are (#420)", () => {
+  for (const lines of [120, 400]) {
+    const html = strongLines(lines);
+    assert.notEqual(boundedMarkup(html), html);
+    assert.equal(count(rt.sanitize(html), /<strong>a word<\/strong>/g), lines);
+  }
+});
+
+const TRIP = Array.from({ length: 300 }, (_, i) => "<i id=" + String(i) + ">t</i>").join("") + "<br>".repeat(300);
+
+const WEIGHT_STYLES: readonly string[] = [
+  'style="color: red; font-weight: 300"',
+  'style="font-weight: 300; color: red"',
+  'style="color: red"',
+  "STYLE='COLOR: red; FONT-WEIGHT: 300'",
+  'style="font: italic 300 12px serif; color: blue"',
+  'style="font-family: &quot;a; font-weight: 300&quot;; color: red"',
+  'style="background: url(a;font-weight:300); color: red"',
+  'style="color: red; /* ; font-weight: 300 */"',
+  'style="font-weight: 300; font-weight: bold; color: red"',
+  'style="font-weight: 3&#48;0; color: red"',
+  'style="font-weight: \\33 00; color: red"',
+  'style="color: red; font-weight: 300" style="font-weight: bold"',
+  "style=color:red;font-weight:300",
+  'style="--w: 300; font-weight: var(--w); color: red"'
+];
+
+test("past the first bound, bold keeps from its style only what decides its weight, and cancels or not as it did (#420)", () => {
+  for (const style of WEIGHT_STYLES) {
+    for (const name of ["b", "strong"]) {
+      const tag = "<" + name + " id=k " + style + ">w</" + name + ">";
+      assert.notEqual(boundedMarkup(TRIP + tag), TRIP + tag);
+      assert.equal(rt.sanitize(TRIP + tag), rt.sanitize(TRIP) + rt.sanitize(tag), tag);
+    }
+  }
+});
+
+test("past the first bound, a tag name inside an attribute value is left as written, so the words and the link after it are kept (#420)", () => {
+  const tail = '<span title="<b q" class=x>Hello</span> world. <a href="https://x.test/">link</a> more "text"';
+  assert.notEqual(boundedMarkup(TRIP + tail), TRIP + tail);
+  assert.equal(rt.sanitize(TRIP + tail), rt.sanitize(TRIP) + rt.sanitize(tail));
+});
+
+test("past the first bound, a comment holding tags stays one comment (#420)", () => {
+  const comment = '<!-- <b style=a-- x><img src=x onerror=alert(1)><a href="javascript:alert(1)">j</a> -->';
+  const body = rt.inertBody(TRIP + comment + "after");
+  assert.equal(body.querySelectorAll("img, a").length, 0);
+  assert.equal(rt.sanitize(TRIP + comment + "after"), rt.sanitize(TRIP + "after"));
+});
+
+test("past the first bound, the text of a text box, a title, a style, a script, an xmp, an iframe, a noembed and a noframes is left as written (#420)", () => {
+  const inner = '<b id=1 title="q>">x</b><a href=y z=1>l</a><font color=red>f</font></i>';
+  const contents: readonly (readonly [string, string])[] = [
+    ["textarea", inner], ["title", inner], ["style", inner], ["script", inner], ["xmp", inner], ["iframe", inner], ["noembed", inner],
+    ["noframes", inner], ["script", "<!--<script></script>" + inner + "-->"], ["TEXTAREA", inner + "</textareax>"]
+  ];
+  for (const [name, text] of contents) {
+    const html = TRIP + "<" + name + ">" + text + "</" + name + ">after";
+    assert.notEqual(boundedMarkup(html), html);
+    assert.equal(rt.inertBody(html).querySelector(name)?.textContent, text, name);
+  }
+});
+
+const COUNTED_NAMES: readonly string[] =["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
 const UNKEPT_NAMES: readonly string[] = ["big", "code", "font", "nobr", "small", "tt"];
 const REOPENABLE_NAMES: readonly string[] = ["b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
 
