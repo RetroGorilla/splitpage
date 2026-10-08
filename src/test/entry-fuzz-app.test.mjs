@@ -86,7 +86,21 @@ const ENTRIES = {
   }
 };
 
-async function through(name, raw, where, tally, spoilMine) {
+const RENDER_BROKE = "render broke (#418)";
+const REDRAW = "Couldn't redraw the script after the update. Your changes are saved.";
+
+function breakRender() {
+  const box = document.getElementById("doc-title");
+  const real = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  Object.defineProperty(box, "value", { configurable: true, get() { return real.get.call(this); }, set() { throw new Error(RENDER_BROKE); } });
+  return () => { delete box.value; };
+}
+
+function redrawOffered() {
+  return Array.from(document.querySelectorAll("#toast-host .toast.has-action")).some((el) => el.firstChild.nodeValue === REDRAW);
+}
+
+async function through(name, raw, where, tally, spoilMine, broken) {
   const entry = ENTRIES[name];
   const base = cloneState(S.state);
   const mine = cloneState(S.state);
@@ -97,14 +111,23 @@ async function through(name, raw, where, tally, spoilMine) {
   const epoch = session.epoch(), gen = session.generation();
   heard.length = 0;
   let outcome;
+  const unbreak = broken ? breakRender() : null;
   try {
     outcome = await quietly(() => entry.run(raw, base, mine));
   } catch (e) {
     assert.fail(where + " threw: " + (e && e.stack));
+  } finally {
+    if (unbreak) unbreak();
   }
   const refused = noDocument(raw);
-  assert.deepEqual(errors.map((e) => String((e && e.stack) || e)), [], where + " logged an error");
-  if (refused || outcome === "failed" || outcome === "nothing-unsaved") {
+  const failed = refused || outcome === "failed" || outcome === "nothing-unsaved";
+  const logged = errors.map((e) => broken && e && e.message === RENDER_BROKE ? RENDER_BROKE : String((e && e.stack) || e));
+  assert.deepEqual(logged, broken && !failed ? [RENDER_BROKE] : [], where + " logged an error");
+  if (broken) {
+    assert.equal(redrawOffered(), !failed, where + ": the redraw toast");
+    document.getElementById("toast-host").textContent = "";
+  }
+  if (failed) {
     bump(tally.typed, name + ":" + (refused ? "no document" : outcome));
     if (refused && name === "draft") assert.equal(outcome, "failed", where + ": a draft that is no document is a typed failure");
     assert.equal(S.state, before, where + ": a failed entry keeps the document");
@@ -134,12 +157,12 @@ function verdictOf(doc, tally) {
   return judge(judged, migrate, allowed);
 }
 
-async function seedEntries(seed, tally = { kinds: {}, known: {}, typed: {} }) {
+async function seedEntries(seed, tally = { kinds: {}, known: {}, typed: {} }, broken = false) {
   const r = seeded(0x3100 + seed);
   settle(startingDocument("Seed " + seed));
   for (const name of Object.keys(ENTRIES)) {
     if (!chance(r, 0.75)) continue;
-    await through(name, rawObject(r), "seed " + seed + " " + name, tally);
+    await through(name, rawObject(r), "seed " + seed + " " + name + (broken ? ", render throwing" : ""), tally, null, broken);
   }
   return tally;
 }
@@ -147,6 +170,14 @@ async function seedEntries(seed, tally = { kinds: {}, known: {}, typed: {} }) {
 test("booted app: seeded raw documents through a draft adoption, a server update, a merge and a recovery merge end in a valid fixed point, a typed failure or a refusal that changes nothing", async (t) => {
   const tally = { kinds: {}, known: {}, typed: {} };
   for (let seed = 1; seed <= SEEDS; seed++) await seedEntries(seed, tally);
+  flushEdits();
+  t.diagnostic(JSON.stringify(tally));
+  for (const name of Object.keys(ENTRIES)) assert.ok((tally.kinds[name] || 0) >= SEEDS / 4, "every entry point lands: " + name + " " + JSON.stringify(tally.kinds));
+});
+
+test("booted app: with render() throwing, the same seeded entries still land whole, publish, stay held and end in a valid fixed point; the render error is logged once and Redraw is offered (#418)", async (t) => {
+  const tally = { kinds: {}, known: {}, typed: {} };
+  for (let seed = 1; seed <= SEEDS; seed++) await seedEntries(seed, tally, true);
   flushEdits();
   t.diagnostic(JSON.stringify(tally));
   for (const name of Object.keys(ENTRIES)) assert.ok((tally.kinds[name] || 0) >= SEEDS / 4, "every entry point lands: " + name + " " + JSON.stringify(tally.kinds));
