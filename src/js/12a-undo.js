@@ -215,12 +215,35 @@ function projectionOf(html) {
 export function createUndoHistory() {
   var done = [], undone = [];
   var serial = 0;
+  var parked = null;
+
+  function park(top) {
+    parked = {
+      redo: undone.slice(), top: top || null,
+      after: top && top.steps[0].after, length: top && top.steps.length,
+      text: top && onlyCell(top.steps) ? projectionOf(top.steps[0].after) : null
+    };
+    undone.length = 0;
+  }
+
+  function unpark(text) {
+    var top = done[done.length - 1] || null;
+    if (!parked || top !== parked.top) return;
+    if (top && top.steps.length !== parked.length) return;
+    if (top && top.steps[0].after !== parked.after) {
+      if (!onlyCell(top.steps)) return;
+      if ((text === undefined ? projectionOf(top.steps[0].after) : text) !== parked.text) return;
+      if (!cosmetic({ op: "rowField", key: top.steps[0].key, before: parked.after, after: top.steps[0].after })) return;
+    }
+    for (var i = 0; i < parked.redo.length; i++) undone.push(parked.redo[i]);
+    parked = null;
+  }
 
   function record(steps, now) {
     if (!steps.length) return;
-    undone.length = 0;
     var cell = onlyCell(steps);
     var last = done[done.length - 1];
+    if (undone.length) park(last);
     var from = cell ? projectionOf(steps[0].before) : "", to = cell ? projectionOf(steps[0].after) : "";
     var ins = cell ? insertedText(from, to) : "";
     if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
@@ -229,7 +252,12 @@ export function createUndoHistory() {
         last.steps[0].after = steps[0].after;
         last.at = now;
         if (ins) last.endsInSpace = /\s$/.test(ins);
-        if (last.from === to && cosmetic(last.steps[0])) dropFrom(done.length - 1);
+        if (last.from === to && cosmetic(last.steps[0])) {
+          dropFrom(done.length - 1);
+          unpark();
+        } else if (parked) {
+          unpark(to);
+        }
         return;
       }
     }
@@ -270,12 +298,14 @@ export function createUndoHistory() {
       top.at = mark.at;
       top.endsInSpace = mark.endsInSpace;
     }
+    unpark();
     return true;
   }
 
   function step(from, to, state, invert) {
     var entry = from.pop();
     if (!entry) return { ok: false, empty: true };
+    parked = null;
     var steps = invert ? invertSteps(entry.steps) : entry.steps;
     var r = applyStepsLive(state, steps);
     if (!r.ok) return { ok: false, reason: r.reason, steps: steps };
@@ -298,6 +328,7 @@ export function createUndoHistory() {
     }
     keep(done);
     keep(undone);
+    if (parked) keep(parked.redo);
     done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });
   }
 
@@ -332,7 +363,7 @@ export function createUndoHistory() {
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
     markCell: markCell,
     dropEmptySince: dropEmptySince,
-    clear: function () { done.length = 0; undone.length = 0; },
+    clear: function () { done.length = 0; undone.length = 0; parked = null; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
     top: function () { return done[done.length - 1] || null; },
     nextRedo: function () { return undone[undone.length - 1] || null; },
