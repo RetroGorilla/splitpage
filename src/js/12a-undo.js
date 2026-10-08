@@ -19,6 +19,16 @@ var MAX_ENTRIES = 200;
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
 function same(a, b) { return a === b || JSON.stringify(a) === JSON.stringify(b); }
 
+function canon(v) {
+  if (Array.isArray(v)) return v.map(canon);
+  if (!v || typeof v !== "object") return v;
+  var out = {};
+  Object.keys(v).sort().forEach(function (k) { out[k] = canon(v[k]); });
+  return out;
+}
+
+function sameDoc(a, b) { return same(canon(a), canon(b)); }
+
 function docKeys(before, after) {
   var keys = {};
   STATE_FIELDS.forEach(function (f) { keys[f.key] = true; });
@@ -35,6 +45,23 @@ function rowsEqualIgnoringStamps(a, b) {
   return Object.keys(keys).every(function (k) {
     return k === "updatedAt" || k === "updatedBy" || same(a[k], b[k]);
   });
+}
+
+var OWNED_LISTS = { productionTags: true, brollShots: true };
+
+function ownerNames(key, before, after) {
+  if (!OWNED_LISTS[key]) return null;
+  var names = idMap(), out = idMap(), any = false;
+  [before, after].forEach(function (st) {
+    listOf(st && st.people).forEach(function (p) { if (p && p.id && p.name) names[p.id] = p.name; });
+  });
+  [before, after].forEach(function (st) {
+    listOf(st && st[key]).forEach(function (e) {
+      var id = e && e.owner;
+      if (typeof id === "string" && id && names[id]) { out[id] = names[id]; any = true; }
+    });
+  });
+  return any ? out : null;
 }
 
 export function diffStates(before, after, opts) {
@@ -77,7 +104,10 @@ export function diffStates(before, after, opts) {
   }
   docKeys(before, after).forEach(function (k) {
     if (skip[k] || same(before[k], after[k])) return;
-    steps.push({ op: "docField", key: k, before: clone(before[k]), after: clone(after[k]) });
+    var step = { op: "docField", key: k, before: clone(before[k]), after: clone(after[k]) };
+    var owners = ownerNames(k, before, after);
+    if (owners) step.owners = owners;
+    steps.push(step);
   });
   return steps;
 }
@@ -102,10 +132,17 @@ function resolveCell(live, step) {
 
 function listOf(v) { return Array.isArray(v) ? v : []; }
 
-function resolveDoc(state, p, survives) {
+function repointed(key, value, remap) {
+  var copy = clone(value);
+  if (remap && OWNED_LISTS[key] && Array.isArray(copy)) repointOwners([copy], remap);
+  return copy;
+}
+
+function resolveDoc(state, p, survives, remap) {
   var live = state[p.key];
-  if (same(live, p.step.before)) { p.value = clone(p.step.after); return; }
-  p.value = listMergeFor(p.key)(clone(p.step.before), clone(live), clone(p.step.after), survives);
+  var before = repointed(p.key, p.step.before, remap), after = repointed(p.key, p.step.after, remap);
+  if (same(live, p.step.before) || sameDoc(live, before)) { p.value = after; return; }
+  p.value = listMergeFor(p.key)(before, clone(live), after, survives);
   p.merged = true;
 }
 
@@ -115,10 +152,15 @@ function resolveDocFields(state, plan) {
   var people = docs.filter(function (p) { return p.key === "people"; })[0];
   if (people) resolveDoc(state, people);
   var sides = listOf(state.people).concat(people ? listOf(people.step.after) : []);
+  docs.forEach(function (p) {
+    var owners = p.step.owners;
+    if (owners) Object.keys(owners).forEach(function (id) { sides.push({ id: id, name: owners[id] }); });
+  });
   var kept = people ? people.value : state.people;
   var survives = personSurvives(sides, kept);
-  docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives); });
-  return people && people.merged ? personIdRemap(sides, kept) : null;
+  var remap = !people || people.merged ? personIdRemap(sides, kept) : null;
+  docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives, remap); });
+  return remap;
 }
 
 function repointLists(state, remap) {
