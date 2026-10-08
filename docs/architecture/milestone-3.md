@@ -314,7 +314,7 @@ The steps, in merge order:
   - A media cell goes through the typed `SanitisedMediaHtml` variant, recorded in INV-10's row until milestone 6.
   - It changed undo on purpose, on Adam's decisions: a typing group that ends where it began is dropped, a cancelled composition leaves no step however slow it was, the redo that typing cleared comes back, and in a just-opened Writer the first Ctrl+Z closes it.
 - **3.13 and 3.14 left four things alone and filed them.**
-  - The Writer has no review-mode guard, so the Writer's split and join stay `needs: "nothing"` (#450).
+  - The Writer had no review-mode guard, so its split and join stayed `needs: "nothing"` (#450). Since #466 the Writer refuses every edit in review mode, and split and join are `needs: "edit"`.
   - A Writer split or join requests no production or b-roll refresh (#451).
   - `editCell` (05b) still writes the cell and calls `markDirty`; routing it through `cellTextCommand` would change paste's counts (#452).
   - The scene paste in `05g-scene-clip.js` still uses `recordPastedBroll` (D10).
