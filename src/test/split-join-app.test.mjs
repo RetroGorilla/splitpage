@@ -142,7 +142,7 @@ function observe(run) {
   };
 }
 
-const WHOLE = { kind: "edit", whole: true, rows: 0, saveNow: false, derive: [] };
+const DECLARED = { kind: "edit", whole: false, rows: 1, saveNow: false, derive: [] };
 const GRID_REFRESH = ["broll", "untagged"];
 
 function storeMedia(el, html) {
@@ -153,7 +153,7 @@ function storeMedia(el, html) {
 
 beforeEach(() => { clock += 10_000; });
 
-test("a grid split (Alt+Enter) is one whole-document edit: one generation, one dirty, one render, no derivation requested", async () => {
+test("a grid split (Alt+Enter) publishes one declared edit: one generation, one dirty, one render, no derivation requested", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   el.focus();
@@ -161,7 +161,7 @@ test("a grid split (Alt+Enter) is one whole-document edit: one generation, one d
   const stamp = row("r1").updatedAt;
   const got = observe(() => key(el, "Enter", { altKey: true }));
   const created = S.state.rows[1].id;
-  assert.deepEqual(got, { seq: 1, generation: 1, published: [WHOLE], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
+  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
   assert.equal(row("r1").audioText, "Hello");
   assert.equal(row(created).audioText, " there");
   assert.notEqual(row("r1").updatedAt, stamp);
@@ -225,7 +225,7 @@ test("a split with a selection deletes it first; a selection over a whole commen
   selectText(el, 6, 19);
   const got = observe(() => key(el, "Enter", { altKey: true }));
   const created = S.state.rows[2].id;
-  assert.deepEqual(got, { seq: 1, generation: 1, published: [WHOLE], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r2.audioText", "insertRow:" + created] });
+  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r2.audioText", "insertRow:" + created] });
   assert.equal(row("r2").audioText, "Alpha ");
   assert.equal(row(created).audioText, " delta");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
@@ -277,7 +277,7 @@ test("a split of a cell holding a video card cuts the live DOM and stores both s
   window.getSelection().addRange(r);
   const got = observe(() => key(el, "Enter", { altKey: true }));
   const created = S.state.rows[1].id;
-  assert.deepEqual(got, { seq: 1, generation: 1, published: [WHOLE], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
+  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
   assert.equal(row("r1").audioText, "Bef");
   assert.match(row(created).audioText, /^ore <a class="video-embed-card"[^>]*>.*<\/a> after$/);
 });
@@ -334,7 +334,7 @@ test("a Writer split is the same single edit with no grid render", async () => {
   selectText(p, 5, 5);
   const got = observe(() => key(p, "Enter"));
   const created = S.state.rows[1].id;
-  assert.deepEqual(got, { seq: 1, generation: 1, published: [WHOLE], refreshed: [], render: 0, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
+  assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: [], render: 0, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
   assert.equal(document.activeElement, para(created));
   writer.closeWriter();
 });
@@ -401,10 +401,10 @@ test("a join of a scene with a status outside the ranks counts it as todo", asyn
   writer.closeWriter();
 });
 
-test("a join is one whole-document edit: one generation, one dirty, no derivation, one entry removing the later scene and writing the earlier one", async () => {
+test("a join publishes one declared edit: one generation, one dirty, no derivation, one entry removing the later scene and writing the earlier one", async () => {
   const got = await joinWithBackspace(joinDoc(["todo", "ready"]), "j1", "j2");
   assert.deepEqual(got, Object.assign({}, got, {
-    seq: 1, generation: 1, published: [WHOLE], refreshed: [], render: 0, undo: 1,
+    seq: 1, generation: 1, published: [DECLARED], refreshed: [], render: 0, undo: 1,
     steps: ["deleteRow:j2", "rowField:j1.audioText", "rowField:j1.status"]
   }));
   assert.equal(got.into.audioText, "Line 1. Line 2.");

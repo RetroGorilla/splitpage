@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
   cssAttr,
@@ -10,7 +10,6 @@ import {
   sanitizeHtml,
   storedHtmlFromDom
 } from "./04-richtext.js";
-import { cellLength, fromHtml, joinCells, projection, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import {
   cellFormatState,
   editableCellHtml,
@@ -24,11 +23,13 @@ import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
 import { truncateForPreview } from "./11-import.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
 import { htmlToPlainText } from "./14-export.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
-import { gallerySize, rowSlots, setRowSlots } from "../core/document/gallery.ts";
+import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 
 export var writerOpen = false;
@@ -173,18 +174,15 @@ function caretAtEdge(cellEl, range, edge) {
 function splitWriterRow(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  markDirty();
   renderWriter();
-  focusWriterBlock(res.created.id, 0);
+  focusWriterBlock(res.id, 0);
 }
 
 function mergeWriterRows(intoIdx) {
   var prev = S.state.rows[intoIdx];
   var cur = S.state.rows[intoIdx + 1];
   if (!prev || !cur) return;
-  var prevHasVisual = !!(htmlToPlainText(prev.visualText) || gallerySize(prev));
-  var curHasVisual = !!(htmlToPlainText(cur.visualText) || gallerySize(cur));
-  if (prevHasVisual && curHasVisual) {
+  if (readSession(bothScenesHaveVisual(prev.id, htmlToPlainText))) {
     showToast("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
     return;
   }
@@ -193,24 +191,10 @@ function mergeWriterRows(intoIdx) {
   var joinAt = prevEl ? prevEl.textContent.length : 0;
 
   breakUndoCoalescing();
-  var a = prev.audioText || "", b = cur.audioText || "";
-  if (/<img|video-embed-card/.test(a + b)) {
-    prev.audioText = a + ((a && b && !/(<br\s*\/?>|\s)$/i.test(a)) ? " " : "") + b;
-  } else {
-    var ca = fromHtml(a), cb = fromHtml(b);
-    var glue = cellLength(ca) && cellLength(cb) && !/\s$/.test(projection(ca)) ? " " : "";
-    prev.audioText = toHtml(joinCells(ca, cb, glue));
-  }
-  if (curHasVisual) {
-    prev.visualText = cur.visualText;
-    setRowSlots(prev, rowSlots(cur));
-  }
-  var rank = { todo: 0, ready: 1, shot: 2 };
-  if ((rank[cur.status] || 0) > (rank[prev.status] || 0)) prev.status = cur.status;
-  stampRow(prev);
-  S.state.rows.splice(intoIdx + 1, 1);
-  syncCommentAnchors(S.state);
-  markDirty();
+  var ports = Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText });
+  var outcome = runCommand(joinScenesCommand(prev.id, ports));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied") return;
   renderWriter();
   focusWriterBlock(prev.id, joinAt);
 }
