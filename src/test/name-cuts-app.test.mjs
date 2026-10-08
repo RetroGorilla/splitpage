@@ -221,6 +221,28 @@ for (const [what, line, stored, now] of HALF_INSIDE) {
   });
 }
 
+test("a cue that its own tag's heal already matches renames no other broken tag (#344)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: ' + x(78) + "g\uD83D y</span>", visualText: "" }],
+    productionTags: [
+      { id: "t_old1", cat: "sound", name: x(78) + "\uD83D", notes: "one" },
+      { id: "t_old2", cat: "sound", name: x(78) + "g\uD83D", notes: "two" }
+    ]
+  });
+  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(78), "one"], ["t_old2", x(78) + "g", "two"]]);
+});
+
+test("a B-roll line that a shot's heal already matches renames no other broken shot (#344)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + x(198) + "g\uD83D y" }],
+    brollShots: [
+      { id: "bs1", name: x(198) + "\uD83D", notes: "one", status: "shot", origin: "list" },
+      { id: "bs2", name: x(198) + "g\uD83D", notes: "two", status: "shot", origin: "script" }
+    ]
+  });
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(198), "one"], ["bs2", x(198) + "g", "two"]]);
+});
+
 test("an unkeyed B-roll line renames the free shot with its old cut, not one a keyed line holds (#344)", () => {
   const key = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> ';
   migrated({
