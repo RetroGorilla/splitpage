@@ -285,8 +285,9 @@ export function pasteCommand(request: PasteRequest, ports: ClipboardPorts): Repo
             stamp();
           }
           if (counts) {
-            attached = attachToGallery(target, request.attach);
+            const done = attachToGallery(target, request.attach);
             stamp();
+            attached = done;
           }
         }
       };
