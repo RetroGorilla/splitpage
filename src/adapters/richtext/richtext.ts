@@ -7,6 +7,7 @@ import type { Run } from "../../core/text/runs.ts";
 import { createCellReader, decodeBody } from "./decode.ts";
 import type { CellReader } from "./decode.ts";
 import { walkToMd } from "./markdown.ts";
+import { boundedBody, boundedMarkup } from "./parse-bound.ts";
 import { imageRefOf, splitBudget, videoCardElement, walkSanitize } from "./sanitize.ts";
 
 export type { CellReader } from "./decode.ts";
@@ -37,9 +38,9 @@ export function createRichText(ports: RichTextPorts): RichText {
   const ids = ports.ids;
 
   function inertBody(html: unknown): HTMLElement {
-    const doc = new Parser().parseFromString(
-      "<!doctype html><body>" + (html == null ? "" : String(html)), "text/html");
-    return doc.body;
+    const text = html == null ? "" : String(html);
+    const doc = new Parser().parseFromString("<!doctype html><body>" + boundedMarkup(text), "text/html");
+    return boundedBody(doc.body, text.length);
   }
 
   function sanitize(html: unknown): string {
