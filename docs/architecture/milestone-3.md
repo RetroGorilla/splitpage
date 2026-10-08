@@ -293,8 +293,8 @@ The plan and the as-built doc came first: #372 (the plan), #422 (scope decisions
 
 The steps, in merge order:
 - `S` importers fell 56 to 55 at 3.8 (05r's only `S` use) and 55 to 54 at 3.14 (05c); `S` writers fell 33 to 32 at 3.8 and 32 to 31 at 3.9.
-- Cycle edges went 415 to 413 at 3.9, were 412 on the base 3.13 was cut from, and fell to 411 at 3.14. 3.12 and 3.13 removed no edge. The plan expected 412 at 3.9; the build has 413, because 01 still imports `12-dirty-toast.js` for the toast.
-- Baseline entries the text commands resolved: 3.12 took 05-render's `state-write` entry (637 to 636), 3.13 took 19-writer's (634 to 633), and 3.14 took two (05c's imports of `12-dirty-toast.js` and `S`).
+- Cycle edges went 415 to 413 at 3.9, were 412 on the base 3.13 was cut from (#430 removed the 20b → 20c edge, 413 to 412), and fell to 411 at 3.14. 3.12 and 3.13 removed no edge. The plan expected 412 at 3.9; the build has 413, because 01 still imports `12-dirty-toast.js` for the toast.
+- Baseline entries the text commands resolved: 3.12 took 05-render's `state-write` entry (635 to 634, after #416 and #430 had each taken one), 3.13 took 19-writer's (634 to 633), and 3.14 took two (05c's imports of `12-dirty-toast.js` and `S`).
 - `node tools/dep-report.mjs` on `391bda6` reports 631 exceptions, 0 new and 0 resolved, so `--prune` has nothing to remove.
 
 ### Where the build differs from the plan
