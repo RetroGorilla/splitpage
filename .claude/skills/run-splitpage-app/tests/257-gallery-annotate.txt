@@ -321,6 +321,20 @@ expect A().marks[1].text === 'x'.repeat(499) + String.fromCodePoint(0x1F600)
 click #annotate-cancel
 click #annotate-cancel
 wait AM().hidden
+eval (function(){ row().moreImages[0].annotation.marks = [{ kind: 'text', color: '#e5383b', size: 0.045, x: 0.1, y: 0.1, text: ' ' + String.fromCharCode(0xd83d) }]; return true; })()
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready && A().marks.length === 1
+expect A().marks[0].text === ' ' + String.fromCharCode(0xd83d)
+click [data-tool="text"]
+eval (function(){ window.hp = pt(0.1 + 0.004, 0.1 + 0.02); return hp; })()
+mouse down hp
+mouse up hp
+wait !!document.querySelector('.annotate-textbox')
+key Escape
+wait !document.querySelector('.annotate-textbox')
+expect A().marks.length === 1 && A().undo === 0
+click #annotate-cancel
+wait AM().hidden
 
 # ---- a review session: no Annotate -------------------------------------------------------------------
 key Escape

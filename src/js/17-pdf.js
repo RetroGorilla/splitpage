@@ -139,7 +139,7 @@ export function pdfFooterOps(title, pageNo, pageCount, PW, M, y, hex, ruleHex) {
   var room = PW - 2 * M - pdfTextWidth(right, false, size) - 24;
   var t = String(title || "");
   if (pdfTextWidth(t, false, size) > room) {
-    while (t.length > 1 && pdfTextWidth(t + "…", false, size) > room) t = t.slice(0, -1);
+    while (t.length > 1 && pdfTextWidth(t + "…", false, size) > room) t = unitSafePrefix(t, t.length - 1);
     t = t.replace(/\s+$/, "") + "…";
   }
   return [
