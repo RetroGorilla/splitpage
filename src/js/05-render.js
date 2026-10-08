@@ -14,7 +14,7 @@ import { blobImgHtml } from "./02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { cellSelection, editCell } from "./05b-cell-edit.js";
+import { cellSelection, editCell, setCellSelection } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
 import { trackDocument } from "./12a-undo.js";
@@ -688,6 +688,7 @@ export function render() {
 }
 
 var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
+var FIRST_DRAW_FAILED = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";
 var redrawToast = null;
 var screenStale = false;
 var staleFocus = null;
@@ -696,9 +697,9 @@ var STALE_PARTS = "#rows, .add-row-bar, #doc-title, #writer-title, #writer-doc, 
 var STALE_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart",
   "compositionstart", "pointerdown", "mousedown", "click"];
 
-function offerRedraw() {
+function offerRedraw(failed) {
   if (redrawToast && redrawToast.isConnected && !redrawToast.classList.contains("is-leaving")) return;
-  redrawToast = showActionToast(REDRAW_FAILED, "error", "Redraw", renderAbsorbed, true);
+  redrawToast = showActionToast(failed, "error", "Redraw", function () { absorbRender(failed); }, true);
   redrawToast.removeEventListener("click", redrawToast.dismiss);
   redrawToast.removeAttribute("title");
   redrawToast.classList.add("is-held");
@@ -709,18 +710,26 @@ function focusPlace(el) {
   var cellEl = el.closest(".cell-editable[data-id][data-field]");
   if (!cellEl) return el.id ? { id: el.id } : null;
   return { root: cellEl.closest("#writer-doc") ? "#writer-doc" : "#rows",
-           row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
+           row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"),
+           sel: cellSelection(cellEl) };
 }
 
-function holdStaleScreen() {
+function markStaleParts(on) {
+  document.querySelectorAll(STALE_PARTS).forEach(function (el) {
+    el.toggleAttribute("inert", on);
+    el.classList.toggle("is-stale-part", on);
+  });
+}
+
+function holdStaleScreen(failed) {
   var active = document.activeElement;
   var inPart = !!(active && active.closest && active.closest(STALE_PARTS));
   var onRedraw = !!(redrawToast && active && redrawToast.contains(active));
   if (!screenStale && inPart) staleFocus = focusPlace(active);
   screenStale = true;
   document.body.classList.add("is-stale-screen");
-  document.querySelectorAll(STALE_PARTS).forEach(function (el) { el.setAttribute("inert", ""); });
-  offerRedraw();
+  markStaleParts(true);
+  offerRedraw(failed);
   if (inPart || onRedraw) redrawToast.querySelector(".toast-action").focus();
 }
 
@@ -728,35 +737,32 @@ function releaseStaleScreen() {
   if (!screenStale) return;
   screenStale = false;
   document.body.classList.remove("is-stale-screen");
-  document.querySelectorAll(STALE_PARTS).forEach(function (el) { el.removeAttribute("inert"); });
+  markStaleParts(false);
   var place = staleFocus;
   staleFocus = null;
   var active = document.activeElement;
   if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
+  if (place.root === "#rows" && writerOpen) return;
   var target = place.id ? document.getElementById(place.id) : document.querySelector(place.root +
     ' .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
-  if (target) target.focus();
+  if (!target) return;
+  target.focus();
+  if (place.sel) setCellSelection(target, place.sel.from, place.sel.to);
 }
 
 function refuseOnStaleScreen(e) {
   if (!screenStale) return;
   var t = e.target;
-  var inPart = !!(t && t.closest && t.closest(STALE_PARTS));
-  if (!inPart && !(e.type === "keydown" && isUndoChord(e) && !ownsTyping(t))) return;
+  if (!(t && t.closest && t.closest(STALE_PARTS))) return;
   e.preventDefault();
   e.stopImmediatePropagation();
 }
 
-function isUndoChord(e) {
-  var k = String(e.key || "").toLowerCase();
-  return (e.ctrlKey || e.metaKey) && !e.altKey && (k === "z" || k === "y");
+export function screenIsStale() {
+  return screenStale;
 }
 
-function ownsTyping(t) {
-  return !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable));
-}
-
-export function renderAbsorbed() {
+function absorbRender(failed) {
   try {
     render();
     releaseStaleScreen();
@@ -764,9 +770,17 @@ export function renderAbsorbed() {
     return true;
   } catch (e) {
     if (window.console) console.error(e);
-    holdStaleScreen();
+    holdStaleScreen(failed);
     return false;
   }
+}
+
+export function renderAbsorbed() {
+  return absorbRender(REDRAW_FAILED);
+}
+
+export function renderFirstDraw() {
+  return absorbRender(FIRST_DRAW_FAILED);
 }
 
 export function syncFieldFromDom(cellEl) {
