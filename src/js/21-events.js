@@ -38,6 +38,7 @@ import {
   maybeCueShortcut,
   maybeDirectionShortcut,
   render,
+  renderAbsorbed,
   renderRow,
   syncFieldFromDom,
   syncPageTitle,
@@ -1161,7 +1162,7 @@ function init() {
     if (S.state !== applied.state) {
       S.state = applied.state;
       setBaseState(cloneState(S.state), "boot: the version this page loaded, nothing to merge");
-      render();
+      renderAbsorbed();
     }
     updateIdentityChip();
     updateAutoSaveMenu();

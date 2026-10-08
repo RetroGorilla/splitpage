@@ -222,7 +222,8 @@ View-level refusals need the booted app, because the toast and the click routing
 | `S.editSeq` and the generation diverge after a merge, reload or recovery | By design (INV-53) |
 | `applyMerge` migrates `theirs` before `mergeStates` (#417), and refuses a `theirs` or `mine` that is no document. The session still migrates the merged result as it enters, which is redundant when `mergeStates` already migrated it (measured at a median 23.6 ms on the long demo, in #384) | #415 (#304); the doc-row corrections stay with 3.15 |
 | The server still stores a `state` that is an array; every client entry refuses it as no document | Server-side refusal is its own PR (Adam's decision of 2026-10-07 on #417) |
-| A render that throws after a merge or adoption half-applies it | #418 |
+| A render that throws after a merge, an adoption or the boot load is absorbed by `renderAbsorbed()`: the update finishes, Redraw is offered, and the rows, titles, Writer and find bar's replace and tag refuse edits until a render draws cleanly. Side panels, the rundown and scene-selection keys are not blocked; they edit the document by id, never from a stale cell | #418, #442, #443 |
+| A render that throws after a review answer leaves the link marked unsaved | #441 |
 | Undo or redo of an owner assignment after a merge folds the owner keeps the dropped id | #391 |
 | The replay counts a live id as alive when `step.after` holds a person with the same name, though nothing re-points it | Accepted in #402 |
 | The `broll` refresh still repairs on read | #325, milestone 6 |
