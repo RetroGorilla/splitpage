@@ -101,3 +101,43 @@ Recorded 2026-10-03 by `node tools/perf-record.mjs`, once, on 4.0-development at
 No long task fired in any case on either fixture.
 
 Against the milestone 2 record on this machine, the p95 values moved by up to about 5 ms, in both directions (short typing 19.3 then 14.5, long typing 16.3 then 16.9, long new scene 42.8 then 45.3), while typing's p50 moved by under 1 ms (3.6 then 3.9, 5.1 then 5.3). The post-milestone-2 queue changed code between the two runs, but a band like that in both directions is what single runs show here. A later comparison, 3.12's typing case first, should compare p50, or run three times and compare the medians, before calling a p95 difference of that size a change.
+
+## Milestone 3 close (Windows)
+
+Recorded 2026-10-08 by `node tools/perf-record.mjs`, on 4.0-development at `391bda6` (3.14 and #448 merged, built with `node build.mjs`), as milestone 3's close (PR 3.15). It ran on the same machine, browser and font as the two Windows records above. The start record above is one run, and single runs here moved by several milliseconds in both directions, so this comparison is of medians: `b1fde0f` (the plan's last revision, a `git archive` built with `node build.mjs` and run with its own `perf-record.mjs`) and `391bda6` ran alternately, base then head, three times each, and the tables give each case's median of the three. Nothing else of this lane ran during them; other sessions on the machine were not controlled. An earlier set of the same kind, with the head at `c91bc4f` (3.14 alone), is summarised below.
+
+### Conditions
+
+- Machine: win32 10.0.26300 x64, AMD Ryzen 9 9950X3D2 16-Core Processor x32, 30.9 GB, Node v22.23.2
+- Browser: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0, headless, viewport 1400x900 at 1x
+- Script font: `"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, sans-serif`; Atkinson Hyperlegible Next is installed and used
+- Fixtures: short is the seed script (2 scenes); long is the long demo (30 scenes)
+- Typing: 55 characters, one real key event every 60 ms, into scene 2's audio cell; latency is key-down to the frame after it
+
+### Input latency, median of 3 runs each (ms)
+
+| Case | Keys | p50 `b1fde0f` | p50 `391bda6` | p95 `b1fde0f` | p95 `391bda6` |
+| --- | --- | --- | --- | --- | --- |
+| short typing | 56 | 4 | 4.6 | 16 | 15.7 |
+| short new scene | 5 | 19.1 | 14.7 | 27.5 | 23.4 |
+| short delete every scene | 1 | 10.1 | 10.2 | 10.1 | 10.2 |
+| short undo the delete | 1 | 15.6 | 12.7 | 15.6 | 12.7 |
+| long typing | 56 | 6.7 | 6.1 | 16.1 | 16.9 |
+| long new scene | 5 | 37.6 | 36.2 | 42.4 | 41 |
+| long delete every scene | 1 | 13.4 | 13.6 | 13.4 | 13.6 |
+| long undo the delete | 1 | 47.1 | 39.1 | 47.1 | 39.1 |
+
+The runs behind the typing medians (p50, then p95): short typing `b1fde0f` 4, 4, 4.6 and 16, 15.3, 16.9; `391bda6` 4.8, 4.6, 4.2 and 17.6, 12.5, 15.7. Long typing `b1fde0f` 6.7, 6.9, 5.5 and 18.1, 16.1, 15.7; `391bda6` 4.8, 6.8, 6.1 and 16.1, 16.9, 19.8. No long task fired in any of the 6 runs, in any case. The cases with one key (delete, undo) have p50, p95 and max equal, so each is one sample per run.
+
+### Export, median of 3 runs each (ms, median of 5 within a run)
+
+| Fixture | .splitpage `b1fde0f` | .splitpage `391bda6` | .md project `b1fde0f` | .md project `391bda6` | Standalone HTML `b1fde0f` | Standalone HTML `391bda6` |
+| --- | --- | --- | --- | --- | --- | --- |
+| short | 0.3 | 0.3 | 0.6 | 0.5 | 0.2 | 0.7 |
+| long | 2.2 | 1.5 | 5.2 | 4.4 | 2.5 | 2.3 |
+
+### Reading it
+
+Typing, which 3.12 put through the session, moved by +0.6 ms (short) and -0.6 ms (long) at p50 and by -0.3 and +0.8 ms at p95, inside the spread between runs of one build (short typing p50 alone ran from 4 to 4.6 on the base, and long typing p95 from 15.7 to 18.1). The earlier set with the head at `c91bc4f` read the same way: short typing p50 3.4 then 4.3 ms and p95 15.2 then 15.7, long typing p50 5.9 then 6.1 and p95 15.9 then 15.6. The 3.12 PR measured the same case in its own interleaved comparison and found its p50 medians within 0.3 ms. The cases that are not typing, none of which goes through a command, differ by amounts in both directions that the runs themselves show (long undo the delete on the base ran from 31.3 to 54 ms). The milestone 3 start record above, a single run, reads 3.9 and 14.5 ms for short typing and 5.3 and 16.9 ms for long typing; the medians here sit beside it. Export is a few milliseconds at most in every case, and the one value that rose (short standalone HTML, 0.2 then 0.7 ms) is a sub-millisecond reading that moved from 0.3 to 0.7 within the head's own runs.
+
+Three earlier runs of the head alone, made before these, read higher on two long cases than the interleaved medians (long new scene p50 46.9, 49.9 and 50.3 ms; long undo the delete 39.3, 48 and 48.8 ms), and the cause was not found. That is why this section compares the base and the head run alternately in one sitting, and why a p95, or a case of one key, should be repeated before it is called a change.

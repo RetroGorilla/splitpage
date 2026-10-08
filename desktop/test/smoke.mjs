@@ -1204,6 +1204,12 @@ async function caseHostMode(target) {
     const shareVisible = await poll(app.cdp, "(function(){ var el = document.getElementById('desktop-share-info'); return el && el.hidden === false; })()", 10000);
     record(tag + ": the desktop share-info UI is visible while hosting", !!shareVisible);
 
+    const lanUrl = info && Array.isArray(info.lanUrls) && info.lanUrls[0];
+    if (lanUrl) {
+      const viaLan = await fetchJson(lanUrl + "api/health").then(() => true, () => false);
+      record(tag + ": a test run's server is not reachable on the LAN address (no firewall prompt)", viaLan === false, lanUrl);
+    }
+
     const port = info && info.port;
     if (port) {
       const noToken = await fetchJson(`http://127.0.0.1:${port}/api/docs`);

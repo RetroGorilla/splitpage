@@ -2,6 +2,8 @@
 
 The working plan for milestone 3 of [the implementation plan](../IMPLEMENTATION-PLAN.md#3--deliver-one-sessioncommand-vertical-slice). It was approved by Adam on 2026-10-02, derived from `4.0-development` at `29714e8` and revised at `b1fde0f` (#364, #365 and #367 on top). It names functions, not lines. Adam's answers to the first draft are under [Decisions](#decisions). Calls that are still open are under [Questions for Adam](#questions-for-adam).
 
+Status (2026-10-08): steps 3.0 to 3.14 are merged. [As built](#as-built) says what they delivered and where the build differs from this plan; the plan's own text below is left as written, with a correction note where a sentence turned out to be wrong. [session.md](session.md) describes the session, the scheduler and the commands. The gate is recorded separately, after its runs.
+
 ## Goal
 
 Introduce `DocumentSession` as the first owner of the live document. Prove the boundary with scene length, then scene status. Then move typing, split, join and cut-paste into session commands, so that milestone 3 meets INV-06, INV-18 and INV-53 itself.
@@ -130,7 +132,7 @@ Recording stubs pin the fan-out order for both commands. 3.0 also characterises 
 
 **3.1 Validated type.**
 - Own `src/core/migrate.ts` (the only producer) and the plan's ten signatures. Add a rule in `dep-report.mjs` or `eslint.config.mjs` refusing a cast to the brand, and its `tools/test-*.mjs`.
-- Bytes are unchanged.
+- Bytes are unchanged. (Reworded from the build: the unminified bundle is byte for byte the base's. In the minified `index.html` only esbuild's identifier naming differs, because it ranks short names by the character frequency of its input, which includes the erased type text, and the CSP script hash changes with it. #378 measured both.)
 - Tests:
   - TypeScript compiler API fixtures: an object literal and a `JSON.parse` result are each a type error, for each function;
   - the rule fails first on a planted cast;
@@ -148,7 +150,7 @@ Recording stubs pin the fan-out order for both commands. 3.0 also characterises 
 - Own `src/core/merge/lists.ts`. An owner id that did not survive the merge gives way to the other side's live owner (the proposal Adam approved for the queue).
 - Fail-first core test from the issue's repro. The differential test against the base on seeded inputs is mandatory for merge algorithms (review.md §5); the only differences allowed are the repaired cases.
 - A merge golden that changes is regenerated in a dedicated commit. Suggested CHANGELOG line required.
-- Note: pinned-defects.md's #353 row names `src/core/merge/tags.ts` and `broll.ts`, which do not exist. 3.15 corrects it.
+- Note: pinned-defects.md's #353 row once named `src/core/merge/tags.ts` and `broll.ts`, which do not exist. It names `src/core/merge/lists.ts`, where the fix landed (#375).
 
 **3.5 Cache ownership (D2, D3).**
 - Own: the return types in `memo.ts`, `readers.ts` and `production/tags.ts`; `decode.ts` (`CellReader` becomes `readonly`); 07's index views; `run-tests.ps1`, `driver.ps1` and `tools/run-suites.mjs`.
@@ -162,7 +164,7 @@ Recording stubs pin the fan-out order for both commands. 3.0 also characterises 
 **3.6 Session, undo adapter, effects.**
 - Own: `src/application/session/`, the two `src/legacy/` files, and the `__init` hooks in `12a-undo.js`, `12-dirty-toast.js` and `03-sync.js` (`noteRemoteChange`). Adoption hooks in at `render()`'s `trackDocument()`, and the reload at `18-local-files.js`'s `absorbRemoteChange()`.
 - Adoption brands through `migrateRows`, timed with `perf-record` on the long demo.
-- Reconciliation runs inside any transaction whose change set moves runs between cells or rows, or inserts or removes rows. A one-cell edit cannot change an anchor's `rowId`/`field`, so it skips the document-wide `syncCommentAnchors` (INV-06). A seeded property test proves that claim.
+- Reconciliation runs inside any transaction whose change set moves runs between cells or rows, or inserts or removes rows. A one-cell edit cannot change an anchor's `rowId`/`field`, so it skips the document-wide `syncCommentAnchors` (INV-06). A seeded property test proves that claim. (Correction from the build: the property test showed the claim holds only while the cell's comment ids are unchanged. The session reconciles a one-cell edit that adds or drops a comment id. See [session.md](session.md#when-reconciliation-runs).)
 - Preserve 12a's diffing, coalescing, `forget` and `foldIntoEdit`, draft undo (INV-55), the 180 ms idle refresh, every autosave debounce, and one `S.editSeq` increment per accepted edit.
 - Tests: application tests for E2 to E4 with fake ports; the INV-06 fake-clock test; a differential of the adapter against 12a over seeded edit sequences, comparing stacks and states; mutation testing on the session.
 - Suites: 73, 84, 185–187, 28, 19, 20, 67, 260–264, 265.
@@ -222,13 +224,118 @@ These pin today's behaviour for 3.12–3.14.
 
 | Defect | Fixed in | Pinned test that flips |
 | --- | --- | --- |
-| #323 undo key order | 3.2 | `tests/core/text/steps.test.ts` ("today the inverse of an insertRow is refused…") |
-| #326 index views disagree after a heal | 3.3 | `src/test/production-shims.test.mjs` ("after a heal the cached core index keeps the ids…") |
-| #353 part 2, a deleted owner beats an assignment | 3.4 | new fail-first test; any golden that changes, in a dedicated commit |
-| #353 part 1, undo replay drops same-named people | 3.7 | new fail-first test |
-| #304 (fixed by #340) becomes a type error | 3.1, 3.10 | — |
-| #303 (fixed by #335) is tested for every cache | 3.5 | — |
+| #323 undo key order | 3.2 (#374) | `tests/core/text/steps.test.ts` ("today the inverse of an insertRow is refused…") |
+| #326 index views disagree after a heal | 3.3 (#376) | `src/test/production-shims.test.mjs` ("after a heal the cached core index keeps the ids…") |
+| #353 part 2, a deleted owner beats an assignment | 3.4 (#375) | new fail-first test; any golden that changes, in a dedicated commit |
+| #353 part 1, undo replay drops same-named people | 3.7 (#402); #391 is the part it left | new fail-first test |
+| #304 (fixed by #340) becomes a type error | 3.1 (#378), 3.10 (#404). A type error for `.ts` callers only; since #417 `applyMerge` also migrates `theirs` at run time (Part of #415) | — |
+| #303 (fixed by #335) is tested for every cache | 3.5 (#385) | — |
 | #325 reads that repair | stays at milestone 6; the scheduler still calls the repairing b-roll refresh | — |
+
+## As built
+
+### The PRs
+
+| Step | PR | Merged as | What it delivered |
+| --- | --- | --- | --- |
+| 3.0 | #373 | `d51cb25` | Characterisation, no source change: ordering recordings for status and length, undo grouping, the 14 `S.state` assignment sites characterised one by one, suite 288, the M3-start perf record |
+| 3.1 | #378 | `141c4d4` | `ValidatedDocument` (`core/document/validated.ts`), produced only by `core/migrate.ts`; `tools/brand-casts.mjs`, run by `npm run typecheck`, refuses a cast to it; four type-aware lint rules; `JSON.parse` returns `unknown` |
+| 3.2 | #374 | `4ad4688` | `applySteps` compares values regardless of key order (#323) |
+| 3.3 | #376 | `94ff983` | One owner function keeps both views of 07's index in step after a heal (#326) |
+| 3.4 | #375 | `f3306b7` | A deleted owner gives way to the other side's live owner in `core/merge/lists.ts` (#353 part 2) |
+| 3.5 | #385 | `2a0a505` | `Frozen<T>` returns, the `?freeze-caches=1` flag (`deepLock`), `SPLITPAGE_FREEZE_CACHES=1` in the harness, suite 380, the merge-input test; the four index writers freezing met are fixed |
+| 3.6 | #384 | `6c78cf2` | `DocumentSession`, the effect scheduler, the undo adapter and the bridge |
+| 3.7 | #402 | `4a233b8` | Undo replay re-points owners of folded people (#353 part 1); #391 left open |
+| 3.8 | #405 | `9d88ab7` | `scene-length.ts`, with D9's review-mode toast |
+| 3.9 | #414 | `d1b84cd` | `scene-status.ts`, with D8's toast; the hide-shot grace stays view state |
+| 3.10 | #404 | `1ffa325` | Seeded entry-point fuzz through the session (tests only); it found #406 to #412 |
+| 3.11 | #379 | `928e340` | Text characterisation: `text-editing-app.test.mjs`, suite 289, the driver's `ime` verb |
+| 3.12 | #427 | `6a360fe` | `cell-text.ts`, `syncFieldFromDom` as a view; #380 and the undo changes under it (Opus) |
+| 3.13 | #447 | `26a1b01` | `split-join.ts`: `splitSceneCommand` and `joinScenesCommand` |
+| 3.14 | #455 | `c91bc4f` | `clipboard.ts`: `pasteCommand` and `cutCommand` |
+| 3.15 | this PR | | The docs, the metrics and the perf record |
+
+Merged after 3.14 and before this PR: #448 (`391bda6`), the composition undo fix for #436 and #446.
+
+The plan and the as-built doc came first: #372 (the plan), #422 (scope decisions of 2026-10-07: D11 and D12) and #423 (`session.md`). Fixes found on the way merged beside the steps and are not steps: #403 (#377), #413 (#355), #416 (#411), #417 (#406 to #410, #412), #435 (#344, #419), #437 (#433), #440 (#418) and #449 (#434, #445). [pinned-defects.md](pinned-defects.md) has each.
+
+### Exit criteria
+
+| # | As built |
+| --- | --- |
+| E1 | Held. 3.8 and 3.9 ran the listed suites; D6's toast is the one difference, and suite 43 has a case for it |
+| E2 | Held for all seven commands. Each has an "E2" application test over the real session with fake ports, in `scene-length`, `scene-status`, `cell-text`, `split-join` and `clipboard` under `tests/application/` |
+| E3 | Held. The "E3" tests run no-ops, refusals and throwing stamp ports through `runConfined`, which also catches an incomplete rollback |
+| E4 | Held (`document-session.test.ts`, `entry-fuzz.test.ts`). Recovery that enters by assignment is published as `adopt`, not `recovery` (session.md §2) |
+| E5 | Held for the commands: no command or session module imports `S` or a concrete adapter. The views of the seven commands no longer write the document. Every other view still does, so `S` has 54 importers (below) |
+| E6 | Held (#378): compiler-API fixtures for the guarded functions, the cast rule with its self-tests |
+| E7 | Held (#385, #376): readonly returns, the freeze flag and `src/test/merge-inputs.test.mjs`. The freeze-on full run belongs to the gate |
+| E8 | Held. `tests/application/cell-text.test.ts` ("INV-06: a burst of keystrokes…") runs 6 keys 100 ms apart as one refresh 180 ms after the last, and 25 keys 60 ms apart as one refresh at the 1,000 ms cap and one after the last key. `67-render-perf.txt` passes |
+| E9 | Held for split, join and cut then paste. `split-join.test.ts` has a seeded check (300 seeds of 8 steps) that a later `syncCommentAnchors` moves nothing and that each command is one undo record; `clipboard.test.ts` has the cut-then-paste case. `comment-anchors.test.mjs` stays |
+| E10 | Held. #323 by #374, #326 by #376, #353 by #375 and #402. #391 is the piece of #353 that stays open |
+| E11 | Not in this PR. The gate record follows the runs |
+
+### Measured
+
+`node tools/dep-report.mjs --metrics`, at `b1fde0f` (where the plan was last revised) and at `391bda6` (3.14 and #448 merged; #448 changed no figure, so they are the same at `c91bc4f`):
+
+| | Start | End |
+| --- | --- | --- |
+| Frontend modules | 137 | 152 |
+| Migrated modules | 60 | 75 |
+| Runtime cycles, largest (modules), edges | 1, 53, 415 | 1, 53, 411 |
+| `S` importers | 56 | 54 |
+| `S` writers | 33 | 31 |
+| `S` field writers | 26 | 26 |
+| `S.state` assigners | 9 | 9 |
+| Dependency baseline entries | 641 | 631 |
+| Browser suites | 188 | 191 (288, 289 and 380 are new) |
+
+The steps, in merge order:
+- `S` importers fell 56 to 55 at 3.8 (05r's only `S` use) and 55 to 54 at 3.14 (05c); `S` writers fell 33 to 32 at 3.8 and 32 to 31 at 3.9.
+- Cycle edges went 415 to 413 at 3.9, were 412 on the base 3.13 was cut from (#430 removed the 20b → 20c edge, 413 to 412), and fell to 411 at 3.14. 3.12 and 3.13 removed no edge. The plan expected 412 at 3.9; the build has 413, because 01 still imports `12-dirty-toast.js` for the toast.
+- Baseline entries the text commands resolved: 3.12 took 05-render's `state-write` entry (635 to 634, after #416 and #430 had each taken one), 3.13 took 19-writer's (634 to 633), and 3.14 took two (05c's imports of `12-dirty-toast.js` and `S`).
+- `node tools/dep-report.mjs` on `391bda6` reports 631 exceptions, 0 new and 0 resolved, so `--prune` has nothing to remove.
+
+### Where the build differs from the plan
+
+- **Effects arrive at module evaluation, not `__init`.** Unit tests import `12-dirty-toast.js` and `07-production-tags.js` alone, and `markDirty` must still mark the document dirty. Adoption also hooks 12a's `restart()`, not only `render()`'s `trackDocument()`.
+- **`EffectPort` has four members** (`dirty`, `draft`, `save`, `refresh`), not five. Undo is recorded through the `UndoPort`, so there is no history effect. There is no toast port: a view shows its toast after a command answers `rejected` with `REVIEW_ONLY`. The selector functions live in the command modules, and the session offers `read(select)`.
+- **`plan` and `read(select)` get the live document typed `DocumentView`.** Only the compiler and `runConfined` stop a write inside `plan`.
+- **The hide-shot grace is view state**, driven by the applied outcome (3.9).
+- **A one-cell edit can move an anchor** when its comment ids change (3.6). The typing command and the paste command set `runsMoved` for it.
+- **Undo and redo replay writes `S.state` outside the session** and reaches it only afterwards, through `afterUndoApplied`'s `markDirty`. The M4 to M7 re-scope (#426, Adam, 2026-10-07) gives milestone 6 the "undo/redo through the mutation boundary" criterion.
+- **Recovery by assignment is published as `adopt`.** Labelling a draft restore, a history restore or a file import `recovery` would route it through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today (INV-53, E4).
+- **3.9's review-mode refusal has two forms.** The status lamp refuses through the command's `REVIEW_ONLY`, and the length editor from the view's `reviewMode()` check, because opening it is not a command. The click guard and `REVIEW_SAFE_ACTIONS` are unchanged (Adam's decisions on #414).
+- **3.12 is not quite what 3.12 says.**
+  - `S.cellRepainting` was dead (nothing set it) and is gone; the `undoApplying` guard stays.
+  - A composition still stores each update at once, as 3.11 recorded, so there is no "no command until the composition ends" (Adam, #380).
+  - The command is `needs: "nothing"`, because a reviewer's comment anchor is stored through it.
+  - A media cell goes through the typed `SanitisedMediaHtml` variant, recorded in INV-10's row until milestone 6.
+  - It changed undo on purpose, on Adam's decisions: a typing group that ends where it began is dropped, a cancelled composition leaves no step however slow it was, the redo that typing cleared comes back, and in a just-opened Writer the first Ctrl+Z closes it.
+- **3.13 and 3.14 left four things alone and filed them.**
+  - The Writer has no review-mode guard, so the Writer's split and join stay `needs: "nothing"` (#450).
+  - A Writer split or join requests no production or b-roll refresh (#451).
+  - `editCell` (05b) still writes the cell and calls `markDirty`; routing it through `cellTextCommand` would change paste's counts (#452).
+  - The scene paste in `05g-scene-clip.js` still uses `recordPastedBroll` (D10).
+- **3.14 changed three small things on purpose.** A paste is one accepted edit, not two (`S.editSeq` and the generation rise by one). A paste or cut whose stamp throws is atomic. Pasting a video file with no name no longer marks the script as unsaved. Its capability is `needs: "edit"`, unlike split and join.
+- **Follow-ups from the three text PRs.** #436 (a slow cancelled composition over a selection) and #446 (an undo during a composition that is then cancelled) were found by 3.12's reviews and are fixed by #448, merged after 3.14 (`391bda6`); that PR records #459 as the limitation it leaves. Open: #450, #451, #452, #459 and #460 (cut, undo, paste leaves an anchor in two scenes).
+
+### The text-command suite set
+
+The browser suites that pin the text commands are the union of what 3.12 (#427), 3.13 (#447) and 3.14 (#455) ran, plus 186 (`186-autosave-panel-edits.txt`), which testing.md selects for a picture-or-video paste's dirty marking. That is 40 suites, matching `^(02|06|09|19|20|28|43|45|46|52|65|67|68|69|73|75|76|77|78|80|81|84|86|91|92|155|160|185|186|187|190|241|245|246|262|267|288|289|322)-`:
+
+| Command | Suites |
+| --- | --- |
+| Typing (3.12) | 06, 20, 43, 52, 67, 73, 75, 76, 77, 78, 81, 84, 86, 185, 187, 289 |
+| Split and join (3.13) | 06, 19, 20, 28, 43, 67, 73, 75, 76, 77, 78, 81, 84, 86, 185, 187, 246, 262 (both), 267 |
+| Cut and paste (3.14) | 02, 09, 20, 43, 45, 46, 65, 67, 68, 69, 73, 75, 76, 77, 80, 81, 84, 86, 91, 92, 155, 160, 185, 186, 187, 190, 241, 245, 288, 289, 322 |
+
+The scene commands' set is E1's. The gate runs all 191 suites, plain and frozen; this set is what a change to a text command runs while it is being written (testing.md).
+
+### Performance
+
+The record is the "Milestone 3 close (Windows)" section of [performance-record.md](performance-record.md), run under 3.0's conditions (same machine, browser and font) with `b1fde0f` and `391bda6` (3.14 and #448 merged) run alternately, three times each. Typing p50 and p95 differ by under 1 ms from the base (short typing p50 4 then 4.6 ms, p95 16 then 15.7; long typing p50 6.7 then 6.1, p95 16.1 then 16.9), inside the spread between runs of one build. An earlier set with the head at `c91bc4f` read the same way. No long task fired in any case in any of the six runs. 3.12 and 3.14 each measured their own change against their base as well (typing, paste and cut within the spread); 3.13 measured split and join in a 300-scene script and found no regression.
 
 ## Risks
 
@@ -237,7 +344,7 @@ These pin today's behaviour for 3.12–3.14.
 - **Reconciliation cost against correctness.** Skipping reconciliation for one-cell edits rests on a property test. If that test fails, reconciliation runs on every edit and INV-06 needs a narrower trigger.
 - **Media cells.** The typed HTML variant is a named exception to "commands accept runs", tracked to milestone 6.
 - **IME and composition.** No script-cell IME suite exists until 3.11. If CDP's IME events don't reproduce a real composition, that is recorded as a platform gap, not passed.
-- **Double effects.** A command plus a leftover `markDirty` would double `S.editSeq` or the autosave. Suites 185 and 187 count both.
+- **Double effects.** A command plus a leftover `markDirty` would double `S.editSeq` or the autosave. (Correction from the build: suites 185 and 187 only check that each edit autosaves. `S.editSeq` is counted by `src/test/session-bridge-app.test.mjs`, `scene-effects-app.test.mjs` and the text commands' booted tests.)
 - **The bridge joining the cycle.** Effects come in by injection; the gate refuses anything else.
 - **Freeze-on writers.** Their number is unknown until 3.5. Each one is fixed or named, never silenced.
 - **Brand churn.** Up to 76 test call sites change. Reviewers check that no assertion was weakened.
