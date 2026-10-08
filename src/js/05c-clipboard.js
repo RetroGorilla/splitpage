@@ -204,10 +204,29 @@ function commentAnchoredAs(id) {
   });
 }
 
+function anchoredInText(id, target) {
+  return readSession(function (doc) {
+    return !!doc && doc.rows.some(function (row) {
+      return ["visualText", "audioText"].some(function (field) {
+        var cell = target.rowId === row.id && target.field === field ? target.rest : cellOf(typeof row[field] === "string" ? row[field] : "");
+        return commentIds(cell).indexOf(id) !== -1;
+      });
+    });
+  });
+}
+
 function liveCellHtml(cellEl) {
   var html = cellEl.innerHTML;
   if (html.indexOf("\u200B") !== -1) html = html.replace(/\u200B/g, "");
   return storedHtmlFromDom(html);
+}
+
+function outsideSelection(cellEl) {
+  var cell = fromHtml(liveCellHtml(cellEl));
+  var sel = cellSelection(cellEl);
+  if (!sel) return cell;
+  var len = cellLength(cell);
+  return sliceCell(cell, 0, Math.min(sel.from, len)).concat(sliceCell(cell, Math.min(sel.to, len), len));
 }
 
 export function copyFromCell(e, cellEl, cut, readOnly) {
@@ -257,7 +276,13 @@ function pasteRequest(rowId, field, range, pasted, got, attach) {
 
 export function pasteIntoCell(cellEl, html, text, extra) {
   extra = extra || {};
-  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs, skipImages: !!extra.skipImages });
+  var target = null;
+  var hasComment = function (id) {
+    if (!commentAnchoredAs(id)) return false;
+    if (!target) target = { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), rest: outsideSelection(cellEl) };
+    return !anchoredInText(id, target);
+  };
+  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages });
   var attach = (extra.attach || []).slice();
   got.attach.forEach(function (item) { addAttachment(attach, item); });
   var rowId = cellEl.getAttribute("data-id");
