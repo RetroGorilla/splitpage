@@ -12,7 +12,7 @@ import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 import { idMap } from "../core/document/id-map.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";
 import { replaceText } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
@@ -30,12 +30,6 @@ function findNeedle() {
 
 function escapeRegExpLiteral(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-var LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-
-function withoutLoneSurrogates(s) {
-  return s.replace(LONE_SURROGATE_RE, "");
 }
 
 function findAllMatches(text, needle, matchCase) {
