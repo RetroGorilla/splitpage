@@ -684,3 +684,18 @@ test("on a stale screen nothing copies a cell's stale text into the script, even
   await pressRedraw();
   assert.equal(cellOf("r2", "audioText").textContent, THEIRS);
 });
+
+test("a failed render marks the page as a stale screen, and Redraw or a later clean update takes the mark off (#443)", async () => {
+  await staleScreen();
+  assert.equal(document.body.classList.contains("is-stale-screen"), true, "the stale screen is marked on the page");
+  await pressRedraw();
+  assert.equal(document.body.classList.contains("is-stale-screen"), false, "Redraw takes the mark off");
+  await staleScreen();
+  assert.equal(document.body.classList.contains("is-stale-screen"), true, "marked again by the next failed render");
+  const theirs = cloneState(S.state);
+  theirs.title = "Cleared by a clean update";
+  const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+  await idle();
+  assert.deepEqual(clean.logged, []);
+  assert.equal(document.body.classList.contains("is-stale-screen"), false, "a later clean update takes the mark off");
+});

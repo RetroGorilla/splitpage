@@ -5652,6 +5652,11 @@
     .toast.is-leaving { transition: none; transform: none; }
   }
 
+body.is-stale-screen :is(#rows, .add-row-bar, #doc-title, #writer-title, #writer-doc, #writer .wr-fmt,
+  #replace-input, #find-replace, #find-replace-all, #find-tag-go, #tag-ghost, #tag-suggest) {
+  opacity: 0.5;
+}
+
 .update-bar {
   display: flex;
   align-items: center;
