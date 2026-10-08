@@ -693,6 +693,27 @@ test("history: a refused Ctrl+Z past compositionstart still takes a fresh mark, 
   assert.deepEqual(undoChain(h, live), [""]);
 });
 
+test("history: a Ctrl+Z that applies inside a composition ends its mark, since the render drops the composition and no compositionend arrives, so later Ctrl+Z and Ctrl+Y keep what the document held (#448 R1)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Third.", "Third.x"), 0);
+  h.markCell("r1", "audioText", "Third.x");
+  h.record(typed("Third.x", "Third.xね"), 100);
+  h.record(typed("Third.xね", "Third.xねこ"), 1300);
+  const live = doc([row("r1", "Third.xねこ")]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね");
+  h.record(typed("Third.xね", "Third.xね!"), 5000);
+  live.rows[0].audioText = "Third.xね!";
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね");
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.");
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね");
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね!");
+});
+
 const seededDraw = (seed) => {
   let s = seed >>> 0;
   return (n) => {
