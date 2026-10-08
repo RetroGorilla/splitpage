@@ -43,7 +43,7 @@ import { queueAutoSave } from "./14-export.js";
 import { sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
 import { idMap } from "../core/document/id-map.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
 
 export var IS_TOUCH;
@@ -992,7 +992,7 @@ export function setTagNotes(key, text) {
   if (!item) return;
   var entry = trackedEntry(item);
   if (!entry) return;
-  var clean = plainText(text).slice(0, 2000);
+  var clean = cappedLongText(plainText(text), 2000);
   if (entry.notes === clean) return;
   entry.notes = clean;
   markDirty();

@@ -7,6 +7,7 @@ import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.j
 import { collectTagsFromRows, mintTagId, normalizeTagName, registryKey } from "./07-production-tags.js";
 import { normalizeBrollProps, recordPastedBroll } from "./08c-broll.js";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
+import { cappedLongText } from "../core/document/text-policy.ts";
 import { inertBody } from "../legacy/richtext.ts";
 
 export var SCENES_MIME = "application/x-splitpage-scenes";
@@ -187,7 +188,7 @@ export function parseScenePayload(json) {
     cut: typeof p.cut === "string" && /^[A-Za-z0-9]{1,64}$/.test(p.cut) ? p.cut : null,
     source: {
       docId: typeof source.docId === "string" ? source.docId : null,
-      title: typeof source.title === "string" ? source.title.slice(0, 300) : ""
+      title: typeof source.title === "string" ? cappedLongText(source.title, 300) : ""
     },
     carried: carried,
     refs: refsIn(doc)

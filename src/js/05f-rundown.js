@@ -7,7 +7,7 @@ import { clearDropMarkers, moveRowTo } from "./06-rows.js";
 import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
 import { contentMemo } from "../core/document/memo.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -350,7 +350,7 @@ function sceneSnippet(row) {
   if (!snippetOf) {
     snippetOf = contentMemo(function (html) {
       var text = toPlainText(cellOf(html)).replace(/\s+/g, " ").trim();
-      return text.length > 90 ? text.slice(0, 90) : text;
+      return unitSafePrefix(text, 90);
     }, cacheSeal);
   }
   return snippetOf(row.audioText || "") || snippetOf(row.visualText || "");
