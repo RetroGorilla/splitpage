@@ -229,6 +229,17 @@ test("a long title of emoji is shortened by whole characters, never half of one 
   }
 });
 
+test("the footer's shortened title never ends in half an emoji (#434)", () => {
+  const grin = String.fromCodePoint(0x1F600);
+  for (let lead = 0; lead < 8; lead++) {
+    S.state = migrateRows({ schema: 2, title: "i".repeat(lead) + grin.repeat(120), comments: [],
+      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+    const foot = read(buildPdf(null)).pages[0].footer[0].str;
+    assert.ok(foot.length > 20 && foot.length < 240, lead + ": " + foot.length);
+    assert.equal((foot.match(/\?/g) || []).length % 2, 0, lead + ": " + foot);
+  }
+});
+
 test("a script with no tags, b-roll or comments has no appendix, and a long title never runs off the page", () => {
   S.state = migrateRows({ schema: 2, title: "A title so long that it could never fit on one line of the page, nor on two lines of it, however small the words are set and however wide the page is", comments: [],
     rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });

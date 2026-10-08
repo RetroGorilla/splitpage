@@ -6,7 +6,7 @@ import { galleryEdit } from "./05e-gallery-overlay.js";
 import { showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
-import { cappedLongText } from "../core/document/text-policy.ts";
+import { cappedLongText, codePointPrefix } from "../core/document/text-policy.ts";
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
 var SIZES = {
@@ -529,7 +529,9 @@ function commitText() {
   if (!ed || !ed.text) return;
   var t = ed.text;
   var box = textBoxEl();
-  var text = box ? cappedLongText(box.value.replace(/\r\n?/g, "\n"), MAX_TEXT).replace(/\s+$/, "") : "";
+  var raw = box ? box.value.replace(/\r\n?/g, "\n") : "";
+  var cut = cappedLongText(raw, MAX_TEXT);
+  var text = (cut.trim() ? cut : codePointPrefix(raw, MAX_TEXT)).replace(/\s+$/, "");
   ed.text = null;
   if (box) box.parentNode.removeChild(box);
   var had = t.index >= 0 ? ed.marks[t.index] : null;
