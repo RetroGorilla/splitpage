@@ -443,8 +443,26 @@ One stack per tab, of step lists (§4). What counts as one entry:
   that reverts the cell, as long as the cancel leaves the cell as it was at
   `compositionstart`; if its first update joined earlier typing, that
   typing keeps its own entry as it was (#380, PR #427). A slow composition
-  that replaced a selection keeps its entries when it is cancelled in a
-  browser that doesn't put the selection back, such as Chromium (#436).
+  that replaced a selection and is cancelled in a browser that doesn't put
+  the selection back, such as Chromium, leaves one entry from the cell as
+  it was at `compositionstart` to the cell after the cancel, so one Ctrl+Z
+  brings the selection back and no step shows the cancelled text (#436). A
+  fast one, whose updates all coalesced, is one typing entry as before. If
+  the composition's first update put the cell back where the typing just
+  before it began, so that typing's entry dropped, the cancel puts that
+  entry back under its own step (PR #448). An input with no key of its own
+  after a cancel, such as a spelling fix or a drop, is its own entry. An
+  undo or redo during the composition that moves an entry from before
+  `compositionstart` makes the cell as it leaves it the new start, but the
+  render ends the composition, so no later cancel in the app works from
+  there; an undo of typing that the composition's
+  first update joined puts that typing on redo without the composition's
+  text (#446, PR #448). Known limitations: an undo or redo of the
+  composition's own updates during it, then a cancel, can give back a redo
+  that shows the cancelled text (#459); and if a co-editor's change reaches
+  the cell during the composition, the cancel keeps its entries as they
+  were made, so they can show the cancelled text. Only a browser whose
+  composition survives Ctrl+Z can reach the first; Chromium ends it first.
   Typing that leaves a real step clears redo. Typing that leaves no entry
   this way gives back only the redo that this same typing cleared, even
   when that typing was undone or redone in between. Redo that earlier
@@ -453,7 +471,8 @@ One stack per tab, of step lists (§4). What counts as one entry:
   change undone before it belongs to a history without it. Known
   limitation: if only part of the typing was undone before it drops (a
   word-start entry, or a slow composition's later update), the redo from
-  before the typing does not come back, as before drops gave any back.
+  before the typing does not come back, as it did before drops gave any
+  redo back.
 - Every intercepted action is one entry:
   - a paste
   - a format
