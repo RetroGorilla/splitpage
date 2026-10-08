@@ -13,6 +13,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
+const { browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../js/03d-drafts-idb.js");
 const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 
@@ -529,6 +530,73 @@ test("a reopen after a reload whose fetch fails still falls back to the link's d
   });
   assert.equal(S.state, start.doc);
   sessionStorage.removeItem(SERVER_RESUME_KEY);
+  window.__hostedTest.setSession({ docId: null });
+  settle(startingDocument("After the server"));
+});
+
+test("a reopen after a reload that is refused as no document does not stop the document the link names from opening", async () => {
+  for (const link of [{ role: "edit", scope: "doc-other" }, { role: "edit", scope: "doc-resume" }]) {
+    const opensOther = link.scope === "doc-other";
+    const where = "reopen " + JSON.stringify(link);
+    const start = holding("Resume then link");
+    const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
+    sessionStorage.setItem(SERVER_RESUME_KEY, pending);
+    await withServer((ask) => {
+      if (ask === "GET api/me") return reply(200, link);
+      if (ask === "GET api/docs/doc-resume") return reply(200, { id: "doc-resume", rev: 2, state: [] });
+      if (ask === "GET api/docs/doc-other") return reply(200, { id: "doc-other", rev: 5, state: startingDocument("Other") });
+      return null;
+    }, async (asked) => {
+      await finishServerDetect();
+      await idle();
+      assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"].concat(opensOther ? ["GET api/docs/doc-other"] : []), where);
+    });
+    if (opensOther) {
+      assert.equal(toasts().length, 2, where);
+      assert.equal(toasts()[0], "That document is empty.", where);
+      assert.match(toasts()[1], /^Opened .* from the server — \d+ scenes?$/, where);
+      assert.equal(window.__hostedTest.home().kind, "server", where);
+      assert.equal(window.__hostedTest.home().id, "doc-other", where);
+      assert.notEqual(S.state, start.doc, where);
+    } else {
+      assert.deepEqual(toasts(), ["That document is empty."], where);
+      assert.equal(S.state, start.doc, where);
+    }
+    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, where);
+    sessionStorage.removeItem(SERVER_RESUME_KEY);
+    window.__hostedTest.setSession({ docId: null });
+    settle(startingDocument("After the server"));
+  }
+});
+
+test("a server open that takes a pending browser draft and finds a state that is no document answers not opened: the picker stays open and the message shows once", async () => {
+  const store = createIdbDraftStore();
+  const key = browserDraftKey(draftBaseOf("", window.location.href), "doc-draft");
+  const draft = JSON.stringify(startingDocument("Draft"));
+  const put = await store.put({
+    key: key, base: draftBaseOf("", window.location.href), docId: "doc-draft", rev: 1, title: "Draft",
+    writerId: "another-tab", editSeq: 1, schema: 2, docIdWrittenOut: true, stateJson: draft, baseJson: draft
+  });
+  assert.equal(put.ok, true);
+  const start = holding("Server pick");
+  const modal = document.getElementById("server-modal");
+  modal.hidden = false;
+  S.serverMode.checked = true;
+  const opened = await withServer((ask) => ask === "GET api/docs/doc-draft" ? reply(200, { id: "doc-draft", rev: 2, state: [] }) : null, async (asked) => {
+    const result = await openServerDoc("doc-draft");
+    assert.deepEqual(asked, ["GET api/docs/doc-draft"]);
+    return result;
+  });
+  assert.ok(S.draftServerResume, "the browser draft was taken");
+  assert.equal(opened, false);
+  assert.deepEqual(toasts(), ["That document is empty."]);
+  assert.equal(modal.hidden, false);
+  unchangedBy("server open with a draft", start, start.epoch, start.gen);
+  assert.notEqual(window.__hostedTest.home().kind, "server");
+  S.draftServerResume.onDone("not-found");
+  await idle();
+  await store.remove(key);
+  modal.hidden = true;
   window.__hostedTest.setSession({ docId: null });
   settle(startingDocument("After the server"));
 });
