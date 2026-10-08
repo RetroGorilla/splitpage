@@ -13,6 +13,7 @@ import { TAG_CATEGORY_IDS, TAG_STATUS_IDS, ensureTagIds, normalizeTagName, tagCa
 import type { TagRecord } from "./document/tags.ts";
 import type { ValidatedDocument } from "./document/validated.ts";
 import {
+  brokenCutOf,
   cappedText,
   legacyMdToHtml,
   plainName,
@@ -85,12 +86,24 @@ function nameKey(name: string): string {
 function cueRenamesFor(tags: readonly Bag[], rows: readonly ProductionRow[], readers: ProductionReaders): (string | undefined)[] | undefined {
   if (!tags.some(function (t) { return t.cat === "sound"; })) return undefined;
   const renames = cueCutRenames(rows, readers);
-  const used: Record<string, boolean> = Object.create(null);
-  return tags.map(function (t) {
+  const claimed: Record<string, boolean> = Object.create(null), used: Record<string, boolean> = Object.create(null);
+  tags.forEach(function (t) { if (t.cat === "sound") claimed[nameKey(textOfName(t))] = true; });
+  const first: boolean[] = [];
+  const wanted = tags.map(function (t) {
     const key = t.cat === "sound" ? nameKey(textOfName(t)) : "";
+    first.push(!!key && !used[key]);
     if (!key || used[key]) return undefined;
     used[key] = true;
-    return renames[key];
+    const name = renames.byOldCut[key];
+    if (name) claimed[nameKey(name)] = true;
+    return name;
+  });
+  return wanted.map(function (name, at) {
+    if (name || !first[at]) return name;
+    const text = textOfName(tags[at] as Bag);
+    const hit = renames.long.find(function (n) { return !claimed[nameKey(n)] && brokenCutOf(text, n, 80); });
+    if (hit) claimed[nameKey(hit)] = true;
+    return hit;
   });
 }
 
@@ -99,10 +112,14 @@ function shotRenamesFor(shots: readonly Bag[], rows: readonly ProductionRow[], r
   const renames = brollCutRenames(rows, readers);
   if (!renames.lines.length) return undefined;
   const wanted: (string | undefined)[] = shots.map(function () { return undefined; });
+  const texts = shots.map(textOfName), named: Record<string, boolean> = Object.create(null);
+  texts.forEach(function (text) { named[nameKey(text)] = true; });
   renames.lines.forEach(function (line) {
+    if (!line.key && named[nameKey(line.name)]) return;
     for (let at = 0; at < shots.length; at++) {
-      const b = shots[at] as Bag;
-      if (wanted[at] || renames.held[b.id as string] || nameKey(textOfName(b)) !== line.key) continue;
+      const text = texts[at] as string;
+      if (wanted[at] || renames.held[(shots[at] as Bag).id as string]) continue;
+      if (!(line.key && nameKey(text) === line.key) && !brokenCutOf(text, line.name, 200)) continue;
       wanted[at] = line.name;
       return;
     }

@@ -153,20 +153,25 @@ export function missingRegistryTags(
   return out;
 }
 
-export function cueCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): Record<string, string> {
-  const out: Record<string, string> = Object.create(null);
+export type CueCutRenames = { byOldCut: Record<string, string>; long: string[] };
+
+export function cueCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): CueCutRenames {
+  const byOldCut: Record<string, string> = Object.create(null), long: string[] = [];
   (rows || []).forEach(function (row) {
     TAG_FIELDS.forEach(function (field) {
       const html = row[field];
-      if (!readers.cueNamesInField(html).some(function (name) { return name.length >= 80; })) return;
+      const names = readers.cueNamesInField(html).filter(function (name) { return name.length >= 77; });
+      if (!names.length) return;
+      names.forEach(function (name) { long.push(name); });
+      if (!names.some(function (name) { return name.length >= 80; })) return;
       cuesInCell(readers.cellOf(html as string)).forEach(function (c) {
         const old = unitCutName(c.name, 80), name = cappedName(c.name, 80);
         const key = normalizeTagName(old);
-        if (old !== name && key && !(key in out)) out[key] = name;
+        if (old !== name && key && !(key in byOldCut)) byOldCut[key] = name;
       });
     });
   });
-  return out;
+  return { byOldCut: byOldCut, long: long };
 }
 
 export function registrySignature(tags: RegistryList): unknown[] {

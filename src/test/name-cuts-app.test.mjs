@@ -197,6 +197,23 @@ for (const [what, stored, line, whole] of OLD_CUTS) {
   });
 }
 
+test("a cue whose old text held a lone half inside its cut stays one tag once the half is dropped (#344)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: ' + x(78) + "\uD83D y</span>", visualText: "" }],
+    productionTags: [{ id: "t_old1", cat: "sound", name: x(78) + "\uD83D", status: "have", owner: "p1", notes: "keep me" }]
+  });
+  const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+  assert.deepEqual(sound.map((t) => [t.id, t.name, t.owner, t.notes]), [["t_old1", x(78) + " y", "p1", "keep me"]]);
+});
+
+test("an unkeyed B-roll line whose old text held a lone half inside its cut stays one shot (#344)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + x(198) + "\uD83D y" }],
+    brollShots: [{ id: "bs1", name: x(198) + "\uD83D", notes: "keep me", status: "shot", origin: "script" }]
+  });
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(198) + " y", "keep me"]]);
+});
+
 test("an unkeyed B-roll line renames the free shot with its old cut, not one a keyed line holds (#344)", () => {
   const key = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> ';
   migrated({

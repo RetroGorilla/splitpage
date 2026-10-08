@@ -58,6 +58,13 @@ export function unitCutName(s: string, max: number): string {
   return s.trim().slice(0, max).trimEnd();
 }
 
+export function brokenCutOf(stored: string, name: string, max: number): boolean {
+  const s = stored.trim();
+  if (s.length < max - 3 || !hasLoneSurrogate(s)) return false;
+  const kept = withoutLoneSurrogates(s).trimStart();
+  return name.length > kept.trimEnd().length && name.startsWith(kept);
+}
+
 const LONE_ONE_RE = /^\p{Cs}$/u;
 const SPACE_RE = /^\s$/;
 

@@ -4,6 +4,7 @@ import { normalizeBrollProps } from "../../../src/core/document/broll.ts";
 import { normalizePictureName, normalizeVideoLink } from "../../../src/core/document/gallery.ts";
 import { PERSON_COLORS, normalizePersonColors } from "../../../src/core/document/person-colors.ts";
 import {
+  brokenCutOf,
   cappedName,
   cappedText,
   codePointPrefix,
@@ -109,6 +110,15 @@ test("settledNames is a fixed point: settling its own output changes nothing (#3
       if (cappedName(name, 4) !== cappedName(texts[at] as string, 4)) assert.fail("a kept name heals to the same name: " + JSON.stringify(texts));
     });
   }
+});
+
+test("brokenCutOf finds a stored name an older build cut from text that held a lone half (#344)", () => {
+  assert.equal(brokenCutOf(x(78) + HIGH, x(78) + " y", 80), true);
+  assert.equal(brokenCutOf(HIGH + x(79), x(79) + "z", 80), true);
+  assert.equal(brokenCutOf(x(78) + HIGH, x(78), 80), false, "the heal already matches");
+  assert.equal(brokenCutOf(x(78) + "y", x(78) + "yz", 80), false, "a clean name is not a broken cut");
+  assert.equal(brokenCutOf(x(70) + HIGH, x(70) + " more", 80), false, "too short to be a cut at the cap");
+  assert.equal(brokenCutOf(x(78) + HIGH, "y" + x(78), 80), false);
 });
 
 test("unitCutName is the cut older builds made: trimmed, cut at max UTF-16 units, trimmed again (#344)", () => {
