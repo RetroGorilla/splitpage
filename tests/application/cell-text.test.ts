@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { CELL_TEXT_DERIVES, cellRuns, cellTextCommand, sanitisedMediaHtml } from "../../src/application/commands/cell-text.ts";
+import type { CellText } from "../../src/application/commands/cell-text.ts";
 import type { CellTextPorts } from "../../src/application/session/ports.ts";
 import { toHtml } from "../../src/core/text/html.ts";
 import { normalizeCell } from "../../src/core/text/runs.ts";
@@ -50,7 +51,12 @@ function ports(name = "Adam"): Counting {
 
 const COMMENTED = html([run("Alpha "), run("bravo", { cmt: ["c1"] }), run(" delta")]);
 const PLAIN = html([run("Every morning.")]);
+const BOLD = html([run("Alpha "), run("bravo", { b: true })]);
 const CARD = '<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>';
+const LEGACY = "Every <b>morning</b>.";
+const MEDIA = "Hello " + CARD;
+decoded.set(LEGACY, normalizeCell([run("Every "), run("morning", { b: true }), run(".")]));
+decoded.set(MEDIA, normalizeCell([run("Hello ")]));
 
 function fixture(): { title: string; docId: string; rows: Record<string, unknown>[]; comments: Record<string, unknown>[] } {
   return {
@@ -59,7 +65,10 @@ function fixture(): { title: string; docId: string; rows: Record<string, unknown
     rows: [
       { id: "r1", visualText: "Wide", audioText: PLAIN, status: "todo", updatedAt: OLD, updatedBy: "Sam" },
       { id: "r2", visualText: "Close", audioText: COMMENTED, status: "ready", updatedAt: OLD, updatedBy: "Sam" },
-      { id: "r3", audioText: "Third.", status: "todo" }
+      { id: "r3", audioText: "Third.", status: "todo" },
+      { id: "r4", audioText: BOLD, status: "todo", updatedAt: OLD, updatedBy: "Sam" },
+      { id: "r5", audioText: LEGACY, status: "todo", updatedAt: OLD, updatedBy: "Sam" },
+      { id: "r6", audioText: MEDIA, status: "todo", updatedAt: OLD, updatedBy: "Sam" }
     ],
     comments: [{ id: "c1", anchorId: "c1", kind: "anchor", rowId: "r2", field: "audioText", body: "Tighter", replies: [] }]
   };
@@ -168,6 +177,84 @@ test("the command is not refused in review mode: a reviewer's comment anchor is 
   const out = runConfined(h.session, cellTextCommand("r1", "audioText", cellRuns(runs), ports("Reviewer")));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: textChanges("r1", "audioText", true) });
   assert.equal(rowOf(h, "r1")?.updatedBy, "Reviewer");
+});
+
+function refusedInReview(rowId: string, field: string, text: CellText, why: string): void {
+  const h = opened();
+  h.deny("review");
+  const before = snapshot(h);
+  const p = ports("Reviewer");
+  assert.deepEqual(runConfined(h.session, cellTextCommand(rowId, field, text, p)), { kind: "rejected", reason: "review" }, why);
+  assert.equal(p.asked(), 0, why + ": no stamp was taken");
+  assert.equal(h.session.generation(), 0, why);
+  assert.deepEqual(h.log, [], why + ": no undo record, no reconciliation, no effects");
+  assert.deepEqual(h.published, [], why);
+  assert.equal(h.clock.armed(), 0, why + ": no refresh was scheduled");
+  assert.equal(snapshot(h), before, why + ": the document is unchanged");
+}
+
+function appliedInReview(rowId: string, text: CellText, why: string): Record<string, unknown> | null {
+  const h = opened();
+  h.deny("review");
+  const out = runConfined(h.session, cellTextCommand(rowId, "audioText", text, ports("Reviewer")));
+  assert.equal(out.kind, "applied", why);
+  assert.equal(h.session.generation(), 1, why);
+  return rowOf(h, rowId);
+}
+
+const REVIEW_TEXT_CHANGES: readonly [string, string, string, CellText][] = [
+  ["a typed character", "r1", "audioText", cellRuns(normalizeCell([run("Every morning!")]))],
+  ["a deleted word", "r2", "audioText", cellRuns(normalizeCell([run("Alpha "), run("bravo", { cmt: ["c1"] })]))],
+  ["an emptied cell", "r1", "audioText", cellRuns([])],
+  ["a new anchor with a typed character", "r1", "audioText", cellRuns(normalizeCell([run("Every "), run("morning", { cmt: ["c9"] }), run("!")]))],
+  ["a removed anchor with a changed word", "r2", "audioText", cellRuns(normalizeCell([run("Alpha bravo gamma")]))],
+  ["bold added", "r1", "audioText", cellRuns(normalizeCell([run("Every "), run("morning", { b: true }), run(".")]))],
+  ["bold removed under a new anchor", "r4", "audioText", cellRuns(normalizeCell([run("Alpha "), run("bravo", { cmt: ["c9"] })]))],
+  ["a highlight on commented words", "r2", "audioText", cellRuns(normalizeCell([run("Alpha "), run("bravo", { cmt: ["c1"], hl: true }), run(" delta")]))],
+  ["a link", "r1", "audioText", cellRuns(normalizeCell([run("Every "), run("morning", { href: "https://example.com/" }), run(".")]))],
+  ["a stage direction", "r1", "audioText", cellRuns(normalizeCell([run("Every morning.", { dir: true })]))],
+  ["the same runs stored in another form, with no anchor change", "r5", "audioText", cellRuns(normalizeCell([run("Every "), run("morning", { b: true }), run(".")]))],
+  ["a cell that holds media, with a new anchor", "r1", "audioText", sanitisedMediaHtml('<span class="cmt-anchor" data-cmt="c9">Every</span> morning. ' + CARD)],
+  ["a stored media cell whose card is gone, with a new anchor", "r6", "audioText", cellRuns(normalizeCell([run("Hello", { cmt: ["c9"] }), run(" ")]))],
+  ["a field the scene does not have yet", "r3", "visualText", cellRuns([])]
+];
+
+test("without edit capability, a change to a cell's text or formatting is refused before anything is written: no stamp, no undo record, no effects", () => {
+  REVIEW_TEXT_CHANGES.forEach(function ([why, rowId, field, text]) { refusedInReview(rowId, field, text, why); });
+});
+
+test("without edit capability, a change that only adds, moves or removes comment anchors is applied", () => {
+  const added = appliedInReview("r1", cellRuns(normalizeCell([run("Every "), run("morning", { cmt: ["c9"] }), run(".")])), "an added anchor");
+  assert.equal(added?.updatedBy, "Reviewer");
+  const moved = appliedInReview("r2", cellRuns(normalizeCell([run("Alpha bravo "), run("delta", { cmt: ["c1"] })])), "a moved anchor");
+  assert.equal(moved?.audioText, 'Alpha bravo <span class="cmt-anchor" data-cmt="c1">delta</span>');
+  const removed = appliedInReview("r2", cellRuns(normalizeCell([run("Alpha bravo delta")])), "a removed anchor");
+  assert.equal(removed?.audioText, "Alpha bravo delta");
+  const across = appliedInReview("r4", cellRuns(normalizeCell([run("Alp"), run("ha ", { cmt: ["c9"] }), run("bra", { b: true, cmt: ["c9"] }), run("vo", { b: true })])), "an anchor across a bold edge");
+  assert.match(String(across?.audioText), /c9/);
+  const legacy = appliedInReview("r5", cellRuns(normalizeCell([run("Every "), run("morning", { b: true, cmt: ["c9"] }), run(".")])), "an anchor in a cell stored in another form");
+  assert.match(String(legacy?.audioText), /data-cmt="c9"/);
+  assert.equal(legacy?.updatedBy, "Reviewer");
+});
+
+test("without edit capability, the same text is still a no-op and a scene that is gone is still a no-op, not a refusal", () => {
+  const h = opened();
+  h.deny("review");
+  const p = ports("Reviewer");
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r1", "audioText", cellRuns(decoded.get(PLAIN) || []), p)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r2", "audioText", cellRuns(normalizeCell([run("Alpha "), run("bravo", { cmt: ["c1"] }), run(" delta")])), p)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, cellTextCommand("gone", "audioText", cellRuns([run("x")]), p)), { kind: "noop" });
+  assert.deepEqual(h.log, []);
+});
+
+test("with edit capability, every change the review check refuses is applied as before", () => {
+  REVIEW_TEXT_CHANGES.forEach(function ([why, rowId, field, text]) {
+    const h = opened();
+    const out = runConfined(h.session, cellTextCommand(rowId, field, text, ports()));
+    assert.equal(out.kind, "applied", why);
+    assert.equal(rowOf(h, rowId)?.[field], text.kind === "runs" ? toHtml(text.runs) : text.html, why);
+    assert.equal(rowOf(h, rowId)?.updatedBy, "Adam", why);
+  });
 });
 
 test("a cell holding media stores its sanitised HTML as given, through the same command", () => {
