@@ -32,7 +32,7 @@ import {
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
-import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { cappedName, cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -173,7 +173,7 @@ export function registryEntry(cat, name) {
 }
 
 export function registerProductionTag(cat, name) {
-  var rec = newRegistryTag(S.state.productionTags, cat, name);
+  var rec = newRegistryTag(S.state.productionTags, cat, cappedName(String(name == null ? "" : name), 80));
   if (rec) S.state.productionTags.push(rec);
 }
 

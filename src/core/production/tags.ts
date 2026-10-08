@@ -104,9 +104,10 @@ export function isBlankTagName(name: unknown): boolean {
 }
 
 export function newRegistryTag(registry: RegistryList, cat: string, name: string): NewRegistryTag | null {
-  if (isBlankTagName(name)) return null;
-  if (registryEntry(registry, cat, name)) return null;
-  return { id: mintTagId(cat, name, registry), cat: cat, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
+  const clean = cappedName(String(name == null ? "" : name), 80);
+  if (isBlankTagName(clean)) return null;
+  if (registryEntry(registry, cat, clean)) return null;
+  return { id: mintTagId(cat, clean, registry), cat: cat, name: clean, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
 }
 
 export function collectTagsFromRows(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): TagGroup[] {
