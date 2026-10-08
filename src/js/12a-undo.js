@@ -216,7 +216,7 @@ export function createUndoHistory() {
   var done = [], undone = [];
   var serial = 0;
   var parked = null;
-  var marks = 0, lowStep = Infinity;
+  var current = null;
 
   function backAtPark(text) {
     var top = done[done.length - 1] || null;
@@ -259,6 +259,7 @@ export function createUndoHistory() {
         if (ins) last.endsInSpace = /\s$/.test(ins);
         if (last.from === to && cosmetic(last.steps[0])) {
           dropFrom(done.length - 1);
+          if (current && last === current.top) current.lost = below();
           unpark();
         } else if (parked) {
           unpark(to);
@@ -282,23 +283,57 @@ export function createUndoHistory() {
     for (var i = gone.length - 1; i >= 0; i--) if (gone[i].evicted) done.unshift(gone[i].evicted);
   }
 
-  function markCell(rowId, key, value) {
+  function below() {
+    var under = done[done.length - 1] || null;
+    return { under: under, after: under && under.steps[0].after };
+  }
+
+  function fill(mark, value) {
     var top = done[done.length - 1] || null;
-    lowStep = Infinity;
-    return {
-      n: serial, gen: ++marks, cell: rowId + "\u0000" + key, key: key, value: value,
-      top: top, after: top && top.steps[0].after, at: top && top.at, endsInSpace: top && top.endsInSpace
-    };
+    mark.n = serial;
+    mark.value = value;
+    mark.top = top;
+    mark.after = top && top.steps[0].after;
+    mark.at = top && top.at;
+    mark.endsInSpace = top && top.endsInSpace;
+    mark.lost = null;
+    return mark;
+  }
+
+  function markCell(rowId, key, value) {
+    current = fill({ rowId: rowId, cell: rowId + "\u0000" + key, key: key, ended: false }, value);
+    return current;
+  }
+
+  function joinedTop(mark) {
+    var top = mark.top;
+    return !!top && onlyCell(top.steps) === mark.cell && (top.steps[0].after !== mark.after || top.at !== mark.at);
+  }
+
+  function putBack(mark) {
+    mark.top.steps[0].after = mark.after;
+    mark.top.at = mark.at;
+    mark.top.endsInSpace = mark.endsInSpace;
+  }
+
+  function remark(state) {
+    if (joinedTop(current)) putBack(current);
+    var rows = (state && state.rows) || [], value;
+    for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id === current.rowId) value = rows[i][current.key];
+    fill(current, value);
   }
 
   function dropEmptySince(mark, cancelled) {
-    if (mark.gen !== marks || lowStep <= mark.n) return false;
+    if (mark !== current) return false;
+    mark.ended = true;
     var k = done.length;
     while (k > 0 && done[k - 1].n > mark.n) k--;
     var top = mark.top;
-    var joined = !!top && done[k - 1] === top && onlyCell(top.steps) === mark.cell &&
-      (top.steps[0].after !== mark.after || top.at !== mark.at);
+    var joined = done[k - 1] === top && joinedTop(mark);
+    var lost = !!mark.lost && (done[k - 1] || null) === mark.lost.under &&
+      (!mark.lost.under || mark.lost.under.steps[0].after === mark.lost.after);
     if (k === done.length && !joined) return false;
+    if (!joined && !lost && !cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: done[k].steps[0].before })) return false;
     for (var i = k; i < done.length; i++) if (onlyCell(done[i].steps) !== mark.cell) return false;
     var end = k < done.length ? done[done.length - 1] : top;
     var after = end.steps[0].after;
@@ -311,11 +346,8 @@ export function createUndoHistory() {
       at: end.at, cell: mark.cell, endsInSpace: /\s$/.test(insertedText(from, projectionOf(after))), from: from, evicted: null
     };
     dropFrom(k);
-    if (joined) {
-      top.steps[0].after = mark.after;
-      top.at = mark.at;
-      top.endsInSpace = mark.endsInSpace;
-    }
+    if (joined || lost) putBack(mark);
+    if (lost) push(top);
     if (one) {
       push(one);
       return false;
@@ -327,15 +359,12 @@ export function createUndoHistory() {
   function step(from, to, state, invert) {
     var entry = from.pop();
     if (!entry) return { ok: false, empty: true };
-    if (entry.n < lowStep) lowStep = entry.n;
     var steps = invert ? invertSteps(entry.steps) : entry.steps;
     var r = applyStepsLive(state, steps);
-    if (!r.ok) {
-      parked = null;
-      return { ok: false, reason: r.reason, steps: steps };
-    }
-    to.push(entry);
-    return { ok: true, steps: steps };
+    if (r.ok) to.push(entry);
+    else parked = null;
+    if (current && !current.ended && entry.n <= current.n) remark(state);
+    return r.ok ? { ok: true, steps: steps } : { ok: false, reason: r.reason, steps: steps };
   }
 
   function forget(touched) {
@@ -390,7 +419,7 @@ export function createUndoHistory() {
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
     markCell: markCell,
     dropEmptySince: dropEmptySince,
-    clear: function () { done.length = 0; undone.length = 0; parked = null; },
+    clear: function () { done.length = 0; undone.length = 0; parked = null; current = null; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
     top: function () { return done[done.length - 1] || null; },
     nextRedo: function () { return undone[undone.length - 1] || null; },

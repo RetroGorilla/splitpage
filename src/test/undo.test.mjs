@@ -572,6 +572,32 @@ test("history: a reconversion whose first update puts the cell back where the co
   }
 });
 
+test("history: a dropped typing entry is not put back on a cancel once a later update has joined the entry under it, so no undo is refused (#448 B1)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Ta", "Ta "), 0);
+  h.record(typed("Ta ", "Ta n"), 200);
+  const mark = h.markCell("r1", "audioText", "Ta n");
+  h.record(typed("Ta n", "Ta "), 300);
+  h.record(typed("Ta ", "Ta  "), 400);
+  h.record(typed("Ta  ", "Ta  ね"), 1500);
+  h.record(typed("Ta  ね", "Ta"), 2600);
+  h.dropEmptySince(mark, true);
+  const chain = undoChain(h, doc([row("r1", "Ta")]));
+  assert.ok(chain.every((text) => !text.startsWith("refused")), chain.join(" < "));
+  assert.equal(chain[chain.length - 1], "Ta");
+});
+
+test("history: a composition's mark drops nothing once the history was cleared, even in a cell with the same row id (#448)", () => {
+  const h = createUndoHistory();
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.clear();
+  h.record(typed("Third.", "Thiね"), 5000);
+  h.record(typed("Thiね", "Thi"), 6100);
+  assert.equal(h.dropEmptySince(mark, true), false);
+  assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+  assert.deepEqual(h.top().steps, typed("Thiね", "Thi"));
+});
+
 test("history: a co-editor's change to the cell during a slow composition is not undone by the cancel's step (#448 S2)", () => {
   const h = createUndoHistory();
   const mark = h.markCell("r1", "audioText", "Third.");
@@ -624,6 +650,19 @@ test("history: a Ctrl+Z past compositionstart that undid typing the composition 
   assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
   assert.equal(h.redo(live).ok, true);
   assert.equal(live.rows[0].audioText, "Third.", "the typing, without the cancelled text");
+});
+
+test("history: once a composition joined to typing has ended in a commit, a later Ctrl+Z of that typing keeps the committed text for Ctrl+Y (#448)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Thir", "Third."), 0);
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Third.か"), 100);
+  assert.equal(h.dropEmptySince(mark, false), false);
+  const live = doc([row("r1", "Third.か")]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Thir");
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.か");
 });
 
 test("history: a refused Ctrl+Z past compositionstart still takes a fresh mark, so the typing the composition then joined is put back when it is cancelled (#448)", () => {
