@@ -217,9 +217,21 @@ export function createUndoHistory() {
   var serial = 0;
   var parked = null;
 
+  function backAtPark(text) {
+    var top = done[done.length - 1] || null;
+    if (!parked || top !== parked.top) return false;
+    if (top && top.steps[0].after !== parked.after) {
+      if (!onlyCell(top.steps)) return false;
+      if ((text === undefined ? projectionOf(top.steps[0].after) : text) !== parked.text) return false;
+      if (!cosmetic({ op: "rowField", key: top.steps[0].key, before: parked.after, after: top.steps[0].after })) return false;
+    }
+    return true;
+  }
+
   function park(top) {
+    var redo = backAtPark() ? parked.redo.concat(undone) : undone.slice();
     parked = {
-      redo: undone.slice(), top: top || null,
+      redo: redo.length > MAX_ENTRIES ? redo.slice(redo.length - MAX_ENTRIES) : redo, top: top || null,
       after: top && top.steps[0].after,
       text: top && onlyCell(top.steps) ? projectionOf(top.steps[0].after) : null
     };
@@ -227,13 +239,7 @@ export function createUndoHistory() {
   }
 
   function unpark(text) {
-    var top = done[done.length - 1] || null;
-    if (!parked || top !== parked.top) return;
-    if (top && top.steps[0].after !== parked.after) {
-      if (!onlyCell(top.steps)) return;
-      if ((text === undefined ? projectionOf(top.steps[0].after) : text) !== parked.text) return;
-      if (!cosmetic({ op: "rowField", key: top.steps[0].key, before: parked.after, after: top.steps[0].after })) return;
-    }
+    if (!backAtPark(text)) return;
     for (var i = 0; i < parked.redo.length; i++) undone.push(parked.redo[i]);
     parked = null;
   }
@@ -304,10 +310,12 @@ export function createUndoHistory() {
   function step(from, to, state, invert) {
     var entry = from.pop();
     if (!entry) return { ok: false, empty: true };
-    parked = null;
     var steps = invert ? invertSteps(entry.steps) : entry.steps;
     var r = applyStepsLive(state, steps);
-    if (!r.ok) return { ok: false, reason: r.reason, steps: steps };
+    if (!r.ok) {
+      parked = null;
+      return { ok: false, reason: r.reason, steps: steps };
+    }
     to.push(entry);
     return { ok: true, steps: steps };
   }
@@ -325,10 +333,10 @@ export function createUndoHistory() {
       list.length = 0;
       kept.forEach(function (e) { list.push(e); });
     }
-    var had = done.length;
+    var had = done.length + undone.length;
     keep(done);
-    if (done.length !== had) parked = null;
     keep(undone);
+    if (done.length + undone.length !== had) parked = null;
     if (parked) keep(parked.redo);
     done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });
   }

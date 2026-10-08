@@ -593,6 +593,76 @@ for (const drop of ["type and delete", "slow cancel"]) {
   });
 }
 
+test("after an undo, typing that is then undone, and a later type and delete, Ctrl+Y redoes the typing and then reaches the change undone before it", async () => {
+  await open();
+  await undoneBang();
+  clock += 5;
+  typeChar(cellOf("r3", "audioText"), "x");
+  await settle();
+  clock += 5000;
+  assert.equal(undo().ok, true);
+  assert.equal(row("r3").audioText, "Three.");
+  const el = cellOf("r1", "visualText");
+  clock += 5000;
+  typeChar(el, "y");
+  await settle();
+  clock += 5;
+  setText(el, "Wide", { inputType: "deleteContentBackward" });
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 0, redo: 2 });
+  assert.equal(redo().ok, true);
+  assert.equal(row("r3").audioText, "Three.x");
+  assert.equal(redo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
+});
+
+test("after an undo, typing a letter, Ctrl+Z, Ctrl+Y and deleting it within a second gives back the redo from before the typing", async () => {
+  await open();
+  await undoneBang();
+  clock += 5;
+  typeChar(cellOf("r3", "audioText"), "x");
+  await settle();
+  clock += 5;
+  assert.equal(undo().ok, true);
+  clock += 5;
+  assert.equal(redo().ok, true);
+  assert.equal(row("r3").audioText, "Three.x");
+  clock += 5;
+  const el = cellOf("r3", "audioText");
+  el.focus();
+  setText(el, "Three.", { inputType: "deleteContentBackward" });
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
+  assert.equal(redo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
+});
+
+test("after an undo, a slow composition with Ctrl+Z and Ctrl+Y in the middle, then cancelled, gives back the redo from before it", async () => {
+  await open();
+  await undoneBang();
+  let el = cellOf("r3", "audioText");
+  el.focus();
+  compose(el, "compositionstart", "");
+  for (const text of ["ね", "ねこ"]) {
+    clock += 1100;
+    setText(el, "Three." + text, { inputType: "insertCompositionText", isComposing: true });
+    await settle();
+  }
+  assert.equal(undo().ok, true);
+  assert.equal(redo().ok, true);
+  assert.equal(row("r3").audioText, "Three.ねこ");
+  clock += 1100;
+  el = cellOf("r3", "audioText");
+  setText(el, "Three.", { inputType: "deleteCompositionText", isComposing: true });
+  await settle();
+  compose(el, "compositionend", "");
+  await settle();
+  assert.equal(row("r3").audioText, "Three.");
+  assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
+  assert.equal(redo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there!");
+});
+
 const scriptCell = (where, id) => where === "writer" ? document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]') : cellOf(id, "audioText");
 
 async function inPlace(where, fn) {
