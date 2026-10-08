@@ -135,18 +135,20 @@ function tierTwo(lines: number): string {
     Array.from({ length: 60 }, (_, i) => closed("<i id=" + String(i) + ">", "i")).join(""),
     Array.from({ length: 4 }, (_, i) => closed("<code class=c" + String(i) + ">", "code")).join(""),
     Array.from({ length: 2 }, (_, i) => closed('<a href="https://l.test/' + String(i) + '">', "a")).join(""),
+    "<!-- <b id=c> -->",
     "<br>".repeat(lines)
   ].join("");
 }
 
 test("past the bound, formatting is kept while the tags without unread attributes fit it, and dropped, keeping every word, one code unit shorter (#420)", () => {
-  const atHtml = onReopenEdge(65, tierTwo, 0);
+  const atHtml = onReopenEdge(67, tierTwo, 0);
   const at = rt.sanitize(atHtml);
   assert.equal(count(at, /<em>t<\/em>/g), 60);
   assert.equal(count(at, /<strong>t<\/strong>/g), 30);
   const unkept = Array.from(rt.inertBody(atHtml).querySelectorAll("code-"));
   assert.deepEqual(unkept.map((el) => el.textContent), ["t", "t", "t", "t"]);
-  const shortHtml = onReopenEdge(65, tierTwo, 1);
+  const shortHtml = onReopenEdge(67, tierTwo, 1);
+  assert.ok(boundedMarkup(shortHtml).includes("<!-- <b id=c> -->"));
   const short = rt.sanitize(shortHtml);
   assert.equal(count(short, /<em>|<strong>/g), 0);
   assert.equal(count(short, /<a /g), 2);
@@ -315,11 +317,12 @@ test("a reopened tag with many attributes is reopened without them, so the parse
     ['<p><b title="<>"' + extra + ">", '<p><b title="<>">'],
     ['<p><a href="https://x.test/"' + extra + ">", '<p><a href="https://x.test/">']
   ];
+  const tail = "<p>x".repeat(400) + '<a href="https://y.test/">y</a>';
   for (const [open, plain] of shapes) {
-    const html = open + "<p>x".repeat(400);
+    const html = open + tail;
     const copies = attributeCopies(rawBody(boundedMarkup(html)));
     assert.ok(copies <= 8 * html.length + 4096, String(copies) + " from " + String(html.length));
-    assert.equal(rt.sanitize(html), rt.sanitize(plain + "<p>x".repeat(400)));
+    assert.equal(rt.sanitize(html), rt.sanitize(plain + tail));
   }
 });
 
@@ -329,14 +332,14 @@ test("a tag scan that would step through more than 8 code units per input code u
   assert.equal(boundedMarkup(shape(4231)), "<b>");
 });
 
-function strongLines(lines: number): string {
-  return Array.from({ length: lines }, (_, i) => "<p>Line " + String(i) + ' has <strong style="color: rgb(' + String(i % 256) + ", " +
+function strongLines(lines: number, family: string): string {
+  return Array.from({ length: lines }, (_, i) => "<p>Line " + String(i) + ' has <strong style="' + family + "color: rgb(" + String(i % 256) + ", " +
     String(Math.floor(i / 256)) + ', 0);">a word</strong> in it.</p>').join("");
 }
 
 test("bold with a colour of its own on every line keeps its bold however many lines there are (#420)", () => {
-  for (const lines of [120, 400]) {
-    const html = strongLines(lines);
+  for (const [lines, family] of [[120, ""], [400, ""], [400, "font-family: &quot;Arial&quot;; "]] as const) {
+    const html = strongLines(lines, family);
     assert.notEqual(boundedMarkup(html), html);
     assert.equal(count(rt.sanitize(html), /<strong>a word<\/strong>/g), lines);
   }
@@ -351,13 +354,19 @@ const WEIGHT_STYLES: readonly string[] = [
   "STYLE='COLOR: red; FONT-WEIGHT: 300'",
   'style="font: italic 300 12px serif; color: blue"',
   'style="font-family: &quot;a; font-weight: 300&quot;; color: red"',
-  'style="background: url(a;font-weight:300); color: red"',
-  'style="color: red; /* ; font-weight: 300 */"',
+  'style="color: &quot;a; font-weight: 300; b&quot;"',
+  "style='color: \"a; font-weight: 300; b\"'",
+  'style="font-family: &quot;Arial&quot;; font-weight: 300; color: red"',
+  'style="background: url(a;font-weight:300;b); color: red"',
+  'style="--x: (a]; font-weight: 300; b); color: red"',
+  'style="--x: [a; font-weight: 300; b]; color: red"',
+  'style="--x: {a; font-weight: 300; b}; color: red"',
+  'style="color: red /* ; font-weight: 300; */"',
   'style="font-weight: 300; font-weight: bold; color: red"',
   'style="font-weight: 3&#48;0; color: red"',
   'style="font-weight: \\33 00; color: red"',
   'style="color: red; font-weight: 300" style="font-weight: bold"',
-  "style=color:red;font-weight:300",
+  "style=color:red;font-weight:900",
   'style="--w: 300; font-weight: var(--w); color: red"'
 ];
 
@@ -384,20 +393,94 @@ test("past the first bound, a comment holding tags stays one comment (#420)", ()
   assert.equal(rt.sanitize(TRIP + comment + "after"), rt.sanitize(TRIP + "after"));
 });
 
-test("past the first bound, the text of a text box, a title, a style, a script, an xmp, an iframe, a noembed and a noframes is left as written (#420)", () => {
-  const inner = '<b id=1 title="q>">x</b><a href=y z=1>l</a><font color=red>f</font></i>';
-  const contents: readonly (readonly [string, string])[] = [
-    ["textarea", inner], ["title", inner], ["style", inner], ["script", inner], ["xmp", inner], ["iframe", inner], ["noembed", inner],
-    ["noframes", inner], ["script", "<!--<script></script>" + inner + "-->"], ["TEXTAREA", inner + "</textareax>"]
+const INNER = '<b id=1 title="q>">x</b><a href=y z=1>l</a><font color=red>f</font></i>';
+
+test("past the first bound, the text of a text box, a title, a style, a script, an xmp, an iframe, a noembed and a noframes is left as written, and the tags after it are rewritten (#420)", () => {
+  const contents: readonly (readonly [string, string, string])[] = [
+    ["textarea", INNER, ">"], ["title", INNER, ">"], ["style", INNER, ">"], ["script", INNER, ">"], ["xmp", INNER, ">"], ["iframe", INNER, ">"],
+    ["noembed", INNER, ">"], ["noframes", INNER, ">"], ["script", "<!--<script></script>" + INNER + "-->", ">"],
+    ["script", "<!--<script>-->" + INNER, ">"], ["script", "<!--<script></script>" + INNER, ">"], ["script", "<!--><script>" + INNER, ">"], ["script", "<!---><script>" + INNER, ">"],
+    ["TEXTAREA", INNER + "</textareax>", ">"], ["textarea", "</title>" + INNER, ">"], ["textarea", INNER, "/>"], ["script", INNER, "/>"]
   ];
-  for (const [name, text] of contents) {
-    const html = TRIP + "<" + name + ">" + text + "</" + name + ">after";
+  for (const [name, text, close] of contents) {
+    const html = "<" + name + ">" + text + "</" + name + close + TRIP;
     assert.notEqual(boundedMarkup(html), html);
-    assert.equal(rt.inertBody(html).querySelector(name)?.textContent, text, name);
+    const body = rt.inertBody(html);
+    assert.equal(body.querySelector(name)?.textContent, text, name + text);
+    assert.equal(body.querySelectorAll("i").length, 300, name + text);
+  }
+  assert.equal(rt.inertBody(TRIP + "<plaintext>" + INNER).querySelector("plaintext")?.textContent, INNER);
+});
+
+test("past the first bound, a comment, a bogus comment and a doctype end where the parser ends them, and a tag cut off by the end of the paste stays dropped (#420)", () => {
+  const before = ["<!---->", "<!-->", "<!--->", "<!-- <b id=1> --!>", "<!-- a --->", "<!-- a -- b -->", "<!-- a --> <!-- <b id=1> -->",
+    "<!-- a --!> <!-- <b id=1> --!>", "<!x <b id=1>", "<?x <b id=1>", "</ <b id=1>", "</>", "<!DOCTYPE html PUBLIC \"a>b\">"];
+  for (const lead of before) {
+    const html = lead + TRIP;
+    assert.equal(boundedMarkup(html), lead + boundedMarkup(TRIP), lead);
+    assert.equal(rt.inertBody(html).querySelectorAll("i").length, 300, lead);
+  }
+  assert.notEqual(boundedMarkup(TRIP), TRIP);
+  assert.equal(rt.sanitize(TRIP + "<b id=1 x"), rt.sanitize(TRIP));
+});
+
+test("past the first bound, bold keeps exactly the style declarations that can decide its weight, as written or re-quoted (#420)", () => {
+  const reduced: readonly (readonly [string, string])[] = [
+    ['<b id=k style="color: red; FONT-WEIGHT: 300">', '<b style=" FONT-WEIGHT: 300">'],
+    ['<b style="color: red; all: initial" id=k>', '<b style=" all: initial">'],
+    ['<strong id=k style="font-weight:\\33 00;color:red">', '<strong style="font-weight:\\33 00;color:red">'],
+    ['<b id=k style="color: red">', "<b>"],
+    ['<i id=k style="font-weight: 300">', "<i>"],
+    ["<b id=k style=\"color: 'a\nb; font-weight: 300'\">", "<b style=\" font-weight: 300'\">"],
+    ["<b id=k style=\"color: 'a; font-weight: 300; b'; x: y\">", "<b style=\"color: 'a; font-weight: 300; b'\">"],
+    ['<b id=k style="font-family: &quot;A&amp;B&quot;; x: y">', '<b style="font-family: &quot;A&amp;B&quot;">'],
+    ['<b id=k style="font-weight: &#x33;00; x: y">', '<b style="font-weight: &#x33;00; x: y">']
+  ];
+  for (const [tag, plain] of reduced) {
+    assert.ok(boundedMarkup(TRIP + tag + "w").endsWith(plain + "w"), tag);
   }
 });
 
-const COUNTED_NAMES: readonly string[] =["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
+test("where the tokenizer guesses raw text wrongly, the formatting it hid is renamed with its end tags and every word stays in place (#420)", () => {
+  const hidden = Array.from({ length: 300 }, (_, i) => "<b id=" + String(i) + ">t</b>").join("");
+  const html = TRIP + "<svg></math><style>" + hidden;
+  const renamed = Array.from(rt.inertBody(html).querySelectorAll("b-"));
+  assert.equal(renamed.length, 300);
+  assert.ok(renamed.every((el) => el.textContent === "t"));
+});
+
+test("past the first bound, svg and math content is tokenized as markup, and raw text after a closed or self-closed svg is left as written (#420)", () => {
+  for (const open of ["<svg>", "<math>"]) {
+    const html = TRIP + open + "<style>" + Array.from({ length: 300 }, (_, i) => "<b id=" + String(i) + ">t</b>").join("");
+    assert.equal(rt.inertBody(html).querySelectorAll("b").length, 300, open);
+  }
+  for (const open of ["<svg/>", "<svg></svg>", "<math></math>"]) {
+    const html = TRIP + open + "<textarea>" + INNER + "</textarea>";
+    assert.equal(rt.inertBody(html).querySelector("textarea")?.textContent, INNER, open);
+  }
+});
+
+test("past the first bound, a link keeps its href and its class, so a video card stays a card (#420)", () => {
+  const tail = '<a class="video-embed-card" data-x=1 href="https://youtu.be/abc" CLASS=no>v</a> and <a title=t HREF="https://x.test/" href="https://y.test/">l</a>';
+  assert.notEqual(boundedMarkup(TRIP + tail), TRIP + tail);
+  assert.ok(boundedMarkup(TRIP + tail).endsWith('<a class="video-embed-card" href="https://youtu.be/abc">v</a> and <a HREF="https://x.test/">l</a>'));
+  assert.equal(rt.sanitize(TRIP + tail), rt.sanitize(TRIP) + rt.sanitize(tail));
+});
+
+test("formatting the tokenizer cannot see, inside comments and attribute values, is renamed only when it alone would pass the bound; links are kept (#420)", () => {
+  const hidden = "<!--" + Array.from({ length: 300 }, (_, i) => "<b id=" + String(i) + manyAttributes(10) + "></b>").join("") +
+    "<a id=x" + manyAttributes(400) + "></a>-->";
+  const html = hidden + '<p><a href="https://x.test/<b q" title=t>x</a> <a href=u>y</a>' + "<p>z".repeat(400);
+  const out = boundedMarkup(html);
+  assert.ok(out.startsWith("<!--<b- id=0 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9></b-><b- id=1"), out.slice(0, 40));
+  assert.ok(out.includes("<a- id=x a0"), out.slice(hidden.length - 3000, hidden.length));
+  assert.ok(out.includes('<a href="https://x.test/<b- q">x</a> <a href=u>y</a>'), out.slice(hidden.length, hidden.length + 120));
+  assert.equal(rt.sanitize(html), rt.sanitize('<p><a href="https://x.test/<b- q">x</a> <a href=u>y</a>' + "<p>z".repeat(400)));
+  const light = "<!--" + Array.from({ length: 10 }, (_, i) => "<b id=" + String(i) + ">").join("") + "-->" + TRIP;
+  assert.ok(boundedMarkup(light).startsWith("<!--<b id=0><b id=1>"));
+});
+
+const COUNTED_NAMES: readonly string[] = ["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
 const UNKEPT_NAMES: readonly string[] = ["big", "code", "font", "nobr", "small", "tt"];
 const REOPENABLE_NAMES: readonly string[] = ["b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
 

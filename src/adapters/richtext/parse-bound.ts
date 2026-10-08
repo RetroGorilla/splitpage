@@ -190,19 +190,16 @@ function scriptEnd(html: string, from: number): number {
   let dashes = 0;
   for (let i = from; i < html.length; i++) {
     const c = html.charCodeAt(i);
-    if (c === 60) {
-      SCRIPT_TAG.lastIndex = i;
-      const tag = SCRIPT_TAG.exec(html);
-      if (tag && tag[1] && state !== DOUBLE_ESCAPED) return i;
-      if (tag && tag[1]) { state = ESCAPED; i += 7; }
-      else if (tag && state === ESCAPED) { state = DOUBLE_ESCAPED; i += 6; }
-      else if (state === SCRIPT_DATA && html.startsWith("<!--", i)) { state = ESCAPED; dashes = 2; i += 3; continue; }
-      dashes = 0;
-      continue;
-    }
     if (c === 45) { dashes++; continue; }
     if (c === 62 && dashes >= 2) state = SCRIPT_DATA;
     dashes = 0;
+    if (c !== 60) continue;
+    SCRIPT_TAG.lastIndex = i;
+    const tag = SCRIPT_TAG.exec(html);
+    if (tag && tag[1] && state !== DOUBLE_ESCAPED) return i;
+    if (tag && tag[1]) state = ESCAPED;
+    else if (tag && state === ESCAPED) state = DOUBLE_ESCAPED;
+    else if (state === SCRIPT_DATA && html.startsWith("<!--", i)) state = ESCAPED;
   }
   return html.length;
 }
