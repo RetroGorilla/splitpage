@@ -54,6 +54,52 @@ export function cappedText(v: unknown, max: number): string {
   return cappedName(plainText(v), max);
 }
 
+export function unitCutName(s: string, max: number): string {
+  return s.trim().slice(0, max).trimEnd();
+}
+
+const LONE_ONE_RE = /^\p{Cs}$/u;
+const SPACE_RE = /^\s$/;
+
+function keptAsStored(text: string, healed: string, max: number): string {
+  if (!healed) return codePointPrefix(text, max).trimEnd();
+  let seen = 0, end = 0;
+  for (const ch of text) {
+    end += ch.length;
+    if (LONE_ONE_RE.test(ch) || (!seen && SPACE_RE.test(ch))) continue;
+    seen += ch.length;
+    if (seen >= healed.length) break;
+  }
+  let keep = end;
+  for (const ch of text.slice(end)) {
+    if (LONE_ONE_RE.test(ch)) { end += 1; keep = end; continue; }
+    if (!SPACE_RE.test(ch)) break;
+    end += ch.length;
+  }
+  return text.slice(0, keep);
+}
+
+export type NameKey = (name: string, at: number) => string;
+
+export function settledNames(texts: readonly string[], max: number, keyOf: NameKey, wanted?: readonly (string | undefined)[]): string[] {
+  const out: string[] = [], taken: Record<string, boolean> = Object.create(null), open: number[] = [];
+  texts.forEach(function (text, at) {
+    const name = cappedName(text, max);
+    out.push(name);
+    if ((wanted && wanted[at]) || hasLoneSurrogate(text)) open.push(at);
+    else if (name) taken[keyOf(name, at)] = true;
+  });
+  open.forEach(function (at) {
+    const text = texts[at] as string, healed = out[at] as string;
+    const want = (wanted && wanted[at]) || healed;
+    let name = want;
+    if (!want || taken[keyOf(want, at)]) name = hasLoneSurrogate(text) ? keptAsStored(text.trim(), healed, max) : healed;
+    out[at] = name;
+    if (name) taken[keyOf(name, at)] = true;
+  });
+  return out;
+}
+
 export function plainName(v: unknown): string {
   return cappedText(v, 80) || "Anonymous";
 }

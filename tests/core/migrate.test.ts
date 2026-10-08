@@ -325,6 +325,55 @@ test("a name left with half an emoji by an earlier cut loses the half (#344)", (
   assert.deepEqual(cappedNames(out), cappedWant((cap) => "a".repeat(cap - 1)));
 });
 
+function namesOf(out: Doc, key: string): unknown[] {
+  return list(out, key).map((it) => it.name);
+}
+
+function healOnce(doc: Doc): Doc {
+  const f = fakeMigration();
+  const out = migrateRows(doc, f.ports);
+  const again = fakeMigration();
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(out), again.ports)), JSON.stringify(out), "a fixed point");
+  return out;
+}
+
+test("a name made only of half an emoji keeps its record, stored as it was (#344)", () => {
+  const out = healOnce({
+    schema: 2, rows: [], comments: [],
+    people: [{ id: "p1", name: "\uD83D" }, { id: "p2", name: " \uDE00 \uD83D " }],
+    productionTags: [{ cat: "prop", name: "\uD83D", notes: "keep me" }],
+    brollShots: [{ id: "bs1", name: "\uDE00", notes: "keep me", props: ["\uD83D", "mug"] }],
+    personColors: { "\uD83D": "#80BDFB" }
+  });
+  assert.deepEqual(namesOf(out, "people"), ["\uD83D", "\uDE00 \uD83D"]);
+  assert.deepEqual(list(out, "productionTags").map((t) => [t.name, t.notes]), [["\uD83D", "keep me"]]);
+  assert.deepEqual(list(out, "brollShots").map((b) => [b.name, b.notes]), [["\uDE00", "keep me"]]);
+  assert.deepEqual(((list(out, "brollShots")[0] as Item).props as Item[]).map((p) => p.name), ["\uD83D", "mug"]);
+  assert.deepEqual(out.personColors, { "\uD83D": "#80BDFB" });
+});
+
+test("a name that would heal into another name of its kind keeps its record, stored as it was (#344)", () => {
+  const out = healOnce({
+    schema: 2, rows: [], comments: [],
+    people: [{ id: "p1", name: "Ann\uD83D" }, { id: "p2", name: "Ann" }, { id: "p3", name: "Bo \uD83D" }, { id: "p4", name: "bo" }],
+    productionTags: [
+      { cat: "prop", name: "mug\uD83D", notes: "first" }, { cat: "prop", name: "mug", notes: "second" },
+      { cat: "prop", name: "cup\uD83D" }, { cat: "prop", name: "cup\uDE00" }, { cat: "location", name: "mug\uD83D" }
+    ],
+    brollShots: [
+      { id: "bs1", name: "Wide \uD83D", props: ["pan\uD83D", "pan", "pot\uD83D"] }, { id: "bs2", name: "Wide" }
+    ],
+    personColors: { "Ann\uD83D": "#80BDFB", "ann": "#F9B64F" }
+  });
+  assert.deepEqual(namesOf(out, "people"), ["Ann\uD83D", "Ann", "Bo \uD83D", "bo"]);
+  assert.deepEqual(list(out, "productionTags").map((t) => [t.cat, t.name, t.notes]), [
+    ["prop", "mug\uD83D", "first"], ["prop", "mug", "second"], ["prop", "cup", ""], ["prop", "cup\uDE00", ""], ["location", "mug", ""]
+  ]);
+  assert.deepEqual(namesOf(out, "brollShots"), ["Wide \uD83D", "Wide"]);
+  assert.deepEqual(((list(out, "brollShots")[0] as Item).props as Item[]).map((p) => p.name), ["pan\uD83D", "pan", "pot"]);
+  assert.deepEqual(out.personColors, { "Ann\uD83D": "#80BDFB", "ann": "#F9B64F" });
+});
+
 test("only a plain object is a document: an array, null and every primitive are refused like no document (#407)", () => {
   for (const raw of [[], [{ id: "r1", audioText: "x" }], null, undefined, 0, 1, "doc", true, false]) {
     assert.equal(isDocumentObject(raw), false, JSON.stringify(raw));

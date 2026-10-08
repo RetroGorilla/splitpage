@@ -8,6 +8,8 @@ import {
   cappedText,
   codePointPrefix,
   plainName,
+  settledNames,
+  unitCutName,
   withoutLoneSurrogates
 } from "../../../src/core/document/text-policy.ts";
 
@@ -64,6 +66,53 @@ test("person-colour names are cut by code point and hold no lone surrogate (#344
   assert.deepEqual(normalizePersonColors({ [x(79) + GRIN + "y"]: BLUE }), { [x(79) + GRIN]: BLUE });
   assert.deepEqual(normalizePersonColors({ [x(79) + HIGH]: BLUE }), { [x(79)]: BLUE });
   assert.deepEqual(normalizePersonColors({ [x(79) + " y"]: BLUE }), { [x(79)]: BLUE });
+});
+
+test("settledNames heals a broken name only into a free, non-empty name, and keeps it as stored otherwise (#344)", () => {
+  const key = (name: string): string => name.toLowerCase();
+  assert.deepEqual(settledNames([x(79) + HIGH, "b " + HIGH], 80, key), [x(79), "b"]);
+  assert.deepEqual(settledNames([HIGH, " " + LOW + " " + HIGH + " "], 60, key), [HIGH, LOW + " " + HIGH]);
+  assert.deepEqual(settledNames(["Ann" + HIGH, "ann"], 60, key), ["Ann" + HIGH, "ann"], "a later clean name still wins");
+  assert.deepEqual(settledNames(["cup" + HIGH, "cup" + LOW], 80, key), ["cup", "cup" + LOW], "the first to heal takes the name");
+  assert.deepEqual(settledNames(["Bo " + HIGH + " ", "bo"], 60, key), ["Bo " + HIGH, "bo"]);
+  assert.deepEqual(settledNames([HIGH + "  a" + LOW + "b " + HIGH + " ", "ab"], 80, key), [HIGH + "  a" + LOW + "b " + HIGH, "ab"]);
+  assert.deepEqual(settledNames(["aaaa" + HIGH + "b", "aaaa"], 4, key), ["aaaa" + HIGH, "aaaa"], "the stored form keeps no more than its heal needs");
+  assert.deepEqual(settledNames(["a", "a"], 80, key), ["a", "a"], "clean duplicates are left as they were");
+  assert.deepEqual(settledNames(["mug", "x"], 80, (n, at) => at + key(n)), ["mug", "x"]);
+});
+
+test("settledNames takes a wanted name when it is free, and a broken one falls back to its stored form (#344)", () => {
+  const key = (name: string): string => name.toLowerCase();
+  assert.deepEqual(settledNames([x(79) + HIGH, "y"], 80, key, [x(79) + GRIN, undefined]), [x(79) + GRIN, "y"]);
+  assert.deepEqual(settledNames([GRIN.repeat(40)], 80, key, [GRIN.repeat(50)]), [GRIN.repeat(50)]);
+  assert.deepEqual(settledNames([x(79) + HIGH, x(79) + GRIN], 80, key, [x(79) + GRIN, undefined]), [x(79) + HIGH, x(79) + GRIN]);
+  assert.deepEqual(settledNames([GRIN.repeat(40), GRIN.repeat(50)], 80, key, [GRIN.repeat(50), undefined]), [GRIN.repeat(40), GRIN.repeat(50)]);
+});
+
+test("settledNames is a fixed point: settling its own output changes nothing (#344)", () => {
+  const key = (name: string): string => name.toLowerCase();
+  const parts = ["a", "A", " ", HIGH, LOW, GRIN, "b"];
+  let seed = 344;
+  const next = (n: number): number => { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return (seed >>> 16) % n; };
+  for (let round = 0; round < 400; round++) {
+    const texts: string[] = [];
+    for (let i = 1 + next(5); i > 0; i--) {
+      let s = "";
+      for (let k = next(9); k > 0; k--) s += parts[next(parts.length)];
+      texts.push(s);
+    }
+    const once = settledNames(texts, 4, key);
+    assert.deepEqual(settledNames(once, 4, key), once, JSON.stringify(texts));
+    once.forEach((name, at) => {
+      if (cappedName(name, 4) !== cappedName(texts[at] as string, 4)) assert.fail("a kept name heals to the same name: " + JSON.stringify(texts));
+    });
+  }
+});
+
+test("unitCutName is the cut older builds made: trimmed, cut at max UTF-16 units, trimmed again (#344)", () => {
+  assert.equal(unitCutName(" " + x(79) + GRIN + " tail", 80), x(79) + HIGH);
+  assert.equal(unitCutName(GRIN.repeat(50), 80), GRIN.repeat(40));
+  assert.equal(unitCutName(x(79) + " y", 80), x(79));
 });
 
 test("picture and file-link names are cut by code point at 200 (#344)", () => {

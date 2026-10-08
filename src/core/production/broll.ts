@@ -10,7 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
-import { cappedName } from "../document/text-policy.ts";
+import { cappedName, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
@@ -171,16 +171,17 @@ function brollLineMarker(items: BrollLineItem[]): BrollMarker | null {
   return m ? { id: "", key: null, rest: null, strip: m[0].length } : null;
 }
 
+function brollMarkerText(line: BrollLine, marker: BrollMarker): string {
+  return marker.rest ? brollLineText(marker.rest) : brollLineText(line.items).slice(marker.strip);
+}
+
 export function brollInCell(cell: readonly Run[]): BrollItem[] {
   const out: BrollDraft[] = [];
   let open: BrollDraft | null = null;
   brollCellLines(cell).forEach(function (line) {
     const marker = brollLineMarker(line.items);
     if (marker) {
-      const name = marker.rest
-        ? brollLineText(marker.rest)
-        : brollLineText(line.items).slice(marker.strip);
-      open = { id: marker.id, name: cappedName(name, BROLL_NAME_MAX), desc: [] };
+      open = { id: marker.id, name: cappedName(brollMarkerText(line, marker), BROLL_NAME_MAX), desc: [] };
       out.push(open);
       return;
     }
@@ -240,6 +241,27 @@ export function collectBrollFromRows(rows: readonly ProductionRow[] | null | und
     });
   });
   return out;
+}
+
+export type BrollCutRename = { key: string; name: string };
+
+export type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
+
+export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): BrollCutRenames {
+  const live = collectBrollFromRows(rows, readers);
+  const lines: BrollCutRename[] = [];
+  const texts: Record<number, string[]> = Object.create(null);
+  live.forEach(function (found) {
+    if (found.id || found.name.length < BROLL_NAME_MAX) return;
+    if (!texts[found.rowIndex]) {
+      const row = (rows as readonly ProductionRow[])[found.rowIndex] as ProductionRow;
+      texts[found.rowIndex] = brollMarkerLines(readers.cellOf(row.visualText as string)).map(function (m) { return brollMarkerText(m.line, m.marker); });
+    }
+    const text = (texts[found.rowIndex] as string[])[found.ordinal] as string;
+    const old = unitCutName(text, BROLL_NAME_MAX);
+    if (old !== found.name) lines.push({ key: normalizeTagName(old), name: found.name });
+  });
+  return { held: brollHeldIds(live), lines: lines };
 }
 
 function brollRow(rows: readonly ProductionRow[], rowId: string): ProductionRow | null {
