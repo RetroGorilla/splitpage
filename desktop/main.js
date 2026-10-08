@@ -14,6 +14,7 @@ const { spawn } = require("node:child_process");
 const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createGoogleDrive } = require("./google-drive");
+const { documentServerHost } = require("./bind-host");
 const { createVoiceHelper } = require("./voice-helper");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
 const {
@@ -985,7 +986,7 @@ async function waitForHealth(port, tries = 120) {
 }
 
 async function startDocumentServer() {
-  const host = HOSTING ? "0.0.0.0" : "127.0.0.1";
+  const host = documentServerHost({ hosting: HOSTING, testMode: TEST_MODE });
   const port = await findFreePort(WANTED_PORT, host);
   if (port == null) {
     const message = `Ports ${WANTED_PORT}-${WANTED_PORT + 20} are all busy. Try --port with something else.`;
