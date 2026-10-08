@@ -204,7 +204,7 @@ started over one of them.
 | `servers` | a dialog other than the join-PIN prompt, the tour |
 | `collaborate`, `paste`, `gdoc-import`, `server-open` | still loading, a dialog, the tour (then their own state) |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
-| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before |
+| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400) |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide shot scenes still act in the writer, Present, the

@@ -86,6 +86,24 @@ test("safeId keeps a cleaned id and asks the id source only when nothing is left
   assert.deepEqual(ids.asked, ["c", "bs", "rp"]);
 });
 
+test("only a string or a number is text: anything else is empty, and an object with no usable toString or valueOf doesn't throw (#408)", () => {
+  const odd: unknown[] = [true, false, [1, "<b>2</b>"], { a: 1 }, JSON.parse('{"toString":1}'), JSON.parse('{"valueOf":null,"toString":null}')];
+  for (const v of odd) {
+    assert.equal(plainText(v), "", String(typeof v));
+    assert.equal(plainName(v), "Anonymous", String(typeof v));
+  }
+  const ids = countingIds();
+  assert.deepEqual(odd.map((v) => safeId(v, "c", ids)), odd.map((_, i) => "c-minted-" + (i + 1)));
+  assert.equal(plainText(0), "0");
+  assert.equal(plainText(-1.5), "-1.5");
+  assert.equal(safeId(0, "c", ids), "0");
+});
+
+test("plainName trims what its cut leaves at the end (#406)", () => {
+  assert.equal(plainName("x".repeat(79) + " y"), "x".repeat(79));
+  assert.equal(plainName("  " + "x".repeat(80) + " y"), "x".repeat(80));
+});
+
 test("storedImageHtml is the stored image tag of a valid reference, and nothing otherwise", () => {
   assert.equal(storedImageHtml({ sha256: SHA, width: 640, height: 480, mime: "image/png" }),
     '<img class="comment-img" data-blob="' + SHA + '" data-w="640" data-h="480" data-mime="image/png">');

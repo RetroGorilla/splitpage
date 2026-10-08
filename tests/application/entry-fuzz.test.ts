@@ -15,9 +15,8 @@ import { createProductionReaders } from "../../src/core/production/readers.ts";
 import { jsdomParser } from "../adapters/richtext/jsdom.mjs";
 import { EDITOR, fixedClock } from "../core/merge/fakes.ts";
 import { countingIds, jsonCopy } from "../core/migrate-ports.ts";
-import { KNOWN_ARRAY_AS_OBJECT, KNOWN_PRIMITIVE_THROW, KNOWN_REPLY_TIME_THROW, KNOWN_REV_NAN, KNOWN_TRIM_AT_CAP, TABLE_304, chance, judge, knownThrow, pick, rawDocument, rawObject, seeded, table304Document } from "./raw-inputs.ts";
+import { TABLE_304, chance, judge, pick, rawDocument, rawObject, seeded, table304Document } from "./raw-inputs.ts";
 import type { Json, Random } from "./raw-inputs.ts";
-import { mergeRawTheirs } from "./raw-merge.mjs";
 import { harness, runConfined } from "./session-fakes.ts";
 
 const SEEDS = Number(process.env.SPLITPAGE_FUZZ_SEEDS) || 150;
@@ -100,8 +99,6 @@ function insertRow(id: string): Command {
   };
 }
 
-const NOTHING = Symbol("nothing thrown");
-
 function plain(log: readonly string[]): string[] {
   return log.map(function (e) { return e.replace(/^(undo\.(?:adopt|server)):.*$/s, "$1"); });
 }
@@ -132,6 +129,10 @@ function bump(into: Record<string, number>, key: string): void {
   into[key] = (into[key] || 0) + 1;
 }
 
+function noDocument(raw: unknown): boolean {
+  return raw !== null && raw !== undefined && (typeof raw !== "object" || Array.isArray(raw));
+}
+
 function rowIdOf(r: Random): (doc: DocumentView) => string | null {
   const roll = r();
   return function (doc) {
@@ -159,7 +160,6 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
     let reloaded: { title: unknown; rows: unknown } | null = null;
     let returned: ValidatedDocument | null | undefined;
     let outcome: CommandOutcome | null = null;
-    let thrown: unknown = NOTHING;
     try {
       if (kind === "adopt" || kind === "server" || kind === "recovery") {
         raw = rawDocument(r);
@@ -169,7 +169,7 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
         const mine = migrate(jsonCopy(held));
         const ancestor = base && chance(r, 0.7) ? migrate(jsonCopy(base)) : null;
         const inputs = JSON.stringify([ancestor, mine, theirs]);
-        const result = mergeRawTheirs(ancestor, mine, theirs, mergePorts());
+        const result = mergeStates(ancestor, mine, migrate(jsonCopy(theirs)), mergePorts());
         assert.equal(JSON.stringify([ancestor, mine, theirs]), inputs, where + ": the merge wrote into an input");
         returned = session.absorbServer(result.merged);
       } else if (kind === "reload") {
@@ -182,27 +182,19 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
         outcome = runConfined(session, insertRow("f" + seed + "x" + step));
       }
     } catch (error) {
-      thrown = error;
+      assert.fail(where + " threw: " + (error instanceof Error ? error.stack : String(error)));
     }
     tally.steps++;
     bump(tally.kinds, kind);
-    if (thrown !== NOTHING) {
-      const known = knownThrow(thrown);
-      if (!known) assert.fail(where + " threw: " + (thrown instanceof Error ? thrown.stack : String(thrown)));
-      bump(tally.known, known);
-      assert.equal(session.read(function (d) { return d; }), held, where + ": a throw keeps the document held");
-      assert.equal(JSON.stringify(held), heldText, where + ": and leaves it as it was");
-      assert.deepEqual([session.epoch(), session.generation()], [epoch, generation], where + ": a throw opens no epoch and adds no generation");
-      assert.deepEqual(h.log.filter(function (e) { return e !== "entry"; }), [], where + ": a throw reaches no other port and publishes nothing");
-      continue;
-    }
     const now = session.read(function (d) { return d; });
     const applied = !!outcome && outcome.kind === "applied";
-    const opens = kind === "adopt" || kind === "recovery";
+    const refused = noDocument(raw);
+    const opens = (kind === "adopt" || kind === "recovery") && !refused;
     assert.equal(session.epoch(), epoch + (opens ? 1 : 0), where + ": epoch");
     assert.equal(session.generation(), generation + (applied ? 1 : 0), where + ": generation");
     const migrated = kind === "merge" || (raw !== null && raw !== undefined);
-    assert.deepEqual(plain(h.log), expectedLog(kind, migrated, outcome, session.generation()), where + ": ports and publication");
+    const wanted = refused ? [] : expectedLog(kind, migrated, outcome, session.generation());
+    assert.deepEqual(plain(h.log), wanted, where + ": ports and publication");
     if (kind === "edit" || kind === "insert") {
       const want = !held ? "rejected" : kind === "edit" && !held.rows.length ? "rejected" : "applied";
       assert.equal(outcome && outcome.kind, want, where + ": command outcome");
@@ -214,14 +206,15 @@ export function runSeed(seed: number, tally: Tally = newTally()): Tally {
     } else if (kind === "reload") {
       assert.equal(now, held, where + ": a reload keeps the document");
       assert.equal(returned, held, where + ": and returns it");
-      if (Array.isArray(held)) {
-        bump(tally.known, KNOWN_ARRAY_AS_OBJECT);
-        continue;
-      }
       const before: unknown = JSON.parse(heldText);
       assert.ok(before && typeof before === "object" && reloaded, where);
       const alone = migrate(jsonCopy({ ...before, title: reloaded.title, rows: reloaded.rows }));
       assert.equal(JSON.stringify(now), JSON.stringify(alone), where + ": the held document is the reloaded title and scenes migrated over it");
+    } else if (refused) {
+      assert.equal(returned, held, where + ": a value that is no document is refused, and the session answers what it holds");
+      assert.equal(now, held, where + ": a refusal keeps the document");
+      assert.equal(JSON.stringify(now), heldText, where + ": a refusal changes nothing");
+      bump(tally.typed, "refused");
     } else {
       assert.equal(now, returned, where + ": the session holds what it returned");
       assert.equal(returned === null, raw === null, where + ": only a missing document closes the session");
@@ -244,6 +237,7 @@ test("seeded raw inputs through adoption, server updates, merges, recoveries, re
   t.diagnostic(JSON.stringify(tally));
   assert.equal(tally.steps, SEEDS * STEPS);
   KINDS.forEach(function (k) { assert.ok((tally.kinds[k] || 0) > SEEDS / 2, "every entry point is exercised: " + k); });
+  assert.ok((tally.typed.refused || 0) > 0, "a value that is no document reaches an entry: " + JSON.stringify(tally.typed));
 });
 
 function spoiledPair(spoil: (d: { [key: string]: Json }) => void): { mine: Json; theirs: Json } {
@@ -264,7 +258,7 @@ TABLE_304.forEach(function (row304) {
     const mine = migrate(jsonCopy(adopted));
     const theirs = jsonCopy(pair.theirs);
     const theirsText = JSON.stringify(theirs);
-    const result = mergeRawTheirs(migrate(table304Document("Base")), mine, theirs, mergePorts());
+    const result = mergeStates(migrate(table304Document("Base")), mine, migrate(jsonCopy(theirs)), mergePorts());
     assert.equal(JSON.stringify(theirs), theirsText, "the merge wrote into the raw theirs");
     const merged = h.session.absorbServer(result.merged);
     assert.deepEqual(judge(merged, migrate).problems, [], "merged");
@@ -296,91 +290,112 @@ test("the fuzz's judge finds what it should: a raw document, a bad status and a 
   const trimEnds = function (raw: unknown): unknown { return JSON.parse(JSON.stringify(raw).replace(/ "/g, '"')); };
   const cell = judge(spaced, trimEnds);
   assert.equal(cell.problems.length, 1);
-  assert.match(String(cell.problems[0]), /^not a migrateRows fixed point: \.rows\[0\]\.audioText "a+ became "a+$/);
+  assert.match(String(cell.problems[0]), /^not a migrateRows fixed point: \.rows\[0\]\.audioText "a+ became "a+, \.productionTags\[0\]\.name "n+ " became "n+"$/);
   assert.deepEqual(cell.known, []);
-  assert.deepEqual(judge({ ...spaced, rows: [] }, trimEnds), { problems: [], known: [KNOWN_TRIM_AT_CAP] });
+  assert.deepEqual(judge({ ...doc, rows: [[]] }, migrate).problems.slice(0, 1), ["rows[0] is an array"]);
+  assert.deepEqual(judge([doc], migrate).problems.slice(0, 1), ["the document is an array"]);
+  assert.deepEqual(judge({ ...doc, rev: NaN }, migrate).problems.slice(0, 1), ["rev"]);
+  const stamped = migrate({ rows: [], comments: [{ id: "c1", rowId: "r1", replies: [{ id: "rp1" }] }] });
+  const comment = stamped.comments[0];
+  assert.ok(comment && comment.replies && comment.replies[0]);
+  assert.deepEqual(judge(stamped, migrate), { problems: [], known: [] });
+  assert.deepEqual(judge({ ...stamped, comments: [{ ...comment, createdAt: 5 }] }, migrate).problems.slice(0, 1), ["comments[0].createdAt"]);
+  assert.deepEqual(judge({ ...stamped, comments: [{ ...comment, replies: [{ ...comment.replies[0], createdAt: {} }] }] }, migrate).problems.slice(0, 1), ["comments[0].replies[0].createdAt"]);
 });
 
-test("today migrateRows trims a name and then cuts it at its cap, so a space can end it and a second migration changes it (#406)", () => {
+test("migrateRows trims what the cut at a name's cap leaves, so the name ends in no space and a second migration keeps it (#406)", () => {
   const name = "n".repeat(59) + " x";
   const once = migrate({ rows: [], people: [{ id: "p1", name: name }] });
-  assert.equal(once.people && JSON.stringify(once.people), JSON.stringify([{ id: "p1", name: "n".repeat(59) + " " }]));
-  const again = migrate(jsonCopy(once));
-  assert.equal(JSON.stringify(again.people), JSON.stringify([{ id: "p1", name: "n".repeat(59) }]));
-  assert.deepEqual(judge(once, migrate), { problems: [], known: [KNOWN_TRIM_AT_CAP] });
+  assert.equal(JSON.stringify(once.people), JSON.stringify([{ id: "p1", name: "n".repeat(59) }]));
+  assert.equal(JSON.stringify(migrate(jsonCopy(once)).people), JSON.stringify(once.people));
+  assert.deepEqual(judge(once, migrate), { problems: [], known: [] });
 });
 
-test("today a JSON object whose toString is not a function makes migrateRows throw out of the session's entry, and the session is left as it was (#408)", () => {
+test("a JSON object whose toString is not a function is no text: each of the session's entries takes the document, and nothing throws (#408)", () => {
   const h = fuzzHarness();
-  const kept = h.session.adopt(table304Document("Kept"));
-  const keptText = JSON.stringify(kept);
-  h.log.length = 0;
-  h.published.length = 0;
-  assert.throws(function () { h.session.absorbServer(JSON.parse('{"title":{"toString":1},"rows":[]}')); }, function (e: unknown) { return knownThrow(e) === KNOWN_PRIMITIVE_THROW; });
-  assert.throws(function () { h.session.absorbRecovery(JSON.parse('{"rows":[],"comments":[{"rowId":{"valueOf":null,"toString":null}}]}')); }, TypeError);
-  assert.throws(function () { h.session.adopt(JSON.parse('{"rows":[{"id":{"toString":"r1"}}]}')); }, TypeError);
-  assert.equal(h.session.read(function (d) { return d; }), kept);
-  assert.equal(JSON.stringify(kept), keptText);
-  assert.deepEqual([h.session.epoch(), h.session.generation()], [1, 0]);
-  assert.deepEqual(h.log, ["entry", "entry", "entry"]);
-  assert.deepEqual(h.published, []);
+  assert.ok(h.session.adopt(table304Document("Kept")));
+  const served = h.session.absorbServer(JSON.parse('{"title":{"toString":1},"rows":[]}'));
+  const recovered = h.session.absorbRecovery(JSON.parse('{"rows":[],"comments":[{"rowId":{"valueOf":null,"toString":null}}]}'));
+  const adopted = h.session.adopt(JSON.parse('{"rows":[{"id":{"toString":"r1"}}]}'));
+  assert.ok(served && recovered && adopted);
+  assert.equal(served.title, "");
+  assert.equal(recovered.comments.length, 1);
+  assert.notEqual(adopted.rows[0]?.id, "r1");
+  for (const doc of [served, recovered, adopted]) assert.deepEqual(judge(doc, migrate), { problems: [], known: [] });
+  assert.equal(h.session.read(function (d) { return d; }), adopted);
+  assert.deepEqual([h.session.epoch(), h.session.generation()], [3, 0]);
+  assert.deepEqual(h.published.map(function (c) { return c.kind; }), ["adopt", "server", "recovery", "adopt"]);
 });
 
-test("today a reply whose createdAt is a number survives migrateRows, and merging a comment both sides hold then throws before the session sees it (#409)", () => {
+test("a reply whose createdAt is a number migrates to null, and merging a comment both sides hold sorts its replies (#409)", () => {
   const raw = table304Document("Replies");
   raw.comments = [{ id: "c1", rowId: "r1", field: "audioText", body: "Tighter", replies: [{ id: "rp1", body: "a", createdAt: "2026-10-07" }, { id: "rp2", body: "b", createdAt: 5 }] }];
   const h = fuzzHarness();
   const mine = h.session.adopt(jsonCopy(raw));
   assert.ok(mine);
-  assert.equal(JSON.stringify(mine.comments[0]?.replies?.map(function (rep) { return rep.createdAt; })), '["2026-10-07",5]');
+  assert.equal(JSON.stringify(mine.comments[0]?.replies?.map(function (rep) { return rep.createdAt; })), '["2026-10-07",null]');
   assert.deepEqual(judge(mine, migrate), { problems: [], known: [] });
   const theirs = migrate(jsonCopy(raw));
   if (theirs.comments[0]) theirs.comments[0].body = "Theirs";
-  h.log.length = 0;
-  assert.throws(function () { mergeStates(migrate(jsonCopy(raw)), migrate(jsonCopy(mine)), theirs, mergePorts()); }, function (e: unknown) { return knownThrow(e) === KNOWN_REPLY_TIME_THROW; });
-  assert.equal(h.session.read(function (d) { return d; }), mine);
-  assert.deepEqual(h.log, []);
+  const result = mergeStates(migrate(jsonCopy(raw)), migrate(jsonCopy(mine)), theirs, mergePorts());
+  assert.deepEqual(result.merged.comments[0]?.replies?.map(function (rep) { return rep.id; }), ["rp2", "rp1"]);
+  const merged = h.session.absorbServer(result.merged);
+  assert.equal(h.session.read(function (d) { return d; }), merged);
+  assert.deepEqual(judge(merged, migrate), { problems: [], known: [] });
 });
 
-test("today a merge with a raw theirs whose rev is a string gives rev NaN, which the session holds and JSON saves as null (#412)", () => {
+test("a rev that is not a finite number enters the session as 0, so the session never holds a rev that JSON saves as null (#412)", () => {
   const h = fuzzHarness();
-  const mine = h.session.adopt(table304Document("Rev"));
-  assert.ok(mine);
-  const theirs = table304Document("Theirs");
-  theirs.rev = "seven";
-  const result = mergeRawTheirs(migrate(jsonCopy(mine)), migrate(jsonCopy(mine)), theirs, mergePorts());
-  const merged = h.session.absorbServer(result.merged);
-  assert.ok(merged);
-  assert.equal(Number.isNaN(merged.rev), true);
-  assert.equal(jsonCopy(merged).rev, null);
-  assert.deepEqual(judge(merged, migrate), { problems: [], known: [KNOWN_REV_NAN] });
-  assert.deepEqual(judge({ ...merged, rev: null }, migrate).problems.slice(0, 1), ["rev"]);
+  for (const rev of [NaN, Infinity, "seven"]) {
+    const held = h.session.absorbServer({ ...table304Document("Rev"), rev: rev });
+    assert.ok(held);
+    assert.equal(held.rev, 0, String(rev));
+    assert.deepEqual(judge(held, migrate), { problems: [], known: [] });
+  }
 });
 
 const FOUND: readonly (readonly [number, string])[] = [
-  [3, KNOWN_TRIM_AT_CAP],
-  [5, KNOWN_ARRAY_AS_OBJECT],
-  [44, KNOWN_REV_NAN],
-  [52, KNOWN_PRIMITIVE_THROW],
-  [4103, KNOWN_REPLY_TIME_THROW]
+  [3, "#406"],
+  [5, "#407"],
+  [44, "#412"],
+  [52, "#408"],
+  [4103, "#409"]
 ];
 
-FOUND.forEach(function ([seed, known]) {
-  test("today seed " + seed + " still finds the pinned defect it found: " + known, () => {
-    assert.ok((runSeed(seed).known[known] || 0) > 0);
+FOUND.forEach(function ([seed, issue]) {
+  test("seed " + seed + ", which found " + issue + ", now ends every step in a valid fixed point", () => {
+    const tally = runSeed(seed);
+    assert.equal(tally.steps, STEPS);
+    assert.deepEqual(tally.known, {});
   });
 });
 
-test("today migrateRows takes an array for an object: an array adopts as the document, and an array scene stays an array (#407)", () => {
+test("an array, or any value that is not an object, is no document: adoption, a server update and a recovery each refuse it and change nothing (#407)", () => {
   const h = fuzzHarness();
-  const held = h.session.adopt([{ id: "r1", audioText: "x" }]);
-  assert.equal(Array.isArray(held), true);
-  assert.equal(JSON.stringify(held), '[{"id":"r1","audioText":"x"}]');
-  assert.deepEqual(judge(held, migrate), { problems: [], known: [KNOWN_ARRAY_AS_OBJECT] });
+  const values: readonly unknown[] = [[{ id: "r1", audioText: "x" }], [], 0, 7, "doc", true, false];
+  const entries = [
+    function (raw: unknown) { return h.session.adopt(raw); },
+    function (raw: unknown) { return h.session.absorbServer(raw); },
+    function (raw: unknown) { return h.session.absorbRecovery(raw); }
+  ];
+  for (const raw of values) for (const take of entries) assert.equal(take(raw), null, "no document held: " + JSON.stringify(raw));
+  assert.deepEqual([h.log, h.published.length, h.session.epoch(), h.session.generation()], [[], 0, 0, 0]);
+  assert.deepEqual(h.session.run(setAudio(function () { return "r1"; }, "x")), { kind: "rejected", reason: NO_DOCUMENT });
+  const held = h.session.adopt(table304Document("Kept"));
+  assert.ok(held);
+  const text = JSON.stringify(held);
+  h.log.length = 0;
+  h.published.length = 0;
+  for (const raw of values) for (const take of entries) assert.equal(take(raw), held, "a document held: " + JSON.stringify(raw));
+  assert.equal(h.session.read(function (d) { return d; }), held);
+  assert.equal(JSON.stringify(held), text);
+  assert.deepEqual([h.log, h.published.length, h.session.epoch(), h.session.generation()], [[], 0, 1, 0]);
+});
+
+test("an array scene is dropped (#407)", () => {
+  const h = fuzzHarness();
   const scene = h.session.absorbServer({ rows: [[], { id: "r2" }] });
   assert.ok(scene);
-  assert.equal(Array.isArray(scene.rows[0]), true);
-  assert.equal(scene.rows[0]?.status, "todo", "the array took the fields JSON then drops");
-  assert.equal(JSON.stringify(scene.rows), '[[],{"id":"r2","status":"todo","visualText":"","audioText":"","imageRef":null,"updatedAt":"","updatedBy":null}]');
-  assert.deepEqual(judge(scene, migrate), { problems: [], known: [KNOWN_ARRAY_AS_OBJECT] });
+  assert.equal(JSON.stringify(scene.rows), '[{"id":"r2","status":"todo","visualText":"","audioText":"","imageRef":null,"updatedAt":"","updatedBy":null}]');
+  assert.deepEqual(judge(scene, migrate), { problems: [], known: [] });
 });

@@ -169,7 +169,7 @@ export function normalizeVideoLink(input: unknown): VideoLink | null {
     if (!href || !/^https?:\/\//i.test(href) || href.length > 2048) return null;
     out = { href: href };
   } else if (typeof x.name === "string") {
-    const name = plainText(x.name).replace(/[\u0000-\u001F]+/g, " ").trim().slice(0, 200);
+    const name = normalizePictureName(x.name);
     if (!name) return null;
     out = { name: name };
     if (typeof x.size === "number" && isFinite(x.size) && x.size >= 0) out.size = Math.floor(x.size);
@@ -185,7 +185,7 @@ export function normalizeVideoLink(input: unknown): VideoLink | null {
 
 export function normalizePictureName(v: unknown): string {
   if (typeof v !== "string") return "";
-  return plainText(v).replace(/[\u0000-\u001F]+/g, " ").trim().slice(0, 200);
+  return plainText(v).replace(/[\u0000-\u001F]+/g, " ").trim().slice(0, 200).trimEnd();
 }
 
 export function videoLinkKey(l: VideoLink | null | undefined): string {

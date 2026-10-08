@@ -68,6 +68,7 @@ import { closeNewTabPage } from "./20j-newtab.js";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
+import { isDocumentObject } from "../core/migrate.ts";
 
 var sharedDocId;
 
@@ -489,17 +490,18 @@ function offerDraftAfterLinkOff() {
   offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
 }
 
+function pendingServerResume() {
+  var override = S.draftServerResume;
+  if (override) return { id: override.id, rev: override.rev || 0 };
+  try {
+    var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
 async function resumeServerDoc() {
   var override = S.draftServerResume;
-  var pending;
-  if (override) {
-    pending = { id: override.id, rev: override.rev || 0 };
-  } else {
-    try {
-      var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
-      pending = raw ? JSON.parse(raw) : null;
-    } catch (e) { pending = null; }
-  }
+  var pending = pendingServerResume();
   if (!pending || !pending.id) return false;
 
   var seqAtStart = S.editSeq;
@@ -518,6 +520,7 @@ async function resumeServerDoc() {
     }
     return false;
   }
+  if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return "empty"; }
   if (override) {
     S.draftServerResume = null;
     var samePending;
@@ -828,8 +831,10 @@ export async function finishServerDetect() {
   var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
-      if (!resumed) openSharedDocFromLink();
-    }, function () { openSharedDocFromLink(); });
+      if (resumed === true) return;
+      var refused = resumed === "empty" ? pendingServerResume() : null;
+      openSharedDocFromLink(refused ? refused.id : "");
+    }, function () { openSharedDocFromLink(""); });
   });
 }
 
@@ -948,7 +953,7 @@ function renderServerPicker() {
 export async function openServerDoc(id) {
   if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
-    var resumed = await resumeServerDoc();
+    var resumed = await resumeServerDoc() === true;
     if (resumed) {
       if (typeof closeNewTabPage === "function") closeNewTabPage();
       closeServerPicker();
@@ -964,7 +969,7 @@ export async function openServerDoc(id) {
     handleApiError(err, "Could not open that document"); return false;
   }
   if (via !== conn) return false;
-  if (!body || !body.state) { showToast("That document is empty.", "warn"); return false; }
+  if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return false; }
   forgetRemoteMisses();
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
@@ -1114,10 +1119,10 @@ function readSharedDocParam() {
   return id;
 }
 
-async function openSharedDocFromLink() {
+async function openSharedDocFromLink(refusedId) {
   var id = conn.scope || sharedDocId || linkDocId;
   sharedDocId = "";
-  if (!id) return false;
+  if (!id || id === refusedId) return false;
   if (onServerDoc()) return false;
   var opened = await openServerDoc(id);
   if (opened && (isLinkGuest() || linkKey)) maybeAskGuestName();
@@ -1266,7 +1271,7 @@ export async function saveToServer() {
     } catch (err) {
       if (serverHomeId() !== docId) return false;
 
-      if (err && err.code === "conflict" && err.payload && err.payload.state) {
+      if (err && err.code === "conflict" && err.payload && isDocumentObject(err.payload.state)) {
         var prevDocId = S.state.docId;
         forgetRemoteMisses();
         var theirs = migrateDocument(cloneState(err.payload.state), {
@@ -1611,7 +1616,7 @@ async function pullServerDoc(docId) {
   } catch (err) {
     return;
   }
-  if (!body || !body.state) return;
+  if (!body || !isDocumentObject(body.state)) return;
   if (serverHomeId() !== docId) return;
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;

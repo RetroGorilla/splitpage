@@ -32,8 +32,19 @@ test("a document list that is not an array is empty, and items that are not obje
   const s = side({ rows: { 0: { id: "r1" } }, comments: "x", people: 5, productionTags: true, brollShots: [null, "x", 3, { id: "b1" }] });
   const out = listShapedSide(s, STATE_FIELDS);
   assert.deepEqual([out.rows, out.comments, out.people, out.productionTags, out.brollShots], [[], [], [], [], [{ id: "b1" }]]);
-  assert.deepEqual(listShapedSide({ rows: [null, "x", 7, false, { id: "r1" }, ["r2"]] }, STATE_FIELDS).rows, [{ id: "r1" }, ["r2"]],
-    "an array counts as an object, as in migrateRows");
+  assert.deepEqual(listShapedSide({ rows: [null, "x", 7, false, { id: "r1" }, ["r2"]] }, STATE_FIELDS).rows, [{ id: "r1" }],
+    "an array is no object, as in migrateRows (#407)");
+});
+
+test("an array is dropped from every list it is cleaned out of (#407)", () => {
+  const out = listShapedSide({
+    rows: [{ id: "r1", imageLinks: [[], { href: "https://v.example/a" }], moreImages: [[], { links: [[], { name: "f" }] }] }],
+    comments: [[], { id: "c1", replies: [["rp0"], { id: "rp1" }] }],
+    people: [[], { id: "p1" }], productionTags: [["t"], { id: "t1" }], brollShots: [[], { id: "b1" }]
+  }, STATE_FIELDS);
+  assert.deepEqual(out.rows, [{ id: "r1", imageLinks: [{ href: "https://v.example/a" }], moreImages: [{ links: [{ name: "f" }] }] }]);
+  assert.deepEqual(out.comments, [{ id: "c1", replies: [{ id: "rp1" }] }]);
+  assert.deepEqual([out.people, out.productionTags, out.brollShots], [[{ id: "p1" }], [{ id: "t1" }], [{ id: "b1" }]]);
 });
 
 test("rows and comments are always lists; a missing or null registry, people or shot list stays as it was", () => {

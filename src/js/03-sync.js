@@ -7,6 +7,7 @@ import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
+import { isDocumentObject } from "../core/migrate.ts";
 import { byId } from "../core/merge/rows.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
@@ -816,13 +817,17 @@ export function applyMerge(opts) {
   var result = null;
   var snap = null;
 
+  if (!isDocumentObject(opts.theirs) || (!opts.unchanged && !isDocumentObject(opts.mine))) {
+    return { state: S.state, result: null, snapshot: null };
+  }
+
   if (!opts.unchanged) {
     if (opts.undoPoint) snap = pushSnapshot(UNDO_LABELS[opts.source], opts.undoPoint);
     if (opts.keepLabel) pushSnapshot(opts.keepLabel, opts.mine);
     result = mergeStates(
-      opts.base ? migrateRows(cloneState(opts.base)) : null,
+      isDocumentObject(opts.base) ? migrateRows(cloneState(opts.base)) : null,
       migrateRows(cloneState(opts.mine)),
-      opts.theirs
+      migrateRows(cloneState(opts.theirs))
     );
   }
   var next = result ? result.merged : opts.theirs;
@@ -840,8 +845,7 @@ export function applyMerge(opts) {
   var kind = opts.recovery || opts.source === "server-resume" ? "recovery" : "server";
 
   function adopt() {
-    if (kind === "recovery") noteRecovery(next);
-    else noteServerUpdate(next);
+    next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
     S.state = next;
     if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
     armUndoPoint(S.state.docId);
