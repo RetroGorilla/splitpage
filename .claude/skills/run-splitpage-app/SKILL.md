@@ -173,7 +173,10 @@ the driver appends to its own last line as `RESULT: n/m checks passed [run
 <token>]`. The runner takes as a suite's verdict only a `RESULT:` line that
 ends with that token, so a `RESULT:` line printed by the page or an `eval` can
 neither end a suite early nor pass for its verdict. A driver started without
-`-ResultToken` prints the plain line.
+`-ResultToken` prints the plain line. The runner records that line, with the
+token stripped, as `result` in `verdicts.json`, and the digest takes each failed
+suite's headline from it (and treats a suite with no such line as one that died,
+so the `.err.txt` tail is shown) instead of reading the log again.
 
 ## The unit tests
 
@@ -542,7 +545,8 @@ on Windows, then `chromium`/`google-chrome` on `PATH`. Running as root it adds
 Everything the suites depend on is deliberately identical: the onboarding
 suppression injected before every navigation, `text=`/`text*=` selector
 resolution, the key map, the pass/fail wording, and the `RESULT: n/m checks
-passed` line. Two quirks are ported rather than fixed, because ~120 existing
+passed` line (`driver.ps1` adds ` [run <token>]` to it when `run-tests.ps1` hands
+it a `-ResultToken`; `driver.mjs` never does). Two quirks are ported rather than fixed, because ~120 existing
 assertions are written against them:
 
 - **A literal comparison is case-insensitive.** PowerShell prints a bool as

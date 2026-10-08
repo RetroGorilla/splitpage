@@ -99,7 +99,7 @@ function failureSection(suite, lines, errLines, judged, v, logPath, limit) {
   const { body, shown, cut } = selectLines(lines, blocks, limit);
   out.push(...body);
   if (cut > 0) out.push(`  ... ${cut} more line(s) cut; full log: ${logPath}`);
-  const abnormal = v.timedOut || suite.out === null || resultLine(lines) === null;
+  const abnormal = v.timedOut || suite.out === null || judged.result === null;
   if (abnormal || blocks.length === 0) {
     out.push(...(suite.out === null ? ["  . (no log was written)"] : tailLines(lines, OUT_TAIL, "  . ", shown)));
     if (abnormal) out.push(...tailLines(errLines, ERR_TAIL, "  e "));
@@ -117,8 +117,10 @@ export function buildDigest({ suites, logPath = (s) => s.name, limit = SECTION_L
   for (const suite of suites) {
     const lines = splitLines(suite.out ?? "");
     const errLines = splitLines(suite.err ?? "");
-    const judged = suite.out === null ? { checks: 1, failedChecks: 1, suiteFailed: true, reason: "no log was written", result: null } : judge(lines);
     const given = suite.verdict;
+    const runnerResult = given !== undefined && Object.hasOwn(given, "result");
+    const judgedLines = runnerResult ? (given.result === null ? [] : [given.result]) : lines;
+    const judged = suite.out === null ? { checks: 1, failedChecks: 1, suiteFailed: true, reason: "no log was written", result: null } : judge(judgedLines);
     const v = given
       ? { checks: given.checks, failedChecks: given.failedChecks, suiteFailed: given.failed, timedOut: Boolean(given.timedOut), timeoutSec }
       : { ...judged, timedOut: false, timeoutSec };
@@ -169,6 +171,7 @@ export function validateVerdicts(verdicts, suiteNames = null) {
       if (typeof s.name !== "string" || s.name === "") problems.push(`${at}: "name" must be a non-empty string`);
       if (typeof s.failed !== "boolean") problems.push(`${at}: "failed" must be true or false`);
       if (typeof s.timedOut !== "boolean") problems.push(`${at}: "timedOut" must be true or false`);
+      if (s.result !== undefined && s.result !== null && typeof s.result !== "string") problems.push(`${at}: "result" must be a string or null`);
       if (!isCount(s.checks)) problems.push(`${at}: "checks" must be a whole number, 0 or more`);
       if (!isCount(s.failedChecks)) problems.push(`${at}: "failedChecks" must be a whole number, 0 or more`);
       else if (isCount(s.checks) && s.failedChecks > s.checks) problems.push(`${at}: "failedChecks" is more than "checks"`);

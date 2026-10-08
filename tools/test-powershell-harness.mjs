@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createServer, connect } from "node:net";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -339,7 +339,7 @@ function runnerHarness(selected, verdictOnly) {
     "}",
     verdictOnly
       ? "foreach ($s in $spec) { Lane $s }\n$code = Write-Verdict $spec.Count\nEmit @{ code = $code; checks = $totalChecks; fail = $totalFail; suiteFail = $suiteFail; notStarted = @($notStarted) }"
-      : "foreach ($s in $spec) {\n  $totalChecks = 0; $totalFail = 0; $suiteFail = 0; $notStarted.Clear()\n  Lane $s\n  Emit @{ name = $s.name; checks = $totalChecks; fail = $totalFail; suiteFail = $suiteFail; notStarted = @($notStarted) }\n}",
+      : "foreach ($s in $spec) {\n  $totalChecks = 0; $totalFail = 0; $suiteFail = 0; $notStarted.Clear()\n  Lane $s\n  Emit @{ name = $s.name; checks = $totalChecks; fail = $totalFail; suiteFail = $suiteFail; notStarted = @($notStarted); result = $laneVerdicts[-1].result }\n}",
     "[Environment]::Exit(0)"
   ].join("\n"));
   return file;
@@ -409,6 +409,63 @@ function digestChecks() {
   }
 }
 
+function digestFlowHarness() {
+  const file = join(work, "digest-flow.ps1");
+  const logs = join(work, "digest-flow-logs");
+  mkdirSync(logs, { recursive: true });
+  writeFileSync(join(logs, "failing.out.txt"), `PASS a\nFAIL b\n\n${done("3/5 checks passed - 2 FAILED")}\n`);
+  writeFileSync(join(logs, "failing.err.txt"), "");
+  writeFileSync(join(logs, "forged-dead.out.txt"), "PASS a\nRESULT: 9/9 checks passed\nFAIL a later check\n");
+  writeFileSync(join(logs, "forged-dead.err.txt"), "[driver] CDP socket closed\n[driver] fatal: edge crashed\n");
+  writeFileSync(file, [
+    importParts(join(SKILL, "run-tests.ps1"), ["Count-FailedSuite", "Report-Lane", "Write-Digest"], []),
+    "function Clear-SplitpageEdge($t) {}",
+    "$TimeoutSec = 180",
+    `$here = '${SKILL.replace(/'/g, "''")}'`,
+    `$logs = '${logs.replace(/'/g, "''")}'`,
+    "$totalChecks = 0; $totalFail = 0; $suiteFail = 0; $laneVerdicts = @()",
+    "$notStarted = New-Object System.Collections.ArrayList",
+    "$files = @([pscustomobject]@{ BaseName = 'failing' }, [pscustomobject]@{ BaseName = 'forged-dead' })",
+    "foreach ($f in $files) {",
+    `  Report-Lane ([pscustomobject]@{ File = [pscustomobject]@{ Name = $f.BaseName + '.txt' }; Tag = 'x'; Token = '${TOKEN}'; Out = (Join-Path $logs ($f.BaseName + '.out.txt')); TimedOut = $false })`,
+    "}",
+    "Write-Digest",
+    "[Environment]::Exit(0)"
+  ].join("\n"));
+  return { file, logs };
+}
+
+function laneHarness() {
+  const file = join(work, "lanes-new.ps1");
+  writeFileSync(file, [
+    importParts(join(SKILL, "run-tests.ps1"), ["New-Lane"], []),
+    "$RunId = 'abcd1234'",
+    "$logs = 'C:\\logs'",
+    "$i = 0",
+    "foreach ($n in 1..6) { $i++; $l = New-Lane ([pscustomobject]@{ BaseName = \"s$n\"; Name = \"s$n.txt\" }) $i; Emit @{ index = $l.Index; tag = $l.Tag; token = $l.Token; out = $l.Out } }",
+    "[Environment]::Exit(0)"
+  ].join("\n"));
+  return file;
+}
+
+function digestFlowChecks() {
+  console.log("\nthe digest that run-tests.ps1 writes from its own verdicts:\n");
+  const flow = digestFlowHarness();
+  const r = powershell(flow.file);
+  const digestPath = join(flow.logs, "digest.txt");
+  const digest = existsSync(digestPath) ? readFileSync(digestPath, "utf8") : "";
+  const headlines = digest.split(/\r?\n/).filter((l) => l.startsWith("== suite"));
+  eq("a failing suite's digest headline has no run token", headlines[0], "== suite failing: RESULT: 3/5 checks passed - 2 FAILED");
+  check("the token is nowhere in the digest", digest !== "" && !digest.includes(TOKEN) && !digest.includes("[run "), digest + r.out + r.err);
+  check("a driver that died after a RESULT line the page printed has no forged headline", headlines[1] !== undefined && !headlines[1].includes("9/9"), headlines[1]);
+  check("and the digest shows its stderr tail with the crash reason", digest.includes("  e [driver] fatal: edge crashed"), digest);
+
+  const lanes = powershell(laneHarness()).records;
+  check("every lane gets a 32-hex token", lanes.length === 6 && lanes.every((l) => /^[0-9a-f]{32}$/.test(l.token ?? "")), JSON.stringify(lanes.map((l) => l.token)));
+  eq("and no two lanes share a token", new Set(lanes.map((l) => l.token)).size, lanes.length);
+  eq("a lane's tag carries the run id and its number, and its log sits in the log directory", [lanes[2]?.tag, lanes[2]?.out], ["abcd1234s03", "C:\\logs\\s3.out.txt"]);
+}
+
 function runnerChecks() {
   console.log("\nrun-tests.ps1's Report-Lane and verdict:\n");
 
@@ -429,6 +486,14 @@ function runnerChecks() {
     const r = forgedRuns[name];
     eq(`${name}: ${forgedWhy[name]} ([checks, failed checks, failed suites] ${JSON.stringify(want)})`, [r?.checks, r?.fail, r?.suiteFail], want);
   }
+
+  eq("each verdict carries the driver's own result line without the token, and null when the driver left none",
+    Object.fromEntries(Object.keys(forgedWant).map((n) => [n, forgedRuns[n] && "result" in forgedRuns[n] ? forgedRuns[n].result : "(missing)"])), {
+      "forged-then-killed.txt": null,
+      "forged-then-real.txt": "RESULT: 8/9 checks passed - 1 FAILED",
+      "forged-tokenless-last.txt": "RESULT: 2/2 checks passed",
+      "wrong-token.txt": null
+    });
 
   const finished = Object.fromEntries(powershell(finishHarness()).records.map((r) => [r.name, r.done]));
   eq("a lane is finished when the driver's tokened RESULT line appears, and not for a forged, another run's or no RESULT line", [finished.quiet, finished.forged, finished.wrong, finished.real], [false, false, false, true]);
@@ -486,6 +551,7 @@ try {
   freezeChecks();
   runnerChecks();
   digestChecks();
+  digestFlowChecks();
 } catch (e) {
   check("the checks ran to the end", false, e instanceof Error ? e.stack : String(e));
 } finally {
