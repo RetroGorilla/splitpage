@@ -18,7 +18,7 @@ const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-fil
 const { openLongDemo } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 
-const REDRAW = "Couldn't redraw the script after the update. Your changes are saved.";
+const REDRAW = "Could not redraw the script after the update. Your changes are saved.";
 const BROKE = "render broke (#418)";
 
 const session = liveSession();
