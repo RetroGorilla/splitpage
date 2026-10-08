@@ -74,7 +74,16 @@ test("props normalise to tracked ids and registry names, dropping repeats and ju
   ]);
 });
 
-test("a prop name is cut to its limit after it is matched, and the list to forty", () => {
+test("a prop name is cut to its limit and trimmed before it is matched, so a second pass matches nothing new (#406)", () => {
+  const cut = "n".repeat(BROLL_PROP_NAME_MAX - 1);
+  const registry = [{ id: mintTagId("prop", cut), cat: "prop", name: cut }];
+  const once = normalizeBrollProps([cut + " tail"], registry);
+  assert.deepEqual(once, [{ id: registry[0]?.id, name: cut }]);
+  assert.deepEqual(normalizeBrollProps(once, registry), once);
+  assert.deepEqual(normalizeBrollProps([cut + " tail"], []), [{ id: "", name: cut }]);
+});
+
+test("a prop name is cut to its limit, and the list to forty", () => {
   const long = "x".repeat(BROLL_PROP_NAME_MAX + 5);
   assert.deepEqual(normalizeBrollProps([long], []), [{ id: "", name: "x".repeat(BROLL_PROP_NAME_MAX) }]);
   const many = Array.from({ length: BROLL_PROPS_MAX + 5 }, (_, i) => "Prop " + i);

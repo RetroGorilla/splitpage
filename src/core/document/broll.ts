@@ -1,4 +1,4 @@
-import { plainText } from "./text-policy.ts";
+import { cappedText } from "./text-policy.ts";
 import { isTagId, normalizeTagName } from "./tags.ts";
 import type { TagRecord } from "./tags.ts";
 
@@ -45,10 +45,9 @@ export function normalizeBrollProps(list: unknown, registry: readonly (TagRecord
     if (!p || typeof p !== "object") return;
     const prop = p as BrollPropInput;
     let id = isTagId(prop.id) ? prop.id : "";
-    let name = typeof prop.name === "string" || typeof prop.name === "number" ? plainText(prop.name).trim() : "";
+    let name = cappedText(prop.name, BROLL_PROP_NAME_MAX);
     if (!id && name && byName[normalizeTagName(name)]) id = (byName[normalizeTagName(name)] as TagRecord).id as string;
-    if (id && byId[id]) name = (byId[id] as TagRecord).name;
-    name = name.slice(0, BROLL_PROP_NAME_MAX);
+    if (id && byId[id]) name = cappedText((byId[id] as TagRecord).name, BROLL_PROP_NAME_MAX);
     if (!name) return;
     const key = brollPropKey(id, name);
     if (seen[key]) return;

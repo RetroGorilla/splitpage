@@ -16,13 +16,21 @@ export function safeHref(href: unknown): string | null {
   return null;
 }
 
+export function textOf(v: unknown): string {
+  if (typeof v === "string") return v;
+  return typeof v === "number" ? String(v) : "";
+}
+
 export function plainText(v: unknown): string {
-  return String(v == null ? "" : v).replace(/<[^>]*>/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+  return textOf(v).replace(/<[^>]*>/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+}
+
+export function cappedText(v: unknown, max: number): string {
+  return plainText(v).trim().slice(0, max).trimEnd();
 }
 
 export function plainName(v: unknown): string {
-  const name = plainText(v).trim().slice(0, 80);
-  return name || "Anonymous";
+  return cappedText(v, 80) || "Anonymous";
 }
 
 export function escapeHtml(s: unknown): string {
@@ -54,7 +62,7 @@ export function legacyMdToHtml(text: unknown): string {
 }
 
 export function safeId(id: unknown, prefix: string, ids: IdSource): string {
-  const clean = String(id == null ? "" : id).replace(/[^A-Za-z0-9_-]/g, "");
+  const clean = textOf(id).replace(/[^A-Za-z0-9_-]/g, "");
   return clean || ids.id(prefix);
 }
 

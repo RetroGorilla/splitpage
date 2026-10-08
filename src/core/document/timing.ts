@@ -27,7 +27,7 @@ export function nextRowStatus(id: unknown): RowStatusId {
 export const DEFAULT_WPM = 150;
 
 export function normalizeWordsPerMinute(v: unknown): number {
-  const wpm = Number(v);
+  const wpm = typeof v === "number" || typeof v === "string" ? Number(v) : NaN;
   return (isFinite(wpm) && wpm >= 60 && wpm <= 400) ? Math.round(wpm) : DEFAULT_WPM;
 }
 

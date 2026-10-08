@@ -3,7 +3,7 @@ import type { StateField } from "../document/fields.ts";
 type Bag = Record<string, unknown>;
 
 function isObject(v: unknown): v is Bag {
-  return !!v && typeof v === "object";
+  return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
 function objectsOf(v: unknown): Bag[] {
@@ -25,7 +25,7 @@ function cleanList(v: unknown, inner?: (x: Bag) => Bag): unknown {
 }
 
 function withLists(item: Bag, keys: readonly string[], inner?: (x: Bag) => Bag): Bag {
-  if (Array.isArray(item) || !keys.some(function (k) { return Object.prototype.hasOwnProperty.call(item, k); })) return item;
+  if (!keys.some(function (k) { return Object.prototype.hasOwnProperty.call(item, k); })) return item;
   const out = shallowCopy(item);
   keys.forEach(function (k) {
     if (Object.prototype.hasOwnProperty.call(item, k)) out[k] = cleanList(item[k], inner);
