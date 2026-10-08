@@ -117,6 +117,26 @@ expect __live('r3').audioText === 'Third.か'
 key ctrl KeyZ
 expect __live('r3').audioText === 'Third.'
 
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+eval (function(){ var t = __cell('r3').firstChild; var r = document.createRange(); r.setStart(t, 3); r.setEnd(t, 6); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+expect getSelection().toString() === 'rd.'
+ime set ね
+sleep 1100
+ime set ねこ
+sleep 1100
+ime cancel
+expect __live('r3').audioText === 'Thi'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 1
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+expect __cell('r3').textContent === 'Third.'
+key ctrl+shift KeyZ
+expect __live('r3').audioText === 'Thi'
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+
 caret #rows .cell-editable[data-id="r1"][data-field="audioText"]
 eval __arm('r1')
 ime set か

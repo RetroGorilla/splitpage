@@ -715,6 +715,143 @@ for (const [where, end] of [["grid", "edge"], ["grid", "firefox"], ["grid", "saf
   });
 }
 
+for (const [where, end] of [["grid", "edge"], ["grid", "firefox"], ["grid", "safari"], ["writer", "edge"]]) {
+  test(`#436: a slow cancelled composition that replaced a selection leaves one step, and one Ctrl+Z brings the selection back (${where}, ${end} event order)`, async () => {
+    await inPlace(where, async (el) => {
+      const sizes = undoSizes();
+      await slowComposition(el, "Thr", ["ね", "ねこ"], end);
+      assert.equal(row("r3").audioText, "Thr");
+      assert.deepEqual(undoSizes(), { undo: sizes.undo + 1, redo: 0 }, "one step, not one per update");
+      assert.equal(undo().ok, true);
+      assert.equal(row("r3").audioText, "Three.", "the cell as it was at compositionstart");
+      assert.deepEqual(undoSizes(), { undo: sizes.undo, redo: 1 });
+      assert.equal(redo().ok, true);
+      assert.equal(row("r3").audioText, "Thr", "and Ctrl+Y never shows the cancelled text either");
+    });
+  });
+}
+
+test("#436: a slow committed composition that replaced a selection keeps a step per update, as before", async () => {
+  await inPlace("grid", async (el) => {
+    compose(el, "compositionstart", "");
+    for (const text of ["ね", "ねこ"]) {
+      clock += 1100;
+      setText(el, "Thr" + text, { inputType: "insertCompositionText", isComposing: true });
+      await settle();
+    }
+    compose(el, "compositionend", "ねこ");
+    await settle();
+    assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+    assert.equal(undo().ok, true);
+    assert.equal(row("r3").audioText, "Thrね");
+  });
+});
+
+test("#446: a Ctrl+Z during a composition that undid the typing before it, then the same text committed again, keeps the new typing undoable", async () => {
+  await inPlace("grid", async (el) => {
+    await commitKa(el);
+    assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+    clock += 5000;
+    compose(el, "compositionstart", "");
+    assert.equal(undo().ok, true);
+    assert.equal(row("r3").audioText, "Three.");
+    const again = cellOf("r3", "audioText");
+    clock += 1100;
+    setText(again, "Three.か", { inputType: "insertCompositionText", isComposing: true });
+    await settle();
+    compose(again, "compositionend", "か");
+    await settle();
+    assert.equal(row("r3").audioText, "Three.か");
+    assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "the re-typed か is a step and the undone one is not given back as redo");
+    assert.equal(undo().ok, true);
+    assert.equal(row("r3").audioText, "Three.");
+  });
+});
+
+test("#448: a Ctrl+Z during a composition that undid the typing before it, then a cancel, leaves no step and Ctrl+Y gives that typing back", async () => {
+  await inPlace("grid", async (el) => {
+    await commitKa(el);
+    clock += 5000;
+    compose(el, "compositionstart", "");
+    assert.equal(undo().ok, true);
+    assert.equal(row("r3").audioText, "Three.");
+    const again = cellOf("r3", "audioText");
+    for (const text of ["ね", "ねこ"]) {
+      clock += 1100;
+      setText(again, "Three." + text, { inputType: "insertCompositionText", isComposing: true });
+      await settle();
+    }
+    compose(again, "compositionend", "");
+    await settle();
+    clock += 1100;
+    setText(again, "Three.", { inputType: "deleteCompositionText", isComposing: false });
+    await settle();
+    assert.equal(row("r3").audioText, "Three.");
+    assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
+    assert.equal(redo().ok, true);
+    assert.equal(row("r3").audioText, "Three.か");
+  });
+});
+
+for (const end of ["edge", "firefox", "safari"]) {
+  test(`#448: typing n, then within the second a slow composition over "an" whose first update puts the cell back where that typing began, then cancelled, keeps the typing as its own step and one Ctrl+Z goes back to the cell at compositionstart (${end} event order)`, async () => {
+    await inPlace("grid", async (el) => {
+      const sizes = undoSizes();
+      typeChar(el, "a");
+      await settle();
+      clock += 1100;
+      typeChar(el, "n");
+      await settle();
+      await slowComposition(el, "Three.", ["a", "ai"], end, 300);
+      assert.equal(row("r3").audioText, "Three.");
+      assert.deepEqual(undoSizes(), { undo: sizes.undo + 3, redo: 0 });
+      for (const want of ["Three.an", "Three.a", "Three."]) {
+        assert.equal(undo().ok, true, "undo to " + want);
+        assert.equal(row("r3").audioText, want);
+      }
+    });
+  });
+}
+
+for (const inputType of ["insertCompositionText", "deleteCompositionText", "deleteByComposition", "insertFromComposition"]) {
+  test(`#448: a slow cancel over a selection whose reverting ${inputType} comes after compositionend still leaves one step`, async () => {
+    await inPlace("grid", async (el) => {
+      const sizes = undoSizes();
+      compose(el, "compositionstart", "");
+      for (const text of ["ね", "ねこ"]) {
+        clock += 1100;
+        setText(el, "Thr" + text, { inputType: "insertCompositionText", isComposing: true });
+        await settle();
+      }
+      compose(el, "compositionend", "");
+      await settle();
+      clock += 1100;
+      setText(el, "Thr", { inputType, isComposing: false });
+      await settle();
+      assert.deepEqual(undoSizes(), { undo: sizes.undo + 1, redo: 0 });
+      assert.equal(undo().ok, true);
+      assert.equal(row("r3").audioText, "Three.");
+    });
+  });
+}
+
+for (const inputType of ["insertReplacementText", "insertFromDrop"]) {
+  test(`#448: after a slow cancel over a selection in Edge's event order, a later ${inputType} with no key of its own is its own step, not part of the cancel's`, async () => {
+    await inPlace("grid", async (el) => {
+      const sizes = undoSizes();
+      await slowComposition(el, "Thr", ["ね", "ねこ"], "edge");
+      clock += 5000;
+      setText(el, "Thx", { inputType });
+      await settle();
+      assert.deepEqual(undoSizes(), { undo: sizes.undo + 2, redo: 0 });
+      assert.equal(undo().ok, true);
+      assert.equal(row("r3").audioText, "Thr");
+      assert.equal(undo().ok, true);
+      assert.equal(row("r3").audioText, "Three.");
+    });
+  });
+}
+
 for (const where of ["grid", "writer"]) {
   for (const key of [null, 229]) {
     test(`#380: a committed composition, then deleting it more than a second later ${key ? "with a keydown of keyCode 229 (Android)" : "with no keydown (the context menu's Delete)"}, keeps both steps (${where})`, async () => {
