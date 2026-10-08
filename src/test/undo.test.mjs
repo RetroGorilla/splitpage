@@ -336,12 +336,382 @@ test("history: a cancel whose last update was undone before the drop never puts 
   live.rows[1].audioText = "Tx";
   assert.equal(h.undo(live).ok, true);
   assert.equal(live.rows[1].audioText, "T");
-  assert.equal(h.dropEmptySince(mark), true);
+  assert.equal(h.dropEmptySince(mark, true), true);
   assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
   assert.deepEqual(h.nextRedo().steps, typed("T", "Tx"));
   assert.equal(h.redo(live).ok, true);
   assert.equal(h.redo(live).empty, true);
   assert.equal(live.rows[0].status, "todo");
+});
+
+test("history: the older redo a cancel did not put back stays parked, so Ctrl+Y on the update and a Backspace back within the second give it back (#446 N1)", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const live = doc([row("r9", "", { status: "shot" }), row("r1", "T")]);
+  assert.equal(h.undo(live).ok, true);
+  const mark = h.markCell("r1", "audioText", "T");
+  h.record(typed("T", "Tね"), 5000);
+  h.record(typed("Tね", "T"), 6100);
+  h.record(typed("T", "Tx"), 7200);
+  live.rows[1].audioText = "Tx";
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(h.dropEmptySince(mark, true), true);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[1].audioText, "Tx");
+  h.record(typed("Tx", "T"), 7300);
+  live.rows[1].audioText = "T";
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  assert.deepEqual(h.nextRedo().steps, status("r9"));
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].status, "shot");
+});
+
+test("history: a slow cancelled composition that replaced a selection leaves one step, back to the cell as it was at compositionstart (#436)", () => {
+  for (const order of ["edge", "firefox, revert at once", "firefox, revert later"]) {
+    const h = createUndoHistory();
+    h.record(status("r9"), 0);
+    const mark = h.markCell("r1", "audioText", "Third.");
+    h.record(typed("Third.", "Thiね"), 5000);
+    h.record(typed("Thiね", "Thiねこ"), 6100);
+    if (order !== "edge") assert.equal(h.dropEmptySince(mark, true), false, order);
+    h.record(typed("Thiねこ", "Thi"), order === "firefox, revert at once" ? 6105 : 7200);
+    assert.equal(h.dropEmptySince(mark, true), false, order);
+    assert.deepEqual(h.sizes(), { undo: 2, redo: 0 }, order);
+    assert.deepEqual(h.top().steps, typed("Third.", "Thi"), order);
+    const live = doc([row("r9", "", { status: "shot" }), row("r1", "Thi")]);
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[1].audioText, "Third.", order + ": one Ctrl+Z brings the selection back");
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].status, "todo", order + ": and the next one is the step before the composition");
+    assert.equal(h.redo(live).ok, true);
+    assert.equal(h.redo(live).ok, true);
+    assert.equal(live.rows[1].audioText, "Thi", order + ": redo never shows the cancelled text either");
+  }
+});
+
+test("history: the one step a cancel leaves takes the word state of what it inserted, so a letter typed next after a left space starts its own step (#436)", () => {
+  const h = createUndoHistory();
+  const mark = h.markCell("r1", "audioText", "a");
+  h.record(typed("a", "aね"), 5000);
+  h.record(typed("aね", "a "), 6100);
+  assert.equal(h.dropEmptySince(mark, true), false);
+  assert.deepEqual(h.top().steps, typed("a", "a "));
+  h.record(typed("a ", "a x"), 6200);
+  assert.equal(h.sizes().undo, 2);
+  const g = createUndoHistory();
+  const m2 = g.markCell("r1", "audioText", "a");
+  g.record(typed("a", "aね"), 5000);
+  g.record(typed("aね", "ab"), 6100);
+  assert.equal(g.dropEmptySince(m2, true), false);
+  g.record(typed("ab", "abx"), 6200);
+  assert.equal(g.sizes().undo, 1, "no space, so the letter joins it");
+});
+
+test("history: a committed composition that replaced a selection keeps its steps, as before (#436)", () => {
+  const h = createUndoHistory();
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Thiね"), 5000);
+  h.record(typed("Thiね", "Thiねこ"), 6100);
+  assert.equal(h.dropEmptySince(mark, false), false);
+  assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+  assert.deepEqual(h.top().steps, typed("Thiね", "Thiねこ"));
+});
+
+test("history: a slow cancelled composition over a selection that joined earlier typing gives that typing back and adds one step from the cell at compositionstart (#436)", () => {
+  for (const firefox of [false, true]) {
+    const h = createUndoHistory();
+    h.record(typed("Thir", "Third."), 0);
+    const mark = h.markCell("r1", "audioText", "Third.");
+    h.record(typed("Third.", "Thiね"), 100);
+    h.record(typed("Thiね", "Thiねこ"), 1200);
+    if (firefox) assert.equal(h.dropEmptySince(mark, true), false);
+    h.record(typed("Thiねこ", "Thi"), firefox ? 1205 : 2300);
+    assert.equal(h.dropEmptySince(mark, true), false);
+    assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+    assert.deepEqual(h.top().steps, typed("Third.", "Thi"));
+    const live = doc([row("r1", "Thi")]);
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].audioText, "Third.");
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].audioText, "Thir", "the typing before the composition keeps its own step");
+  }
+});
+
+test("history: a fast cancelled composition over a selection, every update joined to the typing before it, coalesces like that typing in either event order (#436)", () => {
+  for (const firefox of [false, true]) {
+    const h = createUndoHistory();
+    h.record(typed("Thir", "Third."), 0);
+    const mark = h.markCell("r1", "audioText", "Third.");
+    h.record(typed("Third.", "Thiね"), 100);
+    if (firefox) assert.equal(h.dropEmptySince(mark, true), false);
+    h.record(typed("Thiね", "Thi"), 200);
+    assert.equal(h.dropEmptySince(mark, true), false);
+    assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+    assert.deepEqual(h.top().steps, typed("Thir", "Thi"));
+    h.record(typed("Thi", "Thir"), 300);
+    assert.deepEqual(h.sizes(), { undo: 0, redo: 0 }, "back where that typing began is no step at all, as for any typing");
+  }
+});
+
+test("history: the one step a cancel over a selection leaves keeps the redo it cleared parked, and typing the selection back within the second gives it back (#436)", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const live = doc([row("r9", "", { status: "shot" }), row("r1", "Third.")]);
+  assert.equal(h.undo(live).ok, true);
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Thiね"), 5000);
+  h.record(typed("Thiね", "Thiねこ"), 6100);
+  h.record(typed("Thiねこ", "Thi"), 7200);
+  assert.equal(h.dropEmptySince(mark, true), false);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 }, "the deleted selection is a real step, so redo stays cleared");
+  h.record(typed("Thi", "Third."), 7300);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].status, "shot");
+});
+
+test("history: a Ctrl+Z during a composition that undid typing from before it keeps the composition's steps, so the re-typed text stays undoable (#446)", () => {
+  for (const cancelled of [false, true]) {
+    const h = createUndoHistory();
+    const live = doc([row("r1", "aか")]);
+    h.record(typed("", "a"), 0);
+    h.record(typed("a", "aか"), 5000);
+    const mark = h.markCell("r1", "audioText", "aか");
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].audioText, "a");
+    h.record(typed("a", "aか"), 10000);
+    live.rows[0].audioText = "aか";
+    assert.equal(h.dropEmptySince(mark, cancelled), false);
+    assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].audioText, "a");
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].audioText, "");
+  }
+});
+
+test("history: a Ctrl+Y during a composition that redid an entry from before it keeps the composition's steps (#446)", () => {
+  const h = createUndoHistory();
+  const live = doc([row("r1", "aか")]);
+  h.record(typed("", "a"), 0);
+  h.record(typed("a", "aか"), 5000);
+  assert.equal(h.undo(live).ok, true);
+  const mark = h.markCell("r1", "audioText", "a");
+  assert.equal(h.redo(live).ok, true);
+  h.record(typed("aか", "a"), 10000);
+  live.rows[0].audioText = "a";
+  assert.equal(h.dropEmptySince(mark, true), false);
+  assert.deepEqual(h.sizes(), { undo: 3, redo: 0 });
+  for (const want of ["aか", "a", ""]) {
+    assert.equal(h.undo(live).ok, true);
+    assert.equal(live.rows[0].audioText, want);
+  }
+});
+
+test("history: a composition's mark drops nothing once a later composition has started, so a late recheck never reaches into the new one (#446)", () => {
+  const h = createUndoHistory();
+  const first = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Thi"), 5000);
+  h.markCell("r1", "audioText", "Thi");
+  h.record(typed("Thi", "Thiね"), 6100);
+  h.record(typed("Thiね", "Third."), 7200);
+  assert.equal(h.dropEmptySince(first, true), false);
+  assert.deepEqual(h.sizes(), { undo: 3, redo: 0 });
+});
+
+const CANCELLED = /[ねこぬ]/;
+
+function undoChain(h, live, field) {
+  const seen = [];
+  for (;;) {
+    const r = h.undo(live);
+    if (r.empty) return seen;
+    seen.push(r.ok ? live.rows[0][field || "audioText"] : "refused: " + r.reason);
+  }
+}
+
+test("history: typing n, then within the second a composition over the n that first puts the cell back where that typing began, then a slow cancel, keeps the typing as its own step and one Ctrl+Z goes back to the cell at compositionstart (#448 B1)", () => {
+  for (const order of ["edge", "firefox"]) {
+    for (const restored of [false, true]) {
+      const how = order + (restored ? ", selection put back" : ", selection deleted");
+      const h = createUndoHistory();
+      h.record(typed("", "Ta"), 0);
+      h.record(typed("Ta", "Tan"), 3000);
+      const mark = h.markCell("r1", "audioText", "Tan");
+      h.record(typed("Tan", "Ta"), 3400);
+      h.record(typed("Ta", "Tai"), 4500);
+      if (order === "firefox") h.dropEmptySince(mark, true);
+      const end = restored ? "Tan" : "T";
+      h.record(typed("Tai", end), 5600);
+      h.dropEmptySince(mark, true);
+      const live = doc([row("r1", end)]);
+      const chain = restored ? ["Ta", ""] : ["Tan", "Ta", ""];
+      assert.deepEqual(undoChain(h, live), chain, how);
+      for (const want of chain.slice(0, -1).reverse().concat([end])) {
+        assert.equal(h.redo(live).ok, true, how);
+        assert.equal(live.rows[0].audioText, want, how);
+      }
+    }
+  }
+});
+
+test("history: a reconversion whose first update puts the cell back where the conversion began, within the second, then cancelled or committed back to the same text, never refuses an undo (#448 B1)", () => {
+  for (const cancelled of [true, false]) {
+    const h = createUndoHistory();
+    h.record(typed("T", "Tかん"), 0);
+    h.record(typed("Tかん", "T漢"), 1100);
+    const mark = h.markCell("r1", "audioText", "T漢");
+    h.record(typed("T漢", "Tかん"), 1200);
+    const mid = cancelled ? "Tかんね" : "Tかんか";
+    h.record(typed("Tかん", mid), 2300);
+    const end = cancelled ? "T" : "T漢";
+    h.record(typed(mid, end), 3400);
+    h.dropEmptySince(mark, cancelled);
+    assert.deepEqual(undoChain(h, doc([row("r1", end)])), cancelled ? ["T漢", "Tかん", "T"] : ["Tかん", "T"]);
+  }
+});
+
+test("history: a dropped typing entry is not put back on a cancel once a later update has joined the entry under it, so no undo is refused (#448 B1)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Ta", "Ta "), 0);
+  h.record(typed("Ta ", "Ta n"), 200);
+  const mark = h.markCell("r1", "audioText", "Ta n");
+  h.record(typed("Ta n", "Ta "), 300);
+  h.record(typed("Ta ", "Ta  "), 400);
+  h.record(typed("Ta  ", "Ta  ね"), 1500);
+  h.record(typed("Ta  ね", "Ta"), 2600);
+  h.dropEmptySince(mark, true);
+  const chain = undoChain(h, doc([row("r1", "Ta")]));
+  assert.ok(chain.every((text) => !text.startsWith("refused")), chain.join(" < "));
+  assert.equal(chain[chain.length - 1], "Ta");
+});
+
+test("history: a composition whose own update was deleted back to the cell at compositionstart within the second, then went on and was cancelled, leaves no step and puts nothing back twice (#448)", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Third.ね"), 5000);
+  h.record(typed("Third.ね", "Third."), 5100);
+  h.record(typed("Third.", "Third.こ"), 6200);
+  h.record(typed("Third.こ", "Third."), 7300);
+  assert.equal(h.dropEmptySince(mark, true), true);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  assert.deepEqual(h.top().steps, status("r9"));
+});
+
+test("history: a composition's mark drops nothing once the history was cleared, even in a cell with the same row id (#448)", () => {
+  const h = createUndoHistory();
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.clear();
+  h.record(typed("Third.", "Thiね"), 5000);
+  h.record(typed("Thiね", "Thi"), 6100);
+  assert.equal(h.dropEmptySince(mark, true), false);
+  assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+  assert.deepEqual(h.top().steps, typed("Thiね", "Thi"));
+});
+
+test("history: a co-editor's change to the cell during a slow composition is not undone by the cancel's step (#448 S2)", () => {
+  const h = createUndoHistory();
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Thiね"), 5000);
+  h.forget({ rowFields: { "r1\u0000audioText": true }, structure: false, doc: {} });
+  h.record(typed("THiね", "THiねこ"), 6100);
+  h.record(typed("THiねこ", "THi"), 7200);
+  h.dropEmptySince(mark, true);
+  const chain = undoChain(h, doc([row("r1", "THi")]));
+  assert.ok(chain.length > 0);
+  for (const text of chain) assert.match(text, /^TH/, "every step keeps the co-editor's H");
+});
+
+test("history: a cancel after a Ctrl+Z past compositionstart works from the cell as that Ctrl+Z left it: back there it is no step and gives the redo back, anything else is one step from there (#448 S3)", () => {
+  for (const end of ["a", ""]) {
+    const h = createUndoHistory();
+    const live = doc([row("r1", "aか")]);
+    h.record(typed("", "a"), 0);
+    h.record(typed("a", "aか"), 5000);
+    const mark = h.markCell("r1", "audioText", "aか");
+    assert.equal(h.undo(live).ok, true);
+    h.record(typed("a", "aね"), 10000);
+    h.record(typed("aね", "aねこ"), 11100);
+    h.record(typed("aねこ", end), 12200);
+    live.rows[0].audioText = end;
+    assert.equal(h.dropEmptySince(mark, true), end === "a");
+    if (end === "a") {
+      assert.deepEqual(h.sizes(), { undo: 1, redo: 1 });
+      assert.equal(h.redo(live).ok, true);
+      assert.equal(live.rows[0].audioText, "aか");
+    } else {
+      assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+      assert.deepEqual(undoChain(h, live), ["a", ""]);
+    }
+  }
+});
+
+test("history: a Ctrl+Z past compositionstart that undid typing the composition had joined gives that typing back on redo without the composition's text (#448 S3)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Thir", "Third."), 0);
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Third.ね"), 100);
+  const live = doc([row("r1", "Third.ね")]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Thir");
+  h.record(typed("Thir", "Thirね"), 1300);
+  h.record(typed("Thirね", "Thir"), 2400);
+  live.rows[0].audioText = "Thir";
+  assert.equal(h.dropEmptySince(mark, true), true);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.", "the typing, without the cancelled text");
+});
+
+test("history: once a composition joined to typing has ended in a commit, a later Ctrl+Z of that typing keeps the committed text for Ctrl+Y (#448)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Thir", "Third."), 0);
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Third.か"), 100);
+  assert.equal(h.dropEmptySince(mark, false), false);
+  const live = doc([row("r1", "Third.か")]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Thir");
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.か");
+});
+
+test("history: a refused Ctrl+Z past compositionstart still takes a fresh mark, so the typing the composition then joined is put back when it is cancelled (#448)", () => {
+  const h = createUndoHistory();
+  h.record(typed("", "Ta"), 4800);
+  h.record(status("r9"), 5000);
+  const mark = h.markCell("r1", "audioText", "Ta");
+  const live = doc([row("r1", "Ta"), row("r9")]);
+  assert.equal(h.undo(live).ok, false);
+  h.record(typed("Ta", "Taね"), 5500);
+  h.record(typed("Taね", "Taねこ"), 6600);
+  h.record(typed("Taねこ", "Ta"), 7700);
+  assert.equal(h.dropEmptySince(mark, true), true);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  assert.deepEqual(undoChain(h, live), [""]);
+});
+
+test("history: a Ctrl+Z that applies inside a composition ends its mark, since the render drops the composition and no compositionend arrives, so later Ctrl+Z and Ctrl+Y keep what the document held (#448 R1)", () => {
+  const h = createUndoHistory();
+  h.record(typed("Third.", "Third.x"), 0);
+  h.markCell("r1", "audioText", "Third.x");
+  h.record(typed("Third.x", "Third.xね"), 100);
+  h.record(typed("Third.xね", "Third.xねこ"), 1300);
+  const live = doc([row("r1", "Third.xねこ")]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね");
+  h.record(typed("Third.xね", "Third.xね!"), 5000);
+  live.rows[0].audioText = "Third.xね!";
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね");
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.");
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね");
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(live.rows[0].audioText, "Third.xね!");
 });
 
 const seededDraw = (seed) => {
@@ -358,8 +728,10 @@ function redoInvariantRun(seed, count) {
   let live = doc(["a", "b", "c", "d"].map((id) => row(id, id)));
   const undoneFrom = new Map();
   const canon = () => live.rows.map((r) => r.id + ":" + r.audioText + ":" + r.status).join("|");
+  const model = { undo: [], redo: [] };
   const ops = [];
-  let now = 0, fresh = 0;
+  let now = 0, fresh = 0, i = 0;
+  const where = (what) => "seed " + seed + ": " + what + " at op " + i + ": " + ops.join(",");
   const change = (fn, gap) => {
     now += gap;
     const after = clone(live);
@@ -367,58 +739,154 @@ function redoInvariantRun(seed, count) {
     h.record(diffStates(live, after), now);
     live = after;
   };
-  const kinds = ["edit", "status", "drop", "cancel", "cancelUndo", "insert", "move", "undo", "undo", "redo", "redo", "redo"];
-  for (let i = 0; i < count; i++) {
-    const kind = kinds[draw(kinds.length)];
-    ops.push(kind);
+  const real = () => { model.undo.push(canon()); model.redo.length = 0; };
+  const setText = (at, text, gap) => change((d) => { d.rows[at].audioText = text; }, gap);
+  const undoOne = () => {
+    const entry = h.top();
+    const want = model.undo.pop();
+    const from = canon();
+    const r = h.undo(live);
+    assert.ok(r.ok || r.empty, where("undo refused: " + r.reason));
+    assert.equal(r.ok ? canon() : undefined, want, where("undo lands somewhere the model does not"));
+    if (r.ok) { undoneFrom.set(entry, canon()); model.redo.push(from); }
+    assert.doesNotMatch(canon(), CANCELLED, where("an undo shows cancelled text"));
+    live = clone(live);
+  };
+  const pace = () => [100, 400, 1100][draw(3)];
+  const revert = (at, mark, kept, firefox) => {
+    if (firefox) h.dropEmptySince(mark, true);
+    const gap = firefox && draw(2) ? 5 : pace();
+    setText(at, kept, gap);
+    h.dropEmptySince(mark, true);
+    return gap;
+  };
+  const cancelled = (at, kept, firstGap, firefox) => {
+    const mark = h.markCell(live.rows[at].id, "audioText", live.rows[at].audioText);
+    const gap = pace();
+    setText(at, kept + "ね", firstGap);
+    setText(at, kept + "ねこ", gap);
+    return revert(at, mark, kept, firefox) < 1000 && gap < 1000;
+  };
+  const kinds = ["edit", "status", "drop", "cancel", "cancelSel", "joinCancel", "selCancel", "commit", "cancelUndo",
+    "crossCommit", "crossCancel", "crossJoin", "insert", "move", "undo", "undo", "redo", "redo", "redo"];
+  for (; i < count; i++) {
     const at = draw(live.rows.length);
+    const text = live.rows[at].audioText;
+    const drawn = kinds[draw(kinds.length)];
+    const kind = drawn === "selCancel" && !text ? "edit" : drawn;
+    ops.push(kind);
     if (kind === "edit") {
-      change((d) => { d.rows[at].audioText += "e"; }, 5000);
+      real();
+      setText(at, text + "e", 5000);
     } else if (kind === "status") {
+      real();
       change((d) => { d.rows[at].status = d.rows[at].status === "todo" ? "shot" : "todo"; }, 5000);
     } else if (kind === "drop") {
-      const text = live.rows[at].audioText;
-      change((d) => { d.rows[at].audioText = text + "x"; }, 5000);
-      change((d) => { d.rows[at].audioText = text; }, 100);
-    } else if (kind === "cancel") {
-      const text = live.rows[at].audioText;
+      setText(at, text + "x", 5000);
+      setText(at, text, 100);
+    } else if (kind === "cancel" || kind === "cancelSel") {
+      const kept = kind === "cancelSel" ? text.slice(0, -1) : text;
+      if (kept !== text) real();
+      cancelled(at, kept, 5000, draw(2));
+    } else if (kind === "joinCancel") {
+      const before = { undo: model.undo.slice(), redo: model.redo.slice() };
+      real();
+      setText(at, text + "e", 5000);
+      const typed = canon();
+      const sel = draw(2);
+      const fast = cancelled(at, sel ? text : text + "e", 100, draw(2));
+      if (sel && fast) { model.undo = before.undo; model.redo = before.redo; }
+      else if (sel) model.undo.push(typed);
+    } else if (kind === "selCancel") {
+      real();
+      setText(at, text + "n", 5000);
+      const typed = canon();
+      const mark = h.markCell(live.rows[at].id, "audioText", text + "n");
+      const restored = draw(2);
+      setText(at, text, 100 + 100 * draw(9));
+      setText(at, text + "ね", pace());
+      revert(at, mark, restored ? text + "n" : text.slice(0, -1), draw(2));
+      if (!restored) model.undo.push(typed);
+    } else if (kind === "commit") {
       const mark = h.markCell(live.rows[at].id, "audioText", text);
-      change((d) => { d.rows[at].audioText = text + "ね"; }, 5000);
-      change((d) => { d.rows[at].audioText = text + "ねこ"; }, 1100);
-      change((d) => { d.rows[at].audioText = text; }, 1100);
-      h.dropEmptySince(mark);
+      real();
+      setText(at, text + "か", 5000);
+      real();
+      setText(at, text + "かな", 1100);
+      assert.equal(h.dropEmptySince(mark, false), false, where("a commit drops"));
     } else if (kind === "cancelUndo") {
-      const text = live.rows[at].audioText;
       const mark = h.markCell(live.rows[at].id, "audioText", text);
-      change((d) => { d.rows[at].audioText = text + "ね"; }, 5000);
-      change((d) => { d.rows[at].audioText = text; }, 1100);
-      change((d) => { d.rows[at].audioText = text + "x"; }, 1100);
+      setText(at, text + "ね", 5000);
+      setText(at, text, 1100);
+      setText(at, text + "x", 1100);
       const entry = h.top();
-      if (h.undo(live).ok) undoneFrom.set(entry, canon());
+      const from = canon();
+      assert.equal(h.undo(live).ok, true);
+      undoneFrom.set(entry, canon());
       live = clone(live);
-      h.dropEmptySince(mark);
+      h.dropEmptySince(mark, true);
+      model.redo.length = 0;
+      model.redo.push(from);
+    } else if (kind === "crossCommit" || kind === "crossCancel" || kind === "crossJoin") {
+      real();
+      setText(at, text + "e", 5000);
+      const typed = canon();
+      const mark = h.markCell(live.rows[at].id, "audioText", text + "e");
+      if (kind === "crossJoin") {
+        setText(at, text + "eぬ", 100 + 100 * draw(9));
+        const entry = h.top();
+        const want = model.undo.pop();
+        assert.equal(h.undo(live).ok, true, where("a Ctrl+Z past the mark is refused"));
+        assert.equal(canon(), want, where("a Ctrl+Z past the mark lands somewhere the model does not"));
+        undoneFrom.set(entry, canon());
+        model.redo.push(typed);
+        live = clone(live);
+      } else {
+        undoOne();
+      }
+      const before = { undo: model.undo.slice(), redo: model.redo.slice() };
+      const undone = canon();
+      if (kind === "crossCommit") {
+        real();
+        setText(at, text + "e", pace());
+        assert.equal(h.dropEmptySince(mark, false), false, where("a re-typed commit after a Ctrl+Z past the mark drops"));
+      } else {
+        const sel = text && draw(2);
+        setText(at, text + "ぬ", pace());
+        revert(at, mark, sel ? text.slice(0, -1) : text, draw(2));
+        model.undo = sel ? before.undo.concat([undone]) : before.undo;
+        model.redo = sel ? [] : before.redo;
+      }
     } else if (kind === "insert") {
+      real();
       change((d) => { d.rows.splice(at, 0, row("n" + ++fresh, "n")); }, 5000);
     } else if (kind === "move") {
       const to = draw(live.rows.length);
+      if (to !== at) real();
       change((d) => { d.rows.splice(to, 0, d.rows.splice(at, 1)[0]); }, 5000);
     } else if (kind === "undo") {
-      const entry = h.top();
-      if (h.undo(live).ok) undoneFrom.set(entry, canon());
-      live = clone(live);
+      undoOne();
     } else {
       const entry = h.nextRedo();
       if (entry) {
-        assert.equal(canon(), undoneFrom.get(entry), "seed " + seed + ": redo at op " + i + " starts from a state its entry was not undone from: " + ops.join(","));
+        assert.equal(canon(), undoneFrom.get(entry), where("redo starts from a state its entry was not undone from"));
       }
-      h.redo(live);
+      const want = model.redo.pop();
+      const from = canon();
+      const r = h.redo(live);
+      assert.ok(r.ok || r.empty, where("redo refused: " + r.reason));
+      assert.equal(r.ok ? canon() : undefined, want, where("redo lands somewhere the model does not"));
+      if (r.ok) model.undo.push(from);
+      assert.doesNotMatch(canon(), CANCELLED, where("a redo shows cancelled text"));
       live = clone(live);
     }
+    assert.doesNotMatch(canon(), CANCELLED, where("the document keeps cancelled text"));
+    assert.deepEqual(h.sizes(), { undo: model.undo.length, redo: model.redo.length }, where("history sizes differ from the model"));
   }
 }
 
-test("history: every redo starts from the exact state its entry was undone from, over seeded mixes of edits, drops, cancels, inserts, moves, undo and redo", () => {
-  for (let seed = 1; seed <= 400; seed++) redoInvariantRun(seed, 14);
+test("history: every undo and redo lands where a plain stack of states says, every redo starts from the exact state its entry was undone from, and no step shows cancelled text, over seeded mixes of edits, drops, cancels, cancels over a selection, joined cancels, cancels over the letter just typed, commits, Ctrl+Z past a composition's start (with and without a joined update), then a commit or a cancel, updates under a second apart, inserts, moves, undo and redo", () => {
+  for (let seed = 1; seed <= 600; seed++) redoInvariantRun(seed, 24);
 });
 
 test("history: a typing that cleared redo and was undone and redone gives that redo back when a slow or joined cancel drops it", () => {
@@ -432,7 +900,7 @@ test("history: a typing that cleared redo and was undone and redone gives that r
   assert.equal(h.undo(live).ok, true);
   assert.equal(h.redo(live).ok, true);
   h.record(typed("Third.ねこ", "Third."), 7200);
-  assert.equal(h.dropEmptySince(mark), true);
+  assert.equal(h.dropEmptySince(mark, true), true);
   assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
   assert.equal(h.redo(live).ok, true);
   assert.equal(live.rows[0].status, "shot");
@@ -448,7 +916,7 @@ test("history: a typing that cleared redo and was undone and redone gives that r
   assert.equal(g.undo(live2).ok, true);
   assert.equal(g.redo(live2).ok, true);
   g.record(typed("Three.かねこ", "Three.か"), 12500);
-  assert.equal(g.dropEmptySince(m2), true);
+  assert.equal(g.dropEmptySince(m2, true), true);
   assert.deepEqual(g.sizes(), { undo: 1, redo: 1 });
   assert.equal(g.redo(live2).ok, true);
   assert.equal(live2.rows[0].status, "shot");
@@ -466,7 +934,7 @@ test("history: a drop after an undo and redo that pushed entries out of 200 puts
   assert.equal(h.redo(live).ok, true);
   h.record(typed("aか", "a"), 504000);
   assert.deepEqual(h.sizes(), { undo: 200, redo: 0 });
-  assert.equal(h.dropEmptySince(mark), true);
+  assert.equal(h.dropEmptySince(mark, true), true);
   assert.deepEqual(h.sizes(), { undo: 199, redo: 1 });
   assert.equal(h.redo(live).ok, true);
   assert.equal(live.rows[199].status, "shot");
