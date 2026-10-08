@@ -218,6 +218,17 @@ test("an empty script is one page: its title, its facts, and no more", () => {
   assert.deepEqual(doc.pages[0].footer.map((o) => o.str), ["Nothing yet", "Page 1 of 1"]);
 });
 
+test("a long title of emoji is shortened by whole characters, never half of one (#434)", () => {
+  const grin = String.fromCodePoint(0x1F600);
+  for (let lead = 0; lead < 4; lead++) {
+    S.state = migrateRows({ schema: 2, title: "i".repeat(lead) + (grin.repeat(3) + " ").repeat(30).trim(), comments: [],
+      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+    const lines = read(buildPdf(null)).pages[0].texts.filter((o) => o.size === 20);
+    assert.equal(lines.length, 2);
+    lines.forEach((l) => assert.equal((l.str.match(/\?/g) || []).length % 2, 0, lead + ": " + l.str));
+  }
+});
+
 test("a script with no tags, b-roll or comments has no appendix, and a long title never runs off the page", () => {
   S.state = migrateRows({ schema: 2, title: "A title so long that it could never fit on one line of the page, nor on two lines of it, however small the words are set and however wide the page is", comments: [],
     rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });

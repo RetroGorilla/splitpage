@@ -1,6 +1,6 @@
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { BROLL_STATUS_IDS, brollStatusId, normalizeBrollProps } from "./document/broll.ts";
+import { BROLL_STATUS_IDS, BROLL_TEXT_MAX, brollStatusId, normalizeBrollProps } from "./document/broll.ts";
 import { SCHEMA_VERSION, STATE_FIELDS } from "./document/fields.ts";
 import type { StateField } from "./document/fields.ts";
 import { migrateGallery } from "./document/gallery.ts";
@@ -14,6 +14,7 @@ import type { TagRecord } from "./document/tags.ts";
 import type { ValidatedDocument } from "./document/validated.ts";
 import {
   brokenCutOf,
+  cappedLongText,
   cappedName,
   cappedText,
   legacyMdToHtml,
@@ -280,7 +281,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     t.name = tagNames[at];
     t.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
     t.owner = typeof t.owner === "string" && knownPeople[t.owner] ? t.owner : "";
-    t.notes = plainText(t.notes).slice(0, 2000);
+    t.notes = cappedLongText(plainText(t.notes), 2000);
   });
   s.productionTags = (s.productionTags as Bag[]).filter(function (t) { return t.name; });
   missingRegistryTags(s.rows as ProductionRow[], s.productionTags as TagRecord[], ports.readers).forEach(function (t) {
@@ -295,11 +296,11 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   const shotNames = settledNames(shots.map(textOfName), 200, nameKey, shotRenamesFor(shots, s.rows as ProductionRow[], ports.readers));
   shots.forEach(function (b, at) {
     b.name = shotNames[at];
-    b.desc = plainText(b.desc).slice(0, 2000);
+    b.desc = cappedLongText(plainText(b.desc), BROLL_TEXT_MAX);
     b.status = brollStatusId(b.status) || BROLL_STATUS_IDS[0];
     b.reshoot = b.reshoot === true;
-    b.notes = plainText(b.notes).slice(0, 2000);
-    b.audioRef = plainText(b.audioRef).slice(0, 2000);
+    b.notes = cappedLongText(plainText(b.notes), BROLL_TEXT_MAX);
+    b.audioRef = cappedLongText(plainText(b.audioRef), BROLL_TEXT_MAX);
     b.location = cappedText(b.location, 80);
     b.owner = typeof b.owner === "string" && knownPeople[b.owner] ? b.owner : "";
     b.origin = b.origin === "list" ? "list" : "script";
@@ -314,7 +315,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     else s[f.key] = value;
   });
 
-  s.title = plainText(s.title).slice(0, 300);
+  s.title = cappedLongText(plainText(s.title), 300);
   if (!Number.isFinite(s.rev)) s.rev = 0;
   s.docId = normalizeDocId(s.docId) || ids.docId();
   s.schema = SCHEMA_VERSION;

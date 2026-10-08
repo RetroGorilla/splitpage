@@ -1,3 +1,5 @@
+import { cappedLongText } from "../core/document/text-policy.ts";
+
 export var DRAFTS_IDB_NAME = "splitpage-drafts";
 export var DRAFTS_IDB_VERSION = 1;
 
@@ -70,7 +72,7 @@ function metaOf(rec) {
     base: String(rec.base || ""),
     docId: String(rec.docId || ""),
     rev: Number(rec.rev) || 0,
-    title: typeof rec.title === "string" ? rec.title.slice(0, 500) : "",
+    title: typeof rec.title === "string" ? cappedLongText(rec.title, 500) : "",
     writtenAt: Number(rec.writtenAt) || 0,
     writerId: String(rec.writerId || ""),
     editSeq: Number(rec.editSeq) || 0,

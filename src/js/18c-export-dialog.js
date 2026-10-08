@@ -10,7 +10,7 @@ import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirecti
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
 import { rowImage } from "../core/document/media.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { cellOf } from "../legacy/richtext.ts";
 
@@ -192,7 +192,7 @@ function renderOptions() {
 
 function trunc(s, n) {
   s = String(s || "").replace(/\s+/g, " ").trim();
-  return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
+  return s.length > n ? unitSafePrefix(s, n - 1).trimEnd() + "…" : s;
 }
 
 function cellText(html, n, opts) { return escapeHtml(trunc(toPlainText(cellOf(html), opts), n)); }
@@ -205,7 +205,7 @@ function pvRuns(html, n, nums) {
     if (r.broll) { out += '<span class="pv-broll">B-roll</span>'; continue; }
     if (r.text === "\n") { out += "<br>"; continue; }
     var t = r.text.replace(/\s+/g, " ");
-    if (t.length > left) t = t.slice(0, left).trimEnd() + "…";
+    if (t.length > left) t = unitSafePrefix(t, left).trimEnd() + "…";
     left -= t.length;
     var h = escapeHtml(t);
     if (r.tag && r.tag.color) h = '<span class="pv-tag" style="--pv-c:#' + r.tag.color + '">' + h + '</span>';

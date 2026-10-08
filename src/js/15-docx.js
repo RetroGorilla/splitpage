@@ -26,7 +26,7 @@ import {
   sceneFacts
 } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
-import { escapeHtml, safeHref } from "../core/document/text-policy.ts";
+import { escapeHtml, safeHref, unitSafePrefix } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
 import { importDirections } from "../core/text/directions.ts";
@@ -671,7 +671,7 @@ function footerXml(title) {
       "<w:r>" + rPr + '<w:fldChar w:fldCharType="separate"/></w:r>' + t("1") +
       "<w:r>" + rPr + '<w:fldChar w:fldCharType="end"/></w:r>';
   };
-  if (title.length > FOOTER_TITLE_MAX) title = title.slice(0, FOOTER_TITLE_MAX - 1).replace(/\s+$/, "") + "…";
+  if (title.length > FOOTER_TITLE_MAX) title = unitSafePrefix(title, FOOTER_TITLE_MAX - 1).replace(/\s+$/, "") + "…";
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
     '<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="6" w:color="' + PRINT_COLORS.border + '"/></w:pBdr>' +
