@@ -81,6 +81,17 @@ function typeChar(el, ch, extra) {
   input(el, ch, extra);
 }
 
+function setText(el, text, extra) {
+  const node = lastText(el);
+  node.data = text;
+  caretAt(node, node.data.length);
+  input(el, null, extra);
+}
+
+function keydown(el, key, keyCode) {
+  el.dispatchEvent(new window.KeyboardEvent("keydown", { key, keyCode, bubbles: true, cancelable: true }));
+}
+
 function compose(el, type, data) {
   el.dispatchEvent(new window.CompositionEvent(type, { bubbles: true, data: data }));
 }
@@ -238,6 +249,8 @@ test("#380: in the Writer too, a cancelled composition leaves no step", async ()
     await settle();
     assert.equal(row("r3").audioText, "Three.");
     assert.deepEqual(undoSizes(), sizes);
+    assert.equal(writer.writerUndoStep("undo"), true, "so the first Ctrl+Z in this fresh Writer closes it");
+    assert.equal(writer.writerOpen, false);
   } finally {
     writer.closeWriter();
   }
@@ -283,26 +296,204 @@ test("#380: a committed composition is still its one step, and a cancel in anoth
   assert.equal(lastUndoEntry().steps[0].after, "Hello thereか");
 });
 
-test("only a composition's own step is dropped: an empty step left by typing and deleting a letter stays, as it does today", async () => {
+test("typing a letter and deleting it within a second leaves no step, and the next Ctrl+Z undoes the real entry before it", async () => {
   await open();
-  const el = cellOf("r3", "audioText");
   clock += 5;
+  typeChar(cellOf("r1", "audioText"), "!");
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+  clock += 5000;
+  const el = cellOf("r3", "audioText");
   typeChar(el, "x");
   await settle();
-  const node = lastText(el);
-  node.data = "Three.";
-  caretAt(node, node.data.length);
+  assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
   clock += 5;
-  input(el, null, { inputType: "deleteContentBackward" });
+  setText(el, "Three.", { inputType: "deleteContentBackward" });
   await settle();
   assert.equal(row("r3").audioText, "Three.");
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
-  assert.equal(lastUndoEntry().steps[0].before, lastUndoEntry().steps[0].after, "the step changes nothing");
   el.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" }));
   compose(el, "compositionstart", "");
   compose(el, "compositionend", "");
   await settle();
-  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "neither a stray compositionend nor a composition that typed nothing takes it");
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "neither a stray compositionend nor a composition that typed nothing takes the real entry");
+  assert.equal(undo().ok, true);
+  assert.equal(row("r1").audioText, "Hello there");
+  assert.equal(row("r3").audioText, "Three.");
+});
+
+test("in the Writer, typing a letter and deleting it leaves no step, so the first Ctrl+Z in a fresh Writer closes it", async () => {
+  await open();
+  writer.openWriter();
+  try {
+    const p = document.querySelector('#writer-doc .wr-para[data-id="r3"]');
+    clock += 5;
+    typeChar(p, "x");
+    await settle();
+    clock += 5;
+    setText(p, "Three.", { inputType: "deleteContentBackward" });
+    await settle();
+    assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
+    assert.equal(writer.writerUndoStep("undo"), true);
+    assert.equal(writer.writerOpen, false);
+  } finally {
+    writer.closeWriter();
+  }
+});
+
+test("Ctrl+Y after the Ctrl+Z that closed the Writer reopens it, but not once typing has happened since, even typing that left no step", async () => {
+  await open();
+  clock += 5;
+  typeChar(cellOf("r1", "audioText"), "!");
+  await settle();
+  clock += 5000;
+  writer.openWriter();
+  try {
+    assert.equal(writer.writerUndoStep("undo"), true);
+    assert.equal(writer.writerOpen, false);
+    assert.equal(writer.writerUndoStep("redo"), true);
+    assert.equal(writer.writerOpen, true);
+    assert.equal(writer.writerUndoStep("undo"), true);
+    assert.equal(writer.writerOpen, false);
+    const el = cellOf("r3", "audioText");
+    clock += 5;
+    typeChar(el, "x");
+    await settle();
+    clock += 5;
+    setText(el, "Three.", { inputType: "deleteContentBackward" });
+    await settle();
+    assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+    assert.equal(writer.writerUndoStep("redo"), false);
+    assert.equal(writer.writerOpen, false);
+  } finally {
+    writer.closeWriter();
+  }
+});
+
+async function slowComposition(el, start, updates, end) {
+  compose(el, "compositionstart", "");
+  for (const text of updates) {
+    clock += 1100;
+    setText(el, start + text, { inputType: "insertCompositionText", isComposing: true });
+    await settle();
+  }
+  clock += 1100;
+  if (end === "edge") {
+    setText(el, start, { inputType: "deleteCompositionText", isComposing: true });
+    await settle();
+    compose(el, "compositionend", "");
+  } else if (end === "firefox") {
+    compose(el, "compositionend", "");
+    await settle();
+    setText(el, start, { inputType: "deleteCompositionText", isComposing: false });
+  } else {
+    compose(el, "compositionend", "");
+    keydown(el, "Process", 229);
+    setText(el, start, { inputType: "deleteByComposition", isComposing: false });
+  }
+  await settle();
+}
+
+for (const end of ["edge", "firefox", "safari"]) {
+  test(`#380: a slow composition, each update more than a second apart, leaves no step when cancelled (${end} event order)`, async () => {
+    await open();
+    const el = cellOf("r3", "audioText");
+    el.focus();
+    flushEdits();
+    const sizes = undoSizes();
+    await slowComposition(el, "Three.", ["ね", "ねこ", "ねこが"], end);
+    assert.equal(row("r3").audioText, "Three.");
+    assert.deepEqual(undoSizes(), sizes, "no step left for Ctrl+Z to spend");
+    undo();
+    assert.equal(row("r3").audioText, "Three.", "and Ctrl+Z does not bring the cancelled text back");
+  });
+}
+
+test("#380: in the Writer too, a slow cancelled composition leaves no step", async () => {
+  await open();
+  writer.openWriter();
+  try {
+    const p = document.querySelector('#writer-doc .wr-para[data-id="r3"]');
+    p.focus();
+    flushEdits();
+    const sizes = undoSizes();
+    await slowComposition(p, "Three.", ["に", "にほ"], "edge");
+    assert.equal(row("r3").audioText, "Three.");
+    assert.deepEqual(undoSizes(), sizes);
+  } finally {
+    writer.closeWriter();
+  }
+});
+
+for (const end of ["firefox", "safari"]) {
+  test(`#380: a fast cancelled composition leaves no step when compositionend comes before the reverting input (${end} event order)`, async () => {
+    await open();
+    const el = cellOf("r3", "audioText");
+    el.focus();
+    flushEdits();
+    const sizes = undoSizes();
+    compose(el, "compositionstart", "");
+    clock += 5;
+    typeChar(el, "x", { inputType: "insertCompositionText", isComposing: true });
+    await settle();
+    clock += 5;
+    compose(el, "compositionend", "");
+    if (end === "safari") keydown(el, "Process", 229);
+    setText(el, "Three.", { inputType: end === "safari" ? "deleteByComposition" : "deleteCompositionText", isComposing: false });
+    await settle();
+    assert.equal(row("r3").audioText, "Three.");
+    assert.deepEqual(undoSizes(), sizes);
+  });
+}
+
+test("#380: a slow committed composition keeps its steps, and so does deleting it again later with a key", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  flushEdits();
+  compose(el, "compositionstart", "");
+  for (const text of ["k", "ka", "か"]) {
+    clock += 1100;
+    setText(el, "Hello there" + text, { inputType: "insertCompositionText", isComposing: true });
+    await settle();
+  }
+  compose(el, "compositionend", "か");
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 3, redo: 0 }, "a committed composition undoes through its updates, as before");
+  clock += 1100;
+  keydown(el, "Backspace", 8);
+  setText(el, "Hello there", { inputType: "deleteContentBackward" });
+  await settle();
+  assert.equal(row("r1").audioText, "Hello there");
+  assert.deepEqual(undoSizes(), { undo: 4, redo: 0 }, "a later key's edit is its own step, not part of the composition");
+});
+
+test("#380: a composition start that never ended does not reach back past the next composition's own start", async () => {
+  await open();
+  const el = cellOf("r3", "audioText");
+  el.focus();
+  flushEdits();
+  compose(el, "compositionstart", "");
+  clock += 5;
+  typeChar(el, "x");
+  await settle();
+  clock += 1100;
+  setText(el, "Three.", { inputType: "deleteContentBackward" });
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 2, redo: 0 });
+  compose(el, "compositionstart", "");
+  compose(el, "compositionend", "");
+  await settle();
+  assert.deepEqual(undoSizes(), { undo: 2, redo: 0 }, "the typing before the second composition keeps its two steps");
+});
+
+test("every zero-width caret spot is stripped, not just the first: a cell with two video cards", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.innerHTML = "One " + CARD + ZW + " two " + CARD + ZW;
+  input(el, "");
+  assert.equal(row("r1").audioText, oracle(el.innerHTML));
+  assert.equal(row("r1").audioText.indexOf(ZW), -1);
 });
 
 test("a typing command that fails is thrown from the view and leaves the cell, the edit count and undo as they were", async () => {

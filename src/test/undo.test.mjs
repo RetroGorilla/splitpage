@@ -135,6 +135,149 @@ test("forget (design D4): a merge that changed a cell drops the entries for it, 
   assert.equal(h.sizes().undo, 1, "the move goes with a change to the scene list");
 });
 
+const typed = (b, a, key) => [{ op: "rowField", rowId: "r1", key: key || "audioText", before: b, after: a }];
+const status = (id) => [{ op: "rowField", rowId: id, key: "status", before: "todo", after: "shot" }];
+
+test("history: typing that coalesces back to where its entry began drops the entry, and the one below is the top again", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const below = h.top();
+  h.record(typed("Three.", "Three.x"), 5000);
+  assert.equal(h.sizes().undo, 2);
+  h.record(typed("Three.x", "Three."), 5100);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  assert.equal(h.top(), below);
+  const live = doc([row("r9", "", { status: "shot" })]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[0].status, "todo", "the next undo is the real entry below");
+});
+
+test("history: after a word-start entry, coalescing back drops only that entry, and what follows joins the history as if it never happened", () => {
+  const h = createUndoHistory();
+  h.record(typed("", "hey"), 0);
+  h.record(typed("hey", "hey "), 100);
+  h.record(typed("hey ", "hey y"), 200);
+  assert.equal(h.sizes().undo, 2);
+  h.record(typed("hey y", "hey "), 300);
+  assert.equal(h.sizes().undo, 1);
+  assert.deepEqual(h.top().steps, typed("", "hey "));
+  h.record(typed("hey ", "hey  "), 400);
+  assert.equal(h.sizes().undo, 1, "a space still joins the word before it");
+  h.record(typed("hey  ", "hey  z"), 500);
+  assert.equal(h.sizes().undo, 2, "and the next word starts its own entry");
+});
+
+test("history: an entry that passes through where it began on the way is kept: x, then nothing, then y is one entry", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  h.record(typed("a", "ax"), 5000);
+  h.record(typed("ax", "a"), 5100);
+  h.record(typed("a", "ay"), 5200);
+  assert.equal(h.sizes().undo, 2);
+  assert.deepEqual(h.top().steps, typed("a", "ay"));
+  h.record(typed("ay", "a"), 5300);
+  assert.equal(h.sizes().undo, 1);
+});
+
+test("history: back to where it began means the same runs, so markup that decodes the same counts and a change of marks does not", () => {
+  const h = createUndoHistory();
+  h.record(typed("Three.", "Three.x"), 0);
+  h.record(typed("Three.x", "<span>Three.</span><b></b>"), 100);
+  assert.equal(h.sizes().undo, 0);
+  h.record(typed("Three.", "Three.x"), 5000);
+  h.record(typed("Three.x", "<b>Three.</b>"), 5100);
+  assert.equal(h.sizes().undo, 1, "bold text is not where it began");
+  assert.equal(h.top().steps[0].after, "<b>Three.</b>");
+});
+
+test("history: a drop keeps redo as typing leaves it: the first keystroke cleared it, and it stays cleared", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const live = doc([row("r9", "", { status: "shot" })]);
+  assert.equal(h.undo(live).ok, true);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  h.record(typed("a", "ax"), 5000);
+  h.record(typed("ax", "a"), 5100);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 0 });
+});
+
+test("history: a dropped entry that pushed the oldest of 200 out puts it back", () => {
+  const h = createUndoHistory();
+  for (let i = 0; i < 200; i++) h.record(status("s" + i), i * 2000);
+  assert.equal(h.sizes().undo, 200);
+  h.record(typed("a", "ax"), 500000);
+  assert.equal(h.sizes().undo, 200);
+  h.record(typed("ax", "a"), 500100);
+  assert.equal(h.sizes().undo, 200);
+  const live = doc(Array.from({ length: 200 }, (_, i) => row("s" + i, "", { status: "shot" })));
+  for (let i = 0; i < 200; i++) assert.equal(h.undo(live).ok, true, "undo " + i);
+  assert.equal(h.undo(live).empty, true);
+  assert.equal(live.rows[0].status, "todo", "the oldest entry came back");
+});
+
+test("history: a merge that forgets the entry a drop would put back keeps it forgotten", () => {
+  const h = createUndoHistory();
+  for (let i = 0; i < 200; i++) h.record(status("s" + i), i * 2000);
+  h.record(typed("a", "ax"), 500000);
+  const prev = doc([row("s0", "", { status: "shot" })]);
+  const next = doc([row("s0", "", { status: "todo" })]);
+  h.forget(changedBetween(prev, next));
+  assert.equal(h.sizes().undo, 200);
+  h.record(typed("ax", "a"), 500100);
+  assert.equal(h.sizes().undo, 199);
+});
+
+test("history: dropEmptySince drops every entry since the mark when they are one cell's typing that ends where it began", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const mark = h.mark();
+  h.record(typed("Third.", "Third.ね"), 5000);
+  h.record(typed("Third.ね", "Third.ねこ"), 6100);
+  h.record(typed("Third.ねこ", "Third."), 7200);
+  assert.equal(h.sizes().undo, 4);
+  assert.equal(h.dropEmptySince(mark), true);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  assert.deepEqual(h.top().steps, status("r9"));
+  assert.equal(h.dropEmptySince(mark), false, "nothing is left since the mark");
+  assert.equal(h.dropEmptySince(0), false, "an entry older than the mark is never dropped");
+  assert.equal(h.sizes().undo, 1);
+});
+
+test("history: dropEmptySince keeps entries that end somewhere else, span two cells, or hold more than typing", () => {
+  const cases = [
+    [typed("a", "ak"), typed("ak", "aか")],
+    [typed("a", "ax"), typed("", "y", "visualText"), typed("y", "", "visualText"), typed("ax", "a")],
+    [typed("a", "ax"), typed("ax", "a").concat(status("r9"))]
+  ];
+  for (const steps of cases) {
+    const h = createUndoHistory();
+    h.record(status("r8"), 0);
+    const mark = h.mark();
+    steps.forEach((s, i) => h.record(s, 5000 + i * 2000));
+    const sizes = h.sizes();
+    assert.equal(h.dropEmptySince(mark), false, JSON.stringify(steps));
+    assert.deepEqual(h.sizes(), sizes);
+  }
+});
+
+test("history: dropEmptySince puts back the entries the dropped ones pushed out of 200", () => {
+  const h = createUndoHistory();
+  for (let i = 0; i < 200; i++) h.record(status("s" + i), i * 2000);
+  const mark = h.mark();
+  h.record(typed("a", "ak"), 500000);
+  h.record(typed("ak", "aか"), 502000);
+  h.record(typed("aか", "a"), 504000);
+  assert.equal(h.sizes().undo, 200);
+  assert.equal(h.dropEmptySince(mark), true);
+  assert.equal(h.sizes().undo, 200);
+  const live = doc(Array.from({ length: 200 }, (_, i) => row("s" + i, "", { status: "shot" })));
+  for (let i = 0; i < 198; i++) assert.equal(h.undo(live).ok, true, "undo " + i);
+  assert.deepEqual(live.rows.slice(0, 4).map((r) => r.status), ["shot", "shot", "todo", "todo"], "they came back in their order");
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(h.undo(live).ok, true);
+  assert.deepEqual(live.rows.slice(0, 3).map((r) => r.status), ["todo", "todo", "todo"]);
+});
+
 test("caretAfterStep: the end of what differs, in the DOM's text", () => {
   const typed = { op: "rowField", rowId: "r1", key: "audioText", before: "one<br>two", after: "one<br>two three" };
   assert.equal(caretAfterStep(typed), "onetwo three".length, "redo: end of the retyped text");
