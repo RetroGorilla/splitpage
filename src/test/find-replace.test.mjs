@@ -78,11 +78,18 @@ test("find: a needle's lone surrogate never matches half of an emoji", () => {
   assert.deepEqual(find(cell, "a" + high + "b"), []);
   assert.deepEqual(find("ab a" + emoji + "b", "a" + high + "b"), [{ from: 0, to: 2 }]);
   assert.deepEqual(find(cell, high + high + emoji), [{ from: 1, to: 3 }]);
-  const rows = [{ id: "r1", visualText: cell, audioText: "x" + emoji }];
+  const tag = tagSpan("prop", "Smile", "smile " + emoji);
+  const rows = [
+    { id: "r1", visualText: cell, audioText: "x" + emoji },
+    { id: "r2", visualText: "the " + tag, audioText: "" }
+  ];
   assert.deepEqual(findInRows(rows, high, false), { matches: [], inTags: 0 });
   assert.deepEqual(findInRows(rows, low, true), { matches: [], inTags: 0 });
-  const tag = tagSpan("prop", "Smile " + emoji, "smile");
   assert.equal(countInTags(cellOf(tag), high, false), 0);
+  assert.equal(countInTags(cellOf(tag), low, true), 0);
+  assert.equal(countInTags(cellOf(tag), emoji, false), 1);
+  assert.equal(countInTags(cellOf(tag), "smile " + high, false), 1);
+  assert.deepEqual(findInRows(rows, emoji, false).inTags, 1);
 });
 
 test("replace: a needle's lone surrogate changes nothing, for one match or for all", () => {

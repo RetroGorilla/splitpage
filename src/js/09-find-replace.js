@@ -332,7 +332,7 @@ export function replaceAll() {
 var bulkTagCat = null;
 
 function bulkTagNeedle() {
-  return findNeedle().trim();
+  return withoutLoneSurrogates(findNeedle()).trim();
 }
 
 function bulkTagRowEl() { return document.getElementById("find-tag-row"); }
