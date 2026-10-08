@@ -1,6 +1,7 @@
 import { cappedText, hasLoneSurrogate, plainText, settledNames } from "./text-policy.ts";
 import { isTagId, normalizeTagName } from "./tags.ts";
 import type { TagRecord } from "./tags.ts";
+import type { DocumentShot } from "./validated.ts";
 
 export const BROLL_STATUS_IDS = ["unshot", "shot"] as const;
 
@@ -66,4 +67,21 @@ export function normalizeBrollProps(list: unknown,registry: readonly (TagRecord 
 
 export function brollPropKey(id: string, name: unknown): string {
   return id ? id : "n:" + normalizeTagName(name);
+}
+
+export function newBrollShot(id: string, fields: Readonly<Record<string, unknown>>): DocumentShot {
+  const shot: DocumentShot = {
+    id: id,
+    name: "", desc: "",
+    status: BROLL_STATUS_IDS[0],
+    reshoot: false,
+    notes: "",
+    owner: "",
+    audioRef: "",
+    location: "",
+    props: [],
+    origin: "script"
+  };
+  Object.keys(fields).forEach(function (key) { shot[key] = fields[key]; });
+  return shot;
 }
