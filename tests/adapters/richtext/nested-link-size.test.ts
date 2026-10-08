@@ -346,9 +346,13 @@ test("the budget is shared by the whole input: the second of two links gets only
 
 test("what an inner link spent before its outer link unwraps stays spent (#355)", () => {
   const big = "https://big.test/" + "y".repeat(1000);
-  const spent = 2 * linkShell("https://two.test/");
-  const unwrapped = '<a href="' + big + '">p<object><a href="https://two.test/">x<object><a href="https://three.test/">z</a></object>y</a>' +
+  const strong = "<strong></strong>".length;
+  const spent = 2 * (linkShell("https://two.test/") + strong) + strong;
+  const unwrapped = '<a href="' + big + '">p<object><a href="https://two.test/"><strong>x<object><a href="https://three.test/">z</a></object>y</strong></a>' +
     plainSiblings(400) + "</object>q</a>";
+  const left = rt.sanitize(unwrapped);
+  assert.equal(linkCount(left), 1);
+  assert.equal(left.split("<strong>").length - 1, 3);
   const build = (stretch: string): Shape => {
     const second = plainLink(LONG_HREF + stretch, 400);
     return { body: unwrapped + second.body, cost: spent + second.cost };
