@@ -390,6 +390,24 @@ test("history: a slow cancelled composition that replaced a selection leaves one
   }
 });
 
+test("history: the one step a cancel leaves takes the word state of what it inserted, so a letter typed next after a left space starts its own step (#436)", () => {
+  const h = createUndoHistory();
+  const mark = h.markCell("r1", "audioText", "a");
+  h.record(typed("a", "aね"), 5000);
+  h.record(typed("aね", "a "), 6100);
+  assert.equal(h.dropEmptySince(mark, true), false);
+  assert.deepEqual(h.top().steps, typed("a", "a "));
+  h.record(typed("a ", "a x"), 6200);
+  assert.equal(h.sizes().undo, 2);
+  const g = createUndoHistory();
+  const m2 = g.markCell("r1", "audioText", "a");
+  g.record(typed("a", "aね"), 5000);
+  g.record(typed("aね", "ab"), 6100);
+  assert.equal(g.dropEmptySince(m2, true), false);
+  g.record(typed("ab", "abx"), 6200);
+  assert.equal(g.sizes().undo, 1, "no space, so the letter joins it");
+});
+
 test("history: a committed composition that replaced a selection keeps its steps, as before (#436)", () => {
   const h = createUndoHistory();
   const mark = h.markCell("r1", "audioText", "Third.");
