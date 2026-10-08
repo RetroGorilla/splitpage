@@ -14,6 +14,7 @@ import type { TagRecord } from "./document/tags.ts";
 import type { ValidatedDocument } from "./document/validated.ts";
 import {
   brokenCutOf,
+  cappedName,
   cappedText,
   legacyMdToHtml,
   plainName,
@@ -87,7 +88,11 @@ function cueRenamesFor(tags: readonly Bag[], rows: readonly ProductionRow[], rea
   if (!tags.some(function (t) { return t.cat === "sound"; })) return undefined;
   const renames = cueCutRenames(rows, readers);
   const claimed: Record<string, boolean> = Object.create(null), used: Record<string, boolean> = Object.create(null);
-  tags.forEach(function (t) { if (t.cat === "sound") claimed[nameKey(textOfName(t))] = true; });
+  tags.forEach(function (t) {
+    if (t.cat !== "sound") return;
+    claimed[nameKey(textOfName(t))] = true;
+    claimed[nameKey(cappedText(t.name, 80))] = true;
+  });
   const first: boolean[] = [];
   const wanted = tags.map(function (t) {
     const key = t.cat === "sound" ? nameKey(textOfName(t)) : "";
@@ -113,13 +118,16 @@ function shotRenamesFor(shots: readonly Bag[], rows: readonly ProductionRow[], r
   if (!renames.lines.length) return undefined;
   const wanted: (string | undefined)[] = shots.map(function () { return undefined; });
   const texts = shots.map(textOfName), named: Record<string, boolean> = Object.create(null);
-  texts.forEach(function (text) { named[nameKey(text)] = true; });
+  texts.forEach(function (text) {
+    named[nameKey(text)] = true;
+    named[nameKey(cappedName(text, 200))] = true;
+  });
   renames.lines.forEach(function (line) {
-    if (!line.key && named[nameKey(line.name)]) return;
+    const free = !named[nameKey(line.name)];
     for (let at = 0; at < shots.length; at++) {
       const text = texts[at] as string;
       if (wanted[at] || renames.held[(shots[at] as Bag).id as string]) continue;
-      if (!(line.key && nameKey(text) === line.key) && !brokenCutOf(text, line.name, 200)) continue;
+      if (!(line.key && nameKey(text) === line.key) && !(free && brokenCutOf(text, line.name, 200))) continue;
       wanted[at] = line.name;
       return;
     }
