@@ -198,8 +198,7 @@ function onlyCell(steps) {
   return s.op === "rowField" && TEXT_KEYS[s.key] ? s.rowId + "\u0000" + s.key : null;
 }
 
-function insertedText(step) {
-  var a = projectionOf(step.before), b = projectionOf(step.after);
+function insertedText(a, b) {
   var p = 0;
   while (p < a.length && p < b.length && a[p] === b[p]) p++;
   var sa = a.length, sb = b.length;
@@ -216,24 +215,95 @@ function projectionOf(html) {
 export function createUndoHistory() {
   var done = [], undone = [];
   var serial = 0;
+  var parked = null;
+
+  function backAtPark(text) {
+    var top = done[done.length - 1] || null;
+    if (!parked || top !== parked.top) return false;
+    if (top && top.steps[0].after !== parked.after) {
+      if (!onlyCell(top.steps)) return false;
+      if ((text === undefined ? projectionOf(top.steps[0].after) : text) !== parked.text) return false;
+      if (!cosmetic({ op: "rowField", key: top.steps[0].key, before: parked.after, after: top.steps[0].after })) return false;
+    }
+    return true;
+  }
+
+  function park(top) {
+    parked = {
+      redo: undone.slice(), top: top || null,
+      after: top && top.steps[0].after,
+      text: top && onlyCell(top.steps) ? projectionOf(top.steps[0].after) : null
+    };
+    undone.length = 0;
+  }
+
+  function unpark(text) {
+    if (undone.length || !backAtPark(text)) return;
+    for (var i = 0; i < parked.redo.length; i++) undone.push(parked.redo[i]);
+    parked = null;
+  }
 
   function record(steps, now) {
     if (!steps.length) return;
-    undone.length = 0;
     var cell = onlyCell(steps);
     var last = done[done.length - 1];
+    if (undone.length) park(last);
+    var from = cell ? projectionOf(steps[0].before) : "", to = cell ? projectionOf(steps[0].after) : "";
+    var ins = cell ? insertedText(from, to) : "";
     if (cell && last && last.cell === cell && now - last.at < COALESCE_MS) {
-      var ins = insertedText(steps[0]);
       var startsWord = /\S/.test(ins) && last.endsInSpace;
       if (!startsWord) {
         last.steps[0].after = steps[0].after;
         last.at = now;
         if (ins) last.endsInSpace = /\s$/.test(ins);
+        if (last.from === to && cosmetic(last.steps[0])) {
+          dropFrom(done.length - 1);
+          unpark();
+        } else if (parked) {
+          unpark(to);
+        }
         return;
       }
     }
-    done.push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: cell ? /\s$/.test(insertedText(steps[0])) : false });
-    if (done.length > MAX_ENTRIES) done.shift();
+    var entry = { n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null };
+    done.push(entry);
+    if (done.length > MAX_ENTRIES) {
+      entry.evicted = done.shift();
+      entry.evicted.evicted = null;
+    }
+  }
+
+  function dropFrom(k) {
+    var gone = done.splice(k);
+    for (var i = gone.length - 1; i >= 0; i--) if (gone[i].evicted) done.unshift(gone[i].evicted);
+  }
+
+  function markCell(rowId, key, value) {
+    var top = done[done.length - 1] || null;
+    return {
+      n: serial, cell: rowId + "\u0000" + key, key: key, value: value,
+      top: top, after: top && top.steps[0].after, at: top && top.at, endsInSpace: top && top.endsInSpace
+    };
+  }
+
+  function dropEmptySince(mark) {
+    var k = done.length;
+    while (k > 0 && done[k - 1].n > mark.n) k--;
+    var top = mark.top;
+    var joined = !!top && done[k - 1] === top && onlyCell(top.steps) === mark.cell &&
+      (top.steps[0].after !== mark.after || top.at !== mark.at);
+    if (k === done.length && !joined) return false;
+    for (var i = k; i < done.length; i++) if (onlyCell(done[i].steps) !== mark.cell) return false;
+    var end = k < done.length ? done[done.length - 1] : top;
+    if (!cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: end.steps[0].after })) return false;
+    dropFrom(k);
+    if (joined) {
+      top.steps[0].after = mark.after;
+      top.at = mark.at;
+      top.endsInSpace = mark.endsInSpace;
+    }
+    unpark();
+    return true;
   }
 
   function step(from, to, state, invert) {
@@ -241,7 +311,10 @@ export function createUndoHistory() {
     if (!entry) return { ok: false, empty: true };
     var steps = invert ? invertSteps(entry.steps) : entry.steps;
     var r = applyStepsLive(state, steps);
-    if (!r.ok) return { ok: false, reason: r.reason, steps: steps };
+    if (!r.ok) {
+      parked = null;
+      return { ok: false, reason: r.reason, steps: steps };
+    }
     to.push(entry);
     return { ok: true, steps: steps };
   }
@@ -259,8 +332,12 @@ export function createUndoHistory() {
       list.length = 0;
       kept.forEach(function (e) { list.push(e); });
     }
+    var had = done.length + undone.length;
     keep(done);
     keep(undone);
+    if (done.length + undone.length !== had) parked = null;
+    if (parked) keep(parked.redo);
+    done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });
   }
 
   function standing(entry, hits) {
@@ -292,7 +369,9 @@ export function createUndoHistory() {
     standing: standing,
     amend: amend,
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
-    clear: function () { done.length = 0; undone.length = 0; },
+    markCell: markCell,
+    dropEmptySince: dropEmptySince,
+    clear: function () { done.length = 0; undone.length = 0; parked = null; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
     top: function () { return done[done.length - 1] || null; },
     nextRedo: function () { return undone[undone.length - 1] || null; },
@@ -455,6 +534,17 @@ export function nextRedoEntry() { flushEdits(); return history.nextRedo(); }
 export function undoLifetime() { flushEdits(); return lifetime; }
 
 export function undoMark() { flushEdits(); history.breakCoalescing(); return history.mark(); }
+
+export function undoSerial() { flushEdits(); return history.mark(); }
+
+export function compositionUndoMark(rowId, key) {
+  flushEdits();
+  var rows = (S.state && S.state.rows) || [], value;
+  for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id === rowId) value = rows[i][key];
+  return history.markCell(rowId, key, value);
+}
+
+export function dropEmptyStepsSince(mark) { flushEdits(); return history.dropEmptySince(mark); }
 
 export function caretAfterStep(step) {
   function domChars(h) {

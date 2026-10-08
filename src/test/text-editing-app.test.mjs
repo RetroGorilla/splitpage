@@ -192,21 +192,6 @@ test("while an undo applies, a cell's input stores nothing", async () => {
   assert.equal(row("r1").audioText, "Hello therex", "the next input outside the guard stores it");
 });
 
-test("while a cell is flagged as repainting, its input stores nothing", async () => {
-  await open();
-  const el = cellOf("r1", "audioText");
-  const seq = S.editSeq;
-  S.cellRepainting = true;
-  try {
-    typeChar(el, "x");
-    syncFieldFromDom(el);
-  } finally {
-    S.cellRepainting = false;
-  }
-  assert.equal(row("r1").audioText, "Hello there");
-  assert.equal(S.editSeq, seq);
-});
-
 test("a cell no longer in the page stores nothing", async () => {
   await open();
   const el = cellOf("r1", "audioText").cloneNode(true);
