@@ -94,8 +94,7 @@ export function settledNames(texts: readonly string[], max: number, keyOf: NameK
   const open: number[] = [], heal: number[] = [];
   function hold(map: Record<string, string>, at: number): void {
     if (!out[at]) return;
-    const key = keyOf(out[at] as string, at);
-    if (map[key] === undefined) map[key] = stored[at] as string;
+    map[keyOf(out[at] as string, at)] = stored[at] as string;
   }
   function free(map: Record<string, string>, key: string, at: number): boolean {
     const was = map[key];
