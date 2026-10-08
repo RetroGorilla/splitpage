@@ -1,5 +1,5 @@
 import { BROLL_MARKER_RE } from "../document/broll.ts";
-import { safeHref } from "../document/text-policy.ts";
+import { safeHref, withoutLoneSurrogates } from "../document/text-policy.ts";
 import type { TagName } from "../document/tags.ts";
 
 export const FORMAT_MARKS = Object.freeze(["hl", "b", "i", "u", "s"] as const);
@@ -53,8 +53,20 @@ export function namedTagId(cat: string, name: string): string {
   return defaultTagId(cat, name);
 }
 
-export function cleanText(t: unknown): string {
+function cellChars(t: unknown): string {
   return String(t == null ? "" : t).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g, "");
+}
+
+export function cleanText(t: unknown): string {
+  return withoutLoneSurrogates(cellChars(t));
+}
+
+function holdsLoneSurrogate(r: Run): boolean {
+  return !r.atom && withoutLoneSurrogates(r.text) !== r.text;
+}
+
+function withoutLoneHalves(r: Run): Run {
+  return r.atom ? r : { text: withoutLoneSurrogates(r.text), marks: r.marks };
 }
 
 export function cleanMarks(marks: unknown, forAtom?: boolean): Marks {
@@ -123,7 +135,7 @@ export function normalizeCell(cell: CellInput, opts?: NormalizeOptions | null): 
       }
       return;
     }
-    const t = cleanText(r.text);
+    const t = cellChars(r.text);
     if (!t) return;
     const m = cleanMarks(r.marks, false);
     if (opts.hasTag && m.tag && !opts.hasTag(m.tag)) delete m.tag;
@@ -172,7 +184,7 @@ export function normalizeCell(cell: CellInput, opts?: NormalizeOptions | null): 
       out.push(r);
     }
   });
-  return out;
+  return out.some(holdsLoneSurrogate) ? normalizeCell(out.map(withoutLoneHalves), opts) : out;
 }
 
 export function settleCues(runs: Run[]): Run[] {

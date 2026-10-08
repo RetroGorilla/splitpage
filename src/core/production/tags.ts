@@ -1,6 +1,6 @@
 import type { Frozen } from "../document/freeze.ts";
 import { idMap } from "../document/id-map.ts";
-import { cappedText, plainText } from "../document/text-policy.ts";
+import { cappedName, cappedText } from "../document/text-policy.ts";
 import {
   TAG_STATUS_IDS,
   mintTagId,
@@ -354,7 +354,7 @@ export function planRegistryHealing(
 export function planQuickAdd(state: ValidatedDocument, readers: ProductionReaders, raw: string, index?: ProductionIndex): QuickAddPlan {
   const wanted = idMap<string>(), order: string[] = [];
   raw.split(/\r\n|\r|\n/).forEach(function (line) {
-    const name = plainText(line).trim().slice(0, 80);
+    const name = cappedText(line, 80);
     if (!name) return;
     const key = normalizeTagName(name);
     if (wanted[key]) return;
@@ -445,7 +445,7 @@ function writeTags(
   writeMedia: MediaTagWriter
 ): TagWrite {
   if (!found.length) return { hits: 0, html: html };
-  const clean = plainText(name).trim().slice(0, 80);
+  const clean = cappedText(name, 80);
   if (holdsMedia(html)) {
     const wrapped = writeMedia(html as string, cell, found, cat, clean);
     return wrapped === null ? { hits: 0, html: html } : { hits: found.length, html: wrapped };
@@ -541,7 +541,7 @@ export function retagCell(html: string, cat: string, target: string, toId: strin
     if (t && t.cat === cat && normalizeTagName(t.name) === target) cell = retag(cell, id, toId);
   });
   if (cat === "sound" && html.indexOf("audio-cue") !== -1) {
-    cell = editCues(cell, function (name) { return normalizeTagName(name.slice(0, 80)) === target; },
+    cell = editCues(cell, function (name) { return normalizeTagName(cappedName(name, 80)) === target; },
       toId === null ? null : (tagNameOf(toId) as TagName).name);
   }
   return toHtml(cell);
