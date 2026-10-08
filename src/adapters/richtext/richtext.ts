@@ -7,6 +7,7 @@ import type { Run } from "../../core/text/runs.ts";
 import { createCellReader, decodeBody } from "./decode.ts";
 import type { CellReader } from "./decode.ts";
 import { walkToMd } from "./markdown.ts";
+import { boundedBody, boundedMarkup } from "./parse-bound.ts";
 import { imageRefOf, splitBudget, videoCardElement, walkSanitize } from "./sanitize.ts";
 
 export type { CellReader } from "./decode.ts";
@@ -36,10 +37,13 @@ export function createRichText(ports: RichTextPorts): RichText {
   const images = ports.images;
   const ids = ports.ids;
 
+  function parsedBody(text: string): HTMLElement {
+    return new Parser().parseFromString("<!doctype html><body>" + text, "text/html").body;
+  }
+
   function inertBody(html: unknown): HTMLElement {
-    const doc = new Parser().parseFromString(
-      "<!doctype html><body>" + (html == null ? "" : String(html)), "text/html");
-    return doc.body;
+    const text = html == null ? "" : String(html);
+    return boundedBody(parsedBody(boundedMarkup(text)), text.length);
   }
 
   function sanitize(html: unknown): string {
@@ -52,7 +56,7 @@ export function createRichText(ports: RichTextPorts): RichText {
   }
 
   function decode(html: unknown, opts?: DecodeOptions | null): Run[] {
-    return decodeBody(inertBody(sanitize(html == null ? "" : String(html))), opts);
+    return decodeBody(parsedBody(sanitize(html == null ? "" : String(html))), opts);
   }
 
   function storedHtmlFromDom<T>(html: T): T | string {

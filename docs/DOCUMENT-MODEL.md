@@ -182,13 +182,17 @@ Invariant #18 goes away.
 **Built:** that function is `syncCommentAnchors(state)` (04c): every
 comment marked somewhere points at the first cell holding its mark, in
 document order (row by row, visual before audio); one marked nowhere keeps
-what it had. Split, join and a cut-then-paste call it in their own undo
-entry, and `migrateRows` calls it, so every load and merge comes out in
-step. HANDOFF invariant #18 now says this.
+what it had. Split, join and a cut-then-paste are session commands whose
+transaction runs it after they write, in the same undo entry
+(`docs/architecture/session.md`), and `migrateRows` calls it, so every load
+and merge comes out in step. HANDOFF invariant #18 is now a pointer to the
+ledger's INV-18.
 
 - Splitting a row moves the runs, and their marks move with them. Joining
-  rows does the same. **Built:** `splitRowFieldCore` (06-rows.js) is
-  `splitCell` at the caret; `mergeWriterRows` (19-writer.js) is
+  rows does the same. **Built:** `splitSceneCommand`
+  (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
+  06-rows.js) is `splitCell` at the caret; `joinScenesCommand` (the same
+  file, run by `mergeWriterRows` in 19-writer.js) is
   `joinCells`, whose glue space carries a comment (or link) the text on
   both sides of it is in, so a phrase a split cut in two is one anchor
   again when joined back.
@@ -202,7 +206,8 @@ step. HANDOFF invariant #18 now says this.
   has; the paste spends the nonce, so a second paste of the same cut, a
   drag, another tab's cut or another app brings words only. The moved
   comment's `rowId`/`field` follow it to the pasted cell in the same undo
-  entry as the paste (`editCell`'s `also`).
+  entry as the paste (the paste command's reconciliation, `pasteCommand` in
+  `src/application/commands/clipboard.ts`).
 - Deleting all of a comment's text leaves the comment **detached**
   (`anchor: null`). It still shows in the panel with its quoted text, which
   is today's behaviour for a lost anchor.
@@ -227,8 +232,10 @@ is special. **It is the only atom.**
   typed key's is, and nothing of the copied shot's status, notes, owner or
   location comes with it. Split and join move a key rather than copy it,
   and import brings only plain-text markers, which the anchoring pass keys.
-  **Built:** `freshBrollIds` / `brollIdsTaken` (05c-clipboard.js),
-  `recordPastedBroll` (08c-broll.js). A document that already has two keys
+  **Built:** `freshBrollIds` / `takenBrollIds` and `pastedShots`
+  (`src/application/commands/clipboard.ts`; 05c-clipboard.js keeps thin
+  wrappers), and `recordPastedBroll` (08c-broll.js) for a scene paste
+  (05g-scene-clip.js). A document that already has two keys
   with one id (pasted by an older version) is healed by the anchoring
   pass: the list reads the second as unanchored, a name match never takes
   a record a key further down still holds, and the pass gives the second
@@ -239,7 +246,8 @@ is special. **It is the only atom.**
 
 - **Pasting.** A paste or a drop into a cell never puts them in it. Since
   #135 each one goes into the scene's **gallery** — its Image section — in
-  the same undo entry as the pasted words (editCell's `also`): a picture
+  the same undo entry as the pasted words (the paste command's gallery
+  effect): a picture
   (by its blob ref) is added after the ones there, and so is each video,
   as an item of its own: its link marked `poster`, with a thumbnail (a
   video file's first frame) or none (a placeholder). A link on a video host, a `<video>` and a
@@ -260,8 +268,8 @@ is special. **It is the only atom.**
     real save.
   - Nothing is lost: version history still has the original.
   - **Built:** paste and drop go through `fromHtml` with pictures and video
-    cards taken out first and put in the scene's gallery (`pasteIntoCell`,
-    `attachToGallery`, 05c-clipboard.js, #135), with a "Picture added to scene N" toast
+    cards taken out first and put in the scene's gallery (`pasteIntoCell`
+    in 05c-clipboard.js, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
     whose Undo takes back that paste's entry while it is still the last.
     `migrateRows` (02-state.js, `moveMediaOutOfCell`) does the move: the
     comment is by "Splitpage", dated the row's `updatedAt`, with an empty

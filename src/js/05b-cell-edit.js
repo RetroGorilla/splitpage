@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { ensureTrailingCaretSpot } from "./04-richtext.js";
-import { syncFieldFromDom } from "./05-render.js";
+import { screenIsStale, syncFieldFromDom } from "./05-render.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { toHtml } from "../core/text/html.ts";
@@ -144,6 +144,7 @@ export function setCellSelection(cellEl, from, to) {
 }
 
 export function openCellEdit(cellEl) {
+  if (screenIsStale()) return null;
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(rowId);
