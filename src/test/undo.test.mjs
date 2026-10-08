@@ -225,6 +225,46 @@ test("history: redo comes back only to the history it was cleared from, not afte
   h.record(typed("axy", "ax"), 5300);
   assert.deepEqual(h.sizes(), { undo: 2, redo: 1 }, "the r7 change comes back, not r8's");
   assert.deepEqual(h.nextRedo().steps, status("r7"));
+
+  const g = createUndoHistory();
+  g.record(status("r9"), 0);
+  const live3 = doc([row("r9", "", { status: "shot" }), row("r1", "a")]);
+  assert.equal(g.undo(live3).ok, true);
+  g.record(typed("a", "ax"), 5000);
+  live3.rows[1].audioText = "ax";
+  assert.equal(g.undo(live3).ok, true);
+  assert.equal(g.redo(live3).ok, true);
+  assert.deepEqual(g.sizes(), { undo: 1, redo: 0 });
+  g.record(typed("ax", "a"), 5100);
+  assert.deepEqual(g.sizes(), { undo: 0, redo: 0 }, "once the typing was undone and redone, dropping it brings back nothing older");
+});
+
+test("history: redo that a merge forgot stays forgotten when the typing that cleared it drops", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  h.record(status("r8"), 100);
+  const live = doc([row("r9", "", { status: "shot" }), row("r8", "", { status: "shot" })]);
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(h.undo(live).ok, true);
+  h.record(typed("a", "ax"), 5000);
+  h.forget(changedBetween(doc([row("r9", "", { status: "todo" })]), doc([row("r9", "", { status: "cut" })])));
+  h.record(typed("ax", "a"), 5100);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  assert.deepEqual(h.nextRedo().steps, status("r8"));
+});
+
+test("history: typing that coalesced into the entry under it gives redo back only when that entry decodes as it did, not when only its text matches", () => {
+  const h = createUndoHistory();
+  h.record(typed("Three.", "Three.a"), 0);
+  h.record(status("r9"), 100);
+  const live = doc([row("r9", "", { status: "shot" })]);
+  assert.equal(h.undo(live).ok, true);
+  h.record(typed("Three.a", "Three.ax"), 200);
+  h.record(typed("Three.ax", "<b>Three.a</b>"), 300);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 }, "bold is not where it was");
+  h.record(typed("<b>Three.a</b>", "Three.a"), 400);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 1 });
+  assert.equal(h.top().steps[0].after, "Three.a");
 });
 
 test("history: dropEmptySince brings back the redo the composition cleared, slow or joined to earlier typing", () => {
@@ -381,12 +421,24 @@ test("history: dropEmptySince decides against the cell's value at the mark, so a
   assert.equal(h.dropEmptySince(mark), true);
   assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
   assert.deepEqual(h.top().steps, typed("Three.", "Three.か"));
-  h.record(typed("Three.か", "Three.かx"), 600);
-  assert.equal(h.sizes().undo, 1, "the typing's own time is back too, so a keystroke right after it still joins it");
+  h.record(typed("Three.か", "Three.かx"), 1050);
+  assert.equal(h.sizes().undo, 2, "the typing's own time is back too, so a keystroke a second after it is its own step");
   const live = doc([row("r1", "Three.かx")]);
+  assert.equal(h.undo(live).ok, true);
   assert.equal(h.undo(live).ok, true);
   assert.equal(live.rows[0].audioText, "Three.");
   assert.equal(h.undo(live).empty, true);
+});
+
+test("history: a joined composition that ended in a space and was cancelled gives the typing back its own word state", () => {
+  const h = createUndoHistory();
+  h.record(typed("Three.", "Three.か"), 0);
+  const mark = h.markCell("r1", "audioText", "Three.か");
+  h.record(typed("Three.か", "Three.か "), 100);
+  h.record(typed("Three.か ", "Three.か"), 1200);
+  assert.equal(h.dropEmptySince(mark), true);
+  h.record(typed("Three.か", "Three.かx"), 300);
+  assert.equal(h.sizes().undo, 1, "x does not start a new word after the cancelled space");
 });
 
 test("history: dropEmptySince against the value at the mark keeps a joined composition that ends somewhere else, or reaches another cell", () => {

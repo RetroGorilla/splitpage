@@ -220,7 +220,7 @@ export function createUndoHistory() {
   function park(top) {
     parked = {
       redo: undone.slice(), top: top || null,
-      after: top && top.steps[0].after, length: top && top.steps.length,
+      after: top && top.steps[0].after,
       text: top && onlyCell(top.steps) ? projectionOf(top.steps[0].after) : null
     };
     undone.length = 0;
@@ -229,7 +229,6 @@ export function createUndoHistory() {
   function unpark(text) {
     var top = done[done.length - 1] || null;
     if (!parked || top !== parked.top) return;
-    if (top && top.steps.length !== parked.length) return;
     if (top && top.steps[0].after !== parked.after) {
       if (!onlyCell(top.steps)) return;
       if ((text === undefined ? projectionOf(top.steps[0].after) : text) !== parked.text) return;
