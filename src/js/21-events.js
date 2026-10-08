@@ -815,7 +815,7 @@ function onScriptComposition(e) {
   }
   var since = composingSince;
   composingSince = null;
-  if (since === null || dropEmptyStepsSince(since)) return;
+  if (since === null || dropEmptyStepsSince(since, !e.data)) return;
   endedSince = e.data ? null : since;
 }
 
@@ -826,7 +826,7 @@ function onCompositionKeydown(e) {
 function settleEndedComposition() {
   var since = endedSince;
   endedSince = null;
-  if (since !== null) dropEmptyStepsSince(since);
+  if (since !== null) dropEmptyStepsSince(since, true);
 }
 
 function onRootFocusOut(e) {
