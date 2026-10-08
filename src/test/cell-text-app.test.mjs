@@ -813,6 +813,28 @@ for (const end of ["edge", "firefox", "safari"]) {
   });
 }
 
+for (const inputType of ["insertCompositionText", "deleteCompositionText", "deleteByComposition", "insertFromComposition"]) {
+  test(`#448: a slow cancel over a selection whose reverting ${inputType} comes after compositionend still leaves one step`, async () => {
+    await inPlace("grid", async (el) => {
+      const sizes = undoSizes();
+      compose(el, "compositionstart", "");
+      for (const text of ["ね", "ねこ"]) {
+        clock += 1100;
+        setText(el, "Thr" + text, { inputType: "insertCompositionText", isComposing: true });
+        await settle();
+      }
+      compose(el, "compositionend", "");
+      await settle();
+      clock += 1100;
+      setText(el, "Thr", { inputType, isComposing: false });
+      await settle();
+      assert.deepEqual(undoSizes(), { undo: sizes.undo + 1, redo: 0 });
+      assert.equal(undo().ok, true);
+      assert.equal(row("r3").audioText, "Three.");
+    });
+  });
+}
+
 for (const inputType of ["insertReplacementText", "insertFromDrop"]) {
   test(`#448: after a slow cancel over a selection in Edge's event order, a later ${inputType} with no key of its own is its own step, not part of the cancel's`, async () => {
     await inPlace("grid", async (el) => {
