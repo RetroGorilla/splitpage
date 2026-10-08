@@ -92,6 +92,7 @@ test("settledNames takes a wanted name when it is free, and a broken one falls b
   assert.deepEqual(settledNames([GRIN.repeat(40), GRIN.repeat(50)], 80, key, [GRIN.repeat(50), undefined]), [GRIN.repeat(40), GRIN.repeat(50)]);
   assert.deepEqual(settledNames(["x" + GRIN + LOW, "x" + HIGH], 80, key, [undefined, "x" + GRIN]), ["x" + GRIN + LOW, "x" + GRIN], "a heal never takes a wanted name");
   assert.deepEqual(settledNames(["x" + HIGH, "x" + HIGH], 80, key, ["x" + GRIN, "x" + GRIN]), ["x" + GRIN, "x" + GRIN], "wanted names may share a name");
+  assert.deepEqual(settledNames(["x" + HIGH, "x" + LOW], 80, key, ["x" + GRIN, "x" + GRIN]), ["x" + GRIN, "x" + GRIN], "even when their stored names differ");
 });
 
 test("settledNames is a fixed point: settling its own output changes nothing (#344)", () => {
