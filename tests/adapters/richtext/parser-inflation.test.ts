@@ -275,7 +275,7 @@ test("seeded fuzz: pastes the parser would reopen formatting in stay within the 
     const parsed = elementsIn(rawBody(boundedMarkup(html)));
     let why: string | null = null;
     if (parsedSize(body) > 8 * n + 4096) why = "parsed " + String(parsedSize(body));
-    else if (parsed > 8 * n + 4096 + 36 * (tagsIn(html) + 1)) why = String(parsed) + " elements";
+    else if (parsed > 8 * n + 4096 + (tagsIn(html) + 1)) why = String(parsed) + " elements";
     else if (rt.sanitize(once) !== once) why = "not a fixed point";
     else if (once.length > 56 * n + 28672) why = "output of " + String(once.length);
     else if (words(once) !== words(html)) why = "words changed";
@@ -283,3 +283,32 @@ test("seeded fuzz: pastes the parser would reopen formatting in stay within the 
   }
   assert.deepEqual(failures, []);
 });
+
+const COUNTED_NAMES: readonly string[] = ["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
+const UNKEPT_NAMES: readonly string[] = ["big", "code", "font", "nobr", "small", "tt"];
+const REOPENABLE_NAMES: readonly string[] = ["b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"];
+
+function namedPaste(name: string): (lines: number) => string {
+  const carrier = name === "a" ? "i" : name;
+  return (lines) => Array.from({ length: 40 }, (_, i) => closed("<" + carrier + " id=" + String(i) + ">", carrier)).join("") +
+    closed('<a href="https://l.test/">', "a") + "<br>".repeat(lines);
+}
+
+for (const name of COUNTED_NAMES) {
+  test('each counted tag name, here "' + name + '", is counted by the first tier and, where the second tier renames it, is renamed (#420)', () => {
+    const carrier = name === "a" ? "i" : name;
+    const body = namedPaste(name);
+    const at = onReopenEdge(41, body, 0);
+    const short = onReopenEdge(41, body, 1);
+    assert.equal(boundedMarkup(at), at);
+    const first = boundedMarkup(short);
+    const unkept = UNKEPT_NAMES.includes(name);
+    assert.ok(first.includes(unkept ? "<" + carrier + "- id=0>" : "<" + carrier + ">"), first.slice(0, 120));
+    if (unkept) assert.ok(first.includes("</" + carrier + "->"), first.slice(0, 120));
+    if (REOPENABLE_NAMES.includes(name)) {
+      const styled = Array.from({ length: 200 }, (_, i) => closed('<b style="color:#' + String(i) + '">', "b")).join("");
+      const second = boundedMarkup(styled + closed("<" + name + " id=0>", name));
+      assert.ok(second.includes("<" + name + "-"), second.slice(0, 120));
+    }
+  });
+}
