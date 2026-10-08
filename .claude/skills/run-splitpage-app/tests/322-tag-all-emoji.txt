@@ -27,7 +27,7 @@ jsclick [data-action="tag-all-mentions"]
 sleep 500
 
 expect anchors().length === 1
-expect anchors()[0].textContent === 'x'.repeat(79) + GRIN
+expect anchors()[0].textContent === 'x'.repeat(79)
 expect loose() === 0
 expect document.querySelector('#rows .row').textContent.indexOf('x'.repeat(79) + GRIN + ' more') !== -1
 expect U.sizes().undo === window.__n + 1
