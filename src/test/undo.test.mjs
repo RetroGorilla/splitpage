@@ -587,6 +587,19 @@ test("history: a dropped typing entry is not put back on a cancel once a later u
   assert.equal(chain[chain.length - 1], "Ta");
 });
 
+test("history: a composition whose own update was deleted back to the cell at compositionstart within the second, then went on and was cancelled, leaves no step and puts nothing back twice (#448)", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const mark = h.markCell("r1", "audioText", "Third.");
+  h.record(typed("Third.", "Third.ね"), 5000);
+  h.record(typed("Third.ね", "Third."), 5100);
+  h.record(typed("Third.", "Third.こ"), 6200);
+  h.record(typed("Third.こ", "Third."), 7300);
+  assert.equal(h.dropEmptySince(mark, true), true);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  assert.deepEqual(h.top().steps, status("r9"));
+});
+
 test("history: a composition's mark drops nothing once the history was cleared, even in a cell with the same row id (#448)", () => {
   const h = createUndoHistory();
   const mark = h.markCell("r1", "audioText", "Third.");
