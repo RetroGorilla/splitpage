@@ -452,8 +452,8 @@ One stack per tab, of step lists (§4). What counts as one entry:
   typing then drops, Ctrl+Y redoes that step and stops, because the
   change undone before it belongs to a history without it. Known
   limitation: if only part of the typing was undone before it drops (a
-  word-start entry, or a slow composition's later update), nothing comes
-  back and redo stays cleared, as it did before drops gave any back.
+  word-start entry, or a slow composition's later update), the redo from
+  before the typing does not come back, as before drops gave any back.
 - Every intercepted action is one entry:
   - a paste
   - a format

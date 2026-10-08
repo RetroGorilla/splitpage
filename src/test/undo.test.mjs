@@ -324,6 +324,26 @@ test("history: dropping a later word gives back no redo while the entry under it
   assert.equal(h.top().steps[0].after, "xa ");
 });
 
+test("history: a cancel whose last update was undone before the drop never puts the older redo on top of that update's redo", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const live = doc([row("r9", "", { status: "shot" }), row("r1", "T")]);
+  assert.equal(h.undo(live).ok, true);
+  const mark = h.markCell("r1", "audioText", "T");
+  h.record(typed("T", "Tね"), 5000);
+  h.record(typed("Tね", "T"), 6100);
+  h.record(typed("T", "Tx"), 7200);
+  live.rows[1].audioText = "Tx";
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[1].audioText, "T");
+  assert.equal(h.dropEmptySince(mark), true);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
+  assert.deepEqual(h.nextRedo().steps, typed("T", "Tx"));
+  assert.equal(h.redo(live).ok, true);
+  assert.equal(h.redo(live).empty, true);
+  assert.equal(live.rows[0].status, "todo");
+});
+
 const seededDraw = (seed) => {
   let s = seed >>> 0;
   return (n) => {
@@ -347,7 +367,7 @@ function redoInvariantRun(seed, count) {
     h.record(diffStates(live, after), now);
     live = after;
   };
-  const kinds = ["edit", "status", "drop", "cancel", "insert", "move", "undo", "undo", "redo", "redo", "redo"];
+  const kinds = ["edit", "status", "drop", "cancel", "cancelUndo", "insert", "move", "undo", "undo", "redo", "redo", "redo"];
   for (let i = 0; i < count; i++) {
     const kind = kinds[draw(kinds.length)];
     ops.push(kind);
@@ -366,6 +386,16 @@ function redoInvariantRun(seed, count) {
       change((d) => { d.rows[at].audioText = text + "ね"; }, 5000);
       change((d) => { d.rows[at].audioText = text + "ねこ"; }, 1100);
       change((d) => { d.rows[at].audioText = text; }, 1100);
+      h.dropEmptySince(mark);
+    } else if (kind === "cancelUndo") {
+      const text = live.rows[at].audioText;
+      const mark = h.markCell(live.rows[at].id, "audioText", text);
+      change((d) => { d.rows[at].audioText = text + "ね"; }, 5000);
+      change((d) => { d.rows[at].audioText = text; }, 1100);
+      change((d) => { d.rows[at].audioText = text + "x"; }, 1100);
+      const entry = h.top();
+      if (h.undo(live).ok) undoneFrom.set(entry, canon());
+      live = clone(live);
       h.dropEmptySince(mark);
     } else if (kind === "insert") {
       change((d) => { d.rows.splice(at, 0, row("n" + ++fresh, "n")); }, 5000);
