@@ -87,7 +87,7 @@ const ENTRIES = {
 };
 
 const RENDER_BROKE = "render broke (#418)";
-const REDRAW = "Could not redraw the script after the update. Your changes are saved.";
+const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 
 function breakRender() {
   const box = document.getElementById("doc-title");

@@ -686,7 +686,7 @@ export function render() {
   }
 }
 
-var REDRAW_FAILED = "Could not redraw the script after the update. Your changes are saved.";
+var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 var redrawToast = null;
 
 export function renderAbsorbed() {
