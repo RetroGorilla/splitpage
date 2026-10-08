@@ -197,6 +197,15 @@ for (const [what, stored, line, whole] of OLD_CUTS) {
   });
 }
 
+test("a sound cue whose text differs from its tag only in case leaves the tag's stored casing alone (#344)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: door slam ' + x(70) + "</span>", visualText: "" }],
+    productionTags: [{ id: "t_old1", cat: "sound", name: "DOOR SLAM " + x(70), status: "have", owner: "p1", notes: "keep me" }]
+  });
+  const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+  assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", "DOOR SLAM " + x(70), "have", "p1", "keep me"]]);
+});
+
 const HALF_INSIDE = [
   ["one half", (n) => x(n - 2) + "\uD83D y", (n) => x(n - 2) + "\uD83D", (n) => x(n - 2) + " y"],
   ["two halves, so the name is now under the cap", (n) => x(n - 4) + "\uD83D\uD83D yz", (n) => x(n - 4) + "\uD83D\uD83D y", (n) => x(n - 4) + " yz"]
