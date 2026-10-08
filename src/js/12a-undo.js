@@ -325,7 +325,9 @@ export function createUndoHistory() {
       list.length = 0;
       kept.forEach(function (e) { list.push(e); });
     }
+    var had = done.length;
     keep(done);
+    if (done.length !== had) parked = null;
     keep(undone);
     if (parked) keep(parked.redo);
     done.forEach(function (e) { if (e.evicted && hits(e.evicted)) e.evicted = null; });

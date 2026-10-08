@@ -16,6 +16,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const writer = await import("../js/19-writer.js");
+const { applyMerge, cloneState } = await import("../js/03-sync.js");
 
 after(closeApp);
 
@@ -556,6 +557,41 @@ test("after an undo, a slow cancelled composition that joined earlier typing giv
   assert.equal(redo().ok, true);
   assert.equal(row("r1").audioText, "Hello there!");
 });
+
+for (const drop of ["type and delete", "slow cancel"]) {
+  test(`after an undo, typing a step that a collaborator's merge to that cell then forgets keeps redo cleared through a later ${drop}`, async () => {
+    await open();
+    await undoneBang();
+    assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
+    clock += 5;
+    typeChar(cellOf("r3", "audioText"), "x");
+    await settle();
+    assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+    clock += 5000;
+    const theirs = cloneState(S.state);
+    theirs.rows.find((r) => r.id === "r3").audioText = "Three.x theirs";
+    applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+    flushEdits();
+    assert.equal(row("r3").audioText, "Three.x theirs");
+    assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
+    const el = cellOf("r1", "visualText");
+    el.focus();
+    if (drop === "slow cancel") {
+      await slowComposition(el, "Wide", ["ね", "ねこ"], "edge");
+    } else {
+      clock += 5;
+      typeChar(el, "y");
+      await settle();
+      clock += 5;
+      setText(el, "Wide", { inputType: "deleteContentBackward" });
+      await settle();
+    }
+    assert.equal(row("r1").visualText, "Wide");
+    assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
+    assert.equal(redo().ok, false);
+    assert.equal(row("r1").audioText, "Hello there", "Ctrl+Y does not bring back the change undone before the real typing");
+  });
+}
 
 const scriptCell = (where, id) => where === "writer" ? document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]') : cellOf(id, "audioText");
 

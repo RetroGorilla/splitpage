@@ -253,6 +253,61 @@ test("history: redo that a merge forgot stays forgotten when the typing that cle
   assert.deepEqual(h.nextRedo().steps, status("r8"));
 });
 
+test("history: a merge that forgets the real edit that cleared redo keeps that redo cleared when a later typing drops", () => {
+  const inR2 = (b, a) => typed(b, a).map((s) => Object.assign(s, { rowId: "r2" }));
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const live = doc([row("r9", "", { status: "shot" })]);
+  assert.equal(h.undo(live).ok, true);
+  h.record(typed("a", "ax"), 5000);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  h.forget(changedBetween(doc([row("r1", "ax")]), doc([row("r1", "ax theirs")])));
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 0 });
+  h.record(inR2("b", "bx"), 9000);
+  h.record(inR2("bx", "b"), 9100);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 0 }, "the typing in r1 is still in the document, so the r9 change stays cleared");
+  assert.equal(h.redo(live).empty, true);
+
+  const g = createUndoHistory();
+  g.record(status("r9"), 0);
+  const live2 = doc([row("r9", "", { status: "shot" })]);
+  assert.equal(g.undo(live2).ok, true);
+  g.record([{ op: "moveRow", from: 0, to: 1 }], 5000);
+  g.forget(changedBetween(doc([row("r9"), row("r1", "a")]), doc([row("r9"), row("r1", "a"), row("r2")])));
+  assert.deepEqual(g.sizes(), { undo: 0, redo: 0 });
+  const mark = g.markCell("r1", "audioText", "a");
+  g.record(typed("a", "aね"), 9000);
+  g.record(typed("aね", "a"), 10100);
+  assert.equal(g.dropEmptySince(mark), true);
+  assert.deepEqual(g.sizes(), { undo: 0, redo: 0 }, "a structural edit a merge forgot is the same");
+});
+
+test("history: clear drops the parked redo, so the next document never gets the last one's redo back", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  assert.equal(h.undo(doc([row("r9", "", { status: "shot" })])).ok, true);
+  h.record(typed("a", "ax"), 5000);
+  h.clear();
+  h.record(typed("b", "bx"), 9000);
+  h.record(typed("bx", "b"), 9100);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 0 });
+});
+
+test("history: a fast cancel joined to earlier typing, with the revert before compositionend, gives that typing back its own time and word state", () => {
+  const h = createUndoHistory();
+  h.record(typed("Three.", "Three.か"), 0);
+  const mark = h.markCell("r1", "audioText", "Three.か");
+  h.record(typed("Three.か", "Three.か "), 100);
+  h.record(typed("Three.か ", "Three.か"), 200);
+  assert.equal(h.sizes().undo, 1);
+  assert.equal(h.top().steps[0].after, "Three.か", "the revert left the entry's end as it was");
+  assert.equal(h.dropEmptySince(mark), true);
+  assert.equal(h.top().at, 0);
+  assert.equal(h.top().endsInSpace, false);
+  h.record(typed("Three.か", "Three.かx"), 1050);
+  assert.equal(h.sizes().undo, 2, "a keystroke a second after the typing is its own step");
+});
+
 test("history: typing that coalesced into the entry under it gives redo back only when that entry decodes as it did, not when only its text matches", () => {
   const h = createUndoHistory();
   h.record(typed("Three.", "Three.a"), 0);
