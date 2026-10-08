@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeMarks } from "../../../src/core/document/gallery.ts";
+import type { Mark } from "../../../src/core/document/gallery.ts";
 import { cappedLongText, unitSafePrefix, withoutLoneSurrogates } from "../../../src/core/document/text-policy.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { brollInCell, brollSeedRef } from "../../../src/core/production/broll.ts";
@@ -14,6 +15,8 @@ const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uD
 const x = (n: number): string => "x".repeat(n);
 
 type Bag = Record<string, unknown>;
+
+const markText = (m: Mark): string => (m.kind === "text" ? m.text : "");
 
 function seeded(seed: number): (n: number) => number {
   let s = seed >>> 0;
@@ -122,14 +125,14 @@ test("a seeded fuzz: migrateRows leaves no lone half in a title, note, descripti
 
 test("picture annotation text is cut at 500 code points, without a lone half (#434)", () => {
   const mark = (text: string): Bag => ({ kind: "text", color: "#e5383b", size: 0.05, x: 0.1, y: 0.1, text: text });
-  const texts = normalizeMarks([mark(ACROSS(500)), mark("a" + HIGH + "b"), mark(" two\nlines ")]).map((m) => (m as Bag).text);
+  const texts = normalizeMarks([mark(ACROSS(500)), mark("a" + HIGH + "b"), mark(" two\nlines ")]).map(markText);
   assert.deepEqual(texts, [KEPT(500), "ab", " two\nlines "]);
 });
 
 test("an annotation text of only lone halves is kept as stored, not lost (#434)", () => {
   const mark = { kind: "text", color: "#e5383b", size: 0.05, x: 0.1, y: 0.1, text: " " + HIGH + " " };
-  assert.deepEqual(normalizeMarks([mark]).map((m) => (m as Bag).text), [" " + HIGH + " "]);
-  assert.deepEqual(normalizeMarks([Object.assign({}, mark, { text: x(499) + HIGH + HIGH })]).map((m) => (m as Bag).text), [x(499)]);
+  assert.deepEqual(normalizeMarks([mark]).map(markText), [" " + HIGH + " "]);
+  assert.deepEqual(normalizeMarks([Object.assign({}, mark, { text: x(499) + HIGH + HIGH })]).map(markText), [x(499)]);
 });
 
 test("a B-roll line's description and seed reference are cut at 2000 code points (#434)", () => {
