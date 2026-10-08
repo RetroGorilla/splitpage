@@ -791,7 +791,7 @@ function onRootInput(e) {
   maybeCaptureBroll(e, cellEl);
   maybeOpenPlainTag(e, cellEl);
   syncFieldFromDom(cellEl);
-  settleEndedComposition();
+  settleEndedComposition(e);
   afterScriptCellChange(cellEl);
 }
 
@@ -808,6 +808,7 @@ function afterScriptCellChange(cellEl) {
 
 var composingSince = null;
 var endedSince = null;
+var COMPOSITION_INPUTS = { insertCompositionText: true, deleteCompositionText: true, deleteByComposition: true, insertFromComposition: true };
 
 function onScriptComposition(e) {
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
@@ -818,7 +819,7 @@ function onScriptComposition(e) {
   }
   var since = composingSince;
   composingSince = null;
-  if (since === null || dropEmptyStepsSince(since)) return;
+  if (since === null || dropEmptyStepsSince(since, !e.data)) return;
   endedSince = e.data ? null : since;
 }
 
@@ -826,10 +827,10 @@ function onCompositionKeydown(e) {
   if (!e.isComposing && e.keyCode !== 229) endedSince = null;
 }
 
-function settleEndedComposition() {
+function settleEndedComposition(e) {
   var since = endedSince;
   endedSince = null;
-  if (since !== null) dropEmptyStepsSince(since);
+  if (since !== null) dropEmptyStepsSince(since, COMPOSITION_INPUTS[e.inputType] === true);
 }
 
 function onRootFocusOut(e) {

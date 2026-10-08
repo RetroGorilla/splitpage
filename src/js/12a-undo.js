@@ -216,6 +216,7 @@ export function createUndoHistory() {
   var done = [], undone = [];
   var serial = 0;
   var parked = null;
+  var current = null;
 
   function backAtPark(text) {
     var top = done[done.length - 1] || null;
@@ -258,6 +259,7 @@ export function createUndoHistory() {
         if (ins) last.endsInSpace = /\s$/.test(ins);
         if (last.from === to && cosmetic(last.steps[0])) {
           dropFrom(done.length - 1);
+          if (current && last === current.top) current.lost = below();
           unpark();
         } else if (parked) {
           unpark(to);
@@ -265,7 +267,10 @@ export function createUndoHistory() {
         return;
       }
     }
-    var entry = { n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null };
+    push({ n: ++serial, steps: steps, at: now, cell: cell, endsInSpace: /\s$/.test(ins), from: from, evicted: null });
+  }
+
+  function push(entry) {
     done.push(entry);
     if (done.length > MAX_ENTRIES) {
       entry.evicted = done.shift();
@@ -278,29 +283,74 @@ export function createUndoHistory() {
     for (var i = gone.length - 1; i >= 0; i--) if (gone[i].evicted) done.unshift(gone[i].evicted);
   }
 
-  function markCell(rowId, key, value) {
-    var top = done[done.length - 1] || null;
-    return {
-      n: serial, cell: rowId + "\u0000" + key, key: key, value: value,
-      top: top, after: top && top.steps[0].after, at: top && top.at, endsInSpace: top && top.endsInSpace
-    };
+  function below() {
+    var under = done[done.length - 1] || null;
+    return { under: under, after: under && under.steps[0].after };
   }
 
-  function dropEmptySince(mark) {
+  function fill(mark, value) {
+    var top = done[done.length - 1] || null;
+    mark.n = serial;
+    mark.value = value;
+    mark.top = top;
+    mark.after = top && top.steps[0].after;
+    mark.at = top && top.at;
+    mark.endsInSpace = top && top.endsInSpace;
+    mark.lost = null;
+    return mark;
+  }
+
+  function markCell(rowId, key, value) {
+    current = fill({ rowId: rowId, cell: rowId + "\u0000" + key, key: key, ended: false }, value);
+    return current;
+  }
+
+  function joinedTop(mark) {
+    var top = mark.top;
+    return !!top && onlyCell(top.steps) === mark.cell && (top.steps[0].after !== mark.after || top.at !== mark.at);
+  }
+
+  function putBack(mark) {
+    mark.top.steps[0].after = mark.after;
+    mark.top.at = mark.at;
+    mark.top.endsInSpace = mark.endsInSpace;
+  }
+
+  function remark(state) {
+    if (joinedTop(current)) putBack(current);
+    var rows = (state && state.rows) || [], value;
+    for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id === current.rowId) value = rows[i][current.key];
+    fill(current, value);
+  }
+
+  function dropEmptySince(mark, cancelled) {
+    if (mark !== current) return false;
+    mark.ended = true;
     var k = done.length;
     while (k > 0 && done[k - 1].n > mark.n) k--;
     var top = mark.top;
-    var joined = !!top && done[k - 1] === top && onlyCell(top.steps) === mark.cell &&
-      (top.steps[0].after !== mark.after || top.at !== mark.at);
+    var joined = done[k - 1] === top && joinedTop(mark);
+    var lost = !!mark.lost && (done[k - 1] || null) === mark.lost.under &&
+      (!mark.lost.under || mark.lost.under.steps[0].after === mark.lost.after);
     if (k === done.length && !joined) return false;
+    if (!joined && !lost && !cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: done[k].steps[0].before })) return false;
     for (var i = k; i < done.length; i++) if (onlyCell(done[i].steps) !== mark.cell) return false;
     var end = k < done.length ? done[done.length - 1] : top;
-    if (!cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: end.steps[0].after })) return false;
+    var after = end.steps[0].after;
+    var back = cosmetic({ op: "rowField", key: mark.key, before: mark.value, after: after });
+    if (!back && (!cancelled || k === done.length)) return false;
+    var from = projectionOf(mark.value);
+    var one = back ? null : {
+      n: done[k].n,
+      steps: [{ op: "rowField", rowId: end.steps[0].rowId, key: mark.key, before: mark.value, after: after }],
+      at: end.at, cell: mark.cell, endsInSpace: /\s$/.test(insertedText(from, projectionOf(after))), from: from, evicted: null
+    };
     dropFrom(k);
-    if (joined) {
-      top.steps[0].after = mark.after;
-      top.at = mark.at;
-      top.endsInSpace = mark.endsInSpace;
+    if (joined || lost) putBack(mark);
+    if (lost) push(top);
+    if (one) {
+      push(one);
+      return false;
     }
     unpark();
     return true;
@@ -311,12 +361,13 @@ export function createUndoHistory() {
     if (!entry) return { ok: false, empty: true };
     var steps = invert ? invertSteps(entry.steps) : entry.steps;
     var r = applyStepsLive(state, steps);
-    if (!r.ok) {
-      parked = null;
-      return { ok: false, reason: r.reason, steps: steps };
+    if (r.ok) to.push(entry);
+    else parked = null;
+    if (current && !current.ended) {
+      if (entry.n <= current.n) remark(state);
+      if (r.ok) current.ended = true;
     }
-    to.push(entry);
-    return { ok: true, steps: steps };
+    return r.ok ? { ok: true, steps: steps } : { ok: false, reason: r.reason, steps: steps };
   }
 
   function forget(touched) {
@@ -371,7 +422,7 @@ export function createUndoHistory() {
     breakCoalescing: function () { var last = done[done.length - 1]; if (last) last.cell = null; },
     markCell: markCell,
     dropEmptySince: dropEmptySince,
-    clear: function () { done.length = 0; undone.length = 0; parked = null; },
+    clear: function () { done.length = 0; undone.length = 0; parked = null; current = null; },
     sizes: function () { return { undo: done.length, redo: undone.length }; },
     top: function () { return done[done.length - 1] || null; },
     nextRedo: function () { return undone[undone.length - 1] || null; },
@@ -544,7 +595,7 @@ export function compositionUndoMark(rowId, key) {
   return history.markCell(rowId, key, value);
 }
 
-export function dropEmptyStepsSince(mark) { flushEdits(); return history.dropEmptySince(mark); }
+export function dropEmptyStepsSince(mark, cancelled) { flushEdits(); return history.dropEmptySince(mark, cancelled); }
 
 export function caretAfterStep(step) {
   function domChars(h) {
