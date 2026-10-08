@@ -149,17 +149,30 @@ eval window.__hostedTest.pointTabAt(__fakeServers.X)
 eval window.__hostedTest.clearToken()
 eval __run('tour')
 wait __shown('tour-overlay')
+jsclick #tour-next
+expect document.getElementById('tour-step').textContent === 'Step 2 of 5'
 eval window.__hostedTest.detect()
 wait __shown('pin-modal')
 expect __dialogs() === 'pin-modal'
-expect __shown('tour-overlay')
+expect !__shown('tour-overlay')
 eval __tidy()
 eval __run('servers')
-sleep 300
-expect __dialogs() === 'pin-modal'
-expect __toasts() === 'Finish or skip the tour first.'
-jsclick #tour-skip
-wait !__shown('tour-overlay')
-expect __dialogs() === 'pin-modal'
+wait __shown('connect-modal')
+expect __dialogs() === 'connect-modal,pin-modal'
+expect __toasts() === ''
+expect !__shown('tour-overlay')
+jsclick #connect-modal [data-connect-action="close"]
+wait !__shown('connect-modal')
+expect document.querySelectorAll('#toast-host .toast-action').length === 0
 key Escape
 wait __dialogs() === ''
+wait !!document.querySelector('#toast-host .toast-action')
+expect document.querySelector('#toast-host .toast').firstChild.textContent === 'The tour was paused.'
+expect document.querySelector('#toast-host .toast-action').textContent === 'Resume tour'
+expect !__shown('tour-overlay')
+jsclick #toast-host .toast-action
+wait __shown('tour-overlay')
+expect document.getElementById('tour-step').textContent === 'Step 2 of 5'
+expect document.querySelectorAll('#toast-host .toast:not(.is-leaving) .toast-action').length === 0
+jsclick #tour-skip
+wait !__shown('tour-overlay')

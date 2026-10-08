@@ -12,7 +12,7 @@ import {
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "./02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { cellSelection, editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
@@ -39,7 +39,7 @@ import {
   syncAnchorResolvedClasses,
   updateCommentsCount
 } from "./10-comments.js";
-import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
@@ -59,9 +59,10 @@ import {
   toggleMark,
   typingMarks
 } from "../core/text/edits.ts";
-import { toHtml } from "../core/text/html.ts";
 import { cellLength, projection } from "../core/text/runs.ts";
+import { cellRuns, cellTextCommand, sanitisedMediaHtml } from "../application/commands/cell-text.ts";
 import { fromHtml } from "../legacy/richtext.ts";
+import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 export { pad2 };
 
 var LINK_POPOVER_HTML =
@@ -704,19 +705,16 @@ export function renderAbsorbed() {
 }
 
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying || S.cellRepainting) return;
+  if (!cellEl.isConnected || S.undoApplying) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
   if (idx !== -1) {
     var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
     html = storedHtmlFromDom(html);
-    html = /<img|video-embed-card/.test(html) ? sanitizeHtml(html) : toHtml(fromHtml(html));
-    if (S.state.rows[idx][field] !== html) {
-      S.state.rows[idx][field] = html;
-      stampRow(S.state.rows[idx]);
-      markDirty();
-    }
+    var text = /<img|video-embed-card/.test(html) ? sanitisedMediaHtml(sanitizeHtml(html)) : cellRuns(fromHtml(html));
+    var outcome = runCommand(cellTextCommand(id, field, text, sessionTextPorts));
+    if (outcome.kind === "failed") throw outcome.error;
     noteFieldPainted(cellEl, field, S.state.rows[idx]);
   }
 }

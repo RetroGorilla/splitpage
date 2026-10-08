@@ -649,6 +649,15 @@ function commentText(value, max) {
     .slice(0, max);
 }
 
+function commentName(value, max) {
+  const text = commentText(value, Infinity).replace(/\p{Cs}/gu, "").trim();
+  let end = 0;
+  for (let n = 0; n < max && end < text.length; n++) {
+    end += text.codePointAt(end) > 0xffff ? 2 : 1;
+  }
+  return text.slice(0, end).trimEnd();
+}
+
 function commentIdOf(value) {
   const id = String(value == null ? "" : value);
   return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : "";
@@ -670,12 +679,12 @@ function cleanComment(input, now, fallbackAuthor) {
       : (input.field === "visualText" || input.field === "visualImage") ? input.field : "audioText",
     anchorId: onTitle ? null : (commentIdOf(input.anchorId) || id),
     quotedText: commentText(input.quotedText, COMMENT_QUOTE_MAX),
-    author: commentText(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
+    author: commentName(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
     body,
     resolved: false,
     resolvedBy: null,
     resolvedAt: null,
-    assignee: commentText(input.assignee, COMMENT_NAME_MAX),
+    assignee: commentName(input.assignee, COMMENT_NAME_MAX),
     createdAt: now,
     updatedAt: now,
     kind: input.kind === "conflict" ? "conflict" : "anchor",
@@ -691,7 +700,7 @@ function cleanReply(input, now, fallbackAuthor) {
   if (!body || body.length > COMMENT_HTML_MAX) return null;
   return {
     id,
-    author: commentText(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
+    author: commentName(input.author, COMMENT_NAME_MAX) || fallbackAuthor || "Anonymous",
     body,
     createdAt: now
   };
@@ -1394,7 +1403,7 @@ async function handleApi(req, res, url) {
 
     const body = await readBody(req, COMMENT_BODY);
     const now = new Date().toISOString();
-    const by = who.name || commentText(body && body.by, COMMENT_NAME_MAX);
+    const by = who.name || commentName(body && body.by, COMMENT_NAME_MAX);
 
     if (req.method === "PATCH") {
       if (!body || typeof body.resolved !== "boolean") {

@@ -3,7 +3,6 @@ import { updateScriptStats } from "./01-scene-status.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   inertBody,
-  plainText,
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
@@ -33,7 +32,7 @@ import {
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedName, cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -174,7 +173,7 @@ export function registryEntry(cat, name) {
 }
 
 export function registerProductionTag(cat, name) {
-  var rec = newRegistryTag(S.state.productionTags, cat, name);
+  var rec = newRegistryTag(S.state.productionTags, cat, cappedName(String(name == null ? "" : name), 80));
   if (rec) S.state.productionTags.push(rec);
 }
 
@@ -199,7 +198,7 @@ export function personById(id) {
 }
 
 export function findOrAddPerson(name) {
-  var clean = plainText(name).trim().slice(0, 60);
+  var clean = cappedText(name, 60);
   if (!clean) return "";
   var norm = normalizeTagName(clean);
   for (var i = 0; i < S.state.people.length; i++) {
@@ -768,7 +767,7 @@ function retagInHtml(html, cat, target, toName) {
 }
 
 export function renameTag(cat, oldName, newName) {
-  var clean = plainText(newName).trim().slice(0, 80);
+  var clean = cappedText(newName, 80);
   if (!clean) return false;
   if (registryKey(cat, clean) !== registryKey(cat, oldName)) {
     var collision = registryEntry(cat, clean);
@@ -890,7 +889,7 @@ export function openTagComposer(ctx) {
   pendingTag = ctx;
   document.getElementById("tag-quote").textContent = ctx.quotedText;
   var nameInput = document.getElementById("tag-name");
-  nameInput.value = ctx.quotedText.slice(0, 80);
+  nameInput.value = codePointPrefix(ctx.quotedText, 80);
   renderTagCategories(ctx.cat || "prop");
   refreshTagNameList();
   document.getElementById("tag-all").checked = false;
@@ -912,7 +911,7 @@ function selectedTagCategory() {
 export function applyTag() {
   if (!pendingTag) return;
   var cat = selectedTagCategory();
-  var name = plainText(document.getElementById("tag-name").value).trim().slice(0, 80);
+  var name = cappedText(document.getElementById("tag-name").value, 80);
   if (isBlankTagName(name)) { showToast("Give the label a name first.", "warn"); return; }
 
   var all = document.getElementById("tag-all").checked;

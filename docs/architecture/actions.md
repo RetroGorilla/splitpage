@@ -204,7 +204,7 @@ started over one of them.
 | `servers` | a dialog other than the join-PIN prompt, the tour |
 | `collaborate`, `paste`, `gdoc-import`, `server-open` | still loading, a dialog, the tour (then their own state) |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
-| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400) |
+| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400); the "Resume tour" toast that follows a join-PIN prompt which interrupted the tour asks this action too, so the same rule applies, and it continues at the interrupted step (#401) |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide shot scenes still act in the writer, Present, the
@@ -232,8 +232,11 @@ back in its field. Once the tab moves to another server (joining or using
 one, or going back to this copy), the prompt for the old server closes;
 joining the same server leaves it open. Over the prompt alone, every other
 command that opens a dialog is still refused, and so is a second Servers
-over the pair. The tour can no longer start over the prompt; a tour already
-showing when the prompt opens still refuses Servers.
+over the pair. The tour can no longer start over the prompt. A tour already
+showing when the prompt opens is interrupted instead (#401): it hides, Servers
+still opens in front of the prompt, and when the prompt closes a "The tour was
+paused." toast offers "Resume tour", which continues at the step the tour was
+on. Dismissing the toast leaves the tour ended.
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them
@@ -392,7 +395,7 @@ open when a command runs from the keyboard or a menu.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
-| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Servers, Help and Tour also from the Settings dialog's and the setup wizard's buttons; Servers (Join a shared session) and Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
+| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Servers, Help and Tour also from the Settings dialog's and the setup wizard's buttons; Servers (Join a shared session) and Tour also from the New Tab page; Tour also from the "Resume tour" toast after a join-PIN prompt interrupted the tour (#401) | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js`; the toast's button in `offerTourResume` (`20c-help.js`) |
 | `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
 | `new`, `paste`, `gdoc-import`, `drive-open`, `save-back`, `autosave`, `export-again`, `server-open`, `server-publish` | File menu, command menu, desktop menu; Google Drive also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, a `20s-settings.js` File menu click |

@@ -12,7 +12,7 @@ import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 import { idMap } from "../core/document/id-map.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";
 import { replaceText } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
@@ -33,6 +33,7 @@ function escapeRegExpLiteral(s) {
 }
 
 function findAllMatches(text, needle, matchCase) {
+  needle = withoutLoneSurrogates(needle);
   if (!needle) return [];
   var re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
   var out = [], m;
@@ -325,7 +326,7 @@ export function replaceAll() {
 var bulkTagCat = null;
 
 function bulkTagNeedle() {
-  return findNeedle().trim();
+  return withoutLoneSurrogates(findNeedle()).trim();
 }
 
 function bulkTagRowEl() { return document.getElementById("find-tag-row"); }

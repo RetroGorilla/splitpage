@@ -10,6 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
+import { cappedName, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
@@ -170,16 +171,17 @@ function brollLineMarker(items: BrollLineItem[]): BrollMarker | null {
   return m ? { id: "", key: null, rest: null, strip: m[0].length } : null;
 }
 
+function brollMarkerText(line: BrollLine, marker: BrollMarker): string {
+  return marker.rest ? brollLineText(marker.rest) : brollLineText(line.items).slice(marker.strip);
+}
+
 export function brollInCell(cell: readonly Run[]): BrollItem[] {
   const out: BrollDraft[] = [];
   let open: BrollDraft | null = null;
   brollCellLines(cell).forEach(function (line) {
     const marker = brollLineMarker(line.items);
     if (marker) {
-      const name = marker.rest
-        ? brollLineText(marker.rest)
-        : brollLineText(line.items).slice(marker.strip);
-      open = { id: marker.id, name: name.trim().slice(0, BROLL_NAME_MAX), desc: [] };
+      open = { id: marker.id, name: cappedName(brollMarkerText(line, marker), BROLL_NAME_MAX), desc: [] };
       out.push(open);
       return;
     }
@@ -204,7 +206,7 @@ export function brollPropsInCell(cell: readonly Run[]): string[][] {
     line.items.forEach(function (it) {
       const t = !it.atom && it.marks && it.marks.tag ? tagNameOf(it.marks.tag) : null;
       if (!t || t.cat !== "prop") return;
-      const name = t.name.trim().slice(0, BROLL_PROP_NAME_MAX);
+      const name = cappedName(t.name, BROLL_PROP_NAME_MAX);
       const key = normalizeTagName(name);
       if (!name || seen[key]) return;
       seen[key] = true;
@@ -241,6 +243,28 @@ export function collectBrollFromRows(rows: readonly ProductionRow[] | null | und
   return out;
 }
 
+export type BrollCutRename = { key: string | null; name: string };
+
+export type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
+
+export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): BrollCutRenames {
+  const live = collectBrollFromRows(rows, readers);
+  const lines: BrollCutRename[] = [];
+  const texts: Record<number, string[]> = Object.create(null);
+  live.forEach(function (found) {
+    if (found.id || found.name.length < BROLL_NAME_MAX - 3) return;
+    if (found.name.length < BROLL_NAME_MAX) { lines.push({ key: null, name: found.name }); return; }
+    if (!texts[found.rowIndex]) {
+      const row = (rows as readonly ProductionRow[])[found.rowIndex] as ProductionRow;
+      texts[found.rowIndex] = brollMarkerLines(readers.cellOf(row.visualText as string)).map(function (m) { return brollMarkerText(m.line, m.marker); });
+    }
+    const text = (texts[found.rowIndex] as string[])[found.ordinal] as string;
+    const old = unitCutName(text, BROLL_NAME_MAX);
+    lines.push({ key: old !== found.name ? normalizeTagName(old) : null, name: found.name });
+  });
+  return { held: brollHeldIds(live), lines: lines };
+}
+
 function brollRow(rows: readonly ProductionRow[], rowId: string): ProductionRow | null {
   let i = -1;
   if (rowId) {
@@ -263,7 +287,7 @@ export function brollSeedLocation(row: ProductionRow | null | undefined, readers
       if (!found && t.catId === "location") found = t.name;
     });
   });
-  return found.slice(0, 80);
+  return cappedName(found, 80);
 }
 
 function brollMatchRecord(

@@ -1,6 +1,6 @@
 import type { Frozen } from "../document/freeze.ts";
 import { idMap } from "../document/id-map.ts";
-import { cappedText, plainText } from "../document/text-policy.ts";
+import { cappedName, cappedText, unitCutName } from "../document/text-policy.ts";
 import {
   TAG_STATUS_IDS,
   mintTagId,
@@ -12,7 +12,7 @@ import {
 } from "../document/tags.ts";
 import type { TagCategoryId, TagName, TagStatusId } from "../document/tags.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
-import { editCues } from "../text/cues.ts";
+import { cuesInCell, editCues } from "../text/cues.ts";
 import { retag, setMark } from "../text/edits.ts";
 import type { CellRange } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
@@ -104,9 +104,10 @@ export function isBlankTagName(name: unknown): boolean {
 }
 
 export function newRegistryTag(registry: RegistryList, cat: string, name: string): NewRegistryTag | null {
-  if (isBlankTagName(name)) return null;
-  if (registryEntry(registry, cat, name)) return null;
-  return { id: mintTagId(cat, name, registry), cat: cat, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
+  const clean = cappedName(String(name == null ? "" : name), 80);
+  if (isBlankTagName(clean)) return null;
+  if (registryEntry(registry, cat, clean)) return null;
+  return { id: mintTagId(cat, clean, registry), cat: cat, name: clean, owner: "", notes: "", status: TAG_STATUS_IDS[0] };
 }
 
 export function collectTagsFromRows(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): TagGroup[] {
@@ -150,6 +151,27 @@ export function missingRegistryTags(
     out.push({ cat: t.catId, name: name, owner: "", notes: "", status: TAG_STATUS_IDS[0] });
   });
   return out;
+}
+
+export type CueCutRenames = { byOldCut: Record<string, string>; long: string[] };
+
+export function cueCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): CueCutRenames {
+  const byOldCut: Record<string, string> = Object.create(null), long: string[] = [];
+  (rows || []).forEach(function (row) {
+    TAG_FIELDS.forEach(function (field) {
+      const html = row[field];
+      const names = readers.cueNamesInField(html).filter(function (name) { return name.length >= 77; });
+      if (!names.length) return;
+      names.forEach(function (name) { long.push(name); });
+      if (!names.some(function (name) { return name.length >= 80; })) return;
+      cuesInCell(readers.cellOf(html as string)).forEach(function (c) {
+        const old = unitCutName(c.name, 80), name = cappedName(c.name, 80);
+        const key = normalizeTagName(old);
+        if (old !== name && key && !(key in byOldCut)) byOldCut[key] = name;
+      });
+    });
+  });
+  return { byOldCut: byOldCut, long: long };
 }
 
 export function registrySignature(tags: RegistryList): unknown[] {
@@ -354,7 +376,7 @@ export function planRegistryHealing(
 export function planQuickAdd(state: ValidatedDocument, readers: ProductionReaders, raw: string, index?: ProductionIndex): QuickAddPlan {
   const wanted = idMap<string>(), order: string[] = [];
   raw.split(/\r\n|\r|\n/).forEach(function (line) {
-    const name = plainText(line).trim().slice(0, 80);
+    const name = cappedText(line, 80);
     if (!name) return;
     const key = normalizeTagName(name);
     if (wanted[key]) return;
@@ -445,7 +467,7 @@ function writeTags(
   writeMedia: MediaTagWriter
 ): TagWrite {
   if (!found.length) return { hits: 0, html: html };
-  const clean = plainText(name).trim().slice(0, 80);
+  const clean = cappedText(name, 80);
   if (holdsMedia(html)) {
     const wrapped = writeMedia(html as string, cell, found, cat, clean);
     return wrapped === null ? { hits: 0, html: html } : { hits: found.length, html: wrapped };
@@ -541,7 +563,7 @@ export function retagCell(html: string, cat: string, target: string, toId: strin
     if (t && t.cat === cat && normalizeTagName(t.name) === target) cell = retag(cell, id, toId);
   });
   if (cat === "sound" && html.indexOf("audio-cue") !== -1) {
-    cell = editCues(cell, function (name) { return normalizeTagName(name.slice(0, 80)) === target; },
+    cell = editCues(cell, function (name) { return normalizeTagName(cappedName(name, 80)) === target; },
       toId === null ? null : (tagNameOf(toId) as TagName).name);
   }
   return toHtml(cell);

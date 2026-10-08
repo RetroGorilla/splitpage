@@ -114,7 +114,7 @@ test("a blank or whitespace-only name registers nothing, in any category (#298)"
   }
   assert.equal(newRegistryTag(registry, "gear", null as unknown as string), null);
   assert.equal(newRegistryTag(registry, "gear", undefined as unknown as string), null);
-  assert.equal(newRegistryTag([], "gear", " a ")?.name, " a ", "a name with words is registered as given");
+  assert.equal(newRegistryTag([], "gear", " a ")?.name, "a", "a name with words is registered trimmed, as cappedName leaves it (#344)");
   assert.equal(newRegistryTag([], "gear", "!!")?.name, "!!", "punctuation alone is a name");
   assert.equal(newRegistryTag([], "gear", "a​b")?.name, "a​b", "an invisible character inside a name is kept as it is");
 });
