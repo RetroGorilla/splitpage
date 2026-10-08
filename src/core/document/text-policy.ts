@@ -26,10 +26,15 @@ export function plainText(v: unknown): string {
 }
 
 const SURROGATE_RE = /[\uD800-\uDFFF]/;
+const LONE_SURROGATE_RE = /\p{Cs}/u;
 const LONE_SURROGATES_RE = /\p{Cs}/gu;
 
+export function hasLoneSurrogate(s: string): boolean {
+  return SURROGATE_RE.test(s) && LONE_SURROGATE_RE.test(s);
+}
+
 export function withoutLoneSurrogates(s: string): string {
-  return SURROGATE_RE.test(s) ? s.replace(LONE_SURROGATES_RE, "") : s;
+  return hasLoneSurrogate(s) ? s.replace(LONE_SURROGATES_RE, "") : s;
 }
 
 export function codePointPrefix(s: string, max: number): string {
