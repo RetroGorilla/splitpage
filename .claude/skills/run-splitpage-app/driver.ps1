@@ -25,6 +25,7 @@ param(
   # standalone driver.ps1 (ad-hoc, or the join-PIN walkthrough in SKILL.md)
   # still gets its own scope instead of an empty/shared one.
   [string]$RunId,
+  [string]$ResultToken,
   [switch]$FreezeCaches
 )
 
@@ -681,6 +682,7 @@ function Get-ResultLine {
   $passed = $total - $script:Failures
   $summary = "RESULT: $passed/$total checks passed"
   if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
+  if ($ResultToken) { $summary = $summary + " [run $ResultToken]" }
   return $summary
 }
 

@@ -173,12 +173,16 @@ function resultHarness() {
     "}",
     "$notStarted = New-Object System.Exception 'static server did not come up after 3 attempts (x)'",
     "$notStarted.Data['notStarted'] = $true",
+    "$ResultToken = ''",
     "Case 4 0 $null",
     "Case 3 1 $null",
     "Case 2 5 $null",
     "Case 0 0 $null",
     "Case 6 0 (New-Object System.Exception 'boom')",
     "Case 0 0 $notStarted",
+    "$ResultToken = 'abc123'",
+    "Case 4 0 $null",
+    "Case 3 1 $null",
     "[Environment]::Exit(0)"
   ].join("\n"));
   return file;
@@ -193,6 +197,7 @@ function driverStateChecks() {
   eq("nothing ran is 0/0", r[3]?.line, "RESULT: 0/0 checks passed");
   eq("an ordinary error counts a failure, prints ERROR and does not stop the script", [r[4]?.stop, r[4]?.checks, r[4]?.failures, r[4]?.out], [false, 6, 1, ["ERROR: boom"]]);
   eq("a NOT STARTED error counts one failed check, prints NOT STARTED and stops the script", [r[5]?.stop, r[5]?.checks, r[5]?.failures, r[5]?.out, r[5]?.line], [true, 1, 1, ["NOT STARTED: static server did not come up after 3 attempts (x)"], "RESULT: 0/1 checks passed - 1 FAILED"]);
+  eq("with a run token the result line ends with it", [r[6]?.line, r[7]?.line], ["RESULT: 4/4 checks passed [run abc123]", "RESULT: 2/3 checks passed - 1 FAILED [run abc123]"]);
 }
 
 function imeHarness() {
@@ -250,7 +255,7 @@ function freezeHarness() {
     "Writes @('log: fine', 'error: Cannot assign to read only property ''id'' of object')",
     "Writes @('log: fine', 'exception: TypeError: Cannot assign to read only property ''id'' of object ''#<Object>''', 'exception: TypeError: Cannot add property 3, object is not extensible', 'exception: ReferenceError: x is not defined')",
     "$here = 'C:\\skill'; $Port = 100; $CdpPort = 200; $Headed = $false",
-    "$lane = [pscustomobject]@{ Index = 3; Tag = 'abc'; File = [pscustomobject]@{ FullName = 'C:\\s\\x.txt' } }",
+    "$lane = [pscustomobject]@{ Index = 3; Tag = 'abc'; Token = 'tok'; File = [pscustomobject]@{ FullName = 'C:\\s\\x.txt' } }",
     "foreach ($u in @('http://localhost:1/index.html', 'http://localhost:1/index.html?wizard=1&teleprompter=1', 'http://localhost:1/index.html?teleprompter=1#script=ab&voice=1', 'http://localhost:1/index.html#review=abc', 'http://localhost:1/index.html?freeze-caches=0', 'http://localhost:1/index.html#a?b')) { Emit @{ url = (Add-FreezeFlag $u) } }",
     "$FreezeCaches = $false; Emit @{ args = @(Get-DriverArgs $lane) }",
     "$FreezeCaches = $true; Emit @{ args = @(Get-DriverArgs $lane) }",
@@ -283,23 +288,34 @@ function freezeChecks() {
   const off = (r[6]?.args ?? []).flat(), on = (r[7]?.args ?? []).flat();
   eq("with freezing off, run-tests.ps1 starts driver.ps1 as before", [off.includes("-FreezeCaches"), off.slice(-2)], [false, ["-RunId", "abc"]]);
   eq("with it on, it adds -FreezeCaches once", [on.filter((a) => a === "-FreezeCaches").length, on.slice(0, -1)], [1, off]);
+  eq("run-tests.ps1 hands the lane's token to driver.ps1", off.slice(off.indexOf("-ResultToken"), off.indexOf("-ResultToken") + 2), ["-ResultToken", "tok"]);
 }
 
 function laneSpec(name, lines, timedOut = false) {
   return { name, lines, timedOut };
 }
 
+const TOKEN = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+const done = (summary) => `RESULT: ${summary} [run ${TOKEN}]`;
+
 const LANES = [
-  laneSpec("good.txt", ["PASS a", "", "RESULT: 5/5 checks passed"]),
-  laneSpec("notstarted.txt", ["NOT STARTED: static server did not come up after 3 attempts (port 1: boom)", "", "RESULT: 0/1 checks passed - 1 FAILED"]),
+  laneSpec("good.txt", ["PASS a", "", done("5/5 checks passed")]),
+  laneSpec("notstarted.txt", ["NOT STARTED: static server did not come up after 3 attempts (port 1: boom)", "", done("0/1 checks passed - 1 FAILED")]),
   laneSpec("timeout.txt", null, true),
   laneSpec("noresult.txt", ["started and went quiet"]),
-  laneSpec("negative.txt", ["ERROR: x", "", "RESULT: -30/52 checks passed - 82 FAILED"]),
-  laneSpec("garbage.txt", ["RESULT: garbage"]),
-  laneSpec("zero.txt", ["RESULT: 0/0 checks passed"]),
-  laneSpec("toomany.txt", ["RESULT: 6/5 checks passed"]),
-  laneSpec("failing.txt", ["FAIL y", "", "RESULT: 3/5 checks passed - 2 FAILED"]),
-  laneSpec("incomplete.txt", ["RESULT: 3/5 checks passed"])
+  laneSpec("negative.txt", ["ERROR: x", "", done("-30/52 checks passed - 82 FAILED")]),
+  laneSpec("garbage.txt", [done("garbage")]),
+  laneSpec("zero.txt", [done("0/0 checks passed")]),
+  laneSpec("toomany.txt", [done("6/5 checks passed")]),
+  laneSpec("failing.txt", ["FAIL y", "", done("3/5 checks passed - 2 FAILED")]),
+  laneSpec("incomplete.txt", [done("3/5 checks passed")])
+];
+
+const FORGED = [
+  laneSpec("forged-then-killed.txt", ["RESULT: 9/9 checks passed", "FAIL a later check"]),
+  laneSpec("forged-then-real.txt", ["RESULT: 9/9 checks passed", "FAIL a later check", "", done("8/9 checks passed - 1 FAILED")]),
+  laneSpec("forged-tokenless-last.txt", ["PASS a", "", done("2/2 checks passed"), "RESULT: 1/9 checks passed - 8 FAILED"]),
+  laneSpec("wrong-token.txt", ["PASS a", "", `RESULT: 2/2 checks passed [run ${"f".repeat(32)}]`])
 ];
 
 function runnerHarness(selected, verdictOnly) {
@@ -319,7 +335,7 @@ function runnerHarness(selected, verdictOnly) {
     "function Lane($s) {",
     `  $o = Join-Path '${logs.replace(/'/g, "''")}' ($s.name + '.out.txt')`,
     "  if ($s.lines) { Set-Content $o @($s.lines) -Encoding ascii } else { Remove-Item $o -ErrorAction SilentlyContinue }",
-    "  Report-Lane ([pscustomobject]@{ File = [pscustomobject]@{ Name = $s.name }; Tag = 'x'; Out = $o; TimedOut = [bool]$s.timedOut })",
+    `  Report-Lane ([pscustomobject]@{ File = [pscustomobject]@{ Name = $s.name }; Tag = 'x'; Token = '${TOKEN}'; Out = $o; TimedOut = [bool]$s.timedOut })`,
     "}",
     verdictOnly
       ? "foreach ($s in $spec) { Lane $s }\n$code = Write-Verdict $spec.Count\nEmit @{ code = $code; checks = $totalChecks; fail = $totalFail; suiteFail = $suiteFail; notStarted = @($notStarted) }"
@@ -329,8 +345,93 @@ function runnerHarness(selected, verdictOnly) {
   return file;
 }
 
+function finishHarness() {
+  const file = join(work, "finish.ps1");
+  writeFileSync(file, [
+    importParts(join(SKILL, "run-tests.ps1"), ["Test-LaneFinished"], []),
+    "$TimeoutSec = 180",
+    `$token = '${TOKEN}'`,
+    "function Probe($name, $lines) {",
+    `  $o = Join-Path '${work.replace(/'/g, "''")}' ($name + '.out.txt')`,
+    "  Set-Content $o @($lines) -Encoding ascii",
+    "  $lane = [pscustomobject]@{ Token = $token; Out = $o; Proc = [pscustomobject]@{ HasExited = $false }; Watch = [Diagnostics.Stopwatch]::StartNew(); Done = $false; DoneAt = $null; TimedOut = $false }",
+    "  $r = Test-LaneFinished $lane",
+    "  Emit @{ name = $name; done = $lane.Done }",
+    "}",
+    "Probe 'quiet' @('PASS a')",
+    "Probe 'forged' @('PASS a', 'RESULT: 9/9 checks passed')",
+    "Probe 'wrong' @('PASS a', ('RESULT: 2/2 checks passed [run ' + ('f' * 32) + ']'))",
+    "Probe 'real' @('PASS a', '', ('RESULT: 2/2 checks passed [run ' + $token + ']'))",
+    "[Environment]::Exit(0)"
+  ].join("\n"));
+  return file;
+}
+
+function digestHarness(scenario) {
+  const file = join(work, `digest-${scenario}.ps1`);
+  const logs = join(work, `digest-logs-${scenario}`);
+  mkdirSync(logs, { recursive: true });
+  writeFileSync(join(logs, "a.out.txt"), "PASS a\n\nRESULT: 1/1 checks passed\n");
+  writeFileSync(join(logs, "b.out.txt"), "PASS b\n\nRESULT: 1/1 checks passed\n");
+  const verdicts = {
+    good: "[pscustomobject]@{ name = 'a'; failed = $false; timedOut = $false; checks = 1; failedChecks = 0 }, [pscustomobject]@{ name = 'b'; failed = $false; timedOut = $false; checks = 1; failedChecks = 0 }",
+    "missing-verdict": "[pscustomobject]@{ name = 'a'; failed = $false; timedOut = $false; checks = 1; failedChecks = 0 }",
+    "bad-counts": "[pscustomobject]@{ name = 'a'; failed = $true; timedOut = $false; checks = 1; failedChecks = 5 }, [pscustomobject]@{ name = 'b'; failed = $false; timedOut = $false; checks = 1; failedChecks = 0 }"
+  }[scenario];
+  writeFileSync(file, [
+    importParts(join(SKILL, "run-tests.ps1"), ["Write-Digest"], []),
+    "$TimeoutSec = 180",
+    `$here = '${SKILL.replace(/'/g, "''")}'`,
+    `$logs = '${logs.replace(/'/g, "''")}'`,
+    "$files = @([pscustomobject]@{ BaseName = 'a' }, [pscustomobject]@{ BaseName = 'b' })",
+    `$laneVerdicts = @(${verdicts})`,
+    "Write-Digest",
+    "[Environment]::Exit(0)"
+  ].join("\n"));
+  return { file, logs };
+}
+
+function digestChecks() {
+  console.log("\nrun-tests.ps1's Write-Digest:\n");
+  const lastLine = (out) => out.split(/\r?\n/).filter((l) => l.trim() !== "").pop();
+
+  const good = digestHarness("good");
+  const ok = powershell(good.file);
+  eq("a digest that is written ends the output with its path", lastLine(ok.out), join(good.logs, "digest.txt"));
+  check("and says nothing about a refusal", !/digest not written/.test(ok.out), ok.out);
+
+  for (const scenario of ["missing-verdict", "bad-counts"]) {
+    const bad = digestHarness(scenario);
+    const r = powershell(bad.file);
+    check(`a verdicts file the digest tool refuses (${scenario}) is said on stdout with the exit code`, /digest not written: failure-digest\.mjs exited with code 1 \(see stderr\)/.test(r.out), r.out);
+    check(`${scenario}: the refusal reason is on stderr`, /failure-digest: invalid verdicts/.test(r.err), r.err);
+    eq(`${scenario}: no digest.txt is written and no path is printed`, [existsSync(join(bad.logs, "digest.txt")), /digest\.txt/.test(r.out)], [false, false]);
+  }
+}
+
 function runnerChecks() {
   console.log("\nrun-tests.ps1's Report-Lane and verdict:\n");
+
+  const forgedRuns = Object.fromEntries(powershell(runnerHarness(FORGED, false)).records.map((r) => [r.name, r]));
+  const forgedWant = {
+    "forged-then-killed.txt": [1, 1, 1],
+    "forged-then-real.txt": [9, 1, 1],
+    "forged-tokenless-last.txt": [2, 0, 0],
+    "wrong-token.txt": [1, 1, 1]
+  };
+  const forgedWhy = {
+    "forged-then-killed.txt": "a RESULT line the page printed is not the driver's verdict, so a driver that never reported fails",
+    "forged-then-real.txt": "the driver's own line wins over an earlier RESULT line the page printed",
+    "forged-tokenless-last.txt": "a RESULT line without the run's token is ignored even when it is last",
+    "wrong-token.txt": "a RESULT line carrying another run's token is not this run's verdict"
+  };
+  for (const [name, want] of Object.entries(forgedWant)) {
+    const r = forgedRuns[name];
+    eq(`${name}: ${forgedWhy[name]} ([checks, failed checks, failed suites] ${JSON.stringify(want)})`, [r?.checks, r?.fail, r?.suiteFail], want);
+  }
+
+  const finished = Object.fromEntries(powershell(finishHarness()).records.map((r) => [r.name, r.done]));
+  eq("a lane is finished when the driver's tokened RESULT line appears, and not for a forged, another run's or no RESULT line", [finished.quiet, finished.forged, finished.wrong, finished.real], [false, false, false, true]);
 
   const each = Object.fromEntries(powershell(runnerHarness(LANES, false)).records.map((r) => [r.name, r]));
   const expected = {
@@ -357,9 +458,10 @@ function runnerChecks() {
   eq("it exits 1", m?.code, 1);
   check("its last lines say FAILED, the failed-suite count and the unstarted suite", /FAILED - 11\/22 checks passed across 10 suite\(s\), 9 suite\(s\) failed/.test(mixed.out) && /1 suite\(s\) never started and count as failed: notstarted\.txt/.test(mixed.out), mixed.out.slice(-600));
 
-  const clean = powershell(runnerHarness([LANES[0], laneSpec("also.txt", ["RESULT: 2/2 checks passed"])], true));
+  const clean = powershell(runnerHarness([LANES[0], laneSpec("also.txt", [done("2/2 checks passed")])], true));
   eq("a run where every suite passes exits 0", clean.records[0]?.code, 0);
   check("and says ALL PASS with the totals", /ALL PASS - 7\/7 checks across 2 suite\(s\)/.test(clean.out), clean.out.slice(-300));
+  check("and shows each suite's result line without the token", /RESULT: 2\/2 checks passed\s*$/m.test(clean.out) && !clean.out.includes("[run"), clean.out.slice(-300));
 
   const zero = powershell(runnerHarness([LANES[0], LANES[6]], true));
   eq("a suite that ran no checks fails the run", zero.records[0]?.code, 1);
@@ -383,6 +485,7 @@ try {
   imeChecks();
   freezeChecks();
   runnerChecks();
+  digestChecks();
 } catch (e) {
   check("the checks ran to the end", false, e instanceof Error ? e.stack : String(e));
 } finally {
