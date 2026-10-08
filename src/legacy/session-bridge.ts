@@ -86,6 +86,10 @@ export function runCommand(command: Command): CommandOutcome {
   return session.run(command);
 }
 
+export function editAllowed(): boolean {
+  return given.edit().allowed;
+}
+
 export function provideRefreshRunner(run: (jobs: ReadonlySet<string>) => void): void {
   refreshRunner = run;
 }
