@@ -118,7 +118,7 @@ function bookkeeping() {
   };
 }
 
-async function bothWays(where, prepare, run, how = "late") {
+async function bothWays(where, prepare, run, how = "late", renders = 1) {
   const seen = [];
   for (const broken of [false, true]) {
     const ctx = await prepare();
@@ -128,7 +128,7 @@ async function bothWays(where, prepare, run, how = "late") {
     try { out = await logging(() => run(ctx)); } finally { unbreak(); }
     await idle();
     assert.equal(out.threw, null, label + " threw: " + (out.threw && out.threw.stack));
-    assert.deepEqual(out.logged, broken ? [BROKE] : [], label + ": logged");
+    assert.deepEqual(out.logged, broken ? Array(renders).fill(BROKE) : [], label + ": logged");
     assert.equal(redrawToasts().length, broken ? 1 : 0, label + ": the redraw toast");
     seen.push({ value: out.value, book: bookkeeping(), more: ctx && ctx.observe ? ctx.observe() : null });
   }
@@ -352,4 +352,30 @@ test("the redraw toast is a sticky error with a Redraw button: Redraw while rend
   assert.equal(redrawToasts().length, 0);
   assert.equal(document.getElementById("doc-title").value, "Redrawn");
   assert.equal(cell().textContent, "Theirs, redrawn.");
+});
+
+test("a desktop file draft over an untouched file whose render throws still restores the changes and marks them unsaved (#418)", async () => {
+  const { setHome } = await import("../js/_home.js");
+  const seen = await bothWays("file draft", () => {
+    fresh("Before the file draft");
+    const disk = table304Document("On disk");
+    const mine = table304Document("On disk");
+    mine.rows[0].audioText = "Typed before the crash.";
+    const was = S.DESKTOP;
+    S.DESKTOP = {
+      readFile: async () => {
+        S.DESKTOP = was;
+        return { name: "guard.splitpage", bytes: new TextEncoder().encode(JSON.stringify(disk)), lastModified: 5 };
+      }
+    };
+    return {
+      draft: { header: { origin: { kind: "file", fileName: "guard.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(disk), file: { id: "f-guard", name: "guard.splitpage" } },
+      observe: () => { const book = S.dirty; clearDirty(); setHome("none"); return book; }
+    };
+  }, (ctx) => applyTakenDraft(ctx.draft), "late", 2);
+  assert.equal(seen.value, "applied");
+  assert.equal(seen.more, true);
+  assert.equal(seen.book.rows[0], "Typed before the crash.");
+  assert.equal(seen.book.toasts.length, 1);
+  assert.match(seen.book.toasts[0], /^Restored your unsaved changes to On disk/);
 });
