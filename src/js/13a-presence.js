@@ -19,7 +19,7 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 
 var presenceLastActive;
 
@@ -95,7 +95,7 @@ export function recordMyColor(state) {
   }
   var next = {};
   if (map) Object.keys(map).forEach(function (k) { if (k !== have) next[k] = map[k]; });
-  next[name.slice(0, 80)] = color;
+  next[cappedName(name, 80)] = color;
   state.personColors = normalizePersonColors(next);
   return true;
 }

@@ -3,7 +3,6 @@ import { findRowIndex } from "./03-sync.js";
 import {
   ensureTrailingCaretSpot,
   inertBody,
-  plainText,
   sanitizeHtml
 } from "./04-richtext.js";
 import { render } from "./05-render.js";
@@ -31,7 +30,7 @@ import {
   brollPropKey,
   normalizeBrollProps
 } from "../core/document/broll.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import {
   anchorBrollCell,
   brollAnchorTodo,
@@ -201,7 +200,7 @@ export function brollEntries(readOnly) {
 
 export function addBrollProp(shotId, rawName) {
   var rec = brollRecord(shotId);
-  var name = plainText(rawName).trim().slice(0, BROLL_PROP_NAME_MAX);
+  var name = cappedText(rawName, BROLL_PROP_NAME_MAX);
   if (!rec || !name) return false;
   var entry = registryEntry("prop", name);
   if (!entry) {

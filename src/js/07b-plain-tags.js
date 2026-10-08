@@ -8,7 +8,7 @@ import {
   updateTagBadges
 } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText, replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
 import { fromHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
@@ -48,7 +48,7 @@ export function plainTagPhrase(typed) {
   if (isBlankTagName(text)) return null;
   var lead = s.length - s.replace(/^\s+/, "").length;
   var trail = s.length - s.replace(/\s+$/, "").length;
-  var name = text.replace(/\s+/g, " ").slice(0, NAME_MAX).trim();
+  var name = cappedName(text.replace(/\s+/g, " "), NAME_MAX);
   return { lead: lead, text: text, trail: trail, name: name };
 }
 

@@ -1,7 +1,3 @@
-# An edit never splits an emoji (#322; src/core/text/edits.ts): a tag name cut
-# at 80 UTF-16 units can end in half an emoji, and the Production panel's
-# "Tag all N mentions" then tags a range that ends between the two halves.
-# The tag takes the whole emoji, so no half is left in or out of the tag.
 # Then a caret or a selection set by code inside a pair: paste, cut, Alt+Enter
 # and a paste into a comment box each keep the emoji single and whole.
 #
@@ -14,7 +10,7 @@ eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undo
 eval (function(){ var s = JSON.parse(F.buildSplitpage()); s.title = 'Emoji tag'; s.rows = [ { id: 'r1', status: 'todo', visualText: 'x'.repeat(79) + GRIN + ' more', audioText: '' }, { id: 'r2', status: 'todo', visualText: 'Close on the lake.', audioText: '' } ]; s.productionTags = [ { cat: 'prop', name: NAME, owner: '', notes: '', status: 'needed' } ]; s.comments = []; s.brollShots = []; F.openFile(new File([JSON.stringify(s)], 'emoji.splitpage')); return true; })()
 wait F.state().title === 'Emoji tag' && document.querySelectorAll('#rows .row').length === 2
 sleep 400
-expect F.state().productionTags.some(function (t) { return t.name === NAME; })
+expect F.state().productionTags.some(function (t) { return t.name === 'x'.repeat(79); }) && !F.state().productionTags.some(function (t) { return LONE.test(t.name); })
 expect loose() === 0
 eval (function(){ U.flush(); window.__before = F.state().rows[0].visualText; window.__n = U.sizes().undo; return true; })()
 
@@ -27,7 +23,7 @@ jsclick [data-action="tag-all-mentions"]
 sleep 500
 
 expect anchors().length === 1
-expect anchors()[0].textContent === 'x'.repeat(79) + GRIN
+expect anchors()[0].textContent === 'x'.repeat(79)
 expect loose() === 0
 expect document.querySelector('#rows .row').textContent.indexOf('x'.repeat(79) + GRIN + ' more') !== -1
 expect U.sizes().undo === window.__n + 1

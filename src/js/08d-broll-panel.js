@@ -35,7 +35,7 @@ import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
@@ -816,7 +816,7 @@ function bulkAssign(personId) {
 }
 
 function bulkLocation(name) {
-  var clean = plainText(name).trim().slice(0, 80);
+  var clean = cappedText(name, 80);
   bulkUpdate(function (rec) {
     if ((rec.location || "") === clean) return false;
     rec.location = clean;
@@ -878,7 +878,7 @@ function addBrollFromPanel() {
   if (reviewBlocked()) return;
   var input = document.getElementById("broll-add-input");
   if (!input) return;
-  var name = plainText(input.value).trim().slice(0, BROLL_NAME_MAX);
+  var name = cappedText(input.value, BROLL_NAME_MAX);
   if (!name) return;
   var rec = newBrollRecord({ name: name, origin: "list" });
   input.value = "";
@@ -916,14 +916,14 @@ function commitLocation(input) {
   var id = input.getAttribute("data-id");
   var rec = brollRecord(id);
   editingLocFor = null;
-  var clean = plainText(input.value).trim().slice(0, 80);
+  var clean = cappedText(input.value, 80);
   if (rec && rec.location !== clean) updateRecord(id, { location: clean });
   else renderBrollViews();
 }
 
 function renameShot(id, box) {
   var e = entryById(id);
-  var next = box ? plainText(box.value).trim().slice(0, BROLL_NAME_MAX) : "";
+  var next = box ? cappedText(box.value, BROLL_NAME_MAX) : "";
   renamingId = null;
   breakUndoCoalescing();
   if (e && next && next !== e.name && renameBrollInScript(e, next)) {
