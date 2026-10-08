@@ -221,7 +221,7 @@ test("an empty script is one page: its title, its facts, and no more", () => {
 test("a long title of emoji is shortened by whole characters, never half of one (#434)", () => {
   const grin = String.fromCodePoint(0x1F600);
   for (let lead = 0; lead < 4; lead++) {
-    S.state = migrateRows({ schema: 2, title: "i".repeat(lead) + (grin.repeat(3) + " ").repeat(30).trim(), comments: [],
+    S.state = migrateRows({ schema: 2, title: "Title " + "i".repeat(lead) + grin.repeat(30) + " end i" + grin.repeat(60), comments: [],
       rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
     const lines = read(buildPdf(null)).pages[0].texts.filter((o) => o.size === 20);
     assert.equal(lines.length, 2);

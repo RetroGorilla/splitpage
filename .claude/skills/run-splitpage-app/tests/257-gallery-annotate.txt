@@ -307,6 +307,20 @@ click #annotate-cancel
 click #annotate-cancel
 wait AM().hidden
 eval document.documentElement.removeAttribute('data-theme')
+eval clearToasts()
+click [data-gact="annotate"]
+wait !AM().hidden && A() && A().ready && A().marks.length === 1
+click [data-tool="text"]
+mouse down pt(0.1, 0.1)
+mouse up pt(0.1, 0.1)
+wait !!document.querySelector('.annotate-textbox')
+eval (function(){ document.querySelector('.annotate-textbox').value = 'x'.repeat(499) + String.fromCodePoint(0x1F600) + 'y'; return true; })()
+key Escape
+wait !document.querySelector('.annotate-textbox') && A().marks.length === 2
+expect A().marks[1].text === 'x'.repeat(499) + String.fromCodePoint(0x1F600)
+click #annotate-cancel
+click #annotate-cancel
+wait AM().hidden
 
 # ---- a review session: no Annotate -------------------------------------------------------------------
 key Escape
