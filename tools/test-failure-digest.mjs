@@ -185,7 +185,7 @@ eq("identical FAIL lines are each shown once", lineCount(sameText.text, "FAIL x"
 
 const good = { name: "01-core", failed: false, timedOut: false, checks: 2, failedChecks: 0 };
 const bad = (patch, drop) => {
-  const entry = { ...good, ...patch };
+  const entry = { ...good, name: "02-bad", ...patch };
   for (const key of drop ?? []) delete entry[key];
   return { timeoutSec: 9, suites: [good, entry] };
 };
@@ -199,21 +199,22 @@ for (const field of ["name", "failed", "timedOut", "checks", "failedChecks"]) {
   check(`an entry with no ${field} field is refused, naming the entry and the field`, message !== null && message.includes("suites[1]") && message.includes(`"${field}"`), message);
 }
 check("the refusal names the suite by its name when it has one", problem(bad({ name: "05-x" }, ["failed"])).includes("05-x"), problem(bad({ name: "05-x" }, ["failed"])));
-for (const [what, patch] of [
-  ["a string failed flag", { failed: "false" }],
-  ["a null failed flag", { failed: null }],
-  ["a numeric timedOut flag", { timedOut: 0 }],
-  ["a string check count", { checks: "2" }],
-  ["a fractional check count", { checks: 1.5 }],
-  ["a negative check count", { checks: -1 }],
-  ["a null failed-check count", { failedChecks: null }],
-  ["more failed checks than checks", { checks: 2, failedChecks: 3 }],
-  ["a passing suite that has failed checks", { failed: false, failedChecks: 1 }],
-  ["a timed-out suite that is not marked failed", { failed: false, timedOut: true, checks: 1, failedChecks: 0 }],
-  ["an empty name", { name: "" }],
-  ["a numeric name", { name: 7 }]
+for (const [what, patch, field] of [
+  ["a string failed flag", { failed: "false" }, "failed"],
+  ["a null failed flag", { failed: null }, "failed"],
+  ["a numeric timedOut flag", { timedOut: 0 }, "timedOut"],
+  ["a string check count", { checks: "2" }, "checks"],
+  ["a fractional check count", { checks: 1.5 }, "checks"],
+  ["a negative check count", { checks: -1 }, "checks"],
+  ["a null failed-check count", { failedChecks: null }, "failedChecks"],
+  ["more failed checks than checks", { failed: true, checks: 2, failedChecks: 3 }, "failedChecks"],
+  ["a passing suite that has failed checks", { failed: false, failedChecks: 1 }, "failedChecks"],
+  ["a timed-out suite that is not marked failed", { failed: false, timedOut: true, checks: 1, failedChecks: 0 }, "timedOut"],
+  ["an empty name", { name: "" }, "name"],
+  ["a numeric name", { name: 7 }, "name"]
 ]) {
-  eq(`${what} is refused`, problem(bad(patch)) !== null, true);
+  const message = problem(bad(patch));
+  check(`${what} is refused, naming the field`, message !== null && message.includes("suites[1]") && message.includes(`"${field}"`), message);
 }
 const alone = (patch) => problem({ timeoutSec: 9, suites: [{ ...good, ...patch }] });
 eq("a result line that is a string, null or left out is accepted", [alone({ result: "RESULT: 2/2 checks passed" }), alone({ result: null }), alone({})], [null, null, null]);
