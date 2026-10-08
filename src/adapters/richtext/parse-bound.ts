@@ -83,7 +83,7 @@ function attributesOf(tag: string): Attribute[] {
 interface Formatting {
   readonly at: number;
   readonly name: string;
-  tag: string | null;
+  readonly tag: string | null;
 }
 
 interface Scan {
@@ -102,24 +102,25 @@ function scan(html: string): Scan {
   const found: Formatting[] = [];
   let tags = 0;
   let link = false;
-  let open: Formatting | null = null;
-  for (let at = 0; at < html.length; at++) {
-    const c = html.charCodeAt(at);
-    if (c === 60) {
-      tags++;
-      open = null;
-      FORMATTING_START.lastIndex = at;
-      const name = FORMATTING_START.exec(html);
-      if (!name) continue;
+  let end = -1;
+  for (let at = html.indexOf("<"); at >= 0;) {
+    tags++;
+    const next = html.indexOf("<", at + 1);
+    FORMATTING_START.lastIndex = at;
+    const name = FORMATTING_START.exec(html);
+    if (name) {
       const tagName = name[1] as string;
-      if (tagName === "a" || tagName === "A") { link = true; continue; }
-      open = { at: at, name: tagName, tag: null };
-      found.push(open);
-    } else if (c === 62 && open) {
-      const tag = html.slice(open.at, at + 1);
-      if (endsAtLastChar(tag)) open.tag = tag;
-      open = null;
+      if (tagName === "a" || tagName === "A") link = true;
+      else {
+        if (end < at) {
+          const close = html.indexOf(">", at);
+          end = close < 0 ? Infinity : close;
+        }
+        const tag = end < html.length && (next < 0 || end < next) ? html.slice(at, end + 1) : null;
+        found.push({ at: at, name: tagName, tag: tag !== null && endsAtLastChar(tag) ? tag : null });
+      }
     }
+    at = next;
   }
   return { tags: tags, link: link, found: found };
 }
@@ -180,6 +181,7 @@ function parsedLimit(inputLength: number): number {
 
 function shellSize(el: Element): number {
   let n = 2 * el.localName.length + 5;
+  if (!el.hasAttributes()) return n;
   const attrs = el.attributes;
   for (let i = 0; i < attrs.length; i++) {
     const a = attrs[i] as Attr;
@@ -192,24 +194,23 @@ function isTemplate(el: Element): el is HTMLTemplateElement {
   return el.localName === "template" && "content" in el;
 }
 
+const MEASURED = 0x1 | 0x4 | 0x80;
+
 function parsedPast(root: Node, limit: number): boolean {
   const roots: Node[] = [root];
   let size = 0;
   while (roots.length) {
     const top = roots.pop() as Node;
-    let node: Node | null = top.firstChild;
-    while (node) {
+    const walker = (top.ownerDocument as Document).createTreeWalker(top, MEASURED);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (node.nodeType === 1) {
         const el = node as Element;
         size += shellSize(el);
         if (isTemplate(el)) roots.push(el.content);
       } else {
-        size += (node as CharacterData).data.length;
+        size += (node as CharacterData).length;
       }
       if (size > limit) return true;
-      if (node.firstChild) { node = node.firstChild; continue; }
-      while (node && node !== top && !node.nextSibling) node = node.parentNode;
-      node = node && node !== top ? node.nextSibling : null;
     }
   }
   return false;
