@@ -6,7 +6,7 @@ import type { Run } from "../../core/text/runs.ts";
 import { createCellReader, decodeBody } from "./decode.ts";
 import type { CellReader } from "./decode.ts";
 import { walkToMd } from "./markdown.ts";
-import { imageRefOf, videoCardElement, walkSanitize } from "./sanitize.ts";
+import { imageRefOf, splitBudget, videoCardElement, walkSanitize } from "./sanitize.ts";
 
 export type { CellReader } from "./decode.ts";
 
@@ -42,10 +42,11 @@ export function createRichText(ports: RichTextPorts): RichText {
   }
 
   function sanitize(html: unknown): string {
-    const body = inertBody(html);
+    const text = html == null ? "" : String(html);
+    const body = inertBody(text);
     const doc = body.ownerDocument;
     const out = doc.createElement("div");
-    walkSanitize(body, out, { doc: doc, images: images, ids: ids });
+    walkSanitize(body, out, { doc: doc, images: images, ids: ids, split: splitBudget(text.length) });
     return out.innerHTML;
   }
 
