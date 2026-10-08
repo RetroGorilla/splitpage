@@ -570,7 +570,6 @@
     {"rule":"state-write","source":"src/js/18-local-files.js","target":"global:S.state"},
     {"rule":"state-write","source":"src/js/18b-file-menu.js","target":"global:S.docIdWrittenOut"},
     {"rule":"state-write","source":"src/js/18b-file-menu.js","target":"global:S.state"},
-    {"rule":"state-write","source":"src/js/19-writer.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/19-writer.js","target":"global:S.writerLastCell"},
     {"rule":"state-write","source":"src/js/20-teleprompter.js","target":"global:S.finalTranscript"},
     {"rule":"state-write","source":"src/js/20-teleprompter.js","target":"global:S.interimTranscript"},
