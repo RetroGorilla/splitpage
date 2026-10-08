@@ -82,20 +82,29 @@ function keptAsStored(text: string, healed: string, max: number): string {
 export type NameKey = (name: string, at: number) => string;
 
 export function settledNames(texts: readonly string[], max: number, keyOf: NameKey, wanted?: readonly (string | undefined)[]): string[] {
-  const out: string[] = [], taken: Record<string, boolean> = Object.create(null), open: number[] = [];
+  const out: string[] = [], taken: Record<string, boolean> = Object.create(null), asked: Record<string, boolean> = Object.create(null);
+  const open: number[] = [], heal: number[] = [];
   texts.forEach(function (text, at) {
     const name = cappedName(text, max);
     out.push(name);
-    if ((wanted && wanted[at]) || hasLoneSurrogate(text)) open.push(at);
+    if (wanted && wanted[at]) open.push(at);
+    else if (hasLoneSurrogate(text)) heal.push(at);
     else if (name) taken[keyOf(name, at)] = true;
   });
-  open.forEach(function (at) {
+  function settle(at: number, want: string, blocked: Record<string, boolean>): void {
     const text = texts[at] as string, healed = out[at] as string;
-    const want = (wanted && wanted[at]) || healed;
-    let name = want;
-    if (!want || taken[keyOf(want, at)]) name = hasLoneSurrogate(text) ? keptAsStored(text.trim(), healed, max) : healed;
-    out[at] = name;
-    if (name) taken[keyOf(name, at)] = true;
+    if (want && !taken[keyOf(want, at)] && !blocked[keyOf(want, at)]) { out[at] = want; return; }
+    out[at] = hasLoneSurrogate(text) ? keptAsStored(text.trim(), healed, max) : healed;
+    if (out[at]) taken[keyOf(out[at] as string, at)] = true;
+  }
+  const none: Record<string, boolean> = Object.create(null);
+  open.forEach(function (at) {
+    settle(at, (wanted as readonly (string | undefined)[])[at] as string, none);
+    if (out[at]) asked[keyOf(out[at] as string, at)] = true;
+  });
+  heal.forEach(function (at) {
+    settle(at, out[at] as string, asked);
+    if (out[at]) taken[keyOf(out[at] as string, at)] = true;
   });
   return out;
 }
