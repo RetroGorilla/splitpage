@@ -207,6 +207,7 @@ for (const [what, patch, field] of [
   ["a fractional check count", { checks: 1.5 }, "checks"],
   ["a negative check count", { checks: -1 }, "checks"],
   ["a null failed-check count", { failedChecks: null }, "failedChecks"],
+  ["a negative failed-check count", { failed: true, failedChecks: -1 }, "failedChecks"],
   ["more failed checks than checks", { failed: true, checks: 2, failedChecks: 3 }, "failedChecks"],
   ["a passing suite that has failed checks", { failed: false, failedChecks: 1 }, "failedChecks"],
   ["a timed-out suite that is not marked failed", { failed: false, timedOut: true, checks: 1, failedChecks: 0 }, "timedOut"],
