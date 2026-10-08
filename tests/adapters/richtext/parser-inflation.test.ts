@@ -114,24 +114,24 @@ function tierOne(lines: number): string {
   ].join("");
 }
 
-test("formatting tags are parsed as written while their reopen bound is at most 8 per input code unit plus 4096, and lose the attributes the sanitiser never reads one code unit shorter (#420)", () => {
-  const at = onReopenEdge(66, tierOne, 0);
+test("formatting tags are parsed as written while their reopen bound, each entry weighed as 1 plus its attributes, is at most 8 per input code unit plus 4096, and lose the attributes the sanitiser never reads one code unit shorter (#420)", () => {
+  const at = onReopenEdge(127, tierOne, 0);
   const kept = rt.inertBody(at);
   assert.equal(kept.querySelectorAll("b[id]").length, 42);
   assert.equal(kept.querySelectorAll("b[title]").length, 16);
-  assert.equal(kept.querySelectorAll("i").length, 4);
-  const short = onReopenEdge(66, tierOne, 1);
+  assert.equal(kept.querySelectorAll("i[x\\<y]").length, 4);
+  const short = onReopenEdge(127, tierOne, 1);
   const plain = rt.inertBody(short);
-  assert.equal(plain.querySelectorAll("b[id], b[title]").length, 0);
-  assert.equal(plain.querySelectorAll("b").length, 46);
-  assert.equal(plain.querySelectorAll("i").length, 0);
-  assert.equal(count(rt.sanitize(short), /<strong>t<\/strong>/g), 46);
+  assert.equal(plain.querySelectorAll("b[id], b[title], i[x\\<y]").length, 0);
+  assert.equal(plain.querySelectorAll("b").length, 62);
+  assert.equal(plain.querySelectorAll("i").length, 4);
+  assert.equal(count(rt.sanitize(short), /<strong>t<\/strong>/g), 62);
   assert.equal(words(rt.sanitize(short)), words(short));
 });
 
 function tierTwo(lines: number): string {
   return [
-    Array.from({ length: 30 }, (_, i) => closed('<b style="color:#' + String(100 + i) + '">', "b")).join(""),
+    Array.from({ length: 30 }, (_, i) => closed('<b style="font-family:f' + String(100 + i) + '">', "b")).join(""),
     Array.from({ length: 60 }, (_, i) => closed("<i id=" + String(i) + ">", "i")).join(""),
     Array.from({ length: 4 }, (_, i) => closed("<code class=c" + String(i) + ">", "code")).join(""),
     Array.from({ length: 2 }, (_, i) => closed('<a href="https://l.test/' + String(i) + '">', "a")).join(""),
@@ -140,13 +140,13 @@ function tierTwo(lines: number): string {
 }
 
 test("past the bound, formatting is kept while the tags without unread attributes fit it, and dropped, keeping every word, one code unit shorter (#420)", () => {
-  const atHtml = onReopenEdge(34, tierTwo, 0);
+  const atHtml = onReopenEdge(65, tierTwo, 0);
   const at = rt.sanitize(atHtml);
   assert.equal(count(at, /<em>t<\/em>/g), 60);
   assert.equal(count(at, /<strong>t<\/strong>/g), 30);
   const unkept = Array.from(rt.inertBody(atHtml).querySelectorAll("code-"));
   assert.deepEqual(unkept.map((el) => el.textContent), ["t", "t", "t", "t"]);
-  const shortHtml = onReopenEdge(34, tierTwo, 1);
+  const shortHtml = onReopenEdge(65, tierTwo, 1);
   const short = rt.sanitize(shortHtml);
   assert.equal(count(short, /<em>|<strong>/g), 0);
   assert.equal(count(short, /<a /g), 2);
@@ -411,15 +411,15 @@ for (const name of COUNTED_NAMES) {
   test('each counted tag name, here "' + name + '", is counted by the first tier and, where the second tier renames it, is renamed (#420)', () => {
     const carrier = name === "a" ? "i" : name;
     const body = namedPaste(name);
-    const at = onReopenEdge(41, body, 0);
-    const short = onReopenEdge(41, body, 1);
+    const at = onReopenEdge(82, body, 0);
+    const short = onReopenEdge(82, body, 1);
     assert.equal(boundedMarkup(at), at);
     const first = boundedMarkup(short);
     const unkept = UNKEPT_NAMES.includes(name);
     assert.ok(first.includes(unkept ? "<" + carrier + "- id=0>" : "<" + carrier + ">"), first.slice(0, 120));
     if (unkept) assert.ok(first.includes("</" + carrier + "->"), first.slice(0, 120));
     if (REOPENABLE_NAMES.includes(name)) {
-      const styled = Array.from({ length: 200 }, (_, i) => closed('<b style="color:#' + String(i) + '">', "b")).join("");
+      const styled = Array.from({ length: 200 }, (_, i) => closed('<b style="font-family:f' + String(i) + '">', "b")).join("");
       const second = boundedMarkup(styled + closed("<" + name + " id=0>", name));
       assert.ok(second.includes("<" + name + "-"), second.slice(0, 120));
     }
