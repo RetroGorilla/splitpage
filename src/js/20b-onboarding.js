@@ -5,7 +5,6 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
-import { startTour } from "./20c-help.js";
 import { addServerBookmark, joinErrorText } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -134,7 +133,7 @@ function onboardBack() {
 
 function onboardFinishAndTour() {
   finishOnboarding(false);
-  if (typeof startTour === "function") startTour();
+  appActions.invoke("tour", "button");
 }
 
 function noLauncherHtml() {
