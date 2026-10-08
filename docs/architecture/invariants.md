@@ -30,9 +30,10 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-02 — Script cells change only through the document model
 
 - **Behaviour:** Every change to a script cell is a document-model edit (`editCell()` at the selection, or the edits in `src/core/text/edits.ts`, which `04c-doc-model.js` re-exports), written back with `toHtml()`. No path edits cell HTML with a regex, and nothing uses `execCommand`, in script cells or in comment and reply boxes.
-- **Tests:** `src/test/doc-model.test.mjs`, `src/test/cell-edit.test.mjs`; browser `75-format-model.txt`, `76-tags-model.txt`, `77-clipboard-model.txt`, `78-split-join-model.txt`, `81-draft-edit.txt`. No test asserts that `execCommand` is absent from the source.
+- **Tests:** `src/test/doc-model.test.mjs`, `src/test/cell-edit.test.mjs`; browser `75-format-model.txt`, `76-tags-model.txt`, `77-clipboard-model.txt`, `78-split-join-model.txt`, `81-draft-edit.txt`; for the commands, `tests/application/cell-text.test.ts`, `split-join.test.ts` and `clipboard.test.ts` (every command test through `runConfined`, which fails on a write outside the declared change set). No test asserts that `execCommand` is absent from the source.
 - **Owner:** `src/core/text` (edits), `src/application` (commands), `src/features/editor` (bindings) · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** DocumentSession commands become the only write path (M3). Migrated editor features receive named operations and no writable document (M6; plan §6: "a view or selector never changes document content").
+- **As built (M3, part):** typing, split, join, paste and cut write the cell only through `cellTextCommand`, `splitSceneCommand`, `joinScenesCommand`, `pasteCommand` and `cutCommand` ([session.md](session.md#the-text-commands)). `editCell()` (formatting, shortcuts, tags, b-roll keys, Enter) still writes `row[field]`, stamps and calls `markDirty` itself (#452), and the scene paste and drop in `05g-scene-clip.js` is out of M3 (D10). The row stays open until M6.
 - **Acceptance:** the five suites pass on the migrated editor. A new architecture check finds no `document.execCommand` call and no `innerHTML` assignment to a `.cell-editable` under `src/features/`.
 
 ### INV-03 — Text inside a tag is never touched
@@ -62,17 +63,19 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-06 — No document-wide work per keystroke
 
 - **Behaviour:** Typing triggers no document-wide scan. Expensive refreshes run through one debounced idle refresh (180 ms), memoised derivations are keyed on their own inputs, and the production index is derived at most once per change.
-- **Tests:** browser `67-render-perf.txt` (counts renders, repaints, idle refreshes and index derivations on a 300-scene document); `src/test/production-index.test.mjs` ("the index is kept through prose edits and re-derived by any change to what it reads").
+- **Tests:** browser `67-render-perf.txt` (counts renders, repaints, idle refreshes and index derivations on a 300-scene document); `src/test/production-index.test.mjs` ("the index is kept through prose edits and re-derived by any change to what it reads"); `tests/application/cell-text.test.ts` ("INV-06: a burst of keystrokes through the typing command runs each derivation once per idle window"); `tests/application/session-effects.test.ts` (the scheduler's windows); `tests/application/session-anchors.test.ts` (a one-cell edit skips the document-wide reconciliation unless its comment ids change).
 - **Owner:** `src/application` (effect scheduler) · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** an application effect scheduler coalesces autosave, draft capture, history and expensive derivations (M3). Cached derivations use precise changed inputs (M6).
-- **Acceptance:** `67-render-perf.txt` passes. Application test with a fake clock: a burst of typing change sets inside the debounce window runs each derivation once.
+- **Acceptance:** `67-render-perf.txt` passes. Application test with a fake clock: a burst of typing change sets inside the debounce window runs each derivation once. Met in 3.12 (#427).
+- **As built (M3):** the scheduler is `createEffectScheduler` in `src/application/session/effects.ts`. A command declares `derive` and `saveNow` and never fans out by hand; the refresh jobs coalesce in one 180 ms idle window capped at 1,000 ms ([session.md](session.md#4-the-effect-scheduler)). Legacy refresh callers reach the same window through `requestRefresh`. A legacy writer that calls `markDirty` still passes a whole-document change set and no reconciliation.
 
 ### INV-07 — A single-row change repaints one row
 
 - **Behaviour:** A change confined to one row repaints only that row's changed parts and never a field whose text is unchanged. The rest of the document keeps its DOM nodes, focus and caret.
-- **Tests:** browser `67-render-perf.txt` (typing repaints no row; a structural edit elsewhere keeps the focused cell and untouched fields as the same nodes). No test targets `cycleRowStatus()`.
+- **Tests:** browser `67-render-perf.txt` (typing repaints no row; a structural edit elsewhere keeps the focused cell and untouched fields as the same nodes); `288-scene-status-effects.txt` (a status click repaints one row and no cell).
 - **Owner:** `src/features/rows` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** views consume precise change sets (M3), and the rows view repaints only the rows and fields a change set names (M6).
+- **As built (M3, part):** every command publishes a frozen change set that names the cells, rows and document fields it wrote ([session.md](session.md#what-a-change-set-declares)). Nothing in the app subscribes yet (`subscribe` is used by tests), so the views still repaint by their own calls (`renderRow`, `render`, `renderWriter`) after a command. The consuming view is milestone 6's.
 - **Acceptance:** `67-render-perf.txt` passes. Browser: a status click repaints only its own row, measured by the `__renderTest` counters or their successor.
 
 ### INV-08 — CSS attribute selector values are escaped
@@ -94,7 +97,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-10 — Content enters a script cell only in canonical, sanitised form
 
 - **Behaviour:** Content reaches a script cell only through `fromHtml()` or a model edit, both of which produce canonical, sanitised cells. `syncFieldFromDom()` stores each keystroke that way: it decodes the cell through the adapter and hands the runs to the typing command (`src/application/commands/cell-text.ts`, M3 3.12), which stores `toHtml(runs)`. Anything else rebuilt from HTML, such as a comment body, passes `sanitizeHtml()` before it re-enters state.
-- **Named exception (until milestone 6):** a cell holding a picture or a video card cannot be expressed as runs yet. `syncFieldFromDom()` passes its `sanitizeHtml()` output to the same typing command as the typed `SanitisedMediaHtml` variant (`sanitisedMediaHtml()`), which stores it as given. Milestone 6 retires the variant when runs can carry media.
+- **Named exception (until milestone 6):** a cell holding a picture or a video card cannot be expressed as runs yet. `syncFieldFromDom()` passes its `sanitizeHtml()` output to the same typing command as the typed `SanitisedMediaHtml` variant (`sanitisedMediaHtml()`), which stores it as given; `sanitisedMediaHtml()` does not sanitise, and its only caller does. The media split of a scene stores two `sanitizeHtml()` halves the same way (`mediaHalves`), and a join whose audio holds media concatenates the stored HTML of both. Milestone 6 retires the variant when runs can carry media.
+- **Paste and cut (M3 3.14):** a paste is cleaned by `cellFromClipboard` (05c), inserted as runs or text by `pasteCommand`, and stored as `toHtml(runs)`; a cut stores `toHtml(deleteRange(...))`. `src/test/paste-html-fuzz.test.mjs` (seeded) checks the paste path for clean, canonical cells within the output bound.
 - **Tests:** `src/test/doc-model.test.mjs` ("toHtml writes the sanitiser's own markup: a fixed point of sanitizeHtml", "round trip: fromHtml(toHtml(c)) is normalizeCell(c)"); `src/test/clipboard.test.mjs` ("a paste is sanitised, keeps formatting and tags, and drops pictures and video cards"); `src/test/migrate-rows.test.mjs` ("comments: bodies and replies are sanitised, authors are plain text"); `tests/adapters/richtext/golden.test.ts` ("INV-10: the sanitiser's output is its own fixed point over the corpus", "toHtml(decode(x)) is already in stored form over the corpus", through the adapter on jsdom's parser with no DOM globals); `tools/test-dep-report.mjs` ("INV-10, HTML into cells"); `tests/application/cell-text.test.ts` ("the stored form is exactly toHtml of the runs…", "a cell holding media stores its sanitised HTML as given…"); `src/test/cell-text-app.test.mjs` (the seeded differential against the base's `syncFieldFromDom`); browser `52-csp.txt`.
 - **Owner:** `src/adapters/richtext` · **Milestone:** 2 · **Class:** absorb
 - **Replacement:** the HTML adapter in `src/adapters/richtext/` becomes the only decoder from HTML to cells (M2), and DocumentSession commands accept normalised runs, not HTML (M3). Done in 2.4: `fromHtml`, `cellOf`, `sanitizeHtml` and `storedHtmlFromDom` in `04c-doc-model.js` and `04-richtext.js` are the adapter's functions, handed out through `src/legacy/richtext.ts`.
@@ -161,14 +165,16 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/features/untagged` and the tour and onboarding features · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** views and selectors receive read-only snapshots and named operations (M3; plan §6: "a view or selector never changes document content"). Accepting a hint is a command.
 - **Acceptance:** application test: running the untagged scan and the tour against a session leaves the edit generation, dirty state and undo stack unchanged. The three suites pass.
+- **As built (M3, part):** the session hands a view the live document only through `read(select)`, typed as a deep-readonly `DocumentView` ([session.md](session.md#1-purpose)); the compiler, not the runtime, stops a write. The untagged scan and the tour still run in legacy modules and do not go through a session, and the acceptance test above is not written. The row stays open until M6.
 
 ### INV-18 — A comment is anchored by its mark
 
-- **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, then calls `syncCommentAnchors(state)` in the same undo entry, which points each comment at the first cell holding its mark. A comment whose words are gone keeps its last position. `migrateRows()` (`src/core/migrate.ts`, reading cells through its `readers` port) runs the same pass on every load and merge.
-- **Tests:** `src/test/comment-anchors.test.mjs`; browser `78-split-join-model.txt`, `77-clipboard-model.txt`, `20-comment-drift.txt`, `246-scene-delete-comments.txt`.
+- **Behaviour:** A comment is anchored by its `cmt` mark in the script. Every path that moves words between rows (split, join, cut then paste) moves them as runs, and the session reconciles in the same transaction and undo entry: `syncCommentAnchors(doc)` points each comment at the first cell holding its mark. A comment whose words are gone keeps its last position. `migrateRows()` (`src/core/migrate.ts`, reading cells through its `readers` port) runs the same pass on every load and merge.
+- **Tests:** `src/test/comment-anchors.test.mjs`; `tests/application/split-join.test.ts` ("E9: a split before a commented phrase…", "E9: a join brings the later scene's comments…", "E9 (seeded): split and join leave every comment where reconciliation would put it…"), `tests/application/clipboard.test.ts` ("a paste carrying a cut's comments reconciles in the transaction…", "E9: a cut and the paste of it are one generation and one undo record each"), `tests/application/cell-text.test.ts` ("a cell edit that adds or drops a comment anchor reconciles in the transaction…"), `tests/application/session-anchors.test.ts` (the seeded property that a one-cell edit moves an anchor only when its comment ids change); `src/test/split-join-app.test.mjs`, `src/test/cut-paste-app.test.mjs`; browser `78-split-join-model.txt`, `77-clipboard-model.txt`, `20-comment-drift.txt`, `246-scene-delete-comments.txt`.
 - **Owner:** `src/application` (transaction), with `syncCommentAnchors` in `src/core/text` · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** every accepted DocumentSession transaction reconciles dependent anchors (M3; plan §6: "every accepted user transaction includes its dependent anchor/record reconciliation").
-- **Acceptance:** application test: split, join and cut-then-paste commands that do not call `syncCommentAnchors` themselves still leave every anchored comment's `rowId` and `field` equal to what reconciliation computes, in one undo entry. `comment-anchors.test.mjs` stays.
+- **Acceptance:** application test: split, join and cut-then-paste commands that do not call `syncCommentAnchors` themselves still leave every anchored comment's `rowId` and `field` equal to what reconciliation computes, in one undo entry. `comment-anchors.test.mjs` stays. Met in 3.13 (#447) and 3.14 (#455).
+- **As built (M3):** `ReconcilePort.anchors` runs after `apply` when a change set inserts, removes or moves rows or sets `runsMoved` ([session.md](session.md#when-reconciliation-runs)). Split declares the inserted scene and join the removed one. The typing command sets `runsMoved` when a cell's ordered comment ids change, and a paste sets it when it is a cut's own and carries comments. A cut never reconciles: its comment keeps its place until its words land again. No command calls `syncCommentAnchors` itself. The scene-level paths still do: `deleteRow` in `06-rows.js`, the selected-scene delete and paste in `05h-scene-select.js`, and the scene paste in `05g-scene-clip.js` (D10; M3 took cell-level cut-paste only). Known gap: cut, Ctrl+Z, then paste leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut (#460, the same on the base). `editCell`'s model edits, which move no words between rows, do not reconcile.
 
 ### INV-19 — A full-screen overlay owns focus and stacking
 
@@ -475,8 +481,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-53 — Every edit is recorded once; nothing else is recorded
 
-- **Behaviour:** Every edit to the document ends in `markDirty()`, and undo learns of the edit by diffing. Changes that are not the user's edits are registered as such and never become undo steps: a new document, someone else's merge, a reload in place, or the repair made by an undo's own repaint. On a server document, changes to comments are never recorded.
-- **Tests:** `src/test/undo.test.mjs` ("diffStates: the lists and comments are one step each; bookkeeping is never a step", "forget (design D4)…"); `src/test/apply-merge.test.mjs` ("nothing differed: no merge, no snapshot, no rev bump"); browser `73-undo.txt`, `76-tags-model.txt` (`settleAfterApply`), `185-autosave-every-edit.txt`, `186-autosave-panel-edits.txt`.
+- **Behaviour:** Every edit to the document ends in `markDirty()` or is a session command, and undo learns of the edit by diffing. An edit is recorded once, unless it ends where it began: typing that coalesces back to its start, such as a letter typed and deleted within a second, leaves no step. Changes that are not the user's edits are registered as such and never become undo steps: a new document, someone else's merge, a reload in place, or the repair made by an undo's own repaint. On a server document, changes to comments are never recorded.
+- **Tests:** `src/test/undo.test.mjs` ("diffStates: the lists and comments are one step each; bookkeeping is never a step", "forget (design D4)…", the coalesced-back and redo tests, and `redoInvariantRun`); `src/test/apply-merge.test.mjs` ("nothing differed: no merge, no snapshot, no rev bump"); `tests/application/document-session.test.ts` (the "E2", "E3" and "E4" tests); `src/test/cell-text-app.test.mjs`, `split-join-app.test.mjs` and `cut-paste-app.test.mjs` (one generation, one `S.editSeq` and one undo step per command); browser `73-undo.txt`, `76-tags-model.txt` (`settleAfterApply`), `185-autosave-every-edit.txt`, `186-autosave-panel-edits.txt`, `289-script-cell-ime.txt`.
 - **Owner:** `src/application` (DocumentSession) · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** DocumentSession transactions (M3; plan §6):
   - an accepted change advances the edit generation once and is recorded under the existing undo grouping;
@@ -486,6 +492,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - A user command advances the generation once and adds one undo entry.
   - A merge, a reload or a recovery adoption adds none.
   - A no-op command does not dirty the document, schedule a save or add an entry.
+- **As built (M3):** met by `document-session.test.ts` and each command's "E2" and "E3" tests. Seven edits are commands (scene length, scene status, typing, split, join, cut, paste); every other writer still ends in `markDirty()`, which the session takes as an edit of unknown extent (one generation, one undo record, a whole-document change set). Recovery that enters by assignment (the draft restores, history restore, a file import) is published as `adopt`, not `recovery`, so it opens an epoch and adds no generation or undo entry; naming it `recovery` would route it through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today (E4, accepted by the coordinator). Undo and redo replay still write `S.state` outside the session; milestone 6 takes that ([session.md](session.md#8-known-gaps-and-exceptions)).
 
 ### INV-54 — A b-roll key's id belongs to one line
 
@@ -497,6 +504,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the named tests pass against `src/core/production` and the migrated clipboard path.
+- **As built (M3 3.14):** the cell-level paste is `pasteCommand` in `src/application/commands/clipboard.ts`, which owns `takenBrollIds`, `freshBrollIds` and `pastedShots` (05c keeps thin wrappers). `tests/application/clipboard.test.ts` pins it: "a copied b-roll key whose id is taken gets a fresh id and a shot record seeded from the scene…", "a cut b-roll key pasted back keeps its id and makes no second record…", and "seeded: a pasted copy never leaves two keys with one id in the script". The scene paste in `05g-scene-clip.js` still uses `freshBrollIds` and `recordPastedBroll` (D10).
 
 ### INV-55 — A comment or reply draft owns its undo
 
@@ -504,6 +512,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Tests:** `src/test/draft-edit.test.mjs`; browser `81-draft-edit.txt`.
 - **Owner:** `src/features/comments` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** — (M3 keeps comment and reply drafts on their own undo).
+- **As built (M3):** held. No command takes a draft box: `syncFieldFromDom` and the five text commands act on script cells, and `81-draft-edit.txt` ran green in the 3.12, 3.13 and 3.14 suite sets.
 - **Acceptance:** both pass after the composer moves to the comments feature.
 
 ### INV-56 — A b-roll shot stores only hand-added props, by registry id
@@ -512,7 +521,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - **Stored:** a shot's `props` hold only props added by hand, as `[{id, name}]` keyed by registry id. Props tagged on the shot's own lines are read from the script each time.
   - **Renames and merges:** a rename carries through by id, and folding onto another entry's name re-points the shot in the same edit. Merging is a base-aware set per shot.
   - **Pasting:** a pasted copy of a shot's line gets no props.
-  - **New fields:** a new shot field must be kept by `migrateRows` and `mergeBrollShots`, and added to both shot builders, `newBrollRecord` in `08c-broll.js` and `newBrollShot` in `src/core/production/broll.ts`, at the same place in each.
+  - **New fields:** a new shot field must be kept by `migrateRows` and `mergeBrollShots`, and added to both shot builders, `newBrollShot` in `src/core/document/broll.ts` (the one that `newBrollRecord` in `08c-broll.js` and the paste command in `clipboard.ts` use) and the plan's own builder `newBrollShot` in `src/core/production/broll.ts`, at the same place in each.
 - **Tests:** `src/test/broll-model.test.mjs`; `tests/core/production/broll.test.ts` ("INV-56: …", two tests); `src/test/production-shims.test.mjs` ("a shot the core plan creates and one newBrollRecord stores serialise alike, keys in the same order"); `src/test/merge-states.test.mjs` ("b-roll props: …"); `src/test/migrate-rows.test.mjs` ("brollShots props: …"); `src/test/state-fields.test.mjs` ("a b-roll shot keeps every field it has — props too — through a merge and a save"); `src/test/formats.test.mjs` (props round trips); browser `95-broll-props.txt`.
 - **Owner:** `src/core/production` · **Milestone:** 2 · **Class:** keep
 - **Replacement:** — (the field-list clause can join the M2 field policy; the props rules stay explicit).
