@@ -60,11 +60,62 @@ ime cancel
 expect __cell('r3').textContent === 'Third.'
 expect __live('r3').audioText === 'Third.'
 eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+expect U.sizes().redo === 1
+expect __ev.slice(-1).join(',') === 'compositionend'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set ね
+sleep 1100
+ime set ねこ
+sleep 1100
+ime cancel
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+expect U.sizes().redo === 1
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+expect __cell('r3').textContent === 'Third.'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+press x
+key Backspace
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set か
+ime commit か
+ime set ね
+sleep 1100
+ime set ねこ
+sleep 1100
+ime cancel
+expect __live('r3').audioText === 'Third.か'
+expect __cell('r3').textContent === 'Third.か'
+eval U.flush()
 expect U.sizes().undo - window.__u0 === 1
 key ctrl KeyZ
 expect __live('r3').audioText === 'Third.'
-expect U.sizes().undo - window.__u0 === 0
-expect U.sizes().redo === 1
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set か
+ime commit か
+sleep 1100
+eval document.execCommand('delete')
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 2
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.か'
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
 
 caret #rows .cell-editable[data-id="r1"][data-field="audioText"]
 eval __arm('r1')
@@ -97,5 +148,14 @@ expect __caret(__cell('r3', '#writer-doc')) === 8
 eval U.flush()
 expect U.sizes().undo - window.__u0 === 1
 expect F.state().rows.length === 4
+sleep 1100
+eval __arm('r3', '#writer-doc')
+ime set ねこ
+expect __live('r3').audioText === 'Third.日本ねこ'
+ime cancel
+expect __live('r3').audioText === 'Third.日本'
+expect __cell('r3', '#writer-doc').textContent === 'Third.日本'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
 eval (function(){ U.flush(); var n = F.state().rows.length; var el = __cell('r3', '#writer-doc'); el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' })); var ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, keyCode: 229, bubbles: true, cancelable: true }); el.dispatchEvent(ev); el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '' })); window.__wsplitWhileComposing = F.state().rows.length - n; return true; })()
 expect window.__wsplitWhileComposing === 1

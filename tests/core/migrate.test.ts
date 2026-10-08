@@ -305,6 +305,75 @@ test("a name is still trimmed before it is cut, so leading spaces don't count to
   assert.deepEqual(cappedNames(out), cappedWant(full));
 });
 
+test("a name is cut by code point, so an emoji across the cap stays whole, and migrating it again keeps it (#344)", () => {
+  const grin = "\u{1F600}";
+  const across = (cap: number): string => "a".repeat(cap - 1) + grin + " tail";
+  const whole = (cap: number): string => "a".repeat(cap - 1) + grin;
+  const f = fakeMigration();
+  const once = migrateRows(cappedDocument(f, across), f.ports);
+  assert.deepEqual(cappedNames(once), cappedWant(whole));
+  const again = fakeMigration();
+  cappedDocument(again, across);
+  const text = JSON.stringify(once);
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(once), again.ports)), text);
+});
+
+test("a name left with half an emoji by an earlier cut loses the half (#344)", () => {
+  const half = (cap: number): string => "a".repeat(cap - 1) + "\uD83D";
+  const f = fakeMigration();
+  const out = migrateRows(cappedDocument(f, half), f.ports);
+  assert.deepEqual(cappedNames(out), cappedWant((cap) => "a".repeat(cap - 1)));
+});
+
+function namesOf(out: Doc, key: string): unknown[] {
+  return list(out, key).map((it) => it.name);
+}
+
+function healOnce(doc: Doc): Doc {
+  const f = fakeMigration();
+  const out = migrateRows(doc, f.ports);
+  const again = fakeMigration();
+  assert.equal(JSON.stringify(migrateRows(jsonCopy(out), again.ports)), JSON.stringify(out), "a fixed point");
+  return out;
+}
+
+test("a name made only of half an emoji keeps its record, stored as it was (#344)", () => {
+  const out = healOnce({
+    schema: 2, rows: [], comments: [],
+    people: [{ id: "p1", name: "\uD83D" }, { id: "p2", name: " \uDE00 \uD83D " }],
+    productionTags: [{ cat: "prop", name: "\uD83D", notes: "keep me" }],
+    brollShots: [{ id: "bs1", name: "\uDE00", notes: "keep me", props: ["\uD83D", "mug"] }],
+    personColors: { "\uD83D": "#80BDFB" }
+  });
+  assert.deepEqual(namesOf(out, "people"), ["\uD83D", "\uDE00 \uD83D"]);
+  assert.deepEqual(list(out, "productionTags").map((t) => [t.name, t.notes]), [["\uD83D", "keep me"]]);
+  assert.deepEqual(list(out, "brollShots").map((b) => [b.name, b.notes]), [["\uDE00", "keep me"]]);
+  assert.deepEqual(((list(out, "brollShots")[0] as Item).props as Item[]).map((p) => p.name), ["\uD83D", "mug"]);
+  assert.deepEqual(out.personColors, { "\uD83D": "#80BDFB" });
+});
+
+test("a name that would heal into another name of its kind keeps its record, stored as it was (#344)", () => {
+  const out = healOnce({
+    schema: 2, rows: [], comments: [],
+    people: [{ id: "p1", name: "Ann\uD83D" }, { id: "p2", name: "Ann" }, { id: "p3", name: "Bo \uD83D" }, { id: "p4", name: "bo" }],
+    productionTags: [
+      { cat: "prop", name: "Mug\uD83D", notes: "first" }, { cat: "prop", name: "mug", notes: "second" },
+      { cat: "prop", name: "cup\uD83D" }, { cat: "prop", name: "cup\uDE00" }, { cat: "location", name: "Mug\uD83D" }
+    ],
+    brollShots: [
+      { id: "bs1", name: "Wide \uD83D", props: ["Pan\uD83D", "pan", "pot\uD83D"] }, { id: "bs2", name: "wide" }
+    ],
+    personColors: { "Ann\uD83D": "#80BDFB", "ann": "#F9B64F" }
+  });
+  assert.deepEqual(namesOf(out, "people"), ["Ann\uD83D", "Ann", "Bo \uD83D", "bo"]);
+  assert.deepEqual(list(out, "productionTags").map((t) => [t.cat, t.name, t.notes]), [
+    ["prop", "Mug\uD83D", "first"], ["prop", "mug", "second"], ["prop", "cup", ""], ["prop", "cup\uDE00", ""], ["location", "Mug", ""]
+  ]);
+  assert.deepEqual(namesOf(out, "brollShots"), ["Wide \uD83D", "wide"]);
+  assert.deepEqual(((list(out, "brollShots")[0] as Item).props as Item[]).map((p) => p.name), ["Pan\uD83D", "pan", "pot"]);
+  assert.deepEqual(out.personColors, { "Ann\uD83D": "#80BDFB", "ann": "#F9B64F" });
+});
+
 test("only a plain object is a document: an array, null and every primitive are refused like no document (#407)", () => {
   for (const raw of [[], [{ id: "r1", audioText: "x" }], null, undefined, 0, 1, "doc", true, false]) {
     assert.equal(isDocumentObject(raw), false, JSON.stringify(raw));

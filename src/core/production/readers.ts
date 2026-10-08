@@ -1,5 +1,6 @@
 import type { Seal } from "../document/freeze.ts";
 import { contentMemo } from "../document/memo.ts";
+import { cappedName } from "../document/text-policy.ts";
 import type { TagName } from "../document/tags.ts";
 import { cuesInCell } from "../text/cues.ts";
 import type { CellDecoder } from "../text/ports.ts";
@@ -26,7 +27,7 @@ function readTags(cellOf: CellDecoder, html: string): FieldTag[] {
   const found = out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
   if (html.indexOf("audio-cue") !== -1) {
     cuesInCell(cellOf(html)).forEach(function (c) {
-      const name = c.name.slice(0, 80).trim();
+      const name = cappedName(c.name, 80);
       if (name) found.push({ catId: "sound", name: name, text: c.text });
     });
   }
@@ -35,7 +36,7 @@ function readTags(cellOf: CellDecoder, html: string): FieldTag[] {
 
 function readCueNames(cellOf: CellDecoder, html: string): string[] {
   if (html.indexOf("audio-cue") === -1) return [];
-  return cuesInCell(cellOf(html)).map(function (c) { return c.name.slice(0, 80).trim(); }).filter(Boolean);
+  return cuesInCell(cellOf(html)).map(function (c) { return cappedName(c.name, 80); }).filter(Boolean);
 }
 
 function countWords(cellOf: CellDecoder, html: string): number {

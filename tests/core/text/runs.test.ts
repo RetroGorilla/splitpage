@@ -98,6 +98,21 @@ test("cell text: line ends become line feeds; controls, ZWSP and U+FFFC never en
   assert.deepEqual(normalizeCell([T("a\r\nb\u{7}" + ZWSP + OBJ)]), [T("a\nb")]);
 });
 
+test("cell text holds no lone surrogate: a half without its partner is dropped, a pair is kept (#344)", () => {
+  assert.equal(cleanText("a\uD83Db\uDE00c" + GRIN), "abc" + GRIN);
+  assert.equal(cleanText("\uDE00\uD83D"), "");
+  assert.deepEqual(normalizeCell([T("x\uD83D"), T("y", { b: true }), T("\uDE00z")]), [T("x"), T("y", { b: true }), T("z")]);
+  assert.deepEqual(normalizeCell([T("a"), T("\uD83D", { b: true }), T("b")]), [T("ab")]);
+  assert.deepEqual(normalizeCell([T("\uDE00")]), []);
+  assert.equal(projection([T("x\uD83Dy"), B("k1")]), "xy" + OBJ);
+});
+
+test("a pair split across two runs with the same marks is joined, not dropped (#344)", () => {
+  assert.deepEqual(normalizeCell([T("a\uD83D"), T("\uDE00b")]), [T("a" + GRIN + "b")]);
+  assert.deepEqual(normalizeCell([T("a\uD83D", { b: true }), T("\uDE00", { b: true }), T("c")]), [T("a" + GRIN, { b: true }), T("c")]);
+  assert.deepEqual(normalizeCell([T("a\uD83D", { b: true }), T("\uDE00b")]), [T("a", { b: true }), T("b")]);
+});
+
 test("Unicode text is kept exactly; offsets count UTF-16 code units", () => {
   for (const s of [GRIN, COMBINED_E, TECHNOLOGIST, THUMB, SHALOM, "\u{E9}", "a" + ZWJ + "b"]) {
     assert.deepEqual(normalizeCell([T(s, { b: true })]), [T(s, { b: true })], s);
