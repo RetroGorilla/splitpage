@@ -275,7 +275,7 @@ test("a keyed B-roll line renames no other shot that shares its old cut (#344)",
       { id: "bs2", name: x(199) + "\uD83D", notes: "listed", status: "shot", origin: "list" }
     ]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs2", x(199) + "\uD83D", "listed"]]);
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs2", x(199), "listed"]]);
 });
 
 test("a comment over text that held a lone half is not marked Changed once the half is gone (#344)", () => {

@@ -79,6 +79,8 @@ test("settledNames heals a broken name only into a free, non-empty name, and kee
   assert.deepEqual(settledNames([HIGH + "  a" + LOW + "b " + HIGH + " ", "ab"], 80, key), [HIGH + "  a" + LOW + "b " + HIGH, "ab"]);
   assert.deepEqual(settledNames(["aaaa" + HIGH + "b", "aaaa"], 4, key), ["aaaa" + HIGH, "aaaa"], "the stored form keeps no more than its heal needs");
   assert.deepEqual(settledNames(["a", "a"], 80, key), ["a", "a"], "clean duplicates are left as they were");
+  assert.deepEqual(settledNames(["x" + HIGH, " X" + HIGH + " "], 80, key), ["x", "X"], "names already alike when stored heal alike");
+  assert.deepEqual(settledNames(["x", "x" + HIGH, "X" + HIGH], 80, key), ["x", "x" + HIGH, "X" + HIGH]);
   assert.deepEqual(settledNames(["mug", "x"], 80, (n, at) => at + key(n)), ["mug", "x"]);
 });
 
