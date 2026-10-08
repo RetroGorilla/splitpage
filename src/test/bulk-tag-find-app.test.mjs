@@ -80,6 +80,47 @@ test("bulk tag: a lone half beside real words is dropped, so the words are tagge
   assert.doesNotMatch(S.state.rows[0].visualText, /[\ud800-\udfff]/);
 });
 
+test("bulk tag: a lone half before a word is dropped, and the word is tagged under its own name", () => {
+  load("see the drone now");
+  typeIntoFind(high + " drone");
+  openBulkTag();
+  assert.match(document.getElementById("find-tag-ask").textContent, /^Tag 1 mention of drone as /);
+  closeBulkTag();
+  runBulkTag();
+  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone"]);
+  assert.match(S.state.rows[0].visualText, /data-tag-name="drone"/);
+});
+
+test("bulk tag: a trailing space in the Find box is trimmed, so the tag is registered as the word", () => {
+  load("see the drone now");
+  typeIntoFind("drone ");
+  openBulkTag();
+  assert.match(document.getElementById("find-tag-ask").textContent, /^Tag 1 mention of drone as /);
+  closeBulkTag();
+  runBulkTag();
+  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone"]);
+  assert.match(S.state.rows[0].visualText, /data-tag-name="drone"/);
+});
+
+test("bulk tag: a whole emoji in the Find box is a needle, alone or after words", () => {
+  load("a " + emoji + " b");
+  typeIntoFind(emoji);
+  openBulkTag();
+  assert.ok(document.getElementById("find-tag-ask").textContent.startsWith("Tag 1 mention of " + emoji + " as "));
+  assert.equal(document.getElementById("find-tag-go").disabled, false);
+  closeBulkTag();
+  runBulkTag();
+  assert.deepEqual(S.state.productionTags.map((t) => t.name), [emoji]);
+  load("see the drone" + emoji + " now");
+  typeIntoFind("drone" + emoji);
+  openBulkTag();
+  assert.ok(document.getElementById("find-tag-ask").textContent.startsWith("Tag 1 mention of drone" + emoji + " as "));
+  closeBulkTag();
+  runBulkTag();
+  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone" + emoji]);
+  assert.ok(S.state.rows[0].visualText.includes('data-tag-name="drone' + emoji + '"'));
+});
+
 test("bulk tag: the category picked for a name already registered ignores a lone half in the needle", () => {
   S.state = migrateRows({
     schema: 2, title: "Bulk", rows: [{ id: "r1", status: "todo", visualText: "see the drone now", audioText: "" }],
