@@ -1,5 +1,5 @@
 import { toHtml } from "../../core/text/html.ts";
-import { commentIds } from "../../core/text/runs.ts";
+import { commentIds, normalizeCell } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
 import { changeSet } from "../session/change-set.ts";
@@ -22,6 +22,8 @@ export type CellText = CellRuns | SanitisedMediaHtml;
 export const CELL_TEXT_DERIVES: readonly string[] = Object.freeze(["production", "broll"]);
 
 const ANCHOR = "cmt-anchor";
+
+const MEDIA = /<img|video-embed-card/;
 
 export function cellRuns(runs: readonly Run[]): CellRuns {
   return Object.freeze({ kind: "runs", runs: runs });
@@ -52,6 +54,21 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every(function (id, i) { return id === b[i]; });
 }
 
+function withoutComments(runs: readonly Run[]): string {
+  return toHtml(normalizeCell(runs.map(function (r) {
+    if (!r.marks.cmt) return r;
+    const marks = Object.assign({}, r.marks);
+    Reflect.deleteProperty(marks, "cmt");
+    return Object.assign({}, r, { marks: marks });
+  })));
+}
+
+function onlyAnchorsDiffer(before: unknown, after: string, text: CellText, cells: CellDecoder): boolean {
+  if (text.kind !== "runs" || typeof before !== "string" || MEDIA.test(before)) return false;
+  const was = cells(before);
+  return toHtml(was) !== after && withoutComments(was) === withoutComments(text.runs);
+}
+
 function textChanges(rowId: string, field: string, runsMoved: boolean): ChangeSet {
   return changeSet({
     cells: [
@@ -68,12 +85,14 @@ export function cellTextCommand(rowId: string, field: string, text: CellText, po
   return {
     name: "set-cell-text",
     needs: "nothing",
-    plan: function (doc) {
+    plan: function (doc, capability) {
       const row = doc.rows.find(function (r) { return r.id === rowId; });
       if (!row) return null;
       const before = row[field];
       const after = storedForm(text);
       if (before === after) return null;
+      const can = capability.edit();
+      if (!can.allowed && !onlyAnchorsDiffer(before, after, text, ports.cells)) return { refused: can.reason };
       const moved = !sameIds(idsInHtml(before, ports.cells), idsIn(text, after, ports.cells));
       return {
         changes: textChanges(rowId, field, moved),

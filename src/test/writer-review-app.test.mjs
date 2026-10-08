@@ -15,6 +15,7 @@ const { liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import(
 const { joinScenesCommand, splitSceneCommand, textCut } = await import("../application/commands/split-join.ts");
 const { htmlToPlainText } = await import("../js/14-export.js");
 const writer = await import("../js/19-writer.js");
+const { syncFieldFromDom } = await import("../js/05-render.js");
 
 after(closeApp);
 
@@ -445,21 +446,49 @@ test("back in edit mode the Writer types, splits and formats again", async () =>
   writer.closeWriter();
 });
 
-function composeInto(p, text) {
-  p.setAttribute("contenteditable", "true");
-  p.focus();
-  p.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-  const node = lastText(p);
-  node.data += text;
-  const r = document.createRange();
-  r.setStart(node, node.data.length);
-  r.collapse(true);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(r);
-  p.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: text, isComposing: true }));
-  const now = para(p.getAttribute("data-id"));
-  now.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: text }));
+const removedWhileFocused = [];
+
+function focusOutOnRemoval() {
+  const doc = document.getElementById("writer-doc");
+  const inner = Object.getOwnPropertyDescriptor(window.Element.prototype, "innerHTML");
+  Object.defineProperty(doc, "innerHTML", {
+    configurable: true,
+    get() { return inner.get.call(this); },
+    set(value) {
+      const active = document.activeElement;
+      if (active && active !== this && this.contains(active)) {
+        removedWhileFocused.push({ connected: active.isConnected, text: active.textContent });
+        active.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+      }
+      inner.set.call(this, value);
+    }
+  });
+  return () => { delete doc.innerHTML; };
+}
+
+function composeInto(p, text, opts) {
+  const ends = !opts || opts.end !== false;
+  removedWhileFocused.length = 0;
+  const restore = focusOutOnRemoval();
+  try {
+    p.setAttribute("contenteditable", "true");
+    p.focus();
+    p.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    const node = lastText(p);
+    node.data += text;
+    const r = document.createRange();
+    r.setStart(node, node.data.length);
+    r.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    p.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: text, isComposing: true }));
+    if (!ends) return;
+    const now = para(p.getAttribute("data-id"));
+    now.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: text }));
+  } finally {
+    restore();
+  }
 }
 
 const COMPOSED = String.fromCharCode(0x3042);
@@ -485,6 +514,74 @@ test("composition text that lands in a Writer paragraph not yet redrawn read-onl
   });
   assert.equal(writer.writerOpen, false);
   assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  toEdit();
+});
+
+test("a refused composition whose redraw fires focusout on the removed paragraph, as Chromium does, saves nothing", async () => {
+  await writerInReview();
+  untouched(() => composeInto(para("r1"), COMPOSED, { end: false }));
+  assert.deepEqual(removedWhileFocused, [{ connected: true, text: "Hello there" + COMPOSED }], "the old paragraph got a focusout while connected, holding the composed text");
+  oneRefusal();
+  assert.equal(S.state.rows[0].audioText, "Hello there");
+  assert.equal(para("r1").textContent, "Hello there");
+  assert.equal(para("r1").getAttribute("contenteditable"), "false");
+  toEdit();
+  writer.closeWriter();
+});
+
+test("in review mode, a Writer paragraph whose text differs from the model is not saved by a direct sync, a focusout or closing the Writer", async () => {
+  await writerInReview();
+  const p = para("r2");
+  p.innerHTML = "Alpha bravo CHANGED";
+  untouched(() => syncFieldFromDom(p));
+  untouched(() => p.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
+  p.setAttribute("contenteditable", "true");
+  p.focus();
+  untouched(() => writer.closeWriter());
+  assert.equal(writer.writerOpen, false);
+  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  toEdit();
+});
+
+test("in review mode, a grid cell whose text or formatting differs from the model is not saved by a focusout or a direct sync", async () => {
+  await open();
+  toReview();
+  flushEdits();
+  S.dirty = false;
+  const cell = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
+  cell.innerHTML = "Hello there CHANGED";
+  untouched(() => cell.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
+  cell.innerHTML = "Hello <strong>there</strong>";
+  untouched(() => syncFieldFromDom(cell));
+  assert.equal(S.state.rows[0].audioText, "Hello there");
+  toEdit();
+});
+
+test("in review mode, a comment anchor reaching the grid through the same sync is still stored", async () => {
+  await open();
+  toReview();
+  flushEdits();
+  const cell = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
+  const generation = liveSession().generation();
+  cell.innerHTML = 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>';
+  syncFieldFromDom(cell);
+  assert.equal(S.state.rows[0].audioText, 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>');
+  assert.equal(liveSession().generation(), generation + 1);
+  toEdit();
+});
+
+test("in review mode, an input on the grid's title does not rename the script and gives the title back", async () => {
+  await open();
+  toReview();
+  flushEdits();
+  S.dirty = false;
+  const title = document.getElementById("doc-title");
+  untouched(() => {
+    title.value = "Renamed";
+    title.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  assert.equal(title.value, "Writer in review");
+  assert.equal(S.state.title, "Writer in review");
   toEdit();
 });
 
