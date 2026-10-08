@@ -121,7 +121,7 @@ function soundRenames(tags: readonly Bag[], names: readonly string[], wanted: re
     if (t.cat === "sound" && names[at]) kept[nameKey(names[at] as string)] = true;
   });
   wanted.forEach(function (name, at) {
-    if (!name) return;
+    if (!name || names[at] !== name) return;
     const old = nameKey(cappedText((tags[at] as Bag).name, 80));
     if (kept[old]) return;
     out[old] = name;

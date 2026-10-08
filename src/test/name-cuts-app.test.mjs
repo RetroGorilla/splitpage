@@ -357,6 +357,21 @@ test("words tagged with a renamed sound tag's old name stay on another sound tag
   assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [x(79)]);
 });
 
+test("words of a sound tag whose cue rename was refused never join the tag that refused it (#445)", () => {
+  migrated({
+    rows: [
+      { id: "r1", status: "todo", audioText: cue(x(79) + GRIN + " tail"), visualText: "" },
+      { id: "r2", status: "todo", audioText: soundWords(x(79) + "\uD83D", "door"), visualText: "" }
+    ],
+    productionTags: [
+      { id: "t_old1", cat: "sound", name: x(79) + "\uD83D", owner: "p1", notes: "words" },
+      { id: "t_old2", cat: "sound", name: x(79) + GRIN, notes: "cue" }
+    ]
+  });
+  assert.deepEqual(S.state.productionTags.slice(0, 2).map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + "\uD83D", "words"], ["t_old2", x(79) + GRIN, "cue"]]);
+  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [x(79)]);
+});
+
 test("a sound tag whose cue has its own tag keeps its tagged words (#445)", () => {
   migrated({
     rows: [
