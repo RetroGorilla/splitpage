@@ -313,3 +313,97 @@ test("07 the tag composer offers the selected words cut by code point (#344)", (
   assert.equal(value, x(79) + GRIN);
   assert.ok(!LONE.test(value));
 });
+
+const soundWords = (name, text) => '<span class="tag-anchor" data-tag-cat="sound" data-tag-name="' + name + '" contenteditable="false">' + text + "</span>";
+const cue = (name) => '<span class="audio-cue">SFX: ' + name + "</span>";
+const tagNamesIn = (html) => [...html.matchAll(/data-tag-name="([^"]*)"/g)].map((m) => m[1]);
+
+const CUE_AND_WORDS = [
+  ["40 emoji stored, 50 in the cue", GRIN.repeat(40), GRIN.repeat(50), GRIN.repeat(40), GRIN.repeat(50)],
+  ["half an emoji stored", x(79) + "\uD83D", x(79) + GRIN + " tail", x(79) + "\uD83D", x(79) + GRIN]
+];
+
+for (const [what, stored, line, words, whole] of CUE_AND_WORDS) {
+  test("a sound tag that a cue and tagged words share stays one tag once the cue renames it: " + what + " (#445)", () => {
+    migrated({
+      rows: [
+        { id: "r1", status: "todo", audioText: cue(line), visualText: "" },
+        { id: "r2", status: "todo", audioText: "a " + soundWords(words, "door") + " b", visualText: soundWords(words, "slam") }
+      ],
+      productionTags: [{ id: "t_old1", cat: "sound", name: stored, status: "have", owner: "p1", notes: "keep me" }]
+    });
+    const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+    assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", whole, "have", "p1", "keep me"]]);
+    assert.deepEqual(tagNamesIn(S.state.rows[1].audioText).concat(tagNamesIn(S.state.rows[1].visualText)), [whole, whole]);
+    assert.equal(new window.DOMParser().parseFromString(S.state.rows[1].audioText, "text/html").body.textContent, "a door b");
+    assert.equal(S.state.rows[0].audioText, cue(line));
+    const once = JSON.stringify(S.state);
+    assert.equal(JSON.stringify(migrateRows(JSON.parse(once))), once, "a second load changes nothing");
+  });
+}
+
+test("words tagged with a renamed sound tag's old name stay on another sound tag that holds that name (#445)", () => {
+  migrated({
+    rows: [
+      { id: "r1", status: "todo", audioText: cue(x(79) + GRIN + " tail"), visualText: "" },
+      { id: "r2", status: "todo", audioText: soundWords(x(79), "door"), visualText: "" }
+    ],
+    productionTags: [
+      { id: "t_old1", cat: "sound", name: x(79) + "\uD83D", owner: "p1", notes: "cue" },
+      { id: "t_old2", cat: "sound", name: x(79), notes: "words" }
+    ]
+  });
+  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + GRIN, "cue"], ["t_old2", x(79), "words"]]);
+  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [x(79)]);
+});
+
+test("a sound tag whose cue has its own tag keeps its tagged words (#445)", () => {
+  migrated({
+    rows: [
+      { id: "r1", status: "todo", audioText: cue(GRIN.repeat(50)), visualText: "" },
+      { id: "r2", status: "todo", audioText: soundWords(GRIN.repeat(40), "door"), visualText: "" }
+    ],
+    productionTags: [
+      { id: "t_old1", cat: "sound", name: GRIN.repeat(40), owner: "p1", notes: "words" },
+      { id: "t_old2", cat: "sound", name: GRIN.repeat(50), notes: "cue" }
+    ]
+  });
+  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", GRIN.repeat(40), "words"], ["t_old2", GRIN.repeat(50), "cue"]]);
+  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [GRIN.repeat(40)]);
+});
+
+test("a prop tag with a sound tag's old name keeps its tagged words (#445)", () => {
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: cue(GRIN.repeat(50)) + " " + soundWords(GRIN.repeat(40), "a").replace('"sound"', '"prop"'), visualText: "" }],
+    productionTags: [
+      { id: "t_old1", cat: "sound", name: GRIN.repeat(40), notes: "cue" },
+      { id: "t_old2", cat: "prop", name: GRIN.repeat(40), notes: "prop" }
+    ]
+  });
+  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.cat, t.name]), [["t_old1", "sound", GRIN.repeat(50)], ["t_old2", "prop", GRIN.repeat(40)]]);
+  assert.deepEqual(tagNamesIn(S.state.rows[0].audioText), [GRIN.repeat(40)]);
+});
+
+test("a keyed B-roll line whose id has no stored shot keeps the shot its old cut named (#445)", () => {
+  const key = '<span class="broll-key" data-broll-id="bsX" contenteditable="false">B-roll:</span> ';
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: "", visualText: key + x(199) + GRIN + " a" }],
+    brollShots: [{ id: "bs9", name: x(199) + "\uD83D", notes: "two", status: "shot", origin: "script" }]
+  });
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
+  openBrollPanel();
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
+  closeBrollPanel();
+});
+
+test("a keyed B-roll line whose id is a stored shot still renames no other shot (#445)", () => {
+  const key = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> ';
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: "", visualText: key + x(199) + GRIN + " a" }],
+    brollShots: [
+      { id: "bs1", name: "Other", status: "todo", origin: "script" },
+      { id: "bs9", name: x(199) + "\uD83D", notes: "two", status: "shot", origin: "list" }
+    ]
+  });
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs9", x(199), "two"]]);
+});

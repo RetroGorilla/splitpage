@@ -29,7 +29,7 @@ import {
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
 import { brollCutRenames } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
-import { collectTagsFromRows, cueCutRenames, missingRegistryTags } from "./production/tags.ts";
+import { TAG_FIELDS, collectTagsFromRows, cueCutRenames, missingRegistryTags, retagMarks } from "./production/tags.ts";
 import { syncCommentAnchors } from "./text/anchors.ts";
 import { toHtml } from "./text/html.ts";
 import type { DecodeOptions } from "./text/ports.ts";
@@ -112,9 +112,36 @@ function cueRenamesFor(tags: readonly Bag[], rows: readonly ProductionRow[], rea
   });
 }
 
+function soundRenames(tags: readonly Bag[], names: readonly string[], wanted: readonly (string | undefined)[] | undefined): Record<string, string> | null {
+  if (!wanted) return null;
+  const kept: Record<string, boolean> = Object.create(null), out: Record<string, string> = Object.create(null);
+  let any = false;
+  tags.forEach(function (t, at) {
+    if (t.cat === "sound" && names[at]) kept[nameKey(names[at] as string)] = true;
+  });
+  wanted.forEach(function (name, at) {
+    if (!name || names[at] !== name) return;
+    const old = nameKey(cappedText((tags[at] as Bag).name, 80));
+    if (!old || kept[old]) return;
+    out[old] = name;
+    any = true;
+  });
+  return any ? out : null;
+}
+
+function retagRenamedSounds(rows: readonly Bag[], renames: Record<string, string> | null, readers: ProductionReaders): void {
+  if (!renames) return;
+  rows.forEach(function (r) {
+    TAG_FIELDS.forEach(function (field) {
+      const html = r[field] as string;
+      if (html.indexOf("data-tag-name") !== -1) r[field] = retagMarks(html, "sound", renames, readers);
+    });
+  });
+}
+
 function shotRenamesFor(shots: readonly Bag[], rows: readonly ProductionRow[], readers: ProductionReaders): (string | undefined)[] | undefined {
   if (!shots.length) return undefined;
-  const renames = brollCutRenames(rows, readers);
+  const renames = brollCutRenames(rows, readers, shots.map(function (b) { return b.id as string; }));
   if (!renames.lines.length) return undefined;
   const wanted: (string | undefined)[] = shots.map(function () { return undefined; });
   const texts = shots.map(textOfName), named: Record<string, boolean> = Object.create(null);
@@ -244,9 +271,11 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   s.productionTags = (s.productionTags as unknown[]).filter(isObject);
   const tags = s.productionTags as Bag[];
   tags.forEach(function (t) { t.cat = tagCategoryId(t.cat) || TAG_CATEGORY_IDS[0]; });
+  const cueWanted = cueRenamesFor(tags, s.rows as ProductionRow[], ports.readers);
   const tagNames = settledNames(tags.map(textOfName), 80, function (name, at) {
     return tagKey((tags[at] as Bag).cat as string, name);
-  }, cueRenamesFor(tags, s.rows as ProductionRow[], ports.readers));
+  }, cueWanted);
+  retagRenamedSounds(s.rows as Bag[], soundRenames(tags, tagNames, cueWanted), ports.readers);
   tags.forEach(function (t, at) {
     t.name = tagNames[at];
     t.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
