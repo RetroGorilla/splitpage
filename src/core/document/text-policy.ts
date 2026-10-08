@@ -48,7 +48,7 @@ export function codePointPrefix(s: string, max: number): string {
 
 export function unitSafePrefix(s: string, max: number): string {
   if (s.length <= max) return s;
-  let end = Math.max(0, max);
+  let end = max;
   const last = s.charCodeAt(end - 1), next = s.charCodeAt(end);
   if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end--;
   return s.slice(0, end);
