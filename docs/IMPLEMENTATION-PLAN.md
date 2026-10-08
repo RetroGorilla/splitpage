@@ -263,6 +263,13 @@ Split recovery capture scheduling, store adapters, writer ownership and restore/
 
 **Document-replacement lifecycle test.** A document or tab replacement leaves no session-level handler, timer, observer, subscription or object URL behind (section 6). The test calls the session owner's own dispose, advances the fake clock, lets every pending operation settle, and asserts that nothing from the old document touched the replacement. It does not rely on the app-test helper's own clearing of tracked timers and channels (`src/test/_app-boot.mjs`), which is test housekeeping and would mask missing production cleanup. It separates document-owned resources, which must go, from app-lifetime subscriptions, which must survive a switch, and names each of the latter.
 
+**From the milestone 3 external review (Codex, 2026-10-08; [gate record](architecture/milestone-3-gate.md#external-review)).**
+- Operation identity covers every document-scoped continuation, not only saves: a delayed media paste or drop, a gallery picture, thumbnails and recovery capture the session epoch and document id before their await and refuse to complete in another epoch (#478).
+- Effects are observational. The dirty effect's `personColors` write moves inside the transaction and into the change set (#479); after this, no effect writes document content.
+- A command whose transaction committed but whose undo recording, effect pass or publication threw is a distinct, reported outcome, not `failed`; it is never rolled back.
+- The owners this milestone adds (the save coordinator, the transition API, the store adapters) are constructed by an explicit function that takes its ports. None is a module-evaluation singleton with permissive or no-op defaults, so milestone 7's wiring step only moves that call into `src/bootstrap/`.
+- #463 (atomic render) keeps section 6's render invariant. A detached draw contains preparation failures but does not stop synchronous focus events during the commit, so the commit phase is guarded and focus is restored within its own surface. #477 fixes today's path first, as a bug fix.
+
 **Gate:** Controlled race matrix passes for document switch, same-ID reopen, changed destination/connection during serialization/upload, edits during writes, out-of-order completions, cancelled dialogs, permission revocation, 409 retries and write failure. Assert actual stored bytes, live document, dirty state, baseline and destination. Browser/desktop recovery tests cover multi-tab ownership, quota/unavailable/corrupt storage, offline images, restart and revoked links. Existing five repaired defects stay fixed. The document-replacement lifecycle test and the capture-contract test above pass.
 
 The blob registry (`02c-blobs.js`) moves into a store adapter here, so two criteria from the milestone 2 external review belong to this milestone:
@@ -307,6 +314,8 @@ Finish complex event handling only when the receiving owner exists, preserving p
 
 **Undo and redo (Adam, 2026-10-07).** Replay today writes `S.state` directly through `applyStepsLive` and reaches the session only afterwards, as `afterUndoApplied`'s `markDirty` ([session.md](architecture/session.md)). Acceptance: an undo or redo replay passes through the application's document-mutation boundary as a transaction kind of its own, preserving today's grouping, coalescing, `forget` and `foldIntoEdit`, draft undo (INV-55) and the owner re-pointing from #402. The undo algorithm, the diffing and the inversion stay.
 
+**Order (from the milestone 3 external review, 2026-10-08).** The editing infrastructure comes first: the selection model (#464, whose acceptance points are on the issue: epoch, scene and field, direction and affinity, atoms, mapping through edits, split and join, undo and incoming changes, and the vanished scene; focus separate from selection; a composition lifetime tied to its cell and session) and the undo/redo transaction above land before the panel migrations and the CSS moves, which depend on both. A reviewer's comment anchor becomes a command of its own with an annotate capability when the comments feature migrates, replacing the typing command's anchor-only exception (#466).
+
 **Cleanup, bridges and CSS.**
 - Each feature's dispose test exercises production cleanup under the rule of milestone 4's lifecycle test: call the feature's own dispose, advance the fake clock, settle pending work, assert nothing reached the replacement, never rely on the app-test helper's housekeeping, and name the app-lifetime subscriptions that legitimately survive.
 - A bridge or duplicate implementation goes in the PR that migrates its last consumer. There is no standalone bridge-retirement milestone in 4.0, but a bridge with no importer left is removed, not kept.
@@ -333,6 +342,7 @@ These are architectural contracts, not optional tests or comments to add to sour
 - Document identity, session epoch, local edit generation, destination generation and server revision have different meanings.
 - Every accepted user transaction includes its dependent anchor/record reconciliation; no-op and rejected operations produce no edit side effects.
 - A view or selector never changes document content; document snapshots passed outside the owner cannot be written back by reference.
+- Rendering creates no edit: whatever focus or blur events it causes, it cannot commit a cell's DOM to the document, roll back an accepted update, or let stale DOM overwrite the current document (#477, #463).
 - Credentials, invitation fragments, native handles and unrelated documents never enter project exports or recovery metadata.
 - The baseline is exactly what that destination confirmed. Copies, imported-file writeback, hosted saves and draft capture acknowledge different things.
 - Async results carry their originating context. Transport cannot change mid-operation through a mutable global lookup. Cancellation does not prove a write failed to land.
