@@ -32,7 +32,14 @@ function escapeRegExpLiteral(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+var LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+function withoutLoneSurrogates(s) {
+  return s.replace(LONE_SURROGATE_RE, "");
+}
+
 function findAllMatches(text, needle, matchCase) {
+  needle = withoutLoneSurrogates(needle);
   if (!needle) return [];
   var re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
   var out = [], m;
