@@ -492,20 +492,43 @@ test("a save conflict whose state is no document is not merged: the save fails a
   window.__hostedTest.setSession({ docId: null });
 });
 
-test("reopening a server document after a reload refuses a state that is no document as a failed fetch does: nothing changes and the reopen stays pending (#407)", async () => {
-  for (const raw of NOT_DOCUMENTS) {
-    const start = holding("Resume");
-    const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
-    sessionStorage.setItem(SERVER_RESUME_KEY, pending);
-    await withServer((ask) => ask === "GET api/me" ? reply(200, { role: "edit" }) : ask === "GET api/docs/doc-resume" ? reply(200, { id: "doc-resume", rev: 2, state: raw }) : null, async (asked) => {
-      await finishServerDetect();
-      await idle();
-      assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"]);
-    });
-    unchangedBy("resume " + JSON.stringify(raw), start, start.epoch, start.gen);
-    assert.notEqual(window.__hostedTest.home().kind, "server");
-    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending);
-    sessionStorage.removeItem(SERVER_RESUME_KEY);
+test("reopening a server document after a reload refuses a state that is no document as a server open does: \"That document is empty.\", nothing changes and the reopen stays pending (#407)", async () => {
+  for (const me of [{ role: "edit" }, { role: "edit", scope: "doc-resume" }]) {
+    for (const raw of NOT_DOCUMENTS) {
+      const where = "resume " + JSON.stringify(me) + " " + JSON.stringify(raw);
+      const start = holding("Resume");
+      const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
+      sessionStorage.setItem(SERVER_RESUME_KEY, pending);
+      await withServer((ask) => ask === "GET api/me" ? reply(200, me) : ask === "GET api/docs/doc-resume" ? reply(200, { id: "doc-resume", rev: 2, state: raw }) : null, async (asked) => {
+        await finishServerDetect();
+        await idle();
+        assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"], where);
+      });
+      assert.deepEqual(toasts(), ["That document is empty."], where);
+      unchangedBy(where, start, start.epoch, start.gen);
+      assert.notEqual(window.__hostedTest.home().kind, "server");
+      assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending);
+      sessionStorage.removeItem(SERVER_RESUME_KEY);
+    }
   }
+  window.__hostedTest.setSession({ docId: null });
+  settle(startingDocument("After the server"));
+});
+
+test("a reopen after a reload whose fetch fails still falls back to the link's document", async () => {
+  const start = holding("Resume offline");
+  sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "doc-resume", rev: 1 }));
+  await withServer((ask) => {
+    if (ask === "GET api/me") return reply(200, { role: "edit", scope: "doc-resume" });
+    if (ask === "GET api/docs/doc-resume") throw new Error("offline");
+    return null;
+  }, async (asked) => {
+    await finishServerDetect();
+    await idle();
+    assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume", "GET api/docs/doc-resume"]);
+  });
+  assert.equal(S.state, start.doc);
+  sessionStorage.removeItem(SERVER_RESUME_KEY);
+  window.__hostedTest.setSession({ docId: null });
   settle(startingDocument("After the server"));
 });

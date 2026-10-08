@@ -490,17 +490,18 @@ function offerDraftAfterLinkOff() {
   offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
 }
 
+function pendingServerResume() {
+  var override = S.draftServerResume;
+  if (override) return { id: override.id, rev: override.rev || 0 };
+  try {
+    var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
 async function resumeServerDoc() {
   var override = S.draftServerResume;
-  var pending;
-  if (override) {
-    pending = { id: override.id, rev: override.rev || 0 };
-  } else {
-    try {
-      var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
-      pending = raw ? JSON.parse(raw) : null;
-    } catch (e) { pending = null; }
-  }
+  var pending = pendingServerResume();
   if (!pending || !pending.id) return false;
 
   var seqAtStart = S.editSeq;
@@ -519,7 +520,7 @@ async function resumeServerDoc() {
     }
     return false;
   }
-  if (!body || !isDocumentObject(body.state)) return false;
+  if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return "empty"; }
   if (override) {
     S.draftServerResume = null;
     var samePending;
@@ -830,8 +831,10 @@ export async function finishServerDetect() {
   var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
-      if (!resumed) openSharedDocFromLink();
-    }, function () { openSharedDocFromLink(); });
+      if (resumed === true) return;
+      var refused = resumed === "empty" ? pendingServerResume() : null;
+      openSharedDocFromLink(refused ? refused.id : "");
+    }, function () { openSharedDocFromLink(""); });
   });
 }
 
@@ -950,7 +953,7 @@ function renderServerPicker() {
 export async function openServerDoc(id) {
   if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
-    var resumed = await resumeServerDoc();
+    var resumed = await resumeServerDoc() === true;
     if (resumed) {
       if (typeof closeNewTabPage === "function") closeNewTabPage();
       closeServerPicker();
@@ -1116,10 +1119,10 @@ function readSharedDocParam() {
   return id;
 }
 
-async function openSharedDocFromLink() {
+async function openSharedDocFromLink(refusedId) {
   var id = conn.scope || sharedDocId || linkDocId;
   sharedDocId = "";
-  if (!id) return false;
+  if (!id || id === refusedId) return false;
   if (onServerDoc()) return false;
   var opened = await openServerDoc(id);
   if (opened && (isLinkGuest() || linkKey)) maybeAskGuestName();
