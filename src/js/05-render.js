@@ -39,7 +39,7 @@ import {
   syncAnchorResolvedClasses,
   updateCommentsCount
 } from "./10-comments.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
@@ -683,6 +683,22 @@ export function render() {
   if (S.savedRangeCell && !S.savedRangeCell.isConnected) {
     S.savedRange = null;
     S.savedRangeCell = null;
+  }
+}
+
+var REDRAW_FAILED = "Couldn't redraw the script after the update. Your changes are saved.";
+var redrawToast = null;
+
+export function renderAbsorbed() {
+  try {
+    render();
+    return true;
+  } catch (e) {
+    if (window.console) console.error(e);
+    if (!redrawToast || !redrawToast.isConnected || redrawToast.classList.contains("is-leaving")) {
+      redrawToast = showActionToast(REDRAW_FAILED, "error", "Redraw", renderAbsorbed, true);
+    }
+    return false;
   }
 }
 

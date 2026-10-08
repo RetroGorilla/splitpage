@@ -6,7 +6,7 @@ import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
+import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
@@ -78,7 +78,7 @@ function adoptNewDocument(next, reason) {
   if (home.kind === "file" || home.kind === "import") setHome("none");
   clearDirty();
   resetProductionPanelState();
-  render();
+  renderAbsorbed();
   updateFileChip();
   updateIdentityChip();
   updateSaveStatus();
