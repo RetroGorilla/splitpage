@@ -4,7 +4,7 @@ export type StepState = { rows?: (StepRow | null | undefined)[] | null | undefin
 
 export type RowFieldStep = { op: "rowField"; rowId: string; key: string; before?: unknown; after?: unknown };
 
-export type DocFieldStep = { op: "docField"; key: string; before?: unknown; after?: unknown };
+export type DocFieldStep = { op: "docField"; key: string; before?: unknown; after?: unknown; owners?: Record<string, string> };
 
 export type InsertRowStep = { op: "insertRow"; index: number; row: StepRow };
 
@@ -78,7 +78,11 @@ export function applySteps<T extends StepState>(state: T, steps: readonly Step[]
 export function invertSteps(steps: readonly Step[] | null | undefined): Step[] {
   return (steps || []).slice().reverse().map(function (s): Step {
     if (s.op === "rowField") return { op: "rowField", rowId: s.rowId, key: s.key, before: clone(s.after), after: clone(s.before) };
-    if (s.op === "docField") return { op: "docField", key: s.key, before: clone(s.after), after: clone(s.before) };
+    if (s.op === "docField") {
+      const inverse: Step = { op: "docField", key: s.key, before: clone(s.after), after: clone(s.before) };
+      if (s.owners) inverse.owners = clone(s.owners);
+      return inverse;
+    }
     if (s.op === "insertRow") return { op: "deleteRow", index: s.index, row: clone(s.row) };
     if (s.op === "deleteRow") return { op: "insertRow", index: s.index, row: clone(s.row) };
     if (s.op === "moveRow") return { op: "moveRow", from: s.to, to: s.from };
