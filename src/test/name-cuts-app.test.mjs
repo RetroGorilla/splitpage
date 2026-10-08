@@ -197,6 +197,18 @@ for (const [what, stored, line, whole] of OLD_CUTS) {
   });
 }
 
+test("an unkeyed B-roll line renames the free shot with its old cut, not one a keyed line holds (#344)", () => {
+  const key = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> ';
+  migrated({
+    rows: [{ id: "r1", status: "todo", audioText: "", visualText: key + x(199) + GRIN + " a<br>B-roll: " + x(199) + GRIN + " b" }],
+    brollShots: [
+      { id: "bs1", name: x(199) + "\uD83D", notes: "held", status: "shot", origin: "script" },
+      { id: "bs2", name: x(199) + "\uD83D", notes: "free", status: "shot", origin: "script" }
+    ]
+  });
+  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "held"], ["bs2", x(199) + GRIN, "free"]]);
+});
+
 test("a comment over text that held a lone half is not marked Changed once the half is gone (#344)", () => {
   migrated({
     rows: [{ id: "r1", status: "todo", audioText: 'say <span class="cmt-anchor" data-cmt="c1">hi\uD83D there</span> now', visualText: "" }],

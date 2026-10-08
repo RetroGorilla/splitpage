@@ -357,20 +357,20 @@ test("a name that would heal into another name of its kind keeps its record, sto
     schema: 2, rows: [], comments: [],
     people: [{ id: "p1", name: "Ann\uD83D" }, { id: "p2", name: "Ann" }, { id: "p3", name: "Bo \uD83D" }, { id: "p4", name: "bo" }],
     productionTags: [
-      { cat: "prop", name: "mug\uD83D", notes: "first" }, { cat: "prop", name: "mug", notes: "second" },
-      { cat: "prop", name: "cup\uD83D" }, { cat: "prop", name: "cup\uDE00" }, { cat: "location", name: "mug\uD83D" }
+      { cat: "prop", name: "Mug\uD83D", notes: "first" }, { cat: "prop", name: "mug", notes: "second" },
+      { cat: "prop", name: "cup\uD83D" }, { cat: "prop", name: "cup\uDE00" }, { cat: "location", name: "Mug\uD83D" }
     ],
     brollShots: [
-      { id: "bs1", name: "Wide \uD83D", props: ["pan\uD83D", "pan", "pot\uD83D"] }, { id: "bs2", name: "Wide" }
+      { id: "bs1", name: "Wide \uD83D", props: ["Pan\uD83D", "pan", "pot\uD83D"] }, { id: "bs2", name: "wide" }
     ],
     personColors: { "Ann\uD83D": "#80BDFB", "ann": "#F9B64F" }
   });
   assert.deepEqual(namesOf(out, "people"), ["Ann\uD83D", "Ann", "Bo \uD83D", "bo"]);
   assert.deepEqual(list(out, "productionTags").map((t) => [t.cat, t.name, t.notes]), [
-    ["prop", "mug\uD83D", "first"], ["prop", "mug", "second"], ["prop", "cup", ""], ["prop", "cup\uDE00", ""], ["location", "mug", ""]
+    ["prop", "Mug\uD83D", "first"], ["prop", "mug", "second"], ["prop", "cup", ""], ["prop", "cup\uDE00", ""], ["location", "Mug", ""]
   ]);
-  assert.deepEqual(namesOf(out, "brollShots"), ["Wide \uD83D", "Wide"]);
-  assert.deepEqual(((list(out, "brollShots")[0] as Item).props as Item[]).map((p) => p.name), ["pan\uD83D", "pan", "pot"]);
+  assert.deepEqual(namesOf(out, "brollShots"), ["Wide \uD83D", "wide"]);
+  assert.deepEqual(((list(out, "brollShots")[0] as Item).props as Item[]).map((p) => p.name), ["Pan\uD83D", "pan", "pot"]);
   assert.deepEqual(out.personColors, { "Ann\uD83D": "#80BDFB", "ann": "#F9B64F" });
 });
 
