@@ -243,7 +243,7 @@ test("history: redo comes back only to the history it was cleared from, and also
 
 const inR2 = (b, a) => typed(b, a).map((s) => Object.assign(s, { rowId: "r2" }));
 
-test("history: after the typing that cleared redo is undone, a later drop gives back the typing's redo with the redo from before it under it", () => {
+test("history: after the typing that cleared redo is undone, a later drop gives back only the typing's redo, never the older redo the typing cleared", () => {
   const h = createUndoHistory();
   h.record(status("r9"), 0);
   const live = doc([row("r9", "", { status: "shot" }), row("r1", "a"), row("r2", "b")]);
@@ -255,12 +255,140 @@ test("history: after the typing that cleared redo is undone, a later drop gives 
   h.record(inR2("b", "by"), 9000);
   assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
   h.record(inR2("by", "b"), 9100);
-  assert.deepEqual(h.sizes(), { undo: 0, redo: 2 });
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
   assert.equal(h.redo(live).ok, true);
-  assert.equal(live.rows[1].audioText, "ax", "Ctrl+Y redoes the typing first");
+  assert.equal(live.rows[1].audioText, "ax", "Ctrl+Y redoes the typing");
+  assert.equal(h.redo(live).empty, true, "and stops: the typing cleared the older redo");
+  assert.equal(live.rows[0].status, "todo");
+});
+
+test("history: a drop gives back only what its own typing cleared, so a scene move and an insert undone from the same point are never stacked", () => {
+  const h = createUndoHistory();
+  let live = doc(["a", "b", "c", "d"].map((id) => row(id, id)));
+  const change = (fn, at) => {
+    const after = clone(live);
+    fn(after);
+    h.record(diffStates(live, after), at);
+    live = after;
+  };
+  const ids = () => live.rows.map((r) => r.id).join("");
+  change((d) => d.rows.unshift(d.rows.pop()), 0);
+  assert.equal(ids(), "dabc");
+  assert.equal(h.undo(live).ok, true);
+  change((d) => d.rows.unshift(row("n", "n")), 5000);
+  assert.equal(ids(), "nabcd");
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(ids(), "abcd");
+  change((d) => { d.rows[0].audioText = "ax"; }, 9000);
+  change((d) => { d.rows[0].audioText = "a"; }, 9100);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 1 });
   assert.equal(h.redo(live).ok, true);
-  assert.equal(live.rows[0].status, "shot", "and then reaches the change undone before it");
+  assert.equal(ids(), "nabcd");
+  assert.equal(h.redo(live).empty, true, "the move was undone from a history without the insert");
+  assert.equal(ids(), "nabcd");
+});
+
+test("history: a drop after only part of the typing was undone keeps redo cleared, as before the drop gave any back", () => {
+  const h = createUndoHistory();
+  h.record(status("r9"), 0);
+  const live = doc([row("r9", "", { status: "shot" }), row("r1", "a b")]);
+  assert.equal(h.undo(live).ok, true);
+  h.record(typed("", "a"), 5000);
+  h.record(typed("a", "a "), 5100);
+  h.record(typed("a ", "a b"), 5200);
+  assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+  assert.equal(h.undo(live).ok, true);
+  assert.equal(live.rows[1].audioText, "a ");
+  h.record(typed("a ", "a"), 5300);
+  h.record(typed("a", ""), 5400);
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 0 });
   assert.equal(h.redo(live).empty, true);
+  assert.equal(live.rows[0].status, "todo");
+});
+
+test("history: dropping a later word gives back no redo while the entry under it still holds typing made after the redo was parked", () => {
+  const h = createUndoHistory();
+  h.record(typed("", "x"), 0);
+  h.record(status("r9"), 100);
+  const live = doc([row("r1", "x"), row("r9", "", { status: "shot" })]);
+  assert.equal(h.undo(live).ok, true);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 1 });
+  h.record(typed("x", "xa"), 300);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 });
+  h.record(typed("xa", "xa "), 400);
+  h.record(typed("xa ", "xa b"), 500);
+  assert.deepEqual(h.sizes(), { undo: 2, redo: 0 });
+  h.record(typed("xa b", "xa "), 600);
+  assert.deepEqual(h.sizes(), { undo: 1, redo: 0 }, "the a is still in the cell");
+  assert.equal(h.nextRedo(), null);
+  assert.equal(h.top().steps[0].after, "xa ");
+});
+
+const seededDraw = (seed) => {
+  let s = seed >>> 0;
+  return (n) => {
+    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+    return (s >>> 16) % n;
+  };
+};
+
+function redoInvariantRun(seed, count) {
+  const draw = seededDraw(seed);
+  const h = createUndoHistory();
+  let live = doc(["a", "b", "c", "d"].map((id) => row(id, id)));
+  const undoneFrom = new Map();
+  const canon = () => live.rows.map((r) => r.id + ":" + r.audioText + ":" + r.status).join("|");
+  const ops = [];
+  let now = 0, fresh = 0;
+  const change = (fn, gap) => {
+    now += gap;
+    const after = clone(live);
+    fn(after);
+    h.record(diffStates(live, after), now);
+    live = after;
+  };
+  const kinds = ["edit", "status", "drop", "cancel", "insert", "move", "undo", "undo", "redo", "redo", "redo"];
+  for (let i = 0; i < count; i++) {
+    const kind = kinds[draw(kinds.length)];
+    ops.push(kind);
+    const at = draw(live.rows.length);
+    if (kind === "edit") {
+      change((d) => { d.rows[at].audioText += "e"; }, 5000);
+    } else if (kind === "status") {
+      change((d) => { d.rows[at].status = d.rows[at].status === "todo" ? "shot" : "todo"; }, 5000);
+    } else if (kind === "drop") {
+      const text = live.rows[at].audioText;
+      change((d) => { d.rows[at].audioText = text + "x"; }, 5000);
+      change((d) => { d.rows[at].audioText = text; }, 100);
+    } else if (kind === "cancel") {
+      const text = live.rows[at].audioText;
+      const mark = h.markCell(live.rows[at].id, "audioText", text);
+      change((d) => { d.rows[at].audioText = text + "ね"; }, 5000);
+      change((d) => { d.rows[at].audioText = text + "ねこ"; }, 1100);
+      change((d) => { d.rows[at].audioText = text; }, 1100);
+      h.dropEmptySince(mark);
+    } else if (kind === "insert") {
+      change((d) => { d.rows.splice(at, 0, row("n" + ++fresh, "n")); }, 5000);
+    } else if (kind === "move") {
+      const to = draw(live.rows.length);
+      change((d) => { d.rows.splice(to, 0, d.rows.splice(at, 1)[0]); }, 5000);
+    } else if (kind === "undo") {
+      const entry = h.top();
+      if (h.undo(live).ok) undoneFrom.set(entry, canon());
+      live = clone(live);
+    } else {
+      const entry = h.nextRedo();
+      if (entry) {
+        assert.equal(canon(), undoneFrom.get(entry), "seed " + seed + ": redo at op " + i + " starts from a state its entry was not undone from: " + ops.join(","));
+      }
+      h.redo(live);
+      live = clone(live);
+    }
+  }
+}
+
+test("history: every redo starts from the exact state its entry was undone from, over seeded mixes of edits, drops, cancels, inserts, moves, undo and redo", () => {
+  for (let seed = 1; seed <= 400; seed++) redoInvariantRun(seed, 14);
 });
 
 test("history: a typing that cleared redo and was undone and redone gives that redo back when a slow or joined cancel drops it", () => {
@@ -316,7 +444,7 @@ test("history: a drop after an undo and redo that pushed entries out of 200 puts
   assert.equal(live.rows[0].status, "todo", "the oldest entry came back");
 });
 
-test("history: the redo kept for a later drop never holds more than 200 entries, and keeps the ones Ctrl+Y reaches first", () => {
+test("history: a drop gives back the redo its own typing cleared and nothing the earlier typing cleared from the same point", () => {
   const h = createUndoHistory();
   const live = doc(Array.from({ length: 150 }, (_, i) => row("s" + i, "", { status: "shot" }))
     .concat(Array.from({ length: 100 }, (_, i) => row("q" + i, "", { status: "shot" })), [row("r1", "ax"), row("r2", "b")]));
@@ -328,11 +456,12 @@ test("history: the redo kept for a later drop never holds more than 200 entries,
   assert.deepEqual(h.sizes(), { undo: 0, redo: 101 });
   h.record(inR2("b", "by"), 900000);
   h.record(inR2("by", "b"), 900100);
-  assert.deepEqual(h.sizes(), { undo: 0, redo: 200 });
+  assert.deepEqual(h.sizes(), { undo: 0, redo: 101 });
   assert.deepEqual(h.nextRedo().steps, typed("a", "ax"));
-  for (let i = 0; i < 200; i++) assert.equal(h.redo(live).ok, true, "redo " + i);
-  assert.equal(live.rows[98].status, "shot");
-  assert.equal(live.rows[99].status, "todo", "the change farthest down the redo stack is the one left out");
+  for (let i = 0; i < 101; i++) assert.equal(h.redo(live).ok, true, "redo " + i);
+  assert.equal(h.redo(live).empty, true);
+  assert.equal(live.rows[249].status, "shot");
+  assert.equal(live.rows[149].status, "todo", "the changes the earlier typing cleared stay cleared");
 });
 
 test("history: after the typing was undone, or undone and redone, a merge that forgets it means a later drop gives nothing back", () => {

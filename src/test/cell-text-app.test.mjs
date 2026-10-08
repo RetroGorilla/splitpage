@@ -593,7 +593,7 @@ for (const drop of ["type and delete", "slow cancel"]) {
   });
 }
 
-test("after an undo, typing that is then undone, and a later type and delete, Ctrl+Y redoes the typing and then reaches the change undone before it", async () => {
+test("after an undo, typing that is then undone, and a later type and delete, Ctrl+Y redoes the typing and stops, since the typing cleared the change undone before it", async () => {
   await open();
   await undoneBang();
   clock += 5;
@@ -609,11 +609,11 @@ test("after an undo, typing that is then undone, and a later type and delete, Ct
   clock += 5;
   setText(el, "Wide", { inputType: "deleteContentBackward" });
   await settle();
-  assert.deepEqual(undoSizes(), { undo: 0, redo: 2 });
+  assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
   assert.equal(redo().ok, true);
   assert.equal(row("r3").audioText, "Three.x");
-  assert.equal(redo().ok, true);
-  assert.equal(row("r1").audioText, "Hello there!");
+  assert.equal(redo().ok, false);
+  assert.equal(row("r1").audioText, "Hello there");
 });
 
 test("after an undo, typing a letter, Ctrl+Z, Ctrl+Y and deleting it within a second gives back the redo from before the typing", async () => {
