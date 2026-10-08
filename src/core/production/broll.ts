@@ -247,12 +247,14 @@ export type BrollCutRename = { key: string | null; name: string };
 
 export type BrollCutRenames = { held: Record<string, boolean>; lines: BrollCutRename[] };
 
-export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders): BrollCutRenames {
+export function brollCutRenames(rows: readonly ProductionRow[] | null | undefined, readers: ProductionReaders, shotIds: readonly string[]): BrollCutRenames {
   const live = collectBrollFromRows(rows, readers);
+  const stored: Record<string, boolean> = Object.create(null);
+  shotIds.forEach(function (id) { stored[id] = true; });
   const lines: BrollCutRename[] = [];
   const texts: Record<number, string[]> = Object.create(null);
   live.forEach(function (found) {
-    if (found.id || found.name.length < BROLL_NAME_MAX - 3) return;
+    if ((found.id && stored[found.id]) || found.name.length < BROLL_NAME_MAX - 3) return;
     if (found.name.length < BROLL_NAME_MAX) { lines.push({ key: null, name: found.name }); return; }
     if (!texts[found.rowIndex]) {
       const row = (rows as readonly ProductionRow[])[found.rowIndex] as ProductionRow;
