@@ -225,8 +225,8 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
   cd.setData("text/plain", out.text);
   e.preventDefault();
   if (!moving) return true;
-  cutNonce = nonce;
   cutSelection(cellEl);
+  cutNonce = nonce;
   return true;
 }
 

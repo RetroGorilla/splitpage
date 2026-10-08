@@ -357,6 +357,7 @@ test("E3: a stamp port that throws rolls the paste back whole: text, gallery, sh
   const failing = pasteCommand(request("r1", "audioText", null, null, { attach: [{ kind: "image", ref: PIC }] }), broken);
   assert.equal(runConfined(h.session, failing.command).kind, "failed");
   assert.equal(snapshot(h), before, "a gallery field the row did not have is gone again");
+  assert.equal(failing.report().attached, null, "a rolled-back attach reports nothing attached");
 });
 
 test("a cut removes the range, stamps the scene and reports the caret at the range's start; it never reconciles", () => {

@@ -14,6 +14,7 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render, syncFieldFromDom } = await import("../js/05-render.js");
+const { cellSelection } = await import("../js/05b-cell-edit.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 
 after(closeApp);
@@ -150,6 +151,16 @@ test("a cut dirties once, stamps only the cut scene, and records one entry for t
   assert.equal(document.activeElement, cellOf("r1", "audioText"));
 });
 
+test("a cut leaves the caret collapsed at the cut point, not at the start of the cell", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  selectText(el, 3, 8);
+  clip("cut", el);
+  assert.equal(row("r1").audioText, "Helere");
+  assert.deepEqual(cellSelection(cellOf("r1", "audioText")), { from: 3, to: 3 });
+});
+
 test("a cut with nothing selected, or a cell holding a picture or video card, is not taken at all", async () => {
   await open();
   holdMedia();
@@ -269,6 +280,19 @@ test("pasteIntoCell reports what it did: done, the words, what it attached and w
   const gone = pasteIntoCell(to, "", "", { attach: [] });
   assert.equal(gone.done, true);
   assert.equal(gone.attached, null);
+});
+
+test("a video file with no name adds no tile, so nothing is edited, stamped or dirtied", async () => {
+  await open();
+  const to = cellOf("r1", "audioText");
+  assert.equal(S.dirty, false);
+  const got = record(() => pasteIntoCell(to, "", "", { attach: [{ kind: "videoFile", name: "", size: 3 }] }));
+  assert.equal(got.out.done, true);
+  assert.equal(got.out.attached, null);
+  assert.deepEqual({ seq: got.seq, generation: got.generation, heard: got.heard, undo: got.undo }, { seq: 0, generation: 0, heard: [], undo: 0 });
+  assert.equal(S.dirty, false);
+  assert.equal(row("r1").updatedAt, OLD);
+  assert.equal(row("r1").moreImages, undefined);
 });
 
 test("attached pictures with no words: no repaint of the cell, the stamp moves, the gallery fields are set", async () => {
@@ -542,6 +566,7 @@ test("a stamp that throws fails a paste or a cut whole: the call throws and the 
     to.focus();
     selectAll(to);
     assert.throws(() => pasteIntoCell(to, KEY("bsA") + " gulls", "x", { attach: [{ kind: "video", href: "https://vimeo.com/1" }] }), /no clock/);
+    assert.throws(() => pasteIntoCell(cellOf("r3", "audioText"), "", "", { attach: [{ kind: "video", href: "https://vimeo.com/2" }] }), /no clock/);
     el.focus();
     selectText(el, 0, 6);
     const event = { clipboardData: { setData() {} }, preventDefault() {} };
@@ -555,6 +580,33 @@ test("a stamp that throws fails a paste or a cut whole: the call throws and the 
   assert.equal(session.generation(), generation);
   assert.equal(undoSizes().undo, entries);
 });
+
+test("a cut whose stamp throws is not armed: pasting what it left on the clipboard brings the words and no second anchor", async () => {
+  await open();
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 19);
+  flushEdits();
+  const store = {};
+  const event = { clipboardData: { setData(type, value) { store[type] = value; } }, preventDefault() {} };
+  const real = Date.prototype.toISOString;
+  Date.prototype.toISOString = function () { throw new Error("no clock"); };
+  try {
+    assert.throws(() => copyFromCell(event, el, true, false), /no clock/);
+  } finally {
+    Date.prototype.toISOString = real;
+  }
+  assert.match(store["text/html"], /data-splitpage-cut=/);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  const res = pasteIntoCell(to, store["text/html"], store["text/plain"], null);
+  assert.equal(res.movedComments, false);
+  assert.equal(row("r3").audioText, "Three.bravo charlie");
+  assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo charlie") + " delta");
+  assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
+});
+
 function typeChar(el, ch) {
   el.focus();
   const walker = document.createTreeWalker(el, 4);
