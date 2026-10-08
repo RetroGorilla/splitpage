@@ -38,7 +38,9 @@ import {
   maybeCueShortcut,
   maybeDirectionShortcut,
   render,
+  renderFirstDraw,
   renderRow,
+  screenIsStale,
   syncFieldFromDom,
   syncPageTitle,
   toggleCellFormat,
@@ -654,6 +656,7 @@ function onUndoKey(e) {
 }
 
 function undoOrRedo(redoing) {
+  if (screenIsStale()) return;
   if (writerUndoStep(redoing ? "redo" : "undo")) return;
   if (redoing) redo(); else undo();
 }
@@ -862,6 +865,10 @@ function insertIntoScriptCell(cellEl, html, text, files) {
 }
 
 function insertIntoScriptCellNow(cellEl, html, text, extra) {
+  if (screenIsStale()) {
+    showToast("Could not paste — press Redraw first.", "error");
+    return;
+  }
   var before = lastUndoEntry();
   var res = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
@@ -1162,7 +1169,7 @@ function init() {
     if (S.state !== applied.state) {
       S.state = applied.state;
       setBaseState(cloneState(S.state), "boot: the version this page loaded, nothing to merge");
-      render();
+      renderFirstDraw();
     }
     updateIdentityChip();
     updateAutoSaveMenu();
