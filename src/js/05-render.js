@@ -742,7 +742,6 @@ function releaseStaleScreen() {
   staleFocus = null;
   var active = document.activeElement;
   if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
-  if (place.root === "#rows" && writerOpen) return;
   var target = place.id ? document.getElementById(place.id) : document.querySelector(place.root +
     ' .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
   if (!target) return;

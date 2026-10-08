@@ -630,14 +630,16 @@ test("a stale screen makes the script, the titles and the editing controls inert
   assert.equal(cellOf("r2", "audioText").textContent.indexOf(THEIRS), 0);
 });
 
-test("Redraw does not put the focus back into a scene under a Writer opened since the screen went stale (#443)", async () => {
+test("Redraw with a Writer opened since the screen went stale leaves the focus in the Writer, not in a scene under it (#443)", async () => {
   try {
     await staleScreen(() => { const c = cellOf("r1", "audioText"); c.focus(); select(c, 3); });
     openTheWriter();
+    window.getSelection().removeAllRanges();
     redrawToasts()[0].querySelector(".toast-action").focus();
     await pressRedraw();
     const active = document.activeElement;
     assert.equal(!!(active && active.closest && active.closest("#rows")), false, "the focus is not in a scene the Writer hides");
+    assert.equal(!!(active && active.closest && active.closest("#writer")), true, "the focus is in the Writer");
   } finally {
     closeTheWriter();
   }
