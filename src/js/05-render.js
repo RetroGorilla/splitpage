@@ -718,6 +718,7 @@ function holdStaleScreen() {
   var onRedraw = !!(redrawToast && active && redrawToast.contains(active));
   if (!screenStale && inPart) staleFocus = focusPlace(active);
   screenStale = true;
+  document.body.classList.add("is-stale-screen");
   document.querySelectorAll(STALE_PARTS).forEach(function (el) { el.setAttribute("inert", ""); });
   offerRedraw();
   if (inPart || onRedraw) redrawToast.querySelector(".toast-action").focus();
@@ -726,6 +727,7 @@ function holdStaleScreen() {
 function releaseStaleScreen() {
   if (!screenStale) return;
   screenStale = false;
+  document.body.classList.remove("is-stale-screen");
   document.querySelectorAll(STALE_PARTS).forEach(function (el) { el.removeAttribute("inert"); });
   var place = staleFocus;
   staleFocus = null;
