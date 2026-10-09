@@ -411,7 +411,6 @@
     {"rule":"cycle-edge","source":"src/js/21-events.js","target":"src/js/20d-formats.js"},
     {"rule":"cycle-edge","source":"src/js/21-events.js","target":"src/js/20f-desktop.js"},
     {"rule":"cycle-edge","source":"src/js/21-events.js","target":"src/js/20g-drafts.js"},
-    {"rule":"html-cells","source":"src/js/18-local-files.js","target":"html-parse:parseFromString","reason":"reads the state-data element of a legacy .html export; its cells come from that JSON through migrateDocument, which sanitises them, so no cell is built from the HTML itself"},
     {"rule":"html-cells","source":"src/legacy/document-ports.ts","target":"src/adapters/richtext/richtext.ts","reason":"builds its own RichText over each migration's image ingestion, which the bridge's shared one cannot take; it moves into the bridge or the composition root when documents open through a session (milestone 3)"},
     {"rule":"platform-global","source":"shared/video-embed.js","target":"global:AbortController"},
     {"rule":"platform-global","source":"shared/video-embed.js","target":"global:TextDecoder"},
