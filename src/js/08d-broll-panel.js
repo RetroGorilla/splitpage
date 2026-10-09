@@ -717,6 +717,7 @@ function keepingFocus(container, draw) {
   var again = container.querySelector(kept.key);
   if (!again) return;
   if (kept.ownValue) again.value = kept.value;
+  if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;
   if (kept.typed) {
     try { again.setSelectionRange(kept.start, kept.end); } catch (e) { }
   }
