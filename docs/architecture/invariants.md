@@ -362,13 +362,14 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-40 — A crash draft is removed only when clean or by the user
 
 - **Behaviour:**
-  - **Desktop:** a crash draft is deleted only when its tab becomes clean, or on an explicit user decision. It is never deleted on a crash, kill, renderer loss, session end, quit or restore. A discard writes a tombstone before anything is unlinked. A file tab whose file is no longer at its path is asked about on close, window close and quit as if it had unsaved changes; on "without saving" its tab writes a draft even when clean, and that draft is kept, so the next launch restores it, as an unsaved copy while the file is still missing (#258).
+  - **Desktop:** a crash draft is deleted only when its tab becomes clean, or on an explicit user decision. It is never deleted on a crash, kill, renderer loss, session end, quit or restore. A discard writes a tombstone before anything is unlinked. A file tab whose file is no longer at its path is asked about on close, window close and quit as if it had unsaved changes; on "without saving" its tab writes a draft even when clean, and that draft is kept, so the next launch restores it, as an unsaved copy while the file is still missing (#258). The close goes ahead only once main finds that copy in the draft folder; if the tab doesn't answer in time or the write fails, the same unsaved-changes question is asked again for those tabs, and the tab, window or app stays open unless the user confirms (#496). A Windows session end writes and keeps the same copy without asking (#492). The file check waits at most one second, and a check that doesn't finish counts as the file being gone (#497).
   - **Browser:** a draft is removed only by the page that wrote it, or took it over, once that page is clean or has moved to another server document. The store's bounds still apply (30 days, 20 drafts, 64 MiB).
   - **Both:** a lost link or lapsed sign-in stops saves, not the draft writer, and a restore never saves.
 - **Tests:**
   - `desktop/test/drafts.test.mjs`: "discardForUserDecision during a delayed write…", "session states, take never deletes…".
   - `src/test/browser-drafts.test.mjs`: "remove takes only the writer's own draft; claim hands it over", plus the eviction tests.
-  - `desktop/test/smoke.mjs`: the draft crash-recovery cases, and the three "draft: moved file …" cases (#258).
+  - `desktop/test/smoke.mjs`: the draft crash-recovery cases, the "draft: moved file …" cases (#258, #496) and "draft: session end keeps a copy of a clean tab whose file is gone (#492)".
+  - `desktop/test/close-keep.test.mjs`: the time-limited file check and the kept-copy rule (#496, #497).
   - `src/test/draft-keep-app.test.mjs`: a keep flush writes a clean file tab's draft, and only then (#258).
   - Browser suites `26-desktop-drafts.txt` and `265-browser-drafts.txt`.
 - **Owner:** `src/application` (recovery writer ownership), `desktop/` · **Milestone:** 4 · **Class:** keep
@@ -402,7 +403,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-44 — One quit, one question; session end asks nothing
 
 - **Behaviour:** A quit asks at most one unsaved-changes dialog and one stop-sharing prompt. A Windows session end asks neither and discards nothing. `desktop-state.json` is written durably through one queue.
-- **Tests:** partial. `desktop/test/smoke.mjs` ("window close: 2 dirty tabs + another window open (one dialog)", "quit: dirty tabs in two windows (one answer per attempt)", "--host: stop-sharing prompt fires once at quit…"). `desktop/test/drafts.test.mjs` only records the `session-end` state. No test checks that a session end asks nothing, or that writes go through a single queue.
+- **Tests:** partial. `desktop/test/smoke.mjs` ("window close: 2 dirty tabs + another window open (one dialog)", "quit: dirty tabs in two windows (one answer per attempt)", "--host: stop-sharing prompt fires once at quit…"). `desktop/test/drafts.test.mjs` only records the `session-end` state. "draft: session end keeps a copy of a clean tab whose file is gone (#492)" emits `session-end` through a test-only shell op and checks that nothing is asked and an untitled tab's draft stays; it can't show how long Windows lets the writes run. No test checks that writes go through a single queue.
 - **Owner:** `desktop/` · **Milestone:** 4.x · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the smoke cases pass. New desktop test: a simulated session end with dirty tabs shows no dialog and leaves every draft in place.

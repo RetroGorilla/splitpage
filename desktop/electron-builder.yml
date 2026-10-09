@@ -15,6 +15,7 @@ files:
   - prompter-share.js
   - google-drive.js
   - bind-host.js
+  - close-keep.js
   - blob-store.js
   - voice-helper.js
   - chromium-browsers.js
