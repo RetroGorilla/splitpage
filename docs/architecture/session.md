@@ -106,7 +106,7 @@ A rejected, no-op or failed command leaves the generation, dirty state, undo sta
 
 ### Rollback on a throwing command
 
-`plan` gets the live document typed as `DocumentView`. The compiler, not the runtime, stops it writing, and `runConfined` catches a plan that writes. The rollback point is taken after `plan` returns, so a write made inside `plan` is not undone. If `apply` throws, `rollbackPoint` restores what the change set names, taken before `apply` ran:
+`plan` gets the live document typed as `DocumentView`. The compiler, not the runtime, stops it writing, and `runConfined` catches a plan that writes outside the declared change set; a plan that writes a declared field is not caught today (#480). The rollback point is taken after `plan` returns, so a write made inside `plan` is not undone. If `apply` throws, `rollbackPoint` restores what the change set names, taken before `apply` ran:
 
 - each declared cell, through `keepField(row, field)`;
 - each declared document field, through `keepField(doc, key)`;
@@ -284,3 +284,7 @@ View-level refusals need the booted app, because the toast and the click routing
 | An undo or redo of a composition's own updates and then a cancel can give back a redo that shows the cancelled text, in a browser whose composition survives Ctrl+Z (Firefox, Safari; Chromium ends it first). A co-editor's change reaching the cell during a composition makes the cancel keep its entries as made | #459; DOCUMENT-MODEL.md §7 records both. #436 and #446 are fixed by #448 |
 | Typing that leaves no step gives the redo it cleared back only when none of that typing was undone. After a partial undo, redo stays cleared; nothing is applied wrongly | Accepted in #427, pinned by a test |
 | A single composition with more than 200 slow updates, cancelled, can leave an intermediate update as the top entry. `foldIntoEdit` checks the undo and redo stacks but not a parked redo, so a parked entry that touches the same gallery can come back and its redo is then refused with a toast | Accepted in #427 |
+| A render's own focus changes commit stale cell text: `restoreRenderFocus` focuses the grid cell under a focused Writer paragraph, and `paintRow` and `renderWriter` remove focused cells; the `focusout` reaches the typing command, which knows nothing of a render in progress | #477 (milestone 3 external review, F2) |
+| A delayed media paste or drop resolves its target by row id when the files finish reading, in whatever document is live by then | #478 (F1); milestone 4 |
+| The dirty effect writes `personColors`, which no change set declares, after the transaction | #479 (F3); milestone 4 |
+| A throw after the commit (undo recording, an effect, a listener) leaves the document mutated with no typed outcome | Milestone 4 (plan §5) |
