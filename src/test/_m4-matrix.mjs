@@ -174,6 +174,12 @@ export function createHeldFetch(ports) {
     await gates.pass("fetch", request);
     request.released = true;
     const reply = await answer(request);
+    if (reply.bytes !== undefined) {
+      return new Response(bytesOf(reply.bytes), {
+        status: reply.status === undefined ? 200 : reply.status,
+        headers: Object.assign({ "content-type": "application/octet-stream" }, reply.headers || {})
+      });
+    }
     const body = reply.body === undefined ? null : reply.body;
     return new Response(body === null ? null : JSON.stringify(body), {
       status: reply.status === undefined ? 200 : reply.status,
@@ -337,6 +343,150 @@ export function createHeldDraftStore(inner, ports) {
     holdOp: function (op, times) { gates.hold("draft." + op, { times: times }); },
     arrivedAt: function (op, count) { return gates.arrived("draft." + op, count); },
     releaseOp: function (op) { gates.release("draft." + op); }
+  };
+}
+
+export function createFaultyIdbFactory(inner) {
+  const faults = [];
+  const transactions = [];
+  const wrapped = new WeakMap();
+
+  function wrapDb(db) {
+    if (!db) return db;
+    let out = wrapped.get(db);
+    if (out) return out;
+    out = new Proxy(db, {
+      get: function (target, prop) {
+        if (prop === "transaction") {
+          return function (stores, mode, options) {
+            transactions.push(mode || "readonly");
+            const fault = faults.find(function (f) { return f.remaining > 0 && (!f.mode || f.mode === (mode || "readonly")); });
+            if (fault) {
+              fault.remaining--;
+              throw fault.error;
+            }
+            return target.transaction(stores, mode, options);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+      set: function (target, prop, value) {
+        target[prop] = value;
+        return true;
+      }
+    });
+    wrapped.set(db, out);
+    return out;
+  }
+
+  return {
+    open: function (name, version) {
+      const real = inner.open(name, version);
+      const request = {};
+      ["onupgradeneeded", "onsuccess", "onerror", "onblocked"].forEach(function (handler) {
+        Object.defineProperty(request, handler, {
+          get: function () { return real[handler]; },
+          set: function (fn) { real[handler] = fn; }
+        });
+      });
+      Object.defineProperty(request, "result", { get: function () { return wrapDb(real.result); } });
+      Object.defineProperty(request, "error", { get: function () { return real.error; } });
+      return request;
+    },
+    transactions: transactions,
+    failNext: function (error, options) {
+      const o = options || {};
+      faults.push({ error: error, remaining: o.times === undefined ? 1 : o.times, mode: o.mode || null });
+    },
+    clearFaults: function () { faults.length = 0; },
+    quotaError: function () { return new DOMException("The quota has been exceeded.", "QuotaExceededError"); }
+  };
+}
+
+export function createHeldBlobBackend(inner, ports) {
+  const gates = (ports && ports.gates) || createGates();
+  const calls = [];
+  const backend = { name: inner.name, persistent: inner.persistent };
+  ["get", "put", "missing"].forEach(function (key) {
+    backend[key] = async function (...args) {
+      calls.push({ op: key, args: args });
+      await gates.pass("blob." + key, args);
+      return inner[key].apply(inner, args);
+    };
+  });
+  return {
+    backend: backend,
+    inner: inner,
+    gates: gates,
+    calls: calls,
+    holdOp: function (op, times) { gates.hold("blob." + op, { times: times }); },
+    arrivedAt: function (op, count) { return gates.arrived("blob." + op, count); },
+    releaseOp: function (op) { gates.release("blob." + op); }
+  };
+}
+
+export function createHeldImageDecode(ports) {
+  const gates = (ports && ports.gates) || createGates();
+  const dataUrl = ports && ports.dataUrl;
+  if (typeof dataUrl !== "string") throw new TypeError("createHeldImageDecode needs the data URL a decode answers with");
+  const decoded = [];
+
+  class HeldImage {
+    constructor() {
+      this.onload = null;
+      this.onerror = null;
+      this.width = 1;
+      this.height = 1;
+      this.naturalWidth = 0;
+      this.naturalHeight = 0;
+    }
+
+    set src(value) {
+      decoded.push(String(value).length);
+      const self = this;
+      gates.pass("image.decode", { length: String(value).length }).then(function () {
+        if (typeof self.onload === "function") self.onload();
+      });
+    }
+  }
+
+  return {
+    gates: gates,
+    decoded: decoded,
+    holdDecode: function (times) { gates.hold("image.decode", { times: times }); },
+    arrivedAtDecode: function (count) { return gates.arrived("image.decode", count); },
+    releaseDecode: function () { gates.release("image.decode"); },
+    holdEncode: function (times) { gates.hold("image.encode", { times: times }); },
+    arrivedAtEncode: function (count) { return gates.arrived("image.encode", count); },
+    releaseEncode: function () { gates.release("image.encode"); },
+    install: function (target) {
+      const win = target || globalThis.window;
+      const canvas = win.HTMLCanvasElement.prototype;
+      const realImage = [globalThis.Image, win.Image];
+      const realContext = canvas.getContext;
+      const realDataUrl = canvas.toDataURL;
+      const realBlob = canvas.toBlob;
+      globalThis.Image = HeldImage;
+      win.Image = HeldImage;
+      canvas.getContext = function () {
+        return new Proxy({}, { get: function (t, k) { return k in t ? t[k] : function () {}; }, set: function (t, k, v) { t[k] = v; return true; } });
+      };
+      canvas.toDataURL = function () { return dataUrl; };
+      const encoded = ports.encodedDataUrl === undefined ? dataUrl : ports.encodedDataUrl;
+      canvas.toBlob = function (callback, type) {
+        gates.pass("image.encode", { type: type }).then(function () {
+          callback(new Blob([Buffer.from(encoded.slice(encoded.indexOf(",") + 1), "base64")], { type: type || "image/png" }));
+        });
+      };
+      return function () {
+        globalThis.Image = realImage[0];
+        win.Image = realImage[1];
+        canvas.getContext = realContext;
+        canvas.toDataURL = realDataUrl;
+        canvas.toBlob = realBlob;
+      };
+    }
   };
 }
 
