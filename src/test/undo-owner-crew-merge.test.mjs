@@ -55,7 +55,9 @@ test("redo of an older assignment after a crew-changing merge forgot the removal
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
   remoteCrew((st) => st.people.push(person("p_Di", "Di")));
   assert.equal(undo().ok, true);
-  assert.equal(redo().ok, true);
+  const res = redo();
+  assert.equal(res.ok, true);
+  assert.equal(res.cleared, 1);
   assert.deepEqual(dangling(), []);
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
   assert.equal(ownerOf(migrateRows(clone(S.state)).brollShots, "Dock"), "");
@@ -78,7 +80,9 @@ test("redo still assigns a person who is in the crew (#476)", () => {
   commit();
   assert.equal(undo().ok, true);
   remoteCrew((st) => st.people.push(person("p_Di", "Di")));
-  assert.equal(redo().ok, true);
+  const res = redo();
+  assert.equal(res.ok, true);
+  assert.equal(res.cleared, undefined);
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Cy");
 });
 
@@ -201,4 +205,23 @@ test("seeded: through noteRemoteChange, with crew-changing and mixed-case merges
   }
   assert.equal(refused, 0, "no undo or redo refused");
   assert.ok(undos > 300 && redos > 100 && folds > 100 && crewMerges > 100, JSON.stringify({ undos, redos, folds, crewMerges }));
+});
+
+test("an undo or redo that clears an owner announces it, one that does not stays silent (#476)", () => {
+  const seen = [];
+  const listener = (e) => seen.push(e.detail.count);
+  document.addEventListener("undo-owner-cleared", listener);
+  try {
+    boot(["Ada", "Cy"]);
+    S.state.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
+    commit();
+    removePerson("p_Ada");
+    remoteCrew((st) => st.people.push(person("p_Di", "Di")));
+    assert.equal(undo().ok, true);
+    assert.deepEqual(seen, []);
+    assert.equal(redo().ok, true);
+    assert.deepEqual(seen, [1]);
+  } finally {
+    document.removeEventListener("undo-owner-cleared", listener);
+  }
 });
