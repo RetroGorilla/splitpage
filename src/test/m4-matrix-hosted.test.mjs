@@ -2,7 +2,10 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import blobPolicy from "../../shared/blob-policy.js";
 import { createHeldFetch, createHeldFileHandle, mockClock, rightToday, wrongToday } from "./_m4-matrix.mjs";
+
+const { refsIn } = blobPolicy;
 
 const { runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
 
@@ -61,42 +64,55 @@ function createServer() {
     texts: function (id) {
       return docs.get(id).state.rows.map((r) => r.audioText);
     },
+    answers: [],
     answer: function (r) {
       const path = r.url.replace(/^https?:\/\/[^/]+\//, "").replace(/^\//, "");
       log.push(r.method + " " + path);
-      if (server.override) {
-        const found = server.override(r, path);
-        if (found) return found;
-      }
-      const doc = /^api\/docs\/([^/]+)$/.exec(path);
-      if (doc && r.method === "GET") {
-        const found = docs.get(doc[1]);
-        return found ? { status: 200, body: { id: doc[1], rev: found.rev, state: found.state } } : { status: 404, body: { error: "not-found" } };
-      }
-      if (doc && r.method === "PUT") {
-        const found = docs.get(doc[1]);
-        if (!found) return { status: 404, body: { error: "not-found" } };
-        if (r.body.baseRev !== found.rev) return { status: 409, body: { error: "conflict", rev: found.rev, state: found.state } };
-        found.rev += 1;
-        found.state = copyOf(r.body.state);
-        return { status: 200, body: { id: doc[1], rev: found.rev } };
-      }
-      if (path === "api/docs" && r.method === "POST") {
-        const id = "srv-new-" + (docs.size + 1);
-        docs.set(id, { rev: 1, state: copyOf(r.body.state) });
-        return { status: 200, body: { id: id, rev: 1 } };
-      }
-      if (path === "api/blobs/missing") {
-        return { status: 200, body: { missing: r.body.shas.filter((sha) => !blobs.has(sha)) } };
-      }
-      const blob = /^api\/blobs\/([0-9a-f]{64})$/.exec(path);
-      if (blob && r.method === "PUT") {
-        blobs.add(blob[1]);
-        return { status: 200, body: { ok: true } };
-      }
-      return { status: 200, body: {} };
+      const reply = (server.override && server.override(r, path)) || route(r, path);
+      server.answers.push({ method: r.method, path: path, status: reply.status });
+      return reply;
     }
   };
+
+  function refusedRefs(body) {
+    const accepted = Array.isArray(body.acceptMissing) ? body.acceptMissing : [];
+    return refsIn(body.state).filter((sha) => !blobs.has(sha) && !accepted.includes(sha));
+  }
+
+  function route(r, path) {
+    const doc = /^api\/docs\/([^/]+)$/.exec(path);
+    if (doc && r.method === "GET") {
+      const found = docs.get(doc[1]);
+      return found ? { status: 200, body: { id: doc[1], rev: found.rev, state: found.state } } : { status: 404, body: { error: "not-found" } };
+    }
+    if (doc && r.method === "PUT") {
+      const found = docs.get(doc[1]);
+      if (!found) return { status: 404, body: { error: "not-found" } };
+      if (r.body.baseRev !== found.rev) return { status: 409, body: { error: "conflict", rev: found.rev, state: found.state } };
+      const refused = refusedRefs(r.body);
+      if (refused.length) return { status: 422, body: { error: "missing-blobs", missing: refused } };
+      found.rev += 1;
+      found.state = copyOf(r.body.state);
+      return { status: 200, body: { id: doc[1], rev: found.rev } };
+    }
+    if (path === "api/docs" && r.method === "POST") {
+      const refused = refusedRefs(r.body);
+      if (refused.length) return { status: 422, body: { error: "missing-blobs", missing: refused } };
+      const id = "srv-new-" + (docs.size + 1);
+      docs.set(id, { rev: 1, state: copyOf(r.body.state) });
+      return { status: 200, body: { id: id, rev: 1 } };
+    }
+    if (path === "api/blobs/missing" && r.method === "POST") {
+      return { status: 200, body: { missing: r.body.shas.filter((sha) => !blobs.has(sha)) } };
+    }
+    const blob = /^api\/blobs\/([0-9a-f]{64})$/.exec(path);
+    if (blob && r.method === "PUT") {
+      blobs.add(blob[1]);
+      return { status: 200, body: { ok: true } };
+    }
+    return { status: 404, body: { error: "no-such-route" } };
+  }
+
   return server;
 }
 
@@ -224,6 +240,8 @@ wrongToday("S2", "a hosted save that completes after a same-id reopen does not m
   held.gates.releaseAll("fetch");
   await saving;
   await settle();
+  assert.equal(server.docs.get("srv-a").rev, 2, "setup: the first save reached the server");
+  assert.equal(server.texts("srv-a")[0], "Typed before the save.", "setup: the first save's text is on the server");
   const late = summary();
   editRow(1, "Typed after the reopen.");
   await saveDoc();
@@ -253,6 +271,28 @@ wrongToday("S3", "a tab pointed at another server mid-save sends none of the rem
   assert.deepEqual(strays, [], "no request of the save reached the server the tab was pointed at later: " + strays.join(", "));
 }), /no request of the save reached the server the tab was pointed at later/);
 
+async function requestsOfSaveChangedMidway(change) {
+  let sent = [];
+  await scenario(async ({ server, held }) => {
+    const doc = script("Pictures", idOf("a"));
+    doc.rows[0].imageRef = intern(pngBytes(42, 30));
+    doc.rows[1].imageRef = intern(pngBytes(43, 30));
+    server.put("srv-a", doc, 1);
+    openHosted(doc, "srv-a", 1, { blobs: true });
+    editRow(0, "Typed with pictures.");
+    holdFirst(held, "PUT", "api/blobs/");
+    const saving = saveDoc();
+    await held.gates.arrived("fetch");
+    homeModule.updateConnection(change);
+    held.gates.releaseAll("fetch");
+    await saving;
+    await settle();
+    assert.ok(held.requests.some((r) => r.method === "PUT" && r.url.endsWith("api/docs/srv-a")), "setup: the save went on to the document PUT");
+    sent = held.requests.slice();
+  });
+  return sent;
+}
+
 wrongToday("S4", "a token, role or scope change mid-save is seen as a different connection", async (t) => {
   const changes = [
     ["token", { token: "another-token" }],
@@ -261,25 +301,18 @@ wrongToday("S4", "a token, role or scope change mid-save is seen as a different 
   ];
   mockClock(t);
   for (const [name, change] of changes) {
-    await scenario(async ({ server, held }) => {
-      const doc = script("Pictures", idOf("a"));
-      doc.rows[0].imageRef = intern(pngBytes(42, 30));
-      doc.rows[1].imageRef = intern(pngBytes(43, 30));
-      server.put("srv-a", doc, 1);
-      openHosted(doc, "srv-a", 1, { blobs: true });
-      editRow(0, "Typed with pictures.");
-      holdFirst(held, "PUT", "api/blobs/");
-      const saving = saveDoc();
-      await held.gates.arrived("fetch");
-      homeModule.updateConnection(change);
-      held.gates.releaseAll("fetch");
-      await saving;
-      await settle();
-      const used = new Set(held.requests.map((r) => r.connection));
-      assert.equal(used.size, 2, "a token, role or scope change mid-save is a different connection (" + name + ")");
-    });
+    const sent = await requestsOfSaveChangedMidway(change);
+    const used = new Set(sent.map((r) => r.connection));
+    assert.equal(used.size, 2, "a token, role or scope change mid-save is a different connection (" + name + ")");
   }
 }, /a token, role or scope change mid-save is a different connection/);
+
+wrongToday("S4-token", "a token changed mid-save is carried by no request of that save", async (t) => {
+  mockClock(t);
+  const sent = await requestsOfSaveChangedMidway({ token: "another-token" });
+  const carrying = sent.filter((r) => r.headers["x-splitpage-token"] === "another-token").map((r) => r.method + " " + r.url);
+  assert.deepEqual(carrying, [], "no request of the save carries the token set mid-save: " + carrying.join(", "));
+}, /no request of the save carries the token set mid-save/);
 
 rightToday("S5", "an edit during a hosted save leaves the document dirty", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
@@ -351,6 +384,8 @@ wrongToday("S6-reopen", "a 409 that arrives after a same-id reopen merges nothin
   held.gates.releaseAll("fetch");
   await saving;
   await settle();
+  const conflicts = server.answers.filter((a) => a.method === "PUT" && a.path === "api/docs/srv-a" && a.status === 409);
+  assert.equal(conflicts.length, 1, "setup: the first save was answered 409");
   assert.equal(puts(held, "srv-a").length, 1, "no retry was sent for the save of the replaced session");
   assert.deepEqual(summary(), before, "the reopened session was not touched by the conflict");
 }), /no retry was sent for the save of the replaced session|the reopened session was not touched by the conflict/);
@@ -466,7 +501,7 @@ wrongToday("P1", "a publish whose connection changed reports the document it cre
   assert.equal(await publishing, false);
   await settle();
   assert.equal(server.docs.size, 1, "the old server did create the document");
-  assert.ok(newToasts(before).length > 0, "the document created on the old server is reported");
+  assert.ok(newToasts(before).some((text) => text.includes("To publish") || text.includes("srv-new-1")), "the document created on the old server is reported");
 }), /the document created on the old server is reported/);
 
 rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge ancestor", hostedCase(async ({ server, held }) => {
@@ -483,6 +518,7 @@ rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge
   }
   await settle();
   assert.equal(target.commits.length, 1, "the copy was written once");
+  assert.ok(target.text().includes("Typed before Save As."), "the copy holds the unsaved text");
   assert.equal(held.requests.filter((r) => r.method === "PUT" || r.method === "POST").length, 0, "nothing was sent to the server");
   assert.equal(JSON.stringify(S.baseState), baseBefore, "the merge ancestor is the one the server last sent");
   assert.equal(homeModule.home.kind, "server", "the document is still on the server");
