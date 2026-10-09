@@ -1,6 +1,6 @@
 # Session
 
-The as-built description of the `DocumentSession`, its effect scheduler and the command shape, on `4.0-development` after PRs 3.6 (#384), 3.7 (#402), 3.8 (#405), 3.9 (#414), 3.12 (#427), 3.13 (#447) and 3.14 (#455), with #448 (the composition undo fix) merged after them. [Milestone 3](milestone-3.md) is the plan; this file says what the code does today. Where the two differ, a sentence says so, and the section "Known gaps and exceptions" collects them. It names functions and types, not lines.
+The as-built description of the `DocumentSession`, its effect scheduler and the command shape, on `4.0-development` after PRs 3.6 (#384), 3.7 (#402), 3.8 (#405), 3.9 (#414), 3.12 (#427), 3.13 (#447) and 3.14 (#455), with #448 (the composition undo fix) merged after them, and milestone 4's PR 4.7 (the colour inside the transaction, the committed outcome and `dispose`). [Milestone 3](milestone-3.md) is the plan; this file says what the code does today. Where the two differ, a sentence says so, and the section "Known gaps and exceptions" collects them. It names functions and types, not lines.
 
 The code lives in `src/application/session/` (`document-session.ts`, `change-set.ts`, `effects.ts`, `ports.ts`), `src/application/commands/` (`scene-length.ts`, `scene-status.ts`, `cell-text.ts`, `split-join.ts`, `clipboard.ts`), `src/legacy/session-bridge.ts` and `src/legacy/undo-adapter.ts`.
 
@@ -60,12 +60,12 @@ A `Command` has a `name`, `needs` (`"edit"` or `"nothing"`) and `plan(doc, capab
 The five steps of an accepted command, in order:
 
 1. **Capability.** If `needs` is `"edit"`, `CapabilityPort.edit()` is asked. A refusal ends the command before it plans. Either way the port is handed to `plan`, and a refusal the plan returns from it is an ordinary `{ refused }`.
-2. **One transaction.** `plan` runs against the live document typed as a read-only `DocumentView`, then `apply` against the live document. If the change set calls for it (`needsReconciliation`), `ReconcilePort.anchors` runs inside the same transaction, after `apply`.
+2. **One transaction.** `plan` runs against the live document typed as a read-only `DocumentView`. When the plan is a change, `AttributionPort.attribute` is asked for the editor's own write (in the app: the editor's colour in `personColors`, #479), a `Plan` of its own or `null`, and its change set is joined to the command's (`combined` in `change-set.ts`). Then the command's `apply` and the attribution's `apply` run against the live document. If the change set calls for it (`needsReconciliation`), `ReconcilePort.anchors` runs inside the same transaction, after both.
 3. **One generation advance.** `generation++`, once per accepted command.
 4. **Undo recording.** `UndoPort.record(changes)`, once.
 5. **Change set publish.** One effect pass (section 4), then one frozen `SessionChange` (`kind`, `epoch`, `generation`, `changes`) to every listener.
 
-The commit order, as the tests log it, is reconcile, undo record, dirty, draft, save, publish.
+The commit order, as the tests log it, is attribute, reconcile, undo record, dirty, draft, save, publish. Steps 3 to 5 are the commit: once the generation has advanced, nothing is rolled back. A throw in undo recording, in one effect or in one listener is caught; every later step still runs, each error goes to `ReportPort` once, and the command returns `committed` (D13).
 
 ### What a change set declares
 
@@ -98,11 +98,14 @@ The milestone's 3.6 paragraph carries the old claim with a correction note.
 | Outcome | When | Effects |
 | --- | --- | --- |
 | `{ kind: "applied", generation, changes }` | The command committed | The five steps ran |
+| `{ kind: "committed", generation, changes, errors }` | The command committed, and then undo recording, an effect or a listener threw | The five steps ran; a step that threw stopped there, and the steps after it still ran. `errors` holds the throws in the order they happened, each already reported. The change stays |
 | `{ kind: "noop" }` | `plan` returned `null`, or the change set `isEmpty` | None |
-| `{ kind: "rejected", reason }` | No document (`NO_DOCUMENT`), capability refused (the port's reason), or `plan` returned `{ refused }` | None |
-| `{ kind: "failed", error }` | `plan` threw, `apply` threw, or reconciliation threw | None, and the document is restored |
+| `{ kind: "rejected", reason }` | No document (`NO_DOCUMENT`), a disposed session (`DISPOSED`), capability refused (the port's reason), or `plan` returned `{ refused }` | None |
+| `{ kind: "failed", error }` | `plan` threw, the attribution threw, either `apply` threw, or reconciliation threw | None, and the document is restored |
 
-A rejected, no-op or failed command leaves the generation, dirty state, undo stack and publications unchanged. The caller decides what to show. Views rethrow `failed`: `cycleRowStatus`, `setSceneLength`, `syncFieldFromDom`, `splitRowFieldCore`, `mergeWriterRows`, `cutSelection` and `pasteIntoCell` throw `outcome.error`.
+A rejected, no-op or failed command leaves the generation, dirty state, undo stack and publications unchanged. The caller decides what to show. Views rethrow `failed`: `cycleRowStatus`, `setSceneLength`, `syncFieldFromDom`, `splitRowFieldCore`, `mergeWriterRows`, `cutSelection` and `pasteIntoCell` throw `outcome.error`. They treat `committed` as `applied` and repaint, and show nothing new (D13): the session has already sent the errors to the existing error reporting, which in the app is `console.error`. The dirty effect still runs, so the document stays marked unsaved.
+
+A legacy edit (`noteEdit`) and `settle` catch and report the same way, and do not throw. So does a listener that throws during an adoption, a server update, a recovery or a reload: the other listeners still hear the change.
 
 ### Rollback on a throwing command
 
@@ -155,16 +158,18 @@ None of the five sets `saveNow`: they save through the ordinary debounce. Only s
 
 ## 4. The effect scheduler
 
-`createEffectScheduler(effects, timers, timing)` is the only thing that turns a change set into side effects. `EffectPort` has four members: `dirty`, `draft`, `save`, `refresh`. A pass (`scheduler.pass(change)`) calls `dirty`, `draft` and `save` in that order with the `SessionChange`, then requests a refresh for each name in `changes.derive`. The milestone also lists a history effect. There is none in the `EffectPort`: undo is recorded earlier, through the `UndoPort`, in step 4.
+`createEffectScheduler(effects, timers, timing)` is the only thing that turns a change set into side effects. `EffectPort` has four members: `dirty`, `draft`, `save`, `refresh`. A pass (`scheduler.pass(change)`) calls `dirty`, `draft` and `save` in that order with the `SessionChange`, then requests a refresh for each name in `changes.derive`. Each of those calls is on its own: one that throws does not stop the rest, and the pass returns the throws for the session to report. Effects are observational: none of them writes document content (#479). The milestone also lists a history effect. There is none in the `EffectPort`: undo is recorded earlier, through the `UndoPort`, in step 4.
 
 What each effect does in the app (all handed in by `12-dirty-toast.js` through `provideSessionEffects` at module evaluation):
 
 | Effect | Does |
 | --- | --- |
-| `dirty` | `S.dirty = true`, `S.editSeq++`, and records the editor's colour unless in review mode |
+| `dirty` | `S.dirty = true`, `S.editSeq++` |
 | `draft` | `noteDraftChange()` (20g) |
 | `save` | Sets the save buttons to "Save •" unless a save is running, calls `scheduleAutoSave()`, marks the imported file's home dirty and updates the file chip (or the chip alone on a server document), and calls `queueAutoSave()` last when the change set has `saveNow` |
 | `refresh` | `runIdleRefresh` in `07-production-tags.js`, handed in through `provideRefreshRunner` |
+
+**The editor's colour.** Until 4.7 the `dirty` effect wrote the editor's colour into `personColors` after the commit, undeclared (#479). Now `12-dirty-toast.js` hands the session `myColorPlan` as the attribution: outside review mode, when the saved name and colour are not yet in the document, it returns a plan that declares `docFields: ["personColors"]` and writes the map that `personColorsWithMine` (`13a-presence.js`) works out without writing. The session runs it inside the command's transaction (section 3), so a failed command rolls the colour back with everything else. A legacy edit has no transaction: `markDirty` and `markAbsorbedDirty` apply the same plan to `S.state` themselves just before they call the session, where its whole-document change set already covers it. `personColors` is not an undo field (`undo: false` in `core/document/fields.ts`), so the colour was never part of an undo step and an undo does not take it out; `session-commit-app.test.mjs` pins that.
 
 `S.editSeq` rises once per pass, so one command, one `markDirty`, and one `settle` each raise it once (`src/test/session-bridge-app.test.mjs` counts it for `markDirty` and `settle`, `src/test/scene-effects-app.test.mjs` for the two scene commands, and `cell-text-app`, `split-join-app` and `cut-paste-app` for the text commands; browser suites 185 and 187 check that each such edit autosaves).
 
@@ -190,13 +195,17 @@ All port types are in `ports.ts`. `SessionPorts` in `document-session.ts` bundle
 | `EffectPort` | `dirty`, `draft`, `save`, `refresh` | `session-bridge.ts`, which forwards to the functions that `12-dirty-toast.js` (dirty, draft, save) and `07-production-tags.js` (refresh) hand in; fakes log dirty, draft and save with the generation and refresh without it |
 | `Capability`, `CapabilityPort` | `edit()` gives `{ allowed: true }` or `{ allowed: false, reason }` | `session-bridge.ts`, with the check handed in by `12-dirty-toast.js` (`reviewMode()`); the fake's `deny(reason)` |
 | `ReconcilePort` | `anchors(doc)` returns the count moved | `session-bridge.ts` (`syncCommentAnchors` from `core/text/anchors.ts` with the legacy `cellOf`); fakes log `reconcile` and call an optional hook |
+| `AttributionPort` | `attribute(doc)` gives the editor's own write for an accepted command, a `Plan` or `null`. Defined in `document-session.ts`, beside `Plan` | `session-bridge.ts`, forwarding to `myColorPlan` from `12-dirty-toast.js`; the fake returns `null` unless a test hands in `hooks.attribute`, and then logs `attribute` |
+| `ReportPort` | `(error) => void`, called once for each throw after a commit | `session-bridge.ts` (`console.error`, the app's existing error reporting); the fake logs `report` and keeps the error in `reported` |
 | `TimerPort` | `now`, `start`, `stop` | `session-bridge.ts` (`Date.now`, `setTimeout`, `clearTimeout`); `fakeClock` |
 | `Clock`, `IdSource` | Re-exported from `core/document/ports.ts` | `systemClock` from `adapters/identity/ids.ts` in the bridge; fake clocks in tests |
 | `EditorPort`, `StampPorts` | The editor's name; the clock and editor together, for row stamps | `sessionStamps` in the bridge: `systemClock` and the editor name that `03-sync.js` hands in (`getEditorName`, default "Anonymous"); fakes in the command tests |
 | `CellTextPorts` | `StampPorts` plus `cells`, a `CellDecoder` from stored HTML to runs | `sessionTextPorts` in the bridge: `sessionStamps` and the legacy `cellOf`; the text commands' tests use the real adapter over jsdom or a map of known HTML |
 | `JoinPorts`, `ClipboardPorts` | `CellTextPorts` plus `plainText` (join); plus `ids` and `brollSeed` (paste). Both are defined beside their commands in `split-join.ts` and `clipboard.ts`, not in `ports.ts` | `19-writer.js` (`htmlToPlainText`); `05c-clipboard.js`'s `clipboardPorts()` (`randomIds`, `brollSeedOf`) |
 
-The bridge imports nothing in the runtime cycle. The cycle's modules hand their functions in at module evaluation (`provideSessionEffects`, `provideRefreshRunner`), not in `__init` as the milestone said, because unit tests import `12-dirty-toast.js` and `07-production-tags.js` alone and `markDirty` must still mark the document dirty. Until they do, the bridge's defaults do nothing and allow edits.
+The bridge imports nothing in the runtime cycle. The cycle's modules hand their functions in at module evaluation (`provideSessionEffects`, `provideRefreshRunner`), not in `__init` as the milestone said, because unit tests import `12-dirty-toast.js` and `07-production-tags.js` alone and `markDirty` must still mark the document dirty. Until they do, every port the bridge forwards (dirty, draft, save, the edit capability, the editor name, the attribution and the refresh runner) throws "The session's … port was not provided" (since 4.7; before, they did nothing and allowed every edit). A command then throws or fails before it writes, and a legacy edit reports each missing effect. A test that loads part of the app wires what it uses (`wireSession` in `src/test/_fanout-stubs.mjs`); `src/test/session-bridge-unwired.test.mjs` loads the bridge alone. The session itself is still created at module evaluation; milestone 7 moves that into `src/bootstrap/`.
+
+**`dispose()`.** It stops the scheduler (the armed refresh timer is stopped, pending jobs are dropped and later requests arm nothing), drops every listener and the document. Afterwards `run` is `rejected` with `DISPOSED` (`"disposed"`), `adopt`, `absorbServer`, `absorbRecovery` and `absorbReload` return `null` without calling a port, `noteEdit`, `settle` and `refresh` do nothing, `subscribe` registers nothing, and `read` gives `null`. A second call does nothing. Nothing in the app calls it yet: the bridge's one session lives as long as the page. Milestone 4's transition API (4.8) is where a replacement disposes the old document's session-scoped work (matrix case L1a).
 
 The bridge's other exports: `runCommand`, `readSession`, `REVIEW_ONLY`, `sessionStamps`, `sessionTextPorts`, `noteSessionEdit`, `noteServerUpdate`, `noteRecovery`, `noteReload`, `noteAbsorbedDirty`, `requestRefresh`, `liveSession`.
 
@@ -244,9 +253,9 @@ Outside the adapter: the replay path above (it reaches the session only afterwar
 `tests/application/session-fakes.ts` holds the harness.
 
 - **`fakeClock()`** is a `TimerPort` with a clock that starts at 1,000. `advance(ms)` runs due timers in time order, setting `now` to each timer's time. `stall(ms)` moves `now` without running timers, which tests the maximum window. `armed()` counts pending timers.
-- **`harness(timing?, hooks?)`** builds a real `DocumentSession` over fake ports and returns `session`, `log`, `published`, `refreshes`, `clock` and `deny(reason | null)`. The log is an ordered list of strings (`entry`, `undo.adopt:<title>`, `undo.server:<title>`, `undo.reload`, `undo.record`, `reconcile`, `dirty:<generation>`, `draft:<generation>`, `save:<generation>`, `refresh`, `publish:<kind>`), which is what pins the commit order. Hooks: `beforeUndo` (to start an adoption inside an undo call), `reconcile` and `entry`.
+- **`harness(timing?, hooks?)`** builds a real `DocumentSession` over fake ports and returns `session`, `log`, `published`, `refreshes`, `reported`, `clock` and `deny(reason | null)`. The log is an ordered list of strings (`entry`, `undo.adopt:<title>`, `undo.server:<title>`, `undo.reload`, `attribute`, `undo.record`, `reconcile`, `dirty:<generation>`, `draft:<generation>`, `save:<generation>`, `refresh`, `publish:<kind>`, `report`), which is what pins the commit order. Hooks: `beforeUndo` (to start an adoption inside an undo call), `reconcile`, `entry`, `attribute` (the attribution plan; without it the fake attributes nothing and logs nothing), and `record` and `effect` (to make undo recording or one effect throw). `tests/application/session-commit.test.ts` covers the committed outcome, the attribution and `dispose` with them.
 - **`rawScript(title)`** gives a small raw document with a comment anchor.
-- **`runConfined(session, command)`** snapshots the document as JSON, runs the command, snapshots again and calls `writesOutside` with the applied outcome's change set, or with `NO_CHANGES` for any other outcome. It throws, naming the command, the outcome kind and each place, if the command wrote outside what it declared. It also wraps `plan` and throws if `plan` changed the document at all, declared or not, because the rollback point is taken after `plan` returns and cannot undo a write made there. A `noop`, `rejected` or `failed` command therefore must change nothing at all, which also catches an incomplete rollback. `writesOutside` checks undeclared document fields, undeclared row fields, inserted and removed rows, row order, and comments (their `rowId` and `field` are ignored when the set reconciles). Every command's tests from 3.8 on run through it, including a command with a stamp port that throws.
+- **`runConfined(session, command)`** snapshots the document as JSON, runs the command, snapshots again and calls `writesOutside` with the applied or committed outcome's change set, or with `NO_CHANGES` for any other outcome. It throws, naming the command, the outcome kind and each place, if the command wrote outside what it declared. It also wraps `plan` and throws if `plan` changed the document at all, declared or not, because the rollback point is taken after `plan` returns and cannot undo a write made there. A `noop`, `rejected` or `failed` command therefore must change nothing at all, which also catches an incomplete rollback. `writesOutside` checks undeclared document fields, undeclared row fields, inserted and removed rows, row order, and comments (their `rowId` and `field` are ignored when the set reconciles). Every command's tests from 3.8 on run through it, including a command with a stamp port that throws.
 
 What fails a test: an undeclared write (applied or thrown), a generation, effect, publication or refresh that appears for a no-op, refusal or failure, and a document that is not byte-identical after a rollback. The fake clock itself fails on nothing.
 
@@ -286,5 +295,6 @@ View-level refusals need the booted app, because the toast and the click routing
 | A single composition with more than 200 slow updates, cancelled, can leave an intermediate update as the top entry. `foldIntoEdit` checks the undo and redo stacks but not a parked redo, so a parked entry that touches the same gallery can come back and its redo is then refused with a toast | Accepted in #427 |
 | A render's own focus changes commit stale cell text: `restoreRenderFocus` focuses the grid cell under a focused Writer paragraph, and `paintRow` and `renderWriter` remove focused cells; the `focusout` reaches the typing command, which knows nothing of a render in progress | #477 (milestone 3 external review, F2) |
 | A delayed media paste or drop resolves its target by row id when the files finish reading, in whatever document is live by then | #478 (F1); milestone 4 |
-| The dirty effect writes `personColors`, which no change set declares, after the transaction | #479 (F3); milestone 4 |
-| A throw after the commit (undo recording, an effect, a listener) leaves the document mutated with no typed outcome | Milestone 4 (plan §5) |
+| The dirty effect writes `personColors`, which no change set declares, after the transaction | Fixed by 4.7 (#479, matrix case E1): the colour is the command's attribution, inside the transaction |
+| A throw after the commit (undo recording, an effect, a listener) leaves the document mutated with no typed outcome | Fixed by 4.7 (matrix cases E2a to E2c): the `committed` outcome, reported, never rolled back |
+| A legacy edit writes the editor's colour into `S.state` itself, before it calls the session; a command gets it through the attribution port | Until the legacy writers become commands (milestone 6). One plan, `myColorPlan`, serves both |

@@ -122,6 +122,8 @@ const session = createDocumentSession({
   effects: { dirty() {}, draft() {}, save() {}, refresh() {} },
   capability: { edit: () => ({ allowed: true }) },
   reconcile: { anchors: () => 0 },
+  attribution: { attribute: () => null },
+  report: (error) => { throw error; },
   timers: { now: () => clock, start: () => 0, stop() {} }
 });
 

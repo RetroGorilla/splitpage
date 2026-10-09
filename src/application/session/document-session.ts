@@ -1,10 +1,10 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
-import { WHOLE_DOCUMENT, isEmpty, needsReconciliation } from "./change-set.ts";
+import { WHOLE_DOCUMENT, combined, isEmpty, needsReconciliation } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
-import { createEffectScheduler } from "./effects.ts";
+import { attempt, createEffectScheduler } from "./effects.ts";
 import type { RefreshTiming } from "./effects.ts";
-import type { CapabilityPort, DocumentEntry, EffectPort, ReconcilePort, TimerPort, UndoPort } from "./ports.ts";
+import type { CapabilityPort, DocumentEntry, EffectPort, ReconcilePort, ReportPort, TimerPort, UndoPort } from "./ports.ts";
 
 export type DeepReadonly<T> =
   T extends (infer U)[] ? readonly DeepReadonly<U>[]
@@ -31,9 +31,14 @@ export interface Command {
 
 export type CommandOutcome =
   | { readonly kind: "applied"; readonly generation: number; readonly changes: ChangeSet }
+  | { readonly kind: "committed"; readonly generation: number; readonly changes: ChangeSet; readonly errors: readonly unknown[] }
   | { readonly kind: "noop" }
   | { readonly kind: "rejected"; readonly reason: string }
   | { readonly kind: "failed"; readonly error: unknown };
+
+export interface AttributionPort {
+  readonly attribute: (doc: DocumentView) => Plan | null;
+}
 
 export interface SessionPorts {
   entry: DocumentEntry;
@@ -41,6 +46,8 @@ export interface SessionPorts {
   effects: EffectPort;
   capability: CapabilityPort;
   reconcile: ReconcilePort;
+  attribution: AttributionPort;
+  report: ReportPort;
   timers: TimerPort;
   timing?: RefreshTiming | undefined;
 }
@@ -67,9 +74,12 @@ export interface DocumentSession {
   noteEdit: (changes?: ChangeSet) => void;
   refresh: (job: string) => void;
   subscribe: (listener: SessionListener) => () => void;
+  dispose: () => void;
 }
 
 export const NO_DOCUMENT = "no document";
+
+export const DISPOSED = "disposed";
 
 type Restore = () => void;
 type Bag = Record<string, unknown>;
@@ -159,6 +169,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
   let document: ValidatedDocument | null = null;
   let epoch = 0;
   let generation = 0;
+  let disposed = false;
 
   function enter(raw: unknown): ValidatedDocument | null {
     return raw === null || raw === undefined ? null : ports.entry(raw);
@@ -172,36 +183,53 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return Object.freeze({ kind: kind, epoch: epoch, generation: generation, changes: changes });
   }
 
-  function publish(change: SessionChange): void {
-    listeners.slice().forEach(function (listener) { listener(change); });
+  function reported(errors: unknown[]): unknown[] {
+    errors.forEach(function (error) { ports.report(error); });
+    return errors;
   }
 
-  function commit(changes: ChangeSet): number {
+  function publish(change: SessionChange, errors: unknown[]): void {
+    listeners.slice().forEach(function (listener) {
+      attempt(errors, function () { listener(change); });
+    });
+  }
+
+  function announce(change: SessionChange): void {
+    const errors: unknown[] = [];
+    publish(change, errors);
+    reported(errors);
+  }
+
+  function commit(changes: ChangeSet): { generation: number; errors: unknown[] } {
     generation++;
-    ports.undo.record(changes);
+    const at = generation;
+    const errors: unknown[] = [];
+    attempt(errors, function () { ports.undo.record(changes); });
     const change = changeOf("edit", changes);
-    scheduler.pass(change);
-    publish(change);
-    return generation;
+    scheduler.pass(change).forEach(function (error) { errors.push(error); });
+    publish(change, errors);
+    return { generation: at, errors: reported(errors) };
   }
 
   function adopt(raw: unknown): ValidatedDocument | null {
+    if (disposed) return null;
     if (refuses(raw)) return document;
     const doc = enter(raw);
     ports.undo.adopt(doc);
     epoch++;
     document = doc;
-    publish(changeOf("adopt", WHOLE_DOCUMENT));
+    announce(changeOf("adopt", WHOLE_DOCUMENT));
     return doc;
   }
 
   function absorb(kind: "server" | "recovery", raw: unknown): ValidatedDocument | null {
+    if (disposed) return null;
     if (refuses(raw)) return document;
     const doc = enter(raw);
     ports.undo.absorbServer(doc);
     if (kind === "recovery") epoch++;
     document = doc;
-    publish(changeOf(kind, WHOLE_DOCUMENT));
+    announce(changeOf(kind, WHOLE_DOCUMENT));
     return doc;
   }
 
@@ -211,16 +239,20 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     const next = ports.entry(copied({ ...doc, title: content.title, rows: content.rows }));
     takeInPlace(doc, next);
     ports.undo.absorbReload();
-    publish(changeOf("reload", WHOLE_DOCUMENT));
+    announce(changeOf("reload", WHOLE_DOCUMENT));
     return doc;
   }
 
   function settle(kind: AbsorbedKind): void {
-    ports.undo.record(WHOLE_DOCUMENT);
-    scheduler.pass(changeOf(kind, WHOLE_DOCUMENT));
+    if (disposed) return;
+    const errors: unknown[] = [];
+    attempt(errors, function () { ports.undo.record(WHOLE_DOCUMENT); });
+    scheduler.pass(changeOf(kind, WHOLE_DOCUMENT)).forEach(function (error) { errors.push(error); });
+    reported(errors);
   }
 
   function run(command: Command): CommandOutcome {
+    if (disposed) return { kind: "rejected", reason: DISPOSED };
     const doc = document;
     if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
     if (command.needs === "edit") {
@@ -236,14 +268,23 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     if (!plan) return { kind: "noop" };
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     if (isEmpty(plan.changes)) return { kind: "noop" };
-    const restore = rollbackPoint(doc, plan.changes);
+    let signed: Plan | null;
+    try {
+      signed = ports.attribution.attribute(doc);
+    } catch (error) {
+      return { kind: "failed", error: error };
+    }
+    const sign = signed && !isEmpty(signed.changes) ? signed : null;
+    const changes = sign ? combined(plan.changes, sign.changes) : plan.changes;
+    const restore = rollbackPoint(doc, changes);
     try {
       plan.apply(doc);
+      if (sign) sign.apply(doc);
     } catch (error) {
       restore();
       return { kind: "failed", error: error };
     }
-    if (needsReconciliation(plan.changes)) {
+    if (needsReconciliation(changes)) {
       const unanchor = anchorPoint(doc);
       try {
         ports.reconcile.anchors(doc);
@@ -253,7 +294,17 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
         return { kind: "failed", error: error };
       }
     }
-    return { kind: "applied", generation: commit(plan.changes), changes: plan.changes };
+    const done = commit(changes);
+    if (done.errors.length) return { kind: "committed", generation: done.generation, changes: changes, errors: done.errors.slice() };
+    return { kind: "applied", generation: done.generation, changes: changes };
+  }
+
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    scheduler.dispose();
+    listeners.length = 0;
+    document = null;
   }
 
   return {
@@ -266,14 +317,18 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     absorbReload: absorbReload,
     settle: settle,
     run: run,
-    noteEdit: function (changes) { commit(changes || WHOLE_DOCUMENT); },
+    noteEdit: function (changes) {
+      if (!disposed) commit(changes || WHOLE_DOCUMENT);
+    },
     refresh: function (job) { scheduler.refresh(job); },
     subscribe: function (listener) {
+      if (disposed) return function () {};
       listeners.push(listener);
       return function () {
         const at = listeners.indexOf(listener);
         if (at !== -1) listeners.splice(at, 1);
       };
-    }
+    },
+    dispose: dispose
   };
 }

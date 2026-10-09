@@ -202,7 +202,7 @@ function mergeWriterRows(intoIdx) {
   var ports = Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText });
   var outcome = runCommand(joinScenesCommand(prev.id, ports));
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind !== "applied") return;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   renderWriter();
   focusWriterBlock(prev.id, joinAt);
 }
