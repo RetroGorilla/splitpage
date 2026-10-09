@@ -160,6 +160,14 @@ function resolveDocFields(state, plan) {
   var survives = personSurvives(sides, kept);
   var remap = !people || people.merged ? personIdRemap(sides, kept) : null;
   docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives, remap); });
+  var crew = idMap();
+  listOf(kept).forEach(function (e) { if (e && e.id) crew[e.id] = true; });
+  docs.forEach(function (p) {
+    if (!OWNED_LISTS[p.key] || !Array.isArray(p.value)) return;
+    p.value = p.value.map(function (e) {
+      return e && typeof e.owner === "string" && e.owner && !crew[e.owner] ? Object.assign({}, e, { owner: "" }) : e;
+    });
+  });
   return remap;
 }
 
