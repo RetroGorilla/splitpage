@@ -3,6 +3,7 @@ import type { DocumentRow } from "../../core/document/validated.ts";
 import { clampRange, deleteRange, joinCells, splitCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
+import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DeepReadonly, DocumentView, Plan, Refusal } from "../session/document-session.ts";
@@ -75,7 +76,8 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
       { rowId: rowId, field: "updatedAt" },
       { rowId: rowId, field: "updatedBy" }
     ],
-    rowsInserted: [createdId]
+    rowsInserted: [createdId],
+    derive: CELL_TEXT_DERIVES
   });
 }
 
@@ -134,7 +136,8 @@ function joinChanges(prevId: string, curId: string, takesVisual: boolean, raises
     .concat(raisesStatus ? ["status"] : []);
   return changeSet({
     cells: fields.map(function (field) { return { rowId: prevId, field: field }; }),
-    rowsRemoved: [curId]
+    rowsRemoved: [curId],
+    derive: CELL_TEXT_DERIVES
   });
 }
 

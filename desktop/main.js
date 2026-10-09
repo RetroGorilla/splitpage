@@ -15,7 +15,7 @@ const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./dr
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createGoogleDrive } = require("./google-drive");
 const { documentServerHost } = require("./bind-host");
-const { checkFileGone, copyKept, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
+const { checkFileGone, copyKept, holdKeep, releaseKeep, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
 const { createVoiceHelper } = require("./voice-helper");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
@@ -236,6 +236,7 @@ function pathKey(absPath) {
 let lastFocusedWindowId = null;
 let quitConfirmed = false;
 let quitKeepingDrafts = false;
+const sessionEndKeep = { holder: "session-end" };
 let hostingConfirmed = false;
 let sessionWritesFrozen = false;
 let sessionEnding = false;
@@ -409,9 +410,9 @@ function tabFileGone(tab) {
   return checkFileGone(closeCheckStat, tab.source.absPath, FILE_CHECK_TIMEOUT_MS);
 }
 
-function keepDraftsOfGoneFiles(goneTabs) {
+function keepDraftsOfGoneFiles(goneTabs, holder) {
   return Promise.all(goneTabs.map((tab) => {
-    tab.keepDraftOnClose = true;
+    holdKeep(tab, holder);
     return requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS, true)
       .then((result) => (copyKept(result, draftsHasDraft(tab.id)) ? null : tab));
   })).then((unkept) => unkept.filter(Boolean));
@@ -1924,8 +1925,8 @@ function createTabWindow(restoreSpec) {
     }
 
     const tabIds = rec.tabIds.slice();
-    const confirmClose = () => {
-      settleDraftsForClose(tabIds, true, "close-without-saving");
+    const confirmClose = (closing) => {
+      settleDraftsForClose(closing, true, "close-without-saving");
       if (HOSTING && isLastWindow) hostingConfirmed = true;
       if (isLastWindow) sessionWritesFrozen = true;
       closeConfirmedWindows.add(win);
@@ -1933,17 +1934,17 @@ function createTabWindow(restoreSpec) {
 
     if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
       if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { event.preventDefault(); return; }
-      confirmClose();
+      confirmClose(tabIds);
       return;
     }
 
     event.preventDefault();
     rec.closeKeepingDrafts = true;
     const parent = () => (win.isDestroyed() ? undefined : win);
-    askBeforeClosing(tabIds, "Close window", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding).then((answer) => {
+    askBeforeClosing(() => rec.tabIds.slice(), "Close window", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding).then(({ answer, tabIds: closing }) => {
       rec.closeKeepingDrafts = false;
       if (answer !== "discard" || win.isDestroyed()) return;
-      confirmClose();
+      confirmClose(closing);
       win.close();
     });
   });
@@ -1961,7 +1962,7 @@ function createTabWindow(restoreSpec) {
         continue;
       }
       flushes.push(tabFileGone(tab).then((gone) => {
-        if (gone) tab.keepDraftOnClose = true;
+        if (gone) holdKeep(tab, sessionEndKeep);
         return requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS, gone);
       }));
     }
@@ -2539,20 +2540,44 @@ function askAboutUnsaved(list, verb, parentWin) {
   return decision;
 }
 
-function askBeforeClosing(tabIds, verb, parentOf, stillWanted) {
-  return goneFileTabsOf(tabIds).then((gone) => {
-    if (!stillWanted()) return "cancel";
-    const unsaved = unsavedTabsOf(tabIds.filter((id) => tabs.has(id)), gone);
-    const first = askAboutUnsaved(unsaved, verb, parentOf(unsaved));
-    if (first !== "discard" || !gone.length) return first;
-    return keepDraftsOfGoneFiles(gone).then((unkept) => {
+function reportCloseCheckFailure(verb, err) {
+  console.error(`[splitpage] close check failed (${verb}): ${(err && err.stack) || err}`);
+}
+
+function askBeforeClosing(tabIdsNow, verb, parentOf, stillWanted) {
+  const holder = { verb };
+  const held = [];
+  const asked = [];
+  const round = (ids) => {
+    asked.push(...ids);
+    return goneFileTabsOf(ids).then((gone) => {
       if (!stillWanted()) return "cancel";
-      const missing = unkept.filter((tab) => tabs.get(tab.id) === tab);
-      const again = askAboutUnsaved(missing, verb, parentOf(missing));
-      if (again !== "discard") for (const tab of gone) tab.keepDraftOnClose = false;
-      return again;
+      const unsaved = unsavedTabsOf(ids.filter((id) => tabs.has(id)), gone);
+      const first = askAboutUnsaved(unsaved, verb, parentOf(unsaved));
+      if (first !== "discard" || !gone.length) return first;
+      held.push(...gone);
+      return keepDraftsOfGoneFiles(gone, holder).then((unkept) => {
+        if (!stillWanted()) return "cancel";
+        const missing = unkept.filter((tab) => tabs.get(tab.id) === tab);
+        return askAboutUnsaved(missing, verb, parentOf(missing));
+      });
+    }).then((answer) => {
+      if (answer !== "discard") return answer;
+      const added = tabIdsNow().filter((id) => !asked.includes(id));
+      return added.length ? round(added) : answer;
     });
-  });
+  };
+  return Promise.resolve()
+    .then(() => round(tabIdsNow()))
+    .catch((err) => {
+      reportCloseCheckFailure(verb, err);
+      return "cancel";
+    })
+    .then((answer) => {
+      const now = tabIdsNow();
+      for (const tab of held) if (answer !== "discard" || !now.includes(tab.id)) releaseKeep(tab, holder);
+      return { answer, tabIds: asked.filter((id) => now.includes(id)) };
+    });
 }
 
 function unsavedTabsOf(tabIds, gone) {
@@ -2585,6 +2610,7 @@ function buildUnsavedDialog(list, verb, parentWin) {
   if (answer === "confirm") return "discard";
   if (answer === "cancel") return "cancel";
   if (answer === "review") return "review";
+  if (answer === "throw") throw new Error("test: the unsaved-changes question failed");
 
   if (list.length === 1) {
     const choice = dialog.showMessageBoxSync(parentWin, {
@@ -2672,7 +2698,7 @@ function requestCloseTab(tabId) {
     const home = windowsById.get(tab.windowId);
     return !!(home && home.closeKeepingDrafts);
   };
-  askBeforeClosing([tabId], "Close tab", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding && !windowClosing()).then((answer) => {
+  askBeforeClosing(() => [tabId], "Close tab", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding && !windowClosing()).then(({ answer }) => {
     tab.closeKeepingDraft = false;
     if (answer === "discard" && tabs.get(tabId) === tab) close();
   });
@@ -3979,8 +4005,8 @@ app.on("before-quit", (event) => {
     hostingConfirmed = false;
     sessionWritesFrozen = false;
   };
-  const confirmQuit = () => {
-    settleDraftsForClose(tabIds, true, "quit-without-saving");
+  const confirmQuit = (quitting) => {
+    settleDraftsForClose(quitting, true, "quit-without-saving");
     if (HOSTING) hostingConfirmed = true;
     quitConfirmed = true;
     sessionWritesFrozen = true;
@@ -3993,18 +4019,18 @@ app.on("before-quit", (event) => {
       event.preventDefault();
       return;
     }
-    confirmQuit();
+    confirmQuit(tabIds);
     return;
   }
 
   event.preventDefault();
   quitKeepingDrafts = true;
-  askBeforeClosing(tabIds, "Quit", parentOf, () => !sessionEnding).then((answer) => {
+  askBeforeClosing(allTabsInOrder, "Quit", parentOf, () => !sessionEnding).then(({ answer, tabIds: quitting }) => {
     quitKeepingDrafts = false;
     if (installQuitWatchdog) installQuitWatchdog.restart();
     if (sessionEnding) return;
     if (answer !== "discard") { stayOpen(); return; }
-    confirmQuit();
+    confirmQuit(quitting);
     app.quit();
   });
 });
