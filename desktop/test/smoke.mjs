@@ -4477,7 +4477,7 @@ async function caseTabsMovedOutDuringWindowClose(target, fixturesDir) {
   try {
     app = await launchApp(target, {
       label: "tabs-moved-out-during-check", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"],
-      env: { SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS: "3000", SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1300" }
+      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1300" }
     });
     await waitForRows(app.cdp, 20000);
     held = await tabsHolding(app, [marker, markerB], 20000);
