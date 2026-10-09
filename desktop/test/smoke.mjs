@@ -4477,7 +4477,7 @@ async function caseTabsMovedOutDuringWindowClose(target, fixturesDir) {
   try {
     app = await launchApp(target, {
       label: "tabs-moved-out-during-check", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"],
-      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1300" }
+      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1000" }
     });
     await waitForRows(app.cdp, 20000);
     held = await tabsHolding(app, [marker, markerB], 20000);
@@ -4586,7 +4586,7 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
   try {
     app = await launchApp(target, {
       label: "tab-opened-during-check-" + how.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath], dialogs: ["confirm", "cancel"],
-      env: { SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS: "3000", SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1400" }
+      env: { SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS: "3000", SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1100" }
     });
     await waitForRows(app.cdp, 20000);
     held = await tabsHolding(app, [marker], 20000);
@@ -4605,7 +4605,7 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     await addMarkerRow(cdpC, markerC);
     const dirtyC = await pollShellState(cdpA, (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabCId && t.dirty)), 4000).catch(() => null);
     const took = Date.now() - started;
-    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 2000 && app.proc.exitCode === null, "took " + took + " ms");
+    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
 
     const asked = await dialogsPast(cdpA, seen0 + 1, 15000);
     await sleep(800);
