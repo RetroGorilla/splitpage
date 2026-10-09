@@ -344,7 +344,7 @@
     color: var(--text-faint);
   }
   .doc-title:focus ~ .doc-meta { flex-shrink: 1000; }
-  .doc-meta > :not([hidden]) ~ :not([hidden])::before {
+  .doc-meta > :not([hidden], [data-squeezed]) ~ :not([hidden], [data-squeezed])::before {
     content: "·";
     color: var(--text-faint);
     margin: 0 8px;
@@ -382,11 +382,37 @@
   .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }
   @media (min-width: 761px) {
     .doc-meta {
+      --detail-min: 62px;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, max-content)) auto;
+      grid-template-columns: minmax(0, max-content) minmax(auto, max-content) minmax(0, max-content) auto;
       min-width: auto;
     }
+    .doc-meta .review-chip { grid-column: 1; }
+    .doc-meta .file-chip { grid-column: 2; }
+    .doc-meta .stat-chip { grid-column: 3; }
     .doc-meta .identity-chip { grid-column: 4; }
+    .doc-meta [data-squeezed] { display: none; }
+    .doc-meta .file-chip[data-warning]:not([hidden]) {
+      display: grid;
+      grid-template-columns: auto minmax(0, max-content) auto;
+      overflow: visible;
+      min-width: auto;
+    }
+    .doc-meta .file-chip[data-warning]::before { grid-column: 1; }
+    .doc-meta .file-chip[data-warning] #file-chip-name { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .doc-meta .file-chip[data-warning] #file-chip-state { grid-column: 3; }
+    .doc-meta:has(> .file-chip[data-warning]) {
+      grid-template-columns: minmax(0, max-content) minmax(auto, max-content) minmax(0, max-content) minmax(var(--detail-min), max-content);
+    }
+    .doc-meta[data-yield]:has(> .file-chip[data-warning]) {
+      grid-template-columns: minmax(0, max-content) minmax(var(--warning-min, var(--detail-min)), max-content) minmax(0, max-content) minmax(var(--detail-min), max-content);
+    }
+    .doc-meta[data-yield] .file-chip[data-warning]:not([hidden]) {
+      grid-template-columns: auto minmax(0, max-content) minmax(0, max-content);
+      overflow: hidden;
+      min-width: 0;
+    }
+    .doc-meta[data-yield] .file-chip[data-warning] #file-chip-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   }
 
   .toolbar {

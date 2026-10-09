@@ -141,14 +141,17 @@ function updateHeaderFileChip() {
     chip.hidden = false;
     document.getElementById("file-chip-name").textContent = "On the server";
     var srvState = document.getElementById("file-chip-state");
+    var notSaving = serverSessionExpired || linkTurnedOff || !!(S.dirty && autoSaveHalt);
     srvState.textContent = serverSessionExpired
       ? "· signed out — reload"
       : linkTurnedOff ? "· link turned off — not saving"
       : S.dirty && autoSaveHalt ? "· not saved yet"
       : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
     srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || !!S.dirty);
+    chip.toggleAttribute("data-warning", notSaving);
     return;
   }
+  chip.removeAttribute("data-warning");
   var imported = importHome();
   if (!imported) {
     chip.hidden = true;

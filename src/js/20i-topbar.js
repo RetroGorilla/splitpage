@@ -79,6 +79,89 @@ export function __init() {
     });
   })();
 
+  (function setupHeaderDetails() {
+    const meta = document.querySelector(".doc-meta");
+    const left = meta ? meta.closest(".topbar-left") : null;
+    if (!meta || !left) return;
+    const wide = window.matchMedia ? window.matchMedia("(min-width: 761px)") : null;
+    let queued = false;
+
+    function warningShown() {
+      const chip = document.getElementById("file-chip");
+      return !!chip && !chip.hidden && chip.hasAttribute("data-warning");
+    }
+
+    function plainDetails(warned) {
+      const ids = warned ? ["file-chip-name", "progress-chip", "review-chip"] : ["progress-chip", "file-chip", "review-chip"];
+      return ids.map(function (id) { return document.getElementById(id); }).filter(Boolean);
+    }
+
+    function minWidth() {
+      const v = parseFloat(getComputedStyle(meta).getPropertyValue("--detail-min"));
+      return v > 0 ? v : 0;
+    }
+
+    function hideSlivers(plain, min) {
+      for (let i = 0; i < plain.length; i++) {
+        const sliver = plain.find(function (el) {
+          if (el.hidden || el.hasAttribute("data-squeezed")) return false;
+          const w = el.getBoundingClientRect().width;
+          return w < min - 0.5;
+        });
+        if (!sliver) return;
+        sliver.setAttribute("data-squeezed", "");
+      }
+    }
+
+    function fit() {
+      queued = false;
+      meta.querySelectorAll("[data-squeezed]").forEach(function (el) { el.removeAttribute("data-squeezed"); });
+      meta.removeAttribute("data-yield");
+      meta.style.removeProperty("--warning-min");
+      if (!wide || !wide.matches) return;
+      const warned = warningShown();
+      const plain = plainDetails(warned);
+      const min = minWidth();
+      if (!min) return;
+      hideSlivers(plain, min);
+      const over = left.scrollWidth - left.clientWidth;
+      if (warned && over > 1) {
+        const kept = document.getElementById("file-chip").getBoundingClientRect().width - over - 1;
+        meta.style.setProperty("--warning-min", Math.max(min, Math.floor(kept)) + "px");
+        meta.setAttribute("data-yield", "");
+        hideSlivers(plain, min);
+      }
+    }
+
+    function schedule() {
+      if (queued || !wide || !wide.matches || typeof requestAnimationFrame !== "function") return;
+      queued = true;
+      requestAnimationFrame(fit);
+    }
+
+    if (typeof ResizeObserver === "function") {
+      const sizes = new ResizeObserver(schedule);
+      sizes.observe(left);
+      const title = document.getElementById("doc-title");
+      if (title) sizes.observe(title);
+    }
+    if (typeof MutationObserver === "function") {
+      new MutationObserver(schedule).observe(meta, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ["hidden", "data-warning", "class"]
+      });
+    }
+    ["focus", "blur"].forEach(function (type) {
+      const title = document.getElementById("doc-title");
+      if (title) title.addEventListener(type, schedule);
+    });
+    if (wide && typeof wide.addEventListener === "function") wide.addEventListener("change", fit);
+    try { document.fonts.ready.then(schedule); } catch (e) {}
+  })();
+
   const titleInput = document.getElementById("doc-title");
   if (titleInput) {
     titleInput.addEventListener("mouseenter", function () {
