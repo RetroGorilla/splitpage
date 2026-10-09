@@ -741,14 +741,14 @@ export function renderBroll() {
   var panel = document.getElementById("broll-panel");
   if (!panel || panel.hidden || !S.state) return;
   dropEditingForReview();
-  var entries = brollEntries();
-  pruneSelection(entries);
   var summary = document.getElementById("broll-summary");
   var controls = document.getElementById("broll-controls");
   var listEl = document.getElementById("broll-list");
   var bulk = document.getElementById("broll-bulk");
 
   keepingFocus(panel, function () {
+    var entries = brollEntries();
+    pruneSelection(entries);
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
     var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
@@ -768,7 +768,7 @@ export function renderBroll() {
 
 function fitNotes(root) {
   if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
-  Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field"), fitTextarea);
+  Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field, textarea.broll-page-note"), fitTextarea);
 }
 
 function fitTextarea(box) {
@@ -1215,7 +1215,7 @@ function onBrollKeydown(e, root) {
 function onBrollInput(e) {
   if (reviewMode()) return;
   var box = e.target;
-  if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
+  if (box.tagName === "TEXTAREA" && (box.classList.contains("ev-field") || box.classList.contains("broll-page-note"))) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
       (e.inputType === "insertReplacementText" || e.inputType === undefined)) {
     commitPropInput(box);
@@ -1383,9 +1383,9 @@ function pageRowHtml(e) {
       '</select></td>' +
     '<td class="broll-page-c-note" data-label="Note">' +
       (e.reshoot ? '<span class="broll-flag-ico" title="Flagged" aria-label="Flagged">' + brollIcon("flag", 14) + '</span>' : '') +
-      '<input type="text" class="broll-notes-input broll-page-note" data-id="' + id + '" maxlength="2000" ' +
+      '<textarea class="broll-notes-input broll-page-note" data-id="' + id + '" rows="1" maxlength="2000" ' +
         (ro ? 'readonly ' : 'placeholder="Add a note" ') +
-        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '" value="' + escapeHtml(e.notes) + '"></td>' +
+        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '">' + escapeHtml(e.notes) + '</textarea></td>' +
   '</tr>';
 }
 
@@ -1393,9 +1393,9 @@ export function renderBrollPage() {
   var page = brollPageEl();
   if (!page || page.hidden || !S.state) return;
   dropEditingForReview();
-  var entries = brollEntries();
-  var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
   keepingFocus(page, function () {
+    var entries = brollEntries();
+    var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
     document.getElementById("broll-page-summary").textContent = pageSummaryText(entries);
     var sel = document.getElementById("broll-page-group");
     if (sel) sel.value = pageView.group;
@@ -1412,6 +1412,7 @@ export function renderBrollPage() {
         '</table>'
       : emptyListHtml(entries);
   });
+  fitNotes(page);
 }
 
 export function shotRecordForFile(e) {
