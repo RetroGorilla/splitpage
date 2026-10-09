@@ -35,6 +35,7 @@ import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import {
   anchorBrollCell,
   brollAnchorTodo,
+  brollCommentMarks,
   brollEntries as readBrollEntries,
   brollInCell,
   brollMarkerLines,
@@ -294,6 +295,12 @@ function brollKeyHtml(id, text) {
     '" contenteditable="false">' + escapeHtml(text) + '</span>';
 }
 
+function brollCommentHtml(ids, inner) {
+  return ids.reduceRight(function (html, id) {
+    return '<span class="cmt-anchor" data-cmt="' + escapeHtml(id) + '">' + html + "</span>";
+  }, inner);
+}
+
 function brollLineTextNodes(nodes) {
   var out = [];
   (function walk(list) {
@@ -420,13 +427,14 @@ export function renameBrollInScript(entry, newName) {
   var target = entry.ordinal >= 0 ? brollMarkerLines(cellOf(html))[entry.ordinal] : null;
   if (!target) return false;
   var keyText = target.marker.key ? (target.marker.key.text || "B-roll:") : "B-roll:";
+  var comments = brollCommentMarks(target.line.items).cmt || [];
 
   if (holdsMedia(html)) {
     var body = inertBody(html);
     var line = brollHtmlLines(body)[target.index];
     if (!line) return false;
     var holder = document.createElement("div");
-    holder.innerHTML = brollKeyHtml(entry.id, keyText) + " " + escapeHtml(newName);
+    holder.innerHTML = brollCommentHtml(comments, brollKeyHtml(entry.id, keyText)) + " " + escapeHtml(newName);
     line.nodes.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
     Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
       body.insertBefore(n, line.br);
@@ -437,7 +445,7 @@ export function renameBrollInScript(entry, newName) {
 
   var at = target.line.start;
   var cell = deleteRange(cellOf(html), at, target.line.end);
-  cell = insertBrollKey(cell, at, entry.id, keyText, {});
+  cell = insertBrollKey(cell, at, entry.id, keyText, comments.length ? { cmt: comments } : {});
   cell = insertText(cell, at + 1, " " + newName, {});
   row.visualText = toHtml(cell);
   return true;

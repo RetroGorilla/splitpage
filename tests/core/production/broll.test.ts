@@ -279,6 +279,37 @@ test("anchoring a commented key that repeats an earlier id gives it a fresh id a
   });
 });
 
+test("anchoring a typed marker under a comment puts the comment on the key, whatever part of the marker it covers", () => {
+  const anchored = (runs: Run[]) => {
+    const html = cells.html(runs);
+    const state = doc<BrollState>({ rows: [{ id: "r0", visualText: html, audioText: EMPTY }], brollShots: [], productionTags: [] });
+    const plan = planBrollAnchors(state, readers, countingIds());
+    const cell = cells.decode(html);
+    return anchorBrollCell(cell, brollAnchorTodo(cell, "r0", plan));
+  };
+  assert.deepEqual(anchored([T("B-roll:", { cmt: ["c1"] }), T(" gulls")]), {
+    cell: normalizeCell([B("bsmint0001", "B-roll:", { cmt: ["c1"] }), T(" gulls")]),
+    anchored: 1
+  });
+  assert.deepEqual(anchored([T("B-roll: gulls", { cmt: ["c1"] })]), {
+    cell: normalizeCell([B("bsmint0001", "B-roll:", { cmt: ["c1"] }), T(" "), T("gulls", { cmt: ["c1"] })]),
+    anchored: 1
+  });
+  assert.deepEqual(anchored([T("B-r", { cmt: ["c1"] }), T("oll: gulls", { cmt: ["c2"] })]).cell[0], B("bsmint0001", "B-roll:", { cmt: ["c1", "c2"] }));
+  assert.deepEqual(anchored([T("B-roll:", { b: true, cmt: ["c1"] }), T(" gulls")]).cell[0], B("bsmint0001", "B-roll:", { cmt: ["c1"] }));
+});
+
+test("anchoring a key that carries a format mark and a comment keeps the comment on the new key", () => {
+  const cell = normalizeCell([B("b1", "B-roll:", { b: true, cmt: ["c1"] }), T(" gulls")]);
+  const html = cells.html(cell);
+  const state = doc<BrollState>({ rows: [{ id: "r0", visualText: html, audioText: EMPTY }], brollShots: [], productionTags: [] });
+  const plan = planBrollAnchors(state, readers, countingIds());
+  const decoded = cells.decode(html);
+  const out = anchorBrollCell(decoded, brollAnchorTodo(decoded, "r0", plan));
+  assert.equal(out.anchored, 1);
+  assert.deepEqual(out.cell[0], B("bsmint0001", "B-roll:", { cmt: ["c1"] }));
+});
+
 test("INV-56: a shot shows props tagged on its lines and hand-added ones by registry id; a created shot stores none", () => {
   const registry: RegistryTag[] = [
     { id: "t_mug", cat: "prop", name: "Red mug", status: "have" },
