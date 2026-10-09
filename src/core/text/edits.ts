@@ -133,9 +133,9 @@ export function replaceWithTag(cell: CellInput, from: number, to: number, text: 
   return { cell: setMark(next, r.from, end, "tag", id), end: end };
 }
 
-export function replaceWithBrollKey(cell: CellInput, from: number, to: number, id: string, keyText: string): CellEdit {
+export function replaceWithBrollKey(cell: CellInput, from: number, to: number, id: string, keyText: string, marks?: Marks): CellEdit {
   const r = clampRange(cell, from, to);
-  return { cell: insertBrollKey(deleteRange(cell, r.from, r.to), r.from, id, keyText, {}), end: r.from + 1 };
+  return { cell: insertBrollKey(deleteRange(cell, r.from, r.to), r.from, id, keyText, marks || {}), end: r.from + 1 };
 }
 
 export function setMark(cell: CellInput, from: number, to: number, name: MarkName, value: unknown): Run[] {

@@ -160,6 +160,14 @@ function carriesOnlyComments(marks: Marks | null | undefined): boolean {
   return !marks || Object.keys(marks).every(function (name) { return name === "cmt"; });
 }
 
+export function brollCommentMarks(items: readonly BrollLineItem[]): Marks {
+  const ids: string[] = [];
+  items.forEach(function (it) {
+    ((it.marks && it.marks.cmt) || []).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+  });
+  return ids.length ? { cmt: ids } : {};
+}
+
 function brollLineMarker(items: BrollLineItem[]): BrollMarker | null {
   for (let i = 0; i < items.length; i++) {
     const it = items[i] as BrollLineItem;
@@ -476,8 +484,10 @@ function brollAnchorLine(cell: readonly Run[], line: BrollLine, id: string): Run
   const m = BROLL_MARKER_RE.exec(brollLineText(line.items));
   if (!m) return null;
   let left = m[0].length, to = line.start;
+  const taken: BrollLineItem[] = [];
   for (let i = 0; i < line.items.length && left > 0; i++) {
     const it = line.items[i] as BrollLineItem;
+    taken.push(it);
     if (it.atom) {
       if (it.text.length > left) return null;
       left -= it.text.length;
@@ -488,7 +498,7 @@ function brollAnchorLine(cell: readonly Run[], line: BrollLine, id: string): Run
       to = it.pos + take;
     }
   }
-  const r = replaceWithBrollKey(cell, line.start, to, id, (m[1] as string) + (m[2] as string));
+  const r = replaceWithBrollKey(cell, line.start, to, id, (m[1] as string) + (m[2] as string), brollCommentMarks(taken));
   return insertText(r.cell, r.end, " ", {});
 }
 

@@ -295,6 +295,16 @@ function bareBreaks(cell) {
   return normalizeCell(runs);
 }
 
+function keysBare(cell) {
+  return cell.map((r) => (r.atom ? Object.assign({}, r, { marks: {} }) : r));
+}
+
+function commentsOf(cell) {
+  const ids = new Set();
+  cell.forEach((r) => ((r.marks && r.marks.cmt) || []).forEach((c) => ids.add(c)));
+  return ids;
+}
+
 function withRow(html, fn) {
   S.state = { rows: [{ id: "r0", visualText: html, audioText: "" }], brollShots: [], productionTags: [] };
   return fn(S.state.rows[0]);
@@ -315,7 +325,8 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
     assert.equal(read.length, before.length, html);
     assert.ok(read.every((b) => b.id), "every line now has a key: " + after);
     const old = oldAnchor(html, (k) => read[k].id);
-    assert.deepEqual(bareBreaks(cellOf(after)), bareBreaks(cellOf(old)), html);
+    assert.deepEqual(keysBare(bareBreaks(cellOf(after))), keysBare(bareBreaks(cellOf(old))), html);
+    for (const c of commentsOf(cellOf(html))) assert.ok(commentsOf(cellOf(after)).has(c), "anchoring keeps comment " + c + ": " + html);
     assert.deepEqual(read.map((b) => [b.name, b.desc]), before.map((b) => [b.name, b.desc]), "anchoring changes no name: " + html);
     assert.equal(sanitizeHtml(after), after, "written canonical");
     anchored++;
@@ -423,7 +434,7 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
         assert.ok(renameBrollInScript({ rowId: "r0", ordinal, id }, "a new <name> & more"));
         return S.state.rows[0].visualText;
       });
-      assert.deepEqual(bareBreaks(cellOf(after)), bareBreaks(cellOf(oldRename(html, ordinal, id, "a new <name> & more"))), html);
+      assert.deepEqual(keysBare(bareBreaks(cellOf(after))), keysBare(bareBreaks(cellOf(oldRename(html, ordinal, id, "a new <name> & more")))), html);
       const read = brollInCell(cellOf(after));
       assert.equal(read.length, before.length);
       assert.deepEqual(read[ordinal], { id, name: "a new <name> & more", desc: b.desc });
@@ -435,6 +446,36 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
     assert.equal(renameBrollInScript({ rowId: "r0", ordinal: 0, id: "x" }, "n"), false);
     assert.equal(renameBrollInScript({ rowId: "r0", ordinal: -1, id: "x" }, "n"), false);
   });
+});
+
+test("renaming a shot keeps the comment on its key, on the text path and the media path", () => {
+  const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
+  const cmt = (id, inner) => '<span class="cmt-anchor" data-cmt="' + id + '">' + inner + "</span>";
+  const cases = [
+    cmt("c1", KEY("b1")) + " gulls",
+    cmt("c1", KEY("b1") + " gulls"),
+    KEY("b1") + cmt("c1", " gulls"),
+    "intro<br>" + cmt("c1", KEY("b1") + " gulls") + "<br>low",
+    cmt("c2", cmt("c1", KEY("b1"))) + " gulls"
+  ];
+  for (const base of cases) {
+    for (const html of [sanitizeHtml(base), sanitizeHtml(card + "<br>" + base)]) {
+      const was = brollInCell(cellOf(html)).findIndex((b) => b.id === "b1");
+      const wasIds = new Set();
+      cellOf(html).forEach((r) => ((r.marks && r.marks.cmt) || []).forEach((c) => wasIds.add(c)));
+      withRow(html, (row) => {
+        assert.ok(renameBrollInScript({ rowId: "r0", ordinal: was, id: "b1" }, "terns"), html);
+        const after = cellOf(row.visualText);
+        const key = after.find((r) => r.atom);
+        assert.ok(key && key.id === "b1", row.visualText);
+        const kept = new Set();
+        after.forEach((r) => ((r.marks && r.marks.cmt) || []).forEach((c) => kept.add(c)));
+        assert.deepEqual([...kept].sort(), [...wasIds].sort(), "no comment lost: " + row.visualText);
+        assert.ok([...wasIds].every((c) => (key.marks.cmt || []).includes(c)), "key holds every comment: " + row.visualText);
+        assert.deepEqual(brollInCell(cellOf(row.visualText)).find((b) => b.id === "b1").name, "terns");
+      });
+    }
+  }
 });
 
 test("anchoring and renaming in a cell still holding a video card keep the card", () => {
