@@ -38,4 +38,4 @@ wrongToday("T3", "the pristine check and the resume check agree on a document wi
   const pristineSaid = S.docIdWrittenOut === false;
   const resumeTried = opened.includes("splitpage-files");
   assert.equal(resumeTried, pristineSaid, "pristine says " + pristineSaid + " and the resume check says " + resumeTried);
-});
+}, /pristine says .* and the resume check says/);
