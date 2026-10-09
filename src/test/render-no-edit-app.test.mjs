@@ -284,21 +284,30 @@ test("R3a: an incoming merge while a grid cell holds focus after accepted typing
   assert.equal(caretOffset(document.activeElement), "Mine one.!".length);
 });
 
-test("R3b: an incoming merge while a grid cell holds focus, whose text both sides changed, leaves the cell showing exactly what the merge decided, and the render adds no edit", () => {
-  fresh("R3b");
+function conflictRun(label, focused) {
+  fresh(label);
   const base = cloneState(S.state);
-  const cell = gridCell("r1", "audioText");
-  typeAtEnd(cell, "!");
+  typeAtEnd(gridCell("r1", "audioText"), "!");
+  if (!focused) document.activeElement.blur();
   const theirs = cloneState(base);
   theirs.rows[0].audioText = "Theirs one.";
   theirs.rows[1].audioText = "Theirs two.";
-  const out = observe(() => merged(theirs, cloneState(S.state), base));
-  assert.deepEqual([out.edits, out.seq, out.generation], [0, 0, 0]);
-  const decided = out.value.state.rows.map((r) => [r.id, r.visualText, r.audioText]);
-  assert.deepEqual(modelTexts(), decided, "the model is what the merge returned");
-  assert.deepEqual(gridTexts(), decided, "the grid shows it");
-  assert.equal(row("r2").audioText, "Theirs two.");
-  assert.ok(row("r1").audioText.endsWith("!"), "the typing the merge was handed is still in the cell: " + row("r1").audioText);
+  const decided = applyMerge({ base: cloneState(base), mine: cloneState(S.state), theirs: cloneState(theirs), source: "server-conflict", mergeOnly: true })
+    .state.rows.map((r) => [r.id, r.visualText, r.audioText]);
+  const got = observe(() => merged(theirs, cloneState(S.state), base));
+  return { decided: decided, got: got, texts: modelTexts(), grid: gridTexts() };
+}
+
+test("R3b: an incoming merge while a grid cell holds focus, whose text both sides changed, leaves the model and the cell showing what the merge decides on its own, and the focus changes nothing about its edits or undo steps", () => {
+  const alone = conflictRun("R3b alone", false);
+  const run = conflictRun("R3b focused", true);
+  assert.deepEqual(run.decided, alone.decided, "the same merge decides the same document");
+  assert.equal(run.decided[1][2], "Theirs two.");
+  assert.ok(run.decided[0][2].endsWith("!"), "the typing the merge was handed is in the decided cell: " + run.decided[0][2]);
+  assert.deepEqual([run.got.edits, run.got.seq, run.got.generation], [0, 0, 0]);
+  assert.deepEqual(noEdit(run.got), noEdit(alone.got), "the focused cell added no edit or undo step beyond the merge itself");
+  assert.deepEqual(run.texts, run.decided, "the model is what the merge decided");
+  assert.deepEqual(run.grid, run.decided, "the grid shows it");
   assert.equal(S.dirty, true);
   assert.equal(document.activeElement, gridCell("r1", "audioText"));
 });
@@ -364,12 +373,21 @@ const THROWS = [
     }
   },
   {
-    name: "after the scenes, before the Writer",
+    name: "when the title is read, after the scenes and before the Writer",
     arm: () => {
-      const box = document.getElementById("doc-title");
-      const real = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
-      Object.defineProperty(box, "value", { configurable: true, get() { return real.get.call(this); }, set() { throw new Error("render broke (R4)"); } });
-      return () => { delete box.value; };
+      const doc = S.state;
+      const value = doc.title;
+      let armed = true;
+      Object.defineProperty(doc, "title", {
+        configurable: true,
+        enumerable: true,
+        get() { if (armed) throw new Error("render broke (R4)"); return value; },
+        set(v) { Object.defineProperty(doc, "title", { configurable: true, enumerable: true, writable: true, value: v }); }
+      });
+      return () => {
+        armed = false;
+        Object.defineProperty(doc, "title", { configurable: true, enumerable: true, writable: true, value: value });
+      };
     }
   }
 ];
@@ -494,7 +512,7 @@ wrongToday("R4m", "4.21 (#463)", "a render that throws in the middle of the scen
   }
 });
 
-wrongToday("R4l", "4.21 (#463)", "a render that throws after the scenes leaves the whole screen as it was, title included", () => {
+wrongToday("R4l", "4.21 (#463)", "a render that throws when the title is read, after the scenes were drawn, leaves the whole screen as it was", () => {
   try {
     const run = failingRender(PLACES[0], THROWS[2]);
     sameScreen(screenMarkup(), run.before, "after the failed render");
@@ -503,7 +521,7 @@ wrongToday("R4l", "4.21 (#463)", "a render that throws after the scenes leaves t
   }
 });
 
-wrongToday("R4w", "4.21 (#463)", "a render that throws between the grid and the Writer leaves the Writer and the grid as they were", () => {
+wrongToday("R4w", "4.21 (#463)", "a render that throws when the title is read, between the grid and the Writer, leaves the Writer and the grid as they were", () => {
   try {
     const run = failingRender(PLACES[1], THROWS[2]);
     sameScreen(screenMarkup(), run.before, "after the failed render");
@@ -559,13 +577,11 @@ test("R5b: with the Writer open and a grid cell still the active element, a rend
   }
 });
 
-wrongToday("R5d", "4.21 (#463)", "with the Writer open and a grid cell still the active element, the render's focus restore ends inside the Writer with no range left in the grid", () => {
+wrongToday("R5d", "4.21 (#463)", "with the Writer open and a grid cell still the active element, the render focuses no cell of the grid", () => {
   underWriter("R5d");
   try {
-    observe(() => render());
-    assert.ok(document.getElementById("writer").contains(document.activeElement), "the focus is inside the Writer");
-    const sel = window.getSelection();
-    assert.ok(!sel.rangeCount || !document.getElementById("rows").contains(sel.getRangeAt(0).startContainer), "no range is left in the grid");
+    const calls = focusCalls(() => { observe(() => render()); });
+    assert.deepEqual(calls.filter((el) => el.closest("#rows")).map((el) => el.getAttribute("data-id") + "/" + el.getAttribute("data-field")), [], "a grid cell was focused under the open Writer");
   } finally {
     writer.closeWriter();
   }
