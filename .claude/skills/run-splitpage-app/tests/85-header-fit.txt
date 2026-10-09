@@ -302,6 +302,8 @@ eval (function(){ var d=window.__d(); d.getElementById('review-chip').hidden=fal
 expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
 expect !window.__d().getElementById('file-chip').hidden
 expect !window.__d().getElementById('progress-chip').hidden
+eval window.__at(1920)
+sleep 300
 expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 4
 eval window.__d().getElementById('doc-title').blur()
 sleep 300
@@ -346,69 +348,75 @@ eval window.__check(1920)
 expect window.__last === ''
 eval window.__d().getElementById('doc-title').blur()
 
-eval (function(){ var W=window; W.__facts=function(){ var d=W.__d(); var out=[]; ['review-chip','file-chip','progress-chip'].forEach(function(id){ var e=d.getElementById(id); if(!e||e.hidden) return; out.push({id:id,w:e.getBoundingClientRect().width}); }); return out; }; W.__slivers=function(){ var bad=[]; W.__facts().forEach(function(f){ if(f.w>0&&f.w<61.5) bad.push(f.id+' '+Math.round(f.w*10)/10); }); return bad.join(', '); }; W.__focus=async function(on){ var t=W.__d().getElementById('doc-title'); if(on) t.focus(); else t.blur(); await W.__frames(3); return true; }; W.__nameFirst=function(){ var d=W.__d(); var n=d.getElementById('identity-chip').getBoundingClientRect().width; var warn=d.getElementById('file-chip').hasAttribute('data-warning'); var bad=[]; if(!warn&&n<100) bad.push('name '+Math.round(n)+' with no warning'); if(d.querySelector('.doc-meta').hasAttribute('data-yield')&&n>73) bad.push('warning cut while the name is '+Math.round(n)); if(n<100){ ['review-chip','progress-chip','file-chip-name'].forEach(function(id){ var e=d.getElementById(id); if(e&&!e.hidden&&e.getBoundingClientRect().width>0) bad.push(id+' shown beside a name of '+Math.round(n)); }); } return bad.join(', '); }; W.__lead=function(){ var d=W.__d(); var first=null; ['review-chip','file-chip','progress-chip'].forEach(function(id){ var e=d.getElementById(id); if(!first&&e&&!e.hidden&&e.getBoundingClientRect().width>0) first=e; }); if(!first) return ''; var c=W.__w().getComputedStyle(first,'::before').content; return (c==='none'||c==='normal'||c==='')? '' : first.id+' starts with a separator'; }; W.__sweep=async function(from,to,step,on){ var bad=[]; for(var w=from;w<=to;w+=step){ await W.__at(w); await W.__focus(on); var s=W.__slivers(); var nf=W.__nameFirst(); var ld=W.__lead(); if(s||nf||ld) bad.push(w+': '+s+' '+nf+' '+ld); } W.__last=bad.join(' | '); return W.__last; }; return true; })()
+eval (function(){ var W=window; W.__facts=function(){ var d=W.__d(); var out=[]; ['review-chip','file-chip','progress-chip'].forEach(function(id){ var e=d.getElementById(id); if(!e||e.hidden) return; var r=e.getBoundingClientRect(); var first=id==='review-chip'?e.querySelector('.review-chip-icon'):id==='progress-chip'?e.querySelector('#progress-text'):d.getElementById('file-chip-name'); var fr=first?first.getBoundingClientRect():null; var w=(fr&&fr.width>0)?Math.max(0,r.right-fr.left):r.width; out.push({id:id,box:r.width,w:w,warn:e.hasAttribute('data-warning')}); }); return out; }; W.__slivers=function(){ var bad=[]; W.__facts().forEach(function(f){ if(f.box>0&&!f.warn&&f.w<61.5) bad.push(f.id+' '+Math.round(f.w*10)/10); }); return bad.join(', '); }; W.__focus=async function(on){ var t=W.__d().getElementById('doc-title'); if(on) t.focus(); else t.blur(); await W.__frames(3); return true; }; W.__nameFirst=function(){ var d=W.__d(); var n=d.getElementById('identity-chip').getBoundingClientRect().width; var warn=d.getElementById('file-chip').hasAttribute('data-warning'); var bad=[]; if(!warn&&n<100) bad.push('name '+Math.round(n)+' with no warning'); if(n<100){ ['review-chip','progress-chip','file-chip-name'].forEach(function(id){ var e=d.getElementById(id); if(e&&!e.hidden&&e.getBoundingClientRect().width>0) bad.push(id+' shown beside a name of '+Math.round(n)); }); } return bad.join(', '); }; W.__lead=function(){ var d=W.__d(); var first=null; ['review-chip','file-chip','progress-chip'].forEach(function(id){ var e=d.getElementById(id); if(!first&&e&&!e.hidden&&e.getBoundingClientRect().width>0) first=e; }); if(!first) return ''; var c=W.__w().getComputedStyle(first,'::before').content; return (c==='none'||c==='normal'||c==='')? '' : first.id+' starts with a separator'; }; W.__titleMin=function(){ var d=W.__d(); if(d.getElementById('file-chip').hasAttribute('data-warning')) return ''; var w=d.getElementById('doc-title').getBoundingClientRect().width; return w<54.8? 'title '+Math.round(w)+' with no warning' : ''; }; W.__sweep=async function(from,to,step,on){ var bad=[]; for(var w=from;w<=to;w+=step){ await W.__at(w); await W.__focus(on); var s=W.__slivers(); var nf=W.__nameFirst(); var ld=W.__lead(); var tm=W.__titleMin(); if(s||nf||ld||tm) bad.push(w+': '+s+' '+nf+' '+ld+' '+tm); } W.__last=bad.join(' | '); return W.__last; }; return true; })()
 expect true
 eval window.__sweep(761, 1920, 19, false)
 expect window.__last === ''
 eval window.__sweep(761, 1920, 19, true)
 expect window.__last === ''
-eval (function(){ var W=window; W.__warnOn=function(text){ var d=W.__d(); var c=d.getElementById('file-chip'); c.hidden=false; c.setAttribute('data-warning',''); d.getElementById('file-chip-name').textContent='On the server'; var s=d.getElementById('file-chip-state'); s.textContent=text; s.classList.add('unsaved'); return true; }; W.__warnOff=function(){ var d=W.__d(); var c=d.getElementById('file-chip'); c.removeAttribute('data-warning'); d.getElementById('file-chip-state').classList.remove('unsaved'); return true; }; W.__chipNow=async function(){ await W.__at(3440); await W.__focus(false); W.__chipW=W.__d().getElementById('file-chip-state').getBoundingClientRect().width; return W.__chipW; }; W.__keep=async function(w,on){ await W.__at(w); await W.__focus(on); var d=W.__d(); var c=d.getElementById('file-chip'); var s=d.getElementById('file-chip-state'); var sr=s.getBoundingClientRect(); var hit=d.elementFromPoint(sr.left+sr.width/2, sr.top+sr.height/2); var nw=d.getElementById('file-chip-name').getBoundingClientRect().width; var bad=[]; if(sr.width<W.__chipW-0.5) bad.push('warning '+Math.round(sr.width)+' of '+Math.round(W.__chipW)); if(c.scrollWidth>c.clientWidth+1) bad.push('chip clipped'); if(!hit||!s.contains(hit)) bad.push('warning covered'); if(nw>0&&nw<61.5) bad.push('file name '+Math.round(nw)); W.__last=bad.length? w+(on?' editing: ':': ')+bad.join(', ') : ''; return W.__last; }; W.__fits=async function(w,on){ await W.__keep(w,on); var o=W.__last; await W.__check(w); var d=W.__d(); var n=d.getElementById('identity-chip').getBoundingClientRect().width; var bad=[]; if(o) bad.push(o); if(W.__last) bad.push(W.__last); var sl=W.__slivers(); if(sl) bad.push(sl); var nf=W.__nameFirst(); if(nf) bad.push(nf); if(n<71.5) bad.push('name '+Math.round(n)); W.__last=bad.join('; '); return W.__last; }; W.__yield=async function(w,on){ await W.__at(w); await W.__focus(on); var d=W.__d(); var r=d.getElementById('file-chip-state').getBoundingClientRect(); var bad=[]; if(!(r.width>=100)) bad.push('warning '+Math.round(r.width)); var nw=d.getElementById('file-chip-name').getBoundingClientRect().width; if(nw>0&&nw<61.5) bad.push('file name '+Math.round(nw)); if(nw>0&&r.width<W.__chipW-0.5) bad.push('file name shown while the warning is cut'); var nf=W.__nameFirst(); if(nf) bad.push(nf); await W.__check(w); if(W.__last) bad.push(W.__last); W.__last=bad.length? w+(on?' editing: ':': ')+bad.join(', ') : ''; return W.__last; }; return true; })()
+eval window.__title('Ep 1')
+sleep 300
+eval (function(){ var W=window; var fw=W.__w(); var top=fw.setTimeout(function(){},0); for(var i=1;i<=top;i++) fw.clearTimeout(i); W.__saveWas=W.__d().getElementById('btn-save').getAttribute('data-status'); W.__sig=function(){ var d=W.__d(); return ['review-chip','file-chip','progress-chip'].map(function(id){ var e=d.getElementById(id); return id+(!e||e.hidden?' -':e.getBoundingClientRect().width>0?' o':' x'); }).join(', '); }; W.__fresh=async function(w){ await W.__at(w-1); await W.__at(w); await W.__frames(3); return W.__sig(); }; W.__bar=function(n){ var b=W.__d().getElementById('presence-bar'); var h=''; for(var i=0;i<n;i++) h+='<span class="presence-chip" style="--presence:#c47">P'+i+'</span>'; b.innerHTML=h; b.hidden=n===0; return true; }; W.__saveText=function(t){ W.__d().getElementById('btn-save').setAttribute('data-status',t); return true; }; W.__moves={join:[function(){W.__bar(0);},function(){W.__bar(6);}],leave:[function(){W.__bar(6);},function(){W.__bar(0);}],longer:[function(){W.__saveText('Save');},function(){W.__saveText('All changes saved');}],shorter:[function(){W.__saveText('All changes saved');},function(){W.__saveText('Save');}]}; W.__follow=async function(name,from,to,step){ var bad=[]; for(var w=from;w<=to;w+=step){ await W.__at(w); W.__moves[name][0](); await W.__fresh(w); W.__moves[name][1](); await W.__frames(6); var live=W.__sig(); var sl=W.__slivers(); var fresh=await W.__fresh(w); if(live!==fresh||sl) bad.push(w+': live ['+live+'] fresh ['+fresh+']'+(sl?' slivers '+sl:'')); } W.__bar(0); W.__saveText(W.__saveWas); W.__last=bad.join(' | '); return W.__last; }; return true; })()
+expect true
+eval window.__follow('join', 781, 1500, 60)
+expect window.__last === ''
+eval window.__follow('leave', 781, 1500, 60)
+expect window.__last === ''
+eval window.__follow('longer', 781, 1500, 60)
+expect window.__last === ''
+eval window.__follow('shorter', 781, 1500, 60)
+expect window.__last === ''
+eval window.__title('The Long Road Home: Episode Four of the Documentary Series!!')
+sleep 300
+eval (function(){ var W=window; W.__warnOn=function(text,name){ var d=W.__d(); var c=d.getElementById('file-chip'); c.hidden=false; c.setAttribute('data-warning',''); d.getElementById('file-chip-name').textContent=name||'On the server'; var s=d.getElementById('file-chip-state'); s.textContent=text; s.classList.add('unsaved'); return true; }; W.__warnOff=function(){ var d=W.__d(); var c=d.getElementById('file-chip'); c.removeAttribute('data-warning'); d.getElementById('file-chip-state').classList.remove('unsaved'); return true; }; W.__chipNow=async function(){ await W.__at(3440); await W.__focus(false); W.__chipW=W.__d().getElementById('file-chip-state').getBoundingClientRect().width; return W.__chipW; }; W.__whole=async function(w,on){ await W.__at(w); await W.__focus(on); var d=W.__d(); var c=d.getElementById('file-chip'); var cr=c.getBoundingClientRect(); var s=d.getElementById('file-chip-state'); var sr=s.getBoundingClientRect(); var hit=d.elementFromPoint(sr.left+sr.width/2, sr.top+sr.height/2); var nw=d.getElementById('file-chip-name').getBoundingClientRect().width; var n=d.getElementById('identity-chip').getBoundingClientRect().width; var bad=[]; if(sr.width<W.__chipW-0.5) bad.push('warning '+Math.round(sr.width)+' of '+Math.round(W.__chipW)); if(s.scrollWidth>s.clientWidth+0.5) bad.push('warning has an ellipsis'); if(sr.right>cr.right+0.5||c.scrollWidth>c.clientWidth+1) bad.push('chip clipped'); if(!hit||!s.contains(hit)) bad.push('warning covered'); if(nw>0&&nw<61.5) bad.push('file name '+Math.round(nw)); if(n<71.5) bad.push('name '+Math.round(n)); var sl=W.__slivers(); if(sl) bad.push(sl); var nf=W.__nameFirst(); if(nf) bad.push(nf); await W.__check(w); if(W.__last) bad.push(W.__last); W.__last=bad.length? w+(on?' editing: ':': ')+bad.join(', ') : ''; return W.__last; }; W.__wholeSweep=async function(from,to,step,on){ var all=[]; for(var w=from;w<=to;w+=step){ await W.__whole(w,on); if(W.__last) all.push(W.__last); } W.__last=all.join(' | '); return W.__last; }; return true; })()
 expect true
 eval window.__warnOn('· link turned off — not saving')
 eval window.__chipNow()
 expect window.__chipW > 160
-eval window.__fits(1920, false)
+eval window.__whole(1920, false)
 expect window.__last === ''
-eval window.__fits(1440, true)
+eval window.__whole(1440, true)
 expect window.__last === ''
-eval window.__fits(1280, true)
+eval window.__whole(1280, true)
 expect window.__last === ''
-eval window.__fits(1240, true)
+eval window.__whole(1100, true)
 expect window.__last === ''
-eval window.__fits(1100, true)
+eval window.__whole(1000, true)
 expect window.__last === ''
-eval window.__fits(1100, false)
+eval window.__whole(900, true)
+expect window.__last === ''
+eval window.__whole(800, true)
+expect window.__last === ''
+eval window.__whole(761, false)
+expect window.__last === ''
+eval window.__wholeSweep(761, 1920, 19, true)
+expect window.__last === ''
+eval window.__wholeSweep(770, 1920, 38, false)
 expect window.__last === ''
 eval window.__warnOn('· signed out — reload')
 eval window.__chipNow()
-eval window.__fits(1440, true)
-expect window.__last === ''
-eval window.__fits(1100, true)
+eval window.__wholeSweep(761, 1920, 38, true)
 expect window.__last === ''
 eval window.__warnOn('· not saved yet')
 eval window.__chipNow()
-eval window.__fits(1440, true)
+eval window.__wholeSweep(761, 1920, 38, true)
 expect window.__last === ''
-eval window.__fits(1100, true)
-expect window.__last === ''
-eval window.__fits(1000, true)
-expect window.__last === ''
-eval window.__fits(900, true)
-expect window.__last === ''
-eval window.__fits(800, true)
+eval window.__warnOn('· unsaved changes', 'The Long Road Home.splitpage')
+eval window.__chipNow()
+eval window.__wholeSweep(761, 1920, 38, true)
 expect window.__last === ''
 eval window.__warnOn('· link turned off — not saving')
 eval window.__chipNow()
-eval window.__yield(1000, true)
+eval window.__sweep(761, 1920, 38, true)
 expect window.__last === ''
-eval window.__yield(900, true)
-expect window.__last === ''
-eval window.__yield(800, true)
-expect window.__last === ''
-eval window.__yield(761, true)
-expect window.__last === ''
-eval window.__yield(761, false)
-expect window.__last === ''
-eval window.__sweep(761, 1920, 19, true)
-expect window.__last === ''
-eval window.__sweep(761, 1920, 19, false)
+eval window.__sweep(780, 1920, 38, false)
 expect window.__last === ''
 eval window.__at(761)
 eval window.__focus(false)
-expect window.__d().querySelectorAll('.doc-meta [data-squeezed], .doc-meta[data-yield]').length > 0
+expect window.__d().querySelectorAll('.doc-meta [data-squeezed]').length > 0
 eval window.__at(375)
 eval window.__frames(3)
-expect window.__d().querySelectorAll('.doc-meta [data-squeezed], .doc-meta[data-yield]').length === 0
+expect window.__d().querySelectorAll('.doc-meta [data-squeezed]').length === 0
 eval window.__warnOff()
 eval (function(){ var d=window.__d(); d.getElementById('review-chip').hidden=true; d.getElementById('file-chip').hidden=true; return true; })()
 eval window.__at(1440)

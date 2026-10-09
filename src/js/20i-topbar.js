@@ -101,12 +101,27 @@ export function __init() {
       return v > 0 ? v : 0;
     }
 
+    function readableWidth(el) {
+      const box = el.getBoundingClientRect();
+      for (let node = el.firstChild; node; node = node.nextSibling) {
+        let rect = null;
+        if (node.nodeType === 1) {
+          rect = node.getBoundingClientRect();
+        } else if (node.nodeType === 3 && node.nodeValue.trim() && typeof document.createRange === "function") {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          rect = range.getBoundingClientRect();
+        }
+        if (rect && rect.width > 0) return Math.max(0, box.right - rect.left);
+      }
+      return box.width;
+    }
+
     function hideSlivers(plain, min) {
       for (let i = 0; i < plain.length; i++) {
         const sliver = plain.find(function (el) {
           if (el.hidden || el.hasAttribute("data-squeezed")) return false;
-          const w = el.getBoundingClientRect().width;
-          return w < min - 0.5;
+          return readableWidth(el) < min - 0.5;
         });
         if (!sliver) return;
         sliver.setAttribute("data-squeezed", "");
@@ -116,21 +131,10 @@ export function __init() {
     function fit() {
       queued = false;
       meta.querySelectorAll("[data-squeezed]").forEach(function (el) { el.removeAttribute("data-squeezed"); });
-      meta.removeAttribute("data-yield");
-      meta.style.removeProperty("--warning-min");
       if (!wide || !wide.matches) return;
-      const warned = warningShown();
-      const plain = plainDetails(warned);
       const min = minWidth();
       if (!min) return;
-      hideSlivers(plain, min);
-      const over = left.scrollWidth - left.clientWidth;
-      if (warned && over > 1) {
-        const kept = document.getElementById("file-chip").getBoundingClientRect().width - over - 1;
-        meta.style.setProperty("--warning-min", Math.max(min, Math.floor(kept)) + "px");
-        meta.setAttribute("data-yield", "");
-        hideSlivers(plain, min);
-      }
+      hideSlivers(plainDetails(warningShown()), min);
     }
 
     function schedule() {
@@ -142,8 +146,9 @@ export function __init() {
     if (typeof ResizeObserver === "function") {
       const sizes = new ResizeObserver(schedule);
       sizes.observe(left);
-      const title = document.getElementById("doc-title");
-      if (title) sizes.observe(title);
+      [document.getElementById("doc-title"), document.getElementById("presence-bar"), document.querySelector(".save-state")].forEach(function (el) {
+        if (el) sizes.observe(el);
+      });
     }
     if (typeof MutationObserver === "function") {
       new MutationObserver(schedule).observe(meta, {
