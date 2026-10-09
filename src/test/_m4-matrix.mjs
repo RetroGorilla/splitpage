@@ -236,6 +236,9 @@ export function createHeldFileHandle(ports) {
 
   async function reach(op, detail) {
     calls.push(op);
+    if (permission !== "granted" && (op === "getFile" || op === "createWritable")) {
+      throw new DOMException("The request is not allowed by the user agent or the platform in the current context.", "NotAllowedError");
+    }
     await gates.pass("file." + op, detail);
     const failure = failures.get(op);
     if (failure) {
@@ -311,7 +314,7 @@ function wrapped(target, gates, prefix, log, names) {
 export function createHeldDesktop(backend, ports) {
   const gates = (ports && ports.gates) || createGates();
   const calls = [];
-  const names = ["saveFileDialog", "readFile", "writeFile", "statFile", "writeDraft", "discardDraft", "takeDraft"];
+  const names = ["saveFileDialog", "readFile", "writeFile", "statFile", "writeDraft", "discardDraft", "takeDraft", "historyCopy"];
   return {
     desktop: wrapped(backend, gates, "desktop.", calls, names),
     backend: backend,
