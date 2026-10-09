@@ -79,8 +79,8 @@ function fixture() {
   };
 }
 
-function opened(reconciles = true): ReturnType<typeof harness> {
-  const entry = function () { return migratedThenSet(fixture()); };
+function opened(reconciles = true, make: () => ReturnType<typeof fixture> = fixture): ReturnType<typeof harness> {
+  const entry = function () { return migratedThenSet(make()); };
   const reconcile = reconciles ? function (doc: Parameters<typeof syncCommentAnchors>[0]) { return syncCommentAnchors(doc, cells); } : undefined;
   const h = harness(undefined, reconcile ? { entry: entry, reconcile: reconcile } : { entry: entry });
   h.session.adopt({});
@@ -360,7 +360,7 @@ test("E3: a stamp port that throws rolls the paste back whole: text, gallery, sh
   assert.equal(failing.report().attached, null, "a rolled-back attach reports nothing attached");
 });
 
-test("a cut removes the range, stamps the scene and reports the caret at the range's start; it never reconciles", () => {
+test("a cut removes the range, stamps the scene and reports the caret at the range's start; it reconciles only when a removed comment is anchored elsewhere", () => {
   const h = opened();
   const p = ports();
   const cut = cutCommand("r2", "audioText", { from: 6, to: 19 }, p);
@@ -373,6 +373,33 @@ test("a cut removes the range, stamps the scene and reports the caret at the ran
   assert.deepEqual(anchorsOf(h), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
   h.clock.advance(180);
   assert.deepEqual(h.refreshes, [["broll", "production"]]);
+});
+
+function splitAnchor(): ReturnType<typeof fixture> {
+  const doc = fixture();
+  const r4 = doc.rows[3];
+  if (r4) r4.audioText = "Four " + cmt("c1", "charlie") + ".";
+  doc.comments.splice(1, 1);
+  return doc;
+}
+
+test("a cut that removes the first of two cells holding a comment moves the comment to the cell that still holds its words", () => {
+  const h = opened(true, splitAnchor);
+  const cut = cutCommand("r2", "audioText", { from: 6, to: 19 }, ports());
+  const out = runConfined(h.session, cut.command);
+  assert.equal(out.kind, "applied");
+  assert.equal(rowOf(h, "r2")?.audioText, "Alpha  delta");
+  assert.deepEqual(anchorsOf(h), [["c1", "r4", "audioText"]]);
+});
+
+test("a cut of the only cell holding a comment leaves the comment where it is", () => {
+  const h = opened(true, splitAnchor);
+  const cut = cutCommand("r4", "audioText", { from: 5, to: 12 }, ports());
+  assert.equal(runConfined(h.session, cut.command).kind, "applied");
+  assert.deepEqual(anchorsOf(h), [["c1", "r2", "audioText"]]);
+  const only = opened(true);
+  assert.equal(runConfined(only.session, cutCommand("r2", "audioText", { from: 6, to: 19 }, ports()).command).kind, "applied");
+  assert.deepEqual(anchorsOf(only), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
 });
 
 test("a cut of nothing, of a scene that is gone, or of a range that deletes nothing is a no-op", () => {

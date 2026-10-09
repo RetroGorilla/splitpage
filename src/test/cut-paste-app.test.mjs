@@ -879,3 +879,81 @@ test("a paste that ends in a tag leaves the caret spot after it, so typing can g
   assert.equal(last.nodeType, 3);
   assert.equal(last.data, String.fromCharCode(0x200b));
 });
+function splitFixture() {
+  const doc = fixture();
+  doc.rows[3].audioText = "Four " + cmt("c1", "charlie") + ".";
+  doc.comments.splice(1, 1);
+  return doc;
+}
+
+test("a cut of the first of two cells holding a comment points the comment at the other cell at once, and undo brings it back", async () => {
+  await open(splitFixture());
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectText(el, 6, 19);
+  clip("cut", el);
+  assert.equal(row("r2").audioText, "Alpha  delta");
+  assert.deepEqual(anchors(), [["c1", "r4", "audioText"]]);
+  assert.equal(undo().ok, true);
+  assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo charlie") + " delta");
+  assert.deepEqual(anchors(), [["c1", "r2", "audioText"]]);
+});
+
+test("a cut that takes both anchor cells' words one after the other never leaves a comment on a removed cell", async () => {
+  await open(splitFixture());
+  const first = cellOf("r2", "audioText");
+  first.focus();
+  selectText(first, 6, 19);
+  clip("cut", first);
+  const second = cellOf("r4", "audioText");
+  second.focus();
+  selectText(second, 5, 12);
+  const cut = clip("cut", second);
+  assert.deepEqual(anchors(), [["c1", "r4", "audioText"]]);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  clip("paste", to, cut.store);
+  assert.deepEqual(anchors(), [["c1", "r3", "audioText"]]);
+});
+
+function manyComments(n) {
+  const doc = fixture();
+  let html = "";
+  doc.comments = [];
+  for (let i = 0; i < n; i++) {
+    html += cmt("k" + i, "w" + i) + " ";
+    doc.comments.push(comment("k" + i, "r2", "audioText"));
+  }
+  doc.rows[1].audioText = html.trim();
+  for (let i = 0; i < 400; i++) doc.rows.push({ id: "x" + i, visualText: "v" + i, audioText: "a" + i, status: "todo", updatedAt: OLD, updatedBy: "Sam" });
+  return doc;
+}
+
+async function scansForPaste(n) {
+  await open(manyComments(n));
+  const el = cellOf("r2", "audioText");
+  el.focus();
+  selectAll(el);
+  const cut = clip("cut", el);
+  const to = cellOf("r3", "audioText");
+  to.focus();
+  selectText(to, 6, 6);
+  let scans = 0;
+  const rows = S.state.rows;
+  const names = ["some", "forEach", "find", "filter", "map", "every", "findIndex", "indexOf"];
+  for (const name of names) {
+    const was = rows[name];
+    Object.defineProperty(rows, name, { configurable: true, writable: true, value(...args) { scans++; return was.apply(this, args); } });
+  }
+  clip("paste", to, cut.store);
+  for (const name of names) delete rows[name];
+  assert.deepEqual(anchors().map((a) => a[1]), Array(n).fill("r3"));
+  return scans;
+}
+
+test("a paste of a cut scans the rows the same number of times for 2 comments as for 12", async () => {
+  const few = await scansForPaste(2);
+  const many = await scansForPaste(12);
+  assert.equal(many, few);
+});
