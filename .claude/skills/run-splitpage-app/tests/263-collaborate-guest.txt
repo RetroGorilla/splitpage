@@ -149,6 +149,7 @@ expect document.getElementById('pin-modal').hidden
 expect __toasts().every(function(t){ return t.indexOf('sign-in expired') === -1; })
 expect document.getElementById('btn-save').getAttribute('data-status') == Not saving
 expect document.getElementById('file-chip-state').textContent == · link turned off — not saving
+expect document.getElementById('file-chip').hasAttribute('data-warning')
 expect window.__fileMenuTest.cardView().bits[0].text == Link turned off — not saving
 expect document.getElementById('doc-title').value == Pilot episode, v3
 expect F.autosave.target() === null

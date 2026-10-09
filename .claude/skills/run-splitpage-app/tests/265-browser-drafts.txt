@@ -94,6 +94,7 @@ wait !document.getElementById('merge-banner').hidden
 sleep 1500
 expect __srv.calls.filter(function(c){ return c.m === 'PUT'; }).length === 0
 expect document.getElementById('file-chip-state').textContent == · not saved yet
+expect document.getElementById('file-chip').hasAttribute('data-warning')
 shot 265-recovered
 wait __rec.g && __rec.g.writerId === DB.writerId() && __rec.g.stateJson.indexOf('THEIRS-V2') !== -1
 expect __rec.h && __rec.h.stateJson.indexOf('AFTER-OFF') !== -1
