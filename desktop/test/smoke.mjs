@@ -4434,6 +4434,7 @@ async function caseHeldCopySurvivesPlainFlush(target, fixturesDir) {
     const cdpA = held[marker].cdp;
     const cdpB = held[markerB].cdp;
     const tabAId = held[marker].id;
+    const tabBId = held[markerB].id;
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
     fs.renameSync(bPath, path.join(movedDir, path.basename(bPath)));
     await evalPage(cdpB, "(function(){ var real = JSON.stringify; var spun = false; " +
@@ -4453,6 +4454,10 @@ async function caseHeldCopySurvivesPlainFlush(target, fixturesDir) {
     const dirs = readDraftDirs(userDataDir);
     const stateOf = (id) => JSON.stringify((dirs[id] && dirs[id].current && dirs[id].current.state) || {});
     record(tag + ": tab A's script is still kept as a draft", stateOf(tabAId).indexOf(marker) !== -1, JSON.stringify(Object.keys(dirs)));
+    const saved = readDesktopStateFile(userDataDir);
+    const savedIds = saved && Array.isArray(saved.windows) && saved.windows.length === 1 ? saved.windows[0].tabs.map((t) => t.tabId).sort() : null;
+    record(tag + ": closing the last window keeps the saved layout it had: one window with tabs A and B (#531)",
+      JSON.stringify(savedIds) === JSON.stringify([tabAId, tabBId].sort()), JSON.stringify(saved));
   } finally {
     closeHeld(held);
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }

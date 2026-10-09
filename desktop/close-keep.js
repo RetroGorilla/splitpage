@@ -68,8 +68,7 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
     const now = tabIdsNow();
     const added = now.filter((id) => !asked.includes(id));
     if (added.length) return round(added);
-    const unasked = asked.filter((id) => now.includes(id) && !answered.has(id));
-    const changed = io.unsavedTabsOf(unasked, []).filter((tab) => !held.includes(tab));
+    const changed = io.unsavedTabsOf(asked.filter((id) => now.includes(id) && !answered.has(id)), []);
     return changed.length ? next(ask(changed)) : answer;
   };
   return Promise.resolve()
