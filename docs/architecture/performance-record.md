@@ -141,3 +141,38 @@ The runs behind the typing medians (p50, then p95): short typing `b1fde0f` 4, 4,
 Typing, which 3.12 put through the session, moved by +0.6 ms (short) and -0.6 ms (long) at p50 and by -0.3 and +0.8 ms at p95, inside the spread between runs of one build (short typing p50 alone ran from 4 to 4.6 on the base, and long typing p95 from 15.7 to 18.1). The earlier set with the head at `c91bc4f` read the same way: short typing p50 3.4 then 4.3 ms and p95 15.2 then 15.7, long typing p50 5.9 then 6.1 and p95 15.9 then 15.6. The 3.12 PR measured the same case in its own interleaved comparison and found its p50 medians within 0.3 ms. The cases that are not typing, none of which goes through a command, differ by amounts in both directions that the runs themselves show (long undo the delete on the base ran from 31.3 to 54 ms). The milestone 3 start record above, a single run, reads 3.9 and 14.5 ms for short typing and 5.3 and 16.9 ms for long typing; the medians here sit beside it. Export is a few milliseconds at most in every case, and the one value that rose (short standalone HTML, 0.2 then 0.7 ms) is a sub-millisecond reading that moved from 0.3 to 0.7 within the head's own runs.
 
 Three earlier runs of the head alone, made before these, read higher on two long cases than the interleaved medians (long new scene p50 46.9, 49.9 and 50.3 ms; long undo the delete 39.3, 48 and 48.8 ms), and the cause was not found. That is why this section compares the base and the head run alternately in one sitting, and why a p95, or a case of one key, should be repeated before it is called a change.
+
+## Milestone 4 start: the render and typing base for 4.21 (Windows)
+
+Recorded 2026-10-08 by `node tools/perf-record.mjs`, three runs one after another, on 4.0-development at `1aa1eed` (built with `node build.mjs`; this PR changes no app source), as the base that the atomic render (4.21, #463) compares its typing and render medians with. The tables give each case's median of the three runs. The 4.21 comparison must run base and head alternately in one sitting, as the milestone 3 close did, because single runs here move by several milliseconds in both directions.
+
+### Conditions
+
+- Machine: win32 10.0.26300 x64, AMD Ryzen 9 9950X3D2 16-Core Processor x32, 30.9 GB, Node v22.23.2; other sessions were running on it (processor load 7% just before the first run, 15.6 GB of memory free)
+- Browser: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0, headless, viewport 1400x900 at 1x. It is one major version newer than the three Windows records above (154), so a comparison with them is indicative only
+- Script font: `"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, sans-serif`; Atkinson Hyperlegible Next is installed and used
+- Fixtures: short is the seed script (2 scenes); long is the long demo (30 scenes)
+- Typing: 55 characters, one real key event every 60 ms, into scene 2's audio cell; latency is key-down to the frame after it
+- Render: no case times `render()` alone. The cases that draw the whole script are "new scene" (five Ctrl+Enter presses, each re-rendering) and "undo the delete" (one undo that redraws every scene), so those two are the render medians
+
+### Input latency, median of 3 runs (ms)
+
+| Case | Keys | p50 | p95 |
+| --- | --- | --- | --- |
+| short typing | 56 | 3.8 | 16.2 |
+| short new scene | 5 | 22.4 | 27.3 |
+| short delete every scene | 1 | 8.9 | 8.9 |
+| short undo the delete | 1 | 11.2 | 11.2 |
+| long typing | 56 | 5.3 | 16.9 |
+| long new scene | 5 | 32.5 | 35.4 |
+| long delete every scene | 1 | 12.7 | 12.7 |
+| long undo the delete | 1 | 30.8 | 30.8 |
+
+The runs behind them (p50, then p95): short typing 3.3, 3.8, 3.8 and 16.2, 17, 14.5; long typing 5.1, 5.3, 5.8 and 17, 16.9, 14.6; long new scene 32.7, 31.1, 32.5 and 34.5, 40.6, 35.4; long undo the delete 28.6, 33.3, 30.8; short new scene 22.4, 13.5, 22.7 and 27.3, 24.5, 28. No long task fired in any case, on either fixture, in any of the 3 runs. The cases with one key (delete, undo) have p50, p95 and max equal, so each is one sample per run.
+
+### Export, median of 3 runs each (ms, median of 5 within a run)
+
+| Fixture | .splitpage | .md project | Standalone HTML |
+| --- | --- | --- | --- |
+| short | 0.3 | 0.5 | 0.6 |
+| long | 1.4 | 3.5 | 2.1 |

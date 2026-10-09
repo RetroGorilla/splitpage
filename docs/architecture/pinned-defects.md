@@ -143,6 +143,18 @@ Added by the 3.15 docs PR (2026-10-08). The first block came from 3.10's seeded 
 | Cut, Ctrl+Z, then paste of that cut leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut | #460 | Nothing; the same on the base | `src/js/05c-clipboard.js` | Open |
 | With a long title focused at 1440 px, the search button and the identity chip overlap by 2 px; the headless suites never had focus, so `.doc-title:focus ~ .doc-meta` never applied | #490 | `85-header-fit.txt`, the editing-state check at 1440 | `src/app.css` | Open |
 
+## Found during milestone 4
+
+Added by 4.4 (render invariant tests, #463). The cases are skipped tests in `src/test/render-no-edit-app.test.mjs`, each named by its case id. `RENDER_NO_EDIT_WRONG_TODAY=1 node --test src/test/render-no-edit-app.test.mjs` runs them, and each fails on the base. Whoever fixes one removes its skip in the same commit; the matrix wrapper from 4.0 converts them to `wrongToday` cases once it lands. The case id is the tracker (no separate issues).
+
+| Defect | Case | Pinned by | Owner on 4.0 | Disposition |
+| --- | --- | --- | --- | --- |
+| A render that throws in the middle of the scenes leaves the screen half old and half new: the scenes before the failure are repainted, the ones after it still show the previous document | R4m, #463 | The skipped R4m: `#rows` is not byte-identical after the failed render (scene 1 changed) | `src/js/05-render.js` (`reconcileRows`, `paintRow`) | Milestone 4, 4.21 (atomic render) |
+| A render that throws after the scenes were drawn leaves every scene and the title new and the Writer old | R4l, R4w, #463 | The skipped R4l and R4w: all three scenes differ from the screen before the render | `src/js/05-render.js` (`paintAll`), `src/js/19-writer.js` (`renderWriter`) | Milestone 4, 4.21 |
+| `restoreRenderFocus` focuses a hidden grid cell when a grid cell is the active element under an open Writer; the Writer's focus trap then takes the focus to its first paragraph, and the Writer's redraw removes that paragraph, so the focus ends on the page with a range left in the hidden grid. The Writer's trap and its overlay make the state unreachable by hand | R5d, #463 | The skipped R5d | `src/js/05-render.js` (`captureRenderFocus`, `restoreRenderFocus`), `src/js/19-writer.js` | Milestone 4, 4.21 (restore focus within its own surface) |
+
+Everything else the cases check passes on the base since #477 and #485: no edit, no rollback and no stale overwrite for a render with a grid cell or a Writer paragraph focused, for an incoming three-way merge, and for a render that throws before, in the middle of or after the scenes, as a regression guard for 4.21.
+
 ## Not in this table
 
 - #302 is a test gap, not a defect: two b-roll id draws that no test pins. It stays in the post-M2 queue as a tests-only PR.
