@@ -20,11 +20,15 @@ var editing = null;
 
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
-export function setSceneLength(rowId, seconds) {
+function applySceneLength(rowId, seconds) {
   var outcome = runCommand(sceneLengthCommand(rowId, seconds, sessionStamps));
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(REVIEW_REFUSAL, "warn");
-  if (outcome.kind !== "applied" && outcome.kind !== "committed") return false;
+  return outcome.kind === "applied" || outcome.kind === "committed";
+}
+
+export function setSceneLength(rowId, seconds) {
+  if (!applySceneLength(rowId, seconds)) return false;
   if (!renderRow(rowId)) render();
   updateScriptStats();
   return true;
@@ -82,7 +86,10 @@ export function closeReadTimeEditor(commit, fromBlur) {
       } else {
         editing = null;
         teardown(ed);
-        afterThisPaint(function () { setSceneLength(ed.rowId, secs); });
+        afterThisPaint(
+          function () { setSceneLength(ed.rowId, secs); },
+          function () { applySceneLength(ed.rowId, secs); }
+        );
         refocus(ed, !fromBlur);
         return true;
       }
