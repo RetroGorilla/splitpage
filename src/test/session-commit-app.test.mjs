@@ -143,16 +143,14 @@ test("an absorbed change that marks the document unsaved records the colour as b
   assert.equal(S.dirty, true);
 });
 
-test("the dirty effect itself writes no document content", () => {
+test("the dirty effect itself writes no document content, for a named editor too", () => {
   named();
   const doc = fresh();
-  doc.personColors = { [NAME]: COLOR };
   const before = JSON.stringify(doc);
   liveSession().settle("server");
-  assert.equal(JSON.stringify(S.state), before);
-  unnamed();
   liveSession().noteEdit();
   assert.equal(JSON.stringify(S.state), before);
+  assert.equal(S.dirty, true);
 });
 
 test("a status click whose listener throws after the commit repaints the scene, keeps it unsaved, reports once and shows nothing new", () => {
