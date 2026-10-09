@@ -113,8 +113,41 @@ test("undo of an entry that only added a person clears the item a collaborator g
   assert.equal(again.ok, true);
   assert.equal(again.cleared, undefined);
   assert.deepEqual(S.state.people.map((p) => p.name), ["Cy", "Ada"]);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada", "redo gives back what the undo cleared");
+  const twice = undo();
+  assert.equal(twice.ok, true);
+  assert.equal(twice.cleared, 1, "the second undo clears it again and says so");
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
 });
+
+for (const list of ["brollShots", "productionTags"]) {
+  test("redo of my own unassignment lands after a crew-only undo cleared a collaborator's owner, in " + list + " (#476 review)", () => {
+    S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+      { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
+    ] });
+    S.state.people.push(person("p_Cy", "Cy"));
+    const item = list === "brollShots" ? shot : (id, name, owner) => tag(id, name, owner);
+    S.state[list].push(item("i_dock", "Dock", ""), item("i_pier", "Pier", "p_Cy"));
+    trackDocument();
+    S.state.people.push(person("p_Ada", "Ada"));
+    commit();
+    remoteCrew((st) => { st[list].find((e) => e.name === "Dock").owner = "p_Ada"; });
+    S.state[list].find((e) => e.name === "Pier").owner = "";
+    commit();
+    assert.equal(undo().ok, true);
+    assert.equal(ownerOf(S.state[list], "Pier"), "p_Cy");
+    assert.equal(undo().cleared, 1);
+    assert.equal(ownerOf(S.state[list], "Dock"), "");
+    assert.equal(redo().ok, true);
+    assert.equal(ownerOf(S.state[list], "Dock"), "p_Ada");
+    const res = redo();
+    assert.equal(res.ok, true);
+    assert.equal(res.cleared, undefined);
+    assert.equal(ownerOf(S.state[list], "Pier"), "", "my unassignment is applied");
+    assert.equal(ownerOf(S.state[list], "Dock"), "p_Ada");
+    assert.deepEqual(dangling(), []);
+  });
+}
 
 test("redo of an entry that only removed a person clears the tag a collaborator gave that person meanwhile (#476)", () => {
   boot(["Ada", "Cy"]);
@@ -223,7 +256,7 @@ function remoteItems(synced, mutate) {
     const was = nameOfOwner(synced, l, n);
     return nameOfOwner(mine, l, n) !== was && nameOfOwner(theirs, l, n) === was;
   });
-  const lost = mineOnly.filter(([l, n]) => nameOfOwner(mine, l, n) && nameOfOwner(merged, l, n) !== nameOfOwner(mine, l, n))
+  const lost = mineOnly.filter(([l, n]) => nameOfOwner(merged, l, n) !== nameOfOwner(mine, l, n))
     .map(([l, n]) => n + ": " + nameOfOwner(mine, l, n) + " became " + nameOfOwner(merged, l, n));
   const ownerDeleted = mineOnly.filter(([l, n]) => {
     const was = ownerOf(synced[l], n);
@@ -238,8 +271,34 @@ function remoteItems(synced, mutate) {
   return { lost, ownerDeleted, reassigned: mineOnly.filter(([l, n]) => nameOfOwner(mine, l, n)).length };
 }
 
+let ownItems = 0;
+
+function ownStepsLanded(steps, pre) {
+  const missed = [];
+  const nameIn = (st, s, id) => id && ((s.owners && s.owners[id]) || (st.people.find((p) => p.id === id) || {}).name || "?" + id).trim().toLowerCase();
+  steps.forEach((s) => {
+    if (s.op !== "docField" || (s.key !== "productionTags" && s.key !== "brollShots")) return;
+    const before = new Map((s.before || []).map((e) => [e.id, e.owner || ""]));
+    (s.after || []).forEach((e) => {
+      const want = e.owner || "";
+      if (!before.has(e.id) || before.get(e.id) === want) return;
+      const was = pre[s.key].find((x) => x.id === e.id);
+      if (!was || (was.owner || "") !== before.get(e.id) && nameIn(pre, s, was.owner || "") !== nameIn(pre, s, before.get(e.id))) return;
+      const live = S.state[s.key].find((x) => x.id === e.id);
+      if (!live) return;
+      ownItems++;
+      const name = nameIn(S.state, s, want);
+      const to = name ? S.state.people.find((p) => p.name.trim().toLowerCase() === name) : null;
+      const expect = to ? to.id : "";
+      if ((live.owner || "") !== expect) missed.push(e.name + ": " + (live.owner || "") + " not " + expect);
+    });
+  });
+  return missed;
+}
+
 test("seeded: through noteRemoteChange, with crew-changing, item-assigning and mixed-case merges, undo and redo never refuse, never dangle and land on a value the item held (#476, #353)", () => {
   let undos = 0, redos = 0, folds = 0, crewMerges = 0, refused = 0, remoteAssigns = 0, arrivals = 0, crewOnly = 0, cleared = 0, ownerDeleted = 0, reassigned = 0;
+  ownItems = 0;
   for (let seed = 1; seed <= 400; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
@@ -318,6 +377,7 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
         synced = clone(S.state);
         note();
       } else if (op < 0.85) {
+        const pre = clone(S.state);
         const res = undo();
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
@@ -325,8 +385,10 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
         if (res.steps.every((s) => s.op === "docField" && s.key === "people")) crewOnly++;
         cleared += res.cleared || 0;
         assert.deepEqual(dangling(), [], label + " undo");
+        assert.deepEqual(ownStepsLanded(res.steps, pre), [], label + " undo applied its own owner changes");
         ITEMS.forEach(([l, n]) => assert.ok(seen[n].has(ownerNameOf(l, n)), label + " undo " + n + "=" + ownerNameOf(l, n)));
       } else {
+        const pre = clone(S.state);
         const res = redo();
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
@@ -334,14 +396,15 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
         if (res.steps.every((s) => s.op === "docField" && s.key === "people")) crewOnly++;
         cleared += res.cleared || 0;
         assert.deepEqual(dangling(), [], label + " redo");
+        assert.deepEqual(ownStepsLanded(res.steps, pre), [], label + " redo applied its own owner changes");
         ITEMS.forEach(([l, n]) => assert.ok(seen[n].has(ownerNameOf(l, n)), label + " redo " + n + "=" + ownerNameOf(l, n)));
       }
     }
   }
   assert.equal(refused, 0, "no undo or redo refused");
-  const counts = { undos, redos, folds, crewMerges, remoteAssigns, arrivals, crewOnly, cleared, ownerDeleted, reassigned };
+  const counts = { undos, redos, folds, crewMerges, remoteAssigns, arrivals, crewOnly, cleared, ownerDeleted, reassigned, ownItems };
   assert.ok(undos > 300 && redos > 100 && folds > 100 && crewMerges > 100, JSON.stringify(counts));
-  assert.ok(remoteAssigns > 100 && arrivals > 100 && crewOnly > 300 && cleared > 20 && ownerDeleted > 20 && reassigned > 150, JSON.stringify(counts));
+  assert.ok(remoteAssigns > 100 && arrivals > 100 && crewOnly > 300 && cleared > 20 && ownerDeleted > 20 && reassigned > 150 && ownItems > 500, JSON.stringify(counts));
 });
 
 test("an undo or redo that clears an owner announces it, one that does not stays silent (#476)", () => {
