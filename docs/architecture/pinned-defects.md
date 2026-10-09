@@ -203,7 +203,7 @@ Added by PR 4.0 (the race-matrix harness), PR 4.1 (groups F, I and D) and PR 4.2
 
 ### Race-matrix cases (PR 4.3)
 
-Added by PR 4.3 (groups B, K, H and M), measured on `b0d4282`. Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong and declares `wrongToday`; the case id is the tracker, and the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-recovery.test.mjs` (B, K, H) and `src/test/m4-matrix-continuations.test.mjs` (M).
+Added by PR 4.3 (groups B, K, H and M), measured on `d32dd49`. Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong and declares `wrongToday`; the case id is the tracker, and the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-recovery.test.mjs` (B, K, H) and `src/test/m4-matrix-continuations.test.mjs` (M).
 
 | Defect | Issue or case | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |
