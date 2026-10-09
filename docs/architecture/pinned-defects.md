@@ -145,6 +145,19 @@ Added by the 3.15 docs PR (2026-10-08). The first block came from 3.10's seeded 
 
 ## Found during milestone 4
 
+### Render invariant cases (PR 4.4)
+
+Added by 4.4 (render invariant tests, #463). The cases are skipped tests in `src/test/render-no-edit-app.test.mjs`, each named by its case id. `RENDER_NO_EDIT_WRONG_TODAY=1 node --test src/test/render-no-edit-app.test.mjs` runs them, and each fails on the base. 4.21 owns all four ([milestone-4.md](milestone-4.md#pinned-defects-in-m4)): it removes each skip in the commit that fixes it, or converts the case through the 4.0 wrapper (`src/test/_m4-matrix.mjs`, PR #527), and none may stay skipped at the gate. The case id is the tracker (no separate issues).
+
+| Defect | Case | Pinned by | Owner on 4.0 | Disposition |
+| --- | --- | --- | --- | --- |
+| A render that throws in the middle of the scenes leaves the screen half old and half new: the scenes before the failure are repainted, the ones after it still show the previous document | R4m, #463 | The skipped R4m: `#rows` is not byte-identical after the failed render (scene 1 changed) | `src/js/05-render.js` (`reconcileRows`, `paintRow`) | Milestone 4, 4.21 (atomic render) |
+| A render that throws once the scenes are drawn (the injection is a throwing read of the title, which today comes after them) leaves every scene new and the Writer old; the cases also compare the title box, which today's throw precedes | R4l, R4w, #463 | The skipped R4l and R4w: all three scenes differ from the screen before the render | `src/js/05-render.js` (`paintAll`), `src/js/19-writer.js` (`renderWriter`) | Milestone 4, 4.21 |
+| `restoreRenderFocus` focuses a hidden grid cell when a grid cell is the active element under an open Writer; the Writer's focus trap then takes the focus to its first paragraph, and the Writer's redraw removes that paragraph, so the focus ends on the page with a range left in the hidden grid. The Writer's trap and its overlay make the state unreachable by hand | R5d, #463 | The skipped R5d: #463's rule, no `focus()` call on a grid cell while the Writer is open | `src/js/05-render.js` (`captureRenderFocus`, `restoreRenderFocus`), `src/js/19-writer.js` | Milestone 4, 4.21 (restore focus within its own surface) |
+
+Everything else the cases check passes on the base since #477 and #485: no edit, no rollback and no stale overwrite for a render with a grid cell or a Writer paragraph focused, for an incoming three-way merge, and for a render that throws before, in the middle of or after the scenes, as a regression guard for 4.21.
+### Race-matrix cases (PR 4.0)
+
 Added by PR 4.0 (the race-matrix harness). Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong on `f338fea` and declares `wrongToday`. The case id is the tracker; no separate issues are filed. `npm test` fails while such a case passes, so the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-session.test.mjs`, except T3, which needs its own boot and is in `src/test/m4-matrix-boot.test.mjs`.
 
 | Defect | Issue or case | Pinned by | Owner on 4.0 | Disposition |
