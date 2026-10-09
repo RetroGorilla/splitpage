@@ -376,7 +376,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
         '<textarea class="tag-notes-input ev-field" id="' + notesId + '" data-key="' + k + '" rows="2" ' +
           (ro ? 'readonly placeholder="No notes">'
               : 'placeholder="Reference link, file path, spec, where it’s coming from…">') +
-          escapeHtml(item.notes) + '</textarea>' +
+          '\n' + escapeHtml(item.notes) + '</textarea>' +
       '</dd>' +
     '</dl>';
   if (!gear || ro) return dl;
