@@ -1,8 +1,8 @@
 # Milestone 4: save completion, session transitions and recovery
 
-The working plan for milestone 4 of [the implementation plan](../IMPLEMENTATION-PLAN.md#4--centralize-save-completion-session-transitions-and-recovery), as amended by the approved [re-scope](milestones-4-7-rescope.md) and the [milestone 3 gate record](milestone-3-gate.md#external-review). It was derived from `4.0-development` at `f66789a`. It names functions, not lines. No milestone 4 code lane starts before Adam approves it.
+The working plan for milestone 4 of [the implementation plan](../IMPLEMENTATION-PLAN.md#4--centralize-save-completion-session-transitions-and-recovery), as amended by the approved [re-scope](milestones-4-7-rescope.md) and the [milestone 3 gate record](milestone-3-gate.md#external-review). It was derived from `4.0-development` at `f66789a`. It names functions, not lines.
 
-Status: draft for Adam's approval. [Decisions](#decisions) records the calls already made. [Questions for Adam](#questions-for-adam) lists the calls still open, each with a recommendation.
+Status: approved by Adam on 2026-10-08. Derived from `f66789a`; the base is now `1aa1eed`. His answers to the draft's seven questions and the gate's list of repaired defects are D9 to D16 under [Decisions](#decisions). [Questions for Adam](#questions-for-adam) lists what is still open.
 
 ## Goal
 
@@ -28,6 +28,14 @@ Alongside: collaboration behind application interfaces with an explicit authorit
 | D6 | The race matrix comes first. It is built early, with its cases failing where today's code is wrong and passing where it is right, and each later PR turns cases green | Adam | 4.0 to 4.3 |
 | D7 | #463: the "rendering creates no edit" invariant (plan §6) is defined as tests first | Adam | 4.4, then 4.21 |
 | D8 | #320 is measured with `tools/perf-record.mjs` on `d18adde` and `c4d5944` before the blob registry moves | Adam (plan §5, milestone 4) | 4.5, then 4.19 |
+| D9 | Opening a `.html` file over the parse bound (#465's question, #501): keep the bound for the page body and read the embedded script data from the raw text before the bounded parse. No file that opens today is refused | Adam, 2026-10-08 | 4.12; T4 |
+| D10 | A save that lands after its document was replaced or reopened shows a warning toast only when it landed in the place the open document now saves to (a same-id reopen); nothing when it went to another document's place. The toast's wording comes back to Adam with 4.9 | Adam, 2026-10-08 | 4.9, 4.14, 4.15 |
+| D11 | A pasted or dropped picture that finishes loading after the document was replaced or reopened is dropped with a toast; the wording comes back to Adam with 4.20. When the same document was edited while it loaded, it goes in at the place captured when the paste began if that cell is unchanged since, otherwise at the end of the cell | Adam, 2026-10-08 | 4.20; M1 to M3 |
+| D12 | Without Web Locks a browser draft is taken over as today (every other writer counts as dead), pinned by a test | Adam, 2026-10-08 | 4.17; B3 |
+| D13 | A command that committed and then threw shows nothing new: the error goes to the existing error reporting, and the document stays marked unsaved | Adam, 2026-10-08 | 4.7; E2 |
+| D14 | #508: when the desktop close check throws, the window stays open, the flag is reset so the next close asks again, and the error is reported | Adam, 2026-10-08 | alongside |
+| D15 | #500: "Review" on a clean tab whose file was moved shows the moved-file notice the tab gets on close, with its Save As choice | Adam, 2026-10-08 | alongside |
+| D16 | The gate's "existing five repaired defects" are #247 and #248 (`publish-in-flight.test.mjs`), hosted Save As (#249, suite 249), import writeback with a late edit (#251, suite 261), and a failed Save As not retargeting Save (suite 22) | Adam, 2026-10-08 | [The gate](#the-gate) |
 
 ## Exit criteria
 
@@ -116,7 +124,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | T1 | Save As, publish and detached recovery fork the id; open, restore and a same-id reopen keep it (INV-36) | right | stays |
 | T2 | Each adoption opens its epoch at the transition, not at the next render: new and boot (T2a), file open (T2b), server open and resume (T2c), draft restore (T2d), history restore (T2e) | wrong | 4.8, 4.12, 4.15, 4.18, 4.18 |
 | T3 | The pristine check and the resume check agree on a document (#483) | wrong | 4.18 |
-| T4 | Opening an `.html` file over the parse bound keeps its script data byte for byte (#501) | wrong | 4.12 (Q1) |
+| T4 | Opening an `.html` file over the parse bound keeps its script data byte for byte (#501) | wrong | 4.12 (D9) |
 | T5 | Restoring a draft schedules no save and leaves the destination's confirmed generation and baseline unchanged (INV-41) | right | stays |
 | T6 | After a recovery adoption or a `noAutoSave` merge, nothing autosaves until an explicit Save; with autosave off, nothing is ever scheduled (INV-51) | right | stays |
 | L1 | Replacing the document leaves no session, autosave, draft or refresh timer, no subscription and no object URL of the old one acting on the new one; app-lifetime subscriptions are named | record | 4.8, extended by 4.11, 4.14, 4.17; complete in 4.22 |
@@ -149,7 +157,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | A1 | Owner, scoped editor and reviewer each get exactly today's client capability; none broadens what the server allows | right | stays |
 | B1 | A late draft write for the previous document neither removes the current document's draft record nor claims its key | wrong | 4.17 |
 | B2 | Two tabs on one document: with Web Locks, a live writer's draft is not taken over | right | stays |
-| B3 | Without Web Locks, takeover follows Q4 | record | 4.17 (Q4) |
+| B3 | Without Web Locks, every other writer counts as dead and its draft is taken over (D12) | record | 4.17 |
 | B4–B6 | Quota pauses and backs off; unavailable storage turns drafts off; a corrupt record reads as none | right | stays |
 | B7 | A writer discards only the draft generation acknowledged to it | record | 4.17 |
 | B8 | A restore never writes the user's file or the server | right | stays |
@@ -159,7 +167,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | K2 | A desktop draft write after the tab navigated is refused (`STALE_SEQ`) | right | stays |
 | H1 | A history restore that completes after a same-id reopen does not overwrite the reopened session | wrong | 4.18 |
 | H2 | A snapshot holds the document as it was when `pushSnapshot` was called (INV-39) | right | stays |
-| M1–M3 | A delayed paste or drop completes after a document switch (M1) or a same-id reopen (M2): refused, nothing written; the selection changes while media loads (M3): Q3 (#478) | wrong | 4.20 |
+| M1–M3 | A delayed paste or drop completes after a document switch (M1) or a same-id reopen (M2): refused, nothing written; the selection changes while media loads (M3): D11 (#478) | wrong | 4.20 |
 | M4 | A gallery picture (`handleImageFile`) that finishes after a switch or reopen is refused | wrong | 4.20 |
 | M5, M6 | `retryThumbnail` after a switch; `thumbnailsAfterPaste` after a same-id reopen: refused | wrong | 4.20 |
 | M7 | The annotator's save after a switch is refused | record | 4.20 |
@@ -245,7 +253,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.7 Session.**
 - #479: the dirty effect stops writing `personColors`. The colour is written inside the transaction through a port the session calls before `undo.record`, declared as a `docFields` change. Whether the first edit's undo still removes the colour follows from that and is pinned by a test.
-- A command whose transaction committed but whose undo recording, effect pass or publication threw returns its own outcome (for example `{ kind: "committed", error }`), reaches the existing error reporting, and is never rolled back (Q5).
+- A command whose transaction committed but whose undo recording, effect pass or publication threw returns its own outcome (for example `{ kind: "committed", error }`), reaches the existing error reporting with nothing new on screen, and is never rolled back (D13).
 - `dispose()` on the session: stops the scheduler's timers and drops listeners. The first half of the lifecycle test.
 - Tests: `runConfined` with the real effects, a named editor and a set colour; the throw at each post-commit stage. E1 and E2 green. Suites 73, 185, 186, 187, 44.
 
@@ -258,7 +266,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 - Full browser run before merge: every open path passes through it, so the affected suites cannot be chosen with confidence (review.md §3). Desktop groups `open/save`, `duplicate document id`, `session restore`.
 
 **4.9 Save coordinator.**
-- `createSaveCoordinator(ports)`: one queue per destination; a save captures context and document, then hands the destination's writer the captured snapshot; the completion is accepted only while `stillOwns(ctx)` holds and only for the generation captured; an obsolete write that landed is reported (Q2); cancellation is its own outcome and never proves a failure.
+- `createSaveCoordinator(ports)`: one queue per destination; a save captures context and document, then hands the destination's writer the captured snapshot; the completion is accepted only while `stillOwns(ctx)` holds and only for the generation captured; an obsolete write that landed is reported as D10 says, its toast's wording brought to Adam in this PR; cancellation is its own outcome and never proves a failure.
 - Per destination: confirmed generation and baseline. The document is dirty for a destination while the session's generation is past the destination's confirmed one. `S.dirty`, `S.baseState` and the save buttons become projections the bridge keeps in step, so legacy readers are unchanged.
 - One save-status selector that `setSaveButtons` and every Save control render (INV-20). The autosave policy: where (only a picked handle or the server), when (only while on), halting after unreviewed work (INV-51).
 - Adopter: the front door. `queueAutoSave`, the Save action and every direct `saveDoc` caller go through the coordinator's queue; each destination's writer is still today's code inside.
@@ -273,7 +281,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 **4.12 Import writeback and file open.**
 - `saveBackToFile` captures before it builds (I1) and completes through the coordinator for the import destination only (I2). `deliverFile` stays the download path both writers call.
 - `adoptProjectState` and `loadFileIntoEditor` (both its import branch and its reload branch through `noteReload`) go through the transition API (T2b).
-- #501, by Q1's answer: the recommendation reads the `state-data` script from the raw text before the bounded parse, so T4 passes and no file that opens today is refused.
+- #501 (D9): read the `state-data` script from the raw text before the bounded parse, so T4 passes and no file that opens today is refused.
 - Suites 17, 35, 42, 46, 261; `open-html-bound.test.mjs`. Desktop group `open/save`.
 
 **4.13 Native file target.** The desktop handle shim in `20f-desktop.js` returns the `lastModified` that `writeFile` already answers, so the baseline is the write's own (F8) and the second full read goes. A cancelled native dialog is the coordinator's `cancelled`. No preload or IPC change; if one turns out to be needed, it is a separate Opus PR with the full desktop smoke. Suites 21, 26; desktop groups `open/save`, `save-in-place`.
@@ -286,7 +294,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.15 Server open, resume, pull and publish.**
 - `openServerDoc`, `resumeServerDoc` and `applyMerge`'s adoption go through the transition API (T2c); `pullServerDoc` checks the connection, not only the id.
-- `publishToServer` through `transitions.publish`; a document created on a server the tab has left is reported (P1, Q2).
+- `publishToServer` through `transitions.publish`; a document created on a server the tab has left is reported (P1, D10).
 - #415: `applyMerge` moves to TypeScript, migrates `theirs` before `mergeStates`, and hands the session a `ValidatedDocument`, so the merged result is not migrated a second time (the 23.6 ms median measured in #384 is re-measured). No wrong behaviour today (#417's runtime guard), so this is an acceptance criterion, not a matrix case.
 - Suites 54, 55, 56, 59, 62, 63, 260, 265; `apply-merge`, `entry-fuzz`. Desktop groups as 4.14.
 
@@ -297,7 +305,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.17 Draft store adapters and writer ownership.**
 - The IndexedDB store moves to `src/adapters/storage/` behind the draft-store port, built by an explicit constructor that takes the IndexedDB factory, limits and clock; the desktop draft store becomes an adapter over the existing IPC. The lazy singleton goes.
-- A capture records its operation context and its key at capture time; a late write neither removes nor claims another document's key (B1). Takeover with and without Web Locks per Q4 (B3). A writer discards only the generation acknowledged to it (B7).
+- A capture records its operation context and its key at capture time; a late write neither removes nor claims another document's key (B1). Takeover with and without Web Locks as today, pinned by a test (D12, B3). A writer discards only the generation acknowledged to it (B7).
 - Tests: `browser-drafts.test.mjs` against the adapter (store contract), the B cases. Suites 26, 63, 265. Desktop group `draft:`.
 
 **4.18 Restore and adoption policy.**
@@ -311,7 +319,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 - #320: if 4.5's median is more than 10% slower than `d18adde`, hand the decoded record to the store without the second hash and copy, keeping byte ownership, hash validation, first-seen order and persistence when a pass throws; otherwise record and explain. The load path's extra hash (`loadBlob` → `intern`) is measured in the same run.
 - A move of one module plus its consumers' imports: characterisation in the first commit (`blob-store.test.mjs`, `document-ports.test.ts` and the byte-level cases, passing on the base). Suites 24, 26, 27, 65, 66, 68, 69. Desktop groups `draft:`, `history:`.
 
-**4.20 Continuation identity (#478).** `insertIntoScriptCell`, `handleImageFile`, `retryThumbnail`, `thumbnailsAfterPaste` and the annotator's save capture `captureOperation()` before their `await` and refuse on `!stillOwns(ctx)`, with Q3's toast. The paste's target range is captured with it (Q3). M1 to M7 green. Suites 65, 68, 69, 80, 86, 92, 160, 186 and `render-guard-app.test.mjs`.
+**4.20 Continuation identity (#478).** `insertIntoScriptCell`, `handleImageFile`, `retryThumbnail`, `thumbnailsAfterPaste` and the annotator's save capture `captureOperation()` before their `await` and refuse on `!stillOwns(ctx)` with D11's toast, whose wording is brought to Adam in this PR. The paste's target range is captured with it, and a paste into a cell edited since lands at the end of the cell (D11). M1 to M7 green. Suites 65, 68, 69, 80, 86, 92, 160, 186 and `render-guard-app.test.mjs`.
 
 **4.21 Atomic render (#463).** Build rows and title off-screen with the incremental row reuse, then commit in a guarded phase in which render-generated focus and blur commit nothing; restore focus within its own surface (a Writer paragraph in the Writer); a draw that throws leaves the old screen intact and is a recoverable presentation failure, with #456's editing block kept. Acceptance: 4.4's cases, the issue's own (a throw at any row leaves the DOM byte-identical), and the typing and render medians within noise of 4.4's base on the long demo. Hot path: full browser run before merge, plain and frozen.
 
@@ -328,14 +336,14 @@ Under D4: an issue in save completion, the transitions, drafts and recovery, or 
 | #479 `personColors` in the dirty effect | In M4 | E1 | 4.7 |
 | #415 raw `theirs` in `applyMerge` | In M4 | Acceptance criterion; no wrong behaviour since #417 | 4.15 |
 | #320 double hash and copy | In M4 | Measure, then trim if over 10% | 4.5, 4.19 |
-| #501 over-bound `.html` open | In M4 (file open is a transition) | T4, by Q1 | 4.12 |
-| #465 crafted `.html` open | Closed by #486; its open question is Q1 | — | — |
+| #501 over-bound `.html` open | In M4 (file open is a transition) | T4, by D9 | 4.12 |
+| #465 crafted `.html` open | Closed by #486; its open question is answered by D9 | — | — |
 | #483 pristine and resume checks | In M4 (resume is recovery) | T3 | 4.18 |
 | #514 scene length lost when every redraw fails | Outside: the length editor's render-failure path. A regression from #506 against the base | Fix alongside: apply the typed length as the base did. Sonnet | alongside |
 | #498 no test pins the HELD guard | Outside: desktop main | Test-only, alongside. Haiku (test-only) | alongside |
-| #500 Review on a clean gone-file tab explains nothing | Outside: desktop | Alongside, Sonnet, wording by Q7 | alongside |
+| #500 Review on a clean gone-file tab explains nothing | Outside: desktop | Alongside, Sonnet, behaviour by D15 | alongside |
 | #499 update quit timer during the gone-file dialog | Outside: desktop main, close and quit | Alongside, Opus | alongside |
-| #507, #508, #509 close and quit after #505 | Outside: desktop main, close and quit | One PR alongside, Opus; #508's behaviour by Q6 | alongside |
+| #507, #508, #509 close and quit after #505 | Outside: desktop main, close and quit | One PR alongside, Opus; #508's behaviour by D14 | alongside |
 
 None of the measured defects is cheap data loss reachable today: each needs an operation still in flight when the user replaces or reopens the document, so none gets a standalone lane. The most severe is S2 (a hosted save landing after a same-id reopen moves the reopened session's revision and baseline, so its next save could go through without a conflict); 4.14 takes it first.
 
@@ -357,7 +365,7 @@ None of the measured defects is cheap data loss reachable today: each needs an o
 | A late draft write touches another document's key | B1 | 4.17 | — |
 | Restores re-check nothing across awaits | K1, H1 | 4.18 | — |
 | Pristine and resume checks disagree | #483; T3 | 4.18 | — |
-| Over-bound `.html` loses formatting | #501; T4 | 4.12 | `open-html-bound.test.mjs` if Q1 changes the bound |
+| Over-bound `.html` loses formatting | #501; T4 | 4.12 | `open-html-bound.test.mjs`, where it pins the rewritten script data |
 | Continuations land in another document | #478; M1–M7 | 4.20 | `render-guard-app.test.mjs`'s late-paste case stays |
 | #325 reads that repair, including `settleDerivedRecords` before capture | — | stays at milestone 6 | — |
 
@@ -380,55 +388,18 @@ On the exact merged tree, recorded in `milestone-4-gate.md`, as for milestone 3 
 - **Electron smoke**, dev target, every group.
 - **Windows x64 packaged check**: stage, build, `verify-dist.mjs --arch x64`, the packaged-x64 smoke.
 - **External review** of the integrated milestone under review.md §8, stating its kind (milestone 3 used Codex), covering the save, transition and recovery owners and the race matrix.
-- **Milestone checks:** every matrix case `rightToday`; the lifecycle test (E9) and the capture-contract tests (E8) pass; the recovery tests of E7 pass in the browser and on the desktop; the #320 case rerun on the closing tree is in `performance-record.md`; the plan's "existing five repaired defects" stay fixed (see below).
+- **Milestone checks:** every matrix case `rightToday`; the lifecycle test (E9) and the capture-contract tests (E8) pass; the recovery tests of E7 pass in the browser and on the desktop; the #320 case rerun on the closing tree is in `performance-record.md`; the plan's "existing five repaired defects" stay fixed (below).
 - Linux full run and native ARM64 wait for the 4.0 release gate.
 
-The plan's gate says "existing five repaired defects stay fixed" without naming them, and nothing in the repository defines the five. This plan reads them as the save repairs that milestone 1 named for preservation: the publish regressions #247 and #248 (`publish-in-flight.test.mjs`), hosted Save As (249), import writeback with a late edit (#251, 261), and a Save As whose write fails not retargeting Save (INV-36, 22). The coordinator confirms or corrects this before 4.0 starts.
+The plan's gate names no list for "existing five repaired defects stay fixed". Adam confirmed the list on 2026-10-08 (D16): the publish regressions #247 and #248 (`publish-in-flight.test.mjs`), hosted Save As (#249, suite 249), import writeback with a late edit (#251, suite 261), and a Save As whose write fails not retargeting Save (INV-36, suite 22).
 
 ## Questions for Adam
 
-**Q1. Opening a `.html` file over the parse bound (#465's open question, #501).** Today an opened file is bounded like a paste, and the bound's last fallback can rewrite the embedded script data and lose bold and italic.
-- (a) Keep the bound for the page body, and read the embedded script data from the raw text before the bounded parse. No file that opens today is refused, and #501 goes.
-- (b) Leave file open unbounded: the user chose the file.
-- (c) Keep the bound and refuse a file it would change.
+The draft's seven questions are answered (D9 to D15). What stays open is wording, which comes back to Adam with the PR that adds it:
 
-Recommendation: (a).
-
-**Q2. A save that lands after its document was replaced or reopened.** The plan says such a write is reported, never adopted. What does the user see?
-- (a) A warning toast every time.
-- (b) Nothing; the next save's conflict check (file changed on disk, or a server 409 and merge) surfaces it.
-- (c) A warning toast only when the write landed in the place the open document now saves to (a same-id reopen), because then its next save meets a conflict; nothing when the write went to another document's place, which is what the user asked for.
-
-Recommendation: (c). The wording is yours; a draft: "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged."
-
-**Q3. A pasted or dropped picture that finishes loading after the document changed (#478).**
-- When the document was replaced or reopened: (a) drop it with a toast; (b) drop it silently. Recommendation: (a), wording yours; a draft: "The picture finished loading after you opened another script, so it was not added."
-- When the same document was edited while it loaded: (a) insert at the place captured when the paste began if that cell is unchanged since, otherwise at the end of the cell; (b) always insert at the current caret, as today. Recommendation: (a).
-
-**Q4. Taking over a browser draft when the browser has no Web Locks.** Today every other writer then counts as dead, so a second tab takes over a live tab's draft.
-- (a) Keep it, and pin it with a test. Every browser and Electron version the app supports has Web Locks.
-- (b) Add a heartbeat to the record and refuse a takeover while it is fresh.
-- (c) Never take over without Web Locks; offer the draft read-only.
-
-Recommendation: (a).
-
-**Q5. A change that was kept but whose follow-up work failed** (a command committed, then undo recording or an effect threw). It is never rolled back. What does the user see?
-- (a) Nothing new: the error goes to the existing error reporting, and the document stays marked unsaved.
-- (b) A toast saying the change was kept but something after it failed.
-
-Recommendation: (a).
-
-**Q6. Desktop close or quit when the close check throws (#508, fixed alongside).**
-- (a) Stay open, reset the flag so the next close asks again, and report the error.
-- (b) Close anyway.
-
-Recommendation: (a), as the issue suggests.
-
-**Q7. "Review" on a clean tab whose file was moved (#500, fixed alongside).**
-- (a) Show the same moved-file notice the tab gets when it is closed, with its Save As choice.
-- (b) A toast saying the file is no longer at its path.
-
-Recommendation: (a); the wording is yours if the close notice's text does not fit.
+- **The obsolete-save toast (D10)**, with 4.9. The draft wording to start from: "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged."
+- **The dropped-picture toast (D11)**, with 4.20. The draft wording to start from: "The picture finished loading after you opened another script, so it was not added."
+- **The moved-file notice on "Review" (D15)**, with #500's PR, only if the close notice's text does not fit there.
 
 ## Spec notes
 
@@ -442,4 +413,4 @@ Where the spec does not match the measured code, and what this plan does instead
 - **#320 has a third hash.** Besides the ingestion port's double hash and copy, every IndexedDB load re-hashes and copies through `loadBlob` → `intern`. 4.5 measures it with the rest.
 - **The "existing injected IndexedDB draft store"** is a lazy module singleton injected only through a test hook; D3 replaces it with an explicit constructor (4.17).
 - **Strict expected failures.** "Cases failing where today's code is wrong" needs a wrapper that fails when such a case starts passing; node's `todo` does not (4.0).
-- **"Existing five repaired defects"** is undefined in the repository; [The gate](#the-gate) gives the reading this plan uses.
+- **"Existing five repaired defects"** was undefined in the repository; Adam confirmed the list on 2026-10-08 (D16, [The gate](#the-gate)).
