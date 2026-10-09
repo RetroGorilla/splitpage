@@ -475,14 +475,30 @@ function paintRow(rowEl, row, index) {
 }
 
 var painting = 0;
+var afterPaint = [];
 
 export function whilePainting(draw) {
   painting++;
+  var drawn = false;
   try {
-    return draw();
+    var out = draw();
+    drawn = true;
+    return out;
   } finally {
     painting--;
+    if (!painting && drawn) runAfterPaint();
   }
+}
+
+function runAfterPaint() {
+  var queued = afterPaint;
+  afterPaint = [];
+  queued.forEach(function (fn) { fn(); });
+}
+
+export function afterThisPaint(fn) {
+  if (painting) afterPaint.push(fn);
+  else fn();
 }
 
 export function renderRow(rowId) {
