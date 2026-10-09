@@ -17,7 +17,8 @@ import {
   render,
   syncFieldFromDom,
   toggleCellDirection,
-  toggleCellFormat
+  toggleCellFormat,
+  whilePainting
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
@@ -79,6 +80,10 @@ function writerCaretState() {
 }
 
 export function renderWriter() {
+  whilePainting(paintWriter);
+}
+
+function paintWriter() {
   var doc = document.getElementById("writer-doc");
   var caret = writerCaretState();
   var titleEl = document.getElementById("writer-title");

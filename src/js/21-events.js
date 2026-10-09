@@ -37,6 +37,7 @@ import {
   isScriptCell,
   maybeCueShortcut,
   maybeDirectionShortcut,
+  paintingScreen,
   render,
   renderFirstDraw,
   renderRow,
@@ -859,7 +860,7 @@ function onRootFocusOut(e) {
   S.untaggedMutedFor = null;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
-  if (S.undoApplying) return;
+  if (S.undoApplying || paintingScreen()) return;
   var wrap = cellEl.closest(".field-wrap");
   var related = e.relatedTarget;
   if (wrap && related && wrap.contains(related)) return;
