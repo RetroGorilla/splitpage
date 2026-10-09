@@ -547,7 +547,7 @@ function cardHtml(e, starts) {
 
   var cuts = editingRefFor === e.id
     ? '<textarea class="broll-ref-input ev-field" data-id="' + id + '" rows="3" aria-label="Cuts against" ' +
-        'placeholder="The line of audio this cuts against">' + escapeHtml(e.audioRef) + '</textarea>'
+        'placeholder="The line of audio this cuts against">\n' + escapeHtml(e.audioRef) + '</textarea>'
     : '<div class="broll-cuts">' +
         (e.audioRef
           ? '<blockquote class="broll-quote">' + escapeHtml(e.audioRef) + '</blockquote>'
@@ -596,7 +596,7 @@ function cardHtml(e, starts) {
         field("Props", propsEditHtml(e, ro)) +
         field("Cuts against", cuts) +
         field("Note", '<textarea class="broll-notes-input ev-field" data-id="' + id + '" rows="1" aria-label="Note" ' +
-          (ro ? 'readonly placeholder="No note">' : 'placeholder="Add a note…">') + escapeHtml(e.notes) + '</textarea>') +
+          (ro ? 'readonly placeholder="No note">' : 'placeholder="Add a note…">') + '\n' + escapeHtml(e.notes) + '</textarea>') +
       '</dl>' +
       foot +
     '</div>';
@@ -1386,7 +1386,7 @@ function pageRowHtml(e) {
       (e.reshoot ? '<span class="broll-flag-ico" title="Flagged" aria-label="Flagged">' + brollIcon("flag", 14) + '</span>' : '') +
       '<textarea class="broll-notes-input broll-page-note" data-id="' + id + '" rows="1" maxlength="2000" ' +
         (ro ? 'readonly ' : 'placeholder="Add a note" ') +
-        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '">' + escapeHtml(e.notes) + '</textarea></td>' +
+        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '">\n' + escapeHtml(e.notes) + '</textarea></td>' +
   '</tr>';
 }
 
