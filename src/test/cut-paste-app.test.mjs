@@ -957,3 +957,19 @@ test("a paste of a cut scans the rows the same number of times for 2 comments as
   const many = await scansForPaste(12);
   assert.equal(many, few);
 });
+
+test("a pasted cut drops the mark of a comment that is a conflict record, which anchors nothing", async () => {
+  const doc = fixture();
+  doc.comments.push(Object.assign(comment("c9", "r3", "audioText"), { kind: "conflict" }));
+  doc.rows[2].audioText = "Three " + cmt("c9", "gulls") + ".";
+  await open(doc);
+  const el = cellOf("r3", "audioText");
+  el.focus();
+  selectText(el, 6, 11);
+  const cut = clip("cut", el);
+  const to = cellOf("r1", "audioText");
+  to.focus();
+  selectText(to, 11, 11);
+  clip("paste", to, cut.store);
+  assert.equal(row("r1").audioText, "Hello theregulls");
+});
