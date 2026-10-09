@@ -4060,6 +4060,12 @@ async function caseMovedFileUnkeptCopyAsksOnQuit(target, fixturesDir) {
     record(tag + ": 'cancel' on the second question keeps the app running", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
     const listing = await shell(cdp, "listTargets", {}).catch(() => null);
     record(tag + ": the tab is still open", !!listing && listing.windows.some((w) => w.tabs.some((t) => t.tabId === tabId)), JSON.stringify(listing));
+    const lateCopy = await pollNode(async () => { const s = await draftStatusFor(cdp); return s && s.hasDraft; }, 10000).catch(() => false);
+    record(tag + ": the late copy still lands while the tab stays open", !!lateCopy);
+    const discard = await flushDraft(cdp);
+    const after = await draftStatusFor(cdp);
+    record(tag + ": once the tab stays open, its clean copy is no longer held, so a plain flush removes it",
+      !!discard && discard.ok !== false && !!after && after.hasDraft === false, JSON.stringify(discard) + " " + JSON.stringify(after));
 
     await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
     const exited = await waitForExit(app.proc, 30000);
@@ -4147,6 +4153,8 @@ async function caseSessionEndKeepsGoneFileCopy(target, fixturesDir) {
     const keptA = await pollNode(() => stateOf(tabAId).indexOf(marker) !== -1, 8000).catch(() => false);
     record(tag + ": the clean tab whose file is gone gets a draft", !!keptA, JSON.stringify(Object.keys(readDraftDirs(userDataDir))));
     record(tag + ": nothing is asked", (await dialogsSeen(cdpA)) === seen0, "dialogs seen=" + (await dialogsSeen(cdpA)) + ", before=" + seen0);
+    const plain = await flushDraft(cdpA);
+    record(tag + ": a later plain flush of that clean tab can't remove the copy", !!plain && plain.ok === false && plain.code === "HELD", JSON.stringify(plain));
     await sleep(1000);
     record(tag + ": the untitled tab's draft is still there", stateOf(tabBId).indexOf(markerB) !== -1);
     record(tag + ": the kept copy is still there a second later", stateOf(tabAId).indexOf(marker) !== -1);
