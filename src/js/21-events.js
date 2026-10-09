@@ -1219,6 +1219,10 @@ function init() {
   });
 
   document.addEventListener("input", function (e) {
+    if (e.isComposing) return;
+    if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
+  });
+  document.addEventListener("compositionend", function (e) {
     if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
   });
 
