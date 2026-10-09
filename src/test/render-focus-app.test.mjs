@@ -657,7 +657,7 @@ test("an untouched scene-length editor that a redraw removes sets nothing and ke
   assert.equal(lengthOf("r1"), 45);
 }));
 
-test("a length typed into an editor that a failing redraw removed is not set by the failed redraw, and is set once Redraw draws (#485)", () => hidingShotScenes(() => {
+test("a length typed into an editor that a failing redraw removed is set in the document once that redraw has failed, so a save keeps it, and Redraw then sets nothing more (#485, #514)", () => hidingShotScenes(() => {
   const doc = fresh("Length failed");
   openLength("r1").value = "2:00";
   const theirs = cloneState(doc);
@@ -678,14 +678,15 @@ test("a length typed into an editor that a failing redraw removed is not set by 
   }
   assert.deepEqual(logged, ["render broke (#485)"]);
   assert.ok(removals.length > 0, "the editor was removed before the redraw failed");
-  assert.deepEqual(noEdit(got), NO_EDIT);
-  assert.equal(lengthOf("r1"), undefined);
+  assert.equal(got.edits, 1);
+  assert.equal(lengthOf("r1"), 120);
+  assert.equal(S.dirty, true);
+  assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
   const toast = Array.from(document.querySelectorAll("#toast-host .toast:not(.is-leaving)"))
     .find((el) => el.firstChild && el.firstChild.nodeValue === REDRAW);
   assert.ok(toast, "the redraw toast is offered");
   const redrawn = observe(() => toast.querySelector(".toast-action").click());
-  assert.equal(redrawn.edits, 1);
+  assert.deepEqual(noEdit(redrawn), NO_EDIT);
   assert.equal(lengthOf("r1"), 120);
   assert.equal(S.state.rows[0].status, "shot");
-  assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
 }));
