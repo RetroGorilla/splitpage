@@ -225,7 +225,6 @@ function ownerAt(state, w) {
 function rerecorded(entry, s, invert) {
   var before = invert ? s.after : s.before, after = invert ? s.before : s.after;
   var at = entry.steps.findIndex(function (e) { return e.op === "docField" && e.key === s.key; });
-  if (at === -1) return null;
   var mine = entry.steps[at];
   if (sameDoc(mine.before, before) && sameDoc(mine.after, after)) return mine;
   var next = { op: "docField", key: s.key, before: clone(before), after: clone(after) };
@@ -245,8 +244,7 @@ function foldScan(entry, out, invert) {
   out.cleared.forEach(function (k) { gone[k] = true; });
   var watched = out.scanned.map(function (s) { return { step: s, all: true }; });
   out.replayed.forEach(function (s) {
-    var kept = rerecorded(entry, s, invert);
-    if (kept && OWNED_LISTS[s.key]) watched.push({ step: s, all: !!kept.ownersOnly });
+    watched.push({ step: s, all: !!rerecorded(entry, s, invert).ownersOnly });
   });
   var watch = entry.unassigned || [];
   var seen = idMap();
