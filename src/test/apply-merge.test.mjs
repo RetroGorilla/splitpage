@@ -1,15 +1,18 @@
 import "./_dom.mjs";
-import test, { before } from "node:test";
+import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, cloneState, mergeStates, setBaseState } from "../js/03-sync.js";
-import { __init as historyInit, getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
+import { getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 import { personById } from "../js/07-production-tags.js";
 
-before(async () => {
-  historyInit();
-  await window.__historyTest.forceBackend("memory");
+await bootApp();
+await window.__historyTest.forceBackend("memory");
+after(() => {
+  S.state = mk(freshId());
+  closeApp();
 });
 
 let seq = 0;
@@ -35,6 +38,7 @@ function unstamped(s) {
 }
 
 function reset() {
+  clearTimers();
   S.state = { sentinel: "state" };
   S.baseState = { sentinel: "base" };
   S.lastMergeUndo = { id: "s-earlier", docId: "d-earlier" };
@@ -321,4 +325,27 @@ test("setBaseState stores what it is given, as it is, with its reason", () => {
   setBaseState(null, "a test: no ancestor");
   assert.equal(S.baseState, null);
   assert.equal(baseStateReason(), "a test: no ancestor");
+});
+
+test("an apply that adopts the merged document redraws #rows with no window or console error (#522)", () => {
+  reset();
+  const id = freshId();
+  const mine = mk(id);
+  mine.rows[0].audioText = "mine";
+  const theirs = mk(id);
+  theirs.rows[1].audioText = "theirs";
+  const windowErrors = [];
+  const logged = [];
+  const onError = (e) => { windowErrors.push(e.message); e.preventDefault(); };
+  const realError = console.error;
+  window.addEventListener("error", onError);
+  console.error = (...args) => { logged.push(args.map(String).join(" ")); };
+  try {
+    applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "stash", report: false });
+  } finally {
+    console.error = realError;
+    window.removeEventListener("error", onError);
+  }
+  assert.deepEqual(windowErrors, []);
+  assert.deepEqual(logged, []);
 });
