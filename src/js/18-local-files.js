@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
+import { inertBody } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
@@ -303,8 +304,7 @@ export async function parseProjectFileState(file, opts) {
   }
 
   if (kind === "html") {
-    var doc = new DOMParser().parseFromString(text, "text/html");
-    var dataEl = doc.getElementById("state-data");
+    var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
     var legacy;
     try {
       legacy = JSON.parse(dataEl.textContent);
