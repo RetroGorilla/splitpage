@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, ReloadedContent } from "../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent } from "../application/session/document-session.ts";
 import type { SessionChange } from "../application/session/change-set.ts";
 import type { Capability, CellTextPorts, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
@@ -15,20 +15,22 @@ export interface LegacyEffects {
   save: (change: SessionChange) => void;
   edit: () => Capability;
   editorName: () => string;
+  attribute: (doc: DocumentView) => Plan | null;
 }
 
 export const REVIEW_ONLY = "review";
 
-const ALLOWED: Capability = Object.freeze({ allowed: true });
-
-function nothing(): void {}
+function missing(port: string): never {
+  throw new Error("The session's " + port + " port was not provided");
+}
 
 const given: LegacyEffects = {
-  dirty: nothing,
-  draft: nothing,
-  save: nothing,
-  edit: function () { return ALLOWED; },
-  editorName: function () { return "Anonymous"; }
+  dirty: function () { missing("dirty"); },
+  draft: function () { missing("draft"); },
+  save: function () { missing("save"); },
+  edit: function () { return missing("edit capability"); },
+  editorName: function () { return missing("editor name"); },
+  attribute: function () { return missing("attribution"); }
 };
 
 export const sessionStamps: StampPorts = Object.freeze({
@@ -42,7 +44,7 @@ export const sessionTextPorts: CellTextPorts = Object.freeze({
   cells: function (html: string) { return cellOf(html); }
 });
 
-let refreshRunner: (jobs: ReadonlySet<string>) => void = nothing;
+let refreshRunner: (jobs: ReadonlySet<string>) => void = function () { missing("refresh"); };
 
 function enter(raw: unknown): ValidatedDocument {
   return migrateRows(raw);
@@ -59,6 +61,8 @@ const session: DocumentSession = createDocumentSession({
   },
   capability: { edit: function () { return given.edit(); } },
   reconcile: { anchors: function (doc) { return syncCommentAnchors(doc, cellOf); } },
+  attribution: { attribute: function (doc) { return given.attribute(doc); } },
+  report: function (error) { console.error(error); },
   timers: {
     now: function () { return Date.now(); },
     start: function (run, ms) { return setTimeout(run, ms); },
@@ -74,6 +78,7 @@ export function provideSessionEffects(effects: Partial<LegacyEffects>): void {
   if (effects.save) given.save = effects.save;
   if (effects.edit) given.edit = effects.edit;
   if (effects.editorName) given.editorName = effects.editorName;
+  if (effects.attribute) given.attribute = effects.attribute;
 }
 
 export function readSession<T>(select: (doc: DocumentView | null) => T): T {

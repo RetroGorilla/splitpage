@@ -166,8 +166,6 @@ function committedPrecondition() {
   return { row: row, before: row.status };
 }
 
-const ESCAPES = /a throw after the commit does not escape the command/;
-
 const ADOPTION_LAG = /the session already held the (boot )?document at every write that follows its assignment/;
 
 function adoptionLag(id, title, run) {
@@ -176,10 +174,13 @@ function adoptionLag(id, title, run) {
 
 const COMMITTED = ["applied", "noop", "rejected", "failed"];
 
-function assertReportedAfterCommit(inject) {
+function assertReportedAfterCommit(inject, message) {
   return () => {
     const { row, before } = committedPrecondition();
     const restore = inject();
+    const reported = [];
+    const consoleError = console.error;
+    console.error = (error) => { reported.push(error); };
     let outcome = null;
     let thrown = null;
     try {
@@ -187,6 +188,7 @@ function assertReportedAfterCommit(inject) {
     } catch (error) {
       thrown = error;
     } finally {
+      console.error = consoleError;
       restore();
       flushEdits();
     }
@@ -194,34 +196,38 @@ function assertReportedAfterCommit(inject) {
     assert.equal(thrown, null, "a throw after the commit does not escape the command: " + (thrown && thrown.message));
     assert.ok(outcome && !COMMITTED.includes(outcome.kind), "a distinct outcome, got " + JSON.stringify(outcome && outcome.kind));
     assert.equal(S.dirty, true, "the document stays marked unsaved");
+    assert.deepEqual(reported.map((e) => e && e.message), [message], "the error reaches the existing error reporting");
   };
 }
 
-wrongToday("E1", "a command's effect pass writes no document content that its change set does not declare", () => {
+rightToday("E1", "a command's effect pass writes no document content that its change set does not declare", () => {
   const { row } = committedPrecondition();
   const before = JSON.parse(JSON.stringify(S.state));
   const outcome = runCommand(sceneStatusCommand(row.id, sessionStamps));
   assert.equal(outcome.kind, "applied", "the command applied");
   const undeclared = undeclaredChanges(before, JSON.parse(JSON.stringify(S.state)), outcome.changes);
   assert.deepEqual(undeclared, [], "undeclared document changes after the effect pass: " + JSON.stringify(undeclared));
-}, /undeclared document changes after the effect pass/);
+  assert.equal(before.personColors && before.personColors["Sam Ortega"], undefined, "the document had no colour for the editor");
+  assert.equal(S.state.personColors["Sam Ortega"], PERSON_COLORS[0], "the editor's colour was written");
+  assert.ok(outcome.changes.docFields.includes("personColors"), "the change set declares the colour");
+});
 
-wrongToday("E2a", "a throw in undo recording after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
+rightToday("E2a", "a throw in undo recording after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
   const resolve = Promise.resolve;
   Promise.resolve = function () { throw new Error("undo recording failed"); };
   return () => { Promise.resolve = resolve; };
-}), ESCAPES);
+}, "undo recording failed"));
 
-wrongToday("E2b", "a throw in an effect after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
+rightToday("E2b", "a throw in an effect after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
   const button = document.getElementById("btn-save");
   Object.defineProperty(button, "textContent", { configurable: true, get() { return ""; }, set() { throw new Error("effect failed"); } });
   return () => { delete button.textContent; };
-}), ESCAPES);
+}, "effect failed"));
 
-wrongToday("E2c", "a throw in a session listener after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
+rightToday("E2c", "a throw in a session listener after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
   const off = session.subscribe(() => { throw new Error("listener failed"); });
   return off;
-}), ESCAPES);
+}, "listener failed"));
 
 function serverFetch(answerFor) {
   const held = createHeldFetch({

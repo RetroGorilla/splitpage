@@ -82,22 +82,21 @@ export function personColor(seed) {
   });
 }
 
-export function recordMyColor(state) {
-  if (!state) return false;
+export function personColorsWithMine(state) {
+  if (!state) return null;
   var name = getSavedAuthorName().trim();
   var color = readMyColor();
-  if (!name || !color) return false;
+  if (!name || !color) return null;
   var map = state.personColors && typeof state.personColors === "object" ? state.personColors : null;
   var have = "";
   if (map) {
     Object.keys(map).forEach(function (k) { if (personKey(k) === personKey(name)) have = k; });
-    if (have && map[have] === color) return false;
+    if (have && map[have] === color) return null;
   }
   var next = {};
   if (map) Object.keys(map).forEach(function (k) { if (k !== have) next[k] = map[k]; });
   next[cappedName(name, 80)] = color;
-  state.personColors = normalizePersonColors(next);
-  return true;
+  return normalizePersonColors(next);
 }
 
 export function presenceInitials(name) {

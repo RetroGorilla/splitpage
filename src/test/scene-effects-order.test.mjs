@@ -17,7 +17,7 @@ const STATS = ["paintRowTimes", "setRundownExtraSeconds", "renderRundown", "pain
 
 const reviewing = { on: false };
 const published = [];
-bridge.provideSessionEffects({
+stubs.wireSession({
   dirty: function () {
     stubs.calls.push("dirty");
     stubs.dirtied.push(JSON.parse(JSON.stringify(S.state.rows)));
@@ -139,6 +139,39 @@ test("a status click whose command fails throws to the caller, leaves the row as
   assert.deepEqual(stubs.calls, []);
   assert.equal(JSON.stringify(S.state), before);
   assert.deepEqual(published, []);
+});
+
+function withThrowingListener(run) {
+  const reported = [];
+  const consoleError = console.error;
+  console.error = (error) => { reported.push(error.message); };
+  const off = bridge.liveSession().subscribe(function () { throw new Error("listener broke"); });
+  try {
+    run();
+  } finally {
+    off();
+    console.error = consoleError;
+  }
+  return reported;
+}
+
+test("a status click whose commit is followed by a throw still arms the grace and repaints, and throws nothing", () => {
+  stubs.resetFanout({ hideShot: true });
+  lengthDoc([{ id: "r1", status: "ready" }]);
+  const reported = withThrowingListener(() => cycleRowStatus("r1"));
+  assert.deepEqual(reported, ["listener broke"]);
+  assert.equal(S.state.rows[0].status, "shot");
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r1", "renderRow:r1", ...STATS]);
+});
+
+test("a scene length whose commit is followed by a throw still repaints and answers true, and throws nothing", () => {
+  stubs.resetFanout();
+  lengthDoc([{ id: "r1", status: "todo" }]);
+  let answer = null;
+  const reported = withThrowingListener(() => { answer = setSceneLength("r1", 45); });
+  assert.deepEqual(reported, ["listener broke"]);
+  assert.equal(answer, true);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r1", "updateScriptStats"]);
 });
 
 test("a scene length: the command sets and stamps the row, one effect pass with an immediate save, then the view repaints one row and the stats", () => {

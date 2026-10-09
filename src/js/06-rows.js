@@ -62,7 +62,7 @@ export function splitRowFieldCore(cellEl) {
   var createdId = makeId();
   var outcome = runCommand(splitSceneCommand(id, field, at, createdId, sessionTextPorts));
   if (outcome.kind === "failed") throw outcome.error;
-  return outcome.kind === "applied" ? { id: createdId, field: field } : null;
+  return outcome.kind === "applied" || outcome.kind === "committed" ? { id: createdId, field: field } : null;
 }
 
 function splitMediaCellInDom(cellEl) {

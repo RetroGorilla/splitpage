@@ -129,7 +129,7 @@ export function cycleRowStatus(rowId) {
   var outcome = runCommand(sceneStatusCommand(rowId, sessionStamps));
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(STATUS_REVIEW_REFUSAL, "warn");
-  if (outcome.kind !== "applied") return;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   if (hideShotScenes) {
     var grace = shotGrace(before, readSession(sceneStatus(rowId)));
     if (grace === "arm") armShotHideGrace(rowId);
