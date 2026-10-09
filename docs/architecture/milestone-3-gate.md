@@ -217,7 +217,7 @@ What the gates still miss, in the review's words, is coverage composition: incom
 
 | Advice | Verdict |
 | --- | --- |
-| M4, first: pull the explicit session construction, readiness and disposal forward from milestone 7, so the new save owner cannot run with the bridge's permissive and no-op defaults | Partly accept. Milestone 4's lifecycle test already requires the session's own dispose. The plan now says the owners milestone 4 adds are constructed by explicit functions that take their ports, never as module-evaluation singletons with defaults; the wiring step itself stays in milestone 7 as Adam approved. Pulling the whole step forward reorders the approved scope and is left for Adam (below) |
+| M4, first: pull the explicit session construction, readiness and disposal forward from milestone 7, so the new save owner cannot run with the bridge's permissive and no-op defaults | Partly accept. Milestone 4's lifecycle test already requires the session's own dispose. The plan now says the owners milestone 4 adds are constructed by explicit functions that take their ports, never as module-evaluation singletons with defaults; the wiring step itself stays in milestone 7 as Adam approved. Pulling the whole step forward reorders the approved scope, so it is not done (Adam, 2026-10-08) |
 | M4, second: epoch ownership for delayed clipboard work, thumbnails, recovery and other document-scoped callbacks, not only saves | Accept: plan §5 milestone 4 names them (#478) |
 | M4, third: remove document mutation from effects; capture the read models before asynchronous work | Accept (#479). The capture half is the existing capture contract |
 | M4, fourth: destination-specific queues, acknowledgements and recovery ownership | Already milestone 4 as written |
@@ -237,8 +237,8 @@ gate by decision. The external review is recorded above and its findings have
 their disposition (#477 to #480 and this record), so milestone 3 closes with
 this PR.
 
-One question from the review's advice, not applied: whether milestone 7's
-explicit wiring step (constructing the session, the bridge, the commands and
-the registries from `src/bootstrap/`) should move into milestone 4, before the
-save coordinator is built. The plan keeps the approved order, with the
-construction rule above as the compromise, until Adam says otherwise.
+Adam decided (2026-10-08) on the two plan amendments: the M4 wiring compromise
+only, so milestone 7's explicit wiring step (constructing the session, the
+bridge, the commands and the registries from `src/bootstrap/`) stays as
+approved and milestone 4 gets the construction rule above; and the M6 ordering
+sentence is kept.
