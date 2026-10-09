@@ -57,9 +57,8 @@ test("the app's actions start, stop and start again with one key listener and no
 });
 
 test("while started, a refusal is shown as a toast from every surface but a shortcut, and not once stopped", () => {
-  const host = document.createElement("div");
-  host.id = "toast-host";
-  document.body.appendChild(host);
+  const host = document.getElementById("toast-host") as HTMLElement;
+  host.replaceChildren();
   const registry = createActionRegistry();
   registry.register({ id: "test-refused", label: "Refused", group: "G", availability: () => ({ enabled: false, reason: "Close the open dialog first" }), run: () => {} });
   const toasts = (): string[] => Array.prototype.map.call(host.querySelectorAll(".toast"), (t: Element) => t.textContent ?? "") as string[];
@@ -74,14 +73,13 @@ test("while started, a refusal is shown as a toast from every surface but a shor
     assert.equal(toasts().length, 2);
   } finally {
     stopActions();
-    host.remove();
+    host.replaceChildren();
   }
 });
 
 test("a start that fails partway takes back all it had put in place, and can be tried again", () => {
-  const host = document.createElement("div");
-  host.id = "toast-host";
-  document.body.appendChild(host);
+  const host = document.getElementById("toast-host") as HTMLElement;
+  host.replaceChildren();
   const registry = createActionRegistry();
   const target = new CountingTarget();
   registry.register({ id: "test-refused", label: "Refused", group: "G", availability: () => ({ enabled: false, reason: "Close the open dialog first" }), run: () => {} });
@@ -103,7 +101,7 @@ test("a start that fails partway takes back all it had put in place, and can be 
     assert.deepEqual(registry.list().map((v) => v.id), ["test-refused"]);
   } finally {
     stopActions();
-    host.remove();
+    host.replaceChildren();
   }
 });
 
