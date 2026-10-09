@@ -149,15 +149,14 @@ function ownerChanges(key, before, after) {
   return out;
 }
 
-function ownersReplayed(key, live, before, after, remap, people) {
+function ownersReplayed(key, live, before, after, people) {
   if (!Array.isArray(live)) return clone(live);
   var changes = ownerChanges(key, before, after), crew = idMap();
   listOf(people).forEach(function (p) { if (p && p.id) crew[p.id] = true; });
   return live.map(function (e) {
     var c = e && changes[itemKey(key, e)];
-    var owner = c && (e.owner || "");
-    var held = c && (remap && remap[owner] || owner);
-    if (!c || held !== c.from && (held || !c.from || crew[c.from])) return clone(e);
+    var held = c && (e.owner || "");
+    if (!c || held !== c.from && (held || crew[c.from])) return clone(e);
     return Object.assign(clone(e), { owner: c.to });
   });
 }
@@ -170,7 +169,7 @@ function resolveDoc(state, p, survives, remap) {
   var live = state[p.key];
   var before = repointed(p.key, p.step.before, remap), after = repointed(p.key, p.step.after, remap);
   if (same(live, p.step.before) || sameDoc(live, before)) { p.value = after; return; }
-  if (p.step.ownersOnly && OWNED_LISTS[p.key]) { p.value = ownersReplayed(p.key, live, before, after, remap, state.people); return; }
+  if (p.step.ownersOnly && OWNED_LISTS[p.key]) { p.value = ownersReplayed(p.key, live, before, after, state.people); return; }
   p.value = listMergeFor(p.key)(before, clone(live), after, survives);
   p.merged = true;
 }
