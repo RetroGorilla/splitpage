@@ -246,13 +246,14 @@ function draftOriginSignature(origin) {
   ].join("|");
 }
 
-function captureAndSendDraft() {
+function captureAndSendDraft(keepClean) {
   clearDraftTimers();
   if (!draftWriterLive() || !S.state) return Promise.resolve(null);
   if (draftRestorePending) { draftChangePending = true; return Promise.resolve(null); }
   if (draftInFlight) { draftChangePending = true; return draftInFlight; }
 
-  if (!S.dirty) {
+  var keepCleanFile = !S.dirty && keepClean === true && !!S.DESKTOP && draftOriginOf().kind === "file";
+  if (!S.dirty && !keepCleanFile) {
     draftChangePending = false;
     if (!draftOnDisk || !draftBackendCanDiscard()) return Promise.resolve(null);
     var discardSeq = ++draftSeq;
@@ -275,7 +276,8 @@ function captureAndSendDraft() {
     return Promise.resolve(null);
   }
   var signature = draftOriginSignature(origin);
-  if (S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
+  if ((draftOnDisk || !keepCleanFile) &&
+      S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
     draftChangePending = false;
     return Promise.resolve(null);
   }
@@ -434,12 +436,13 @@ function noteDraftWriteRefused(code) {
   }, draftBackoffMs);
 }
 
-export function flushDraftNow() {
+export function flushDraftNow(opts) {
   if (!draftWriterLive()) return Promise.resolve({ ok: true });
+  var keepClean = !!(opts && opts.keep === true);
   clearDraftTimers();
   if (draftBackoffTimer) { clearTimeout(draftBackoffTimer); draftBackoffTimer = null; }
   return Promise.resolve(draftInFlight).then(function () {
-    return captureAndSendDraft();
+    return captureAndSendDraft(keepClean);
   }).then(function (r) {
     return r || { ok: true };
   }, function (err) {
