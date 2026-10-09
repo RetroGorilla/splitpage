@@ -9,7 +9,7 @@ commitment of the milestone 2 external review
 - every "Found, not changed", "Found, not fixed" and "Left open" item in
   [milestone-2.md](milestone-2.md);
 - the issues filed while fixing those on the closed 3.1.x branches;
-- the defects milestone 3 found, in the last section.
+- the defects milestone 3 found, and the cases the milestone 4 race matrix measured as wrong, in the last two sections.
 
 Adam approved these dispositions and the milestone assignments on 2026-10-01.
 He may change any of them later.
@@ -142,6 +142,34 @@ Added by the 3.15 docs PR (2026-10-08). The first block came from 3.10's seeded 
 | `editCell` (05b) still writes the cell and calls `markDirty`; routing it through `cellTextCommand` changes paste's counts | #452 | Nothing | `src/js/05b-cell-edit.js` | Open; milestone 6 candidate |
 | Cut, Ctrl+Z, then paste of that cut leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut | #460 | Nothing; the same on the base | `src/js/05c-clipboard.js` | Open |
 | With a long title focused at 1440 px, the search button and the identity chip overlap by 2 px; the headless suites never had focus, so `.doc-title:focus ~ .doc-meta` never applied | #490 | `85-header-fit.txt`, the editing-state check at 1440 | `src/app.css` | Open |
+
+## Found during milestone 4
+
+Added by PR 4.0 (the race-matrix harness). Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong on `f338fea` and declares `wrongToday`. The case id is the tracker; no separate issues are filed. `npm test` fails while such a case passes, so the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-session.test.mjs`, except T3, which needs its own boot and is in `src/test/m4-matrix-boot.test.mjs`.
+
+| Defect | Issue or case | Pinned by | Owner on 4.0 | Disposition |
+| --- | --- | --- | --- | --- |
+| `buildMarkdownProject` hands the table to the serializer but reads the production breakdown and the comments from the live document | X2 | `X2` | `src/js/20d-formats.js`, `src/js/14-export.js` (`appendMarkdownTail`) | Milestone 4, PR 4.6 (capture contract) |
+| The HTML export's head is built from the live document (`exportMetaLine` reads `exportFacts()`) even when the body is the captured one | X3 | `X3` | `src/js/02b-doc-id.js` (`standaloneHtmlFor`), `src/js/14-export.js` (`exportMetaLine`) | Milestone 4, PR 4.6 |
+| `toMarkdownDoc` takes no document and reads the live one | X4 | `X4` | `src/js/14-export.js` | Milestone 4, PR 4.6 |
+| `exportFacts` takes no document and reads the live one | X5 | `X5` | `src/js/14b-export-kit.js` | Milestone 4, PR 4.6 |
+| The dirty effect writes `personColors` into the document after the transaction, so the published change set does not declare it | #479; E1 | `E1` | `src/js/12-dirty-toast.js`, `src/js/13a-presence.js` (`recordMyColor`) | Milestone 4, PR 4.7 |
+| A throw in undo recording after a commit escapes `runCommand`; there is no distinct outcome and the dirty mark is not set | E2a | `E2a` | `src/application/session/document-session.ts` (`commit`) | Milestone 4, PR 4.7, with D13 (nothing new for the user; the error goes to the existing reporting and the document stays marked unsaved) |
+| A throw in an effect after a commit escapes `runCommand` | E2b | `E2b` | `src/application/session/effects.ts` | Milestone 4, PR 4.7, with D13 |
+| A throw in a session listener after a commit escapes `runCommand` | E2c | `E2c` | `src/application/session/document-session.ts` (`publish`) | Milestone 4, PR 4.7, with D13 |
+| A new document (File menu, `replaceWithNewDocument`) writes the baseline and the dirty state before the session holds it; the epoch opens at the next render | T2a | `T2a` | `src/js/18b-file-menu.js` | Milestone 4, PR 4.8 |
+| A blank document from the new-tab page (`adoptNewDocument`) does the same | T2a-tab | `T2a-tab` | `src/js/20j-newtab.js` | Milestone 4, PR 4.8 |
+| The boot document does the same | T2a-boot | `T2a-boot` | `src/js/21-events.js` (boot load) | Milestone 4, PR 4.8 |
+| An opened file (`adoptProjectState`) does the same | T2b | `T2b` | `src/js/18-local-files.js` | Milestone 4, PR 4.12 |
+| A server document opened from the picker (`openServerDoc`) does the same | T2c-open | `T2c-open` | `src/js/13-hosted.js` | Milestone 4, PR 4.15 |
+| A server document reopened after a sign-in with nothing typed and no stash (`resumeServerDoc`) does the same. A resumed draft or stash goes through `applyMerge`, which absorbs first and is right (`T2c-resume`) | T2c-reopen | `T2c-reopen` | `src/js/13-hosted.js` | Milestone 4, PR 4.15 |
+| An unsaved script restored from a draft (`adoptUntitledDraft`, and `recoverDraftAsUnsavedCopy` the same way) does the same | T2d | `T2d` | `src/js/20g-drafts.js` | Milestone 4, PR 4.18 |
+| A version restored from history (`adoptRestoredState`) marks the document dirty under the old epoch | T2e | `T2e` | `src/js/02b-doc-id.js`, `src/js/03-sync.js` (`restoreSnapshot`) | Milestone 4, PR 4.18 |
+| A page whose state data has a junk editor name and no revision passes the resume check but not the pristine check, so the page treats its own document as written out and still tries to resume the last project | #483; T3 | `T3` | `src/js/02b-doc-id.js` (`loadInitialState`), `src/js/21-events.js` (the resume check) | Milestone 4, PR 4.18 |
+| An `.html` file over the parse bound loses the bold and italic in its script data, because the bound's last fallback rewrites the script text | #501; T4 | `T4` | `src/js/18-local-files.js` (`parseProjectFileState`), `src/adapters/richtext/parse-bound.ts` | Milestone 4, PR 4.12, by D9: read the script data from the raw text before the bounded parse. `open-html-bound.test.mjs` pins the bound itself and stays |
+| A draft restored onto a file that is unchanged since the draft's base (the "applied" outcome) leaves autosave armed, so about two seconds later the recovered edits are written to the user's file. INV-41 says a restore never writes the user's file by itself; INV-51 halts autosave only for a restore's merge. Measured wrong against INV-41, which the plan listed as right. Not data loss: the branch runs only when the file equals the draft's base, so autosave writes that base plus the user's own recovered edits; what is lost is the chance to decline the recovery before it reaches disk. Ruled `wrongToday` by the coordinator in the review of #527 | T5 | `T5` | `src/js/20g-drafts.js` (`restoreFileDraft`) | Milestone 4, PR 4.18 (restore leaves the confirmed baseline and schedules no save) |
+| A refresh job that the old document asked for still runs after the document was replaced, because the session has no `dispose` | L1a | `L1a` | `src/application/session/effects.ts`, `src/legacy/session-bridge.ts` | Milestone 4, PR 4.7 (`dispose`) and PR 4.8 (called by the transition) |
+| An object URL made for a session video is never revoked when the document is replaced. Only the URLs are document-owned (`sessionVideoUrls`, a lazy cache that is rebuilt on demand). The file grants (`sessionVideoFiles`) and token grants (`videoFileTokens`) in `06-rows.js` are keyed by name and size, are app-lifetime and must survive a switch (a version restore, a same-file reopen, a paste into another document); the case asserts that they do | L1c | `L1c` | `src/js/06-rows.js` | Milestone 4, PR 4.22 (lifecycle test): revoke the URLs, name the grant maps app-lifetime. Ruled by the coordinator in the review of #527 |
 
 ## Not in this table
 
