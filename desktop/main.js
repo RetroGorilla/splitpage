@@ -396,9 +396,16 @@ function tabHasFile(tab) {
   return typeof absPath === "string" && !!absPath;
 }
 
+const TEST_CLOSE_STAT_DELAY_MS = TEST_MODE ? Number(process.env.SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS) || 0 : 0;
+
+function closeCheckStat(p) {
+  if (TEST_CLOSE_STAT_DELAY_MS > 0) return new Promise((r) => setTimeout(r, TEST_CLOSE_STAT_DELAY_MS)).then(() => fsp.stat(p));
+  return fsp.stat(p);
+}
+
 function tabFileGone(tab) {
   if (!tabHasFile(tab)) return Promise.resolve(false);
-  return checkFileGone((p) => fsp.stat(p), tab.source.absPath, FILE_CHECK_TIMEOUT_MS);
+  return checkFileGone(closeCheckStat, tab.source.absPath, FILE_CHECK_TIMEOUT_MS);
 }
 
 function keepDraftsOfGoneFiles(goneTabs) {
