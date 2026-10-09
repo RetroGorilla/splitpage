@@ -120,6 +120,15 @@ function ownerGivesWay(current: unknown, other: unknown, survives: PersonSurvive
   return typeof current === "string" && typeof other === "string" && !survives(current) && survives(other);
 }
 
+function mineOwnerWins(base: { owner?: unknown } | undefined, theirs: unknown, mine: unknown, survives: PersonSurvives): boolean {
+  if (base) {
+    const was = base.owner || "", t = theirs || "", m = mine || "";
+    if (t === was && m !== was && (m === "" || typeof m === "string" && survives(m))) return true;
+    if (m === was && t !== was && t === "") return false;
+  }
+  return ownerGivesWay(theirs, mine, survives);
+}
+
 export function repointOwners(lists: readonly unknown[], remap: Readonly<Record<string, string>>): void {
   lists.forEach(function (list) {
     (Array.isArray(list) ? list as unknown[] : []).forEach(function (e) {
@@ -140,7 +149,7 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
   const dropped = droppedListKeys(baseTags, mineTags, theirTags, idOf, tagPrint);
   const baseById = idMap<TagInput>();
   (baseTags || []).forEach(function (t) { if (t && t.name) baseById[idOf(t)] = t; });
-  const out: TagEntry[] = [], byId = idMap<TagEntry>();
+  const out: TagEntry[] = [], byId = idMap<TagEntry>(), theirKeys = idMap<boolean>();
   function entryOf(t: TagInput): TagEntry {
     const e: TagEntry = { cat: t.cat as string, name: t.name as string, owner: t.owner || "", notes: t.notes || "",
                           status: tagStatusId(t.status) || TAG_STATUS_IDS[0] };
@@ -152,6 +161,7 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const k = idOf(t);
     if (dropped[k] || byId[k]) return;
     byId[k] = entryOf(t);
+    theirKeys[k] = true;
     out.push(byId[k]);
   });
   (mineTags || []).forEach(function (t) {
@@ -167,7 +177,9 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const b = baseById[k];
     if (b && existing.name === b.name && t.name !== b.name) existing.name = t.name;
     if (b && existing.cat === b.cat && t.cat !== b.cat) existing.cat = t.cat as string;
-    if (ownerGivesWay(existing.owner, t.owner, live)) existing.owner = t.owner as string;
+    if (theirKeys[k] ? mineOwnerWins(b, existing.owner, t.owner, live) : ownerGivesWay(existing.owner, t.owner, live)) {
+      existing.owner = (t.owner || "") as string;
+    }
     if (!existing.notes && t.notes) existing.notes = t.notes;
     if (tagStatusRank(t.status) > tagStatusRank(existing.status)) {
       existing.status = tagStatusId(t.status) || TAG_STATUS_IDS[0];
@@ -195,17 +207,20 @@ export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirS
   const dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
   const baseById = idMap<BrollShot>();
   (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
-  const out: BrollShot[] = [], byId = idMap<BrollShot>();
+  const out: BrollShot[] = [], byId = idMap<BrollShot>(), theirIds = idMap<boolean>();
   (theirShots || []).forEach(function (b) {
     if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
     byId[b.id] = jsonCopy(b);
+    theirIds[b.id] = true;
     out.push(byId[b.id] as BrollShot);
   });
   (mineShots || []).forEach(function (b) {
     if (!b || !b.id || dropped[b.id]) return;
     const existing = byId[b.id];
     if (!existing) { byId[b.id] = jsonCopy(b); out.push(byId[b.id] as BrollShot); return; }
-    if (ownerGivesWay(existing.owner, b.owner, live)) existing.owner = b.owner;
+    if (theirIds[b.id] ? mineOwnerWins(baseById[b.id], existing.owner, b.owner, live) : ownerGivesWay(existing.owner, b.owner, live)) {
+      existing.owner = b.owner || "";
+    }
     if (!existing.notes && b.notes) existing.notes = b.notes;
     if (!existing.audioRef && b.audioRef) existing.audioRef = b.audioRef;
     if (!existing.location && b.location) existing.location = b.location;
