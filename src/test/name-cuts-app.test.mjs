@@ -13,7 +13,7 @@ const { addBrollProp } = await import("../js/08c-broll.js");
 const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { COMMENT_NAME_KEY, renderComments, setCommentAssignee } = await import("../js/10-comments.js");
 const { PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
-const { recordMyColor } = await import("../js/13a-presence.js");
+const { personColorsWithMine } = await import("../js/13a-presence.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 
@@ -164,8 +164,8 @@ test("13a my colour is recorded under my name cut by code point (#344)", () => {
   writePref(COMMENT_NAME_KEY, x(29) + GRIN + "y");
   writePref(PERSON_COLOR_KEY, PERSON_COLORS[1]);
   const state = { personColors: null };
-  assert.ok(recordMyColor(state));
-  assert.deepEqual(state.personColors, { [x(29) + GRIN]: PERSON_COLORS[1] });
+  assert.deepEqual(personColorsWithMine(state), { [x(29) + GRIN]: PERSON_COLORS[1] });
+  assert.equal(state.personColors, null, "working out the colours writes nothing");
 });
 
 const OLD_CUTS = [

@@ -24,7 +24,7 @@ function applySceneLength(rowId, seconds) {
   var outcome = runCommand(sceneLengthCommand(rowId, seconds, sessionStamps));
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(REVIEW_REFUSAL, "warn");
-  return outcome.kind === "applied";
+  return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
 export function setSceneLength(rowId, seconds) {

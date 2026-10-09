@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
-import type { Command, CommandOutcome, DocumentSession } from "../../src/application/session/document-session.ts";
+import type { Command, CommandOutcome, DocumentSession, DocumentView, Plan } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, needsReconciliation } from "../../src/application/session/change-set.ts";
 import type { ChangeSet, SessionChange } from "../../src/application/session/change-set.ts";
 import type { Capability, TimerPort } from "../../src/application/session/ports.ts";
@@ -49,6 +49,7 @@ export interface Harness {
   log: string[];
   published: SessionChange[];
   refreshes: string[][];
+  reported: unknown[];
   clock: FakeClock;
   deny: (reason: string | null) => void;
 }
@@ -57,12 +58,16 @@ export interface HarnessHooks {
   beforeUndo?: (session: DocumentSession) => void;
   reconcile?: (doc: ValidatedDocument) => number;
   entry?: (raw: unknown) => ValidatedDocument;
+  attribute?: (doc: DocumentView) => Plan | null;
+  record?: () => void;
+  effect?: (name: "dirty" | "draft" | "save") => void;
 }
 
 export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harness {
   const log: string[] = [];
   const published: SessionChange[] = [];
   const refreshes: string[][] = [];
+  const reported: unknown[] = [];
   const clock = fakeClock();
   const migration = fakeMigration();
   let denied: string | null = null;
@@ -77,14 +82,14 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     entry: function (raw) { log.push("entry"); return hooks.entry ? hooks.entry(raw) : migrateRows(raw, migration.ports); },
     undo: {
       adopt: function (doc) { nested(); log.push("undo.adopt:" + (doc ? doc.title : "none")); },
-      record: function () { log.push("undo.record"); },
+      record: function () { log.push("undo.record"); if (hooks.record) hooks.record(); },
       absorbServer: function (doc) { nested(); log.push("undo.server:" + (doc ? doc.title : "none")); },
       absorbReload: function () { log.push("undo.reload"); }
     },
     effects: {
-      dirty: function (c) { log.push("dirty:" + c.generation); },
-      draft: function (c) { log.push("draft:" + c.generation); },
-      save: function (c) { log.push("save:" + c.generation); },
+      dirty: function (c) { log.push("dirty:" + c.generation); if (hooks.effect) hooks.effect("dirty"); },
+      draft: function (c) { log.push("draft:" + c.generation); if (hooks.effect) hooks.effect("draft"); },
+      save: function (c) { log.push("save:" + c.generation); if (hooks.effect) hooks.effect("save"); },
       refresh: function (jobs) { log.push("refresh"); refreshes.push(Array.from(jobs).sort()); }
     },
     capability: {
@@ -96,6 +101,17 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
         return hooks.reconcile ? hooks.reconcile(doc) : 0;
       }
     },
+    attribution: {
+      attribute: function (doc) {
+        if (!hooks.attribute) return null;
+        log.push("attribute");
+        return hooks.attribute(doc);
+      }
+    },
+    report: function (error) {
+      log.push("report");
+      reported.push(error);
+    },
     timers: clock,
     timing: timing
   });
@@ -105,6 +121,7 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
     log: log,
     published: published,
     refreshes: refreshes,
+    reported: reported,
     clock: clock,
     deny: function (reason) { denied = reason; }
   };
@@ -190,7 +207,7 @@ export function runConfined(session: DocumentSession, command: Command): Command
   }
   const after = snapshotOf(session);
   if (!before || !after) return outcome;
-  const changes = outcome.kind === "applied" ? outcome.changes : NO_CHANGES;
+  const changes = outcome.kind === "applied" || outcome.kind === "committed" ? outcome.changes : NO_CHANGES;
   const outside = writesOutside(before, after, changes);
   if (outside.length) {
     throw new Error("command " + command.name + " (" + outcome.kind + ") wrote outside its declared change set: " + outside.join(", "));

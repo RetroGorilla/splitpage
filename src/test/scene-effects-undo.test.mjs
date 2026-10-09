@@ -12,6 +12,8 @@ const stubs = await import("./_fanout-stubs.mjs");
 const { cycleRowStatus } = await import("../js/01-scene-status.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
 
+stubs.wireSession();
+
 function fresh() {
   stubs.resetFanout({ noteEdit: true });
   S.state = migrateRows({

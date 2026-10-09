@@ -722,6 +722,47 @@ test("a join of a commented phrase cut in two by a split gives one anchor back, 
   writer.closeWriter();
 });
 
+function withThrowingListener(run) {
+  const reported = [];
+  const consoleError = console.error;
+  console.error = (error) => { reported.push(error.message); };
+  const off = liveSession().subscribe(() => { throw new Error("listener broke"); });
+  try {
+    run();
+  } finally {
+    off();
+    console.error = consoleError;
+  }
+  return reported;
+}
+
+test("a grid split whose commit is followed by a throw still draws the new scene, and the throw is only reported", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  selectText(el, 5, 5);
+  const reported = withThrowingListener(() => key(el, "Enter", { altKey: true }));
+  const created = S.state.rows[1].id;
+  assert.deepEqual(reported, ["listener broke"]);
+  assert.equal(row(created).audioText, " there");
+  assert.ok(cellOf(created, "audioText"), "the new scene is on screen");
+  assert.equal(S.dirty, true);
+});
+
+test("a Writer join whose commit is followed by a throw still redraws the Writer, and the throw is only reported", async () => {
+  await open(joinDoc(["todo", "ready"]));
+  writer.openWriter();
+  const p = para("j2");
+  p.focus();
+  selectText(p, 0, 0);
+  const reported = withThrowingListener(() => key(p, "Backspace"));
+  assert.deepEqual(reported, ["listener broke"]);
+  assert.deepEqual(ids(), ["j1"]);
+  assert.equal(para("j2"), null, "the joined scene left the Writer");
+  assert.equal(S.dirty, true);
+  writer.closeWriter();
+});
+
 test("a Writer split is refused when the session turns review with the Writer open: no scene, no undo step, no new generation", async () => {
   await open();
   writer.openWriter();
