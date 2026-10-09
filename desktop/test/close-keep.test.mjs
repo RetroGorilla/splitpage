@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { checkFileGone, copyKept, holdKeep, releaseKeep, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.js"));
+const { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.js"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -139,6 +139,101 @@ test("a release on a tab nobody held leaves it unheld", () => {
   const tab = { id: "t6" };
   releaseKeep(tab, {});
   assert.notEqual(tab.keepDraftOnClose, true);
+});
+
+function closeCheck(spec) {
+  const tabs = new Map();
+  for (const t of spec.tabs) tabs.set(t.id, t);
+  const order = spec.order || spec.tabs.map((t) => t.id);
+  const answers = (spec.answers || []).slice();
+  const questions = [];
+  const reports = [];
+  const holders = [];
+  const io = {
+    tabs,
+    goneFileTabsOf: (ids) => Promise.resolve(ids.map((id) => tabs.get(id)).filter((t) => t && t.gone)),
+    unsavedTabsOf: (ids, gone) => {
+      if (spec.unsavedThrowsAfter !== undefined && spec.unsavedThrowsAfter-- <= 0) throw new Error("test: unsavedTabsOf failed");
+      return ids.map((id) => tabs.get(id)).filter((t) => t && (t.dirty || gone.includes(t)));
+    },
+    askAboutUnsaved: (list) => {
+      if (!list.length) return "discard";
+      questions.push(list.map((t) => t.id));
+      const answer = answers.length ? answers.shift() : "cancel";
+      return typeof answer === "function" ? answer({ tabs, order, list }) : answer;
+    },
+    keepDraftsOfGoneFiles: (gone, holder) => {
+      holders.push(holder);
+      for (const t of gone) holdKeep(t, holder);
+      const during = spec.duringKeep ? spec.duringKeep({ tabs, order, round: holders.length }) : null;
+      return Promise.resolve(during).then(() => gone.filter((t) => t.keepFails));
+    },
+    report: (verb, err) => reports.push(verb + ": " + err.message)
+  };
+  const wanted = spec.stillWanted || (() => true);
+  return runCloseCheck(io, () => order.filter((id) => tabs.has(id)), spec.verb || "Close window", () => undefined, wanted)
+    .then((result) => ({ ...result, questions, reports, tabs, holders }));
+}
+
+const tab = (id, extra) => ({ id, ...extra });
+
+test("close check: nothing unsaved and no file gone closes with no question", async () => {
+  const r = await closeCheck({ tabs: [tab("a"), tab("b")] });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [], ["a", "b"]]);
+});
+
+test("close check: an unsaved tab is asked about, and Stay keeps everything open", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { dirty: true }), tab("b")], answers: ["cancel"] });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"]]]);
+});
+
+test("close check: a tab whose file is gone is asked about, and its kept copy stays held after 'close'", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard"] });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [["a"]], ["a", "b"]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, true);
+});
+
+test("close check: a copy that was not kept is asked about again, and Stay lets go of the hold", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true, keepFails: true }), tab("b", { dirty: true })], answers: ["discard", "cancel"] });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a", "b"], ["a"]]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+});
+
+test("close check: a tab opened during the copy's wait is asked about in a second round (#509)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true })], answers: ["discard", "discard"],
+    duringKeep: ({ tabs, order, round }) => { if (round === 1) { tabs.set("c", tab("c", { dirty: true })); order.push("c"); } }
+  });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [["a"], ["c"]], ["a", "c"]]);
+});
+
+test("close check: a failed question is reported, answers Stay and lets go of every hold (#508)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true, keepFails: true })],
+    answers: ["discard", () => { throw new Error("test: the question failed"); }]
+  });
+  assert.deepEqual([r.answer, r.reports], ["cancel", ["Close window: test: the question failed"]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+});
+
+test("close check: a close that is no longer wanted after the copy's wait answers Stay and lets go", async () => {
+  let wanted = true;
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true })], answers: ["discard"], stillWanted: () => wanted,
+    duringKeep: () => { wanted = false; }
+  });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"]]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+});
+
+test("close check: a tab moved out during the copy's wait is let go and not closed (#509)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true }), tab("b", { gone: true })], answers: ["discard"],
+    duringKeep: ({ order }) => { order.splice(order.indexOf("a"), 1); }
+  });
+  assert.deepEqual([r.answer, r.tabIds], ["discard", ["b"]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+  assert.equal(r.tabs.get("b").keepDraftOnClose, true);
 });
 
 let failed = 0;
