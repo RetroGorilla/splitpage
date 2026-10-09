@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { setHome } from "../js/_home.js";
 
 await bootApp();
 
@@ -65,6 +66,26 @@ test("a chip that leaves the server loses the warning", () => {
   window.__hostedTest.setSession({ docId: null });
   S.dirty = false;
   resumeAutoSave();
+  updateFileChip();
+  assert.equal(chip().hidden, true);
+  assert.equal(warns(), false);
+});
+
+test("a local file with unsaved changes is a warning, and clears when it is up to date", () => {
+  window.__hostedTest.setSession({ docId: null });
+  setHome("import", { name: "a.docx", format: "docx", dirty: true });
+  updateFileChip();
+  assert.equal(chip().hidden, false);
+  assert.equal(stateText(), "· unsaved changes");
+  assert.equal(warns(), true);
+  setHome("import", { name: "a.docx", format: "docx", dirty: false });
+  updateFileChip();
+  assert.equal(stateText(), "· up to date");
+  assert.equal(warns(), false);
+  setHome("import", { name: "a.docx", format: "docx", dirty: true });
+  updateFileChip();
+  assert.equal(warns(), true);
+  setHome("none");
   updateFileChip();
   assert.equal(chip().hidden, true);
   assert.equal(warns(), false);

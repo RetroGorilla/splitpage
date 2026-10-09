@@ -162,6 +162,7 @@ function updateHeaderFileChip() {
   var stateEl = document.getElementById("file-chip-state");
   stateEl.textContent = imported.dirty ? "· unsaved changes" : "· up to date";
   stateEl.classList.toggle("unsaved", !!imported.dirty);
+  chip.toggleAttribute("data-warning", !!imported.dirty);
 }
 
 export function exportFileName(kind, baseName, opts) {
