@@ -496,6 +496,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - A merge, a reload or a recovery adoption adds none.
   - A no-op command does not dirty the document, schedule a save or add an entry.
 - **As built (M3):** met by `document-session.test.ts` and each command's "E2" and "E3" tests. Seven edits are commands (scene length, scene status, typing, split, join, cut, paste); every other writer still ends in `markDirty()`, which the session takes as an edit of unknown extent (one generation, one undo record, a whole-document change set). Recovery that enters by assignment (the draft restores, history restore, a file import) is published as `adopt`, not `recovery`, so it opens an epoch and adds no generation or undo entry; naming it `recovery` would route it through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today (E4, accepted by the coordinator). Undo and redo replay still write `S.state` outside the session; milestone 6 takes that ([session.md](session.md#8-known-gaps-and-exceptions)).
+- **As built (M4, 4.7):** once the generation has advanced, a command is never rolled back. A throw in undo recording, an effect or a listener is reported, the change stays, and the command returns `committed` (D13, matrix cases E2a to E2c). The editor's colour (`personColors`) is written inside the command's transaction and declared; it is not an undo field, so it never becomes a step (`session-commit-app.test.mjs`).
 
 ### INV-54 — A b-roll key's id belongs to one line
 
