@@ -80,7 +80,12 @@ export async function bootApp(stateData) {
   return seen.splice(0);
 }
 
-export function closeApp() {
+export function clearTimers() {
   for (const [clear, id] of timers) clear(id);
+  timers.clear();
+}
+
+export function closeApp() {
+  clearTimers();
   for (const channel of channels) channel.close();
 }
