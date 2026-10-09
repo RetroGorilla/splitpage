@@ -72,6 +72,8 @@ function script(title, docId, ids, texts) {
 }
 
 function showDocument(doc) {
+  decode.gates.releaseAll("image.decode");
+  decode.gates.releaseAll("image.encode");
   S.state = doc;
   flushEdits();
   renderAbsorbed();
@@ -89,7 +91,7 @@ async function reopen(doc) {
   await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
   clearDirty();
   document.getElementById("toast-host").textContent = "";
-  assert.ok(session.epoch() > epoch, "precondition: the document was replaced and has a new epoch");
+  assert.ok(session.epoch() > epoch, "setup: the document was replaced and has a new epoch");
 }
 
 function textNodes(el) {
@@ -129,13 +131,16 @@ async function latePaste(replace) {
   const cell = cellOf("r1", "audioText");
   cell.focus();
   select(cell, 5);
+  assert.equal(window.getSelection().anchorOffset, 5, "setup: the caret starts at offset 5");
   decode.holdDecode();
   pastePicture(cell, "Pasted ");
   await decode.arrivedAtDecode();
+  assert.equal(decode.gates.parked("image.decode").length, 1, "setup: the picture is held in its decode");
   await replace();
   const before = edits();
   decode.releaseDecode();
   await settle();
+  assert.equal(decode.gates.parked("image.decode").length, 0, "setup: the held decode was released");
   return before;
 }
 
@@ -181,6 +186,7 @@ wrongToday("M3b", "a delayed paste puts its text at the end of the cell if the c
     node.data += "!";
     cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "!" }));
     flushEdits();
+    assert.equal(S.state.rows[0].audioText, AUDIO + "!", "setup: the edit made while the picture loaded reached the document");
     select(cell, 0);
   });
   assert.equal(S.state.rows[0].audioText, AUDIO + "!Pasted ", "the text went in at the end of the edited cell");
@@ -206,14 +212,16 @@ function dropPicture(target) {
 wrongToday("M2d", "a delayed drop on a scene's image section that completes after the same document was reopened changes nothing and tells the user", async () => {
   showDocument(script("Drop target", idOf("a"), ["r1", "r2"]));
   const media = document.querySelector('#rows .row[data-id="r1"] .visual-cell');
-  assert.ok(media, "precondition: the scene has an image section to drop on");
+  assert.ok(media, "setup: the scene has an image section to drop on");
   decode.holdDecode();
   dropPicture(media);
   await decode.arrivedAtDecode();
+  assert.equal(decode.gates.parked("image.decode").length, 1, "setup: the dropped picture is held in its decode");
   await reopen(script("Drop target", idOf("a"), ["r1", "r2"]));
   const before = edits();
   decode.releaseDecode();
   await settle();
+  assert.equal(decode.gates.parked("image.decode").length, 0, "setup: the held decode was released");
   assertDropped(before, "after a same-id reopen");
 }, /after a same-id reopen: the late picture and text changed nothing in the replacement/);
 
@@ -222,10 +230,12 @@ async function lateGalleryPicture(replace) {
   decode.holdDecode();
   handleImageFile("r1", new window.File(["not really a picture"], "gallery.png", { type: "image/png" }));
   await decode.arrivedAtDecode();
+  assert.equal(decode.gates.parked("image.decode").length, 1, "setup: the gallery picture is held in its decode");
   await replace();
   const before = edits();
   decode.releaseDecode();
   await settle();
+  assert.equal(decode.gates.parked("image.decode").length, 0, "setup: the held decode was released");
   return before;
 }
 
@@ -337,7 +347,7 @@ async function lateAnnotation(replace) {
   const frame = document.getElementById("annotate-frame");
   pointer(frame, "pointerdown");
   pointer(frame, "pointerup");
-  assert.equal(window.__annotateTest.state().marks.length, 1, "precondition: one stroke is drawn");
+  assert.equal(window.__annotateTest.state().marks.length, 1, "setup: one stroke is drawn");
   decode.holdEncode();
   document.getElementById("annotate-done").click();
   await decode.arrivedAtEncode();

@@ -151,19 +151,21 @@ wrongToday("B1", "a late draft write for the previous document neither removes t
     typeInto("Edited in A.");
     clock.tick(1500);
     await blobs.arrivedAt("put");
-    const writesBefore = drafts().status().writes;
 
     const docB = script("Document B", { docId: idOf("b") });
     await idb.store.put(record("srv-b", docB, OTHER));
     serverDocument("srv-b", "Document B", "b");
     await resumeBrowserDraft("srv-b");
-    assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-b"), "precondition: the writer tracks document B's draft");
+    assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-b"), "setup: the writer tracks document B's draft");
+    assert.notEqual(await idb.store.get(draftKey("srv-b")), null, "setup: document B's draft record is stored before the late write lands");
+    assert.equal(blobs.gates.parked("blob.put").length, 1, "setup: document A's write is still held");
 
     blobs.releaseOp("put");
-    await until(() => drafts().status().writes > writesBefore, "document A's late write landed");
+    await settleIo();
     assert.notEqual(await idb.store.get(draftKey("srv-b")), null, "the current document's draft record is still stored");
     assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-b"), "the late write did not claim the writer's key from the current document");
   } finally {
+    blobs.gates.releaseAll("blob.put");
     setBlobBackend(null);
     await endCase();
   }
@@ -177,7 +179,7 @@ rightToday("B2", "with Web Locks a live writer's draft is not taken over, and it
     let letGo = () => {};
     const alive = locks.request(LOCK_PREFIX + OTHER, () => new Promise((resolve) => { letGo = resolve; }));
     await pause();
-    assert.equal(locks.isHeld(LOCK_PREFIX + OTHER), true, "precondition: the other tab holds its writer lock");
+    assert.equal(locks.isHeld(LOCK_PREFIX + OTHER), true, "setup: the other tab holds its writer lock");
     const doc = script("Shared", { docId: idOf("c") });
     await idb.store.put(record("srv-c", doc, OTHER));
     serverDocument("srv-c", "Shared", "c");
@@ -198,7 +200,7 @@ rightToday("B2", "with Web Locks a live writer's draft is not taken over, and it
 });
 
 rightToday("B3", "without Web Locks every other writer counts as dead and its draft is taken over (D12)", () => cleanly(async () => {
-  assert.equal(globalThis.navigator.locks, undefined, "precondition: no Web Locks in this environment");
+  assert.equal(globalThis.navigator.locks, undefined, "setup: no Web Locks in this environment");
   const idb = browserStore();
   const doc = script("Shared without locks", { docId: idOf("d") });
   await idb.store.put(record("srv-d", doc, OTHER));
@@ -261,11 +263,13 @@ wrongToday("B4b", "a change noted while a retry is in flight does not bring the 
   const { attempts } = await quotaSetup(clock, 3);
   typeInto("First edit.");
   await advance(clock, 1500);
-  assert.equal(attempts(), 1, "precondition: the first write failed");
+  assert.equal(attempts(), 1, "setup: the first write failed");
+  assert.equal(drafts().status().paused, true, "setup: crash recovery is paused after the first failure");
   clock.tick(5000);
   typeInto("Typed as the retry went out.");
   await settleIo();
-  assert.equal(attempts(), 2, "precondition: the retry went out and failed, so the next wait is 10 seconds");
+  assert.equal(attempts(), 2, "setup: the retry went out and failed, so the next wait is 10 seconds");
+  assert.equal(drafts().status().paused, true, "setup: crash recovery is still paused after the retry failed");
   await advance(clock, 9999);
   assert.equal(attempts(), 2, "the next retry waited its whole backoff");
 }), /the next retry waited its whole backoff/);
@@ -336,14 +340,14 @@ rightToday("B7", "a writer discards only the draft it wrote: a newer generation 
   typeInto("Mine, generation one.");
   await advance(clock, 1500);
   const key = draftKey("srv-g");
-  assert.equal((await idb.store.get(key)).writerId, drafts().browser.writerId(), "precondition: this tab wrote the draft");
+  assert.equal((await idb.store.get(key)).writerId, drafts().browser.writerId(), "setup: this tab wrote the draft");
   const theirs = script("Generations", { docId: idOf("2") });
   theirs.rows[0].audioText = "Theirs, generation two.";
   await idb.store.put(record("srv-g", theirs, OTHER, { editSeq: 99 }));
   const discardsBefore = drafts().status().discards;
   clearDirty();
   await flushDraftNow();
-  assert.equal(drafts().status().discards, discardsBefore + 1, "precondition: this tab tried to discard its draft");
+  assert.equal(drafts().status().discards, discardsBefore + 1, "setup: this tab tried to discard its draft");
   const kept = await idb.store.get(key);
   assert.notEqual(kept, null, "the other tab's draft was not discarded");
   assert.equal(kept.writerId, OTHER);
@@ -500,12 +504,13 @@ wrongToday("K1", "a desktop file-draft restore whose document is replaced across
     });
     await held.arrivedAt("readFile");
     startNewScript();
-    assert.equal(S.state.title, "Untitled Script", "precondition: the user replaced the document meanwhile");
+    assert.equal(S.state.title, "Untitled Script", "setup: the user replaced the document meanwhile");
     held.releaseOp("readFile");
     await restoring;
     assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
     assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here."), false, "the late restore put none of its text into the replacement");
   } finally {
+    held.gates.releaseAll("desktop.readFile");
     restore();
     homeModule.setHome("none");
   }
@@ -557,17 +562,26 @@ async function snapshotRestore(setup) {
   button.setAttribute("data-id", ticket.id);
   window.__historyTest.injectFault("delay-put");
   const restoring = restoreSnapshotFromCard(button);
-  await settleIo(20);
-  S.state.rows[1].audioText = "Typed while the backup was being stored.";
-  await setup(doc);
-  window.__historyTest.releaseDelayedPut();
+  let finished = false;
+  restoring.then(() => { finished = true; }, () => { finished = true; });
+  try {
+    await settleIo(20);
+    assert.equal(finished, false, "setup: the restore is waiting for its backup");
+    S.state.rows[1].audioText = "Typed while the backup was being stored.";
+    await setup(doc);
+  } finally {
+    window.__historyTest.releaseDelayedPut();
+  }
   return restoring;
 }
 
 wrongToday("H1", "a history restore that completes after a same-id reopen does not overwrite the reopened session", async () => {
   const outcome = await snapshotRestore(async (doc) => {
+    const replaced = S.state;
     await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
     clearDirty();
+    assert.notEqual(S.state, replaced, "setup: the reopen put a new document in place");
+    assert.equal(S.state.docId, replaced.docId, "setup: the reopened document has the same id");
     S.state.rows[1].audioText = "Typed in the reopened session.";
     markDirty();
   });
