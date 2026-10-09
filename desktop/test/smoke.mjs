@@ -4115,25 +4115,25 @@ async function caseSessionEndKeepsGoneFileCopy(target, fixturesDir) {
   const tag = target.name + " session end: a clean tab whose file is gone keeps a copy, nothing asked or discarded (#492)";
   const marker = "MARKER-SESSION-END-GONE-" + Date.now();
   const aPath = writeFixture(fixturesDir, "case-492-gone-" + Date.now() + ".splitpage", "Session End Gone", [[marker, "s"]]);
-  const markerB0 = "MARKER-SESSION-END-FIXTURE-" + Date.now();
-  const markerB = "MARKER-SESSION-END-DIRTY-" + Date.now();
-  const bPath = writeFixture(fixturesDir, "case-492-dirty-" + Date.now() + ".splitpage", "Session End Dirty", [[markerB0, "e"]]);
+  const markerB = "MARKER-SESSION-END-UNTITLED-" + Date.now();
   const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   let app = null;
   let held = {};
   let found = {};
+  let cdpB = null;
   try {
-    app = await launchApp(target, { label: "session-end-gone", userDataDir, fixtures: [aPath, bPath] });
+    app = await launchApp(target, { label: "session-end-gone", userDataDir, fixtures: [aPath] });
     await waitForRows(app.cdp, 20000);
-    held = await tabsHolding(app, [marker, markerB0], 20000);
-    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB0], JSON.stringify(Object.keys(held)));
-    if (!held[marker] || !held[markerB0]) return;
+    held = await tabsHolding(app, [marker], 20000);
+    record(tag + ": the file opens in a tab", !!held[marker], JSON.stringify(Object.keys(held)));
+    if (!held[marker]) return;
     const cdpA = held[marker].cdp;
-    const cdpB = held[markerB0].cdp;
     const tabAId = held[marker].id;
-    const tabBId = held[markerB0].id;
 
+    const tabBId = await shell(cdpA, "createTab", {});
+    cdpB = await connectTab(app, tabBId);
+    await waitForRows(cdpB, 20000);
     await addMarkerRow(cdpB, markerB);
     await flushDraft(cdpB);
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
@@ -4148,22 +4148,26 @@ async function caseSessionEndKeepsGoneFileCopy(target, fixturesDir) {
     record(tag + ": the clean tab whose file is gone gets a draft", !!keptA, JSON.stringify(Object.keys(readDraftDirs(userDataDir))));
     record(tag + ": nothing is asked", (await dialogsSeen(cdpA)) === seen0, "dialogs seen=" + (await dialogsSeen(cdpA)) + ", before=" + seen0);
     await sleep(1000);
-    record(tag + ": the dirty tab's draft is still there", stateOf(tabBId).indexOf(markerB) !== -1);
+    record(tag + ": the untitled tab's draft is still there", stateOf(tabBId).indexOf(markerB) !== -1);
     record(tag + ": the kept copy is still there a second later", stateOf(tabAId).indexOf(marker) !== -1);
 
     closeHeld(held);
     held = {};
+    try { cdpB.close(); } catch {}
+    cdpB = null;
     await crashApp(app);
     app = null;
 
     app = await launchApp(target, { label: "session-end-gone-relaunch", userDataDir });
     await waitForRows(app.cdp, 20000);
-    found = await tabsHolding(app, [marker, markerB], 20000);
-    for (const [name, m] of [["the moved file's script", marker], ["the dirty tab's edit", markerB]]) {
+    for (const [name, m] of [["the untitled tab's edit", markerB], ["the moved file's script", marker]]) {
+      closeHeld(found);
+      found = await tabsHolding(app, [m], 8000);
       const cdp = found[m] && found[m].cdp;
       record(tag + ": the relaunch brings back " + name + " as an unsaved copy", !!cdp && !!(await isDirty(cdp)), JSON.stringify(Object.keys(found)));
     }
   } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
     closeHeld(found);
     closeHeld(held);
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
