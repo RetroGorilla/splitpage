@@ -69,6 +69,7 @@ import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-draf
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { sessionEpoch } from "../legacy/session-bridge.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 
 var sharedDocId;
@@ -1238,6 +1239,10 @@ export async function fetchBlob(sha) {
   return bytesForSync(sha);
 }
 
+function reportObsoleteServerSave() {
+  showToast("A save made before this script was reopened reached the server afterwards.", "warn");
+}
+
 export async function saveToServer() {
   if (serverSessionExpired || clientTooOld || linkTurnedOff) return false;
   if (reviewMode()) return sendReviewWrites();
@@ -1253,6 +1258,7 @@ export async function saveToServer() {
     var published = cloneState(S.state);
     var seqAtSave = S.editSeq;
     var baseRevAtSave = home.rev;
+    var epochAtSave = sessionEpoch();
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
@@ -1263,6 +1269,10 @@ export async function saveToServer() {
         }, true);
       });
       if (serverHomeId() !== docId) return true;
+      if (sessionEpoch() !== epochAtSave) {
+        reportObsoleteServerSave();
+        return true;
+      }
       home.rev = body.rev;
       setBaseState(published, "saveToServer: what the server just accepted");
       if (S.editSeq === seqAtSave) clearDirty();
