@@ -210,7 +210,7 @@ function resolveDocFields(state, plan) {
     if (docs.some(function (p) { return p.key === key; }) || !Array.isArray(state[key])) return;
     touched = false;
     var value = orphansCleared(key, state[key]);
-    if (touched) plan.push({ op: "doc", key: key, value: value, scan: clone(state[key]) });
+    if (touched) plan.push({ op: "doc", key: key, value: value });
   });
   return { remap: remap, cleared: cleared };
 }
@@ -222,31 +222,57 @@ function ownerAt(state, w) {
   return hit && hit.owner || "";
 }
 
-function foldScan(entry, scanned, replayed, invert) {
-  var forward = invert ? invertSteps(scanned) : scanned;
+function rerecorded(entry, s, invert, crew) {
+  var before = invert ? s.after : s.before, after = invert ? s.before : s.after;
+  var mine = entry.steps.filter(function (e) { return e.op === "docField" && e.key === s.key; });
+  if (!mine.length) return null;
+  var ownersOnly = mine.every(function (e) { return e.ownersOnly; });
+  if (mine.length === 1 && sameDoc(mine[0].before, before) && sameDoc(mine[0].after, after)) return { ownersOnly: ownersOnly };
+  var next = { op: "docField", key: s.key, before: clone(before), after: clone(after) };
+  var names = idMap(), any = false;
+  mine.forEach(function (e) { Object.keys(e.owners || {}).forEach(function (id) { names[id] = e.owners[id]; any = true; }); });
+  var was = { people: crew.before }, now = { people: crew.after };
+  was[s.key] = s.before;
+  now[s.key] = s.after;
+  var found = ownerNames(s.key, was, now);
+  Object.keys(found || {}).forEach(function (id) { names[id] = found[id]; any = true; });
+  if (any) next.owners = names;
+  if (ownersOnly) next.ownersOnly = true;
+  entry.steps[entry.steps.indexOf(mine[0])] = next;
+  mine.slice(1).forEach(function (e) { entry.steps.splice(entry.steps.indexOf(e), 1); });
+  entry.cell = null;
+  return { ownersOnly: ownersOnly };
+}
+
+function foldScan(entry, out, invert) {
+  var forward = invert ? invertSteps(out.scanned) : out.scanned;
   forward.forEach(function (s) {
     s.ownersOnly = true;
     entry.steps.push(s);
   });
-  replayed.forEach(function (s) {
-    var at = entry.steps.findIndex(function (e) { return e.op === "docField" && e.ownersOnly && e.key === s.key; });
-    entry.steps[at] = { op: "docField", key: s.key, before: clone(invert ? s.after : s.before), after: clone(invert ? s.before : s.after), ownersOnly: true };
+  if (forward.length) entry.cell = null;
+  var gone = idMap();
+  out.cleared.forEach(function (k) { gone[k] = true; });
+  var watched = out.scanned.map(function (s) { return { step: s, all: true }; });
+  out.replayed.forEach(function (s) {
+    var r = rerecorded(entry, s, invert, out.crew);
+    if (r && OWNED_LISTS[s.key]) watched.push({ step: s, all: r.ownersOnly });
   });
-  entry.cell = null;
-  var watch = entry.unassigned || (entry.unassigned = []);
+  var watch = entry.unassigned || [];
   var seen = idMap();
   watch.forEach(function (w) { seen[itemKey(w.key, w)] = true; });
-  scanned.concat(replayed).forEach(function (s) {
-    var after = idMap();
+  watched.forEach(function (w) {
+    var s = w.step, after = idMap();
     listOf(s.after).forEach(function (e) { if (e) after[itemKey(s.key, e)] = e; });
     listOf(s.before).forEach(function (e) {
       if (!e || !e.owner) return;
       var k = itemKey(s.key, e), now = after[k];
-      if (!now || now.owner || seen[k]) return;
+      if (!now || now.owner || seen[k] || !w.all && !gone[k]) return;
       seen[k] = true;
       watch.push({ key: s.key, id: e.id, name: e.name });
     });
   });
+  if (watch.length) entry.unassigned = watch;
 }
 
 function repointLists(state, remap) {
@@ -280,7 +306,7 @@ export function applyStepsLive(state, steps, out) {
       }
     } else if (s.op === "docField") {
       if (!same(state[s.key], s.before) && !listMergeFor(s.key)) return { ok: false, reason: "it has changed since" };
-      plan.push({ op: "doc", key: s.key, step: s, live: s.ownersOnly ? clone(state[s.key]) : undefined });
+      plan.push({ op: "doc", key: s.key, step: s });
     } else if (s.op === "insertRow") {
       if (s.index < 0 || s.index > order.length || byId[s.row.id] && order.indexOf(s.row.id) !== -1) {
         return { ok: false, reason: "the scene list has changed since" };
@@ -302,6 +328,12 @@ export function applyStepsLive(state, steps, out) {
       return { ok: false, reason: "unknown step" };
     }
   }
+  var prior = idMap(), carried = idMap(), crew = null;
+  steps.forEach(function (s) { if (s.op === "docField" && listMergeFor(s.key)) carried[s.key] = true; });
+  if (out && plan.some(function (p) { return p.op === "doc"; })) {
+    crew = clone(state.people);
+    Object.keys(carried).concat(Object.keys(OWNED_LISTS)).forEach(function (k) { if (!(k in prior)) prior[k] = clone(state[k]); });
+  }
   var resolved = resolveDocFields(state, plan);
   var remap = resolved.remap;
   plan.forEach(function (p) {
@@ -320,11 +352,13 @@ export function applyStepsLive(state, steps, out) {
   if (remap) repointLists(state, remap);
   if (out) {
     out.cleared = resolved.cleared;
-    out.scanned = plan.filter(function (p) { return p.scan; }).map(function (p) {
-      return { op: "docField", key: p.key, before: p.scan, after: clone(state[p.key]) };
-    });
-    out.replayed = plan.filter(function (p) { return p.op === "doc" && p.step && p.step.ownersOnly; }).map(function (p) {
-      return { op: "docField", key: p.key, before: p.live, after: clone(state[p.key]) };
+    out.crew = { before: crew, after: clone(state.people) };
+    out.scanned = [];
+    out.replayed = [];
+    Object.keys(prior).forEach(function (k) {
+      var change = { op: "docField", key: k, before: prior[k], after: clone(state[k]) };
+      if (carried[k]) out.replayed.push(change);
+      else if (!same(prior[k], state[k])) out.scanned.push(change);
     });
   }
   return resolved.cleared.length ? { ok: true, cleared: resolved.cleared.length } : { ok: true };
@@ -507,7 +541,7 @@ export function createUndoHistory() {
       var ids = idMap();
       out.cleared.forEach(function (k) { ids[k] = true; });
       watch.forEach(function (w, i) { if (had[i] && !ownerAt(state, w)) ids[itemKey(w.key, w)] = true; });
-      if (out.scanned.length || out.replayed.length) foldScan(entry, out.scanned, out.replayed, invert);
+      foldScan(entry, out, invert);
       var count = Object.keys(ids).length;
       r = count ? { ok: true, cleared: count } : { ok: true };
     } else {

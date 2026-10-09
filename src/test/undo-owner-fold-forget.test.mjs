@@ -186,7 +186,7 @@ test("the folded owner change leaves alone an owner I unassigned later, and does
   const back = undo();
   assert.equal(back.ok, true);
   assert.equal(back.cleared, 1, "only Pier, which the undo gave back to a person no longer in the crew");
-  assert.deepEqual(crew(), ["Cy"]);
+  assert.deepEqual(crew(), ["Cy", "ADA"], "the crew the redo merged into comes back (#529)");
   assert.equal(ownerOf("brollShots", "Dock"), "");
   assert.equal(ownerOf("brollShots", "Pier"), "");
   assert.equal(itemOf(S.state, "brollShots", "Quay").notes, "from them");
@@ -347,4 +347,113 @@ test("seeded: with collaborators editing other items, undo and redo never undo a
   assert.equal(refused, 0, "no undo or redo refused");
   assert.ok(replays > 300 && overEdits > 50 && roundTrips > 2000 && crewTrips > 1500 && foldedTrips > 100 && notesEdits > 3000,
     JSON.stringify({ replays, overEdits, roundTrips, crewTrips, foldedTrips, notesEdits }));
+});
+
+test("seeded: with collaborators also changing the crew, and editing between a replay and its opposite step, no replay undoes a collaborator's edit (#529)", () => {
+  const CREW = ["Ada", "Bo", "Cy", "Di"];
+  let checks = 0, between = 0, crewEdits = 0;
+  for (let seed = 1; seed <= 1000; seed++) {
+    const r = rng(seed);
+    const pick = (list) => list[Math.floor(r() * list.length)];
+    S.state = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+      { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
+    ] });
+    S.state.productionTags.push(tag("t_kettle", "Kettle"), tag("t_lamp", "Lamp"));
+    S.state.brollShots.push(shot("bs_pier", "Pier"), shot("bs_dock", "Dock"), shot("bs_quay", "Quay"));
+    trackDocument();
+    const names = {}, notes = {}, owners = {}, added = {}, removed = {};
+    const nameOf = (id) => (S.state.people.find((p) => p.id === id) || {}).name;
+    const theirs = (step) => {
+      const op = r();
+      if (op < 0.3) {
+        const [l, n] = pick(ITEMS);
+        const owner = pick(["", ...S.state.people.map((p) => p.id)]);
+        if (ownerOf(l, n) === owner) return;
+        if (owner) names[owner] = nameOf(owner);
+        remote((st) => { itemOf(st, l, n).owner = owner; });
+        owners[n] = owner;
+      } else if (op < 0.6) {
+        const [l, n] = pick(ITEMS);
+        remote((st) => { itemOf(st, l, n).notes = "theirs " + step; });
+        notes[n] = "theirs " + step;
+      } else if (op < 0.8) {
+        const n = pick(CREW);
+        if (S.state.people.some((p) => p.name === n)) return;
+        const id = "pR_" + n + "_" + step;
+        remote((st) => { st.people.push(person(id, n)); });
+        crewEdits++;
+        added[id] = n;
+        delete removed[n];
+      } else {
+        if (!S.state.people.length) return;
+        const gone = pick(S.state.people);
+        remote((st) => {
+          st.people = st.people.filter((p) => p.id !== gone.id);
+          [].concat(st.productionTags, st.brollShots).forEach((e) => { if (e.owner === gone.id) e.owner = ""; });
+        });
+        crewEdits++;
+        delete added[gone.id];
+        removed[gone.name] = gone.id;
+        ITEMS.forEach(([, n]) => { if (owners[n] === gone.id) owners[n] = ""; });
+      }
+    };
+    const check = (label) => {
+      checks++;
+      const ids = new Set(S.state.people.map((p) => p.id));
+      const crewNames = new Set(S.state.people.map((p) => p.name));
+      ITEMS.forEach(([l, n]) => {
+        if (n in notes) assert.equal(itemOf(S.state, l, n).notes, notes[n], label + " " + n + " notes");
+        if (!(n in owners)) return;
+        const want = owners[n], got = ownerOf(l, n);
+        const kept = got === want || got === "" && want && !ids.has(want) || got && nameOf(got) === names[want];
+        assert.ok(kept, label + " " + n + " owner " + got + " for " + want);
+      });
+      Object.keys(added).forEach((id) => assert.ok(ids.has(id) || crewNames.has(added[id]), label + " " + id + " stays"));
+      Object.keys(removed).forEach((n) => assert.ok(!ids.has(removed[n]), label + " " + n + " stays gone"));
+      assert.deepEqual(dangling(), [], label);
+    };
+    for (let step = 0; step < 40; step++) {
+      const op = r();
+      const label = "seed " + seed + " step " + step;
+      if (op < 0.14) {
+        const n = pick(CREW);
+        if (S.state.people.some((p) => p.name === n)) continue;
+        S.state.people.push(person("pM_" + n + "_" + step, n));
+        commit();
+        delete removed[n];
+      } else if (op < 0.22) {
+        if (!S.state.people.length) continue;
+        const gone = pick(S.state.people);
+        S.state.people = S.state.people.filter((p) => p.id !== gone.id);
+        [].concat(S.state.productionTags, S.state.brollShots).forEach((e) => { if (e.owner === gone.id) e.owner = ""; });
+        commit();
+        delete added[gone.id];
+        delete removed[gone.name];
+        ITEMS.forEach(([, n]) => { if (owners[n] === gone.id) delete owners[n]; });
+      } else if (op < 0.32) {
+        const [l, n] = pick(ITEMS);
+        const owner = pick(["", ...S.state.people.map((p) => p.id)]);
+        if (ownerOf(l, n) === owner) continue;
+        itemOf(S.state, l, n).owner = owner;
+        commit();
+        delete owners[n];
+      } else if (op < 0.55) {
+        theirs(step);
+      } else {
+        const backwards = r() < 0.6;
+        const res = backwards ? undo() : redo();
+        if (res.empty) continue;
+        assert.equal(res.ok, true, label + " applies");
+        check(label);
+        if (r() < 0.5) {
+          if (r() < 0.6) { theirs(step); between++; }
+          const again = backwards ? redo() : undo();
+          if (again.empty) continue;
+          assert.equal(again.ok, true, label + " the opposite step applies");
+          check(label + " opposite");
+        }
+      }
+    }
+  }
+  assert.ok(checks > 8000 && between > 1500 && crewEdits > 2500, JSON.stringify({ checks, between, crewEdits }));
 });

@@ -55,9 +55,10 @@ test("redo of an older assignment after a crew-changing merge forgot the removal
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
   remoteCrew((st) => st.people.push(person("p_Di", "Di")));
   assert.equal(undo().ok, true);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
   const res = redo();
   assert.equal(res.ok, true);
-  assert.equal(res.cleared, 1);
+  assert.equal(res.cleared, undefined, "the undo changed nothing, so the redo changes nothing (#529)");
   assert.deepEqual(dangling(), []);
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
   assert.equal(ownerOf(migrateRows(clone(S.state)).brollShots, "Dock"), "");
@@ -197,8 +198,9 @@ test("a crew-only redo that clears one owner and re-points another records both,
   assert.deepEqual(dangling(), []);
   const back = undo();
   assert.equal(back.ok, true);
-  assert.deepEqual(S.state.people.map((p) => p.id), ["p_Cy"]);
-  assert.deepEqual(S.state.brollShots.map((b) => b.owner), ["", ""]);
+  assert.equal(back.cleared, 1);
+  assert.deepEqual(S.state.people.map((p) => p.id), ["p_Cy", "pT_ada"], "the crew the redo merged into comes back (#529)");
+  assert.deepEqual(S.state.brollShots.map((b) => b.owner), ["pT_ada", ""]);
   assert.deepEqual(dangling(), []);
   assert.equal(redo().ok, true);
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
@@ -462,6 +464,14 @@ test("an undo or redo that clears an owner announces it, one that does not stays
     remoteCrew((st) => st.people.push(person("p_Di", "Di")));
     assert.equal(undo().ok, true);
     assert.deepEqual(seen, []);
+    assert.equal(redo().ok, true);
+    assert.deepEqual(seen, [], "the undo changed nothing, so the redo clears nothing (#529)");
+    boot(["Ada", "Cy"]);
+    S.state.people = S.state.people.filter((p) => p.id !== "p_Ada");
+    commit();
+    assert.equal(undo().ok, true);
+    assert.deepEqual(seen, []);
+    remoteCrew((st) => { st.productionTags.find((e) => e.name === "Kettle").owner = "p_Ada"; });
     assert.equal(redo().ok, true);
     assert.deepEqual(seen, [1]);
   } finally {
