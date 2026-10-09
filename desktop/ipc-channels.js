@@ -105,7 +105,7 @@ const CHANNELS = [
   { name: "splitpage:restore-notice", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:update-status", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:reassign-doc-id", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
-  { name: "splitpage:draft-flush", direction: "receive", argsSchema: ["number"], allowedOrigins: APP },
+  { name: "splitpage:draft-flush", direction: "receive", argsSchema: ["number", "boolean?"], allowedOrigins: APP },
   { name: "splitpage:voice-event", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
 
   { name: "splitpage:tabstrip-window-id-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: STRIP, refusal: null },
