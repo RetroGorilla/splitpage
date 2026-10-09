@@ -200,6 +200,23 @@ Added by PR 4.0 (the race-matrix harness), PR 4.1 (groups F, I and D) and PR 4.2
 | A publish that finds the tab pointed at another server returns without a word; the document it created on the old server is orphaned and unreported | P1 | `P1` | `src/js/13-hosted.js` (`publishToServer`) | Milestone 4, PR 4.15 |
 | A Drive listing that completes after the modal closed redraws the closed modal's list | C3 | `C3` | `src/js/13-hosted.js` (the Drive modal) | Milestone 4, PR 4.16 |
 
+### Race-matrix cases (PR 4.3)
+
+Added by PR 4.3 (groups B, K, H and M), measured on `758128d`. Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong and declares `wrongToday`; the case id is the tracker, and the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-recovery.test.mjs` (B, K, H) and `src/test/m4-matrix-continuations.test.mjs` (M).
+
+| Defect | Issue or case | Pinned by | Owner on 4.0 | Disposition |
+| --- | --- | --- | --- | --- |
+| A draft write for the previous document that lands late removes the current document's draft record and moves the writer's key to its own: `browserWriteDraft` reads `browserKeyOnDisk` when the write starts (after the picture persist), and `browserDraftRestoreDone` for the new document may have set it since | B1 | `B1` | `src/js/20g-drafts.js` (`browserWriteDraft`, `browserDraftRestoreDone`) | Milestone 4, PR 4.17 (a capture records its key and context at capture time) |
+| A draft retry's backoff is bypassed: the retry timer clears `draftBackoffTimer` before the write, so a change noted while the write is in flight (autosave's `setSaveButtons` does it) schedules a capture 1.5 s later that ignores the 10, 20 or 40 s wait | B4b | `B4b` | `src/js/20g-drafts.js` (`noteDraftChange`, `noteDraftWriteRefused`) | Milestone 4, PR 4.18 (capture scheduling) |
+| A desktop file-draft restore re-checks nothing across its awaits: if the document is replaced while the file is read, the restore replaces the new document with the file's document carrying the draft's text and makes the file its destination | K1 | `K1` | `src/js/20g-drafts.js` (`restoreFileDraft`) | Milestone 4, PR 4.18 |
+| A history restore checks only the document id across its awaits, so after a same-id reopen it replaces the reopened session with the snapshot. What was typed after the reopen is gone from the screen. Not data loss: the restore's retry loop first stores a backup of the reopened session ("Before restoring an earlier version"), measured to hold the typed text | H1 | `H1` | `src/js/03-sync.js` (`restoreSnapshot`) | Milestone 4, PR 4.18 |
+| A delayed paste or drop that finishes after another document was opened says nothing: no toast tells the user the picture was not added (D11). The text and picture are dropped only because the scene ids differ | #478; M1, M4 | `M1`, `M4` | `src/js/21-events.js` (`insertIntoScriptCell`), `src/js/06-rows.js` (`handleImageFile`) | Milestone 4, PR 4.20 (the toast's wording goes to Adam) |
+| A delayed paste, drop or gallery picture is found again by scene id, so after a same-id reopen, or a switch to a copy with the same scene ids, its text and picture go into the other session | #478; M1b, M2, M2d, M4b | `M1b`, `M2`, `M2d`, `M4b` | `src/js/21-events.js` (`insertIntoScriptCell`), `src/js/06-rows.js` (`handleImageFile`) | Milestone 4, PR 4.20 |
+| A delayed paste inserts its text at the selection at completion, not where the paste began: at the caret the user moved to (M3a, M3b), or at the end of the cell if the caret left it (M3c). D11: the captured place if the cell is unchanged, the end of the cell if it was edited | #478; M3a, M3b, M3c | `M3a`, `M3b`, `M3c` | `src/js/21-events.js` (`insertIntoScriptCell`) | Milestone 4, PR 4.20 (places the text from `insertIntoScriptCell`) |
+| A retried thumbnail is written into any document that has the scene id and the video link, so a copy opened meanwhile gets it | #478; M5 | `M5` | `src/js/05e-gallery-overlay.js` (`retryThumbnail`) | Milestone 4, PR 4.20 |
+| A thumbnail fetched for a paste checks only the document id, so after a same-id reopen it is written into the reopened session | #478; M6 | `M6` | `src/js/05v-video.js` (`thumbnailsAfterPaste`) | Milestone 4, PR 4.20 |
+| An annotation flattened before a same-id reopen is saved into the reopened session: the annotator stays open across the reopen and finds its scene by id | #478; M7 | `M7` | `src/js/05w-annotate.js` (`done`, `save`) | Milestone 4, PR 4.20 |
+
 ## Not in this table
 
 - #302 is a test gap, not a defect: two b-roll id draws that no test pins. It stays in the post-M2 queue as a tests-only PR.

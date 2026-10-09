@@ -47,7 +47,7 @@ Alongside: collaboration behind application interfaces with an explicit authorit
 | E4 | One transition API adopts open, new, restore and publish, with today's identity and fork rules (INV-36). `S.state` assigners fall from 9 to 2: the prelude's initial `null` and the live-document port the transition bridge is handed | INV-36's application tests; matrix group T; `node tools/dep-report.mjs --metrics` |
 | E5 | Hosted Save As is a copy that acknowledges no server edit and keeps its merge ancestor. Import writeback acknowledges only its own destination and bytes. A failed or cancelled save never retargets Save | Matrix cases C1, I1, I2, F3; suites 22, 249, 261 |
 | E6 | Collaboration runs behind application interfaces with an explicit authority model (owner, scoped editor, reviewer). Modal stale-completion checks stay. The server stays authoritative, and a client capability never broadens a link's permission | Authority application tests; suites 18, 43, 59, 260 to 264, 361; `tools/test-server.mjs` unchanged |
-| E7 | Recovery is split into capture scheduling, store adapters, writer ownership and restore policy. A writer discards only the draft generation acknowledged to it. Restoring never saves (INV-40, INV-41, INV-51) | Matrix groups B, K, H; `browser-drafts.test.mjs`, `desktop/test/drafts.test.mjs`; suites 26, 63, 265; desktop smoke `draft:` and `history:`; recovery cases for multi-tab ownership, quota, unavailable and corrupt storage, offline images, restart and revoked links |
+| E7 | Recovery is split into capture scheduling, store adapters, writer ownership and restore policy. A writer discards only the draft generation acknowledged to it. Restoring never saves (INV-40, INV-41, INV-51) | Matrix groups B, K, H; `browser-drafts.test.mjs`, `desktop/test/drafts.test.mjs`; suites 26, 63, 265; desktop smoke `draft:` and `history:`; recovery cases for multi-tab ownership, quota, unavailable and corrupt storage, offline images (B10 covers the half where pictures cannot be stored locally and travel inline in the draft; the half where they are stored locally and brought back is suite 26 and the `#82` smoke group on the desktop, and 4.19's PR adds the browser case), restart and revoked links |
 | E8 | The capture contract: `buildSplitpageFile`, `buildMarkdownProject`, `standaloneHtmlFor`, `toMarkdownDoc` and `exportFacts` take the captured `ExportDocument`, which carries core's production, comment and b-roll read models. Run with the live document mutated after capture, each produces the captured bytes | Matrix group X; the format goldens and INV-60 unchanged |
 | E9 | A document or tab replacement leaves no document-owned handler, timer, observer, subscription or object URL behind. The test calls the owners' own dispose, advances a fake clock, settles pending work, never relies on `src/test/_app-boot.mjs`'s housekeeping, and names each app-lifetime subscription that survives | The lifecycle test, matrix group L |
 | E10 | Every document-scoped continuation (delayed paste or drop, gallery picture, thumbnails, annotator, recovery capture) captures the epoch and document id before its `await` and refuses to complete in another epoch (#478) | Matrix group M |
@@ -114,7 +114,7 @@ The plan's gate names five things to assert: the bytes actually stored, the live
 
 A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only when its assertion fails, and fails the run with "now right" when it starts to pass, so the PR that fixes it must flip it in the same commit. node's `todo` is not enough, because it stays quiet when a case starts passing. The harness has its own self-test for both directions. At the gate no case is `wrongToday`.
 
-"Today" below is predicted from the code at `f66789a`. 4.0 to 4.3 record what each case actually does on the base and correct this column in the same PR. PR 4.0 measured groups X, E, T and L on `f338fea`, so those rows state what the cases do; PR 4.1 measured groups F, I and D on `8cc553d`; PR 4.2 measured groups S, P, C and A on `8cc553d`. Where a row was split into cases, the case ids follow. The cases are in `src/test/m4-matrix-session.test.mjs` (T3 in `src/test/m4-matrix-boot.test.mjs`), for F, I and D in `src/test/m4-matrix-files.test.mjs`, and for S, P, C and A in `src/test/m4-matrix-hosted.test.mjs`, built on `src/test/_m4-matrix.mjs`; every `wrongToday` case has a row in [pinned-defects.md](pinned-defects.md#found-during-milestone-4).
+"Today" below is predicted from the code at `f66789a`. 4.0 to 4.3 record what each case actually does on the base and correct this column in the same PR. PR 4.0 measured groups X, E, T and L on `f338fea`, so those rows state what the cases do; PR 4.1 measured groups F, I and D on `8cc553d`; PR 4.2 measured groups S, P, C and A on `8cc553d`; PR 4.3 measured groups B, K, H and M on `758128d`. Where a row was split into cases, the case ids follow; B4b, B11, H1-switch and M0 to M7-switch are 4.3's. The cases are in `src/test/m4-matrix-session.test.mjs` (T3 in `src/test/m4-matrix-boot.test.mjs`), for F, I and D in `src/test/m4-matrix-files.test.mjs`, for S, P, C and A in `src/test/m4-matrix-hosted.test.mjs`, for B, K and H in `src/test/m4-matrix-recovery.test.mjs`, and for M in `src/test/m4-matrix-continuations.test.mjs`, built on `src/test/_m4-matrix.mjs`; every `wrongToday` case has a row in [pinned-defects.md](pinned-defects.md#found-during-milestone-4).
 
 | ID | Case | Today | Green in |
 | --- | --- | --- | --- |
@@ -165,22 +165,39 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | C3 | A Drive listing that completes after the modal closed changes nothing | wrong (measured: the closed modal's list is redrawn) | 4.16 |
 | C3-download | A Drive download started before the modal closed is still delivered after it closes: the file is saved and the "Saved …" toast shows (Adam's ruling: closing the window is not a cancel) | right (measured) | stays |
 | A1 | Owner, scoped editor and reviewer each get exactly today's client capability; none broadens what the server allows. The case pins the observable table: command outcome, document `PUT`s, the publish and open menu states, the collaborate refusal and the publish `POST` | right (measured: owner edits, saves, publishes, opens and invites; scoped editor edits and saves only; reviewer's edit is rejected and sends no `PUT`) | stays |
-| B1 | A late draft write for the previous document neither removes the current document's draft record nor claims its key | wrong | 4.17 |
-| B2 | Two tabs on one document: with Web Locks, a live writer's draft is not taken over | right | stays |
-| B3 | Without Web Locks, every other writer counts as dead and its draft is taken over (D12) | record | 4.17 |
-| B4–B6 | Quota pauses and backs off; unavailable storage turns drafts off; a corrupt record reads as none | right | stays |
-| B7 | A writer discards only the draft generation acknowledged to it | record | 4.17 |
-| B8 | A restore never writes the user's file or the server | right | stays |
-| B9 | A revoked link keeps the draft as an unsaved local copy and never writes to the server | right | stays |
-| B10 | A draft whose pictures could not be persisted restores with them | right | stays |
-| K1 | A desktop file-draft restore whose document is replaced across its awaits does not overwrite the replacement | wrong | 4.18 |
-| K2 | A desktop draft write after the tab navigated is refused (`STALE_SEQ`) | right | stays |
-| H1 | A history restore that completes after a same-id reopen does not overwrite the reopened session | wrong | 4.18 |
-| H2 | A snapshot holds the document as it was when `pushSnapshot` was called (INV-39) | right | stays |
-| M1–M3 | A delayed paste or drop completes after a document switch (M1) or a same-id reopen (M2): refused, nothing written; the selection changes while media loads (M3): D11 (#478) | wrong | 4.20 |
-| M4 | A gallery picture (`handleImageFile`) that finishes after a switch or reopen is refused | wrong | 4.20 |
-| M5, M6 | `retryThumbnail` after a switch; `thumbnailsAfterPaste` after a same-id reopen: refused | wrong | 4.20 |
-| M7 | The annotator's save after a switch is refused | record | 4.20 |
+| B1 | A late draft write for the previous document neither removes the current document's draft record nor claims its key. The case holds the picture persist of document A's capture, opens document B with its own draft (the writer then tracks B's key), and lets A's write land | wrong (measured: A's write removes B's draft record and sets the writer's key to A's; `before` is read when the write starts, after the persist) | 4.17 |
+| B2 | Two tabs on one document: with Web Locks, a live writer's draft is not taken over, and it is once that writer's lock is gone | right (measured) | stays |
+| B3 | Without Web Locks, every other writer counts as dead and its draft is taken over (D12) | right (measured: pinned as D12 says) | stays |
+| B4 | Quota pauses crash recovery with one notice and backs off 5, 10, 20 and 40 seconds; the first write that lands carries the latest work and ends the pause. Autosave is off in the case | right (measured) | stays |
+| B4b | A change noted while a retry's write is in flight does not bring the next retry forward from its backoff | wrong (measured: the retry timer clears `draftBackoffTimer` before the write, so `noteDraftChange` schedules a capture, 1.5 s later, that ignores the 10 s wait; found when autosave, which calls it through `setSaveButtons`, ran in the first draft of B4) | 4.18 (capture scheduling) |
+| B5 | Unavailable storage turns browser drafts off with no notice and no retry | right (measured) | stays |
+| B6 | A corrupt record (not JSON, JSON that is not a document, a header with no body) reads as none: not resumed, not offered, nothing thrown | right (measured) | stays |
+| B7 | A writer discards only the draft it wrote: a newer generation written by another tab survives this tab's discard | right (measured: `remove` takes the writer id) | stays; 4.17 keeps it as generations replace the single key |
+| B8 | A restore never writes the user's file or the server: a browser draft resumed onto a server document, and an unsaved script restored, send no write and arm no autosave (the file halves are T5 and T5-merge) | right (measured) | stays |
+| B9 | A revoked link keeps the draft as an unsaved local copy with a new id and never writes to the server | right (measured; the server answers 404 to the resume) | stays |
+| B10 | A draft whose pictures could not be persisted carries them inline and restores with them. This covers only the inline half of offline images. Pictures stored locally and brought back are covered by suite 26 and the `#82` smoke group on the desktop, and the browser case for them comes with 4.19's blob store | right (measured) | stays |
+| B11 | After a restart, the work left by the closed session comes back as unsaved work and writes nothing: an untitled draft, and a file draft whose file is gone (an unsaved copy) | right (measured) | stays |
+| K1 | A desktop file-draft restore whose document is replaced across its awaits does not overwrite the replacement | wrong (measured: the late restore replaces the new blank script with the file's document carrying the draft's text, and makes the file its destination) | 4.18 |
+| K2 | A desktop draft write after the tab navigated is refused (`STALE_SEQ`), leaves no draft and pauses nothing; the next write lands. Runs the real `desktop/drafts.js` store as the bridge | right (measured) | stays |
+| H1 | A history restore that completes after a same-id reopen does not overwrite the reopened session. The case holds the restore's backup snapshot (`delay-put`) | wrong (measured: the snapshot replaces the reopened session, so what was typed in it after the reopen is gone from the screen. Not data loss: the restore's retry loop first stores a backup of the reopened session, "Before restoring an earlier version", and it holds the typed text) | 4.18 |
+| H1-switch | A history restore that completes after another document was opened is refused ("changed") and says so | right (measured) | stays |
+| H2 | A snapshot holds the document as it was when `pushSnapshot` was called (INV-39) | right (measured) | stays |
+| M0, M0b | Controls: in an untouched document a delayed paste lands at its caret with its picture, and a late gallery picture, retried thumbnail, pasted link's thumbnail and annotation each land on their scene | right (measured) | stays |
+| M1 | A delayed paste that completes after another document (other scene ids) was opened changes nothing and tells the user the picture was not added (D11; the cases check only that a toast other than the success toast appears, because the wording is Adam's) | wrong (measured: nothing is written, because the scene ids differ, but no toast) | 4.20 |
+| M1b | The same with a document whose scenes have the same ids (a copy) | wrong (measured: the picture and the text go into the other document) | 4.20 |
+| M2 | The same after a same-id reopen | wrong (measured: the picture and the text go into the reopened session) | 4.20 |
+| M2d | A delayed drop on a scene's image section after a same-id reopen | wrong (measured: the picture goes into the reopened session) | 4.20 |
+| M3a | A delayed paste puts its text where the paste began if the cell is unchanged, however the caret moved inside it (D11) | wrong (measured: the text goes in at the caret the user moved to) | 4.20 |
+| M3b | If the cell was edited while the picture loaded, the text goes at the end of the cell (D11) | wrong (measured: at the caret, which the case put at the start) | 4.20 |
+| M3c | If the caret moved to another cell, the text still goes into the cell the paste began in, where it began (D11) | wrong (measured: at the end of the original cell) | 4.20 |
+| M4 | A gallery picture (`handleImageFile`) that finishes after another document was opened changes nothing and tells the user | wrong (measured: nothing is written, no toast) | 4.20 |
+| M4b | The same after a same-id reopen | wrong (measured: the picture goes into the reopened session) | 4.20 |
+| M5 | `retryThumbnail` that arrives after another document with the same scene and video link was opened changes nothing in it | wrong (measured: the thumbnail is written into the other document) | 4.20 |
+| M5b | `retryThumbnail` that arrives after an unrelated document was opened changes nothing in it | right (measured: nothing is written, but the unrelated document shows "Could not get this video's thumbnail — you may be offline, or the video is private or gone." Whether that toast is acceptable is open: see Questions for Adam) | stays |
+| M6 | `thumbnailsAfterPaste` after a same-id reopen changes nothing in the reopened session | wrong (measured: the thumbnail is written into it, because the check is the document id) | 4.20 |
+| M6-switch | `thumbnailsAfterPaste` after a copy with another document id and the same scenes was opened changes nothing in it | right (measured: the document id check catches it) | stays |
+| M7 | The annotator's save after a same-id reopen changes nothing in the reopened session | wrong (measured: the annotation is saved into it; the annotator stays open across the reopen) | 4.20 |
+| M7-switch | The annotator's save after an unrelated document was opened changes nothing in it | right (measured: the annotator closes when its scene is gone) | stays |
 
 "record" means the outcome could not be predicted from reading alone; the matrix PR records it as `rightToday` or `wrongToday`, and a `wrongToday` case is turned green by the PR named.
 
@@ -250,7 +267,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.0 Matrix harness.** The held ports and the `rightToday`/`wrongToday` wrapper above, with a self-test that a `wrongToday` case that passes fails the run and a `rightToday` case that fails fails it. Groups X, E, T and L. Records the actual "Today" column for its groups and adds a row per wrong case to [pinned-defects.md](pinned-defects.md) (the case id is the tracker; no separate issues). No source change. Evidence: `npm run verify`; no browser suite changes.
 
-**4.1, 4.2, 4.3 Matrix groups.** One case file each, the same rules. 4.2 builds its server from the held fetch, as `publish-in-flight` and `entry-fuzz-app` do, with each request recording which connection sent it. 4.3 includes the recovery cases the gate names (multi-tab ownership, quota, unavailable and corrupt storage, offline images, restart, revoked links) at the booted-app level; the browser and desktop halves stay suites 265 and 26 and the `draft:` groups.
+**4.1, 4.2, 4.3 Matrix groups.** One case file each, the same rules. 4.2 builds its server from the held fetch, as `publish-in-flight` and `entry-fuzz-app` do, with each request recording which connection sent it. 4.3 includes the recovery cases the gate names (multi-tab ownership, quota, unavailable and corrupt storage, offline images, restart, revoked links) at the booted-app level; the browser and desktop halves stay suites 265 and 26 and the `draft:` groups. B10 covers only the inline half of offline images; the stored half is suite 26 and the `#82` smoke group on the desktop, and 4.19's PR adds its browser case.
 
 **4.4 Render invariant tests (#463, D7).** Before any mechanism: whatever focus or blur a render causes, it commits no cell's DOM to the document, rolls back no accepted update, and lets no stale DOM overwrite the current document. Cases: a render with a grid cell focused, with a Writer paragraph focused, an incoming merge while a cell holds focus, a render that throws part-way, `restoreRenderFocus` with the Writer open. Booted-app tests with the real handlers, and one browser suite with CDP focus emulation (#471). Since #477 most should pass; any that fail are `wrongToday` cases for 4.21. Also records the render and typing medians from `perf-record` as 4.21's base.
 
@@ -377,6 +394,7 @@ None of the measured defects is cheap data loss reachable today: each needs an o
 | Publish orphan unreported | P1 | 4.15 | — |
 | Drive modal has no stale check | C3 | 4.16 | — |
 | A late draft write touches another document's key | B1 | 4.17 | — |
+| A change noted during a draft retry's write brings the next retry forward from its backoff | B4b | 4.18 | — |
 | Restores re-check nothing across awaits | K1, H1 | 4.18 | — |
 | A draft restored onto an unchanged file leaves autosave armed, so the recovered edits are written to the file | T5 | 4.18 | — |
 | A replaced document leaves its refresh job and its session video object URLs behind | L1a, L1c | 4.7, 4.8, 4.22 | — |
@@ -417,6 +435,7 @@ The draft's seven questions are answered (D9 to D15). What stays open is wording
 - **The obsolete-save toast (D10)**, with 4.9. The draft wording to start from: "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged."
 - **The dropped-picture toast (D11)**, with 4.20. The draft wording to start from: "The picture finished loading after you opened another script, so it was not added."
 - **The moved-file notice on "Review" (D15)**, with #500's PR, only if the close notice's text does not fit there.
+- **A retried thumbnail that arrives after the user opened an unrelated document (M5b)**, with 4.20. Today that document shows "Could not get this video's thumbnail — you may be offline, or the video is private or gone." Options: keep it, drop the result silently, or give it D11's dropped-picture toast. The case checks only that nothing is written.
 
 ## Spec notes
 
