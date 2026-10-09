@@ -4,7 +4,7 @@ import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
-import { pad2, render } from "./05-render.js";
+import { pad2, paintingScreen, render, whilePainting } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
 import {
   findOrAddPerson,
@@ -663,20 +663,54 @@ function focusKey(el) {
   return sel;
 }
 
+var RECORD_INPUTS = [
+  { cls: "broll-notes-input", field: "notes" },
+  { cls: "broll-ref-input", field: "audioRef" },
+  { cls: "broll-loc-input", field: "location" }
+];
+
+function recordField(el) {
+  if (!el || !el.classList || !el.getAttribute || !el.getAttribute("data-id")) return null;
+  for (var i = 0; i < RECORD_INPUTS.length; i++) {
+    if (el.classList.contains(RECORD_INPUTS[i].cls)) return RECORD_INPUTS[i].field;
+  }
+  return null;
+}
+
+function typedSinceDrawn(el) {
+  return el.value !== el.defaultValue;
+}
+
+function typedChange(el) {
+  var field = recordField(el);
+  var rec = field && brollRecord(el.getAttribute("data-id"));
+  if (!rec || !typedSinceDrawn(el)) return null;
+  var next = field === "location" ? cappedText(el.value, 80) : cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
+  if (rec[field] === next) return null;
+  var change = {};
+  change[field] = next;
+  return change;
+}
+
 function keepingFocus(container, draw) {
   var active = document.activeElement;
   var kept = null;
   if (active && container.contains(active)) {
     var typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
-    kept = { key: focusKey(active), typed: typed, value: active.value,
+    var ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
+    if (ownValue && !reviewMode()) {
+      var change = typedChange(active);
+      if (change) writeRecord(active.getAttribute("data-id"), change);
+    }
+    kept = { key: focusKey(active), typed: typed, ownValue: ownValue, value: active.value,
              start: typed ? active.selectionStart : 0, end: typed ? active.selectionEnd : 0 };
   }
-  draw();
+  whilePainting(draw);
   if (!kept || !kept.key) return;
   var again = container.querySelector(kept.key);
   if (!again) return;
+  if (kept.ownValue) again.value = kept.value;
   if (kept.typed) {
-    again.value = kept.value;
     try { again.setSelectionRange(kept.start, kept.end); } catch (e) { }
   }
   again.focus({ preventScroll: true });
@@ -747,13 +781,18 @@ function entryById(id) {
   return null;
 }
 
-function updateRecord(id, fields) {
+function writeRecord(id, fields) {
   var rec = brollRecord(id);
   if (!rec) return null;
   Object.keys(fields).forEach(function (k) { rec[k] = fields[k]; });
   markDirty();
   queueAutoSave();
-  renderBrollViews();
+  return rec;
+}
+
+function updateRecord(id, fields) {
+  var rec = writeRecord(id, fields);
+  if (rec) renderBrollViews();
   return rec;
 }
 
@@ -913,11 +952,9 @@ function commitPropInput(input) {
 }
 
 function commitLocation(input) {
-  var id = input.getAttribute("data-id");
-  var rec = brollRecord(id);
   editingLocFor = null;
-  var clean = cappedText(input.value, 80);
-  if (rec && rec.location !== clean) updateRecord(id, { location: clean });
+  var change = typedChange(input);
+  if (change) updateRecord(input.getAttribute("data-id"), change);
   else renderBrollViews();
 }
 
@@ -1104,23 +1141,15 @@ function focusBulkInput() {
 }
 
 function onBrollFocusOut(e) {
-  if (reviewMode()) return;
+  if (reviewMode() || paintingScreen()) return;
   var el = e.target;
-  var id = el.getAttribute && el.getAttribute("data-id");
-  if (!id) return;
-  var rec = brollRecord(id);
-  if (!rec) return;
-  if (el.classList.contains("broll-notes-input")) {
-    var notes = cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
-    if (rec.notes !== notes) updateRecord(id, { notes: notes });
-  } else if (el.classList.contains("broll-ref-input")) {
-    editingRefFor = null;
-    var ref = cappedLongText(plainText(el.value), BROLL_TEXT_MAX);
-    if (rec.audioRef !== ref) updateRecord(id, { audioRef: ref });
-    else renderBrollViews();
-  } else if (el.classList.contains("broll-loc-input")) {
-    commitLocation(el);
-  }
+  var field = recordField(el);
+  if (!field || !brollRecord(el.getAttribute("data-id"))) return;
+  if (field === "location") { commitLocation(el); return; }
+  if (field === "audioRef") editingRefFor = null;
+  var change = typedChange(el);
+  if (change) updateRecord(el.getAttribute("data-id"), change);
+  else if (field === "audioRef") renderBrollViews();
 }
 
 function onBrollKeydown(e, root) {

@@ -14,7 +14,7 @@ import {
   cellFormatState,
   editableCellHtml,
   pad2,
-  render,
+  renderAbsorbed,
   syncFieldFromDom,
   toggleCellDirection,
   toggleCellFormat,
@@ -343,7 +343,7 @@ export function closeWriter() {
   writerOpen = false;
   S.writerLastCell = null;
   hideTagGhost();
-  render();
+  renderAbsorbed();
 }
 
 export function writerUndoStep(dir) {
