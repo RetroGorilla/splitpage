@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
+import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, noteRemoteChange, redo, trackDocument, undo } from "../js/12a-undo.js";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -92,7 +93,50 @@ for (const list of ["brollShots", "productionTags"]) {
     assert.equal(undo().ok, true);
     assert.equal(undo().empty, true);
   });
+
+  test("a collaborator's edit to another item that arrives through a merge keeps the entry, in " + list + " (#518)", () => {
+    foldedCrewEntry(list);
+    const synced = clone(S.state);
+    const theirs = clone(synced);
+    itemOf(theirs, list, "Quay").notes = "from them";
+    const merged = mergeStates(clone(synced), clone(S.state), theirs).merged;
+    remote((st) => { st[list] = merged[list]; });
+    const back = undo();
+    assert.equal(back.ok, true);
+    assert.equal(back.cleared, 1);
+    assert.deepEqual(crew(), ["Cy"]);
+    assert.equal(ownerOf(list, "Dock"), "");
+    assert.equal(itemOf(S.state, list, "Quay").notes, "from them");
+  });
 }
+
+test("the folded owner change leaves alone an owner I unassigned later, and does not count it as cleared (#518)", () => {
+  S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+    { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
+  ] });
+  S.state.people.push(person("p_Cy", "Cy"));
+  S.state.brollShots.push(shot("bs_dock", "Dock", ""), shot("bs_quay", "Quay", ""));
+  trackDocument();
+  S.state.people.push(person("p_Ada", "Ada"));
+  commit();
+  assert.equal(undo().ok, true);
+  S.state.people.push(person("pT_ada", "ADA"));
+  itemOf(S.state, "brollShots", "Dock").owner = "pT_ada";
+  S.state.brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
+  assert.equal(redo().cleared, 1);
+  assert.equal(ownerOf("brollShots", "Dock"), "p_Ada");
+  itemOf(S.state, "brollShots", "Dock").owner = "";
+  commit();
+  remote((st) => { itemOf(st, "brollShots", "Quay").notes = "from them"; });
+  const back = undo();
+  assert.equal(back.ok, true);
+  assert.equal(back.cleared, 1, "only Pier, which the undo gave back to a person no longer in the crew");
+  assert.deepEqual(crew(), ["Cy"]);
+  assert.equal(ownerOf("brollShots", "Dock"), "");
+  assert.equal(ownerOf("brollShots", "Pier"), "");
+  assert.equal(itemOf(S.state, "brollShots", "Quay").notes, "from them");
+  assert.deepEqual(dangling(), []);
+});
 
 function rng(seed) {
   let a = seed >>> 0;
