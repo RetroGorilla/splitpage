@@ -486,14 +486,14 @@ export function whilePainting(draw) {
     return out;
   } finally {
     painting--;
-    if (!painting) runAfterPaint(drawn);
+    if (!painting && drawn) runAfterPaint();
   }
 }
 
-function runAfterPaint(drawn) {
+function runAfterPaint() {
   var queued = afterPaint;
   afterPaint = [];
-  if (drawn) queued.forEach(function (fn) { fn(); });
+  queued.forEach(function (fn) { fn(); });
 }
 
 export function afterThisPaint(fn) {

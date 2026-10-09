@@ -131,6 +131,7 @@ function observe(run) {
   flushEdits();
   const seq = S.editSeq, generation = session.generation(), sizes = undoSizes();
   published.length = 0;
+  publishedWhilePainting.length = 0;
   const value = chromiumRemoval(run);
   flushEdits();
   return {
@@ -299,7 +300,7 @@ test("a paint nested in another ends without ending the outer one: a focusout th
   textNodeAt(gridCell("r2"), 0)[0].data = "Mine two.";
 });
 
-test("work queued during a nested paint runs once, after the outermost paint ends; with no paint it runs at once; a paint that throws drops it (#485)", () => {
+test("work queued during a nested paint runs once, after the outermost paint ends; with no paint it runs at once; after a paint that throws it waits for the next paint that finishes (#485)", () => {
   const ran = [];
   whilePainting(() => {
     whilePainting(() => afterThisPaint(() => ran.push("queued")));
@@ -309,11 +310,14 @@ test("work queued during a nested paint runs once, after the outermost paint end
   afterThisPaint(() => ran.push("now"));
   assert.deepEqual(ran, ["outer", "queued", "now"]);
   assert.throws(() => whilePainting(() => {
-    afterThisPaint(() => ran.push("dropped"));
+    afterThisPaint(() => ran.push("kept"));
     throw new Error("paint broke (#485)");
   }), /paint broke/);
-  whilePainting(() => {});
   assert.deepEqual(ran, ["outer", "queued", "now"]);
+  whilePainting(() => {});
+  assert.deepEqual(ran, ["outer", "queued", "now", "kept"]);
+  whilePainting(() => {});
+  assert.deepEqual(ran, ["outer", "queued", "now", "kept"]);
 });
 
 function withShot(title) {
@@ -470,7 +474,6 @@ test("a length typed into the scene-length editor is set after a redraw that rem
   openLength("r1").value = "2:00";
   const theirs = cloneState(doc);
   theirs.rows[0].status = "shot";
-  publishedWhilePainting.length = 0;
   const got = observe(() => merge(theirs));
   assert.equal(lengthBox(), null, "the redraw took the editor away");
   assert.ok(removals.length > 0, "the editor lost focus during the redraw");
@@ -492,7 +495,7 @@ test("an untouched scene-length editor that a redraw removes sets nothing and ke
   assert.equal(lengthOf("r1"), 45);
 }));
 
-test("a length typed into an editor that a failing redraw removed is not set, by the failed redraw or by the Redraw after it (#485)", () => hidingShotScenes(() => {
+test("a length typed into an editor that a failing redraw removed is not set by the failed redraw, and is set once Redraw draws (#485)", () => hidingShotScenes(() => {
   const doc = fresh("Length failed");
   openLength("r1").value = "2:00";
   const theirs = cloneState(doc);
@@ -519,6 +522,8 @@ test("a length typed into an editor that a failing redraw removed is not set, by
     .find((el) => el.firstChild && el.firstChild.nodeValue === REDRAW);
   assert.ok(toast, "the redraw toast is offered");
   const redrawn = observe(() => toast.querySelector(".toast-action").click());
-  assert.deepEqual(noEdit(redrawn), NO_EDIT);
-  assert.equal(lengthOf("r1"), undefined);
+  assert.equal(redrawn.edits, 1);
+  assert.equal(lengthOf("r1"), 120);
+  assert.equal(S.state.rows[0].status, "shot");
+  assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
 }));
