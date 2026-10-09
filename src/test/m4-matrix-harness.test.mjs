@@ -32,9 +32,24 @@ test("judge: a rightToday case that passes passes, and one that fails fails with
 });
 
 test("judge: a wrongToday case passes only by failing the assertion it names", async () => {
-  assert.equal(await judge("X9", "wrong", failing, /Expected values to be strictly equal/), "wrong");
   const named = async () => { assert.equal(1, 2, "the defect shows"); };
   assert.equal(await judge("X9", "wrong", named, /the defect shows/), "wrong");
+});
+
+test("judge: an expectation that node's default assertion messages also match is refused before the case runs", async () => {
+  for (const expects of [/Expected values to be strictly equal/, /strictly deep-equal/, /falsy value/, /did not match/, /unequal to/, /^Failed$/]) {
+    let ran = false;
+    await assert.rejects(judge("X9", "wrong", async () => { ran = true; }, expects), /X9 names an expected message that node's default assertion messages also match; use an assert with a label/, String(expects));
+    assert.equal(ran, false);
+  }
+});
+
+test("judge: an expectation with the g or y flag is refused before the case runs", async () => {
+  for (const expects of [/the defect shows/g, /the defect shows/y]) {
+    let ran = false;
+    await assert.rejects(judge("X9", "wrong", async () => { ran = true; }, expects), /X9 names an expected message with the g or y flag/, String(expects));
+    assert.equal(ran, false);
+  }
 });
 
 test("judge: a wrongToday case that fails a different assertion fails, with the assertion it failed on", async () => {

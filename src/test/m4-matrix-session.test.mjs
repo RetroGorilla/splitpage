@@ -540,10 +540,10 @@ wrongToday("L1a", "a refresh the old document asked for does not run once the do
   provideRefreshRunner((due) => jobs.push(...due));
   useDocument(script("Old document"));
   clock.tick(5000);
-  jobs.length = 0;
   requestRefresh("m4-old-document");
   startNewScript();
   assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+  jobs.length = 0;
   clock.tick(5000);
   assert.equal(jobs.includes("m4-old-document"), false, "the old document's refresh did not run after the replacement: " + jobs.join(","));
 }, /the old document's refresh did not run after the replacement/);
