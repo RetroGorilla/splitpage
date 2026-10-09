@@ -114,7 +114,7 @@ The plan's gate names five things to assert: the bytes actually stored, the live
 
 A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only when its assertion fails, and fails the run with "now right" when it starts to pass, so the PR that fixes it must flip it in the same commit. node's `todo` is not enough, because it stays quiet when a case starts passing. The harness has its own self-test for both directions. At the gate no case is `wrongToday`.
 
-"Today" below is predicted from the code at `f66789a`. 4.0 to 4.3 record what each case actually does on the base and correct this column in the same PR. PR 4.0 measured groups X, E, T and L on `f338fea`, so those rows state what the cases do; PR 4.1 measured groups F, I and D on `8cc553d`. Where a row was split into cases, the case ids follow. The cases are in `src/test/m4-matrix-session.test.mjs` (T3 in `src/test/m4-matrix-boot.test.mjs`) and, for F, I and D, `src/test/m4-matrix-files.test.mjs`, built on `src/test/_m4-matrix.mjs`; every `wrongToday` case has a row in [pinned-defects.md](pinned-defects.md#found-during-milestone-4).
+"Today" below is predicted from the code at `f66789a`. 4.0 to 4.3 record what each case actually does on the base and correct this column in the same PR. PR 4.0 measured groups X, E, T and L on `f338fea`, so those rows state what the cases do; PR 4.1 measured groups F, I and D on `8cc553d`; PR 4.2 measured groups S, P, C and A on `8cc553d`. Where a row was split into cases, the case ids follow. The cases are in `src/test/m4-matrix-session.test.mjs` (T3 in `src/test/m4-matrix-boot.test.mjs`), for F, I and D in `src/test/m4-matrix-files.test.mjs`, and for S, P, C and A in `src/test/m4-matrix-hosted.test.mjs`, built on `src/test/_m4-matrix.mjs`; every `wrongToday` case has a row in [pinned-defects.md](pinned-defects.md#found-during-milestone-4).
 
 | ID | Case | Today | Green in |
 | --- | --- | --- | --- |
@@ -148,22 +148,23 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | I1 | An edit while import writeback awaits its bytes leaves the import home dirty. The bytes wait on a held blob load; the case claims no byte capture (Spec notes) | wrong (measured: `docIdAtBuild` and `seqAtBuild` are taken after the build, so the edit counts as written and the import home reads saved) | 4.12 |
 | I2 | Import writeback acknowledges only the import home | right (measured) | stays |
 | D1 | An export or download acknowledges nothing. The case runs the md, html, csv and txt exports in the browser and the md export on the desktop. It does not cover Save's own download fallback, which by the code sets the baseline and clears the dirty state when the download succeeds (`saveDoc`'s no-handle branch); Ruled in the review of #537: Save's download fallback stays as today's behaviour and is outside D1's scope | right (measured, exports only) | stays |
-| S1 | A hosted save whose document is switched for another acknowledges nothing in the new one | right | stays |
-| S2 | A hosted save that completes after a same-id reopen does not move the reopened session's revision or baseline | wrong | 4.14 |
-| S3 | A tab pointed at another server mid-save sends none of the remaining uploads or the `PUT` there | wrong | 4.14 |
-| S4 | A token, role or scope change mid-save is seen as a different connection | wrong | 4.8 (instances), 4.14 |
-| S5 | An edit during a hosted save leaves the document dirty | right | stays |
-| S6 | A 409 merges into the session that sent the save, and the retry carries that merge; a 409 after a switch or reopen merges nothing | record | 4.14 |
-| S7 | Overlapping manual and automatic saves send one `PUT` at a time per document | wrong | 4.9 |
-| S10 | Copying a share link on a dirty document (`publishAndCopyShareLink`) while a save runs sends one `PUT` at a time and completes through the same queue | wrong | 4.9 |
-| S8 | A failed upload or `PUT` (500, `missing-blobs`, offline) writes no record and keeps the document dirty (INV-52) | right | stays |
-| S9 | A link turned off or a role lowered mid-save authorizes no write; the work stays as an unsaved local copy | right | stays |
-| P1 | A publish whose connection changed reports the document it created on the old server | wrong (silent) | 4.15 |
-| P2, P3 | Publish while another document is opened (#247); typing during publish stays dirty (#248) | right | stays |
-| C1 | Hosted Save As acknowledges no server edit and keeps the merge ancestor | right | stays |
-| C2 | A collaboration modal step that completes after the modal closed changes nothing | right | stays |
-| C3 | A Drive listing or download that completes after the modal closed changes nothing | wrong | 4.16 |
-| A1 | Owner, scoped editor and reviewer each get exactly today's client capability; none broadens what the server allows | right | stays |
+| S1 | A hosted save whose document is switched for another acknowledges nothing in the new one | right (measured) | stays |
+| S2 | A hosted save that completes after a same-id reopen does not move the reopened session's revision or baseline. The case also saves once more after the reopen and asserts the server still holds the first save's text | wrong (measured: the late save sets the reopened home's revision and baseline and clears its dirty mark while the screen shows the reopened text. The next save is accepted without a 409 and reverts the saved text on the server, which keeps no revision history; the typed text survives only in the local snapshot "Before opening …"). Ruled cheap reachable data loss by the coordinator: a separate small fix PR ahead of M4 | the fix PR, then 4.14 |
+| S3 | A tab pointed at another server mid-save sends none of the remaining uploads or the `PUT` there | wrong (measured: the remaining blob upload and the document `PUT` go to the new server) | 4.14 |
+| S4, S4-token | A token, role or scope change mid-save is seen as a different connection (S4, the instances half: the case runs the three changes in turn). A token changed mid-save is carried by no request of that save (S4-token, the transport half) | wrong (measured: the change mutates the one `conn` object, so every request of the save records the same connection; and the next blob upload and the document `PUT` carry the new token) | S4 4.8 (instances), 4.14; S4-token 4.14 |
+| S5 | An edit during a hosted save leaves the document dirty | right (measured) | stays |
+| S6, S6-switch, S6-reopen | A 409 merges into the session that sent the save, and the retry carries that merge (S6); a 409 after a switch merges nothing and sends no retry (S6-switch); a 409 after a same-id reopen the same (S6-reopen) | S6 and S6-switch right (measured). S6-reopen wrong (measured: the loop continues in the reopened session and sends a second `PUT` with the reopened content, which moves the server revision and the reopened home's revision; no content is lost) | S6-reopen 4.14; the others stay |
+| S7 | Overlapping manual and automatic saves send one `PUT` at a time per document. The case starts the second save from the save-error banner's retry button, a caller that bypasses the busy flag (so do `openPrompterElsewhere` and `window.__splitpageFormats.save`); the Save action itself is refused while a save runs | wrong (measured: two `PUT`s are sent while the first is in flight) | 4.9 |
+| S10 | Copying a share link on a dirty document (`publishAndCopyShareLink`) while a save runs sends one `PUT` at a time and completes through the same queue. Only the first half is observable today | wrong (measured: two `PUT`s are sent while the first is in flight) | 4.9 |
+| S8 | A failed upload or `PUT` (500, `missing-blobs`, offline) writes no record and keeps the document dirty (INV-52). The case runs a `PUT` 500, offline, `missing-blobs` and a blob upload 500 | right (measured) | stays |
+| S9, S9-link | A role lowered mid-save (S9) or a link turned off mid-save (S9-link) authorizes no write; the work stays as an unsaved local copy. S9-link is the last case in its file, because the app has no way to reset `linkTurnedOff` | right (measured) | stays |
+| P1 | A publish whose connection changed reports the document it created on the old server | wrong (measured: silent; the old server holds the created document and the tab shows nothing) | 4.15 |
+| P2, P3 | Publish while another document is opened (#247); typing during publish stays dirty (#248) | right (measured) | stays |
+| C1 | Hosted Save As acknowledges no server edit and keeps the merge ancestor | right (measured) | stays |
+| C2 | A collaboration modal step that completes after the modal closed changes nothing. The case runs the connect step, the sign-in step and the links step. The publish step is not covered: it completes the publish the user asked for and shows its own toast | right (measured) | stays |
+| C3 | A Drive listing that completes after the modal closed changes nothing | wrong (measured: the closed modal's list is redrawn) | 4.16 |
+| C3-download | A Drive download started before the modal closed is still delivered after it closes: the file is saved and the "Saved …" toast shows (Adam's ruling: closing the window is not a cancel) | right (measured) | stays |
+| A1 | Owner, scoped editor and reviewer each get exactly today's client capability; none broadens what the server allows. The case pins the observable table: command outcome, document `PUT`s, the publish and open menu states, the collaborate refusal and the publish `POST` | right (measured: owner edits, saves, publishes, opens and invites; scoped editor edits and saves only; reviewer's edit is rejected and sends no `PUT`) | stays |
 | B1 | A late draft write for the previous document neither removes the current document's draft record nor claims its key | wrong | 4.17 |
 | B2 | Two tabs on one document: with Web Locks, a live writer's draft is not taken over | right | stays |
 | B3 | Without Web Locks, every other writer counts as dead and its draft is taken over (D12) | record | 4.17 |
@@ -313,7 +314,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.16 Collaboration and authority.**
 - An authority model in `src/application/collaboration/`: none, owner, scoped editor (document id), reviewer. `reviewMode()`, `isLinkGuest()` and the session's `CapabilityPort` derive from it. Server refusals stay authoritative (A1).
-- The Collaborate workflow (`connectStep`, `signInStep`, `publishStep`, the link actions) behind an interface; its `collab.seq` check is kept. The Drive modal gets the same stale check (C3). Credentials stay per server in this browser (INV-62).
+- The Collaborate workflow (`connectStep`, `signInStep`, `publishStep`, the link actions) behind an interface; its `collab.seq` check is kept. The Drive modal's listing gets the same stale check (C3); a download already started is still delivered (C3-download). Credentials stay per server in this browser (INV-62).
 - Sonnet by D2; it becomes Opus if it has to change the publish or save path. Suites 18, 43, 44, 57, 59, 64, 260 to 264, 266, 361. Desktop groups `per-tab connections`, `draft: server document`, `google drive`.
 
 **4.17 Draft store adapters and writer ownership.**
