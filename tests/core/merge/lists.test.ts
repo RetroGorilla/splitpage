@@ -132,10 +132,12 @@ test("my reassignment wins over an owner their side left as it was in the base, 
   }
   assert.equal(shotOwner("pSam", 7, "pSam"), "pSam", "an owner that is not an id never wins");
   const base = [shot("b1", { owner: "pSam" })];
-  const mine = [shot("b1", { owner: "pAda" }), shot("b1", { owner: "pBo" })];
-  assert.equal(mergeBrollShots(base, mine, [], survives)[0]?.owner, "pAda", "my own duplicate is not their side");
+  const mine = [shot("b1", { owner: "pSam", notes: "kept" }), shot("b1", { owner: "pBo" })];
+  assert.equal(mergeBrollShots(base, mine, [shot("b2")], survives).find((b) => b.id === "b1")?.owner, "pSam",
+    "my own duplicate is not their side");
   assert.equal(mergeProductionTags([tag("t_k", "Kettle", { owner: "pSam" })],
-    [tag("t_k", "Kettle", { owner: "pAda" }), tag("t_k", "Kettle", { owner: "pBo" })], [], survives)[0]?.owner, "pAda");
+    [tag("t_k", "Kettle", { owner: "pSam", notes: "kept" }), tag("t_k", "Kettle", { owner: "pBo" })], [tag("t_l", "Lamp")], survives)
+    .find((t) => t.name === "Kettle")?.owner, "pSam");
 });
 
 test("two or more entries for one tag name: a deleted owner gives way to the next live one, in list order (#353)", () => {
