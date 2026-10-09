@@ -174,9 +174,25 @@ export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-inpu
 export function cleanAuthorName(name) {
   return normalizeEditorName(name) || "";
 }
+var EMOJI_PART = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
+function wholeEmojiCut(value, at) {
+  if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return at;
+  var seg = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value).containing(at);
+  return seg && seg.index < at && EMOJI_PART.test(seg.segment) ? seg.index : at;
+}
 export function limitAuthorNameField(field) {
-  var cut = codePointPrefix(field.value, EDITOR_NAME_MAX);
-  if (cut !== field.value) field.value = cut;
+  var value = field.value;
+  var excess = Array.from(value).length - EDITOR_NAME_MAX;
+  if (excess <= 0) return;
+  var caret = field.selectionStart;
+  var head = typeof caret === "number" && caret === field.selectionEnd ? Array.from(value.slice(0, caret)) : [];
+  if (head.length < excess) {
+    field.value = value.slice(0, wholeEmojiCut(value, codePointPrefix(value, EDITOR_NAME_MAX).length));
+    return;
+  }
+  var cut = wholeEmojiCut(value, head.slice(0, head.length - excess).join("").length);
+  field.value = value.slice(0, cut) + value.slice(caret);
+  field.setSelectionRange(cut, cut);
 }
 export function getSavedAuthorName() {
   try { return cleanAuthorName(localStorage.getItem(COMMENT_NAME_KEY)); } catch (e) { return ""; }
