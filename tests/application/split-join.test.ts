@@ -130,7 +130,8 @@ test("E2: a split is one generation, one reconciliation, one undo record and one
     generation: 1,
     changes: changeSet({
       cells: [{ rowId: "r1", field: "audioText" }, { rowId: "r1", field: "updatedAt" }, { rowId: "r1", field: "updatedBy" }],
-      rowsInserted: ["new1"]
+      rowsInserted: ["new1"],
+      derive: ["production", "broll"]
     })
   });
   assert.deepEqual(h.log, COMMIT);
@@ -146,7 +147,8 @@ test("E2: a split is one generation, one reconciliation, one undo record and one
   assert.deepEqual(Object.keys(made || {}), ["id", "visualText", "imageRef", "audioText", "status", "updatedAt", "updatedBy"]);
   assert.equal(rowOf(h, "r2")?.updatedAt, OLD, "no other scene is stamped");
   assert.equal(h.published[0]?.changes.saveNow, false);
-  assert.deepEqual(h.published[0]?.changes.derive, [], "the view repaints and asks for the refresh itself");
+  h.clock.advance(180);
+  assert.deepEqual(h.refreshes, [["broll", "production"]], "the derivations run once, on the idle refresh");
   assert.equal(h.clock.armed(), 0);
 });
 
@@ -277,7 +279,8 @@ test("E2: a join is one generation, one reconciliation, one undo record and one 
       cells: [
         { rowId: "a", field: "audioText" }, { rowId: "a", field: "updatedAt" }, { rowId: "a", field: "updatedBy" }, { rowId: "a", field: "status" }
       ],
-      rowsRemoved: ["b"]
+      rowsRemoved: ["b"],
+      derive: ["production", "broll"]
     })
   });
   assert.deepEqual(h.log, COMMIT);
@@ -287,8 +290,9 @@ test("E2: a join is one generation, one reconciliation, one undo record and one 
   assert.equal(rowOf(h, "a")?.updatedAt, STAMP);
   assert.equal(rowOf(h, "a")?.updatedBy, "Adam");
   assert.equal(rowOf(h, "z")?.updatedAt, undefined);
-  assert.deepEqual(h.published[0]?.changes.derive, []);
   assert.equal(h.published[0]?.changes.saveNow, false);
+  h.clock.advance(180);
+  assert.deepEqual(h.refreshes, [["broll", "production"]], "the derivations run once, on the idle refresh");
   assert.equal(h.clock.armed(), 0);
 });
 

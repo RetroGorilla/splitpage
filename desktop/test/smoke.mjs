@@ -4308,6 +4308,496 @@ async function caseSessionEndKeepsGoneFileCopy(target, fixturesDir) {
   }
 }
 
+function dialogsPast(cdp, before, timeoutMs) {
+  return poll(cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return i && i.testDialogsSeen > " + before + "; })", timeoutMs || 10000, 40)
+    .catch(() => false);
+}
+
+function tabListed(listing, tabId) {
+  return !!listing && listing.windows.some((w) => w.tabs.some((t) => t.tabId === tabId));
+}
+
+async function caseCloseBackOffReleasesCopy(target, fixturesDir, other) {
+  const tag = target.name + " close check: a tab close that backs off for a " + other + " stops holding its copy once the " + other + " is cancelled (#507)";
+  const stamp = Date.now();
+  const marker = "MARKER-507-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-507-a-" + stamp + ".splitpage", "Back Off A", [[marker, "a"]]);
+  const markerB = "MARKER-507-B-" + stamp;
+  const bPath = writeFixture(fixturesDir, "case-507-b-" + stamp + ".splitpage", "Back Off B", [[markerB, "b"]]);
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  try {
+    app = await launchApp(target, {
+      label: "close-back-off-" + other.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm", "cancel"],
+      env: { SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS: "3000", SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1300" }
+    });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker, markerB], 20000);
+    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB], JSON.stringify(Object.keys(held)));
+    if (!held[marker] || !held[markerB]) return;
+    const cdpA = held[marker].cdp;
+    const cdpB = held[markerB].cdp;
+    const tabAId = held[marker].id;
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+
+    const seen0 = await dialogsSeen(cdpB);
+    await fireEval(cdpA, "window.splitpageDesktop.__testRequestCloseTab()", { awaitPromise: false });
+    const confirmed = await dialogsPast(cdpB, seen0, 10000);
+    await sleep(750);
+    const request = other === "quit" ? "__testRequestQuit" : "__testRequestClose";
+    await fireEval(cdpB, "window.splitpageDesktop." + request + "()", { awaitPromise: false });
+    record(tag + ": the tab close asks about tab A and is answered 'close'", !!confirmed);
+    const cancelled = await dialogsPast(cdpB, seen0 + 1, 10000);
+    record(tag + ": the " + other + " asks too and is answered 'stay'", !!cancelled, "dialogs seen=" + (await dialogsSeen(cdpB).catch(() => "?")) + ", before=" + seen0);
+    await sleep(800);
+    record(tag + ": the app keeps running", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+    const listing = await shell(cdpB, "listTargets", {}).catch(() => null);
+    record(tag + ": tab A is still open", tabListed(listing, tabAId), JSON.stringify(listing));
+    const copy = await pollNode(async () => { const s = await draftStatusFor(cdpA); return s && s.hasDraft; }, 10000).catch(() => false);
+    record(tag + ": the tab close's copy of tab A landed", !!copy);
+    const plain = await flushDraft(cdpA);
+    const after = await draftStatusFor(cdpA);
+    record(tag + ": tab A no longer holds that copy, so a plain flush removes it",
+      !!plain && plain.ok !== false && !!after && after.hasDraft === false, JSON.stringify(plain) + " " + JSON.stringify(after));
+  } finally {
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
+async function caseCloseBackOffKeepsSessionEndHold(target, fixturesDir) {
+  const tag = target.name + " close check: a tab close that backs off for a session end leaves the session end's copy held (#507)";
+  const stamp = Date.now();
+  const marker = "MARKER-507-SE-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-507-se-a-" + stamp + ".splitpage", "Session End Back Off A", [[marker, "a"]]);
+  const markerB = "MARKER-507-SE-B-" + stamp;
+  const bPath = writeFixture(fixturesDir, "case-507-se-b-" + stamp + ".splitpage", "Session End Back Off B", [[markerB, "b"]]);
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  try {
+    app = await launchApp(target, {
+      label: "close-back-off-session-end", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"],
+      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1200" }
+    });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker, markerB], 20000);
+    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB], JSON.stringify(Object.keys(held)));
+    if (!held[marker] || !held[markerB]) return;
+    const cdpA = held[marker].cdp;
+    const cdpB = held[markerB].cdp;
+    const tabAId = held[marker].id;
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+
+    const seen0 = await dialogsSeen(cdpB);
+    await fireEval(cdpA, "window.splitpageDesktop.__testRequestCloseTab()", { awaitPromise: false });
+    const confirmed = await dialogsPast(cdpB, seen0, 10000);
+    await shell(cdpB, "sessionEnd", {});
+    record(tag + ": the tab close asks about tab A and is answered 'close'", !!confirmed);
+    await sleep(2500);
+    const listing = await shell(cdpB, "listTargets", {}).catch(() => null);
+    record(tag + ": tab A is still open after the session end", tabListed(listing, tabAId), JSON.stringify(listing));
+    const copy = await pollNode(async () => { const s = await draftStatusFor(cdpA); return s && s.hasDraft; }, 10000).catch(() => false);
+    record(tag + ": tab A's copy is on disk", !!copy);
+    const plain = await flushDraft(cdpA);
+    record(tag + ": a later plain flush still can't remove it", !!plain && plain.ok === false && plain.code === "HELD", JSON.stringify(plain));
+  } finally {
+    closeHeld(held);
+    if (app) await crashApp(app);
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
+async function caseHeldCopySurvivesPlainFlush(target, fixturesDir) {
+  const tag = target.name + " close check: a plain flush while a window close waits on another tab's copy can't remove the copy already kept (#498)";
+  const stamp = Date.now();
+  const marker = "MARKER-498-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-498-a-" + stamp + ".splitpage", "Held Copy A", [[marker, "a"]]);
+  const markerB = "MARKER-498-B-" + stamp;
+  const bPath = writeFixture(fixturesDir, "case-498-b-" + stamp + ".splitpage", "Slow Copy B", [[markerB, "b"]]);
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  try {
+    app = await launchApp(target, { label: "held-copy-plain-flush", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"] });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker, markerB], 20000);
+    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB], JSON.stringify(Object.keys(held)));
+    if (!held[marker] || !held[markerB]) return;
+    const cdpA = held[marker].cdp;
+    const cdpB = held[markerB].cdp;
+    const tabAId = held[marker].id;
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+    fs.renameSync(bPath, path.join(movedDir, path.basename(bPath)));
+    await evalPage(cdpB, "(function(){ var real = JSON.stringify; var spun = false; " +
+      "JSON.stringify = function (v) { if (!spun && v && Array.isArray(v.rows) && Object.prototype.hasOwnProperty.call(v, 'title')) { spun = true; var until = Date.now() + 1000; while (Date.now() < until) {} } " +
+      "return real.apply(JSON, arguments); }; return true; })()");
+
+    await fireEval(cdpA, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const keptA = await pollNode(async () => { const s = await draftStatusFor(cdpA); return s && s.hasDraft; }, 8000, 30).catch(() => false);
+    const plain = keptA ? await flushDraft(cdpA).catch((e) => ({ error: String(e) })) : null;
+    record(tag + ": tab A's copy lands while tab B's is still being made", !!keptA && app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
+    record(tag + ": a plain flush of tab A then is refused as held", !!plain && plain.ok === false && plain.code === "HELD", JSON.stringify(plain));
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": the window closes and the app exits", exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+    closeHeld(held);
+    held = {};
+    app = null;
+    const dirs = readDraftDirs(userDataDir);
+    const stateOf = (id) => JSON.stringify((dirs[id] && dirs[id].current && dirs[id].current.state) || {});
+    record(tag + ": tab A's script is still kept as a draft", stateOf(tabAId).indexOf(marker) !== -1, JSON.stringify(Object.keys(dirs)));
+  } finally {
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
+async function caseTabsMovedOutDuringWindowClose(target, fixturesDir) {
+  const tag = target.name + " close check: tabs moved to another window during a window close's check stay as they were (#509)";
+  const stamp = Date.now();
+  const marker = "MARKER-509-MOVE-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-509-move-a-" + stamp + ".splitpage", "Moved Out A", [[marker, "a"]]);
+  const markerB = "MARKER-509-MOVE-B-" + stamp;
+  const bPath = writeFixture(fixturesDir, "case-509-move-b-" + stamp + ".splitpage", "Stays Behind B", [[markerB, "b"]]);
+  const markerC = "MARKER-509-MOVE-C-" + stamp;
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  let cdpC = null;
+  try {
+    app = await launchApp(target, {
+      label: "tabs-moved-out-during-check", userDataDir, fixtures: [aPath, bPath], dialogs: ["confirm"],
+      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1000" }
+    });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker, markerB], 20000);
+    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB], JSON.stringify(Object.keys(held)));
+    if (!held[marker] || !held[markerB]) return;
+    const cdpA = held[marker].cdp;
+    const cdpB = held[markerB].cdp;
+    const tabAId = held[marker].id;
+    const tabBId = held[markerB].id;
+    const tabCId = await shell(cdpB, "createTab", {});
+    cdpC = await connectTab(app, tabCId);
+    await waitForRows(cdpC, 20000);
+    await addMarkerRow(cdpC, markerC);
+    await flushDraft(cdpC);
+    const draftC = await draftStatusFor(cdpC);
+    record(tag + ": tab C has an unsaved edit with a draft", !!draftC && draftC.hasDraft === true, JSON.stringify(draftC));
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+
+    const seen0 = await dialogsSeen(cdpB);
+    await fireEval(cdpB, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const confirmed = await dialogsPast(cdpB, seen0, 10000);
+    const w2 = await shell(cdpB, "moveTabToWindow", { tabId: tabAId, windowId: null });
+    const movedC = w2 ? await shell(cdpB, "moveTabToWindow", { tabId: tabCId, windowId: w2 }) : false;
+    record(tag + ": the window close asks, is answered 'close', and tabs A and C move to a new window while A's copy is written",
+      !!confirmed && !!w2 && !!movedC, "w2=" + w2 + " movedC=" + movedC);
+    const leftB = await pollShellState(cdpA, (l) => !l.windows.some((w) => w.tabs.some((t) => t.tabId === tabBId)), 15000).catch(() => null);
+    record(tag + ": the closed window takes tab B with it", !!leftB);
+    record(tag + ": the app keeps running with tabs A and C open", app.proc.exitCode === null && tabListed(leftB, tabAId) && tabListed(leftB, tabCId),
+      "exitCode=" + app.proc.exitCode + " " + JSON.stringify(leftB));
+    const afterC = await draftStatusFor(cdpC);
+    record(tag + ": tab C's draft was not discarded by the close", !!afterC && afterC.hasDraft === true && !afterC.tombstoned, JSON.stringify(afterC));
+    const wantIds = JSON.stringify([tabAId, tabCId].sort());
+    const layout = await pollNode(async () => {
+      const s = readDesktopStateFile(userDataDir);
+      const only = s && Array.isArray(s.windows) && s.windows.length === 1 ? s.windows[0] : null;
+      return only && only.windowId === w2 && JSON.stringify(only.tabs.map((t) => t.tabId).sort()) === wantIds ? s : null;
+    }, 10000).catch(() => null);
+    record(tag + ": the saved layout is still written after the close: one window, the new one, holding tabs A and C (#531)",
+      !!layout, JSON.stringify(readDesktopStateFile(userDataDir)));
+    const copy = await pollNode(async () => { const s = await draftStatusFor(cdpA); return s && s.hasDraft; }, 10000).catch(() => false);
+    record(tag + ": tab A's copy landed", !!copy);
+    const plain = await flushDraft(cdpA);
+    const afterA = await draftStatusFor(cdpA);
+    record(tag + ": tab A no longer holds that copy, so a plain flush removes it",
+      !!plain && plain.ok !== false && !!afterA && afterA.hasDraft === false, JSON.stringify(plain) + " " + JSON.stringify(afterA));
+  } finally {
+    if (cdpC) { try { cdpC.close(); } catch {} }
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
+async function caseCloseCheckFailureAsksAgain(target, fixturesDir, how) {
+  const tag = target.name + " close check: when the " + how + "'s check fails, nothing closes and the next " + how + " asks again (#508)";
+  const stamp = Date.now();
+  const marker = "MARKER-508-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-508-a-" + stamp + ".splitpage", "Check Fails A", [[marker, "a"]]);
+  const markerB = "MARKER-508-B-" + stamp;
+  const bPath = writeFixture(fixturesDir, "case-508-b-" + stamp + ".splitpage", "Check Fails B", [[markerB, "b"]]);
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  try {
+    app = await launchApp(target, {
+      label: "close-check-fails-" + how.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath, bPath], dialogs: ["throw", "cancel"]
+    });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker, markerB], 20000);
+    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB], JSON.stringify(Object.keys(held)));
+    if (!held[marker] || !held[markerB]) return;
+    const cdpA = held[marker].cdp;
+    const cdpB = held[markerB].cdp;
+    const tabAId = held[marker].id;
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+    const request = how === "quit" ? "__testRequestQuit" : how === "tab close" ? "__testRequestCloseTab" : "__testRequestClose";
+
+    const seen0 = await dialogsSeen(cdpB);
+    await fireEval(cdpA, "window.splitpageDesktop." + request + "()", { awaitPromise: false });
+    const failed = await dialogsPast(cdpB, seen0, 10000);
+    await sleep(800);
+    const listing = await shell(cdpB, "listTargets", {}).catch(() => null);
+    record(tag + ": the check reaches the question, which fails, and tab A stays open",
+      !!failed && app.proc.exitCode === null && tabListed(listing, tabAId), "exitCode=" + app.proc.exitCode + " " + JSON.stringify(listing));
+    record(tag + ": the failure is reported", app.getStderr().indexOf("[splitpage] close check failed") !== -1, app.getStderr().slice(-600));
+
+    await fireEval(cdpA, "window.splitpageDesktop." + request + "()", { awaitPromise: false });
+    const askedAgain = await dialogsPast(cdpB, seen0 + 1, 10000);
+    record(tag + ": the next " + how + " asks again", !!askedAgain, "dialogs seen=" + (await dialogsSeen(cdpB).catch(() => "?")) + ", before=" + seen0);
+    await sleep(800);
+    const after = await shell(cdpB, "listTargets", {}).catch(() => null);
+    record(tag + ": 'stay' keeps tab A open", app.proc.exitCode === null && tabListed(after, tabAId), "exitCode=" + app.proc.exitCode + " " + JSON.stringify(after));
+  } finally {
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
+async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
+  const tag = target.name + " close check: a tab opened during a " + how + "'s file check is asked about before it closes (#509)";
+  const stamp = Date.now();
+  const marker = "MARKER-509-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-509-a-" + stamp + ".splitpage", "Opened During Check A", [[marker, "a"]]);
+  const markerC = "MARKER-509-C-" + stamp;
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  let cdpC = null;
+  try {
+    app = await launchApp(target, {
+      label: "tab-opened-during-check-" + how.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath], dialogs: ["confirm", "confirm"],
+      env: { SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS: "3000", SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1100" }
+    });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker], 20000);
+    record(tag + ": the file opens in a tab", !!held[marker], JSON.stringify(Object.keys(held)));
+    if (!held[marker]) return;
+    const cdpA = held[marker].cdp;
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+
+    const request = how === "quit" ? "__testRequestQuit" : "__testRequestClose";
+    await fireEval(cdpA, "window.splitpageDesktop." + request + "()", { awaitPromise: false });
+    const started = Date.now();
+    const tabCId = await shell(cdpA, "createTab", {});
+    cdpC = await connectTab(app, tabCId);
+    await waitForRows(cdpC, 20000);
+    await addMarkerRow(cdpC, markerC);
+    const dirtyC = await pollShellState(cdpA, (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabCId && t.dirty)), 4000).catch(() => null);
+    const took = Date.now() - started;
+    record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
+
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": answering 'close' to exactly two questions closes and the app exits", exited === true && app.proc.exitCode === 0,
+      "exited=" + exited + " exitCode=" + app.proc.exitCode + " (a third question is answered Cancel and keeps it open)");
+    try { cdpC.close(); } catch {}
+    cdpC = null;
+    closeHeld(held);
+    held = {};
+    app = null;
+    const session = readSession(userDataDir);
+    record(tag + ": the second question was about the new tab, whose edit is discarded as answered",
+      ((session && session.discardedTabIds) || []).includes(tabCId), JSON.stringify(session));
+  } finally {
+    if (cdpC) { try { cdpC.close(); } catch {} }
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
+async function caseHostTabTornOffDuringLastWindowClose(target, fixturesDir) {
+  const tag = target.name + " close check: under --host, a tab torn off during the last window's close keeps the stop-sharing prompt for the window left (#531)";
+  const stamp = Date.now();
+  const marker = "MARKER-531-HOST-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-531-host-a-" + stamp + ".splitpage", "Host Close A", [[marker, "a"]]);
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  let cdpB = null;
+  try {
+    app = await launchApp(target, {
+      label: "host-torn-off-during-close", userDataDir, dataDir, fixtures: [aPath], flags: ["--host", "--pin", "3344"],
+      dialogs: ["confirm", "confirm", "cancel", "confirm"],
+      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1000" }
+    });
+    await waitForRows(app.cdp, 20000);
+    await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
+    held = await tabsHolding(app, [marker], 20000);
+    record(tag + ": the file opens in a tab", !!held[marker], JSON.stringify(Object.keys(held)));
+    if (!held[marker]) return;
+    const cdpA = held[marker].cdp;
+    const tabAId = held[marker].id;
+    const tabBId = await shell(cdpA, "createTab", {});
+    cdpB = await connectTab(app, tabBId);
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+
+    const seen0 = await dialogsSeen(cdpB);
+    await fireEval(cdpA, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const asked = await dialogsPast(cdpB, seen0 + 1, 10000);
+    const w2 = asked ? await shell(cdpB, "moveTabToWindow", { tabId: tabBId, windowId: null }) : null;
+    record(tag + ": the close asks to stop sharing and about tab A, both answered 'close', and tab B is torn off while A's copy is written",
+      !!asked && !!w2, "asked=" + asked + " w2=" + w2);
+    const left = await pollShellState(cdpB, (l) => l.windows.length === 1 && !tabListed(l, tabAId), 15000).catch(() => null);
+    record(tag + ": the first window closes and the app keeps running with tab B", !!left && tabListed(left, tabBId) && app.proc.exitCode === null,
+      "exitCode=" + app.proc.exitCode + " " + JSON.stringify(left));
+    record(tag + ": exactly one unsaved-changes question, about tab A", JSON.stringify(questionsAsked(app)) === JSON.stringify([[tabAId]]), JSON.stringify(questionsAsked(app)));
+
+    await fireEval(cdpB, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const askedAgain = await dialogsPast(cdpB, seen0 + 2, 10000);
+    await sleep(800);
+    const still = await shell(cdpB, "listTargets", {}).catch(() => null);
+    record(tag + ": closing the window left asks to stop sharing again, and 'cancel' keeps it open",
+      !!askedAgain && app.proc.exitCode === null && tabListed(still, tabBId),
+      "dialogs seen=" + (await dialogsSeen(cdpB).catch(() => "?")) + ", before=" + seen0 + " exitCode=" + app.proc.exitCode);
+
+    await fireEval(cdpB, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": 'stop sharing and close' then closes it and quits with no further prompt", exited === true && app.proc.exitCode === 0,
+      "exited=" + exited + " exitCode=" + app.proc.exitCode + " (a fifth prompt is answered Cancel and keeps the app running)");
+    try { cdpB.close(); } catch {}
+    cdpB = null;
+    closeHeld(held);
+    held = {};
+    app = null;
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(dataDir);
+    rmrf(movedDir);
+  }
+}
+
+function questionsAsked(app) {
+  const out = [];
+  const re = /\[splitpage\] test question \([^)]*\): (\[[^\n]*\])/g;
+  const text = app.getStderr() || "";
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    try { out.push(JSON.parse(m[1])); } catch { out.push(m[1]); }
+  }
+  return out;
+}
+
+function editLastCell(cdp, marker) {
+  return evalPage(cdp, "(function(){ var cells = document.querySelectorAll('#rows .cell-editable[data-field=\"visualText\"]'); " +
+    "var cell = cells[cells.length - 1]; if (!cell) return false; cell.textContent = " + JSON.stringify(marker) + "; " +
+    "cell.dispatchEvent(new Event('input', { bubbles: true })); return true; })()", { awaitPromise: false });
+}
+
+async function caseTabEditedDuringCloseCheck(target, fixturesDir, how) {
+  const leave = how === "quit";
+  const tag = target.name + " close check: a tab edited while a " + how + " waits for a kept copy is asked about again, and " +
+    (leave ? "'close' discards it as answered" : "'stay' keeps it") + " (#532)";
+  const stamp = Date.now();
+  const marker = "MARKER-532-A-" + stamp;
+  const aPath = writeFixture(fixturesDir, "case-532-a-" + stamp + ".splitpage", "Edited During Check A", [[marker, "a"]]);
+  const markerB = "MARKER-532-B-" + stamp;
+  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  let app = null;
+  let held = {};
+  let cdpB = null;
+  try {
+    app = await launchApp(target, {
+      label: "tab-edited-during-check-" + how.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath],
+      dialogs: leave ? ["confirm", "confirm"] : ["confirm", "cancel"],
+      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1100" }
+    });
+    await waitForRows(app.cdp, 20000);
+    held = await tabsHolding(app, [marker], 20000);
+    record(tag + ": the file opens in a tab", !!held[marker], JSON.stringify(Object.keys(held)));
+    if (!held[marker]) return;
+    const cdpA = held[marker].cdp;
+    const tabAId = held[marker].id;
+    const tabBId = await shell(cdpA, "createTab", {});
+    cdpB = await connectTab(app, tabBId);
+    await waitForRows(cdpB, 20000);
+    const sameWindowClean = (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabAId) && w.tabs.some((t) => t.tabId === tabBId && !t.dirty));
+    const before = await pollShellState(cdpA, sameWindowClean, 5000).catch(() => null);
+    record(tag + ": an untitled tab B opens clean in the same window", !!before, JSON.stringify(before));
+    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
+
+    const seen0 = await dialogsSeen(cdpB);
+    const request = leave ? "__testRequestQuit" : "__testRequestClose";
+    await fireEval(cdpA, "window.splitpageDesktop." + request + "()", { awaitPromise: false });
+    const answered = await dialogsPast(cdpB, seen0, 10000);
+    const started = Date.now();
+    const edited = answered ? await editLastCell(cdpB, markerB) : false;
+    const dirtyB = edited ? await pollShellState(cdpB, (l) => l.windows.some((w) => w.tabs.some((t) => t.tabId === tabBId && t.dirty)), 3000).catch(() => null) : null;
+    const took = Date.now() - started;
+    record(tag + ": tab B gets an unsaved edit after the first question, while tab A's copy is still being written",
+      !!answered && !!dirtyB && took < 900, "answered=" + answered + " edited=" + edited + " took " + took + " ms");
+
+    if (leave) {
+      const exited = await waitForExit(app.proc, 30000);
+      record(tag + ": answering 'close' to both questions quits", exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
+      record(tag + ": exactly two questions, the first about tab A, the second about tab B", JSON.stringify(questionsAsked(app)) === JSON.stringify([[tabAId], [tabBId]]),
+        JSON.stringify(questionsAsked(app)) + " A=" + tabAId + " B=" + tabBId);
+      try { cdpB.close(); } catch {}
+      cdpB = null;
+      closeHeld(held);
+      held = {};
+      app = null;
+      const session = readSession(userDataDir);
+      record(tag + ": tab B's edit is discarded as the user answered", ((session && session.discardedTabIds) || []).includes(tabBId), JSON.stringify(session));
+      const dirs = readDraftDirs(userDataDir);
+      const stateA = JSON.stringify((dirs[tabAId] && dirs[tabAId].current && dirs[tabAId].current.state) || {});
+      record(tag + ": tab A's copy is still kept as a draft", stateA.indexOf(marker) !== -1, JSON.stringify(Object.keys(dirs)));
+      return;
+    }
+
+    const asked = await pollNode(async () => (questionsAsked(app).length >= 2 ? questionsAsked(app) : null), 8000).catch(() => questionsAsked(app));
+    await sleep(800);
+    record(tag + ": exactly two questions, the first about tab A, the second about tab B", JSON.stringify(questionsAsked(app)) === JSON.stringify([[tabAId], [tabBId]]),
+      JSON.stringify(asked) + " then " + JSON.stringify(questionsAsked(app)) + " A=" + tabAId + " B=" + tabBId);
+    const listing = await shell(cdpB, "listTargets", {}).catch(() => null);
+    record(tag + ": 'stay' keeps the app running with tabs A and B open", app.proc.exitCode === null && tabListed(listing, tabAId) && tabListed(listing, tabBId),
+      "exitCode=" + app.proc.exitCode + " " + JSON.stringify(listing));
+    await flushDraft(cdpB).catch(() => null);
+    const draftB = await draftStatusFor(cdpB).catch(() => null);
+    record(tag + ": tab B's edit is still in its draft", !!draftB && draftB.hasDraft === true && !draftB.tombstoned && await markerPresent(cdpB, markerB).catch(() => false),
+      JSON.stringify(draftB));
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
+    closeHeld(held);
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+    rmrf(movedDir);
+  }
+}
+
 async function caseDraftCrashMidWrite(target) {
   const tag = target.name + " draft: power-cut mid-write keeps the FIRST generation, no leftover .tmp-*";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -5855,6 +6345,19 @@ async function runTargetSuite(target, groupFilter) {
     ["draft: moved file, a tab close and a window close at once never lose the script (#505)", () => caseMovedFileTabAndWindowCloseTogether(target, fixturesDir)],
     ["draft: moved file, a tab that answers ok without a copy is asked about again (#505)", () => caseMovedFileWriterStoppedAsksAgain(target, fixturesDir)],
     ["draft: session end flushes a dirty file tab before the file check (#505)", () => caseSessionEndFlushesDirtyTabFirst(target, fixturesDir)],
+    ["close check: a tab close backing off for a cancelled quit stops holding its copy (#507)", () => caseCloseBackOffReleasesCopy(target, fixturesDir, "quit")],
+    ["close check: a tab close backing off for a cancelled window close stops holding its copy (#507)", () => caseCloseBackOffReleasesCopy(target, fixturesDir, "window close")],
+    ["close check: a tab close backing off for a session end keeps the session end's hold (#507)", () => caseCloseBackOffKeepsSessionEndHold(target, fixturesDir)],
+    ["close check: a plain flush during a window close can't remove a kept copy (#498)", () => caseHeldCopySurvivesPlainFlush(target, fixturesDir)],
+    ["close check: a failed tab close check asks again next time (#508)", () => caseCloseCheckFailureAsksAgain(target, fixturesDir, "tab close")],
+    ["close check: a failed window close check asks again next time (#508)", () => caseCloseCheckFailureAsksAgain(target, fixturesDir, "window close")],
+    ["close check: a failed quit check asks again next time (#508)", () => caseCloseCheckFailureAsksAgain(target, fixturesDir, "quit")],
+    ["close check: a tab opened during a window close's check is asked about (#509)", () => caseTabOpenedDuringCloseCheck(target, fixturesDir, "window close")],
+    ["close check: a tab opened during a quit's check is asked about (#509)", () => caseTabOpenedDuringCloseCheck(target, fixturesDir, "quit")],
+    ["close check: tabs moved out during a window close's check stay as they were, and the saved layout follows them (#509, #531)", () => caseTabsMovedOutDuringWindowClose(target, fixturesDir)],
+    ["close check: under --host, a tab torn off during the last window's close keeps the stop-sharing prompt (#531)", () => caseHostTabTornOffDuringLastWindowClose(target, fixturesDir)],
+    ["close check: a tab edited during a window close's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "window close")],
+    ["close check: a tab edited during a quit's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "quit")],
     ["draft: power-cut mid-write keeps the first generation", () => caseDraftCrashMidWrite(target)],
     ["draft: both generations corrupt -> quarantined, seed boot", () => caseDraftCorrupt(target)],
     ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],
