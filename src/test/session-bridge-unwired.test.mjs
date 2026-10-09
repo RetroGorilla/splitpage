@@ -63,6 +63,12 @@ test("with the effects missing, a legacy edit reports each missing effect and th
   ]);
 });
 
+test("with no refresh runner, a refresh that comes due throws instead of doing nothing", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1_000_000 });
+  bridge.requestRefresh("production");
+  assert.throws(() => t.mock.timers.tick(1000), /The session's refresh port was not provided/);
+});
+
 test("once every port is provided, a command applies", () => {
   script();
   const ran = [];
