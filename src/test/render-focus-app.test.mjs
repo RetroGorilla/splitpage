@@ -378,13 +378,16 @@ for (const f of PANEL_FIELDS) {
       assert.deepEqual(noEdit(got), NO_EDIT);
       assert.equal(shot()[f.key], "Theirs " + f.name + ".");
       assert.equal(S.dirty, false);
+      assert.equal(document.activeElement, shotBox(f.cls), "the redrawn box has the focus");
+      observe(() => runBrollRefresh());
       const box = shotBox(f.cls);
-      assert.equal(document.activeElement, box, "the redrawn box has the focus");
+      assert.equal(document.activeElement, box, "the box is still open and focused after the next redraw");
       assert.equal(box.value, "Theirs " + f.name + ".");
       const blurred = observe(() => box.blur());
       assert.deepEqual(noEdit(blurred), NO_EDIT);
       assert.equal(shot()[f.key], "Theirs " + f.name + ".");
       assert.equal(S.dirty, false);
+      if (f.open) assert.equal(shotBox(f.cls), null, "a blur closes the " + f.name + " editor");
     } finally {
       leavePanel();
     }
@@ -416,8 +419,9 @@ for (const f of PANEL_FIELDS) {
       });
       assert.equal(shot()[f.key], "Typed " + f.name + ".");
       assert.equal(S.dirty, true);
+      observe(() => runBrollRefresh());
       const box = shotBox(f.cls);
-      assert.equal(document.activeElement, box);
+      assert.equal(document.activeElement, box, "the box is still open and focused after the next redraw");
       assert.equal(box.value, "Typed " + f.name + ".");
       const blurred = observe(() => box.blur());
       assert.deepEqual(noEdit(blurred), NO_EDIT, "the blur has nothing left to save");
