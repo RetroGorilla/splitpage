@@ -547,6 +547,7 @@ function typedOnce() {
 const inWriter = (id) => cellOf(id, "audioText", "#writer-doc");
 const openTheWriter = () => { writer.openWriter(); };
 const closeTheWriter = () => { if (writer.writerOpen) writer.closeWriter(); };
+const rowsInert = () => document.getElementById("rows").hasAttribute("inert");
 
 const EDITS = [
   { name: "typing into the scene the update changed", act: () => typeChar(cellOf("r2", "audioText"), "x") },
@@ -568,11 +569,11 @@ const EDITS = [
   { name: "Enter in the find bar's replace box", act: () => { findAndReplace("Wide", "Far"); key(document.getElementById("replace-input"), "Enter"); }, teardown: () => find.closeFindBar() },
   { name: "Replace all", act: () => { findAndReplace("Wide", "Far"); document.getElementById("find-replace-all").click(); }, teardown: () => find.closeFindBar() },
   { name: "Tag all as… in the find bar", act: () => { findAndReplace("Wide", ""); find.openBulkTag(); find.pickBulkTagCat("prop"); document.getElementById("find-tag-go").click(); }, teardown: () => find.closeFindBar() },
-  { name: "typing in the Writer", setup: openTheWriter, act: () => typeChar(inWriter("r1"), "x"), teardown: closeTheWriter },
-  { name: "a new scene in the Writer (Enter)", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 6); key(p, "Enter"); }, teardown: closeTheWriter },
-  { name: "joining scenes in the Writer (Backspace)", setup: openTheWriter, act: () => { const p = inWriter("r2"); p.focus(); select(p, 0); key(p, "Backspace"); }, teardown: closeTheWriter },
-  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); S.writerLastCell = p; document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter },
-  { name: "typing the Writer's title", setup: openTheWriter, act: () => retitle(document.getElementById("writer-title"), "Writer title"), teardown: closeTheWriter }
+  { name: "typing in the Writer", setup: openTheWriter, act: () => typeChar(inWriter("r1"), "x"), teardown: closeTheWriter, closeRedraws: true },
+  { name: "a new scene in the Writer (Enter)", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 6); key(p, "Enter"); }, teardown: closeTheWriter, closeRedraws: true },
+  { name: "joining scenes in the Writer (Backspace)", setup: openTheWriter, act: () => { const p = inWriter("r2"); p.focus(); select(p, 0); key(p, "Backspace"); }, teardown: closeTheWriter, closeRedraws: true },
+  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); S.writerLastCell = p; document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter, closeRedraws: true },
+  { name: "typing the Writer's title", setup: openTheWriter, act: () => retitle(document.getElementById("writer-title"), "Writer title"), teardown: closeTheWriter, closeRedraws: true }
 ];
 
 for (const edit of EDITS) {
@@ -586,7 +587,8 @@ for (const edit of EDITS) {
       sameEdits(editState(), before, edit.name + " on the stale screen");
       assert.equal(redrawToasts().length, 1, "Redraw is still offered");
       if (edit.teardown) edit.teardown();
-      await pressRedraw();
+      if (edit.closeRedraws) assert.deepEqual([redrawToasts().length, rowsInert()], [0, false], "closing the Writer redraws through the guard (#458)");
+      else await pressRedraw();
       const drawn = editState();
       const allowed = await logging(async () => { await edit.act(); await idle(); });
       assert.equal(allowed.threw, null, edit.name + " threw after Redraw: " + (allowed.threw && allowed.threw.stack));
@@ -697,8 +699,12 @@ for (const place of WRITER_CLOSED) {
     try {
       await staleScreen(place.setup, place.change);
       assert.equal(document.activeElement, redrawToasts()[0].querySelector(".toast-action"));
-      if (place.closeWriter) closeTheWriter();
-      await pressRedraw();
+      if (place.closeWriter) {
+        closeTheWriter();
+        assert.deepEqual([redrawToasts().length, rowsInert()], [0, false], "closing the Writer redraws through the guard (#458)");
+      } else {
+        await pressRedraw();
+      }
       place.check();
       nothingInHiddenWriter();
     } finally {
@@ -734,6 +740,43 @@ for (const place of WRITER_OPEN) {
       assert.equal(window.getSelection().toString(), "", "no old range is put back");
       const sel = window.getSelection();
       assert.ok(!sel.rangeCount || !document.getElementById("rows").contains(sel.getRangeAt(0).startContainer), "no range is left in the script under the Writer");
+    } finally {
+      closeTheWriter();
+    }
+  });
+}
+
+const WRITER_CLOSES = [
+  { name: "its close button", close: () => document.getElementById("wr-close").click() },
+  { name: "Escape", close: () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })) },
+  { name: "closeWriter", close: () => writer.closeWriter() }
+];
+
+for (const how of WRITER_CLOSES) {
+  test("closing the Writer by " + how.name + " redraws through the guard: a redraw that throws is caught, offers Redraw and holds the part-drawn script (#458)", async () => {
+    fresh("Writer close");
+    try {
+      openTheWriter();
+      const p = inWriter("r1");
+      p.focus();
+      select(p, 2);
+      const before = editState();
+      const unbreak = breakRender("early");
+      let out;
+      try {
+        out = await logging(() => how.close());
+      } finally {
+        unbreak();
+      }
+      assert.equal(out.threw, null, out.threw && out.threw.stack);
+      assert.deepEqual(out.logged, [BROKE]);
+      assert.equal(writer.writerOpen, false);
+      assert.equal(document.getElementById("writer").hidden, true);
+      sameEdits(editState(), before, "closing the Writer");
+      assert.equal(redrawToasts().length, 1, "Redraw is offered");
+      assert.equal(rowsInert(), true, "the script is held until a Redraw draws");
+      await pressRedraw();
+      assert.equal(rowsInert(), false);
     } finally {
       closeTheWriter();
     }
