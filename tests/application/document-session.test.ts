@@ -452,6 +452,20 @@ test("runConfined fails a command that writes outside its change set, applied or
   assert.equal(runConfined(opened().session, declared).kind, "applied");
 });
 
+test("runConfined fails a plan that writes a declared field, since the rollback point is taken after plan and cannot undo it", () => {
+  const planWrites: Command = {
+    name: "plan-writes-declared",
+    needs: "edit",
+    plan: function (doc) {
+      const live = doc as unknown as { rows: { audioText: string }[] };
+      const row = live.rows[0];
+      if (row) row.audioText = "written in plan";
+      return { changes: cellEdit("r1", "audioText"), apply: function () {} };
+    }
+  };
+  assert.throws(function () { runConfined(opened().session, planWrites); }, /plan-writes-declared planned a write/);
+});
+
 test("writesOutside names undeclared document fields, rows, order and comment edits, and allows anchor moves only when the change set reconciles", () => {
   const before = { title: "A", rows: [{ id: "r1", a: 1 }, { id: "r2", a: 2 }], comments: [{ id: "c1", rowId: "r1", field: "audioText" }] };
   const after = { title: "B", extra: 1, rows: [{ id: "r2", a: 2 }, { id: "r3" }], comments: [{ id: "c1", rowId: "r2", field: "audioText" }] };
