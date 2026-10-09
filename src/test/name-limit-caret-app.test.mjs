@@ -18,11 +18,11 @@ const { render } = await import("../js/05-render.js");
 
 after(closeApp);
 
-function insert(field, at, text, end = at) {
+function insert(field, at, text, end = at, inputType = "insertText") {
   const v = field.value;
   field.value = v.slice(0, at) + text + v.slice(end);
   field.setSelectionRange(at + text.length, at + text.length);
-  field.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+  field.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType, data: inputType === "insertText" ? text : null }));
   return { value: field.value, caret: field.selectionStart, end: field.selectionEnd };
 }
 
@@ -90,6 +90,61 @@ test("an emoji counts as one character: refused whole when full, kept whole when
   const shorter = GRIN + "b".repeat(28);
   fresh(field, shorter, 2);
   assert.deepEqual(insert(field, 2, GRIN + GRIN), { value: GRIN + GRIN + "b".repeat(28), caret: 4, end: 4 });
+});
+
+const FLAG = String.fromCodePoint(0x1F1E9, 0x1F1F0);
+const FAMILY = String.fromCodePoint(0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467);
+const THUMB = String.fromCodePoint(0x1F44D, 0x1F3FD);
+const ACUTE = String.fromCodePoint(0x301);
+
+const CLUSTERS = [
+  ["flag", FLAG, 2],
+  ["family emoji", FAMILY, 5],
+  ["skin-tone emoji", THUMB, 2]
+];
+
+for (const inputType of ["insertText", "insertFromPaste"]) {
+  const how = inputType === "insertText" ? "typed" : "pasted";
+  for (const [label, emoji, size] of CLUSTERS) {
+    test(`a ${label} ${how} where it does not fit is refused whole, at the end and in the middle`, () => {
+      const field = commentName();
+      const name = FULL.slice(0, 30 - size + 1);
+      fresh(field, name, name.length);
+      assert.deepEqual(insert(field, name.length, emoji, name.length, inputType), { value: name, caret: name.length, end: name.length });
+      fresh(field, name, 5);
+      assert.deepEqual(insert(field, 5, emoji, 5, inputType), { value: name, caret: 5, end: 5 });
+    });
+
+    test(`a ${label} ${how} where it fits exactly is kept whole`, () => {
+      const field = commentName();
+      const name = FULL.slice(0, 30 - size);
+      fresh(field, name, 5);
+      const expected = name.slice(0, 5) + emoji + name.slice(5);
+      assert.deepEqual(insert(field, 5, emoji, 5, inputType), { value: expected, caret: 5 + emoji.length, end: 5 + emoji.length });
+    });
+  }
+}
+
+test("a character typed after a whole emoji in a full name is refused and the emoji stays", () => {
+  const field = commentName();
+  const name = FULL.slice(0, 30 - 5) + FAMILY;
+  fresh(field, name, name.length);
+  assert.deepEqual(insert(field, name.length, "x"), { value: name, caret: name.length, end: name.length });
+});
+
+test("a combining mark typed after a letter in a full plain-text name is refused alone, as before", () => {
+  const field = commentName();
+  fresh(field, FULL, 10);
+  assert.deepEqual(insert(field, 10, ACUTE), { value: FULL, caret: 10, end: 10 });
+});
+
+test("a value set in code that ends in half a flag over the limit is cut before the flag", () => {
+  const field = commentName();
+  const name = FULL.slice(0, 29);
+  field.value = name + FLAG;
+  field.setSelectionRange(0, 5);
+  field.dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(field.value, name);
 });
 
 test("while a composition is open the field is left alone; it is cut when the composition ends", () => {
