@@ -120,10 +120,13 @@ function ownerGivesWay(current: unknown, other: unknown, survives: PersonSurvive
   return typeof current === "string" && typeof other === "string" && !survives(current) && survives(other);
 }
 
-function mineReassigned(base: { owner?: unknown } | undefined, theirs: unknown, mine: unknown, survives: PersonSurvives): boolean {
-  if (!base || typeof mine !== "string" || !mine || !survives(mine)) return false;
-  const was = base.owner || "";
-  return mine !== was && (theirs || "") === was;
+function mineOwnerWins(base: { owner?: unknown } | undefined, theirs: unknown, mine: unknown, survives: PersonSurvives): boolean {
+  if (base) {
+    const was = base.owner || "", t = theirs || "", m = mine || "";
+    if (t === was && m !== was && (m === "" || typeof m === "string" && survives(m))) return true;
+    if (m === was && t !== was && t === "") return false;
+  }
+  return ownerGivesWay(theirs, mine, survives);
 }
 
 export function repointOwners(lists: readonly unknown[], remap: Readonly<Record<string, string>>): void {
@@ -174,8 +177,8 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
     const b = baseById[k];
     if (b && existing.name === b.name && t.name !== b.name) existing.name = t.name;
     if (b && existing.cat === b.cat && t.cat !== b.cat) existing.cat = t.cat as string;
-    if (ownerGivesWay(existing.owner, t.owner, live) || theirKeys[k] && mineReassigned(b, existing.owner, t.owner, live)) {
-      existing.owner = t.owner as string;
+    if (theirKeys[k] ? mineOwnerWins(b, existing.owner, t.owner, live) : ownerGivesWay(existing.owner, t.owner, live)) {
+      existing.owner = (t.owner || "") as string;
     }
     if (!existing.notes && t.notes) existing.notes = t.notes;
     if (tagStatusRank(t.status) > tagStatusRank(existing.status)) {
@@ -215,8 +218,8 @@ export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirS
     if (!b || !b.id || dropped[b.id]) return;
     const existing = byId[b.id];
     if (!existing) { byId[b.id] = jsonCopy(b); out.push(byId[b.id] as BrollShot); return; }
-    if (ownerGivesWay(existing.owner, b.owner, live) || theirIds[b.id] && mineReassigned(baseById[b.id], existing.owner, b.owner, live)) {
-      existing.owner = b.owner;
+    if (theirIds[b.id] ? mineOwnerWins(baseById[b.id], existing.owner, b.owner, live) : ownerGivesWay(existing.owner, b.owner, live)) {
+      existing.owner = b.owner || "";
     }
     if (!existing.notes && b.notes) existing.notes = b.notes;
     if (!existing.audioRef && b.audioRef) existing.audioRef = b.audioRef;
