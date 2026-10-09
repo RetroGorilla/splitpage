@@ -65,6 +65,31 @@ export function cellTextEdit(rowId: string, field: string, before: CellInput, af
   return changeSet({ cells: [{ rowId: rowId, field: field }], runsMoved: !same, derive: derive });
 }
 
+function joined<T>(first: readonly T[], second: readonly T[], same: (a: T, b: T) => boolean): T[] {
+  return first.concat(second.filter(function (item, at) {
+    return !first.some(function (had) { return same(had, item); }) &&
+      second.findIndex(function (other) { return same(other, item); }) === at;
+  }));
+}
+
+function equal<T>(a: T, b: T): boolean {
+  return a === b;
+}
+
+export function combined(first: ChangeSet, second: ChangeSet): ChangeSet {
+  return changeSet({
+    whole: first.whole || second.whole,
+    cells: joined(first.cells, second.cells, function (a, b) { return a.rowId === b.rowId && a.field === b.field; }),
+    rowsInserted: joined(first.rowsInserted, second.rowsInserted, equal),
+    rowsRemoved: joined(first.rowsRemoved, second.rowsRemoved, equal),
+    rowsMoved: first.rowsMoved || second.rowsMoved,
+    runsMoved: first.runsMoved || second.runsMoved,
+    docFields: joined(first.docFields, second.docFields, equal),
+    derive: joined(first.derive, second.derive, equal),
+    saveNow: first.saveNow || second.saveNow
+  });
+}
+
 export function isEmpty(changes: ChangeSet): boolean {
   return !changes.whole && !changes.cells.length && !changes.rowsInserted.length && !changes.rowsRemoved.length &&
     !changes.rowsMoved && !changes.runsMoved && !changes.docFields.length;

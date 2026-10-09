@@ -47,6 +47,8 @@ export interface ReconcilePort {
   anchors: (doc: ValidatedDocument) => number;
 }
 
+export type ReportPort = (error: unknown) => void;
+
 export interface TimerPort {
   now: () => number;
   start: (run: () => void, ms: number) => unknown;

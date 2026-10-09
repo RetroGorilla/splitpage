@@ -3,7 +3,7 @@ import { home } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
-import { recordMyColor } from "./13a-presence.js";
+import { personColorsWithMine } from "./13a-presence.js";
 import {
   autoSaveEnabled,
   autoSaveHalt,
@@ -17,15 +17,30 @@ import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
 import { REVIEW_ONLY, noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { changeSet } from "../application/session/change-set.ts";
 
 S.saveButtonBusy = false;
+
+var MY_COLOR = changeSet({ docFields: ["personColors"] });
+
+function myColorPlan(doc) {
+  if (!doc || reviewMode()) return null;
+  var next = personColorsWithMine(doc);
+  if (!next) return null;
+  return { changes: MY_COLOR, apply: function (live) { live.personColors = next; } };
+}
+
+function signLegacyEdit() {
+  var plan = myColorPlan(S.state);
+  if (plan) plan.apply(S.state);
+}
 
 provideSessionEffects({
   dirty: function () {
     S.dirty = true;
     S.editSeq++;
-    if (!reviewMode()) recordMyColor(S.state);
   },
+  attribute: myColorPlan,
   draft: function () {
     if (typeof noteDraftChange === "function") noteDraftChange();
   },
@@ -56,10 +71,12 @@ export function setSaveButtons(text, disabled) {
 }
 
 export function markDirty() {
+  signLegacyEdit();
   noteSessionEdit();
 }
 
 export function markAbsorbedDirty(kind) {
+  signLegacyEdit();
   noteAbsorbedDirty(kind);
 }
 
