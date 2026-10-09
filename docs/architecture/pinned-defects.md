@@ -141,7 +141,7 @@ Added by the 3.15 docs PR (2026-10-08). The first block came from 3.10's seeded 
 | A Writer split or join does not refresh the production and b-roll panels | #451 | Nothing | `src/js/19-writer.js`, `src/application/commands/split-join.ts` (declares no `derive`) | Open |
 | `editCell` (05b) still writes the cell and calls `markDirty`; routing it through `cellTextCommand` changes paste's counts | #452 | Nothing | `src/js/05b-cell-edit.js` | Open; milestone 6 candidate |
 | Cut, Ctrl+Z, then paste of that cut leaves the anchor in two scenes, because `cutNonce` outlives an undo of the cut | #460 | Nothing; the same on the base | `src/js/05c-clipboard.js` | Open |
-| With a long title focused at 1440 px, the search button and the identity chip overlap by 2 px; the headless suites never had focus, so `.doc-title:focus ~ .doc-meta` never applied | #490 | `85-header-fit.txt`, the editing-state check at 1440 | `src/app.css` | Open |
+| With a long title focused at 1440 px, the search button and the identity chip overlap by 2 px; the headless suites never had focus, so `.doc-title:focus ~ .doc-meta` never applied | #490 | `85-header-fit.txt`, the editing-state check at 1440 | `src/app.css` | Fixed: at 761 px and wider `.doc-meta` is a grid whose floor is the identity chip, so the facts give way first and then the title; the editing check now asserts no overlap at 761 to 1920 px |
 
 ## Not in this table
 
