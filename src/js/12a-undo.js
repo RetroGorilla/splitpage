@@ -148,7 +148,7 @@ function resolveDoc(state, p, survives, remap) {
 
 function resolveDocFields(state, plan) {
   var docs = plan.filter(function (p) { return p.op === "doc"; });
-  if (!docs.length) return null;
+  if (!docs.length) return { remap: null, cleared: 0 };
   var people = docs.filter(function (p) { return p.key === "people"; })[0];
   if (people) resolveDoc(state, people);
   var sides = listOf(state.people).concat(people ? listOf(people.step.after) : []);
@@ -160,7 +160,18 @@ function resolveDocFields(state, plan) {
   var survives = personSurvives(sides, kept);
   var remap = !people || people.merged ? personIdRemap(sides, kept) : null;
   docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives, remap); });
-  return remap;
+  var crew = idMap();
+  listOf(kept).forEach(function (e) { if (e && e.id) crew[e.id] = true; });
+  var cleared = 0;
+  docs.forEach(function (p) {
+    if (!OWNED_LISTS[p.key] || !Array.isArray(p.value)) return;
+    p.value = p.value.map(function (e) {
+      if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner] || remap && crew[remap[e.owner]]) return e;
+      cleared++;
+      return Object.assign({}, e, { owner: "" });
+    });
+  });
+  return { remap: remap, cleared: cleared };
 }
 
 function repointLists(state, remap) {
@@ -216,7 +227,8 @@ export function applyStepsLive(state, steps) {
       return { ok: false, reason: "unknown step" };
     }
   }
-  var remap = resolveDocFields(state, plan);
+  var resolved = resolveDocFields(state, plan);
+  var remap = resolved.remap;
   plan.forEach(function (p) {
     if (p.op === "set") {
       if (p.value === undefined) delete p.row[p.key]; else p.row[p.key] = p.value;
@@ -231,7 +243,7 @@ export function applyStepsLive(state, steps) {
     }
   });
   if (remap) repointLists(state, remap);
-  return { ok: true };
+  return resolved.cleared ? { ok: true, cleared: resolved.cleared } : { ok: true };
 }
 
 function onlyCell(steps) {
@@ -409,6 +421,7 @@ export function createUndoHistory() {
       if (entry.n <= current.n) remark(state);
       if (r.ok) current.ended = true;
     }
+    if (r.ok && r.cleared) return { ok: true, steps: steps, cleared: r.cleared };
     return r.ok ? { ok: true, steps: steps } : { ok: false, reason: r.reason, steps: steps };
   }
 
@@ -571,6 +584,12 @@ export function resetUndo() {
   restart();
 }
 
+function announceCleared(count) {
+  if (typeof document === "undefined") return;
+  var Ctor = (document.defaultView && document.defaultView.CustomEvent) || (typeof CustomEvent === "function" ? CustomEvent : null);
+  if (Ctor) document.dispatchEvent(new Ctor("undo-owner-cleared", { detail: { count: count } }));
+}
+
 function run(dir) {
   flushEdits();
   if (!S.state) return { ok: false, empty: true };
@@ -585,6 +604,7 @@ function run(dir) {
     base = clone(S.state);
     tracked = S.state;
     if (hooks.afterApply) hooks.afterApply(r.steps, dir);
+    if (r.cleared) announceCleared(r.cleared);
   } else if (!r.empty) {
     base = clone(S.state);
     if (hooks.onRefused) hooks.onRefused(r.reason, dir);

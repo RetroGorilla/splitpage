@@ -180,6 +180,13 @@ export function showToast(msg, kind, sticky) {
   return el;
 }
 
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("undo-owner-cleared", function (e) {
+    var n = (e.detail && e.detail.count) || 0;
+    if (n) showToast("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
+  });
+}
+
 export function showActionToast(msg, kind, label, onAction, sticky) {
   var el = showToast(msg, kind, true);
   if (!sticky) {
