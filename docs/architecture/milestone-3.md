@@ -267,13 +267,13 @@ The plan and the as-built doc came first: #372 (the plan), #422 (scope decisions
 | E2 | Held for all seven commands. Each has an "E2" application test over the real session with fake ports, in `scene-length`, `scene-status`, `cell-text`, `split-join` and `clipboard` under `tests/application/` |
 | E3 | Held. The "E3" tests run no-ops, refusals and throwing stamp ports through `runConfined`, which also catches an incomplete rollback |
 | E4 | Held (`document-session.test.ts`, `entry-fuzz.test.ts`). Recovery that enters by assignment is published as `adopt`, not `recovery` (session.md §2) |
-| E5 | Held for the commands: no command or session module imports `S` or a concrete adapter. The views of the seven commands no longer write the document. Every other view still does, so `S` has 54 importers (below) |
+| E5 | Held for the commands: no command or session module imports `S` or a concrete adapter. The views of the seven commands no longer write the document. Every other view still does, so `S` has 54 importers (below). The plan's "no migrated view imports `S`" holds in that narrower form only: this milestone migrated no view (the target layout keeps 05r, 01, `syncFieldFromDom`, 06, 19 and 05c as legacy views calling commands), and the full form is milestone 6's gate (external review, E5) |
 | E6 | Held (#378): compiler-API fixtures for the guarded functions, the cast rule with its self-tests |
 | E7 | Held (#385, #376): readonly returns, the freeze flag and `src/test/merge-inputs.test.mjs`. The freeze-on full run belongs to the gate |
-| E8 | Held. `tests/application/cell-text.test.ts` ("INV-06: a burst of keystrokes…") runs 6 keys 100 ms apart as one refresh 180 ms after the last, and 25 keys 60 ms apart as one refresh at the 1,000 ms cap and one after the last key. `67-render-perf.txt` passes |
+| E8 | Held. `tests/application/cell-text.test.ts` ("INV-06: a burst of keystrokes…") runs 6 keys 100 ms apart as one refresh 180 ms after the last, and 25 keys 60 ms apart as one refresh at the 1,000 ms cap and one after the last key. `67-render-perf.txt` passes. Held for the derivations, not literally: 12a's `flushEdits` still runs `diffStates(base, S.state)` over every row after each edit, the undo diff that the plan keeps until milestone 6's undo transaction. INV-06's row names it with its measured cost (external review, E8) |
 | E9 | Held for split, join and cut then paste. `split-join.test.ts` has a seeded check (300 seeds of 8 steps) that a later `syncCommentAnchors` moves nothing and that each command is one undo record; `clipboard.test.ts` has the cut-then-paste case. `comment-anchors.test.mjs` stays |
 | E10 | Held. #323 by #374, #326 by #376, #353 by #375 and #402. #391 is the piece of #353 that stays open |
-| E11 | Not in this PR. The gate record follows the runs |
+| E11 | Recorded in [milestone-3-gate.md](milestone-3-gate.md): the runs, and the external review with its disposition (#477 to #480) |
 
 ### Measured
 
