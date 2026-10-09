@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { checkFileGone, copyKept, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.js"));
+const { checkFileGone, copyKept, holdKeep, releaseKeep, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.js"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -80,6 +80,65 @@ test("a copy counts as kept only when the flush answered ok and a draft is on di
   assert.equal(copyKept(null, true), false);
   assert.equal(copyKept(undefined, true), false);
   assert.equal(copyKept({ ok: true }, "yes"), false);
+});
+
+test("a held tab keeps its copy until its one holder lets go", () => {
+  const tab = { id: "t1" };
+  const flow = {};
+  holdKeep(tab, flow);
+  assert.equal(tab.keepDraftOnClose, true);
+  releaseKeep(tab, flow);
+  assert.equal(tab.keepDraftOnClose, false);
+});
+
+test("a tab held by two flows stays held until both let go, in either order", () => {
+  for (const order of [[0, 1], [1, 0]]) {
+    const tab = { id: "t2" };
+    const flows = [{}, {}];
+    holdKeep(tab, flows[0]);
+    holdKeep(tab, flows[1]);
+    releaseKeep(tab, flows[order[0]]);
+    assert.equal(tab.keepDraftOnClose, true);
+    releaseKeep(tab, flows[order[1]]);
+    assert.equal(tab.keepDraftOnClose, false);
+  }
+});
+
+test("letting go of a hold that was never taken leaves the other holder's hold", () => {
+  const tab = { id: "t3" };
+  const holder = {};
+  holdKeep(tab, holder);
+  releaseKeep(tab, {});
+  assert.equal(tab.keepDraftOnClose, true);
+  releaseKeep(tab, holder);
+  releaseKeep(tab, holder);
+  assert.equal(tab.keepDraftOnClose, false);
+});
+
+test("a flow holding a tab twice lets go with one release", () => {
+  const tab = { id: "t4" };
+  const flow = {};
+  holdKeep(tab, flow);
+  holdKeep(tab, flow);
+  releaseKeep(tab, flow);
+  assert.equal(tab.keepDraftOnClose, false);
+});
+
+test("a hold nobody releases stays, whatever the other flows do", () => {
+  const tab = { id: "t5" };
+  const forever = {};
+  const flow = {};
+  holdKeep(tab, flow);
+  holdKeep(tab, forever);
+  releaseKeep(tab, flow);
+  releaseKeep(tab, flow);
+  assert.equal(tab.keepDraftOnClose, true);
+});
+
+test("a release on a tab nobody held leaves it unheld", () => {
+  const tab = { id: "t6" };
+  releaseKeep(tab, {});
+  assert.notEqual(tab.keepDraftOnClose, true);
 });
 
 let failed = 0;

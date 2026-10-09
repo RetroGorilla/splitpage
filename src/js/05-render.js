@@ -486,18 +486,23 @@ export function whilePainting(draw) {
     return out;
   } finally {
     painting--;
-    if (!painting && drawn) runAfterPaint();
+    if (!painting) runAfterPaint(drawn);
   }
 }
 
-function runAfterPaint() {
+function runAfterPaint(drawn) {
   var queued = afterPaint;
-  afterPaint = [];
-  queued.forEach(function (fn) { fn(); });
+  if (drawn) {
+    afterPaint = [];
+    queued.forEach(function (entry) { entry.fn(); });
+    return;
+  }
+  afterPaint = queued.filter(function (entry) { return !entry.ifFailed; });
+  queued.forEach(function (entry) { if (entry.ifFailed) entry.ifFailed(); });
 }
 
-export function afterThisPaint(fn) {
-  if (painting) afterPaint.push(fn);
+export function afterThisPaint(fn, ifFailed) {
+  if (painting) afterPaint.push({ fn: fn, ifFailed: ifFailed });
   else fn();
 }
 
