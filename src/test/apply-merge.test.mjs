@@ -1,5 +1,5 @@
 import "./_dom.mjs";
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -38,6 +38,7 @@ function unstamped(s) {
 }
 
 function reset() {
+  clearTimers();
   S.state = { sentinel: "state" };
   S.baseState = { sentinel: "base" };
   S.lastMergeUndo = { id: "s-earlier", docId: "d-earlier" };
