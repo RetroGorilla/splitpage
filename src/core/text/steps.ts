@@ -4,7 +4,7 @@ export type StepState = { rows?: (StepRow | null | undefined)[] | null | undefin
 
 export type RowFieldStep = { op: "rowField"; rowId: string; key: string; before?: unknown; after?: unknown };
 
-export type DocFieldStep = { op: "docField"; key: string; before?: unknown; after?: unknown; owners?: Record<string, string> };
+export type DocFieldStep = { op: "docField"; key: string; before?: unknown; after?: unknown; owners?: Record<string, string>; ownersOnly?: true };
 
 export type InsertRowStep = { op: "insertRow"; index: number; row: StepRow };
 
@@ -81,6 +81,7 @@ export function invertSteps(steps: readonly Step[] | null | undefined): Step[] {
     if (s.op === "docField") {
       const inverse: Step = { op: "docField", key: s.key, before: clone(s.after), after: clone(s.before) };
       if (s.owners) inverse.owners = clone(s.owners);
+      if (s.ownersOnly) inverse.ownersOnly = true;
       return inverse;
     }
     if (s.op === "insertRow") return { op: "deleteRow", index: s.index, row: clone(s.row) };

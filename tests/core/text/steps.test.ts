@@ -276,6 +276,13 @@ test("the inverse of each kind of step", () => {
   assert.deepEqual(applySteps({ rows: [] }, undefined), { rows: [] });
 });
 
+test("the inverse of a list step keeps its owner names and its owners-only mark, and only when it has them (#518)", () => {
+  const before = [{ id: "s1", owner: "p1" }], after = [{ id: "s1", owner: "" }];
+  assert.deepEqual(invertSteps([{ op: "docField", key: "brollShots", before, after, owners: { p1: "Ada" }, ownersOnly: true }]),
+    [{ op: "docField", key: "brollShots", before: after, after: before, owners: { p1: "Ada" }, ownersOnly: true }]);
+  assert.deepEqual(Object.keys(invertSteps([{ op: "docField", key: "brollShots", before, after }])[0] || {}), ["op", "key", "before", "after"]);
+});
+
 test("a step that no longer applies is refused, and an unknown one too", () => {
   const state: StepState = { title: "T", rows: [{ id: "r1", text: "a" }, { id: "r2", text: "b" }] };
   const refused = (steps: unknown[], why: RegExp) =>

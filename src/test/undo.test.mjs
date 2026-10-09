@@ -1353,7 +1353,7 @@ for (const x of PROTOTYPE_IDS) {
   test(`changedBetween: a scene "${x}" added or edited is reported as such (#311)`, () => {
     const prev = doc([row("r1", "one")]);
     const next = doc([row("r1", "one"), row(x, "two")]);
-    assert.deepEqual(changedBetween(prev, next), { rowFields: {}, structure: true, doc: {} });
+    assert.deepEqual(changedBetween(prev, next), { rowFields: {}, structure: true, doc: {}, items: {} });
     const edited = doc([row("r1", "one"), row(x, "TWO")]);
     assert.deepEqual(Object.keys(changedBetween(next, edited).rowFields), [x + "\u0000audioText"]);
   });
