@@ -2585,6 +2585,7 @@ function buildUnsavedDialog(list, verb, parentWin) {
   if (answer === "confirm") return "discard";
   if (answer === "cancel") return "cancel";
   if (answer === "review") return "review";
+  if (answer === "throw") throw new Error("test: the unsaved-changes question failed");
 
   if (list.length === 1) {
     const choice = dialog.showMessageBoxSync(parentWin, {
