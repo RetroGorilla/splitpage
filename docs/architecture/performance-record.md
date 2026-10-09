@@ -144,35 +144,73 @@ Three earlier runs of the head alone, made before these, read higher on two long
 
 ## Image-heavy load and merge, #320 (Windows)
 
-Recorded 2026-10-08 by `node tools/perf-record.mjs --only images` (PR 4.5), before the blob registry moves (D8). The case opens a document whose ten comments each hold a fresh 1 MiB picture, reads the same pictures back from IndexedDB on a fresh page, and merges two sides that each add ten. The same file ran, unchanged, on builds of `d18adde` (where milestone 2 started) and `c4d5944` (milestone 2's final tree): a `git worktree add --detach` checkout of each, `node_modules` junctioned to the lane's, `node build.mjs`, and `tools/perf-record.mjs` copied in (the tool measures the build of the repo it sits in). One run is three trials, each on pictures no earlier trial has seen; the tables give each run's median trial. The runs went in this order, one at a time on one machine, browser and font setup: `d18adde`, `c4d5944`, `d18adde`, `c4d5944`, `1aa1eed` (the base of PR 4.5, 4.0-development at that point), `d18adde`, `c4d5944`. Milestone 4's closing tree (4.22) runs the same command under these conditions.
+Recorded 2026-10-08 by `node tools/perf-record.mjs --only images` (PR 4.5), before the blob registry moves (D8). The case opens a document whose ten comments each hold a fresh 1 MiB picture, reads the same pictures back from IndexedDB on a fresh page, and merges two sides that each add ten. The same file ran, unchanged, on builds of `d18adde` (where milestone 2 started) and `c4d5944` (milestone 2's final tree): a `git worktree add --detach` checkout of each, `node_modules` junctioned to the lane's, `node build.mjs`, and `tools/perf-record.mjs` copied in (the tool measures the build of the repo it sits in). One run is three trials, each on ten pictures that no earlier trial used and that were not in the registry when its timer started (the tool checks the second and refuses the run otherwise); the tables give each run's median trial, and the per-trial times are listed under the results.
+
+The runs used the tool as committed at `8ed2dc7` (PR 4.5's second round). They went in two sets, one run at a time on one machine, browser and font setup, in this order: `d18adde`, `c4d5944`, `d18adde`, `c4d5944`, `1aa1eed` (the base of PR 4.5, with no app source changed since), `d18adde`, `c4d5944`, `1aa1eed`. The first set's `c4d5944` merge runs spread by 13.9%, over the 10% line, so the set was rerun once in full (set 2); that set had one disturbed `c4d5944` run of its own, so the headline numbers are the medians over both sets (6 runs of `d18adde` and `c4d5944`, 4 of `1aa1eed`). An earlier set at tool `8f62a25` is superseded: its open file went through the app's migration while it was built, so its pictures were already in the registry when the timer started (it read +33.9% open and +33.7% merge for `c4d5944`). Milestone 4's closing tree (4.22) runs the same command under these conditions.
 
 ### Conditions
 
 - Machine: win32 10.0.26300 x64, AMD Ryzen 9 9950X3D2 16-Core Processor x32, 30.9 GB, Node v22.23.2
 - Browser: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0, headless, viewport 1400x900 at 1x. The same browser ran every build.
 - Script font: `"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, sans-serif`; Atkinson Hyperlegible Next is installed and used
-- Load at the time: no other browser or node process was running and 17 GB of RAM was free. The tool read the CPU as 4 to 9% busy in the second before each run and in the second after it (`d18adde` 5/7, 6/8, 6/4; `c4d5944` 9/9, 4/4, 4/4; `1aa1eed` 4/5), from idle Claude sessions and desktop software. No game was running.
+- Load at the time: not quiet. Other lanes of this milestone (agents running tests and reviews) shared the PC, 3 to 35 node processes at the start of a run and no other browser. The system CPU read, just before each run, ranged from 1% to 85%; the tool's own reads in the second before and after each run ranged from 4% to 96% and are in the tables below. A game was not running. Free RAM was 11 GB at the start. Runs that overlapped a burst of other work are visible in the trial lists (set 1 run 4's merge, set 1 run 5, set 2 run 2) and are named under Reading it.
 - Fixture: the seed script (2 scenes) with ten comments added, each holding one picture. A picture is a valid PNG of exactly 1 MiB (a 1x1 image plus a private chunk of random bytes with correct checksums), so no two share a hash and the browser decodes each
-- Open: `openFile` on a .splitpage whose comment bodies hold the pictures as data URLs, until the frame after it. It covers reading and parsing the 14 MB file, migrating it (decode, hash and copy of each picture, `intern`), and the redraw
+- Open: `openFile` on a .splitpage that is plain JSON (the file is not run through the app's migration when it is built), whose comment bodies hold the pictures as data URLs, until the frame after it. None of the ten is in the registry at the start (checked by hash). The timed work is reading and parsing the 14 MB file, migrating it (each picture decoded, hashed and put in the registry), and the redraw; storing the pictures in IndexedDB is queued by the migration on a timer and is not waited for inside the time
 - Load from IndexedDB: `ensureBytes` for the ten pictures of an earlier open, after a reload of the page, so the registry reads them back from the store (`loadBlob`, then `intern`). This is the third hash and copy that the milestone 4 plan names; the tool checks that none of the ten was in memory before the call
-- Merge: a hosted pull (`noteRev`, with `fetch` stubbed to answer from memory) of a document that added ten pictures as data URLs, into a document that added ten others, until the frame after it. My side's pictures were already in the registry, as in a live session, so the timed ingestion is theirs; the JSON parse of a server answer is not in the time
+- Merge: a hosted pull (`noteRev`, with `fetch` stubbed to answer from memory) of a document that added ten pictures as data URLs, into a document that added ten others, until the frame after it. My side's pictures were already in the registry, as in a live session, so the timed ingestion is theirs, and none of theirs is in the registry at the start (checked by hash); the JSON parse of a server answer is not in the time
 
-### Results, median of 3 runs each (ms, each run the median of its 3 trials)
+### Results, median over all runs (ms; each run is the median of its 3 trials)
 
-| Case | `d18adde` runs | `d18adde` median | `c4d5944` runs | `c4d5944` median | `1aa1eed` (1 run) |
-| --- | --- | --- | --- | --- | --- |
-| open, 10 pictures | 270, 281, 270.8 | 270.8 | 368, 362.6, 360 | 362.6 | 369.9 |
-| load from IndexedDB, 10 pictures | 102.6, 102.6, 103.1 | 102.6 | 103, 102.8, 102.9 | 102.9 | 103.3 |
-| merge, 10 + 10 pictures | 299.8, 289.8, 287 | 289.8 | 387.6, 393.3, 387.2 | 387.6 | 384 |
+| Case | `d18adde` (6 runs) | `c4d5944` (6 runs) | `1aa1eed` (4 runs) |
+| --- | --- | --- | --- |
+| open, 10 pictures | 284.05 | 382.75 | 384.05 |
+| load from IndexedDB, 10 pictures | 104.25 | 108 | 104.65 |
+| merge, 10 + 10 pictures | 298.2 | 394.4 | 392.25 |
 
-Median slowdown against `d18adde`:
+A median of six is the mean of the middle two runs. Slowdown against `d18adde`:
 
 | Case | `c4d5944` | `1aa1eed` |
 | --- | --- | --- |
-| open | +33.9% | +36.6% |
-| load from IndexedDB | +0.3% | +0.7% |
-| merge | +33.7% | +32.5% |
+| open | +34.7% | +35.2% |
+| load from IndexedDB | +3.6% | +0.4% |
+| merge | +32.3% | +31.5% |
+
+Each set alone, `c4d5944` against `d18adde`: set 1 open +35.7% (284.2 against 385.6), merge +31.1% (299.7 against 392.9); set 2 open +33.7% (280.8 against 375.3), merge +33.4% (296.7 against 395.9).
+
+### Every run and trial (ms)
+
+Busy is the tool's read of the CPU in the second before and the second after the run; system is the instantaneous read just before it. The trial lists are in the order they ran.
+
+Set 1:
+
+| Run | Build | Busy before / after | System | open trials | load trials | merge trials |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `d18adde` | 21% / 11% | 46% | 304.4, 292.1, 288.7 | 104.3, 105.8, 103.8 | 313.3, 299.7, 291.6 |
+| 2 | `c4d5944` | 15% / 8% | 7% | 386.4, 378.3, 379.9 | 105.5, 102.6, 102.7 | 390.7, 392.9, 396.3 |
+| 3 | `d18adde` | 8% / 4% | 5% | 288.6, 283.9, 283.6 | 103.8, 105.9, 105 | 309, 293.4, 306.9 |
+| 4 | `c4d5944` | 7% / 87% | 1% | 398.7, 385.6, 383.8 | 108.5, 109.9, 105 | 389.2, 445.2, 506.7 |
+| 5 | `1aa1eed` | 96% / 10% | 85% | 521.6, 510.3, 507 | 122.2, 111.4, 109.1 | 402.7, 415, 398.3 |
+| 6 | `d18adde` | 9% / 54% | 15% | 284.2, 275.5, 288.8 | 104, 104.2, 104.4 | 293.6, 293.2, 288.9 |
+| 7 | `c4d5944` | 45% / 14% | 79% | 394.2, 385.5, 386.9 | 107.5, 113.7, 103.3 | 390.4, 395, 382.8 |
+| 8 | `1aa1eed` | 10% / 18% | 1% | 383.1, 383.8, 379.1 | 104.7, 103.2, 105.2 | 390.1, 388, 390.4 |
+
+Set 2:
+
+| Run | Build | Busy before / after | System | open trials | load trials | merge trials |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `d18adde` | 10% / 10% | 8% | 284.4, 280.8, 279.7 | 102.8, 102.9, 103.6 | 304.2, 310.3, 298.7 |
+| 2 | `c4d5944` | 26% / 15% | 7% | 491.8, 499.9, 472.9 | 122.1, 122.6, 121.8 | 531.8, 522.4, 419.5 |
+| 3 | `d18adde` | 14% / 4% | 29% | 290.5, 295.8, 292.8 | 105.7, 105.9, 104.2 | 288.7, 286.5, 287.5 |
+| 4 | `c4d5944` | 5% / 4% | 1% | 370.4, 363.5, 369.4 | 122.7, 125.7, 108.4 | 411.3, 395.9, 389.5 |
+| 5 | `1aa1eed` | 5% / 9% | 1% | 377.3, 367.4, 375 | 104.6, 103.9, 105.1 | 390.9, 389.2, 395.7 |
+| 6 | `d18adde` | 4% / 4% | 3% | 280.1, 271.8, 272.8 | 102.4, 103.1, 102.2 | 296.7, 283.7, 298.7 |
+| 7 | `c4d5944` | 4% / 16% | 1% | 376.8, 375.3, 367.4 | 102.8, 103.2, 102.8 | 382.9, 387.5, 410.7 |
+| 8 | `1aa1eed` | 12% / 8% | 12% | 394.4, 381.8, 385 | 103.5, 104.6, 104.6 | 393.6, 380.9, 394.7 |
 
 ### Reading it
 
-The runs of one build sit within 4.4% of each other at most (`d18adde` open 270 to 281, merge 287 to 299.8; `c4d5944` open 360 to 368, merge 387.2 to 393.3), so no pair needed a rerun and the slowdown is far outside the spread. The three trials inside a run lie within 26 ms of each other. The open and merge cases, which both ingest ten new pictures, are about a third slower on `c4d5944` (about 92 and 98 ms) and `1aa1eed` reads the same, so the cost came in between `d18adde` and `c4d5944` and the commits since have not moved it. The load from IndexedDB is the same on all three builds: its extra hash and copy is on `d18adde` too (`loadBlob` calls `intern` there as well), so the load path is not a regression, and a trim of the ingestion port leaves it as it is. Whether the 10% line named in E14 calls for the trim is for 4.19; both ingesting cases are above it by a factor of three.
+This machine was shared with other lanes throughout, and it shows. `d18adde`'s six runs spread by 7% (open 272.8 to 292.8) and 6.5% (merge 287.5 to 306.9), within the 10% line. `c4d5944`'s spread by 32% (open) and 34% (merge), over it, because of two runs that overlapped bursts of other work: set 1 run 4 (87% busy after it; its merge trials 389, 445, 507) and set 2 run 2 (every case 19 to 33% up). The rest of `c4d5944`'s runs sit tight: open 369.4 to 386.9 (4.6%) in five runs, merge 387.5 to 395.9 (2.1%) in four. `1aa1eed`'s set 1 run was taken under 96% busy (open 510) and the other three agree within 2.6% (open) and 3.2% (merge, all four). The spread rule asked for one rerun of the pair, which is set 2; the medians over both sets are used because a second set did not make the disturbance go away, and a median of six does not move for two bad runs.
+
+The two cases that ingest ten new pictures, open and merge, are about a third slower on `c4d5944` than on `d18adde` (about 99 and 96 ms), and `1aa1eed` reads the same. Each set alone gives the same answer (+35.7% and +31.1%, then +33.7% and +33.4%), so the slowdown is far outside the spread. The cost came in between `d18adde` and `c4d5944`, and the commits since have not moved it. The size matches the extra hash of ten 1 MiB pictures that the PR review measured in Node (96 to 100 ms).
+
+The load from IndexedDB was 102 to 106 ms on every `d18adde` run and 102.7 to 108.5 on four of `c4d5944`'s six; the other two (set 2 runs 2 and 4) read 122 ms, and the second of them was taken with the CPU quiet, so the +3.6% of the median over all runs is not explained by load alone. The code is the same on both builds (`loadBlob` calls `intern` on `d18adde` too, so its extra hash and copy is not new), `1aa1eed` reads 104.6, and the four ordinary `c4d5944` runs equal `d18adde`'s, so I read the 122 ms runs as store timing noise, but this data cannot prove it. A trim of the ingestion port leaves the load path as it is. Whether the 10% line named in E14 calls for the trim is for 4.19; both ingesting cases are above it by a factor of three.
