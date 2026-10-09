@@ -808,7 +808,7 @@ export function renderFirstDraw() {
 }
 
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying || screenStale || painting) return;
+  if (!cellEl.isConnected || S.undoApplying || screenStale) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
