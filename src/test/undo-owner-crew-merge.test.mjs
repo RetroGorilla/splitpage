@@ -224,6 +224,25 @@ test("an undo that only changes the crew announces the items it unassigned (#476
   }
 });
 
+test("an undo that only changes the crew announces its cleared items without a jsdom error (#503)", () => {
+  const failures = [];
+  const onError = (e) => { failures.push(e.message); e.preventDefault(); };
+  window.addEventListener("error", onError);
+  try {
+    boot(["Cy"]);
+    S.state.people.push(person("p_Ada", "Ada"));
+    commit();
+    remoteCrew((st) => {
+      st.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
+      st.productionTags.find((e) => e.name === "Kettle").owner = "p_Ada";
+    });
+    assert.equal(undo().ok, true);
+    assert.deepEqual(failures, []);
+  } finally {
+    window.removeEventListener("error", onError);
+  }
+});
+
 function rng(seed) {
   let a = seed >>> 0;
   return () => {

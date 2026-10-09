@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "https://splitpage.test/" });
+const dom = new JSDOM("<!doctype html><html><body><div id=\"toast-host\"></div></body></html>", { url: "https://splitpage.test/" });
 
 for (const name of [
   "window", "document", "DOMParser", "Node", "NodeFilter", "Element",
