@@ -108,6 +108,9 @@ for (const list of ["brollShots", "productionTags"]) {
     assert.equal(undo().cleared, 2);
     assert.equal(redo().ok, true);
     assert.equal(ownerOf(list, "Quay"), "p_Ada");
+    remote((st) => { itemOf(st, list, "Pier").notes = "from them"; });
+    assert.equal(undo().cleared, 2, "the step recorded again still forgets per item");
+    assert.equal(itemOf(S.state, list, "Pier").notes, "from them");
   });
 
   test("redo gives back an item a collaborator added for that person after the fold, in " + list + " (#518 review B1)", () => {
@@ -193,11 +196,11 @@ test("the folded owner change leaves alone an owner I unassigned later, and does
   assert.deepEqual(dangling(), []);
 });
 
-function crewDoc() {
+function crewDoc(names = ["Cy"]) {
   S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
   ] });
-  S.state.people.push(person("p_Cy", "Cy"));
+  names.forEach((n) => S.state.people.push(person("p_" + n, n)));
   S.state.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
   S.state.brollShots.push(shot("bs_dock", "Dock", ""), shot("bs_quay", "Quay", ""));
   trackDocument();
@@ -245,6 +248,44 @@ test("redo after an undo that merged the crew by name gives back the owner the m
   assert.equal(undo().ok, true);
   assert.equal(ownerOf("productionTags", "Lamp"), "p_Cy");
   assert.deepEqual(dangling(), []);
+});
+
+test("a list step recorded again keeps its owner names, so a redo still finds a person a collaborator re-added under a new id (#529)", () => {
+  crewDoc(["Ada", "Cy"]);
+  itemOf(S.state, "brollShots", "Dock").owner = "p_Ada";
+  commit();
+  itemOf(S.state, "brollShots", "Quay").owner = "p_Cy";
+  itemOf(S.state, "productionTags", "Kettle").owner = "p_Cy";
+  commit();
+  remote((st) => { itemOf(st, "productionTags", "Lamp").notes = "from them"; });
+  assert.equal(undo().ok, true);
+  assert.equal(ownerOf("brollShots", "Dock"), "");
+  assert.equal(ownerOf("brollShots", "Quay"), "p_Cy");
+  remote((st) => { st.people = [person("p_Cy", "Cy"), person("pR_ada", "Ada")]; });
+  const again = redo();
+  assert.equal(again.ok, true);
+  assert.equal(again.cleared, undefined);
+  assert.equal(ownerOf("brollShots", "Dock"), "pR_ada");
+  assert.equal(ownerOf("brollShots", "Quay"), "p_Cy");
+});
+
+test("an undo that clears an owner through a merged list says so again after a redo, and counts only that owner (#529)", () => {
+  crewDoc();
+  S.state.people.push(person("p_Ada", "Ada"));
+  itemOf(S.state, "brollShots", "Dock").owner = "p_Ada";
+  commit();
+  itemOf(S.state, "brollShots", "Quay").owner = "p_Ada";
+  const back = undo();
+  assert.equal(back.cleared, 1);
+  assert.deepEqual(crew(), ["Cy"]);
+  assert.equal(ownerOf("brollShots", "Dock"), "");
+  assert.equal(ownerOf("brollShots", "Quay"), "");
+  const again = redo();
+  assert.equal(again.cleared, undefined);
+  assert.equal(ownerOf("brollShots", "Dock"), "p_Ada");
+  assert.equal(ownerOf("brollShots", "Quay"), "p_Ada", "the redo gives back what the undo cleared");
+  assert.equal(undo().cleared, 1, "the second undo clears Quay again and says so, and Dock is its own change");
+  assert.equal(ownerOf("brollShots", "Quay"), "");
 });
 
 function rng(seed) {
