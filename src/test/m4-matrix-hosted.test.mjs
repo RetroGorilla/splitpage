@@ -248,6 +248,7 @@ wrongToday("S2", "a hosted save that completes after a same-id reopen does not m
   await settle();
   assert.equal(late.rev, before.rev, "the reopened session's revision did not move");
   assert.deepEqual(late.baseTexts, before.baseTexts, "the reopened session's baseline did not move");
+  assert.equal(server.texts("srv-a")[1], "Typed after the reopen.", "setup: the next save reached the server");
   assert.equal(server.texts("srv-a")[0], "Typed before the save.", "the server still holds the saved text after the next edit");
 }), /the reopened session's revision did not move|the reopened session's baseline did not move|the server still holds the saved text after the next edit/);
 
@@ -655,7 +656,7 @@ wrongToday("C3", "a Drive listing that completes after the modal closed changes 
   assert.equal(document.getElementById("drive-list").innerHTML, afterClose, "the Drive list was not redrawn after the modal closed");
 }), /the Drive list was not redrawn after the modal closed/);
 
-wrongToday("C3-download", "a Drive download that completes after the modal closed delivers nothing", hostedCase(async ({ server, held }) => {
+rightToday("C3-download", "a Drive download started before the modal closed is still delivered after it closes", hostedCase(async ({ server, held }) => {
   withDriveCredentials();
   server.override = driveAnswer(DRIVE_FILES);
   hosted.openDriveModal();
@@ -673,12 +674,12 @@ wrongToday("C3-download", "a Drive download that completes after the modal close
     held.gates.releaseAll("fetch");
     await downloading;
     await settle();
-    assert.equal(made.length, 0, "the Drive download was not delivered after the modal closed");
-    assert.deepEqual(newToasts(before), [], "the Drive download said nothing after the modal closed");
+    assert.equal(made.length, 1, "the Drive download was delivered after the modal closed");
+    assert.ok(newToasts(before).includes("Saved clip.txt"), "the user is told the download was saved");
   } finally {
     URL.createObjectURL = make;
   }
-}), /the Drive download was not delivered after the modal closed/);
+}));
 
 wrongToday("S10", "copying a share link on a dirty document while a save runs sends one PUT at a time", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);

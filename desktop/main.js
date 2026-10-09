@@ -15,7 +15,7 @@ const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./dr
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createGoogleDrive } = require("./google-drive");
 const { documentServerHost } = require("./bind-host");
-const { checkFileGone, copyKept, holdKeep, releaseKeep, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
+const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
 const { createVoiceHelper } = require("./voice-helper");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
@@ -1918,17 +1918,19 @@ function createTabWindow(restoreSpec) {
     if (closeConfirmedWindows.has(win)) return;
     if (rec.closeKeepingDrafts) { event.preventDefault(); return; }
 
-    const isLastWindow = liveWindows().length <= 1;
+    const lastWhenAsked = liveWindows().length <= 1;
 
-    if (HOSTING && isLastWindow && !hostingConfirmed) {
+    if (HOSTING && lastWhenAsked && !hostingConfirmed) {
       if (!askHostingPrompt(win)) { event.preventDefault(); return; }
     }
 
     const tabIds = rec.tabIds.slice();
     const confirmClose = (closing) => {
+      const othersOpen = liveWindows().some((w) => w.win !== win);
+      const { freezeSession, confirmHosting } = lastWindowClose(lastWhenAsked, othersOpen, HOSTING);
       settleDraftsForClose(closing, true, "close-without-saving");
-      if (HOSTING && isLastWindow) hostingConfirmed = true;
-      if (isLastWindow) sessionWritesFrozen = true;
+      if (confirmHosting) hostingConfirmed = true;
+      if (freezeSession) sessionWritesFrozen = true;
       closeConfirmedWindows.add(win);
     };
 
@@ -2545,39 +2547,8 @@ function reportCloseCheckFailure(verb, err) {
 }
 
 function askBeforeClosing(tabIdsNow, verb, parentOf, stillWanted) {
-  const holder = { verb };
-  const held = [];
-  const asked = [];
-  const round = (ids) => {
-    asked.push(...ids);
-    return goneFileTabsOf(ids).then((gone) => {
-      if (!stillWanted()) return "cancel";
-      const unsaved = unsavedTabsOf(ids.filter((id) => tabs.has(id)), gone);
-      const first = askAboutUnsaved(unsaved, verb, parentOf(unsaved));
-      if (first !== "discard" || !gone.length) return first;
-      held.push(...gone);
-      return keepDraftsOfGoneFiles(gone, holder).then((unkept) => {
-        if (!stillWanted()) return "cancel";
-        const missing = unkept.filter((tab) => tabs.get(tab.id) === tab);
-        return askAboutUnsaved(missing, verb, parentOf(missing));
-      });
-    }).then((answer) => {
-      if (answer !== "discard") return answer;
-      const added = tabIdsNow().filter((id) => !asked.includes(id));
-      return added.length ? round(added) : answer;
-    });
-  };
-  return Promise.resolve()
-    .then(() => round(tabIdsNow()))
-    .catch((err) => {
-      reportCloseCheckFailure(verb, err);
-      return "cancel";
-    })
-    .then((answer) => {
-      const now = tabIdsNow();
-      for (const tab of held) if (answer !== "discard" || !now.includes(tab.id)) releaseKeep(tab, holder);
-      return { answer, tabIds: asked.filter((id) => now.includes(id)) };
-    });
+  const io = { tabs, goneFileTabsOf, unsavedTabsOf, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure };
+  return runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted);
 }
 
 function unsavedTabsOf(tabIds, gone) {
@@ -2606,6 +2577,7 @@ function unsavedTitles(list) {
 }
 
 function buildUnsavedDialog(list, verb, parentWin) {
+  if (TEST_MODE) process.stderr.write(`[splitpage] test question (${verb}): ${JSON.stringify(list.map((tab) => tab.id))}\n`);
   const answer = consumeTestDialogAnswer();
   if (answer === "confirm") return "discard";
   if (answer === "cancel") return "cancel";

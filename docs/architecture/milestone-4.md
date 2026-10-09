@@ -161,7 +161,8 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | P2, P3 | Publish while another document is opened (#247); typing during publish stays dirty (#248) | right (measured) | stays |
 | C1 | Hosted Save As acknowledges no server edit and keeps the merge ancestor | right (measured) | stays |
 | C2 | A collaboration modal step that completes after the modal closed changes nothing. The case runs the connect step, the sign-in step and the links step. The publish step is not covered: it completes the publish the user asked for and shows its own toast | right (measured) | stays |
-| C3, C3-download | A Drive listing (C3) or download (C3-download) that completes after the modal closed changes nothing | wrong (measured: the closed modal's list is redrawn; a download is delivered with a "Saved …" toast). Whether a download the user started should still be delivered after they closed the modal is not settled; the case follows the matrix row | 4.16 |
+| C3 | A Drive listing that completes after the modal closed changes nothing | wrong (measured: the closed modal's list is redrawn) | 4.16 |
+| C3-download | A Drive download started before the modal closed is still delivered after it closes: the file is saved and the "Saved …" toast shows (Adam's ruling: closing the window is not a cancel) | right (measured) | stays |
 | A1 | Owner, scoped editor and reviewer each get exactly today's client capability; none broadens what the server allows. The case pins the observable table: command outcome, document `PUT`s, the publish and open menu states, the collaborate refusal and the publish `POST` | right (measured: owner edits, saves, publishes, opens and invites; scoped editor edits and saves only; reviewer's edit is rejected and sends no `PUT`) | stays |
 | B1 | A late draft write for the previous document neither removes the current document's draft record nor claims its key | wrong | 4.17 |
 | B2 | Two tabs on one document: with Web Locks, a live writer's draft is not taken over | right | stays |
@@ -312,7 +313,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.16 Collaboration and authority.**
 - An authority model in `src/application/collaboration/`: none, owner, scoped editor (document id), reviewer. `reviewMode()`, `isLinkGuest()` and the session's `CapabilityPort` derive from it. Server refusals stay authoritative (A1).
-- The Collaborate workflow (`connectStep`, `signInStep`, `publishStep`, the link actions) behind an interface; its `collab.seq` check is kept. The Drive modal gets the same stale check (C3). Credentials stay per server in this browser (INV-62).
+- The Collaborate workflow (`connectStep`, `signInStep`, `publishStep`, the link actions) behind an interface; its `collab.seq` check is kept. The Drive modal's listing gets the same stale check (C3); a download already started is still delivered (C3-download). Credentials stay per server in this browser (INV-62).
 - Sonnet by D2; it becomes Opus if it has to change the publish or save path. Suites 18, 43, 44, 57, 59, 64, 260 to 264, 266, 361. Desktop groups `per-tab connections`, `draft: server document`, `google drive`.
 
 **4.17 Draft store adapters and writer ownership.**
@@ -333,7 +334,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 
 **4.20 Continuation identity (#478).** `insertIntoScriptCell`, `handleImageFile`, `retryThumbnail`, `thumbnailsAfterPaste` and the annotator's save capture `captureOperation()` before their `await` and refuse on `!stillOwns(ctx)` with D11's toast, whose wording is brought to Adam in this PR. The paste's target range is captured with it, and a paste into a cell edited since lands at the end of the cell (D11). M1 to M7 green. Suites 65, 68, 69, 80, 86, 92, 160, 186 and `render-guard-app.test.mjs`.
 
-**4.21 Atomic render (#463).** Build rows and title off-screen with the incremental row reuse, then commit in a guarded phase in which render-generated focus and blur commit nothing; restore focus within its own surface (a Writer paragraph in the Writer); a draw that throws leaves the old screen intact and is a recoverable presentation failure, with #456's editing block kept. Acceptance: 4.4's cases, the issue's own (a throw at any row leaves the DOM byte-identical), and the typing and render medians within noise of 4.4's base on the long demo. Hot path: full browser run before merge, plain and frozen.
+**4.21 Atomic render (#463).** Build rows and title off-screen with the incremental row reuse, then commit in a guarded phase in which render-generated focus and blur commit nothing; restore focus within its own surface (a Writer paragraph in the Writer); a draw that throws leaves the old screen intact and is a recoverable presentation failure, with #456's editing block kept. Acceptance: 4.4's cases, including the four it leaves skipped as owned by this PR (R4m, R4l, R4w and R5d in `src/test/render-no-edit-app.test.mjs`, each converted to a passing test, or to a `wrongToday`-then-green case through the 4.0 wrapper, in the commit that fixes it; none may stay skipped at the gate), the issue's own (a throw at any row leaves the DOM byte-identical), and the typing and render medians within noise of 4.4's base on the long demo. Hot path: full browser run before merge, plain and frozen.
 
 **4.22 Close.** The lifecycle test complete across the owners, with the app-lifetime subscriptions named (E9). Every matrix case `rightToday`. Revise `saving.md` and `session.md`; this doc's as-built section with `--metrics` before and after and `--prune`; ledger rows INV-20, 29, 36, 39, 40, 41, 51, 52, 62 with their `HANDOFF.md` pointers; pinned-defects rows; the #320 case rerun on the closing tree under 4.5's conditions. The gate record is a separate docs PR after the runs.
 
@@ -381,6 +382,7 @@ None of the measured defects is cheap data loss reachable today: each needs an o
 | Pristine and resume checks disagree | #483; T3 | 4.18 | — |
 | Over-bound `.html` loses formatting | #501; T4 | 4.12 | `open-html-bound.test.mjs`, where it pins the rewritten script data |
 | Continuations land in another document | #478; M1–M7 | 4.20 | `render-guard-app.test.mjs`'s late-paste case stays |
+| A render that throws leaves a half-drawn screen; the render's focus restore under an open Writer may focus a grid cell | #463; R4m, R4l, R4w, R5d | 4.21 | the four skipped cases of `src/test/render-no-edit-app.test.mjs` (run with `RENDER_NO_EDIT_WRONG_TODAY=1`); 4.21 removes each skip in the commit that fixes it, and the 4.0 wrapper (`src/test/_m4-matrix.mjs`, PR #527) can turn them into `wrongToday` cases |
 | #325 reads that repair, including `settleDerivedRecords` before capture | — | stays at milestone 6 | — |
 
 ## Risks
