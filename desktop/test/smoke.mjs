@@ -790,6 +790,7 @@ async function waitForNoProcesses(userDataDir, timeoutMs) {
 }
 
 const ENDS_DIRTY = "the case ends with a dirty tab, and test mode answers the unsaved-changes prompt Cancel";
+const ENDS_FILE_GONE = "the case ends with a tab whose file was deleted, which asks before closing (#258), and test mode answers Cancel";
 
 async function teardown(app, tag, opts) {
   opts = opts || {};
@@ -2223,7 +2224,7 @@ async function caseRecentDocuments(target, fixturesDir) {
       JSON.stringify(diskAfterClear && diskAfterClear.recents));
   } finally {
     if (cdp) { try { cdp.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 
