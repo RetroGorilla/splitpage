@@ -1,21 +1,36 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { LONG_DEMO } from "../js/_starters.js";
 
 await bootApp();
 
 const { parseProjectFileState } = await import("../js/18-local-files.js");
+const { buildPublishHtml } = await import("../js/02-state.js");
+const { migrateDocument } = await import("../js/02b-doc-id.js");
 
 after(closeApp);
 
-const DOC = JSON.stringify(S.state);
+const SOURCE = JSON.parse(JSON.stringify(LONG_DEMO.state));
+SOURCE.rows.push({
+  id: "rich-row",
+  status: "draft",
+  visualText: '<strong>bold</strong> <em>italic</em> <u>under</u> <a href="https://example.com/">link</a> <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lens" contenteditable="false">Lens</span>',
+  audioText: "<strong>spoken</strong> line",
+  imageRef: null,
+  updatedAt: "",
+  updatedBy: null
+});
+
+const SOURCE_JSON = JSON.stringify(SOURCE);
+
+const EXPORT = buildPublishHtml(SOURCE_JSON);
 
 const SHELL_HEAD = '<!doctype html><html><head><meta charset="utf-8"><title>t</title></head><body>';
 
 const SHELL_TAIL = "</body></html>";
 
-const STATE_SCRIPT = '<script id="state-data" type="application/json">' + DOC.replace(/</g, "\\u003c") + "</script>";
+const STATE_SCRIPT = '<script id="state-data" type="application/json">\n' + SOURCE_JSON.replace(/<\//g, "<\\/") + "\n</script>";
 
 const DISTINCT = 100;
 
@@ -46,6 +61,11 @@ function weight(doc) {
   return n;
 }
 
+function unboundedState(markup) {
+  const doc = new window.DOMParser().parseFromString(markup, "text/html");
+  return JSON.parse(JSON.stringify(migrateDocument(JSON.parse(doc.getElementById("state-data").textContent), { kind: "file" })));
+}
+
 async function parsedWithCount(markup) {
   const proto = window.DOMParser.prototype;
   const original = proto.parseFromString;
@@ -69,15 +89,18 @@ for (const [name, shape] of Object.entries(SHAPES)) {
     const { parsed, elements } = await parsedWithCount(markup);
     assert.ok(parsed && parsed.state, "the embedded state still opens");
     assert.equal(parsed.kind, "html");
+    assert.equal(JSON.stringify(JSON.parse(JSON.stringify(parsed.state))), JSON.stringify(unboundedState(markup)), "the opened state equals an unbounded parse of the same file");
     assert.ok(elements < markup.length, "parsed " + elements + " elements and attributes from " + markup.length + " characters");
   });
 }
 
-test("an ordinary saved .html file opens to the same state with its element count unchanged", async () => {
-  const markup = SHELL_HEAD + '<main id="app"><p>one <b>two</b></p><ul><li>a</li><li>b</li></ul></main>' + STATE_SCRIPT + SHELL_TAIL;
-  const plain = new window.DOMParser().parseFromString(markup, "text/html");
-  const { parsed, elements } = await parsedWithCount(markup);
+test("an ordinary saved .html file opens to the source data, identical to an unbounded parse", async () => {
+  const { parsed, elements } = await parsedWithCount(EXPORT);
+  assert.ok(parsed && parsed.state, "the export opens");
   assert.equal(parsed.kind, "html");
-  assert.equal(JSON.stringify(parsed.state), JSON.stringify((await parseProjectFileState(file(markup))).state));
+  assert.equal(parsed.state.title, SOURCE.title);
+  assert.deepEqual(parsed.state.rows.map((row) => row.id), SOURCE.rows.map((row) => row.id));
+  assert.equal(JSON.stringify(JSON.parse(JSON.stringify(parsed.state))), JSON.stringify(unboundedState(EXPORT)));
+  const plain = new window.DOMParser().parseFromString(EXPORT, "text/html");
   assert.ok(elements <= weight(plain) + 2);
 });
