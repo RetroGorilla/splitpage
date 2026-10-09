@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.js"));
+const { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require(path.join(here, "..", "close-keep.js"));
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -234,6 +234,108 @@ test("close check: a tab moved out during the copy's wait is let go and not clos
   assert.deepEqual([r.answer, r.tabIds], ["discard", ["b"]]);
   assert.equal(r.tabs.get("a").keepDraftOnClose, false);
   assert.equal(r.tabs.get("b").keepDraftOnClose, true);
+});
+
+const editDuringFirstKeep = (id) => ({ tabs, round }) => { if (round === 1) tabs.get(id).dirty = true; };
+
+test("close check: a tab that was clean at its question and is edited during the copy's wait is asked again, and Stay keeps it (#532)", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard", "cancel"], duringKeep: editDuringFirstKeep("b") });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"], ["b"]]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+});
+
+test("close check: 'close' to the second question about the edited tab closes both (#532)", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard", "discard"], duringKeep: editDuringFirstKeep("b") });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [["a"], ["b"]], ["a", "b"]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, true);
+});
+
+test("close check: a tab already answered 'close' while unsaved is not asked again (#532)", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true }), tab("b", { dirty: true })], answers: ["discard", "cancel"], duringKeep: editDuringFirstKeep("b") });
+  assert.deepEqual([r.answer, r.questions], ["discard", [["a", "b"]]]);
+});
+
+test("close check: a gone file's tab edited during its own copy's wait stays held, not asked again (#532)", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true })], answers: ["discard", "cancel"], duringKeep: editDuringFirstKeep("a") });
+  assert.deepEqual([r.answer, r.questions], ["discard", [["a"]]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, true);
+});
+
+test("close check: a tab whose copy was asked about again is not asked a third time (#532)", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true, keepFails: true })], answers: ["discard", "discard", "cancel"], duringKeep: editDuringFirstKeep("a") });
+  assert.deepEqual([r.answer, r.questions], ["discard", [["a"], ["a"]]]);
+});
+
+test("close check: a tab edited during a later round's wait is asked again too (#532)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard", "discard", "cancel"],
+    duringKeep: ({ tabs, order, round }) => {
+      if (round === 1) { tabs.set("c", tab("c", { gone: true })); order.push("c"); }
+      if (round === 2) tabs.get("b").dirty = true;
+    }
+  });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"], ["c"], ["b"]]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+  assert.equal(r.tabs.get("c").keepDraftOnClose, false);
+});
+
+test("close check: a tab edited while the second question is open is asked about as well (#532)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true }), tab("b"), tab("d")], duringKeep: editDuringFirstKeep("b"),
+    answers: ["discard", ({ tabs }) => { tabs.get("d").dirty = true; return "discard"; }, "discard"]
+  });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [["a"], ["b"], ["d"]], ["a", "b", "d"]]);
+});
+
+test("close check: a tab opened during the second question is asked about in its own round (#509, #532)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true }), tab("b")], duringKeep: editDuringFirstKeep("b"),
+    answers: ["discard", ({ tabs, order }) => { tabs.set("e", tab("e", { dirty: true })); order.push("e"); return "discard"; }, "cancel"]
+  });
+  assert.deepEqual([r.answer, r.questions], ["cancel", [["a"], ["b"], ["e"]]]);
+});
+
+test("close check: a tab moved out and edited during the wait is not asked about (#532)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard", "cancel"],
+    duringKeep: ({ tabs, order }) => { tabs.get("b").dirty = true; order.splice(order.indexOf("b"), 1); }
+  });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [["a"]], ["a"]]);
+});
+
+test("close check: a tab closed during the wait is not asked about (#532)", async () => {
+  const r = await closeCheck({
+    tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard", "cancel"],
+    duringKeep: ({ tabs }) => { tabs.get("b").dirty = true; tabs.delete("b"); }
+  });
+  assert.deepEqual([r.answer, r.questions, r.tabIds], ["discard", [["a"]], ["a"]]);
+});
+
+test("close check: a failure in the last re-check is reported and answers Stay (#508, #532)", async () => {
+  const r = await closeCheck({ tabs: [tab("a", { gone: true }), tab("b")], answers: ["discard"], unsavedThrowsAfter: 1 });
+  assert.deepEqual([r.answer, r.questions, r.reports], ["cancel", [["a"]], ["Close window: test: unsavedTabsOf failed"]]);
+  assert.equal(r.tabs.get("a").keepDraftOnClose, false);
+});
+
+test("close check: with no file gone, nothing is waited on and a clean tab is not asked about", async () => {
+  const r = await closeCheck({ tabs: [tab("a"), tab("b", { dirty: true })], answers: ["discard", "cancel"] });
+  assert.deepEqual([r.answer, r.questions], ["discard", [["b"]]]);
+});
+
+test("closing window: only a window still the last one at 'close' freezes the session, and hosting is confirmed only when it was asked as the last (#531)", () => {
+  const cases = [
+    [true, false, true, { freezeSession: true, confirmHosting: true }],
+    [true, true, true, { freezeSession: false, confirmHosting: false }],
+    [false, false, true, { freezeSession: true, confirmHosting: false }],
+    [false, true, true, { freezeSession: false, confirmHosting: false }],
+    [true, false, false, { freezeSession: true, confirmHosting: false }],
+    [true, true, false, { freezeSession: false, confirmHosting: false }],
+    [false, false, false, { freezeSession: true, confirmHosting: false }],
+    [false, true, false, { freezeSession: false, confirmHosting: false }]
+  ];
+  for (const [askedAsLast, othersOpen, hosting, expected] of cases) {
+    assert.deepEqual(lastWindowClose(askedAsLast, othersOpen, hosting), expected, JSON.stringify([askedAsLast, othersOpen, hosting]));
+  }
 });
 
 let failed = 0;
