@@ -200,14 +200,29 @@ rightToday("B2", "with Web Locks a live writer's draft is not taken over, and it
 });
 
 rightToday("B3", "without Web Locks every other writer counts as dead and its draft is taken over (D12)", () => cleanly(async () => {
-  assert.equal(globalThis.navigator.locks, undefined, "setup: no Web Locks in this environment");
-  const idb = browserStore();
-  const doc = script("Shared without locks", { docId: idOf("d") });
-  await idb.store.put(record("srv-d", doc, OTHER));
-  serverDocument("srv-d", "Shared without locks", "d");
-  await resumeBrowserDraft("srv-d");
-  await until(async () => (await idb.store.get(draftKey("srv-d"))).writerId === drafts().browser.writerId(), "the draft was claimed");
-  assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-d"));
+  const realNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const nav = globalThis.navigator;
+  Object.defineProperty(globalThis, "navigator", {
+    value: new Proxy(nav, {
+      get: (target, prop) => (prop === "locks" ? undefined : Reflect.get(target, prop, target)),
+      has: (target, prop) => (prop === "locks" ? false : Reflect.has(target, prop))
+    }),
+    configurable: true,
+    writable: true
+  });
+  try {
+    assert.equal(globalThis.navigator.locks, undefined, "setup: this case runs without Web Locks");
+    const idb = browserStore();
+    const doc = script("Shared without locks", { docId: idOf("d") });
+    await idb.store.put(record("srv-d", doc, OTHER));
+    serverDocument("srv-d", "Shared without locks", "d");
+    await resumeBrowserDraft("srv-d");
+    await until(async () => (await idb.store.get(draftKey("srv-d"))).writerId === drafts().browser.writerId(), "the draft was claimed");
+    assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-d"));
+  } finally {
+    if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
+    else delete globalThis.navigator;
+  }
 }));
 
 async function advance(clock, ms) {
@@ -506,7 +521,8 @@ wrongToday("K1", "a desktop file-draft restore whose document is replaced across
     startNewScript();
     assert.equal(S.state.title, "Untitled Script", "setup: the user replaced the document meanwhile");
     held.releaseOp("readFile");
-    await restoring;
+    const outcome = await restoring;
+    assert.ok(!["unreadable", "untitled-copy"].includes(outcome), "setup: the restore read the file");
     assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
     assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here."), false, "the late restore put none of its text into the replacement");
   } finally {
