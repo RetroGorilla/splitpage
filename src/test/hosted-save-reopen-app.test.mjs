@@ -13,6 +13,7 @@ const exportModule = await import("../js/14-export.js");
 const { saveDoc } = exportModule;
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../js/_home.js");
+const { cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 
 after(closeApp);
 
@@ -144,7 +145,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   assert.equal(late.rev, 1, "the reopened session keeps its own revision");
   assert.equal(late.baseText, "One.", "the reopened session keeps its own baseline");
   assert.equal(late.shown, "One.", "the late save did not change the reopened copy");
-  assert.equal(late.warned.length, 1, "the late save is reported with one warning");
+  assert.deepEqual(late.warned, ["An earlier save of this script arrived late. Your next save will merge both versions."], "the late save is reported with one warning");
   assert.equal(late.halted, "", "a late save that landed does not pause autosave");
   leave();
 });
@@ -177,28 +178,67 @@ test("a hosted save that lands after another server document was opened is not r
   leave();
 });
 
-test("a document put in place but not yet drawn already counts as a new session for a late hosted save", async (t) => {
+test("a history restore made while a hosted save is in flight sticks, on screen and on the server", async (t) => {
   mockClock(t);
   const server = createServer();
-  server.put("srv-g", script(), 1);
+  server.put("srv-r", script(), 1);
   const held = withServer(t, server);
-  openHosted("srv-g", 1);
+  openHosted("srv-r", 1);
+  const ticket = pushSnapshot("The version to go back to", cloneState(S.state));
+  await ticket.done;
 
-  S.state.rows[0].audioText = "Typed before the swap.";
+  S.state.rows[0].audioText = "Typed then regretted.";
   markDirty();
   held.holdWhen((r) => r.method === "PUT");
-  const saving = saveDoc();
+  const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
-  S.state = script();
+
+  const button = document.createElement("button");
+  button.setAttribute("data-id", ticket.id);
+  assert.equal(await restoreSnapshotFromCard(button), "restored", "the earlier version was restored");
+  assert.equal(textOf(S.state.rows[0]), "One.", "the restored version is on screen");
   const warnedBefore = warnToasts().length;
 
   held.gates.releaseAll("fetch");
   await saving;
   await settle();
+  const late = { rev: homeModule.home.rev, warned: warnToasts().slice(warnedBefore) };
 
-  assert.equal(homeModule.home.rev, 1, "the swapped-in document keeps the revision it was given");
-  assert.equal(textOf(S.baseState.rows[0]), "One.", "the swapped-in document keeps its baseline");
-  assert.equal(warnToasts().slice(warnedBefore).length, 1, "the late save is reported");
+  await saveDoc();
+  await settle();
+
+  assert.equal(textOf(S.state.rows[0]), "One.", "the restored version is still on screen");
+  assert.equal(textOf(server.docs.get("srv-r").state.rows[0]), "One.", "the server holds the restored version");
+  assert.deepEqual(server.answered.map((a) => a.baseRev + ":" + a.status), ["1:200", "2:200"], "the save after the restore went on top of the late save");
+  assert.equal(late.rev, 2, "the late save moved the revision of the place it was sent to");
+  assert.deepEqual(late.warned, [], "a save that landed where the restored copy saves is not reported");
+  leave();
+});
+
+test("a hosted save whose revision the reopen already fetched is not reported", async (t) => {
+  mockClock(t);
+  const server = createServer();
+  server.put("srv-h", script(), 1);
+  withServer(t, server);
+  openHosted("srv-h", 1);
+
+  S.state.rows[0].audioText = "Saved before the reopen.";
+  markDirty();
+  const releaseReply = server.holdPutReply();
+  const saving = saveDoc({ auto: true });
+  for (let turn = 0; turn < 2000 && !server.answered.length; turn++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(server.docs.get("srv-h").rev, 2, "the server accepted the save before replying");
+
+  assert.equal(await hosted.openServerDoc("srv-h"), true, "the document was reopened");
+  assert.equal(textOf(S.state.rows[0]), "Saved before the reopen.", "the reopened copy already shows the saved text");
+  const warnedBefore = warnToasts().length;
+
+  releaseReply();
+  await saving;
+  await settle();
+
+  assert.equal(homeModule.home.rev, 2, "the reopened session keeps the revision it fetched");
+  assert.deepEqual(warnToasts().slice(warnedBefore), [], "a save the reopened copy already holds is not reported");
   leave();
 });
 
