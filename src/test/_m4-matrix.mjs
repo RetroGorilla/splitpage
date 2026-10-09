@@ -9,9 +9,39 @@ function isAssertion(error) {
 
 const CASE_TIMEOUT = Number(process.env.SPLITPAGE_M4_CASE_TIMEOUT_MS) || 20000;
 
+function messageOf(check) {
+  try {
+    check();
+  } catch (error) {
+    return error.message;
+  }
+  return "";
+}
+
+const DEFAULT_MESSAGES = [
+  messageOf(() => assert.equal(1, 2)),
+  messageOf(() => assert.notEqual(1, 1)),
+  messageOf(() => assert.deepEqual([1], [])),
+  messageOf(() => assert.deepEqual({ a: 1 }, { a: 2 })),
+  messageOf(() => assert.notDeepEqual([1], [1])),
+  messageOf(() => assert.ok(false)),
+  messageOf(() => assert.match("a", /b/)),
+  messageOf(() => assert.fail())
+];
+
+export function refusedExpectation(expects) {
+  if (!(expects instanceof RegExp)) return "is declared wrongToday without the assertion message it expects to fail on";
+  if (expects.global || expects.sticky) return "names an expected message with the g or y flag, which makes the match depend on how often it ran";
+  if (DEFAULT_MESSAGES.some(function (m) { return expects.test(m); })) {
+    return "names an expected message that node's default assertion messages also match; use an assert with a label";
+  }
+  return null;
+}
+
 export async function judge(id, today, run, expects) {
-  if (today === "wrong" && !(expects instanceof RegExp)) {
-    throw new Error(id + " is declared wrongToday without the assertion message it expects to fail on");
+  if (today === "wrong") {
+    const refused = refusedExpectation(expects);
+    if (refused) throw new Error(id + " " + refused);
   }
   let failure = null;
   try {
