@@ -26,4 +26,16 @@ function copyKept(result, hasDraft) {
   return !!(result && result.ok === true) && hasDraft === true;
 }
 
-module.exports = { checkFileGone, copyKept, FILE_CHECK_TIMEOUT_MS };
+function holdKeep(tab, holder) {
+  if (!(tab.keepHolders instanceof Set)) tab.keepHolders = new Set();
+  tab.keepHolders.add(holder);
+  tab.keepDraftOnClose = true;
+}
+
+function releaseKeep(tab, holder) {
+  if (!(tab.keepHolders instanceof Set)) return;
+  tab.keepHolders.delete(holder);
+  if (!tab.keepHolders.size) tab.keepDraftOnClose = false;
+}
+
+module.exports = { checkFileGone, copyKept, holdKeep, releaseKeep, FILE_CHECK_TIMEOUT_MS };
