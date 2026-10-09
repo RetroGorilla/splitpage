@@ -175,8 +175,18 @@ export function cleanAuthorName(name) {
   return normalizeEditorName(name) || "";
 }
 export function limitAuthorNameField(field) {
-  var cut = codePointPrefix(field.value, EDITOR_NAME_MAX);
-  if (cut !== field.value) field.value = cut;
+  var value = field.value;
+  var excess = Array.from(value).length - EDITOR_NAME_MAX;
+  if (excess <= 0) return;
+  var caret = field.selectionStart;
+  var head = typeof caret === "number" && caret === field.selectionEnd ? Array.from(value.slice(0, caret)) : [];
+  if (head.length < excess) {
+    field.value = codePointPrefix(value, EDITOR_NAME_MAX);
+    return;
+  }
+  var kept = head.slice(0, head.length - excess).join("");
+  field.value = kept + value.slice(caret);
+  field.setSelectionRange(kept.length, kept.length);
 }
 export function getSavedAuthorName() {
   try { return cleanAuthorName(localStorage.getItem(COMMENT_NAME_KEY)); } catch (e) { return ""; }
