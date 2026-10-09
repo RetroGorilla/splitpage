@@ -383,6 +383,7 @@
   @media (min-width: 761px) {
     .doc-meta {
       --detail-min: 62px;
+      --name-min: 72px;
       display: grid;
       grid-template-columns: minmax(0, max-content) minmax(auto, max-content) minmax(0, max-content) auto;
       min-width: auto;
@@ -402,10 +403,10 @@
     .doc-meta .file-chip[data-warning] #file-chip-name { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .doc-meta .file-chip[data-warning] #file-chip-state { grid-column: 3; }
     .doc-meta:has(> .file-chip[data-warning]) {
-      grid-template-columns: minmax(0, max-content) minmax(auto, max-content) minmax(0, max-content) minmax(var(--detail-min), max-content);
+      grid-template-columns: minmax(0, max-content) minmax(auto, max-content) minmax(0, max-content) minmax(var(--name-min), max-content);
     }
     .doc-meta[data-yield]:has(> .file-chip[data-warning]) {
-      grid-template-columns: minmax(0, max-content) minmax(var(--warning-min, var(--detail-min)), max-content) minmax(0, max-content) minmax(var(--detail-min), max-content);
+      grid-template-columns: minmax(0, max-content) minmax(var(--warning-min, var(--detail-min)), max-content) minmax(0, max-content) minmax(var(--name-min), max-content);
     }
     .doc-meta[data-yield] .file-chip[data-warning]:not([hidden]) {
       grid-template-columns: auto minmax(0, max-content) minmax(0, max-content);
