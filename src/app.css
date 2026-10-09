@@ -6614,9 +6614,9 @@
   .broll-page-c-note .broll-flag-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: inline-flex; color: var(--danger); }
   .broll-page-row.is-flagged .broll-page-note { padding-left: 24px; }
   .broll-page-note {
-    width: 100%; font-family: var(--font-body); font-size: 13px; color: var(--text); line-height: 1.3;
-    background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 6px 6px; resize: none;
-    text-overflow: ellipsis;
+    width: 100%; font-family: var(--font-body); font-size: 13px; color: var(--text); line-height: calc(1.3em + 12px);
+    background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 6px; resize: none;
+    display: block; overflow: hidden; white-space: nowrap;
   }
   .broll-page-note::placeholder { color: transparent; }
   .broll-page-row:hover .broll-page-note::placeholder, .broll-page-note:focus::placeholder { color: var(--text-faint); }
