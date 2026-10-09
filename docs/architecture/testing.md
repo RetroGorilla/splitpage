@@ -52,8 +52,13 @@ you have not staged or committed fails it; `git add sw.js` settles that.
 `node tools/perf-record.mjs [report.md]` drives the built app in headless
 Chromium and records typing, new-scene, bulk delete/undo and export timings on
 the seed and the long demo, with the machine, browser and font it ran under.
-[performance-record.md](performance-record.md) is the 4.0 starting point;
-compare a later run only under the same conditions.
+It also times an image-heavy case (ten fresh 1 MiB pictures in comment bodies:
+open, load from IndexedDB, and a hosted merge of two sides that each add ten);
+`--only short,long,images` picks fixtures, and `PERF_PORT_BASE` moves its two
+ports. The tool measures the build of the repo it lives in, so a run on an
+older commit copies `tools/perf-record.mjs` into a checkout of it and builds
+there. [performance-record.md](performance-record.md) is the 4.0 starting
+point; compare a later run only under the same conditions.
 
 Every `run-tests.ps1` run ends by writing `digest.txt` beside the suite logs
 and printing its path as the last line. Read the digest before any log: it has
