@@ -18,6 +18,8 @@ Everything listed here goes inside the asar.
 | `prompter-share.js` | The teleprompter's loopback listener (#86). |
 | `google-drive.js` | Google Drive through a loopback OAuth redirect (#10). |
 | `bind-host.js` | Which address the document server listens on: every interface under `--host`, loopback otherwise and always in a test run, so test runs cause no firewall prompts. |
+| `close-keep.js` | The close-time checks for a tab whose file is gone: a file check with a one-second limit, so an unreachable drive can't freeze a close (#497), and whether a kept copy really reached the draft folder (#496). |
+| `quit-watchdog.js` | The update restart's 3 s quit timer, which waits while the quit is still asking the user and starts again once they answer. |
 | `blob-store.js` | The content-addressed folder where images live (#82). |
 | `voice-helper.js` | Follow My Voice's listener process (#8). The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |

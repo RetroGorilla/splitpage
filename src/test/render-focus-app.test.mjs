@@ -9,7 +9,10 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
-const { renderAbsorbed, renderRow } = await import("../js/05-render.js");
+const { afterThisPaint, paintingScreen, renderAbsorbed, renderRow, whilePainting } = await import("../js/05-render.js");
+const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
+const { runBrollRefresh } = await import("../js/08c-broll.js");
+const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
@@ -24,7 +27,8 @@ after(() => { Date.now = realNow; });
 
 const session = liveSession();
 const published = [];
-session.subscribe((c) => published.push(c.kind));
+const publishedWhilePainting = [];
+session.subscribe((c) => { published.push(c.kind); publishedWhilePainting.push(paintingScreen()); });
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 
@@ -40,11 +44,11 @@ function fixture(title) {
   };
 }
 
-function fresh(title) {
+function fresh(title, build = fixture) {
   if (writer.writerOpen) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
-  S.state = migrateRows(fixture(title));
+  S.state = migrateRows(build(title));
   flushEdits();
   renderAbsorbed();
   clearDirty();
@@ -99,6 +103,7 @@ function chromiumRemoval(run) {
     const active = document.activeElement;
     if (!active || active === document.body || !subtree || !subtree.contains || !subtree.contains(active)) return;
     removals.push({ id: active.getAttribute && active.getAttribute("data-id"), connected: active.isConnected, text: active.textContent });
+    active.dispatchEvent(new window.FocusEvent("blur"));
     active.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
   }
   Object.defineProperty(proto, "innerHTML", {
@@ -126,6 +131,7 @@ function observe(run) {
   flushEdits();
   const seq = S.editSeq, generation = session.generation(), sizes = undoSizes();
   published.length = 0;
+  publishedWhilePainting.length = 0;
   const value = chromiumRemoval(run);
   flushEdits();
   return {
@@ -277,3 +283,251 @@ test("a render that throws between the grid and the Writer makes no edit, and ty
   assert.equal(audio("r2"), "Theirs two.!?");
   writer.closeWriter();
 });
+
+test("a paint nested in another ends without ending the outer one: a focusout the outer paint causes after it writes nothing (#495)", () => {
+  fresh("Nested paint");
+  caretAt(gridCell("r2"), 2);
+  const got = observe(() => whilePainting(() => {
+    assert.equal(renderRow("r2"), true);
+    assert.equal(paintingScreen(), true, "the outer paint is still running");
+    const cell = gridCell("r2");
+    textNodeAt(cell, 0)[0].data = "Stale under the outer paint.";
+    cell.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+  }));
+  assert.deepEqual(noEdit(got), NO_EDIT);
+  assert.equal(audio("r2"), "Mine two.");
+  assert.equal(paintingScreen(), false);
+  textNodeAt(gridCell("r2"), 0)[0].data = "Mine two.";
+});
+
+test("work queued during a nested paint runs once, after the outermost paint ends; with no paint it runs at once; after a paint that throws it waits for the next paint that finishes (#485)", () => {
+  const ran = [];
+  whilePainting(() => {
+    whilePainting(() => afterThisPaint(() => ran.push("queued")));
+    ran.push("outer");
+  });
+  assert.deepEqual(ran, ["outer", "queued"]);
+  afterThisPaint(() => ran.push("now"));
+  assert.deepEqual(ran, ["outer", "queued", "now"]);
+  assert.throws(() => whilePainting(() => {
+    afterThisPaint(() => ran.push("kept"));
+    throw new Error("paint broke (#485)");
+  }), /paint broke/);
+  assert.deepEqual(ran, ["outer", "queued", "now"]);
+  whilePainting(() => {});
+  assert.deepEqual(ran, ["outer", "queued", "now", "kept"]);
+  whilePainting(() => {});
+  assert.deepEqual(ran, ["outer", "queued", "now", "kept"]);
+});
+
+function withShot(title) {
+  const doc = fixture(title);
+  doc.brollShots = [{ id: "bs1", name: "Harbour wide", origin: "list", notes: "Mine note.", audioRef: "Mine line.", location: "Mine quay" }];
+  return doc;
+}
+
+const panelEl = () => document.getElementById("broll-panel");
+const shotBox = (cls) => panelEl().querySelector("." + cls + '[data-id="bs1"]');
+const shot = () => S.state.brollShots.find((b) => b.id === "bs1");
+
+const PANEL_FIELDS = [
+  { name: "note", key: "notes", cls: "broll-notes-input" },
+  { name: "reference", key: "audioRef", cls: "broll-ref-input", open: "broll-ref-edit" },
+  { name: "location", key: "location", cls: "broll-loc-input", open: "broll-loc-edit" }
+];
+
+function focusShotField(title, f) {
+  const doc = fresh(title, withShot);
+  openBrollPanel();
+  if (!panelEl().querySelector('.broll-card[data-id="bs1"]')) panelEl().querySelector('.broll-row-main[data-id="bs1"]').click();
+  if (f.open) panelEl().querySelector('[data-action="' + f.open + '"][data-id="bs1"]').click();
+  clearDirty();
+  const box = shotBox(f.cls);
+  box.focus();
+  assert.equal(document.activeElement, box);
+  assert.equal(box.value, shot()[f.key]);
+  return doc;
+}
+
+function typeInto(box, value) {
+  box.value = value;
+  box.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
+}
+
+function theirsFor(doc, key, value) {
+  const theirs = cloneState(doc);
+  theirs.brollShots[0][key] = value;
+  return theirs;
+}
+
+function leavePanel() {
+  const active = document.activeElement;
+  if (active && active !== document.body) active.blur();
+  closeBrollPanel();
+}
+
+for (const f of PANEL_FIELDS) {
+  test("an update redrawn while the b-roll " + f.name + " box has focus, untouched, keeps the incoming " + f.name + " and makes no edit; a blur afterwards writes nothing (#485)", () => {
+    try {
+      const doc = focusShotField("Panel " + f.name, f);
+      const got = observe(() => {
+        merge(theirsFor(doc, f.key, "Theirs " + f.name + "."));
+        runBrollRefresh();
+      });
+      assert.ok(removals.some((r) => r.id === "bs1"), "the redraw took the focused box away");
+      assert.deepEqual(noEdit(got), NO_EDIT);
+      assert.equal(shot()[f.key], "Theirs " + f.name + ".");
+      assert.equal(S.dirty, false);
+      assert.equal(document.activeElement, shotBox(f.cls), "the redrawn box has the focus");
+      observe(() => runBrollRefresh());
+      const box = shotBox(f.cls);
+      assert.equal(document.activeElement, box, "the box is still open and focused after the next redraw");
+      assert.equal(box.value, "Theirs " + f.name + ".");
+      const blurred = observe(() => box.blur());
+      assert.deepEqual(noEdit(blurred), NO_EDIT);
+      assert.equal(shot()[f.key], "Theirs " + f.name + ".");
+      assert.equal(S.dirty, false);
+      if (f.open) assert.equal(shotBox(f.cls), null, "a blur closes the " + f.name + " editor");
+    } finally {
+      leavePanel();
+    }
+  });
+
+  test("a blur from the untouched b-roll " + f.name + " box after an update changed that field, before the panel redraws, writes nothing (#485)", () => {
+    try {
+      const doc = focusShotField("Panel blur " + f.name, f);
+      const box = shotBox(f.cls);
+      const got = observe(() => {
+        merge(theirsFor(doc, f.key, "Theirs " + f.name + "."));
+        box.blur();
+      });
+      assert.deepEqual(noEdit(got), NO_EDIT);
+      assert.equal(shot()[f.key], "Theirs " + f.name + ".");
+      assert.equal(S.dirty, false);
+    } finally {
+      leavePanel();
+    }
+  });
+
+  test("typing in the b-roll " + f.name + " box is saved before a redraw replaces the box, over an incoming change to the same field, and the redrawn box keeps the typing and the focus (#485)", () => {
+    try {
+      const doc = focusShotField("Panel typed " + f.name, f);
+      typeInto(shotBox(f.cls), "Typed " + f.name + ".");
+      observe(() => {
+        merge(theirsFor(doc, f.key, "Theirs " + f.name + "."));
+        runBrollRefresh();
+      });
+      assert.equal(shot()[f.key], "Typed " + f.name + ".");
+      assert.equal(S.dirty, true);
+      observe(() => runBrollRefresh());
+      const box = shotBox(f.cls);
+      assert.equal(document.activeElement, box, "the box is still open and focused after the next redraw");
+      assert.equal(box.value, "Typed " + f.name + ".");
+      const blurred = observe(() => box.blur());
+      assert.deepEqual(noEdit(blurred), NO_EDIT, "the blur has nothing left to save");
+      assert.equal(shot()[f.key], "Typed " + f.name + ".");
+    } finally {
+      leavePanel();
+    }
+  });
+}
+
+test("typing in the b-roll note box is saved when an update takes the shot out of the filtered list, before the box goes (#485)", () => {
+  try {
+    const doc = focusShotField("Panel filtered", PANEL_FIELDS[0]);
+    panelEl().querySelector('[data-action="broll-filter"][data-filter="unshot"]').click();
+    assert.equal(document.activeElement, shotBox("broll-notes-input"));
+    typeInto(shotBox("broll-notes-input"), "Typed before it went.");
+    observe(() => {
+      merge(theirsFor(doc, "status", "shot"));
+      runBrollRefresh();
+    });
+    assert.equal(shotBox("broll-notes-input"), null, "the shot left the list");
+    assert.equal(shot().status, "shot");
+    assert.equal(shot().notes, "Typed before it went.");
+  } finally {
+    panelEl().querySelector('[data-action="broll-filter"][data-filter="all"]').click();
+    leavePanel();
+  }
+});
+
+const lengthBox = () => document.querySelector("#rows .row-read-input");
+const lengthOf = (id) => S.state.rows.find((r) => r.id === id).lengthSeconds;
+
+function openLength(id) {
+  document.querySelector('#rows .row[data-id="' + id + '"] .row-read').dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  const box = lengthBox();
+  assert.ok(box, "the length editor is open");
+  assert.equal(document.activeElement, box);
+  return box;
+}
+
+function hidingShotScenes(run) {
+  setHideShotScenes(true);
+  try {
+    return run();
+  } finally {
+    setHideShotScenes(false);
+  }
+}
+
+const editsWhilePainting = () => published.map((k, i) => [k, publishedWhilePainting[i]]).filter((p) => p[0] === "edit").map((p) => p[1]);
+
+test("a length typed into the scene-length editor is set after a redraw that removes the editor, not from inside it, and the incoming change is kept too (#485)", () => hidingShotScenes(() => {
+  const doc = fresh("Length typed");
+  openLength("r1").value = "2:00";
+  const theirs = cloneState(doc);
+  theirs.rows[0].status = "shot";
+  const got = observe(() => merge(theirs));
+  assert.equal(lengthBox(), null, "the redraw took the editor away");
+  assert.ok(removals.length > 0, "the editor lost focus during the redraw");
+  assert.equal(S.state.rows[0].status, "shot");
+  assert.equal(lengthOf("r1"), 120);
+  assert.equal(got.edits, 1);
+  assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
+}));
+
+test("an untouched scene-length editor that a redraw removes sets nothing and keeps the incoming length (#485)", () => hidingShotScenes(() => {
+  const doc = fresh("Length untouched");
+  openLength("r1");
+  const theirs = cloneState(doc);
+  theirs.rows[0].status = "shot";
+  theirs.rows[0].lengthSeconds = 45;
+  const got = observe(() => merge(theirs));
+  assert.equal(lengthBox(), null);
+  assert.deepEqual(noEdit(got), NO_EDIT);
+  assert.equal(lengthOf("r1"), 45);
+}));
+
+test("a length typed into an editor that a failing redraw removed is not set by the failed redraw, and is set once Redraw draws (#485)", () => hidingShotScenes(() => {
+  const doc = fresh("Length failed");
+  openLength("r1").value = "2:00";
+  const theirs = cloneState(doc);
+  theirs.rows[0].status = "shot";
+  const box = document.getElementById("doc-title");
+  const real = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+  Object.defineProperty(box, "value", { configurable: true, get() { return real.get.call(this); }, set() { throw new Error("render broke (#485)"); } });
+  const consoles = [...new Set([window.console, globalThis.console])];
+  const was = consoles.map((c) => c.error);
+  const logged = [];
+  consoles.forEach((c) => { c.error = (e) => { logged.push((e && e.message) || String(e)); }; });
+  let got;
+  try {
+    got = observe(() => merge(theirs));
+  } finally {
+    delete box.value;
+    consoles.forEach((c, i) => { c.error = was[i]; });
+  }
+  assert.deepEqual(logged, ["render broke (#485)"]);
+  assert.ok(removals.length > 0, "the editor was removed before the redraw failed");
+  assert.deepEqual(noEdit(got), NO_EDIT);
+  assert.equal(lengthOf("r1"), undefined);
+  const toast = Array.from(document.querySelectorAll("#toast-host .toast:not(.is-leaving)"))
+    .find((el) => el.firstChild && el.firstChild.nodeValue === REDRAW);
+  assert.ok(toast, "the redraw toast is offered");
+  const redrawn = observe(() => toast.querySelector(".toast-action").click());
+  assert.equal(redrawn.edits, 1);
+  assert.equal(lengthOf("r1"), 120);
+  assert.equal(S.state.rows[0].status, "shot");
+  assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
+}));
