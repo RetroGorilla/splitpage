@@ -27,7 +27,7 @@ const trial = (label, ms, extra) => ({ label, ms, pictures: 10, comments: 10, he
 const good = [
   ...[1, 2, 3].map((i) => trial("images open", 300 + i, { opened: true })),
   ...[1, 2, 3].map((i) => trial("images load from IndexedDB", 100 + i, { comments: undefined, before: 0, missing: 0 })),
-  ...[1, 2, 3].map((i) => trial("images merge", 400 + i, { pictures: 20, comments: 20, held: 20 }))
+  ...[1, 2, 3].map((i) => trial("images merge", 400 + i, { pictures: 20, comments: 20, held: 20, done: true }))
 ];
 function change(label, index, patch) {
   let seen = 0;
@@ -53,6 +53,8 @@ eq("a picture the registry lacks is named", imageProblems(change("images merge",
 eq("a load that found the bytes in memory is named", imageProblems(change("images load from IndexedDB", 2, { before: 1 })).length, 1);
 eq("a load that missed a picture is named", imageProblems(change("images load from IndexedDB", 0, { missing: 1 })).length, 1);
 eq("a merge that did not take their pictures is named", imageProblems(change("images merge", 1, { comments: 10, pictures: 10, held: 10 })).length, 1);
+eq("a merge that never finished is named", imageProblems(change("images merge", 0, { done: false })).length, 1);
+eq("a merge that ran out the clock is named", imageProblems(change("images merge", 1, { ms: 25001.5 })).length, 1);
 eq("an open that failed is named", imageProblems(change("images open", 0, { opened: false })).length, 1);
 eq("pictures not stored in time are named", imageProblems(change("images open", 2, { durable: false })).length, 1);
 eq("a trial with no time is named", imageProblems(change("images merge", 2, { ms: 0 })).length, 1);

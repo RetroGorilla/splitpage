@@ -182,7 +182,7 @@ export const IMAGES = `(function () {
       await frame();
       var ms = performance.now() - t;
       var after = F.state(), merged = shasOf(after);
-      return trial({ label: 'images merge', ms: +ms.toFixed(1), comments: after.comments.length - seed.comments.length, pictures: merged.length,
+      return trial({ label: 'images merge', ms: +ms.toFixed(1), done: after.comments.length >= wanted, comments: after.comments.length - seed.comments.length, pictures: merged.length,
         held: merged.filter(function (sha) { return B.has(sha); }).length, durable: settled,
         inline: JSON.stringify(after.comments).indexOf('data:image') !== -1 });
     },
@@ -290,6 +290,7 @@ export function imageProblems(trials) {
         if (t.durable !== true) bad.push("the pictures were not stored in time");
       }
       if (t.label === "images open" && t.opened !== true) bad.push("the file did not open");
+      if (t.label === "images merge" && (t.done !== true || t.ms >= 20000)) bad.push("the merge did not finish in time");
       if (bad.length) problems.push(`${spec.label}: ${bad.join("; ")}`);
     }
   }
