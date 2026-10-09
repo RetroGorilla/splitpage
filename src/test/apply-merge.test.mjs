@@ -1,19 +1,19 @@
 import "./_dom.mjs";
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import test, { after, before } from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, cloneState, mergeStates, setBaseState } from "../js/03-sync.js";
-import { __init as historyInit, getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
+import { getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 import { personById } from "../js/07-production-tags.js";
 
-before(async () => {
-  await bootApp();
-  historyInit();
-  await window.__historyTest.forceBackend("memory");
+await bootApp();
+await window.__historyTest.forceBackend("memory");
+after(() => {
+  S.state = mk(freshId());
+  closeApp();
 });
-after(closeApp);
 
 let seq = 0;
 function mk(docId) {
