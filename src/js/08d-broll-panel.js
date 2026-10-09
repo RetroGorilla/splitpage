@@ -768,7 +768,7 @@ export function renderBroll() {
 
 function fitNotes(root) {
   if (typeof CSS !== "undefined" && CSS.supports && CSS.supports("field-sizing", "content")) return;
-  Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field, textarea.broll-page-note"), fitTextarea);
+  Array.prototype.forEach.call(root.querySelectorAll("textarea.ev-field"), fitTextarea);
 }
 
 function fitTextarea(box) {
@@ -1215,7 +1215,7 @@ function onBrollKeydown(e, root) {
 function onBrollInput(e) {
   if (reviewMode()) return;
   var box = e.target;
-  if (box.tagName === "TEXTAREA" && (box.classList.contains("ev-field") || box.classList.contains("broll-page-note"))) fitTextarea(box);
+  if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
       (e.inputType === "insertReplacementText" || e.inputType === undefined)) {
     commitPropInput(box);
@@ -1412,7 +1412,6 @@ export function renderBrollPage() {
         '</table>'
       : emptyListHtml(entries);
   });
-  fitNotes(page);
 }
 
 export function shotRecordForFile(e) {
