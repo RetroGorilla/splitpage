@@ -38,7 +38,7 @@ function foldedCrewEntry(list) {
   ] });
   S.state.people.push(person("p_Cy", "Cy"));
   const item = list === "brollShots" ? shot : tag;
-  S.state[list].push(item("i_dock", "Dock", ""), item("i_quay", "Quay", ""));
+  S.state[list].push(item("i_dock", "Dock", ""), item("i_quay", "Quay", ""), item("i_pier", "Pier", ""));
   trackDocument();
   S.state.people.push(person("p_Ada", "Ada"));
   commit();
@@ -92,6 +92,61 @@ for (const list of ["brollShots", "productionTags"]) {
     assert.equal(ownerOf(list, "Dock"), "p_Cy");
     assert.equal(undo().ok, true);
     assert.equal(undo().empty, true);
+  });
+
+  test("redo gives back an owner a collaborator gave another item after the fold, which the undo cleared, in " + list + " (#518 review B1)", () => {
+    foldedCrewEntry(list);
+    remote((st) => { itemOf(st, list, "Quay").owner = "p_Ada"; });
+    const back = undo();
+    assert.equal(back.ok, true);
+    assert.equal(back.cleared, 2);
+    assert.equal(ownerOf(list, "Dock"), "");
+    assert.equal(ownerOf(list, "Quay"), "");
+    assert.equal(redo().ok, true);
+    assert.equal(ownerOf(list, "Dock"), "p_Ada");
+    assert.equal(ownerOf(list, "Quay"), "p_Ada", "the collaborator's assignment comes back");
+    assert.equal(undo().cleared, 2);
+    assert.equal(redo().ok, true);
+    assert.equal(ownerOf(list, "Quay"), "p_Ada");
+  });
+
+  test("redo gives back an item a collaborator added for that person after the fold, in " + list + " (#518 review B1)", () => {
+    foldedCrewEntry(list);
+    const item = list === "brollShots" ? shot : tag;
+    remote((st) => { st[list].push(item("i_wharf", "Wharf", "p_Ada")); });
+    assert.equal(undo().cleared, 2);
+    assert.equal(ownerOf(list, "Wharf"), "");
+    assert.equal(redo().ok, true);
+    assert.equal(ownerOf(list, "Dock"), "p_Ada");
+    assert.equal(ownerOf(list, "Wharf"), "p_Ada");
+  });
+
+  test("redo gives back my own later assignment that a collaborator's edit made permanent and the undo cleared, in " + list + " (#518 review B1)", () => {
+    foldedCrewEntry(list);
+    itemOf(S.state, list, "Pier").owner = "p_Ada";
+    commit();
+    remote((st) => { itemOf(st, list, "Quay").notes = "from them"; });
+    assert.equal(undo().cleared, 2);
+    assert.equal(ownerOf(list, "Pier"), "");
+    assert.equal(redo().ok, true);
+    assert.equal(ownerOf(list, "Dock"), "p_Ada");
+    assert.equal(ownerOf(list, "Pier"), "p_Ada");
+    assert.equal(itemOf(S.state, list, "Quay").notes, "from them");
+  });
+
+  test("redo does not give back an owner I cleared myself after the fold, in " + list + " (#518 review B2)", () => {
+    foldedCrewEntry(list);
+    itemOf(S.state, list, "Dock").owner = "";
+    commit();
+    remote((st) => { itemOf(st, list, "Quay").notes = "from them"; });
+    const back = undo();
+    assert.equal(back.ok, true);
+    assert.equal(back.cleared, undefined);
+    assert.deepEqual(crew(), ["Cy"]);
+    assert.equal(ownerOf(list, "Dock"), "");
+    assert.equal(redo().ok, true);
+    assert.deepEqual(crew(), ["Cy", "Ada"]);
+    assert.equal(ownerOf(list, "Dock"), "", "undo then redo is a round trip");
   });
 
   test("a collaborator's edit to another item that arrives through a merge keeps the entry, in " + list + " (#518)", () => {
@@ -156,6 +211,13 @@ function notesOf(st) {
   return JSON.stringify(ITEMS.map(([l, n]) => itemOf(st, l, n).notes));
 }
 
+function snapshot(st) {
+  return JSON.stringify({
+    people: st.people.map((p) => p.id),
+    items: ITEMS.map(([l, n]) => [itemOf(st, l, n).owner, itemOf(st, l, n).notes])
+  });
+}
+
 function ownerName(l, n) {
   const owner = ownerOf(l, n);
   if (!owner) return "";
@@ -164,7 +226,7 @@ function ownerName(l, n) {
 }
 
 test("seeded: with collaborators editing other items, undo and redo of folded owner changes never undo a collaborator's edit, never refuse and never dangle (#518)", () => {
-  let replays = 0, overEdits = 0, notesEdits = 0, refused = 0;
+  let replays = 0, overEdits = 0, roundTrips = 0, notesEdits = 0, refused = 0;
   for (let seed = 1; seed <= 1000; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
@@ -210,7 +272,8 @@ test("seeded: with collaborators editing other items, undo and redo of folded ow
         remote((st) => { itemOf(st, l, n).notes = "theirs " + step; });
       } else {
         const pre = clone(S.state);
-        const res = r() < 0.6 ? undo() : redo();
+        const backwards = r() < 0.6;
+        const res = backwards ? undo() : redo();
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
         const folded = res.steps.filter((s) => s.op === "docField" && s.ownersOnly);
@@ -219,9 +282,15 @@ test("seeded: with collaborators editing other items, undo and redo of folded ow
         assert.equal(notesOf(S.state), notesOf(pre), label + " step " + step + " kept every collaborator note");
         assert.deepEqual(dangling(), [], label + " step " + step);
         ITEMS.forEach(([l, n]) => assert.ok(seen[n].has(ownerName(l, n)), label + " step " + step + " " + n + "=" + ownerName(l, n)));
+        if (r() < 0.5) {
+          const again = backwards ? redo() : undo();
+          assert.equal(again.ok, true, label + " step " + step + " the opposite step applies");
+          if (folded.length) roundTrips++;
+          assert.equal(snapshot(S.state), snapshot(pre), label + " step " + step + " the opposite step puts everything back");
+        }
       }
     }
   }
   assert.equal(refused, 0, "no undo or redo refused");
-  assert.ok(replays > 300 && overEdits > 50 && notesEdits > 3000, JSON.stringify({ replays, overEdits, notesEdits }));
+  assert.ok(replays > 300 && overEdits > 50 && roundTrips > 100 && notesEdits > 3000, JSON.stringify({ replays, overEdits, roundTrips, notesEdits }));
 });
