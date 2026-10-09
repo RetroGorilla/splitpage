@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import { crc32, inflateSync } from "node:zlib";
-import { IMAGES, busyPercent, imageProblems, imageRows, parseArgs, parseTrials, report, suiteText } from "./perf-record.mjs";
+import { IMAGES, busyPercent, imageProblems, imageRows, parseArgs, parsePortBase, parseTrials, report, suiteText } from "./perf-record.mjs";
 
 const { imageDims, sniffImageMime } = createRequire(import.meta.url)("../shared/blob-policy.js");
 
@@ -23,7 +23,7 @@ function eq(name, actual, expected) {
   console.log(`  FAIL ${name} — ${detail}`);
 }
 
-const trial = (label, ms, extra) => ({ label, ms, pictures: 10, comments: 10, held: 10, durable: true, inline: false, ...extra });
+const trial = (label, ms, extra) => ({ label, ms, pictures: 10, comments: 10, held: 10, durable: true, inline: false, known: 0, ...extra });
 const good = [
   ...[1, 2, 3].map((i) => trial("images open", 300 + i, { opened: true })),
   ...[1, 2, 3].map((i) => trial("images load from IndexedDB", 100 + i, { comments: undefined, before: 0, missing: 0 })),
@@ -43,6 +43,15 @@ eq("a path is the report file", parseArgs(["--only", "images", "out.md"]).out?.e
 eq("an unknown fixture is refused", parseArgs(["--only", "huge"]).error !== null, true);
 eq("--only with nothing is refused", parseArgs(["--only"]).error !== null, true);
 
+console.log("\nparsePortBase():\n");
+
+eq("no variable gives the default", parsePortBase(undefined), { base: 18990, error: null });
+eq("a valid base is taken", parsePortBase("50100"), { base: 50100, error: null });
+eq("the highest base leaves room for the CDP port", parsePortBase("64535").error, null);
+eq("a base above that is refused", parsePortBase("64536").error !== null, true);
+eq("a typo is refused, not defaulted", [parsePortBase("5010o").error !== null, parsePortBase("50100.5").error !== null, parsePortBase("-1").error !== null, parsePortBase("0x10").error !== null], [true, true, true, true]);
+eq("a privileged port is refused", parsePortBase("80").error !== null, true);
+
 console.log("\nthe image trials:\n");
 
 eq("trial lines are read from driver output", parseTrials('x\nTRIAL {"label":"a","ms":1}\nPERF {"label":"b"}\n'), [{ label: "a", ms: 1 }]);
@@ -53,6 +62,9 @@ eq("a picture the registry lacks is named", imageProblems(change("images merge",
 eq("a load that found the bytes in memory is named", imageProblems(change("images load from IndexedDB", 2, { before: 1 })).length, 1);
 eq("a load that missed a picture is named", imageProblems(change("images load from IndexedDB", 0, { missing: 1 })).length, 1);
 eq("a merge that did not take their pictures is named", imageProblems(change("images merge", 1, { comments: 10, pictures: 10, held: 10 })).length, 1);
+eq("an open of pictures the registry already held is named", imageProblems(change("images open", 1, { known: 10 })).length, 1);
+eq("a merge of pictures the registry already held is named", imageProblems(change("images merge", 2, { known: 1 })).length, 1);
+eq("a trial that does not say what the registry held is named", imageProblems(change("images open", 0, { known: undefined })).length, 1);
 eq("a merge that never finished is named", imageProblems(change("images merge", 0, { done: false })).length, 1);
 eq("a merge that ran out the clock is named", imageProblems(change("images merge", 1, { ms: 25001.5 })).length, 1);
 eq("an open that failed is named", imageProblems(change("images open", 0, { opened: false })).length, 1);
