@@ -162,14 +162,29 @@ function resolveDocFields(state, plan) {
   docs.forEach(function (p) { if (p !== people) resolveDoc(state, p, survives, remap); });
   var crew = idMap();
   listOf(kept).forEach(function (e) { if (e && e.id) crew[e.id] = true; });
-  var cleared = 0;
-  docs.forEach(function (p) {
-    if (!OWNED_LISTS[p.key] || !Array.isArray(p.value)) return;
-    p.value = p.value.map(function (e) {
-      if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner] || remap && crew[remap[e.owner]]) return e;
+  var cleared = 0, touched = false;
+  var rescue = remap || personIdRemap(sides, kept);
+  function orphansCleared(list) {
+    return list.map(function (e) {
+      if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner]) return e;
+      if (crew[rescue[e.owner]]) {
+        if (remap) return e;
+        touched = true;
+        return Object.assign({}, e, { owner: rescue[e.owner] });
+      }
       cleared++;
+      touched = true;
       return Object.assign({}, e, { owner: "" });
     });
+  }
+  docs.forEach(function (p) {
+    if (OWNED_LISTS[p.key] && Array.isArray(p.value)) p.value = orphansCleared(p.value);
+  });
+  if (people) Object.keys(OWNED_LISTS).forEach(function (key) {
+    if (docs.some(function (p) { return p.key === key; }) || !Array.isArray(state[key])) return;
+    touched = false;
+    var value = orphansCleared(state[key]);
+    if (touched) plan.push({ op: "doc", key: key, value: value });
   });
   return { remap: remap, cleared: cleared };
 }
