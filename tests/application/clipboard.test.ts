@@ -392,6 +392,18 @@ test("a cut that removes the first of two cells holding a comment moves the comm
   assert.deepEqual(anchorsOf(h), [["c1", "r4", "audioText"]]);
 });
 
+test("a cut holding one comment that lives on elsewhere and one that does not still moves the first", () => {
+  const h = opened(true, function () {
+    const doc = splitAnchor();
+    const r2 = doc.rows[1];
+    if (r2) r2.audioText = "Alpha " + cmt("c1", "bravo") + " " + cmt("c3", "charlie") + " delta";
+    doc.comments.push({ id: "c3", anchorId: "c3", kind: "anchor", rowId: "r2", field: "audioText", body: "x", replies: [] });
+    return doc;
+  });
+  assert.equal(runConfined(h.session, cutCommand("r2", "audioText", { from: 6, to: 19 }, ports()).command).kind, "applied");
+  assert.deepEqual(anchorsOf(h), [["c1", "r4", "audioText"], ["c3", "r2", "audioText"]]);
+});
+
 test("a cut of the only cell holding a comment leaves the comment where it is", () => {
   const h = opened(true, splitAnchor);
   const cut = cutCommand("r4", "audioText", { from: 5, to: 12 }, ports());
