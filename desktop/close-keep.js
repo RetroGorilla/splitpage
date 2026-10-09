@@ -42,24 +42,35 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
   const holder = { verb };
   const held = [];
   const asked = [];
+  const answered = new Set();
+  const ask = (list) => {
+    const answer = io.askAboutUnsaved(list, verb, parentOf(list));
+    if (answer === "discard") for (const tab of list) answered.add(tab.id);
+    return answer;
+  };
   const round = (ids) => {
     asked.push(...ids);
     return io.goneFileTabsOf(ids).then((gone) => {
       if (!stillWanted()) return "cancel";
       const unsaved = io.unsavedTabsOf(ids.filter((id) => io.tabs.has(id)), gone);
-      const first = io.askAboutUnsaved(unsaved, verb, parentOf(unsaved));
+      const first = ask(unsaved);
       if (first !== "discard" || !gone.length) return first;
       held.push(...gone);
       return io.keepDraftsOfGoneFiles(gone, holder).then((unkept) => {
         if (!stillWanted()) return "cancel";
         const missing = unkept.filter((tab) => io.tabs.get(tab.id) === tab);
-        return io.askAboutUnsaved(missing, verb, parentOf(missing));
+        return ask(missing);
       });
-    }).then((answer) => {
-      if (answer !== "discard") return answer;
-      const added = tabIdsNow().filter((id) => !asked.includes(id));
-      return added.length ? round(added) : answer;
-    });
+    }).then(next);
+  };
+  const next = (answer) => {
+    if (answer !== "discard") return answer;
+    const now = tabIdsNow();
+    const added = now.filter((id) => !asked.includes(id));
+    if (added.length) return round(added);
+    const unasked = asked.filter((id) => now.includes(id) && !answered.has(id));
+    const changed = io.unsavedTabsOf(unasked, []).filter((tab) => !held.includes(tab));
+    return changed.length ? next(ask(changed)) : answer;
   };
   return Promise.resolve()
     .then(() => round(tabIdsNow()))
@@ -74,4 +85,9 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
     });
 }
 
-module.exports = { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, FILE_CHECK_TIMEOUT_MS };
+function lastWindowClose(askedAsLast, othersOpen, hosting) {
+  const last = !othersOpen;
+  return { freezeSession: last, confirmHosting: !!(hosting && askedAsLast && last) };
+}
+
+module.exports = { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS };
