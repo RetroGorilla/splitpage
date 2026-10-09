@@ -15,7 +15,18 @@ const PICTURE_BYTES = 1024 * 1024;
 const IMAGE_TRIALS = 3;
 const FIXTURES = ["short", "long", "images"];
 const EXPECTED_PERF = { short: 6, long: 6, images: 1 };
-const PORT_BASE = Number(process.env.PERF_PORT_BASE) || 18990;
+const MERGE_WAIT_MS = 25000;
+const DEFAULT_PORT_BASE = 18990;
+const CDP_PORT_OFFSET = 1000;
+
+export function parsePortBase(raw) {
+  if (raw === undefined || raw === "") return { base: DEFAULT_PORT_BASE, error: null };
+  const base = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!(base >= 1024 && base + CDP_PORT_OFFSET <= 65535)) {
+    return { base: DEFAULT_PORT_BASE, error: `PERF_PORT_BASE must be a whole number from 1024 to ${65535 - CDP_PORT_OFFSET}, got "${raw}"` };
+  }
+  return { base, error: null };
+}
 
 const PROBE = `(function () {
   if (window.__perf) return 'ready';
@@ -101,11 +112,23 @@ export const IMAGES = `(function () {
     for (var i = 0; i < b.length; i += 24576) out.push(btoa(String.fromCharCode.apply(null, b.subarray(i, i + 24576))));
     return out.join('');
   };
-  var next = 1;
+  var next = 1, made = [];
   var urls = function () {
     var out = [];
-    for (var i = 0; i < COUNT; i++) out.push('data:image/png;base64,' + b64(picture(Math.imul(next++, 0x9e3779b1) >>> 0)));
+    made = [];
+    for (var i = 0; i < COUNT; i++) {
+      made.push(picture(Math.imul(next++, 0x9e3779b1) >>> 0));
+      out.push('data:image/png;base64,' + b64(made[i]));
+    }
     return out;
+  };
+  var knownIn = async function (list) {
+    var known = 0;
+    for (var i = 0; i < list.length; i++) {
+      var digest = new Uint8Array(await crypto.subtle.digest('SHA-256', list[i]));
+      if (B.has(Array.prototype.map.call(digest, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''))) known++;
+    }
+    return known;
   };
   var seed = F.clone(F.state());
   var rowId = seed.rows[0].id;
@@ -117,7 +140,7 @@ export const IMAGES = `(function () {
     });
   };
   var withComments = function (list) { var s = F.clone(seed); s.comments = s.comments.concat(list); return s; };
-  var fileOf = function (s) { return new File([F.buildSplitpage(s)], 'perf-images.splitpage', { type: 'application/json' }); };
+  var fileOf = function (s) { return new File([JSON.stringify(s)], 'perf-images.splitpage', { type: 'application/json' }); };
   var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   var frame = function () { return new Promise(function (r) { requestAnimationFrame(function () { setTimeout(r, 0); }); }); };
   var shasOf = function (s) {
@@ -137,6 +160,7 @@ export const IMAGES = `(function () {
   var api = {
     open: async function () {
       var file = fileOf(withComments(comments('o' + next, urls())));
+      var known = await knownIn(made);
       await frame();
       var t = performance.now();
       var ok = await F.openFile(file);
@@ -146,7 +170,7 @@ export const IMAGES = `(function () {
       var sets = JSON.parse(sessionStorage.getItem('perfShas') || '[]');
       sets.push(shas);
       sessionStorage.setItem('perfShas', JSON.stringify(sets));
-      return trial({ label: 'images open', ms: +ms.toFixed(1), opened: ok === true, comments: st.comments.length - seed.comments.length, pictures: shas.length,
+      return trial({ label: 'images open', ms: +ms.toFixed(1), known: known, opened: ok === true, comments: st.comments.length - seed.comments.length, pictures: shas.length,
         held: shas.filter(function (sha) { return B.has(sha); }).length, durable: await durable(shas),
         inline: JSON.stringify(st.comments).indexOf('data:image') !== -1 });
     },
@@ -166,6 +190,7 @@ export const IMAGES = `(function () {
       var st = F.state();
       F.migrate(withComments(comments('m' + next, urls()))).comments.forEach(function (c) { if (c.id.indexOf('c-perf-') === 0) st.comments.push(c); });
       var theirs = withComments(comments('t' + next, urls()));
+      var known = await knownIn(made);
       var wanted = st.comments.length + COUNT;
       var shas = shasOf(st);
       var answer = { state: theirs, rev: 2, updatedBy: 'Perf' };
@@ -178,11 +203,11 @@ export const IMAGES = `(function () {
       await frame();
       var t = performance.now();
       H.noteRev({ docId: 'perf-doc', rev: 2 });
-      while (F.state().comments.length < wanted && performance.now() - t < 25000) await wait(0);
+      while (F.state().comments.length < wanted && performance.now() - t < ${MERGE_WAIT_MS}) await wait(0);
       await frame();
       var ms = performance.now() - t;
       var after = F.state(), merged = shasOf(after);
-      return trial({ label: 'images merge', ms: +ms.toFixed(1), done: after.comments.length >= wanted, comments: after.comments.length - seed.comments.length, pictures: merged.length,
+      return trial({ label: 'images merge', ms: +ms.toFixed(1), known: known, done: after.comments.length >= wanted, comments: after.comments.length - seed.comments.length, pictures: merged.length,
         held: merged.filter(function (sha) { return B.has(sha); }).length, durable: settled,
         inline: JSON.stringify(after.comments).indexOf('data:image') !== -1 });
     },
@@ -290,7 +315,8 @@ export function imageProblems(trials) {
         if (t.durable !== true) bad.push("the pictures were not stored in time");
       }
       if (t.label === "images open" && t.opened !== true) bad.push("the file did not open");
-      if (t.label === "images merge" && (t.done !== true || t.ms >= 20000)) bad.push("the merge did not finish in time");
+      if (t.label === "images merge" && (t.done !== true || t.ms >= MERGE_WAIT_MS)) bad.push("the merge did not finish in time");
+      if (t.label !== "images load from IndexedDB" && t.known !== 0) bad.push(`${t.known} of the new pictures were in the registry before the timer`);
       if (bad.length) problems.push(`${spec.label}: ${bad.join("; ")}`);
     }
   }
@@ -398,6 +424,11 @@ export function main(argv) {
     console.error(`perf-record: ${args.error}`);
     return 2;
   }
+  const ports = parsePortBase(process.env.PERF_PORT_BASE);
+  if (ports.error) {
+    console.error(`perf-record: ${ports.error}`);
+    return 2;
+  }
   const out = args.out;
   if (!existsSync(join(REPO, "index.html"))) {
     console.error("perf-record: index.html is not built; run `node build.mjs` first");
@@ -409,7 +440,7 @@ export function main(argv) {
   for (const fixture of args.only) {
     const suite = join(work, `${fixture}.txt`);
     writeFileSync(suite, suiteText(fixture));
-    const r = spawnSync(process.execPath, [DRIVER, "--script", suite, "--port", String(PORT_BASE), "--cdp-port", String(PORT_BASE + 1000), "--shot-dir", work], {
+    const r = spawnSync(process.execPath, [DRIVER, "--script", suite, "--port", String(ports.base), "--cdp-port", String(ports.base + CDP_PORT_OFFSET), "--shot-dir", work], {
       cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 5 * 60 * 1000
     });
     const stdout = r.stdout ?? "";
