@@ -717,6 +717,7 @@ function keepingFocus(container, draw) {
   var again = container.querySelector(kept.key);
   if (!again) return;
   if (kept.ownValue) again.value = kept.value;
+  if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;
   if (kept.typed) {
     try { again.setSelectionRange(kept.start, kept.end); } catch (e) { }
   }
@@ -741,14 +742,14 @@ export function renderBroll() {
   var panel = document.getElementById("broll-panel");
   if (!panel || panel.hidden || !S.state) return;
   dropEditingForReview();
-  var entries = brollEntries();
-  pruneSelection(entries);
   var summary = document.getElementById("broll-summary");
   var controls = document.getElementById("broll-controls");
   var listEl = document.getElementById("broll-list");
   var bulk = document.getElementById("broll-bulk");
 
   keepingFocus(panel, function () {
+    var entries = brollEntries();
+    pruneSelection(entries);
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
     var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
@@ -1383,9 +1384,9 @@ function pageRowHtml(e) {
       '</select></td>' +
     '<td class="broll-page-c-note" data-label="Note">' +
       (e.reshoot ? '<span class="broll-flag-ico" title="Flagged" aria-label="Flagged">' + brollIcon("flag", 14) + '</span>' : '') +
-      '<input type="text" class="broll-notes-input broll-page-note" data-id="' + id + '" maxlength="2000" ' +
+      '<textarea class="broll-notes-input broll-page-note" data-id="' + id + '" rows="1" maxlength="2000" ' +
         (ro ? 'readonly ' : 'placeholder="Add a note" ') +
-        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '" value="' + escapeHtml(e.notes) + '"></td>' +
+        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '">' + escapeHtml(e.notes) + '</textarea></td>' +
   '</tr>';
 }
 
@@ -1393,9 +1394,9 @@ export function renderBrollPage() {
   var page = brollPageEl();
   if (!page || page.hidden || !S.state) return;
   dropEditingForReview();
-  var entries = brollEntries();
-  var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
   keepingFocus(page, function () {
+    var entries = brollEntries();
+    var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
     document.getElementById("broll-page-summary").textContent = pageSummaryText(entries);
     var sel = document.getElementById("broll-page-group");
     if (sel) sel.value = pageView.group;
