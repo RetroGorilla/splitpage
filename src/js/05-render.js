@@ -474,7 +474,22 @@ function paintRow(rowEl, row, index) {
   return parts.length > 0;
 }
 
+var painting = 0;
+
+export function whilePainting(draw) {
+  painting++;
+  try {
+    return draw();
+  } finally {
+    painting--;
+  }
+}
+
 export function renderRow(rowId) {
+  return whilePainting(function () { return paintOneRow(rowId); });
+}
+
+function paintOneRow(rowId) {
   if (!S.state) return false;
   var idx = findRowIndex(rowId);
   var rowsEl = document.getElementById("rows");
@@ -579,22 +594,20 @@ function reconcileRows(rowsEl, pinned) {
 
 function captureRenderFocus(rowsEl) {
   var active = document.activeElement;
-  if (!active || !active.classList) return null;
+  if (!active || !active.classList || !rowsEl || !rowsEl.contains(active)) return null;
   var out = { cell: null, id: null, field: null, rowEl: null, sel: null };
   if (active.classList.contains("cell-editable")) {
     out.cell = active;
     out.id = active.getAttribute("data-id");
     out.field = active.getAttribute("data-field");
   }
-  if (rowsEl && rowsEl.contains(active)) {
-    var rowEl = active.closest(".row");
-    if (rowEl && rowEl.parentNode === rowsEl) out.rowEl = rowEl;
-    var sel = window.getSelection();
-    if (out.cell && sel && sel.rangeCount) {
-      var r = sel.getRangeAt(0);
-      if (active.contains(r.startContainer) && active.contains(r.endContainer)) {
-        out.sel = { sc: r.startContainer, so: r.startOffset, ec: r.endContainer, eo: r.endOffset };
-      }
+  var rowEl = active.closest(".row");
+  if (rowEl && rowEl.parentNode === rowsEl) out.rowEl = rowEl;
+  var sel = window.getSelection();
+  if (out.cell && sel && sel.rangeCount) {
+    var r = sel.getRangeAt(0);
+    if (active.contains(r.startContainer) && active.contains(r.endContainer)) {
+      out.sel = { sc: r.startContainer, so: r.startOffset, ec: r.endContainer, eo: r.endOffset };
     }
   }
   return (out.cell || out.rowEl) ? out : null;
@@ -653,6 +666,14 @@ export function syncPageTitle() {
 }
 
 export function render() {
+  whilePainting(paintAll);
+}
+
+export function paintingScreen() {
+  return painting > 0;
+}
+
+function paintAll() {
   trackDocument();
   if (!S.state) return;
   renderCalls++;
@@ -787,7 +808,7 @@ export function renderFirstDraw() {
 }
 
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying || screenStale) return;
+  if (!cellEl.isConnected || S.undoApplying || screenStale || painting) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
