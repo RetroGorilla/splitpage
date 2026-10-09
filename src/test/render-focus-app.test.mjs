@@ -433,7 +433,7 @@ for (const f of PANEL_FIELDS) {
 
   test("typing in the b-roll " + f.name + " box that a redraw already saved is not written back over a later incoming change by the next redraw (#510)", () => {
     try {
-      const doc = focusShotField("Panel saved " + f.name, f);
+      focusShotField("Panel saved " + f.name, f);
       typeInto(shotBox(f.cls), "Typed " + f.name + ".");
       observe(() => runBrollRefresh());
       assert.equal(shot()[f.key], "Typed " + f.name + ".");
