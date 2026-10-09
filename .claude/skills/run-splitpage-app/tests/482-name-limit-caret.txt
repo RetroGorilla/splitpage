@@ -32,6 +32,21 @@ expect window.st() === '012345678901234567890123456789|30|30'
 eval window.fld(String.fromCodePoint(0x1F600) + 'b'.repeat(29), 2)
 press X
 expect window.st() === String.fromCodePoint(0x1F600) + 'b'.repeat(29) + '|2|2'
+eval window.fld(FULL.slice(0, 29), 29)
+type 🇩🇰
+expect window.st() === FULL.slice(0, 29) + '|29|29'
+eval window.fld(FULL.slice(0, 29), 5)
+type 🇩🇰
+expect window.st() === FULL.slice(0, 29) + '|5|5'
+eval window.fld(FULL.slice(0, 26), 26)
+type 👨‍👩‍👧
+expect window.st() === FULL.slice(0, 26) + '|26|26'
+eval window.fld(FULL.slice(0, 29), 29)
+type 👍🏽
+expect window.st() === FULL.slice(0, 29) + '|29|29'
+eval window.fld(FULL.slice(0, 28), 5)
+type 🇩🇰
+expect window.st() === FULL.slice(0, 5) + '🇩🇰' + FULL.slice(5, 28) + '|9|9'
 eval window.fld(FULL.slice(0, 29), 10)
 ime set ABC
 expect document.getElementById('settings-name').value.length === 32
