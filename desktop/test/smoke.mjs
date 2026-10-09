@@ -4123,36 +4123,41 @@ async function caseMovedFileTabAndWindowCloseTogether(target, fixturesDir) {
   const aPath = writeFixture(fixturesDir, "case-505-both-a-" + Date.now() + ".splitpage", "Both Closes A", [[marker, "t"]]);
   const markerB = "MARKER-TAB-AND-WINDOW-B-" + Date.now();
   const bPath = writeFixture(fixturesDir, "case-505-both-b-" + Date.now() + ".splitpage", "Both Closes B", [[markerB, "u"]]);
+  const markerC = "MARKER-TAB-AND-WINDOW-C-" + Date.now();
+  const cPath = writeFixture(fixturesDir, "case-505-both-c-" + Date.now() + ".splitpage", "Both Closes C", [[markerC, "c"]]);
   const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   let app = null;
   let held = {};
   try {
     app = await launchApp(target, {
-      label: "tab-and-window-close", userDataDir, fixtures: [aPath, bPath],
+      label: "tab-and-window-close", userDataDir, fixtures: [aPath, bPath, cPath],
       dialogs: ["confirm", "confirm", "cancel"], env: { SPLITPAGE_TEST_DRAFT_FAIL: "EIO:1" }
     });
     await waitForRows(app.cdp, 20000);
-    held = await tabsHolding(app, [marker, markerB], 20000);
-    record(tag + ": both files open in their own tabs", !!held[marker] && !!held[markerB], JSON.stringify(Object.keys(held)));
-    if (!held[marker] || !held[markerB]) return;
+    held = await tabsHolding(app, [marker, markerB, markerC], 20000);
+    record(tag + ": the three files open in their own tabs", !!held[marker] && !!held[markerB] && !!held[markerC], JSON.stringify(Object.keys(held)));
+    if (!held[marker] || !held[markerB] || !held[markerC]) return;
     const cdpA = held[marker].cdp;
     const cdpB = held[markerB].cdp;
     const tabAId = held[marker].id;
+    const otherWindow = await shell(cdpB, "moveTabToWindow", { tabId: held[markerB].id, windowId: null });
+    record(tag + ": tab B moves to a window of its own", !!otherWindow, String(otherWindow));
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
 
+    const seen0 = await dialogsSeen(cdpB);
     await fireEval(cdpA, "(function(){ window.splitpageDesktop.__testRequestCloseTab(); window.splitpageDesktop.__testRequestClose(); return true; })()", { awaitPromise: false });
-    const exited = await waitForExit(app.proc, 10000);
-    let stillOpen = false;
-    if (!exited) {
-      const listing = await shell(cdpB, "listTargets", {}).catch(() => null);
-      stillOpen = !!listing && listing.windows.some((w) => w.tabs.some((t) => t.tabId === tabAId));
-    }
+    const windowGone = await pollShellState(cdpB, (l) => !l.windows.some((w) => w.tabs.some((t) => t.tabId === tabAId)), 10000).catch(() => null);
+    await sleep(1000);
+    const seen = (await dialogsSeen(cdpB)) - seen0;
+    const listing = await shell(cdpB, "listTargets", {}).catch(() => null);
+    const stillOpen = !!listing && listing.windows.some((w) => w.tabs.some((t) => t.tabId === tabAId));
     const dirs = readDraftDirs(userDataDir);
     const kept = JSON.stringify((dirs[tabAId] && dirs[tabAId].current && dirs[tabAId].current.state) || {}).indexOf(marker) !== -1;
-    record(tag + ": tab A's script is still open or kept as a draft", stillOpen || kept,
-      "exited=" + exited + " stillOpen=" + stillOpen + " drafts=" + JSON.stringify(Object.keys(dirs)));
-    if (exited) app = null;
+    record(tag + ": once a question about tab A was answered 'cancel', its script is still open or kept as a draft",
+      seen < 3 || stillOpen || kept,
+      "questions=" + seen + " windowGone=" + !!windowGone + " stillOpen=" + stillOpen + " drafts=" + JSON.stringify(Object.keys(dirs)));
+    record(tag + ": only one of the two closes asks about tab A", seen === 2, "questions=" + seen);
   } finally {
     closeHeld(held);
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
