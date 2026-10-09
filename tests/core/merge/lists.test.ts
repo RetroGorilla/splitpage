@@ -102,8 +102,9 @@ test("an owner who did not survive gives way to the other side's live owner, in 
     assert.equal(owner("pSam", "pAda", survives), "pAda", owner.name + ": their live owner stays");
     assert.equal(owner("pAda", "pBo", survives), "pBo", owner.name + ": a live owner on their side is never replaced");
     assert.equal(owner("pCy", "pSam", survives), "pSam", owner.name + ": a deleted owner gives way only to a live one");
-    assert.equal(owner("", "pSam", survives), "pSam", owner.name + ": nor to no owner");
-    assert.equal(owner("pAda", "pSam"), "pSam", owner.name + ": with no check every owner counts as live");
+    assert.equal(owner("", "pSam", survives), "", owner.name + ": my unassignment wins over the owner they left alone");
+    assert.equal(owner("", "pBo", survives), "pBo", owner.name + ": but not over an owner they changed");
+    assert.equal(owner("pCy", "pSam"), "pCy", owner.name + ": with no check every owner counts as live");
   }
   assert.equal(shotOwner("pAda", 7, survives), 7, "an owner that is not an id is left as it was");
   assert.equal(shotOwner(7, "pSam", survives), "pSam");
@@ -111,6 +112,39 @@ test("an owner who did not survive gives way to the other side's live owner, in 
   const before = JSON.stringify(tags);
   mergeProductionTags(tags, [tag("t_k", "Kettle", { owner: "pAda" })], tags, survives);
   assert.equal(JSON.stringify(tags), before);
+});
+
+test("a one-sided reassignment or unassignment wins over an owner the other side left as it was in the base, in tags and shots (#353)", () => {
+  const survives = (id: string) => id !== "pGone";
+  const tagOwner = (base: string | null, mine: string, theirs: string) =>
+    mergeProductionTags(base === null ? [] : [tag("t_k", "Kettle", { owner: base })], [tag("t_k", "Kettle", { owner: mine })],
+      [tag("t_k", "Kettle", { owner: theirs })], survives)[0]?.owner;
+  const shotOwner = (base: string | null, mine: unknown, theirs: string) =>
+    mergeBrollShots(base === null ? [] : [shot("b1", { owner: base })], [shot("b1", { owner: mine })],
+      [shot("b1", { owner: theirs })], survives)[0]?.owner;
+  for (const owner of [tagOwner, shotOwner]) {
+    assert.equal(owner("pSam", "pAda", "pSam"), "pAda", owner.name + ": their side kept the base owner");
+    assert.equal(owner("", "pAda", ""), "pAda", owner.name + ": no owner in the base or theirs");
+    assert.equal(owner("pSam", "pAda", "pBo"), "pBo", owner.name + ": both sides reassigned: theirs stays");
+    assert.equal(owner("pSam", "pSam", "pBo"), "pBo", owner.name + ": only their side reassigned");
+    assert.equal(owner("pSam", "", "pSam"), "", owner.name + ": my one-sided unassignment wins");
+    assert.equal(owner("pSam", "pSam", ""), "", owner.name + ": their one-sided unassignment wins");
+    assert.equal(owner("pSam", "", "pBo"), "pBo", owner.name + ": both changed, theirs reassigned: their owner stays");
+    assert.equal(owner("pSam", "pBo", ""), "pBo", owner.name + ": both changed, theirs unassigned: my owner stays");
+    assert.equal(owner("", "", ""), "", owner.name + ": no owner anywhere");
+    assert.equal(owner("pSam", "pSam", "pGone"), "pSam", owner.name + ": their change to a person who is gone gives way to my live owner");
+    assert.equal(owner("pSam", undefined as unknown as string, "pSam"), "", owner.name + ": a missing owner on my side is an unassignment, stored as empty");
+    assert.equal(owner("pSam", "pGone", "pSam"), "pSam", owner.name + ": a reassignment to a person who is gone loses");
+    assert.equal(owner(null, "pAda", "pSam"), "pSam", owner.name + ": with no base entry theirs stays");
+  }
+  assert.equal(shotOwner("pSam", 7, "pSam"), "pSam", "an owner that is not an id never wins");
+  const base = [shot("b1", { owner: "pSam" })];
+  const mine = [shot("b1", { owner: "pSam", notes: "kept" }), shot("b1", { owner: "pBo" })];
+  assert.equal(mergeBrollShots(base, mine, [shot("b2")], survives).find((b) => b.id === "b1")?.owner, "pSam",
+    "my own duplicate is not their side");
+  assert.equal(mergeProductionTags([tag("t_k", "Kettle", { owner: "pSam" })],
+    [tag("t_k", "Kettle", { owner: "pSam", notes: "kept" }), tag("t_k", "Kettle", { owner: "pBo" })], [tag("t_l", "Lamp")], survives)
+    .find((t) => t.name === "Kettle")?.owner, "pSam");
 });
 
 test("two or more entries for one tag name: a deleted owner gives way to the next live one, in list order (#353)", () => {
