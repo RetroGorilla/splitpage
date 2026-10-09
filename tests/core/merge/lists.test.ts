@@ -102,7 +102,8 @@ test("an owner who did not survive gives way to the other side's live owner, in 
     assert.equal(owner("pSam", "pAda", survives), "pAda", owner.name + ": their live owner stays");
     assert.equal(owner("pAda", "pBo", survives), "pBo", owner.name + ": a live owner on their side is never replaced");
     assert.equal(owner("pCy", "pSam", survives), "pSam", owner.name + ": a deleted owner gives way only to a live one");
-    assert.equal(owner("", "pSam", survives), "pSam", owner.name + ": nor to no owner");
+    assert.equal(owner("", "pSam", survives), "", owner.name + ": my unassignment wins over the owner they left alone");
+    assert.equal(owner("", "pBo", survives), "pBo", owner.name + ": but not over an owner they changed");
     assert.equal(owner("pCy", "pSam"), "pCy", owner.name + ": with no check every owner counts as live");
   }
   assert.equal(shotOwner("pAda", 7, survives), 7, "an owner that is not an id is left as it was");
@@ -113,7 +114,7 @@ test("an owner who did not survive gives way to the other side's live owner, in 
   assert.equal(JSON.stringify(tags), before);
 });
 
-test("my reassignment wins over an owner their side left as it was in the base, in tags and shots (#353)", () => {
+test("a one-sided reassignment or unassignment wins over an owner the other side left as it was in the base, in tags and shots (#353)", () => {
   const survives = (id: string) => id !== "pGone";
   const tagOwner = (base: string | null, mine: string, theirs: string) =>
     mergeProductionTags(base === null ? [] : [tag("t_k", "Kettle", { owner: base })], [tag("t_k", "Kettle", { owner: mine })],
@@ -126,7 +127,11 @@ test("my reassignment wins over an owner their side left as it was in the base, 
     assert.equal(owner("", "pAda", ""), "pAda", owner.name + ": no owner in the base or theirs");
     assert.equal(owner("pSam", "pAda", "pBo"), "pBo", owner.name + ": both sides reassigned: theirs stays");
     assert.equal(owner("pSam", "pSam", "pBo"), "pBo", owner.name + ": only their side reassigned");
-    assert.equal(owner("pSam", "", "pSam"), "pSam", owner.name + ": an unassignment never removes an owner");
+    assert.equal(owner("pSam", "", "pSam"), "", owner.name + ": my one-sided unassignment wins");
+    assert.equal(owner("pSam", "pSam", ""), "", owner.name + ": their one-sided unassignment wins");
+    assert.equal(owner("pSam", "", "pBo"), "pBo", owner.name + ": both changed, theirs reassigned: their owner stays");
+    assert.equal(owner("pSam", "pBo", ""), "pBo", owner.name + ": both changed, theirs unassigned: my owner stays");
+    assert.equal(owner("", "", ""), "", owner.name + ": no owner anywhere");
     assert.equal(owner("pSam", "pGone", "pSam"), "pSam", owner.name + ": a reassignment to a person who is gone loses");
     assert.equal(owner(null, "pAda", "pSam"), "pSam", owner.name + ": with no base entry theirs stays");
   }
