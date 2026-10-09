@@ -119,11 +119,6 @@ export function requestRefresh(job: string): void {
   session.refresh(job);
 }
 
-export function sessionEpoch(): number {
-  followLiveDocument();
-  return session.epoch();
-}
-
 export function liveSession(): DocumentSession {
   return session;
 }
