@@ -4585,7 +4585,7 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
   let cdpC = null;
   try {
     app = await launchApp(target, {
-      label: "tab-opened-during-check-" + how.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath], dialogs: ["confirm", "cancel"],
+      label: "tab-opened-during-check-" + how.replace(/\W+/g, "-"), userDataDir, fixtures: [aPath], dialogs: ["confirm", "confirm"],
       env: { SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS: "3000", SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1100" }
     });
     await waitForRows(app.cdp, 20000);
@@ -4595,7 +4595,6 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     const cdpA = held[marker].cdp;
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
 
-    const seen0 = await dialogsSeen(cdpA);
     const request = how === "quit" ? "__testRequestQuit" : "__testRequestClose";
     await fireEval(cdpA, "window.splitpageDesktop." + request + "()", { awaitPromise: false });
     const started = Date.now();
@@ -4607,11 +4606,17 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
     const took = Date.now() - started;
     record(tag + ": a new tab gets an unsaved edit while the check still runs", !!dirtyC && took < 1800 && app.proc.exitCode === null, "took " + took + " ms");
 
-    const asked = await dialogsPast(cdpA, seen0 + 1, 15000);
-    await sleep(800);
-    record(tag + ": the new tab is asked about too", !!asked, "dialogs seen=" + (await dialogsSeen(cdpA).catch(() => "?")) + ", before=" + seen0);
-    record(tag + ": 'stay' keeps the app running", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
-    record(tag + ": the new tab is still open with its edit", app.proc.exitCode === null && !!(await markerPresent(cdpC, markerC).catch(() => false)));
+    const exited = await waitForExit(app.proc, 30000);
+    record(tag + ": answering 'close' to exactly two questions closes and the app exits", exited === true && app.proc.exitCode === 0,
+      "exited=" + exited + " exitCode=" + app.proc.exitCode + " (a third question is answered Cancel and keeps it open)");
+    try { cdpC.close(); } catch {}
+    cdpC = null;
+    closeHeld(held);
+    held = {};
+    app = null;
+    const session = readSession(userDataDir);
+    record(tag + ": the second question was about the new tab, whose edit is discarded as answered",
+      ((session && session.discardedTabIds) || []).includes(tabCId), JSON.stringify(session));
   } finally {
     if (cdpC) { try { cdpC.close(); } catch {} }
     closeHeld(held);
