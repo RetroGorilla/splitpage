@@ -57,19 +57,22 @@ test("a replayed people merge re-points only the ids it folded into another pers
     productionTags: [tag("t_kettle", "Kettle", "pB"), tag("t_lamp", "Lamp", "pT"), tag("t_cup", "Cup", "pGone")],
     brollShots: [shot("bs_pier", "Pier", "pB"), shot("bs_dock", "Dock", "")] });
   const shots = live.brollShots;
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(live, steps), { ok: true, cleared: 1 });
   assert.deepEqual(live.people, [person("pM", "Ada"), person("pB", "Bo")]);
-  assert.deepEqual(live.productionTags.map((t) => t.owner), ["pB", "pM", "pGone"]);
+  assert.deepEqual(live.productionTags.map((t) => t.owner), ["pB", "pM", ""]);
   assert.deepEqual(live.brollShots.map((b) => b.owner), ["pB", ""]);
   assert.equal(live.brollShots, shots, "a list with nothing to re-point is left as it was");
 });
 
-test("a replay that sets the people list as recorded re-points no owner", () => {
-  const steps = diffStates(doc({ people: [person("pX", "Bo")] }), doc({ people: [person("pY", "bo")] }));
-  const live = doc({ people: [person("pX", "Bo")], brollShots: [shot("bs_pier", "Pier", "pX")] });
+test("a replay that sets the people list as recorded hands an owner it dropped to the same-named person it kept", () => {
+  const steps = diffStates(doc({ people: [person("pX", "Bo"), person("pC", "Cy")] }),
+    doc({ people: [person("pY", "bo"), person("pC", "Cy")] }));
+  const live = doc({ people: [person("pX", "Bo"), person("pC", "Cy")],
+    brollShots: [shot("bs_pier", "Pier", "pX"), shot("bs_dock", "Dock", "pC")] });
   assert.deepEqual(applyStepsLive(live, steps), { ok: true });
-  assert.deepEqual(live.people, [person("pY", "bo")]);
-  assert.equal(ownerOf(live.brollShots, "Pier"), "pX");
+  assert.deepEqual(live.people, [person("pY", "bo"), person("pC", "Cy")]);
+  assert.equal(ownerOf(live.brollShots, "Pier"), "pY");
+  assert.equal(ownerOf(live.brollShots, "Dock"), "pC");
 });
 
 test("a replayed list merge hands an item to its live owner when the replayed owner is gone (#353)", () => {

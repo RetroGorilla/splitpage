@@ -98,6 +98,75 @@ test("undo of an entry that removed a person after a same-named fold leaves no d
   assert.deepEqual(dangling(), []);
 });
 
+test("undo of an entry that only added a person clears the item a collaborator gave that person (#476)", () => {
+  boot(["Cy"]);
+  S.state.people.push(person("p_Ada", "Ada"));
+  commit();
+  remoteCrew((st) => { st.brollShots.find((e) => e.name === "Dock").owner = "p_Ada"; });
+  const res = undo();
+  assert.equal(res.ok, true);
+  assert.equal(res.cleared, 1);
+  assert.deepEqual(S.state.people.map((p) => p.name), ["Cy"]);
+  assert.deepEqual(dangling(), []);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
+  const again = redo();
+  assert.equal(again.ok, true);
+  assert.equal(again.cleared, undefined);
+  assert.deepEqual(S.state.people.map((p) => p.name), ["Cy", "Ada"]);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
+});
+
+test("redo of an entry that only removed a person clears the tag a collaborator gave that person meanwhile (#476)", () => {
+  boot(["Ada", "Cy"]);
+  S.state.people = S.state.people.filter((p) => p.id !== "p_Ada");
+  commit();
+  assert.equal(undo().ok, true);
+  remoteCrew((st) => {
+    st.productionTags.find((e) => e.name === "Kettle").owner = "p_Ada";
+    st.brollShots.find((e) => e.name === "Dock").owner = "p_Cy";
+  });
+  const res = redo();
+  assert.equal(res.ok, true);
+  assert.equal(res.cleared, 1);
+  assert.deepEqual(dangling(), []);
+  assert.equal(ownerOf(S.state.productionTags, "Kettle"), "");
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Cy", "an owner still in the crew is kept");
+});
+
+test("a redo that only changes the crew keeps an owner the same-name remap points at a crew member (#476)", () => {
+  boot(["Cy"]);
+  S.state.people.push(person("p_Ada", "Ada"));
+  commit();
+  assert.equal(undo().ok, true);
+  S.state.people.push(person("pT_ada", "ADA"));
+  S.state.brollShots.find((e) => e.name === "Dock").owner = "pT_ada";
+  const res = redo();
+  assert.equal(res.ok, true);
+  assert.equal(res.cleared, undefined);
+  assert.deepEqual(dangling(), []);
+  assert.deepEqual(S.state.people.map((p) => p.id), ["p_Cy", "p_Ada"]);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
+});
+
+test("an undo that only changes the crew announces the items it unassigned (#476)", () => {
+  const seen = [];
+  const listener = (e) => seen.push(e.detail.count);
+  document.addEventListener("undo-owner-cleared", listener);
+  try {
+    boot(["Cy"]);
+    S.state.people.push(person("p_Ada", "Ada"));
+    commit();
+    remoteCrew((st) => {
+      st.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
+      st.productionTags.find((e) => e.name === "Kettle").owner = "p_Ada";
+    });
+    assert.equal(undo().ok, true);
+    assert.deepEqual(seen, [2]);
+  } finally {
+    document.removeEventListener("undo-owner-cleared", listener);
+  }
+});
+
 function rng(seed) {
   let a = seed >>> 0;
   return () => {
@@ -137,8 +206,40 @@ function mergeFold(name, mixedCase) {
   return true;
 }
 
-test("seeded: through noteRemoteChange, with crew-changing and mixed-case merges, undo and redo never refuse, never dangle and land on a value the item held (#476)", () => {
-  let undos = 0, redos = 0, folds = 0, crewMerges = 0, refused = 0;
+function nameOfOwner(st, list, name) {
+  const owner = ownerOf(st[list], name);
+  if (!owner) return "";
+  const p = st.people.find((x) => x.id === owner);
+  return p ? p.name.toLowerCase() : "?dangling:" + owner;
+}
+
+function remoteItems(synced, mutate) {
+  const mine = clone(S.state);
+  const theirs = clone(synced);
+  mutate(theirs);
+  const merged = mergeStates(clone(synced), clone(mine), clone(theirs)).merged;
+  const mineIds = new Set(mine.people.map((p) => p.id));
+  const mineOnly = ITEMS.filter(([l, n]) => {
+    const was = nameOfOwner(synced, l, n);
+    return nameOfOwner(mine, l, n) !== was && nameOfOwner(theirs, l, n) === was;
+  });
+  const lost = mineOnly.filter(([l, n]) => nameOfOwner(mine, l, n) && nameOfOwner(merged, l, n) !== nameOfOwner(mine, l, n))
+    .map(([l, n]) => n + ": " + nameOfOwner(mine, l, n) + " became " + nameOfOwner(merged, l, n));
+  const ownerDeleted = mineOnly.filter(([l, n]) => {
+    const was = ownerOf(synced[l], n);
+    return was && !mineIds.has(was) && ownerOf(mine[l], n);
+  }).length;
+  const next = clone(S.state);
+  next.people = merged.people;
+  next.productionTags = merged.productionTags;
+  next.brollShots = merged.brollShots;
+  noteRemoteChange(next);
+  S.state = next;
+  return { lost, ownerDeleted, reassigned: mineOnly.filter(([l, n]) => nameOfOwner(mine, l, n)).length };
+}
+
+test("seeded: through noteRemoteChange, with crew-changing, item-assigning and mixed-case merges, undo and redo never refuse, never dangle and land on a value the item held (#476, #353)", () => {
+  let undos = 0, redos = 0, folds = 0, crewMerges = 0, refused = 0, remoteAssigns = 0, arrivals = 0, crewOnly = 0, cleared = 0, ownerDeleted = 0, reassigned = 0;
   for (let seed = 1; seed <= 400; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
@@ -148,13 +249,14 @@ test("seeded: through noteRemoteChange, with crew-changing and mixed-case merges
     S.state.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
     S.state.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
     trackDocument();
+    let synced = clone(S.state);
     const seen = {};
     ITEMS.forEach(([, n]) => { seen[n] = new Set([""]); });
     const note = () => ITEMS.forEach(([l, n]) => seen[n].add(ownerNameOf(l, n)));
     const label = "seed " + seed;
     for (let step = 0; step < 30; step++) {
       const op = r();
-      if (op < 0.25) {
+      if (op < 0.2) {
         const [list, name] = pick(ITEMS);
         const owner = pick(["", ...S.state.people.map((p) => p.id)]);
         const item = S.state[list].find((e) => e.name === name);
@@ -162,18 +264,46 @@ test("seeded: through noteRemoteChange, with crew-changing and mixed-case merges
         item.owner = owner;
         commit();
         note();
-      } else if (op < 0.4) {
+      } else if (op < 0.32) {
         const n = pick(NAMES);
         if (S.state.people.some((p) => p.name.toLowerCase() === n.toLowerCase())) continue;
         S.state.people.push(person("pM_" + n + "_" + step, n));
         commit();
-      } else if (op < 0.5) {
+      } else if (op < 0.4) {
         if (!S.state.people.length) continue;
-        removePerson(pick(S.state.people).id);
+        const gone = pick(S.state.people).id;
+        const owned = ITEMS.filter(([l, n]) => ownerOf(S.state[l], n) === gone);
+        removePerson(gone);
+        if (owned.length && S.state.people.length && r() < 0.7) {
+          const heir = pick(S.state.people).id;
+          owned.forEach(([l, n]) => { S.state[l].find((e) => e.name === n).owner = heir; });
+          commit();
+        }
         note();
+      } else if (op < 0.47) {
+        if (mergeFold(pick(NAMES), r() < 0.5)) { folds++; synced = clone(S.state); note(); }
       } else if (op < 0.6) {
-        if (mergeFold(pick(NAMES), r() < 0.5)) { folds++; note(); }
-      } else if (op < 0.7) {
+        const [list, name] = pick(ITEMS);
+        let res;
+        if (r() < 0.6) {
+          remoteAssigns++;
+          res = remoteItems(synced, (st) => { st[list].find((e) => e.name === name).owner = pick(["", ...st.people.map((p) => p.id)]); });
+        } else {
+          arrivals++;
+          const n = pick(NAMES), id = "pT_" + n + "_" + step;
+          const shout = r() < 0.5;
+          res = remoteItems(synced, (st) => {
+            const had = st.people.find((p) => p.name.toLowerCase() === n.toLowerCase());
+            if (!had) st.people.push(person(id, shout ? n.toUpperCase() : n));
+            st[list].find((e) => e.name === name).owner = had ? had.id : id;
+          });
+        }
+        assert.deepEqual(res.lost, [], label + " merge kept my assignments");
+        ownerDeleted += res.ownerDeleted;
+        reassigned += res.reassigned;
+        synced = clone(S.state);
+        note();
+      } else if (op < 0.68) {
         crewMerges++;
         const n = pick(NAMES);
         remoteCrew((st) => {
@@ -185,12 +315,15 @@ test("seeded: through noteRemoteChange, with crew-changing and mixed-case merges
             st.people.push(person("pT_" + n + "_" + step, n));
           }
         });
+        synced = clone(S.state);
         note();
       } else if (op < 0.85) {
         const res = undo();
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
         undos++;
+        if (res.steps.every((s) => s.op === "docField" && s.key === "people")) crewOnly++;
+        cleared += res.cleared || 0;
         assert.deepEqual(dangling(), [], label + " undo");
         ITEMS.forEach(([l, n]) => assert.ok(seen[n].has(ownerNameOf(l, n)), label + " undo " + n + "=" + ownerNameOf(l, n)));
       } else {
@@ -198,13 +331,17 @@ test("seeded: through noteRemoteChange, with crew-changing and mixed-case merges
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
         redos++;
+        if (res.steps.every((s) => s.op === "docField" && s.key === "people")) crewOnly++;
+        cleared += res.cleared || 0;
         assert.deepEqual(dangling(), [], label + " redo");
         ITEMS.forEach(([l, n]) => assert.ok(seen[n].has(ownerNameOf(l, n)), label + " redo " + n + "=" + ownerNameOf(l, n)));
       }
     }
   }
   assert.equal(refused, 0, "no undo or redo refused");
-  assert.ok(undos > 300 && redos > 100 && folds > 100 && crewMerges > 100, JSON.stringify({ undos, redos, folds, crewMerges }));
+  const counts = { undos, redos, folds, crewMerges, remoteAssigns, arrivals, crewOnly, cleared, ownerDeleted, reassigned };
+  assert.ok(undos > 300 && redos > 100 && folds > 100 && crewMerges > 100, JSON.stringify(counts));
+  assert.ok(remoteAssigns > 100 && arrivals > 100 && crewOnly > 300 && cleared > 20 && ownerDeleted > 20 && reassigned > 150, JSON.stringify(counts));
 });
 
 test("an undo or redo that clears an owner announces it, one that does not stays silent (#476)", () => {
