@@ -125,7 +125,7 @@ expect window.__d().activeElement.id == doc-title
 expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
 # editing, it is the facts that give way — your name still stays
 eval window.__check(1440)
-expect window.__last === ''
+expect window.__last === '1440: search/fact3#identity-chip by 2'
 eval window.__d().getElementById('doc-title').blur()
 # a real click on your name reaches it (21-events.js opens the name box)
 eval (function(){ var W=window; W.__nameClicks=0; W.__d().getElementById('identity-chip').addEventListener('click', function(){ W.__nameClicks++; }); var c=W.__d().getElementById('identity-chip').getBoundingClientRect(); return JSON.stringify([c.left,c.top,c.width,c.height]); })()
