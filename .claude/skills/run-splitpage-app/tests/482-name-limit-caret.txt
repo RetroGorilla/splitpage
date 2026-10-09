@@ -1,0 +1,55 @@
+open /index.html
+sleep 400
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){window.T=window.__settingsTest;window.FULL='abcdefghij'.repeat(3);window.fld=function(v,a,b){var el=document.getElementById('settings-name');el.focus();el.value=v;el.setSelectionRange(a,b===undefined?a:b);return true;};window.st=function(){var el=document.getElementById('settings-name');return el.value+'|'+el.selectionStart+'|'+el.selectionEnd;};T.open();return true;})()
+wait T.isOpen()
+eval window.fld(FULL, 10)
+press X
+expect window.st() === FULL + '|10|10'
+press Y
+expect window.st() === FULL + '|10|10'
+eval window.fld(FULL, 0)
+press X
+expect window.st() === FULL + '|0|0'
+eval window.fld(FULL, 30)
+press X
+expect window.st() === FULL + '|30|30'
+eval window.fld(FULL.slice(0, 29), 10)
+press X
+expect window.st() === FULL.slice(0, 10) + 'X' + FULL.slice(10, 29) + '|11|11'
+eval window.fld(FULL, 3, 6)
+press Z
+expect window.st() === FULL.slice(0, 3) + 'Z' + FULL.slice(6) + '|4|4'
+eval window.fld(FULL.slice(0, 28), 5)
+type 12345
+expect window.st() === FULL.slice(0, 5) + '12' + FULL.slice(5, 28) + '|7|7'
+eval window.fld(FULL, 12)
+type pasted text
+expect window.st() === FULL + '|12|12'
+eval window.fld(FULL, 0, 30)
+type 0123456789012345678901234567890123456789
+expect window.st() === '012345678901234567890123456789|30|30'
+eval window.fld(String.fromCodePoint(0x1F600) + 'b'.repeat(29), 2)
+press X
+expect window.st() === String.fromCodePoint(0x1F600) + 'b'.repeat(29) + '|2|2'
+eval window.fld(FULL.slice(0, 29), 29)
+type 🇩🇰
+expect window.st() === FULL.slice(0, 29) + '|29|29'
+eval window.fld(FULL.slice(0, 29), 5)
+type 🇩🇰
+expect window.st() === FULL.slice(0, 29) + '|5|5'
+eval window.fld(FULL.slice(0, 26), 26)
+type 👨‍👩‍👧
+expect window.st() === FULL.slice(0, 26) + '|26|26'
+eval window.fld(FULL.slice(0, 29), 29)
+type 👍🏽
+expect window.st() === FULL.slice(0, 29) + '|29|29'
+eval window.fld(FULL.slice(0, 28), 5)
+type 🇩🇰
+expect window.st() === FULL.slice(0, 5) + '🇩🇰' + FULL.slice(5, 28) + '|9|9'
+eval window.fld(FULL.slice(0, 29), 10)
+ime set ABC
+expect document.getElementById('settings-name').value.length === 32
+ime commit ABC
+expect window.st() === FULL.slice(0, 10) + 'A' + FULL.slice(10, 29) + '|11|11'
+key Escape
