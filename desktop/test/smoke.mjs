@@ -4408,7 +4408,7 @@ async function caseCloseBackOffKeepsSessionEndHold(target, fixturesDir) {
     record(tag + ": a later plain flush still can't remove it", !!plain && plain.ok === false && plain.code === "HELD", JSON.stringify(plain));
   } finally {
     closeHeld(held);
-    if (app) { await crashApp(app); app = null; }
+    if (app) await crashApp(app);
     rmrf(userDataDir);
     rmrf(movedDir);
   }
