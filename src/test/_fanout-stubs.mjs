@@ -49,6 +49,7 @@ export function renderRow(id) {
   return answers.renderRow;
 }
 export function render() { calls.push("render"); }
+export function afterThisPaint(fn) { fn(); }
 export function paintRowTimes() { calls.push("paintRowTimes"); }
 export function setRundownExtraSeconds() { calls.push("setRundownExtraSeconds"); }
 export function renderRundown() { calls.push("renderRundown"); }

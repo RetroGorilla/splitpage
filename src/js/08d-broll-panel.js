@@ -4,7 +4,7 @@ import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
-import { pad2, paintingScreen, render, whilePainting } from "./05-render.js";
+import { pad2, render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
 import {
   findOrAddPerson,
@@ -692,6 +692,8 @@ function typedChange(el) {
   return change;
 }
 
+var drawingPanel = 0;
+
 function keepingFocus(container, draw) {
   var active = document.activeElement;
   var kept = null;
@@ -705,7 +707,12 @@ function keepingFocus(container, draw) {
     kept = { key: focusKey(active), typed: typed, ownValue: ownValue, value: active.value,
              start: typed ? active.selectionStart : 0, end: typed ? active.selectionEnd : 0 };
   }
-  whilePainting(draw);
+  drawingPanel++;
+  try {
+    draw();
+  } finally {
+    drawingPanel--;
+  }
   if (!kept || !kept.key) return;
   var again = container.querySelector(kept.key);
   if (!again) return;
@@ -1141,7 +1148,7 @@ function focusBulkInput() {
 }
 
 function onBrollFocusOut(e) {
-  if (reviewMode() || paintingScreen()) return;
+  if (reviewMode() || drawingPanel) return;
   var el = e.target;
   var field = recordField(el);
   if (!field || !brollRecord(el.getAttribute("data-id"))) return;
