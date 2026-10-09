@@ -228,7 +228,7 @@ rightToday("S1", "a hosted save whose document is switched for another acknowled
   assert.equal(puts(held, "srv-b").length, 0, "nothing was sent for B");
 }));
 
-wrongToday("S2", "a hosted save that completes after a same-id reopen does not move the reopened session's revision or baseline", hostedCase(async ({ server, held }) => {
+rightToday("S2", "a hosted save that completes after a same-id reopen does not move the reopened session's revision or baseline", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
   openHosted(script("A", idOf("a")), "srv-a", 1);
   editRow(0, "Typed before the save.");
@@ -250,7 +250,7 @@ wrongToday("S2", "a hosted save that completes after a same-id reopen does not m
   assert.deepEqual(late.baseTexts, before.baseTexts, "the reopened session's baseline did not move");
   assert.equal(server.texts("srv-a")[1], "Typed after the reopen.", "setup: the next save reached the server");
   assert.equal(server.texts("srv-a")[0], "Typed before the save.", "the server still holds the saved text after the next edit");
-}), /the reopened session's revision did not move|the reopened session's baseline did not move|the server still holds the saved text after the next edit/);
+}));
 
 wrongToday("S3", "a tab pointed at another server mid-save sends none of the remaining uploads or the PUT there", hostedCase(async ({ server, held }) => {
   const first = intern(pngBytes(40, 30));
