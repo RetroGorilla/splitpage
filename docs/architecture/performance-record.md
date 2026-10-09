@@ -141,3 +141,38 @@ The runs behind the typing medians (p50, then p95): short typing `b1fde0f` 4, 4,
 Typing, which 3.12 put through the session, moved by +0.6 ms (short) and -0.6 ms (long) at p50 and by -0.3 and +0.8 ms at p95, inside the spread between runs of one build (short typing p50 alone ran from 4 to 4.6 on the base, and long typing p95 from 15.7 to 18.1). The earlier set with the head at `c91bc4f` read the same way: short typing p50 3.4 then 4.3 ms and p95 15.2 then 15.7, long typing p50 5.9 then 6.1 and p95 15.9 then 15.6. The 3.12 PR measured the same case in its own interleaved comparison and found its p50 medians within 0.3 ms. The cases that are not typing, none of which goes through a command, differ by amounts in both directions that the runs themselves show (long undo the delete on the base ran from 31.3 to 54 ms). The milestone 3 start record above, a single run, reads 3.9 and 14.5 ms for short typing and 5.3 and 16.9 ms for long typing; the medians here sit beside it. Export is a few milliseconds at most in every case, and the one value that rose (short standalone HTML, 0.2 then 0.7 ms) is a sub-millisecond reading that moved from 0.3 to 0.7 within the head's own runs.
 
 Three earlier runs of the head alone, made before these, read higher on two long cases than the interleaved medians (long new scene p50 46.9, 49.9 and 50.3 ms; long undo the delete 39.3, 48 and 48.8 ms), and the cause was not found. That is why this section compares the base and the head run alternately in one sitting, and why a p95, or a case of one key, should be repeated before it is called a change.
+
+## Image-heavy load and merge, #320 (Windows)
+
+Recorded 2026-10-08 by `node tools/perf-record.mjs --only images` (PR 4.5), before the blob registry moves (D8). The case opens a document whose ten comments each hold a fresh 1 MiB picture, reads the same pictures back from IndexedDB on a fresh page, and merges two sides that each add ten. The same file ran, unchanged, on builds of `d18adde` (where milestone 2 started) and `c4d5944` (milestone 2's final tree): a `git worktree add --detach` checkout of each, `node_modules` junctioned to the lane's, `node build.mjs`, and `tools/perf-record.mjs` copied in (the tool measures the build of the repo it sits in). One run is three trials, each on pictures no earlier trial has seen; the tables give each run's median trial. The runs went in this order, one at a time on one machine, browser and font setup: `d18adde`, `c4d5944`, `d18adde`, `c4d5944`, `1aa1eed` (the base of PR 4.5, 4.0-development at that point), `d18adde`, `c4d5944`. Milestone 4's closing tree (4.22) runs the same command under these conditions.
+
+### Conditions
+
+- Machine: win32 10.0.26300 x64, AMD Ryzen 9 9950X3D2 16-Core Processor x32, 30.9 GB, Node v22.23.2
+- Browser: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0, headless, viewport 1400x900 at 1x. The same browser ran every build.
+- Script font: `"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", Verdana, sans-serif`; Atkinson Hyperlegible Next is installed and used
+- Load at the time: no other browser or node process was running and 17 GB of RAM was free. The tool read the CPU as 4 to 9% busy in the second before each run and in the second after it (`d18adde` 5/7, 6/8, 6/4; `c4d5944` 9/9, 4/4, 4/4; `1aa1eed` 4/5), from idle Claude sessions and desktop software. No game was running.
+- Fixture: the seed script (2 scenes) with ten comments added, each holding one picture. A picture is a valid PNG of exactly 1 MiB (a 1x1 image plus a private chunk of random bytes with correct checksums), so no two share a hash and the browser decodes each
+- Open: `openFile` on a .splitpage whose comment bodies hold the pictures as data URLs, until the frame after it. It covers reading and parsing the 14 MB file, migrating it (decode, hash and copy of each picture, `intern`), and the redraw
+- Load from IndexedDB: `ensureBytes` for the ten pictures of an earlier open, after a reload of the page, so the registry reads them back from the store (`loadBlob`, then `intern`). This is the third hash and copy that the milestone 4 plan names; the tool checks that none of the ten was in memory before the call
+- Merge: a hosted pull (`noteRev`, with `fetch` stubbed to answer from memory) of a document that added ten pictures as data URLs, into a document that added ten others, until the frame after it. My side's pictures were already in the registry, as in a live session, so the timed ingestion is theirs; the JSON parse of a server answer is not in the time
+
+### Results, median of 3 runs each (ms, each run the median of its 3 trials)
+
+| Case | `d18adde` runs | `d18adde` median | `c4d5944` runs | `c4d5944` median | `1aa1eed` (1 run) |
+| --- | --- | --- | --- | --- | --- |
+| open, 10 pictures | 270, 281, 270.8 | 270.8 | 368, 362.6, 360 | 362.6 | 369.9 |
+| load from IndexedDB, 10 pictures | 102.6, 102.6, 103.1 | 102.6 | 103, 102.8, 102.9 | 102.9 | 103.3 |
+| merge, 10 + 10 pictures | 299.8, 289.8, 287 | 289.8 | 387.6, 393.3, 387.2 | 387.6 | 384 |
+
+Median slowdown against `d18adde`:
+
+| Case | `c4d5944` | `1aa1eed` |
+| --- | --- | --- |
+| open | +33.9% | +36.6% |
+| load from IndexedDB | +0.3% | +0.7% |
+| merge | +33.7% | +32.5% |
+
+### Reading it
+
+The runs of one build sit within 4.4% of each other at most (`d18adde` open 270 to 281, merge 287 to 299.8; `c4d5944` open 360 to 368, merge 387.2 to 393.3), so no pair needed a rerun and the slowdown is far outside the spread. The three trials inside a run lie within 26 ms of each other. The open and merge cases, which both ingest ten new pictures, are about a third slower on `c4d5944` (about 92 and 98 ms) and `1aa1eed` reads the same, so the cost came in between `d18adde` and `c4d5944` and the commits since have not moved it. The load from IndexedDB is the same on all three builds: its extra hash and copy is on `d18adde` too (`loadBlob` calls `intern` there as well), so the load path is not a regression, and a trim of the ingestion port leaves it as it is. Whether the 10% line named in E14 calls for the trim is for 4.19; both ingesting cases are above it by a factor of three.
