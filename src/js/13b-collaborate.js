@@ -3,7 +3,7 @@ import { conn, home, normalizeServerUrl, serverHomeId, updateConnection } from "
 import { readPref, writePref } from "./00p-prefs.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
-import { COMMENT_NAME_KEY, getSavedAuthorName } from "./10-comments.js";
+import { COMMENT_NAME_KEY, cleanAuthorName, getSavedAuthorName } from "./10-comments.js";
 import { showToast } from "./12-dirty-toast.js";
 import {
   apiFetch,
@@ -29,7 +29,7 @@ import { updateFileChip } from "./18-local-files.js";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
-import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
@@ -850,7 +850,7 @@ function openGuestName() {
       '<p class="modal-hint">You’re in <strong>' + escapeHtml(title) + '</strong> — ' + escapeHtml(can) +
         ' Your name goes on your changes and comments, and shows the others where you are.</p>' +
       '<label class="collab-field-label" for="guest-name">Your name</label>' +
-      '<input type="text" id="guest-name" class="collab-input" autocomplete="name" placeholder="Your name" maxlength="80">' +
+      '<input type="text" id="guest-name" class="collab-input" autocomplete="name" placeholder="Your name">' +
       personSwatchesHtml("", "guest-person-color", "collab-field-label") +
       '<div class="modal-footer">' +
         '<span></span>' +
@@ -872,7 +872,7 @@ function closeGuestName() {
 
 function saveGuestName() {
   var input = document.getElementById("guest-name");
-  var v = input ? cappedName(input.value, 80) : "";
+  var v = input ? cleanAuthorName(input.value) : "";
   if (!v) { if (input) input.focus(); return; }
   writePref(COMMENT_NAME_KEY, v);
   updateIdentityChip();

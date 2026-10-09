@@ -162,12 +162,14 @@ import {
   toggleBulkTag
 } from "./09-find-replace.js";
 import {
+  AUTHOR_NAME_FIELDS,
   armDeleteComment,
   captureReplyDrafts,
   closeCommentComposer,
   closeCommentsPanel,
   jumpToAnchor,
   jumpToComment,
+  limitAuthorNameField,
   openCommentsPanel,
   postComment,
   postReply,
@@ -313,6 +315,12 @@ var REVIEW_SAFE_ACTIONS = {
   "tag-expand": 1, "bulk-clear": 1,
   "export-breakdown": 1, "export-packing-gear": 1
 };
+
+export function toastLastEditor(loaded) {
+  if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
+    showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
+  }
+}
 
 export function onRootClick(e) {
   if (reviewMode()) {
@@ -1190,8 +1198,8 @@ function init() {
 
     if (applied.report) {
       reportMerge(applied.report, { kind: "recovery" });
-    } else if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
-      showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
+    } else {
+      toastLastEditor(loaded);
     }
 
     if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
@@ -1208,6 +1216,10 @@ function init() {
       detectServer();
       return applyTakenDraft(t);
     });
+  });
+
+  document.addEventListener("input", function (e) {
+    if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
   });
 
   var rowsEl = document.getElementById("rows");

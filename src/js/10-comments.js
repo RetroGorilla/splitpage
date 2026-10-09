@@ -33,7 +33,8 @@ import {
 } from "../core/document/comments.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
-import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
+import { EDITOR_NAME_MAX, normalizeEditorName } from "../core/document/fields.ts";
+import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 export { nowIso };
 
 var commentFilter;
@@ -169,11 +170,19 @@ var replyDrafts = idMap();
 S.deleteCommentArmId = null;
 export var deleteCommentArmTimer = null;
 
+export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input, #guest-name";
+export function cleanAuthorName(name) {
+  return normalizeEditorName(name) || "";
+}
+export function limitAuthorNameField(field) {
+  var cut = codePointPrefix(field.value, EDITOR_NAME_MAX);
+  if (cut !== field.value) field.value = cut;
+}
 export function getSavedAuthorName() {
-  try { return localStorage.getItem(COMMENT_NAME_KEY) || ""; } catch (e) { return ""; }
+  try { return cleanAuthorName(localStorage.getItem(COMMENT_NAME_KEY)); } catch (e) { return ""; }
 }
 export function saveAuthorName(name) {
-  try { localStorage.setItem(COMMENT_NAME_KEY, name); } catch (e) {}
+  try { localStorage.setItem(COMMENT_NAME_KEY, cleanAuthorName(name)); } catch (e) {}
 }
 
 export var COMMENTS_SORT_KEY = "splitpage-comments-sort";
@@ -575,7 +584,7 @@ export function closeCommentComposer(cancelled) {
 export function postComment() {
   if (!pendingComment) return;
   var nameInput = document.getElementById("comment-name");
-  var author = (nameInput.value || "").trim() || "Anonymous";
+  var author = cleanAuthorName(nameInput.value) || "Anonymous";
   saveAuthorName(author);
   var bodyEl = document.getElementById("comment-body-editable");
   var bodyHtml = sanitizeHtml(bodyEl.innerHTML);
@@ -694,7 +703,7 @@ export function postReply(id) {
   if (!card) return;
   var nameInput = card.querySelector(".reply-name-input");
   var bodyEl = card.querySelector(".cell-editable");
-  var author = (nameInput.value || "").trim() || "Anonymous";
+  var author = cleanAuthorName(nameInput.value) || "Anonymous";
   saveAuthorName(author);
   var bodyHtml = sanitizeHtml(bodyEl.innerHTML);
   if (!bodyEl.textContent.trim()) {

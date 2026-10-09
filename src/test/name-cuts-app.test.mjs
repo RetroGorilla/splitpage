@@ -153,19 +153,19 @@ for (const [what, c] of CASES) {
     writePref(COMMENT_NAME_KEY, null);
     sessionStorage.clear();
     assert.ok(maybeAskGuestName());
-    document.getElementById("guest-name").value = c.typed(80);
+    document.getElementById("guest-name").value = c.typed(30);
     document.querySelector('#guest-modal [data-guest-action="save"]').click();
-    assert.equal(localStorage.getItem(COMMENT_NAME_KEY), c.kept(80));
+    assert.equal(localStorage.getItem(COMMENT_NAME_KEY), c.kept(30));
   });
 }
 
 test("13a my colour is recorded under my name cut by code point (#344)", () => {
   load();
-  writePref(COMMENT_NAME_KEY, x(79) + GRIN + "y");
+  writePref(COMMENT_NAME_KEY, x(29) + GRIN + "y");
   writePref(PERSON_COLOR_KEY, PERSON_COLORS[1]);
   const state = { personColors: null };
   assert.ok(recordMyColor(state));
-  assert.deepEqual(state.personColors, { [x(79) + GRIN]: PERSON_COLORS[1] });
+  assert.deepEqual(state.personColors, { [x(29) + GRIN]: PERSON_COLORS[1] });
 });
 
 const OLD_CUTS = [

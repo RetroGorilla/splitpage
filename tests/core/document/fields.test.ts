@@ -65,8 +65,8 @@ test("defaults are fresh values, and only the fields a document always has carry
   assert.notEqual(rows?.def?.(), rows?.def?.());
 });
 
-test("normalize: three fields carry one, and undefined from it means the field goes", () => {
-  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key), ["wordsPerMinute", "personColors", "targetSeconds"]);
+test("normalize: four fields carry one, and undefined from it means the field goes", () => {
+  assert.deepEqual(STATE_FIELDS.filter((f) => f.normalize).map((f) => f.key), ["wordsPerMinute", "lastEditedBy", "personColors", "targetSeconds"]);
   const norm = (key: string, v: unknown) => (STATE_FIELDS.find((f) => f.key === key)?.normalize as (v: unknown) => unknown)(v);
   assert.equal(norm("wordsPerMinute", "212.5"), 213);
   assert.equal(norm("wordsPerMinute", undefined), DEFAULT_WPM);
@@ -74,6 +74,13 @@ test("normalize: three fields carry one, and undefined from it means the field g
   assert.deepEqual(norm("personColors", { Ann: "#80bdfb" }), { Ann: "#80BDFB" });
   assert.equal(norm("personColors", { Ann: "red" }), undefined);
   assert.equal(norm("personColors", null), undefined);
+  assert.equal(norm("lastEditedBy", "Ada"), "Ada");
+  assert.equal(norm("lastEditedBy", 7), undefined);
+  assert.equal(norm("lastEditedBy", " "), undefined);
+  assert.equal(norm("lastEditedBy", "x".repeat(100)), "x".repeat(30));
+  assert.equal(norm("lastEditedBy", "x".repeat(31)), "x".repeat(30));
+  assert.equal(norm("lastEditedBy", "x".repeat(29) + "\u{1F600}"), "x".repeat(29) + "\u{1F600}");
+  assert.equal(norm("lastEditedBy", "x".repeat(30) + "\u{1F600}"), "x".repeat(30));
   assert.equal(norm("targetSeconds", 59.6), 60);
   assert.equal(norm("targetSeconds", 0), undefined);
   assert.equal(norm("targetSeconds", "60"), undefined);
