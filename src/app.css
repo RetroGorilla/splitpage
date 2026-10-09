@@ -380,6 +380,14 @@
   .doc-meta .identity-chip { flex: none; display: inline-flex; align-items: center; }
   .doc-meta #identity-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
   .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }
+  @media (min-width: 761px) {
+    .doc-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, max-content)) auto;
+      min-width: auto;
+    }
+    .doc-meta .identity-chip { grid-column: 4; }
+  }
 
   .toolbar {
     display: flex;
