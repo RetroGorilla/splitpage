@@ -196,22 +196,26 @@ function holdsDocument() {
   return readSession(function (doc) { return !!doc; });
 }
 
-function commentAnchoredAs(id) {
+function anchoredCommentIds() {
   return readSession(function (doc) {
-    return !!doc && (doc.comments || []).some(function (c) {
-      return c.kind !== "conflict" && (c.anchorId || c.id) === id;
+    var ids = Object.create(null);
+    ((doc && doc.comments) || []).forEach(function (c) {
+      if (c.kind !== "conflict") ids[c.anchorId || c.id] = true;
     });
+    return ids;
   });
 }
 
-function anchoredInText(id, target) {
+function idsInText(target) {
   return readSession(function (doc) {
-    return !!doc && doc.rows.some(function (row) {
-      return ["visualText", "audioText"].some(function (field) {
+    var ids = Object.create(null);
+    ((doc && doc.rows) || []).forEach(function (row) {
+      ["visualText", "audioText"].forEach(function (field) {
         var cell = target.rowId === row.id && target.field === field ? target.rest : cellOf(typeof row[field] === "string" ? row[field] : "");
-        return commentIds(cell).indexOf(id) !== -1;
+        commentIds(cell).forEach(function (id) { ids[id] = true; });
       });
     });
+    return ids;
   });
 }
 
@@ -276,11 +280,13 @@ function pasteRequest(rowId, field, range, pasted, got, attach) {
 
 export function pasteIntoCell(cellEl, html, text, extra) {
   extra = extra || {};
-  var target = null;
+  var anchored = null;
+  var inText = null;
   var hasComment = function (id) {
-    if (!commentAnchoredAs(id)) return false;
-    if (!target) target = { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), rest: outsideSelection(cellEl) };
-    return !anchoredInText(id, target);
+    if (!anchored) anchored = anchoredCommentIds();
+    if (!anchored[id]) return false;
+    if (!inText) inText = idsInText({ rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), rest: outsideSelection(cellEl) });
+    return !inText[id];
   };
   var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages });
   var attach = (extra.attach || []).slice();

@@ -9,7 +9,7 @@ import { flattenCues } from "../../core/text/cues.ts";
 import { flattenDirections } from "../../core/text/directions.ts";
 import { clamp, clampRange, deleteRange, insertCell, insertText } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { cellLength } from "../../core/text/runs.ts";
+import { cellLength, commentIds } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
@@ -296,6 +296,16 @@ export function pasteCommand(request: PasteRequest, ports: ClipboardPorts): Repo
   return { command: command, report: function () { return { attached: attached, caret: caret }; } };
 }
 
+function anchoredElsewhere(doc: DocumentView, rowId: string, field: string, ids: readonly string[], cells: CellDecoder): boolean {
+  return doc.rows.some(function (row) {
+    return (["visualText", "audioText"] as const).some(function (f) {
+      if (row.id === rowId && f === field) return false;
+      const here = commentIds(cells(textOf(row, f)));
+      return ids.some(function (id) { return here.indexOf(id) !== -1; });
+    });
+  });
+}
+
 export function cutCommand(rowId: string, field: string, range: TextRange, ports: CellTextPorts): ReportedCommand {
   let caret: number | null = null;
   const command: Command = {
@@ -308,10 +318,14 @@ export function cutCommand(rowId: string, field: string, range: TextRange, ports
       const cell = ports.cells(before);
       const span = clampRange(cell, range.from, range.to);
       caret = span.from;
-      const after = toHtml(deleteRange(cell, span.from, span.to));
+      const rest = deleteRange(cell, span.from, span.to);
+      const after = toHtml(rest);
       if (after === before) return null;
+      const kept = commentIds(rest);
+      const lost = commentIds(cell).filter(function (id) { return kept.indexOf(id) === -1; });
+      const moved = lost.length > 0 && anchoredElsewhere(doc, rowId, field, lost, ports.cells);
       return {
-        changes: changeSet({ cells: textCells(rowId, field, false), derive: CELL_TEXT_DERIVES }),
+        changes: changeSet({ cells: textCells(rowId, field, false), runsMoved: moved, derive: CELL_TEXT_DERIVES }),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });
           if (!target) throw new Error("scene " + rowId + " left the document before the cut");
