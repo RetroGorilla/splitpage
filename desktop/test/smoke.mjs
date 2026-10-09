@@ -4173,10 +4173,14 @@ async function caseMovedFileWriterStoppedAsksAgain(target, fixturesDir) {
   const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
   let app = null;
+  let held = {};
   try {
     app = await launchApp(target, { label: "writer-stopped", userDataDir, fixtures: [aPath], dialogs: ["confirm", "cancel", "confirm", "cancel"] });
     await waitForRows(app.cdp, 20000);
-    const cdp = app.cdp;
+    held = await tabsHolding(app, [marker], 20000);
+    record(tag + ": the file opens in a tab", !!held[marker], JSON.stringify(Object.keys(held)));
+    if (!held[marker]) return;
+    const cdp = held[marker].cdp;
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
     await evalPage(cdp, "(function(){ var real = JSON.stringify; window.__realStringify = real; " +
       "JSON.stringify = function (v) { if (v && Array.isArray(v.rows) && Object.prototype.hasOwnProperty.call(v, 'title')) throw new RangeError('test: too large'); " +
@@ -4200,6 +4204,7 @@ async function caseMovedFileWriterStoppedAsksAgain(target, fixturesDir) {
     await sleep(500);
     record(tag + ": 'cancel' keeps the window open", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
   } finally {
+    closeHeld(held);
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
     rmrf(movedDir);
