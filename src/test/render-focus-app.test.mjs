@@ -453,6 +453,37 @@ for (const f of PANEL_FIELDS) {
   });
 }
 
+const NORMALISED = [
+  { name: "a leading line break", text: "\nLead", fields: ["note", "reference", "page note"] },
+  { name: "markup", text: "a<b>c", fields: ["note", "reference", "location", "page note"] },
+  { name: "a control character", text: "a" + String.fromCharCode(1) + "b", fields: ["page note"] },
+  { name: "text over the cap", text: "x".repeat(2005), fields: ["page note"] }
+];
+
+for (const n of NORMALISED) {
+  for (const f of PANEL_FIELDS.filter((p) => n.fields.includes(p.name))) {
+    test("typing " + n.name + " in the b-roll " + f.name + " box that a redraw already saved is not written back over a later incoming change (#510)", () => {
+      try {
+        focusShotField("Panel normalised " + f.name, f);
+        typeInto(shotBox(f.cls), n.text);
+        observe(() => runBrollRefresh());
+        const saved = shot()[f.key];
+        assert.notEqual(saved, undefined);
+        clearDirty();
+        const got = observe(() => {
+          merge(theirsFor(S.state, f.key, "Theirs."));
+          runBrollRefresh();
+        });
+        assert.deepEqual([got.edits, got.seq], [0, 0]);
+        assert.equal(shot()[f.key], "Theirs.");
+        assert.equal(S.dirty, false);
+      } finally {
+        leavePanel();
+      }
+    });
+  }
+}
+
 const pageEl = () => document.getElementById("broll-page");
 const pageBox = () => pageEl().querySelector('.broll-page-note[data-id="bs1"]');
 
@@ -497,6 +528,26 @@ test("typing in the b-roll page note box that a redraw already saved is not writ
     leavePage();
   }
 });
+
+for (const n of NORMALISED.filter((v) => v.fields.includes("page note"))) {
+  test("typing " + n.name + " in the b-roll page note box that a redraw already saved is not written back over a later incoming change (#510)", () => {
+    try {
+      focusPageNote("Page normalised", "Mine note.");
+      typeInto(pageBox(), n.text);
+      observe(() => runBrollRefresh());
+      clearDirty();
+      const got = observe(() => {
+        merge(theirsFor(S.state, "notes", "Theirs."));
+        runBrollRefresh();
+      });
+      assert.deepEqual([got.edits, got.seq], [0, 0]);
+      assert.equal(shot().notes, "Theirs.");
+      assert.equal(S.dirty, false);
+    } finally {
+      leavePage();
+    }
+  });
+}
 
 test("an update redrawn while an untouched b-roll page note box with a line break has focus keeps the incoming note and makes no edit (#511)", () => {
   try {
