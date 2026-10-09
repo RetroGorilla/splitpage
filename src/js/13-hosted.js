@@ -69,7 +69,6 @@ import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-draf
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
-import { sessionEpoch } from "../legacy/session-bridge.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 
 var sharedDocId;
@@ -1239,8 +1238,8 @@ export async function fetchBlob(sha) {
   return bytesForSync(sha);
 }
 
-function reportObsoleteServerSave() {
-  showToast("A save made before this script was reopened reached the server afterwards.", "warn");
+function reportLateServerSave() {
+  showToast("An earlier save of this script arrived late. Your next save will merge both versions.", "warn");
 }
 
 export async function saveToServer() {
@@ -1258,7 +1257,7 @@ export async function saveToServer() {
     var published = cloneState(S.state);
     var seqAtSave = S.editSeq;
     var baseRevAtSave = home.rev;
-    var epochAtSave = sessionEpoch();
+    var homeAtSave = home;
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
@@ -1269,8 +1268,8 @@ export async function saveToServer() {
         }, true);
       });
       if (serverHomeId() !== docId) return true;
-      if (sessionEpoch() !== epochAtSave) {
-        reportObsoleteServerSave();
+      if (home !== homeAtSave) {
+        if (home.rev < body.rev) reportLateServerSave();
         return true;
       }
       home.rev = body.rev;
