@@ -16,6 +16,7 @@ const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./pr
 const { createGoogleDrive } = require("./google-drive");
 const { documentServerHost } = require("./bind-host");
 const { checkFileGone, copyKept, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
+const { createQuitWatchdog } = require("./quit-watchdog");
 const { createVoiceHelper } = require("./voice-helper");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
 const {
@@ -1390,6 +1391,7 @@ function downloadUpdate() {
 
 let installOnQuit = false;
 let installQuitWatcher = null;
+let installQuitWatchdog = null;
 
 function startInstallerNow() {
   try {
@@ -1422,13 +1424,15 @@ function runUpdateInstaller() {
     const done = (value) => { if (!settled) { settled = true; resolve(value); } };
     installQuitWatcher = done;
     app.quit();
-    setTimeout(() => {
+    if (installQuitWatchdog) installQuitWatchdog.stop();
+    installQuitWatchdog = createQuitWatchdog(3000, () => quitKeepingDrafts, () => {
+      installQuitWatchdog = null;
       if (settled) return;
       installOnQuit = false;
       installQuitWatcher = null;
       setDownloadState({ state: "ready" });
       done({ ok: false, error: "quit-cancelled" });
-    }, 3000);
+    });
   });
 }
 
@@ -1952,6 +1956,10 @@ function createTabWindow(restoreSpec) {
     const flushes = [];
     for (const tab of tabs.values()) {
       if (tab.view.webContents.isDestroyed()) continue;
+      if (tab.dirty || !tabHasFile(tab)) {
+        flushes.push(requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS));
+        continue;
+      }
       flushes.push(tabFileGone(tab).then((gone) => {
         if (gone) tab.keepDraftOnClose = true;
         return requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS, gone);
@@ -2660,7 +2668,11 @@ function requestCloseTab(tabId) {
     return;
   }
   tab.closeKeepingDraft = true;
-  askBeforeClosing([tabId], "Close tab", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding).then((answer) => {
+  const windowClosing = () => {
+    const home = windowsById.get(tab.windowId);
+    return !!(home && home.closeKeepingDrafts);
+  };
+  askBeforeClosing([tabId], "Close tab", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding && !windowClosing()).then((answer) => {
     tab.closeKeepingDraft = false;
     if (answer === "discard" && tabs.get(tabId) === tab) close();
   });
@@ -3989,6 +4001,7 @@ app.on("before-quit", (event) => {
   quitKeepingDrafts = true;
   askBeforeClosing(tabIds, "Quit", parentOf, () => !sessionEnding).then((answer) => {
     quitKeepingDrafts = false;
+    if (installQuitWatchdog) installQuitWatchdog.restart();
     if (sessionEnding) return;
     if (answer !== "discard") { stayOpen(); return; }
     confirmQuit();
@@ -4004,6 +4017,7 @@ app.on("will-quit", () => {
   if (installOnQuit) {
     installOnQuit = false;
     const started = startInstallerNow();
+    if (installQuitWatchdog) { installQuitWatchdog.stop(); installQuitWatchdog = null; }
     if (installQuitWatcher) {
       installQuitWatcher(started.ok ? { ok: true, quitting: true } : started);
       installQuitWatcher = null;
