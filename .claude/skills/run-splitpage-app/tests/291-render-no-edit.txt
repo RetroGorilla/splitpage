@@ -11,14 +11,13 @@ type Edited
 caret #rows .row[data-id="r2"] .audio-cell .cell-editable
 eval T.arm()
 jsclick #btn-save
-wait T.puts.length >= 2
-sleep 500
+wait T.puts.length >= 2 && window.__hostedTest.dirty() === false
 expect T.puts[0][1] === 'Mine two.'
 expect T.puts[1][1] === 'Theirs two.'
 expect T.puts[1][0].indexOf('Edited') >= 0
 expect T.model().indexOf('Theirs two.') > 0
 expect T.grid() === T.model()
-expect T.removed.some(function (r) { return r.id === 'r2' && r.text === 'Mine two.'; })
+expect T.removed.some(function (r) { return r.id === 'r2' && r.text === 'Mine two.' && r.connected; })
 expect T.at() === 'grid r2'
 expect T.undone() === 0
 expect window.__hostedTest.dirty() === false
@@ -33,20 +32,19 @@ type Edited
 caret #writer-doc .wr-para[data-id="r2"] start
 eval T.arm()
 jsclick #wr-save
-wait T.puts.length >= 2
-sleep 500
+wait T.puts.length >= 2 && window.__hostedTest.dirty() === false
 expect T.puts[1][1] === 'Theirs two.'
 expect T.puts[1][0].indexOf('Edited') >= 0
 expect T.model().indexOf('Theirs two.') > 0
 expect T.writer() === T.model()
 expect T.grid() === T.model()
-expect T.removed.some(function (r) { return r.id === 'r2' && r.writer && r.text === 'Mine two.'; })
+expect T.removed.some(function (r) { return r.id === 'r2' && r.writer && r.text === 'Mine two.' && r.connected; })
 expect T.at() === 'writer r2'
 expect T.caret() === 0
 expect T.undone() === 0
 expect window.__hostedTest.dirty() === false
 jsclick #wr-close
-sleep 300
+wait document.getElementById('writer').hidden
 expect T.grid() === T.model()
 expect T.undone() === 0
 
@@ -59,8 +57,7 @@ caret #rows .row[data-id="r2"] .audio-cell .cell-editable
 eval T.arm()
 eval (function(){ var real = Document.prototype.querySelectorAll; document.querySelectorAll = function (s) { if (String(s).indexOf('#rows .gutter-btn') === 0) throw new Error('render broke (291)'); return real.call(this, s); }; return true; })()
 jsclick #btn-save
-wait T.puts.length >= 2
-sleep 500
+wait T.puts.length >= 2 && window.__hostedTest.dirty() === false
 eval delete document.querySelectorAll
 expect document.body.classList.contains('is-stale-screen')
 expect T.puts[1][1] === 'Theirs two.'
@@ -70,10 +67,9 @@ expect T.at().indexOf('toast') === 0
 expect T.undone() === 0
 expect window.__hostedTest.dirty() === false
 jsclick .toast .toast-action
-sleep 300
-expect !document.body.classList.contains('is-stale-screen')
+wait !document.body.classList.contains('is-stale-screen')
 expect T.grid() === T.model()
 expect T.at() === 'grid r2'
-expect T.puts.length === 2
+expect window.__hostedTest.home().rev === 3
 expect T.undone() === 0
 expect window.__hostedTest.dirty() === false
