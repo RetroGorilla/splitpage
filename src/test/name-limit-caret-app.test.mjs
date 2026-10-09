@@ -100,7 +100,8 @@ const ACUTE = String.fromCodePoint(0x301);
 const CLUSTERS = [
   ["flag", FLAG, 2],
   ["family emoji", FAMILY, 5],
-  ["skin-tone emoji", THUMB, 2]
+  ["skin-tone emoji", THUMB, 2],
+  ["keycap", "1️⃣", 3]
 ];
 
 for (const inputType of ["insertText", "insertFromPaste"]) {
