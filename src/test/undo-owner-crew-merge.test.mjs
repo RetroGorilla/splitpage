@@ -181,6 +181,30 @@ test("a redo that only changes the crew keeps an owner the same-name remap point
   assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
 });
 
+test("a crew-only redo that clears one owner and re-points another records both, so its undo goes back exactly (#476 review)", () => {
+  boot(["Cy"]);
+  S.state.people.push(person("p_Ada", "Ada"));
+  commit();
+  assert.equal(undo().ok, true);
+  S.state.people.push(person("pT_ada", "ADA"));
+  S.state.brollShots.find((e) => e.name === "Dock").owner = "pT_ada";
+  S.state.brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
+  const res = redo();
+  assert.equal(res.ok, true);
+  assert.equal(res.cleared, 1);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
+  assert.equal(ownerOf(S.state.brollShots, "Pier"), "");
+  assert.deepEqual(dangling(), []);
+  const back = undo();
+  assert.equal(back.ok, true);
+  assert.deepEqual(S.state.people.map((p) => p.id), ["p_Cy"]);
+  assert.deepEqual(S.state.brollShots.map((b) => b.owner), ["", ""]);
+  assert.deepEqual(dangling(), []);
+  assert.equal(redo().ok, true);
+  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
+  assert.deepEqual(dangling(), []);
+});
+
 test("an undo that only changes the crew announces the items it unassigned (#476)", () => {
   const seen = [];
   const listener = (e) => seen.push(e.detail.count);

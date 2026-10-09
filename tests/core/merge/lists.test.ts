@@ -132,6 +132,8 @@ test("a one-sided reassignment or unassignment wins over an owner the other side
     assert.equal(owner("pSam", "", "pBo"), "pBo", owner.name + ": both changed, theirs reassigned: their owner stays");
     assert.equal(owner("pSam", "pBo", ""), "pBo", owner.name + ": both changed, theirs unassigned: my owner stays");
     assert.equal(owner("", "", ""), "", owner.name + ": no owner anywhere");
+    assert.equal(owner("pSam", "pSam", "pGone"), "pSam", owner.name + ": their change to a person who is gone gives way to my live owner");
+    assert.equal(owner("pSam", undefined as unknown as string, "pSam"), "", owner.name + ": a missing owner on my side is an unassignment, stored as empty");
     assert.equal(owner("pSam", "pGone", "pSam"), "pSam", owner.name + ": a reassignment to a person who is gone loses");
     assert.equal(owner(null, "pAda", "pSam"), "pSam", owner.name + ": with no base entry theirs stays");
   }

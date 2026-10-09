@@ -184,7 +184,7 @@ function resolveDocFields(state, plan) {
     if (docs.some(function (p) { return p.key === key; }) || !Array.isArray(state[key])) return;
     touched = false;
     var value = orphansCleared(key, state[key]);
-    if (touched) plan.push({ op: "doc", key: key, value: value, scan: { before: clone(state[key]), people: clone(state.people) } });
+    if (touched) plan.push({ op: "doc", key: key, value: value, scan: clone(state[key]) });
   });
   return { remap: remap, cleared: cleared };
 }
@@ -288,12 +288,7 @@ export function applyStepsLive(state, steps, out) {
   if (out) {
     out.cleared = resolved.cleared;
     out.scanned = plan.filter(function (p) { return p.scan; }).map(function (p) {
-      var step = { op: "docField", key: p.key, before: p.scan.before, after: clone(state[p.key]) };
-      var was = { people: p.scan.people };
-      was[p.key] = p.scan.before;
-      var owners = ownerNames(p.key, was, state);
-      if (owners) step.owners = owners;
-      return step;
+      return { op: "docField", key: p.key, before: p.scan, after: clone(state[p.key]) };
     });
   }
   return resolved.cleared.length ? { ok: true, cleared: resolved.cleared.length } : { ok: true };
