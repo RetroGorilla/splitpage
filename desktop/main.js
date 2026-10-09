@@ -3801,6 +3801,9 @@ function registerIpc() {
         }
         case "listTargets":
           return listTargets();
+        case "sessionEnd":
+          for (const w of liveWindows()) w.win.emit("session-end", { reasons: ["logoff"], preventDefault() {} });
+          return true;
         case "externalOpens":
           return testExternalOpens.slice();
         case "chromiumLaunches":
