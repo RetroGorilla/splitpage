@@ -362,13 +362,14 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-40 — A crash draft is removed only when clean or by the user
 
 - **Behaviour:**
-  - **Desktop:** a crash draft is deleted only when its tab becomes clean, or on an explicit user decision. It is never deleted on a crash, kill, renderer loss, session end, quit or restore. A discard writes a tombstone before anything is unlinked.
+  - **Desktop:** a crash draft is deleted only when its tab becomes clean, or on an explicit user decision. It is never deleted on a crash, kill, renderer loss, session end, quit or restore. A discard writes a tombstone before anything is unlinked. A file tab whose file is no longer at its path is asked about on close, window close and quit as if it had unsaved changes; on "without saving" its tab writes a draft even when clean, and that draft is kept, so the next launch restores it, as an unsaved copy while the file is still missing (#258).
   - **Browser:** a draft is removed only by the page that wrote it, or took it over, once that page is clean or has moved to another server document. The store's bounds still apply (30 days, 20 drafts, 64 MiB).
   - **Both:** a lost link or lapsed sign-in stops saves, not the draft writer, and a restore never saves.
 - **Tests:**
   - `desktop/test/drafts.test.mjs`: "discardForUserDecision during a delayed write…", "session states, take never deletes…".
   - `src/test/browser-drafts.test.mjs`: "remove takes only the writer's own draft; claim hands it over", plus the eviction tests.
-  - `desktop/test/smoke.mjs`: the draft crash-recovery cases.
+  - `desktop/test/smoke.mjs`: the draft crash-recovery cases, and the three "draft: moved file …" cases (#258).
+  - `src/test/draft-keep-app.test.mjs`: a keep flush writes a clean file tab's draft, and only then (#258).
   - Browser suites `26-desktop-drafts.txt` and `265-browser-drafts.txt`.
 - **Owner:** `src/application` (recovery writer ownership), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: recovery preserves source work through failed adoption, writer conflict or revoked access).
