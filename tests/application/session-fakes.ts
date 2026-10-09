@@ -170,8 +170,24 @@ export function writesOutside(before: Bag, after: Bag, changes: ChangeSet): stri
 }
 
 export function runConfined(session: DocumentSession, command: Command): CommandOutcome {
+  let plannedWrite = false;
+  const watched: Command = {
+    name: command.name,
+    needs: command.needs,
+    plan: function (doc, capability) {
+      const text = JSON.stringify(doc);
+      try {
+        return command.plan(doc, capability);
+      } finally {
+        if (JSON.stringify(doc) !== text) plannedWrite = true;
+      }
+    }
+  };
   const before = snapshotOf(session);
-  const outcome = session.run(command);
+  const outcome = session.run(watched);
+  if (plannedWrite) {
+    throw new Error("command " + command.name + " planned a write to the document; plan must only read it");
+  }
   const after = snapshotOf(session);
   if (!before || !after) return outcome;
   const changes = outcome.kind === "applied" ? outcome.changes : NO_CHANGES;
