@@ -13,6 +13,8 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { openProductionPanel } = await import("../js/08-production-panels.js");
+const { openBrollPanel } = await import("../js/08d-broll-panel.js");
 
 after(closeApp);
 
@@ -142,7 +144,7 @@ function observe(run) {
   };
 }
 
-const DECLARED = { kind: "edit", whole: false, rows: 1, saveNow: false, derive: [] };
+const DECLARED = { kind: "edit", whole: false, rows: 1, saveNow: false, derive: ["production", "broll"] };
 const GRID_REFRESH = ["broll", "untagged"];
 
 function storeMedia(el, html) {
@@ -153,7 +155,7 @@ function storeMedia(el, html) {
 
 beforeEach(() => { clock += 10_000; });
 
-test("a grid split (Alt+Enter) publishes one declared edit: one generation, one dirty, one render, no derivation requested", async () => {
+test("a grid split (Alt+Enter) publishes one declared edit: one generation, one dirty, one render, production and b-roll derived", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   el.focus();
@@ -371,6 +373,67 @@ test("Shift+Enter in the Writer is not a split", async () => {
   writer.closeWriter();
 });
 
+const TAG = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="mug" contenteditable="false">mug</span>';
+const SHOT_KEY = '<span class="broll-key" data-broll-id="bsA" contenteditable="false">B-roll:</span>';
+
+function panelDoc() {
+  return {
+    schema: 2,
+    title: "Panels",
+    rows: [
+      { id: "p1", visualText: "", audioText: "Hello there", status: "todo" },
+      { id: "p2", visualText: SHOT_KEY + " gulls", audioText: "Pour the " + TAG + " now", status: "todo" }
+    ],
+    comments: []
+  };
+}
+
+const texts = (selector) => Array.from(document.querySelectorAll(selector)).map((el) => el.textContent);
+const brollScenes = () => texts("#broll-panel .broll-group-scene");
+const productionScenes = () => texts("#production-panel .tag-scene");
+const waitRefresh = () => new Promise((r) => setTimeout(r, 400));
+
+const PANELS = [
+  { name: "production", open: openProductionPanel, scenes: productionScenes, labels: (n) => ["0" + n] },
+  { name: "b-roll", open: openBrollPanel, scenes: brollScenes, labels: (n) => ["Scene 0" + n] }
+];
+
+async function openPanelUnderWriter(panel) {
+  await open(panelDoc());
+  writer.openWriter();
+  panel.open();
+  await waitRefresh();
+  assert.deepEqual(panel.scenes(), panel.labels(2), panel.name);
+}
+
+test("a Writer split refreshes the production and b-roll panels with the scene numbers after the split", async () => {
+  for (const panel of PANELS) {
+    await openPanelUnderWriter(panel);
+    const p = para("p1");
+    p.focus();
+    selectText(p, 5, 5);
+    key(p, "Enter");
+    assert.equal(S.state.rows.length, 3, panel.name);
+    await waitRefresh();
+    assert.deepEqual(panel.scenes(), panel.labels(3), panel.name);
+    writer.closeWriter();
+  }
+});
+
+test("a Writer join refreshes the production and b-roll panels with the scene numbers after the join", async () => {
+  for (const panel of PANELS) {
+    await openPanelUnderWriter(panel);
+    const p = para("p2");
+    p.focus();
+    selectText(p, 0, 0);
+    key(p, "Backspace");
+    assert.equal(S.state.rows.length, 1, panel.name);
+    await waitRefresh();
+    assert.deepEqual(panel.scenes(), panel.labels(1), panel.name);
+    writer.closeWriter();
+  }
+});
+
 function joinDoc(statuses) {
   return {
     schema: 2,
@@ -422,7 +485,7 @@ test("a join of a scene with a status outside the ranks counts it as todo", asyn
   writer.closeWriter();
 });
 
-test("a join publishes one declared edit: one generation, one dirty, no derivation, one entry removing the later scene and writing the earlier one", async () => {
+test("a join publishes one declared edit: one generation, one dirty, production and b-roll derived, one entry removing the later scene and writing the earlier one", async () => {
   const got = await joinWithBackspace(joinDoc(["todo", "ready"]), "j1", "j2");
   assert.deepEqual(got, Object.assign({}, got, {
     seq: 1, generation: 1, published: [DECLARED], refreshed: [], render: 0, undo: 1,
