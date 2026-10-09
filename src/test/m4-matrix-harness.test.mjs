@@ -4,13 +4,18 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { IDBFactory } from "fake-indexeddb";
+import { createIdbDraftStore } from "../js/03d-drafts-idb.js";
 import {
   createFakeLocks,
+  createFaultyIdbFactory,
   createGates,
+  createHeldBlobBackend,
   createHeldDesktop,
   createHeldDraftStore,
   createHeldFetch,
   createHeldFileHandle,
+  createHeldImageDecode,
   declaredCases,
   firstWriteBeforeAdoption,
   judge,
@@ -291,6 +296,107 @@ test("held draft store: every store method is gated and logged, and the inner st
   assert.deepEqual(await writing, { ok: true });
   assert.deepEqual(seen, [["remove", "other"], ["put", "k"]]);
   assert.deepEqual(held.calls.map((c) => c.op), ["put", "remove"]);
+});
+
+test("held fetch: a reply with bytes answers the raw bytes and not JSON", async () => {
+  const held = createHeldFetch({ answer: (r) => (r.url.endsWith("image") ? { bytes: new Uint8Array([137, 80, 78, 71]), headers: { "content-type": "image/png" } } : { body: { ok: true } }) });
+  const image = await held.fetch("https://s.test/image");
+  assert.equal(image.headers.get("content-type"), "image/png");
+  assert.deepEqual(Array.from(new Uint8Array(await image.arrayBuffer())), [137, 80, 78, 71]);
+  assert.deepEqual(await (await held.fetch("https://s.test/json")).json(), { ok: true });
+});
+
+test("faulty indexedDB: a queued fault fails the next transaction of its mode with that error and later ones pass", async () => {
+  const faulty = createFaultyIdbFactory(new IDBFactory());
+  const store = createIdbDraftStore({ indexedDB: faulty });
+  const rec = { key: "k1", base: "https://s.test/", docId: "doc-1", rev: 1, title: "t", writerId: "w1", editSeq: 1, schema: 5, stateJson: "{}", baseJson: "{}" };
+  assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
+  faulty.failNext(faulty.quotaError(), { mode: "readwrite" });
+  assert.deepEqual(await store.get("k1") !== null, true, "a read passes a write fault");
+  assert.deepEqual(await store.put(rec), { ok: false, code: "QUOTA" });
+  assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
+  faulty.failNext(new Error("EIO"), { times: 2 });
+  assert.deepEqual(await store.put(rec), { ok: false, code: "EIO" });
+  assert.equal(await store.get("k1"), null, "a failed read answers none");
+  assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
+  assert.deepEqual(faulty.transactions, ["readwrite", "readonly", "readwrite", "readwrite", "readwrite", "readonly", "readwrite"]);
+  faulty.failNext(new Error("late"));
+  faulty.clearFaults();
+  assert.equal((await store.get("k1")).docId, "doc-1");
+});
+
+test("held blob backend: put, get and missing are gated and logged under their own names, and the inner backend sees the call on release", async () => {
+  const seen = [];
+  const inner = {
+    name: "inner",
+    persistent: true,
+    put: async (sha) => { seen.push(["put", sha]); },
+    get: async (sha) => { seen.push(["get", sha]); return null; },
+    missing: async (shas) => { seen.push(["missing", shas.length]); return []; }
+  };
+  const held = createHeldBlobBackend(inner);
+  assert.deepEqual([held.backend.name, held.backend.persistent], ["inner", true]);
+  held.holdOp("put");
+  const putting = held.backend.put("a1");
+  await held.arrivedAt("put");
+  await held.backend.missing(["a1"]);
+  assert.deepEqual(seen, [["missing", 1]]);
+  held.releaseOp("put");
+  await putting;
+  assert.deepEqual(seen, [["missing", 1], ["put", "a1"]]);
+  assert.deepEqual(held.calls.map((c) => c.op), ["put", "missing"]);
+});
+
+test("held image decode: an image waits for its decode to be released, the canvas answers the data URL, and uninstall puts everything back", async () => {
+  const canvasProto = { getContext: () => "real-context", toDataURL: () => "real-url", toBlob: () => "real-blob" };
+  const win = { Image: "real-image", HTMLCanvasElement: { prototype: canvasProto } };
+  const realGlobalImage = globalThis.Image;
+  const decode = createHeldImageDecode({ dataUrl: "data:image/png;base64,AAAA" });
+  decode.holdDecode();
+  const uninstall = decode.install(win);
+  assert.equal(globalThis.Image, win.Image);
+  const img = new globalThis.Image();
+  let loaded = 0;
+  img.onload = () => { loaded++; };
+  img.src = "data:image/png;base64,0000";
+  await decode.arrivedAtDecode();
+  assert.equal(loaded, 0);
+  const ctx = canvasProto.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  assert.equal(canvasProto.toDataURL("image/png"), "data:image/png;base64,AAAA");
+  decode.releaseDecode();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(loaded, 1);
+  const second = new globalThis.Image();
+  second.onload = () => { loaded++; };
+  second.src = "data:image/png;base64,1111";
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(loaded, 2, "a decode with no hold left passes");
+  assert.equal(decode.decoded.length, 2);
+  decode.holdEncode();
+  let encoded = null;
+  canvasProto.toBlob((blob) => { encoded = blob; }, "image/png");
+  await decode.arrivedAtEncode();
+  assert.equal(encoded, null, "an encode waits for its release");
+  decode.releaseEncode();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(encoded.type, "image/png");
+  assert.deepEqual(Array.from(new Uint8Array(await encoded.arrayBuffer())), [0, 0, 0]);
+  uninstall();
+  const other = createHeldImageDecode({ dataUrl: "data:image/png;base64,AAAA", encodedDataUrl: "data:image/png;base64,AQID" });
+  const uninstallOther = other.install(win);
+  let otherBlob = null;
+  canvasProto.toBlob((blob) => { otherBlob = blob; }, "image/jpeg");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(otherBlob.type, "image/jpeg");
+  assert.deepEqual(Array.from(new Uint8Array(await otherBlob.arrayBuffer())), [1, 2, 3], "the encode can answer other bytes than the decode");
+  uninstallOther();
+  assert.equal(globalThis.Image, realGlobalImage);
+  assert.equal(win.Image, "real-image");
+  assert.equal(canvasProto.getContext(), "real-context");
+  assert.equal(canvasProto.toDataURL(), "real-url");
+  assert.equal(canvasProto.toBlob(), "real-blob");
+  assert.throws(() => createHeldImageDecode({}), /data URL/);
 });
 
 test("fake locks: exclusive requests queue, ifAvailable answers null, steal takes over, and the lock goes when the callback settles", async () => {
