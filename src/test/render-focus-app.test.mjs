@@ -268,5 +268,12 @@ test("a render that throws between the grid and the Writer makes no edit, and ty
   });
   assert.equal(typed.edits, 1, "typing after the redraw is an edit again");
   assert.equal(audio("r2"), "Theirs two.!");
+  const blurred = observe(() => {
+    const [node] = textNodeAt(p, "Theirs two.!".length);
+    node.data += "?";
+    p.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
+  });
+  assert.equal(blurred.edits, 1, "a focusout after the redraw saves the cell again");
+  assert.equal(audio("r2"), "Theirs two.!?");
   writer.closeWriter();
 });
