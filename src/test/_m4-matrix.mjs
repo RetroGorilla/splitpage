@@ -7,7 +7,12 @@ function isAssertion(error) {
   return error instanceof assert.AssertionError;
 }
 
-export async function judge(id, today, run) {
+const CASE_TIMEOUT = Number(process.env.SPLITPAGE_M4_CASE_TIMEOUT_MS) || 20000;
+
+export async function judge(id, today, run, expects) {
+  if (today === "wrong" && !(expects instanceof RegExp)) {
+    throw new Error(id + " is declared wrongToday without the assertion message it expects to fail on");
+  }
   let failure = null;
   try {
     await run();
@@ -25,24 +30,27 @@ export async function judge(id, today, run) {
   if (!isAssertion(failure)) {
     throw new Error(id + " is declared wrongToday but failed with " + failure.name + ": " + failure.message + ", not with an assertion", { cause: failure });
   }
+  if (!expects.test(failure.message)) {
+    throw new Error(id + " is declared wrongToday to fail on " + String(expects) + " but failed a different assertion: " + failure.message, { cause: failure });
+  }
   return "wrong";
 }
 
-function declare(id, today, title, run) {
+function declare(id, today, title, run, expects) {
   declared.push({ id: id, today: today, title: title });
   const gated = today === "wrong" && process.env.SPLITPAGE_M4_GATE === "1";
-  test(id + " " + title + " [" + today + "Today]", async (t) => {
+  test(id + " " + title + " [" + today + "Today]", { timeout: CASE_TIMEOUT }, async (t) => {
     if (gated) assert.fail(id + " is still wrongToday at the gate");
-    await judge(id, today, function () { return run(t); });
+    await judge(id, today, function () { return run(t); }, expects);
   });
 }
 
 export function rightToday(id, title, run) {
-  declare(id, "right", title, run);
+  declare(id, "right", title, run, null);
 }
 
-export function wrongToday(id, title, run) {
-  declare(id, "wrong", title, run);
+export function wrongToday(id, title, run, expects) {
+  declare(id, "wrong", title, run, expects);
 }
 
 export function declaredCases() {

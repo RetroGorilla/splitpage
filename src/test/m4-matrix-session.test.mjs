@@ -39,11 +39,12 @@ const { sceneStatusCommand } = await import("../application/commands/scene-statu
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { openProjectFile, parseProjectFileState } = await import("../js/18-local-files.js");
 const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, publishToServer } = await import("../js/13-hosted.js");
-const { setHome } = await import("../js/_home.js");
+const homeModule = await import("../js/_home.js");
+const { setHome } = homeModule;
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../js/03d-drafts-idb.js");
 const { makeDesktopHandle } = await import("../js/20f-desktop.js");
-const { grantVideoFile, sessionVideoUrl } = await import("../js/06-rows.js");
+const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 
 after(closeApp);
@@ -125,13 +126,13 @@ const htmlHead = (doc) => ({ title: (doc.title || "Untitled Script") + " " + EM_
 
 rightToday("X1", "buildSplitpageFile gives the captured bytes after the live document changed", serializedAfterMutation((doc) => buildSplitpageFile(doc)));
 
-wrongToday("X2", "buildMarkdownProject gives the captured bytes after the live document changed", serializedAfterMutation((doc) => buildMarkdownProject(doc)));
+wrongToday("X2", "buildMarkdownProject gives the captured bytes after the live document changed", serializedAfterMutation((doc) => buildMarkdownProject(doc)), /the captured document gives the captured bytes/);
 
-wrongToday("X3", "standaloneHtmlFor with its head gives the captured bytes after the live document changed", serializedAfterMutation((doc) => standaloneHtmlFor(doc, htmlHead(doc))));
+wrongToday("X3", "standaloneHtmlFor with its head gives the captured bytes after the live document changed", serializedAfterMutation((doc) => standaloneHtmlFor(doc, htmlHead(doc))), /the captured document gives the captured bytes/);
 
-wrongToday("X4", "toMarkdownDoc gives the captured bytes after the live document changed", serializedAfterMutation(() => toMarkdownDoc()));
+wrongToday("X4", "toMarkdownDoc gives the captured bytes after the live document changed", serializedAfterMutation(() => toMarkdownDoc()), /the captured document gives the captured bytes/);
 
-wrongToday("X5", "exportFacts gives the captured facts after the live document changed", serializedAfterMutation(() => JSON.stringify(exportFacts(new Date(0)))));
+wrongToday("X5", "exportFacts gives the captured facts after the live document changed", serializedAfterMutation(() => JSON.stringify(exportFacts(new Date(0)))), /the captured document gives the captured bytes/);
 
 function undeclaredChanges(before, after, changes) {
   const out = [];
@@ -165,6 +166,14 @@ function committedPrecondition() {
   return { row: row, before: row.status };
 }
 
+const ESCAPES = /a throw after the commit does not escape the command/;
+
+const ADOPTION_LAG = /the session already held the (boot )?document at every write that follows its assignment/;
+
+function adoptionLag(id, title, run) {
+  wrongToday(id, title, run, ADOPTION_LAG);
+}
+
 const COMMITTED = ["applied", "noop", "rejected", "failed"];
 
 function assertReportedAfterCommit(inject) {
@@ -192,26 +201,27 @@ wrongToday("E1", "a command's effect pass writes no document content that its ch
   const { row } = committedPrecondition();
   const before = JSON.parse(JSON.stringify(S.state));
   const outcome = runCommand(sceneStatusCommand(row.id, sessionStamps));
-  assert.equal(outcome.kind, "applied");
-  assert.deepEqual(undeclaredChanges(before, JSON.parse(JSON.stringify(S.state)), outcome.changes), []);
-});
+  assert.equal(outcome.kind, "applied", "the command applied");
+  const undeclared = undeclaredChanges(before, JSON.parse(JSON.stringify(S.state)), outcome.changes);
+  assert.deepEqual(undeclared, [], "undeclared document changes after the effect pass: " + JSON.stringify(undeclared));
+}, /undeclared document changes after the effect pass/);
 
 wrongToday("E2a", "a throw in undo recording after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
   const resolve = Promise.resolve;
   Promise.resolve = function () { throw new Error("undo recording failed"); };
   return () => { Promise.resolve = resolve; };
-}));
+}), ESCAPES);
 
 wrongToday("E2b", "a throw in an effect after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
   const button = document.getElementById("btn-save");
   Object.defineProperty(button, "textContent", { configurable: true, get() { return ""; }, set() { throw new Error("effect failed"); } });
   return () => { delete button.textContent; };
-}));
+}), ESCAPES);
 
 wrongToday("E2c", "a throw in a session listener after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
   const off = session.subscribe(() => { throw new Error("listener failed"); });
   return off;
-}));
+}), ESCAPES);
 
 function serverFetch(answerFor) {
   const held = createHeldFetch({
@@ -224,14 +234,14 @@ function serverFetch(answerFor) {
   return held;
 }
 
-wrongToday("T2a", "a new document opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2a", "a new document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before new"));
   const epoch = session.epoch();
   const events = await traced(() => startNewScript());
   assertAdoptedAtOnce(events, epoch);
 });
 
-wrongToday("T2a-tab", "a new tab's blank document opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2a-tab", "a new tab's blank document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before new tab"));
   const epoch = session.epoch();
   const events = await traced(async () => {
@@ -242,20 +252,20 @@ wrongToday("T2a-tab", "a new tab's blank document opens its epoch at the transit
   assertAdoptedAtOnce(events, epoch);
 });
 
-wrongToday("T2a-boot","the boot document opens its epoch at the transition, not at the next render", () => {
+adoptionLag("T2a-boot","the boot document opens its epoch at the transition, not at the next render", () => {
   assert.ok(bootTrace.events.some((e) => e.field === "state" && e.value !== null), "the boot assigned a document");
   const late = firstWriteBeforeAdoption(bootTrace.events, "state");
   assert.equal(late, null, "the session already held the boot document at every write that follows its assignment: " + JSON.stringify(late));
 });
 
-wrongToday("T2b", "an opened file opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2b", "an opened file opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before open"));
   const epoch = session.epoch();
   const events = await traced(() => openProjectFile(splitpageFile(script("Opened", { docId: "d" + "5".repeat(32) })), null, { skipSnapshot: true, silent: true }));
   assertAdoptedAtOnce(events, epoch);
 });
 
-wrongToday("T2c-open", "a server document opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2c-open", "a server document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before server"));
   const served = script("From the server", { docId: "d" + "6".repeat(32) });
   const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-b") ? { status: 200, body: { id: "server-b", rev: 3, state: served } } : null));
@@ -301,7 +311,7 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   }
 });
 
-wrongToday("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before reopen"));
   const served = script("Reopened from the server", { docId: "d" + "d".repeat(32) });
   const held = serverFetch((r) => {
@@ -326,7 +336,7 @@ wrongToday("T2c-reopen", "a server document reopened after a sign-in opens its e
   }
 });
 
-wrongToday("T2d", "a restored draft opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2d", "a restored draft opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before draft"));
   const epoch = session.epoch();
   const draft = script("Draft", { docId: "d" + "7".repeat(32) });
@@ -337,7 +347,7 @@ wrongToday("T2d", "a restored draft opens its epoch at the transition, not at th
   assertAdoptedAtOnce(events, epoch);
 });
 
-wrongToday("T2e", "a restored history version opens its epoch at the transition, not at the next render", async () => {
+adoptionLag("T2e", "a restored history version opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("History"));
   const point = cloneState(S.state);
   point.rows[0].audioText = "As it was.";
@@ -428,7 +438,7 @@ wrongToday("T4", "opening an .html file over the parse bound keeps its script da
   assert.equal(parsed.kind, "html");
   assert.equal(parsed.state.rows[0].audioText, "<strong>bold</strong> and <em>italic</em>", "the bold and italic in the script data are still there");
   assert.equal(JSON.stringify(parsed.state), JSON.stringify(expected), "the opened state equals an unbounded parse of the same file");
-});
+}, /the bold and italic in the script data are still there/);
 
 
 async function withRestoredFileDraft(variant, run) {
@@ -451,6 +461,7 @@ async function withRestoredFileDraft(variant, run) {
     await run({
       outcome: outcome,
       disk: disk,
+      fileId: picked.id,
       writes: () => held.calls.filter((c) => c.op === "writeFile"),
       onDisk: async () => new TextDecoder().decode((await fake.readFile(picked.id)).bytes)
     });
@@ -478,8 +489,11 @@ wrongToday("T5", "restoring a draft onto an unchanged file schedules no save and
     assert.equal(restored.writes().length, 0, "nothing was written to the file after the restore");
     assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held");
     assert.equal(JSON.stringify(S.baseState), baselineBefore, "the baseline did not move");
+    assert.equal(S.dirty, true, "the recovered work is still unsaved");
+    assert.equal(homeModule.home.kind, "file", "the destination is still the file");
+    assert.equal(homeModule.home.handle._desktopId, restored.fileId, "and it is the same file");
   });
-});
+}, /nothing was written to the file after the restore/);
 
 rightToday("T5-merge", "restoring a draft onto a changed file merges, halts autosave and leaves the file and baseline as they were", async (t) => {
   const clock = mockClock(t);
@@ -496,6 +510,8 @@ rightToday("T5-merge", "restoring a draft onto a changed file merges, halts auto
     assert.equal(await restored.onDisk(), fileBefore);
     assert.equal(JSON.stringify(S.baseState), baselineBefore);
     assert.match(exportModule.autoSaveHalt, /Autosave is paused/);
+    assert.equal(S.dirty, true, "the merged work is still unsaved");
+    assert.equal(homeModule.home.handle._desktopId, restored.fileId, "the destination is still the file");
   });
 });
 
@@ -506,10 +522,12 @@ rightToday("T6", "with autosave off, nothing is scheduled after a restore or an 
   try {
     await withRestoredFileDraft("unchanged", async (restored) => {
       assert.equal(restored.outcome, "applied");
+      const fileBefore = await restored.onDisk();
       S.state.rows[1].audioText = "Typed after the restore.";
       markDirty();
       await settleSaves(clock);
-      assert.equal(restored.writes().length, 0, "no automatic write with autosave off");
+      assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held: no automatic write with autosave off");
+      assert.equal(S.dirty, true, "the work is still unsaved");
     });
   } finally {
     setAutoSaveEnabled(true);
@@ -525,9 +543,10 @@ wrongToday("L1a", "a refresh the old document asked for does not run once the do
   jobs.length = 0;
   requestRefresh("m4-old-document");
   startNewScript();
+  assert.equal(S.state.title, "Untitled Script", "the replacement happened");
   clock.tick(5000);
   assert.equal(jobs.includes("m4-old-document"), false, "the old document's refresh did not run after the replacement: " + jobs.join(","));
-});
+}, /the old document's refresh did not run after the replacement/);
 
 rightToday("L1b", "an autosave or draft the old document armed writes nothing for itself once the document was replaced", async (t) => {
   const clock = mockClock(t);
@@ -540,12 +559,13 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
     const handle = makeDesktopHandle(picked);
     await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
     held.calls.length = 0;
+    const fileBefore = new TextDecoder().decode((await fake.readFile(picked.id)).bytes);
     S.state.rows[0].audioText = "Typed in the old document.";
     markDirty();
     assert.ok(exportModule.autoSaveIdleTimer, "an autosave is armed for the old document");
     startNewScript();
     await settleSaves(clock);
-    assert.deepEqual(held.calls.filter((c) => c.op === "writeFile").length, 0, "the old document's file was not written after it was replaced");
+    assert.equal(new TextDecoder().decode((await fake.readFile(picked.id)).bytes), fileBefore, "the old document's file holds what it held after the replacement");
     const drafted = held.calls.filter((c) => c.op === "writeDraft").map((c) => c.args[0].stateJson);
     assert.equal(drafted.filter((json) => json.includes("Typed in the old document.")).length, 0, "no draft of the old document's text was written for the replacement");
     assert.equal(S.state.title, "Untitled Script");
@@ -571,9 +591,11 @@ wrongToday("L1c", "an object URL made for the old document's session video is re
     grantVideoFile(new File(["12345"], "clip.mp4"), link);
     assert.ok(sessionVideoUrl(link), "the video has an object URL while its document is open");
     startNewScript();
+    assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+    assert.ok(hasSessionVideo(link), "the file grant survives the switch");
     assert.deepEqual(created.filter((url) => !revoked.includes(url)), [], "every object URL made for the old document is revoked");
   } finally {
     URL.createObjectURL = make;
     URL.revokeObjectURL = revoke;
   }
-});
+}, /every object URL made for the old document is revoked/);

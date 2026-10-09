@@ -31,16 +31,33 @@ test("judge: a rightToday case that passes passes, and one that fails fails with
   await assert.rejects(judge("X", "right", throwing), TypeError);
 });
 
-test("judge: a wrongToday case passes only by failing an assertion", async () => {
-  assert.equal(await judge("X9", "wrong", failing), "wrong");
+test("judge: a wrongToday case passes only by failing the assertion it names", async () => {
+  assert.equal(await judge("X9", "wrong", failing, /Expected values to be strictly equal/), "wrong");
+  const named = async () => { assert.equal(1, 2, "the defect shows"); };
+  assert.equal(await judge("X9", "wrong", named, /the defect shows/), "wrong");
+});
+
+test("judge: a wrongToday case that fails a different assertion fails, with the assertion it failed on", async () => {
+  const setup = async () => { assert.ok(false, "the setup did not happen"); };
+  await assert.rejects(judge("X9", "wrong", setup, /the defect shows/), (error) => {
+    assert.match(error.message, /X9 is declared wrongToday to fail on \/the defect shows\/ but failed a different assertion: the setup did not happen/);
+    assert.ok(error.cause instanceof assert.AssertionError);
+    return true;
+  });
+});
+
+test("judge: a wrongToday case with no named assertion is refused before it runs", async () => {
+  let ran = false;
+  await assert.rejects(judge("X9", "wrong", async () => { ran = true; }), /X9 is declared wrongToday without the assertion message it expects to fail on/);
+  assert.equal(ran, false);
 });
 
 test("judge: a wrongToday case that starts passing fails with now right and the id", async () => {
-  await assert.rejects(judge("X9", "wrong", nothing), /X9 is declared wrongToday and now passes: it is now right/);
+  await assert.rejects(judge("X9", "wrong", nothing, /anything/), /X9 is declared wrongToday and now passes: it is now right/);
 });
 
 test("judge: a wrongToday case that dies of anything but an assertion fails", async () => {
-  await assert.rejects(judge("X9", "wrong", throwing), (error) => {
+  await assert.rejects(judge("X9", "wrong", throwing, /anything/), (error) => {
     assert.match(error.message, /X9 is declared wrongToday but failed with TypeError: boom, not with an assertion/);
     assert.ok(error.cause instanceof TypeError);
     return true;
@@ -64,15 +81,21 @@ function runFixture(name, body, env) {
   return { status: run.status, output: String(run.stdout) + String(run.stderr) };
 }
 
-test("the run: a wrongToday case that fails its assertion and a rightToday case that passes make a green run", () => {
-  const r = runFixture("green", 'wrongToday("W1", "broken", async () => { assert.equal(1, 2); });\nrightToday("R1", "fine", async () => { assert.equal(1, 1); });');
+test("the run: a wrongToday case that fails its named assertion and a rightToday case that passes make a green run", () => {
+  const r = runFixture("green", 'wrongToday("W1", "broken", async () => { assert.equal(1, 2, "it is broken"); }, /it is broken/);\nrightToday("R1", "fine", async () => { assert.equal(1, 1); });');
   assert.equal(r.status, 0, r.output);
 });
 
 test("the run: a wrongToday case that starts passing fails the run", () => {
-  const r = runFixture("wrong-passes", 'wrongToday("W2", "fixed by accident", async () => { assert.equal(1, 1); });');
+  const r = runFixture("wrong-passes", 'wrongToday("W2", "fixed by accident", async () => { assert.equal(1, 1); }, /anything/);');
   assert.notEqual(r.status, 0);
   assert.match(r.output, /W2 is declared wrongToday and now passes/);
+});
+
+test("the run: a wrongToday case that fails a different assertion fails the run", () => {
+  const r = runFixture("wrong-other", 'wrongToday("W5", "setup broke", async () => { assert.ok(false, "the setup did not happen"); }, /it is broken/);');
+  assert.notEqual(r.status, 0);
+  assert.match(r.output, /W5 is declared wrongToday to fail on .* but failed a different assertion: the setup did not happen/);
 });
 
 test("the run: a rightToday case that fails fails the run", () => {
@@ -81,13 +104,20 @@ test("the run: a rightToday case that fails fails the run", () => {
 });
 
 test("the run: a wrongToday case that throws a plain error fails the run", () => {
-  const r = runFixture("wrong-throws", 'wrongToday("W3", "crashes", async () => { throw new Error("crash"); });');
+  const r = runFixture("wrong-throws", 'wrongToday("W3", "crashes", async () => { throw new Error("crash"); }, /crash/);');
   assert.notEqual(r.status, 0);
   assert.match(r.output, /not with an assertion/);
 });
 
+test("the run: a case that waits on a call nobody releases fails by timeout and names the case", () => {
+  const r = runFixture("hangs", 'rightToday("H1", "never released", async () => { await new Promise((resolve) => setTimeout(resolve, 1500)); });', { SPLITPAGE_M4_CASE_TIMEOUT_MS: "300" });
+  assert.notEqual(r.status, 0);
+  assert.match(r.output, /H1 never released/);
+  assert.match(r.output, /timed out after 300ms/);
+});
+
 test("the run: at the gate, any wrongToday case fails the run even while it still fails", () => {
-  const body = 'wrongToday("W4", "still broken", async () => { assert.equal(1, 2); });';
+  const body = 'wrongToday("W4", "still broken", async () => { assert.equal(1, 2, "it is broken"); }, /it is broken/);';
   assert.equal(runFixture("gate-off", body).status, 0);
   const gated = runFixture("gate-on", body, { SPLITPAGE_M4_GATE: "1" });
   assert.notEqual(gated.status, 0);
