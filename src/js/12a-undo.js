@@ -166,7 +166,7 @@ function resolveDocFields(state, plan) {
   docs.forEach(function (p) {
     if (!OWNED_LISTS[p.key] || !Array.isArray(p.value)) return;
     p.value = p.value.map(function (e) {
-      if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner]) return e;
+      if (!e || typeof e.owner !== "string" || !e.owner || crew[e.owner] || remap && crew[remap[e.owner]]) return e;
       cleared++;
       return Object.assign({}, e, { owner: "" });
     });
