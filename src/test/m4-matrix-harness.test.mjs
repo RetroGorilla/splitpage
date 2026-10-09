@@ -250,6 +250,29 @@ test("held file handle: permission answers come from setPermission", async () =>
   assert.equal(await file.handle.isSameEntry(file.handle), true);
 });
 
+test("held file handle: a handle whose permission is not granted refuses getFile and createWritable and stores nothing", async () => {
+  const file = createHeldFileHandle({ name: "c.md", text: "keep", permission: "prompt" });
+  await assert.rejects(file.handle.createWritable(), (error) => error.name === "NotAllowedError");
+  await assert.rejects(file.handle.getFile(), (error) => error.name === "NotAllowedError");
+  assert.equal(file.commits.length, 0);
+  assert.deepEqual(file.calls, ["createWritable", "getFile"]);
+  file.setPermission("granted");
+  assert.equal(await (await file.handle.getFile()).text(), "keep");
+});
+
+test("held desktop: the history copy is gated and logged like the file calls", async () => {
+  const seen = [];
+  const held = createHeldDesktop({ historyCopy: async (from, to) => { seen.push([from, to]); return { ok: true, copied: 1 }; } });
+  held.holdOp("historyCopy");
+  const copying = held.desktop.historyCopy("d1", "d2");
+  await held.arrivedAt("historyCopy");
+  assert.deepEqual(seen, []);
+  held.releaseOp("historyCopy");
+  assert.deepEqual(await copying, { ok: true, copied: 1 });
+  assert.deepEqual(seen, [["d1", "d2"]]);
+  assert.deepEqual(held.calls.map((c) => c.op), ["historyCopy"]);
+});
+
 test("held desktop: a held call parks before it reaches the backend, and the backend keeps its own state", async () => {
   const calls = [];
   const backend = {
