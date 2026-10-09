@@ -7,7 +7,7 @@ import {
   updateScriptStats
 } from "./01-scene-status.js";
 import { cssAttr } from "./04-richtext.js";
-import { render, renderRow } from "./05-render.js";
+import { afterThisPaint, render, renderRow } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
 import { redo, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
@@ -82,7 +82,7 @@ export function closeReadTimeEditor(commit, fromBlur) {
       } else {
         editing = null;
         teardown(ed);
-        setSceneLength(ed.rowId, secs);
+        afterThisPaint(function () { setSceneLength(ed.rowId, secs); });
         refocus(ed, !fromBlur);
         return true;
       }
