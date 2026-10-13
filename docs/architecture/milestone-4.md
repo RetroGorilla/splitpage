@@ -432,7 +432,7 @@ The plan's gate names no list for "existing five repaired defects stay fixed". A
 
 The draft's seven questions are answered (D9 to D15). What stays open is wording, which comes back to Adam with the PR that adds it:
 
-- **The obsolete-save toast (D10)**, with 4.9. The draft wording to start from: "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged."
+- **The obsolete-save toast (D10)**, answered with 4.9: Adam approved the draft wording on 2026-10-13, "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged." (file destinations; a server document keeps 13-hosted's "An earlier save of this script arrived late. Your next save will merge both versions.", which 4.14 takes over).
 - **The dropped-picture toast (D11)**, with 4.20. 4.20 ships "The picture finished loading after the script changed, so it was not added." (the draft said "after you opened another script", but a Save As, a first server save or a sign-in refuses it too). The annotator's late save says "The annotations were not saved because the script changed."
 - **The moved-file notice on "Review" (D15)**, with #500's PR, only if the close notice's text does not fit there.
 - **A retried thumbnail that arrives after the user opened an unrelated document (M5b)**, with 4.20. Before 4.20 that document showed "Could not get this video's thumbnail — you may be offline, or the video is private or gone." 4.20 drops the result silently, as `thumbnailsAfterPaste` already did. Other options: keep the old toast, or give it D11's dropped-picture toast. The case checks only that nothing is written.
