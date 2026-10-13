@@ -1,11 +1,10 @@
-import { S } from "./_state.js";
+import { migrateRows } from "./02-state.js";
 import {
   ROW_STATUSES,
   DEFAULT_WPM,
   formatDuration,
   formatTimecode,
   hasSetLength,
-  rowSeconds,
   rowStatus,
   targetClock,
   targetLengthOf,
@@ -13,14 +12,23 @@ import {
 } from "./01-scene-status.js";
 import { TAG_CATEGORIES } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
-import { brollEntries, brollSortedForList } from "./08c-broll.js";
+import { brollSortedForList } from "./08c-broll.js";
 import { shotRecordForFile } from "./08d-broll-panel.js";
 import { commentEntries } from "./10-comments.js";
-import { tagPrintColor } from "./14-export.js";
-import { pad2 } from "../core/production/timing.ts";
+import { htmlToPlainText, tagPrintColor } from "./14-export.js";
+import { randomIds, systemClock } from "../adapters/identity/ids.ts";
+import { captureExportDocument as captureWith } from "../application/save/capture.ts";
+import { buildExportDocument } from "../core/document/export-document.ts";
+import { contentMemo } from "../core/document/memo.ts";
+import { brollEntries } from "../core/production/broll.ts";
+import { deriveProductionIndex } from "../core/production/tags.ts";
+import { pad2, rowSeconds as rowSecondsIn } from "../core/production/timing.ts";
 import { toHtml } from "../core/text/html.ts";
 import { toDocxRuns } from "../core/text/projections.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 
 export var PRINT_COLORS = {
   text: "171613",
@@ -74,20 +82,39 @@ export function exportDateText(d) {
 
 function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
-export function exportFacts(now) {
-  var s = S.state;
+function exportReadModels(doc) {
+  return {
+    production: deriveProductionIndex(doc, productionReaders).entries,
+    commentNumbers: numberComments(doc),
+    broll: brollEntries(doc, productionReaders, randomIds, htmlToPlainText, false).entries
+  };
+}
+
+var capturePorts = { read: readSession, readModels: exportReadModels, clock: systemClock };
+
+export function captureExportDocument(opts) {
+  return captureWith(capturePorts, opts);
+}
+
+export function exportDocumentOf(state, opts) {
+  var doc = migrateRows(JSON.parse(JSON.stringify(state)));
+  return buildExportDocument(doc, systemClock.nowIso(), exportReadModels(doc), opts);
+}
+
+export function exportFacts(doc) {
+  var s = doc.document;
   var rows = s.rows || [];
   var seconds = 0, words = 0;
   var status = { todo: 0, ready: 0, shot: 0 };
   rows.forEach(function (r) {
-    seconds += rowSeconds(r);
+    seconds += rowSecondsIn(r, s, productionReaders);
     words += wordCount(r.audioText);
     var st = rowStatus(r.status) || ROW_STATUSES[0];
     status[st.id]++;
   });
   var target = targetLengthOf(s);
   var clock = target === null ? null : targetClock(seconds, target);
-  var when = now || new Date();
+  var when = new Date(doc.capturedAt);
   return {
     title: s.title || "Untitled Script",
     scenes: rows.length,
@@ -103,7 +130,6 @@ export function exportFacts(now) {
 }
 
 export function exportSummaryParts(facts) {
-  facts = facts || exportFacts();
   var out = [plural(facts.scenes, "scene"), facts.runtime + " running time"];
   if (facts.target) {
     out.push("Target " + facts.target.text + " · " +
@@ -113,10 +139,10 @@ export function exportSummaryParts(facts) {
   return out;
 }
 
-export function sceneFacts() {
+export function sceneFacts(doc) {
   var at = 0;
-  return (S.state.rows || []).map(function (r, i) {
-    var sec = rowSeconds(r);
+  return (doc.scenes || []).map(function (r, i) {
+    var sec = rowSecondsIn(r, doc.document, productionReaders);
     var st = rowStatus(r.status) || ROW_STATUSES[0];
     var out = {
       index: i,
@@ -133,26 +159,33 @@ export function sceneFacts() {
   });
 }
 
-export function commentNumbers() {
+export function commentNumbers(doc) {
+  return doc.commentNumbers;
+}
+
+var anchorOrder = contentMemo(function (html) {
+  var spans = Array.prototype.slice.call(inertBody(toHtml(cellOf(html))).querySelectorAll(".cmt-anchor"));
+  spans.sort(function (a, b) {
+    if (a.contains(b)) return 1;
+    if (b.contains(a)) return -1;
+    return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+  return spans.map(function (el) { return el.getAttribute("data-cmt"); });
+}, cacheSeal);
+
+function numberComments(state) {
   var open = Object.create(null);
-  (S.state.comments || []).forEach(function (c) {
+  (state.comments || []).forEach(function (c) {
     if (c && c.id && !c.resolved && c.field !== "title") open[c.id] = true;
   });
   var nums = Object.create(null), n = 0;
-  (S.state.rows || []).forEach(function (row) {
+  (state.rows || []).forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
       var html = row[field] || "";
       if (html.indexOf("cmt-anchor") === -1) return;
-      var spans = Array.prototype.slice.call(inertBody(toHtml(cellOf(html))).querySelectorAll(".cmt-anchor"))
-        .filter(function (el) { return open[el.getAttribute("data-cmt")]; });
-      spans.sort(function (a, b) {
-        if (a.contains(b)) return 1;
-        if (b.contains(a)) return -1;
-        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-      });
-      spans.forEach(function (el) {
+      anchorOrder(html).forEach(function (id) {
+        if (!open[id]) return;
         n++;
-        var id = el.getAttribute("data-cmt");
         if (!nums[id]) nums[id] = n;
       });
     });
@@ -160,9 +193,9 @@ export function commentNumbers() {
   return nums;
 }
 
-export function exportComments(opts) {
-  var nums = commentNumbers();
-  var list = commentEntries(opts || { pieces: true }).map(function (c) {
+export function exportComments(doc, opts) {
+  var nums = doc.commentNumbers;
+  var list = commentEntries(doc, opts || { pieces: true }).map(function (c) {
     var scene = c.rowIndex >= 0 ? pad2(c.rowIndex + 1) : "";
     var field = c.field === "audioText" ? "Audio" : "Visual";
     return Object.assign(c, {
@@ -185,7 +218,6 @@ export function exportComments(opts) {
 }
 
 export function exportRuns(html, nums) {
-  nums = nums || commentNumbers();
   var runs = toDocxRuns(cellOf(html), { annotate: true });
   runs.forEach(function (r, i) {
     if (r.tag) r.tag = { cat: r.tag.cat, name: r.tag.name, color: tagPrintColor(r.tag.cat) };
@@ -203,8 +235,8 @@ export function exportRuns(html, nums) {
   return runs;
 }
 
-export function breakdownGroups(rows) {
-  rows = rows || breakdownRows();
+export function breakdownGroups(doc) {
+  var rows = breakdownRows(doc);
   return TAG_CATEGORIES.map(function (cat) {
     return {
       catId: cat.id,
@@ -215,10 +247,10 @@ export function breakdownGroups(rows) {
   }).filter(function (g) { return g.items.length; });
 }
 
-export function exportBrollScenes() {
-  var facts = sceneFacts();
+export function exportBrollScenes(doc) {
+  var facts = sceneFacts(doc);
   var groups = [], byRow = Object.create(null);
-  brollSortedForList(brollEntries(true)).forEach(function (e) {
+  brollSortedForList(doc.broll).forEach(function (e) {
     var key = e.rowIndex === -1 ? "none" : String(e.rowIndex);
     var g = byRow[key];
     if (!g) {
@@ -233,7 +265,7 @@ export function exportBrollScenes() {
       };
       groups.push(g);
     }
-    var rec = shotRecordForFile(e);
+    var rec = shotRecordForFile(e, doc.people);
     rec.id = e.id;
     g.items.push(rec);
     g.total++;

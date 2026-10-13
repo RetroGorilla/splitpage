@@ -22,6 +22,7 @@ import {
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -71,7 +72,7 @@ function script(title, extra) {
 }
 
 function splitpageFile(doc, name) {
-  return new File([buildSplitpageFile(doc)], name || "m4.splitpage", { lastModified: 1 });
+  return new File([buildSplitpageFile(exportDocumentOf(doc))], name || "m4.splitpage", { lastModified: 1 });
 }
 
 function useDocument(doc) {
@@ -544,7 +545,7 @@ wrongToday("K1", "a desktop file-draft restore whose document is replaced across
   const { fake, held, restore } = withHeldDesktop();
   try {
     const picked = await fake.saveFileDialog({ suggestedName: "disk.splitpage" });
-    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(original)));
+    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(original))));
     held.holdOp("readFile");
     const restoring = applyTakenDraft({
       header: { origin: { kind: "file", fileName: picked.name }, docIdWrittenOut: true },

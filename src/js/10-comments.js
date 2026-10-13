@@ -378,14 +378,6 @@ function formatRelativeTime(iso) {
   } catch (e) { return ""; }
 }
 
-function findAnchorLocationLabel(rowId, field) {
-  if (field === "title") return "Document title";
-  var idx = findRowIndex(rowId);
-  var rowLabel = idx === -1 ? "Deleted row" : ("Row " + pad2(idx + 1));
-  var fieldLabel = field === "audioText" ? "Audio" : "Visual";
-  return rowLabel + " · " + fieldLabel;
-}
-
 function commentLocationHtml(rowId, field) {
   if (field === "title") return "Document title";
   var idx = findRowIndex(rowId);
@@ -432,16 +424,30 @@ function commentPositionCompare(a, b) {
   return compareCommentPositions(a, b, findRowIndex);
 }
 
-export function commentEntries(opts) {
+function capturedRowIndex(doc) {
+  var at = Object.create(null);
+  doc.scenes.forEach(function (row, i) { if (!(row.id in at)) at[row.id] = i; });
+  return function (id) { return typeof id === "string" && id in at ? at[id] : -1; };
+}
+
+function capturedLocationLabel(rowIndex, field) {
+  if (field === "title") return "Document title";
+  var rowLabel = rowIndex === -1 ? "Deleted row" : ("Row " + pad2(rowIndex + 1));
+  return rowLabel + " · " + (field === "audioText" ? "Audio" : "Visual");
+}
+
+export function commentEntries(doc, opts) {
   var pieces = !!(opts && opts.pieces);
-  var list = (S.state.comments || []).slice();
-  list.sort(commentPositionCompare);
+  var rowIndexOf = capturedRowIndex(doc);
+  var list = (doc.comments || []).slice();
+  list.sort(function (a, b) { return compareCommentPositions(a, b, rowIndexOf); });
   return list.map(function (c) {
+    var rowIndex = rowIndexOf(c.rowId);
     var entry = {
       id: c.id,
-      rowIndex: c.field === "title" ? -1 : findRowIndex(c.rowId),
+      rowIndex: c.field === "title" ? -1 : rowIndex,
       field: c.field,
-      location: findAnchorLocationLabel(c.rowId, c.field),
+      location: capturedLocationLabel(rowIndex, c.field),
       author: c.author || "Anonymous",
       body: htmlToPlainText(c.body),
       quoted: c.quotedText || "",

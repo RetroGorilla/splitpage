@@ -29,18 +29,19 @@ import {
   removeTag,
   renameTag,
   selectedKeys,
+  tagCategory,
   tagStatus,
   tagStatusLampHtml,
   tagsByCategory,
   updateProductionBadge
 } from "./07-production-tags.js";
-import { brollShotsByProp } from "./08c-broll.js";
+import { brollSortedForList } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
-import { sceneFacts } from "./14b-export-kit.js";
+import { captureExportDocument, sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
@@ -1052,10 +1053,34 @@ export function saveTagRename(key) {
   }
 }
 
-export function breakdownRows() {
+function capturedEntries(doc) {
+  return doc.production.map(function (e) { return Object.assign({}, e, { cat: tagCategory(e.catId) }); });
+}
+
+function capturedShotsByProp(doc) {
+  var out = Object.create(null);
+  brollSortedForList(doc.broll).forEach(function (e) {
+    e.props.forEach(function (p) {
+      var k = "prop " + normalizeTagName(p.name);
+      if (!out[k]) out[k] = [];
+      out[k].push(e.name || "Untitled shot");
+    });
+  });
+  return out;
+}
+
+function capturedPerson(doc, id) {
+  if (!id) return null;
+  for (var i = 0; i < doc.people.length; i++) {
+    if (doc.people[i].id === id) return doc.people[i];
+  }
+  return null;
+}
+
+export function breakdownRows(doc) {
   var out = [];
-  var shotsFor = brollShotsByProp();
-  tagsByCategory().forEach(function (g) {
+  var shotsFor = capturedShotsByProp(doc);
+  tagsByCategory(capturedEntries(doc)).forEach(function (g) {
     g.items.forEach(function (item) {
       var scenes = [];
       var seen = {};
@@ -1064,7 +1089,7 @@ export function breakdownRows() {
         seen[m.rowIndex] = true;
         scenes.push(pad2(m.rowIndex + 1));
       });
-      var owner = personById(item.owner);
+      var owner = capturedPerson(doc, item.owner);
       var st = tagStatus(item.status) || TAG_STATUSES[0];
       out.push({
         catId: g.cat.id,
@@ -1085,14 +1110,14 @@ export function breakdownRows() {
   return out;
 }
 
-export function breakdownTable() {
-  var starts = sceneFacts().map(function (f) { return f.start; });
+export function breakdownTable(doc) {
+  var starts = sceneFacts(doc).map(function (f) { return f.start; });
   var out = {
     head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
            "First scene at", "Group"],
     rows: []
   };
-  breakdownRows().forEach(function (r) {
+  breakdownRows(doc).forEach(function (r) {
     var first = r.inScript === "no" ? "" : (starts[Number(r.scenes[0]) - 1] || "");
     out.rows.push({ catId: r.catId, status: r.status, cells: [
       r.categoryLabel,
@@ -1112,7 +1137,7 @@ export function breakdownTable() {
 }
 
 export function buildBreakdownCsv() {
-  var t = breakdownTable();
+  var t = breakdownTable(captureExportDocument());
   var lines = [t.head.join(",")];
   t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
   if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));

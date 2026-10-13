@@ -6,6 +6,7 @@ import { S } from "../js/_state.js";
 await bootApp();
 
 const { cycleRowStatus } = await import("../js/01-scene-status.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
@@ -21,7 +22,7 @@ const doc = migrateRows({
     { id: "r2", visualText: "Close", audioText: "Two.", status: "todo" }
   ]
 });
-await openProjectFile(new File([buildSplitpageFile(doc)], "counts.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
+await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(doc))], "counts.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
 
 test("the booted app holds the opened script, saved", () => {
   assert.equal(S.state.title, "Edit counts");

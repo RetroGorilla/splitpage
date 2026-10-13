@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentBodyText } from "./10-comments.js";
-import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
+import { captureExportDocument, exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";
@@ -14,9 +14,9 @@ export function csvEscape(v) {
 
 var CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
-function sceneTagLists() {
+function sceneTagLists(doc) {
   var byScene = Object.create(null);
-  breakdownRows().forEach(function (r) {
+  breakdownRows(doc).forEach(function (r) {
     if (r.inScript === "no") return;
     r.scenes.forEach(function (n) {
       var i = Number(n) - 1;
@@ -32,9 +32,9 @@ function sceneTagLists() {
   return byScene;
 }
 
-function sceneBrollLists() {
+function sceneBrollLists(doc) {
   var byScene = Object.create(null);
-  exportBrollScenes().forEach(function (g) {
+  exportBrollScenes(doc).forEach(function (g) {
     if (!g.scene) return;
     byScene[Number(g.scene) - 1] = g.items.map(function (r) {
       return r.name + " (" + (r.shot ? "shot" : "to shoot") + (r.flagged ? ", flagged" : "") + ")";
@@ -46,11 +46,12 @@ function sceneBrollLists() {
 export var COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
 
 export function scriptTable() {
-  var facts = exportFacts();
-  var scenes = sceneFacts();
-  var tags = sceneTagLists();
-  var broll = sceneBrollLists();
-  var comments = exportComments({ pieces: true });
+  var doc = captureExportDocument();
+  var facts = exportFacts(doc);
+  var scenes = sceneFacts(doc);
+  var tags = sceneTagLists(doc);
+  var broll = sceneBrollLists(doc);
+  var comments = exportComments(doc, { pieces: true });
   var open = Object.create(null);
   comments.forEach(function (c) {
     if (c.number && c.rowIndex >= 0) (open[c.rowIndex] = open[c.rowIndex] || []).push(c.number);

@@ -1,0 +1,47 @@
+{
+  "splitpage": {
+    "bytes": 8289,
+    "sha256": "4c168bbc63c104f13d1be5b6e5970d48d117eba146cf41d96d2ed20bbc20b6c4"
+  },
+  "markdownProject": {
+    "bytes": 11529,
+    "sha256": "2e5725cce799b9bf4f76bf0218c9b1e0dd0e9f035081234504b74e7e138f378d"
+  },
+  "standaloneHtml": {
+    "stateData": {
+      "bytes": 6945,
+      "sha256": "e0f2dfb38352bf1ff3840873fc8fb9c65655f9f91b35f0b44639cfbc8eff622e"
+    },
+    "title": "Three Lights for Under $200 — SplitShare",
+    "description": "6 scenes · 1:35 running time · 2 of 6 shot · October 13, 2026"
+  },
+  "markdownExport": {
+    "bytes": 4058,
+    "sha256": "7d0004d7986d0a5631852763fa12bd65df0f011ce2a3c5fd7d17137bd42d4379"
+  },
+  "markdownExportPreview": {
+    "bytes": 1439,
+    "sha256": "bee5cdc60cee941640f29a5772eea391a7a8751223acab32d5559344d80d575d"
+  },
+  "markdownTableExport": {
+    "bytes": 3952,
+    "sha256": "be7cae3a695aca89bccaf005b7f52aab773eacc56c61beb695abea6e499f33e9"
+  },
+  "markdownImages": [],
+  "facts": {
+    "title": "Three Lights for Under $200",
+    "scenes": 6,
+    "seconds": 94.8,
+    "runtime": "1:35",
+    "target": null,
+    "status": {
+      "todo": 3,
+      "ready": 1,
+      "shot": 2
+    },
+    "words": 237,
+    "wpm": 150,
+    "exportedAt": "2026-10-13T17:30:00.000Z",
+    "date": "October 13, 2026"
+  }
+}

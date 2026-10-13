@@ -1,0 +1,47 @@
+{
+  "splitpage": {
+    "bytes": 7366,
+    "sha256": "77ca704b8e97bef15a0caa65f94343bdbc4b85af351c6bff0c75e91cf6ede344"
+  },
+  "markdownProject": {
+    "bytes": 9934,
+    "sha256": "8a0722607306f524777535c9b01758d2e8851731d0de8c5e43bd0a67dbef5d03"
+  },
+  "standaloneHtml": {
+    "stateData": {
+      "bytes": 6028,
+      "sha256": "3a9d0bfd73dfd267d686175cd87d231a768f8f5a76a53c0d5f59dd286466d393"
+    },
+    "title": "Meet the Baker — Crumb &amp; Co. — SplitShare",
+    "description": "6 scenes · 0:55 running time · 0 of 6 shot · October 13, 2026"
+  },
+  "markdownExport": {
+    "bytes": 3484,
+    "sha256": "635b89dce7ca272758a698e3af238b3790320e4cd4ca2ef9ff8278cd69e5aeee"
+  },
+  "markdownExportPreview": {
+    "bytes": 1049,
+    "sha256": "f93479cba83f405928764c7f30e520d3201cf389dd366d1cb12506447c4ea9b4"
+  },
+  "markdownTableExport": {
+    "bytes": 3380,
+    "sha256": "c37b4ec41d16d056b2f36fb620fc4d5ce933755bc01ac55a72d27752cb54f708"
+  },
+  "markdownImages": [],
+  "facts": {
+    "title": "Meet the Baker — Crumb & Co.",
+    "scenes": 6,
+    "seconds": 55.19999999999999,
+    "runtime": "0:55",
+    "target": null,
+    "status": {
+      "todo": 4,
+      "ready": 2,
+      "shot": 0
+    },
+    "words": 138,
+    "wpm": 150,
+    "exportedAt": "2026-10-13T17:30:00.000Z",
+    "date": "October 13, 2026"
+  }
+}
