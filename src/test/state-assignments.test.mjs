@@ -26,18 +26,16 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 const SITES = [
   "00-prelude.js#(anonymous)",
   "02b-doc-id.js#adoptRestoredState",
+  "02b-doc-id.js#assign",
   "03-sync.js#adopt",
   "13-hosted.js#resumeServerDoc",
   "13-hosted.js#openServerDoc",
   "18-local-files.js#adoptProjectState",
   "18-local-files.js#loadFileIntoEditor",
-  "18b-file-menu.js#replaceWithNewDocument",
   "20g-drafts.js#recoverDraftAsUnsavedCopy",
   "20g-drafts.js#restoreFileDraft",
   "20g-drafts.js#adoptUntitledDraft",
-  "20j-newtab.js#adoptNewDocument",
-  "21-events.js#init",
-  "21-events.js#(anonymous)"
+  "21-events.js#init"
 ];
 
 function sourceFiles(dir) {
@@ -61,7 +59,9 @@ function enclosingFunction(node) {
 }
 
 function nameOf(fn) {
-  return fn && (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) && fn.name ? fn.name.text : "(anonymous)";
+  if (fn && (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) && fn.name) return fn.name.text;
+  if (fn && fn.parent && ts.isPropertyAssignment(fn.parent) && ts.isIdentifier(fn.parent.name)) return fn.parent.name.text;
+  return "(anonymous)";
 }
 
 function isStateAssignment(node) {
@@ -125,7 +125,7 @@ function migrated(title) {
   return migrateRows(rawDoc(title));
 }
 
-test("there are fourteen S.state assignments, in these functions", () => {
+test("there are twelve S.state assignments, in these functions", () => {
   assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
 });
 
@@ -144,9 +144,9 @@ test("13-hosted resumeServerDoc assigns `theirs`, which is migrateDocument's ans
     "theirs = " + (init ? init.getText() : "nothing"));
 });
 
-test("boot from the seed: 00-prelude and init assign null, then the seed script, a migrateRows fixed point", () => {
+test("boot from the seed: 00-prelude and init assign null, then the transition API's live-document port the seed script, a migrateRows fixed point", () => {
   assert.equal(seedCheckPasses(), true, "the page's seed check matches its state-data, as a fresh build's does");
-  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "21-events.js#init", "21-events.js#(anonymous)"]);
+  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "21-events.js#init", "02b-doc-id.js#assign"]);
   assert.equal(atBoot[0].value, null);
   assert.equal(atBoot[1].value, null);
   const seed = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));
@@ -210,9 +210,9 @@ test("18-local-files loadFileIntoEditor, from a .txt import: a migrateRows fixed
   assert.equal(fixedPoint(only(got, "18-local-files.js#loadFileIntoEditor")), true);
 });
 
-test("18b replaceWithNewDocument, a new script and the long demo: migrateRows fixed points", async () => {
-  assert.equal(fixedPoint(only(await drive(() => startNewScript()), "18b-file-menu.js#replaceWithNewDocument")), true);
-  assert.equal(fixedPoint(only(await drive(() => openLongDemo()), "18b-file-menu.js#replaceWithNewDocument")), true);
+test("18b replaceWithNewDocument, a new script and the long demo, through the live-document port: migrateRows fixed points", async () => {
+  assert.equal(fixedPoint(only(await drive(() => startNewScript()), "02b-doc-id.js#assign")), true);
+  assert.equal(fixedPoint(only(await drive(() => openLongDemo()), "02b-doc-id.js#assign")), true);
 });
 
 test("20g recoverDraftAsUnsavedCopy, an imported file's draft: a migrateRows fixed point with a minted docId", async () => {
@@ -255,9 +255,9 @@ test("20g adoptUntitledDraft: a migrateRows fixed point", async () => {
   assert.equal(fixedPoint(only(await drive(() => applyTakenDraft(t)), "20g-drafts.js#adoptUntitledDraft")), true);
 });
 
-test("20j adoptNewDocument, from the new-tab page's New script: a migrateRows fixed point", async () => {
+test("20j adoptNewDocument, from the new-tab page's New script, through the live-document port: a migrateRows fixed point", async () => {
   const button = document.querySelector('#newtab-page [data-newtab-action="new"]');
   assert.ok(button, "the page has the button");
   const got = await drive(() => button.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
-  assert.equal(fixedPoint(only(got, "20j-newtab.js#adoptNewDocument")), true);
+  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
 });

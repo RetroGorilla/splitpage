@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
@@ -190,6 +190,14 @@ export function runTests({
   return failed ? 1 : 0;
 }
 
+export function nodeVersionWarning(version = process.version, repo = REPO) {
+  const file = join(repo, ".nvmrc");
+  if (!existsSync(file)) return null;
+  const pinned = readFileSync(file, "utf8").trim().replace(/^v/, "");
+  if (!pinned || version.replace(/^v/, "") === pinned) return null;
+  return `run-tests: warning: running Node ${version.replace(/^v/, "")}, but .nvmrc pins ${pinned}; run \`nvm use\` first, some tests fail on other patch versions`;
+}
+
 export function parseArgs(args) {
   const only = [];
   const named = [];
@@ -216,6 +224,8 @@ if (isMain(import.meta.url)) {
     console.error(`run-tests: ${parsed.error}`);
     process.exitCode = 2;
   } else {
+    const warning = nodeVersionWarning();
+    if (warning) console.error(warning);
     process.exitCode = runTests(parsed);
   }
 }

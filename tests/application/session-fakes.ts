@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../../src/application/session/document-session.ts";
-import type { Command, CommandOutcome, DocumentSession, DocumentView, Plan } from "../../src/application/session/document-session.ts";
+import type { Command, CommandOutcome, DocumentSession, DocumentView, Plan, SessionCounters } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, needsReconciliation } from "../../src/application/session/change-set.ts";
 import type { ChangeSet, SessionChange } from "../../src/application/session/change-set.ts";
 import type { Capability, TimerPort } from "../../src/application/session/ports.ts";
@@ -61,6 +61,7 @@ export interface HarnessHooks {
   attribute?: (doc: DocumentView) => Plan | null;
   record?: () => void;
   effect?: (name: "dirty" | "draft" | "save") => void;
+  after?: SessionCounters;
 }
 
 export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harness {
@@ -113,7 +114,8 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
       reported.push(error);
     },
     timers: clock,
-    timing: timing
+    timing: timing,
+    after: hooks.after
   });
   session.subscribe(function (c) { published.push(c); log.push("publish:" + c.kind); });
   return {
