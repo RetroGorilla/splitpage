@@ -57,6 +57,17 @@ export function adoptRestoredState(snap) {
   return S.state;
 }
 
+export var liveDocumentPort = Object.freeze({
+  current: function () { return S.state || null; },
+  assign: function (doc) { S.state = doc; }
+});
+
+export var documentIdentityPort = Object.freeze({
+  mint: mintDocId,
+  writtenOut: function () { return !!S.docIdWrittenOut; },
+  markWrittenOut: function (writtenOut) { S.docIdWrittenOut = writtenOut; }
+});
+
 S.docIdWrittenOut = false;
 var identityAdoptedAt = 0;
 var lastIdentityKey = "";

@@ -268,7 +268,8 @@ test("a new blank script whose render throws still replaces the document, as a c
   });
   assert.equal(seen.more, true);
   assert.notEqual(seen.book.title, "Before the blank");
-  assert.deepEqual(seen.book.heard, ["adopt"]);
+  assert.deepEqual(seen.book.heard, [], "the replaced script's listeners hear nothing of the new one (4.8)");
+  assert.equal(seen.book.sessionHoldsIt, true);
   assert.equal(seen.book.dirty, false);
 });
 

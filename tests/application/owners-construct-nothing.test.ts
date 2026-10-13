@@ -1,0 +1,74 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import * as operation from "../../src/application/session/operation.ts";
+import * as transitionPorts from "../../src/application/transitions/ports.ts";
+import * as transitions from "../../src/application/transitions/transitions.ts";
+
+const REPO = fileURLToPath(new URL("../../", import.meta.url));
+
+const OWNERS = [
+  "src/application/session/operation.ts",
+  "src/application/transitions"
+];
+
+function sourcesOf(path: string): string[] {
+  const full = join(REPO, path);
+  if (!statSync(full).isDirectory()) return [full];
+  return readdirSync(full, { withFileTypes: true }).flatMap(function (entry) {
+    const inner = join(path, entry.name);
+    if (entry.isDirectory()) return sourcesOf(inner);
+    return /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [join(REPO, inner)] : [];
+  });
+}
+
+function inert(node: ts.Expression): boolean {
+  if (ts.isStringLiteral(node) || ts.isNumericLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return true;
+  if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return true;
+  if (ts.isArrayLiteralExpression(node)) return node.elements.every(inert);
+  if (ts.isObjectLiteralExpression(node)) {
+    return node.properties.every(function (p) { return ts.isPropertyAssignment(p) && inert(p.initializer); });
+  }
+  if (ts.isCallExpression(node)) {
+    const callee = node.expression;
+    const freezes = ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) &&
+      callee.expression.text === "Object" && callee.name.text === "freeze";
+    return freezes && node.arguments.every(inert);
+  }
+  return false;
+}
+
+function topLevelWork(file: string): string[] {
+  const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+  const found: string[] = [];
+  for (const statement of source.statements) {
+    if (ts.isImportDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) ||
+        ts.isFunctionDeclaration(statement) || ts.isExportDeclaration(statement)) continue;
+    if (ts.isVariableStatement(statement) &&
+        statement.declarationList.declarations.every(function (d) { return d.initializer !== undefined && inert(d.initializer); })) continue;
+    found.push(relative(REPO, file) + ": " + statement.getText().split("\n")[0]);
+  }
+  return found;
+}
+
+test("E12: the owners' modules do nothing when they are loaded: only types, functions and frozen constants", () => {
+  const files = OWNERS.flatMap(sourcesOf);
+  assert.ok(files.length >= 3, "found the owners' sources: " + files.join(", "));
+  const work = files.flatMap(topLevelWork);
+  assert.deepEqual(work, []);
+});
+
+test("E12: importing the owners constructs nothing: each export is a constructor function or frozen data", () => {
+  const loaded: Record<string, Record<string, unknown>> = { operation: operation, transitionPorts: transitionPorts, transitions: transitions };
+  for (const [module, exports] of Object.entries(loaded)) {
+    for (const [name, value] of Object.entries(exports)) {
+      const ok = typeof value === "function" || typeof value !== "object" || value === null || Object.isFrozen(value);
+      assert.ok(ok, module + " exports " + name + ", which is neither a function nor frozen data");
+    }
+  }
+  assert.equal(typeof transitions.createTransitions, "function");
+  assert.equal(typeof operation.createOperations, "function");
+});
