@@ -82,6 +82,34 @@ test("intern copies: a caller reusing its buffer cannot change what a sha names"
   assert.deepEqual(recordFor(rec.sha256), rec);
 });
 
+test("bytesForSync hands out bytes the caller owns: writing into them leaves the picture as it was (E14)", () => {
+  const original = png(43, 30);
+  const rec = intern(original);
+  const first = bytesForSync(rec.sha256);
+  first.fill(0x41);
+  const again = bytesForSync(rec.sha256);
+  assert.notEqual(again, first, "a fresh array each read");
+  assert.deepEqual(again, original);
+  assert.equal(sha(again), rec.sha256);
+  const row = { imageRef: rec };
+  const pic = rowImageBytes(row);
+  pic.bytes.fill(0x42);
+  assert.deepEqual(rowImageBytes(row).bytes, original);
+  assert.equal(sha(Buffer.from(dataUrlForSync(rec.sha256).split(",")[1], "base64")), rec.sha256);
+});
+
+test("the memory backend keeps its own copy of what it is given and hands out copies", async () => {
+  const mem = createMemoryBackend();
+  const bytes = png(44, 30);
+  const s = sha(bytes);
+  await mem.put(s, bytes, "image/png");
+  bytes.fill(0);
+  const got = await mem.get(s);
+  assert.equal(sha(got.bytes), s);
+  got.bytes.fill(0);
+  assert.equal(sha((await mem.get(s)).bytes), s);
+});
+
 test("intern refuses what is not a measurable raster image", () => {
   assert.equal(intern(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>")), null, "SVG");
   assert.equal(intern(png(0, 5)), null, "zero width");
@@ -364,7 +392,7 @@ test("rowImageUrl / Key / DataUrl / Bytes answer for either form, synchronously"
   assert.equal(rowImageDataUrl(absent), null);
 
   const fromRef = rowImageBytes(ref);
-  assert.equal(fromRef.bytes, bytesForSync(rec.sha256));
+  assert.deepEqual(fromRef.bytes, bytesForSync(rec.sha256));
   assert.deepEqual([fromRef.mime, fromRef.width, fromRef.height], ["image/png", 14, 9]);
   const fromLegacy = rowImageBytes(legacy);
   assert.deepEqual(Array.from(fromLegacy.bytes), Array.from(bytes));
