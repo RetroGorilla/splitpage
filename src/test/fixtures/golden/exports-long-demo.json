@@ -1,0 +1,52 @@
+{
+  "splitpage": {
+    "bytes": 38432,
+    "sha256": "82ac7f916c90f5e1525bcdbc9d1ec5a834b3e723f7aaa7535c2106e20a789836"
+  },
+  "markdownProject": {
+    "bytes": 52930,
+    "sha256": "a6207cebd444f6eec47ff56ef888ef0fc7c2cc1a3cf28122ba047c63b6a22560"
+  },
+  "standaloneHtml": {
+    "stateData": {
+      "bytes": 32976,
+      "sha256": "46661125be01ab891cb1da6c6bf17e56a6fc6e6fcf826b2e1bbfba25564b8aeb"
+    },
+    "title": "I Fixed a $40 Film Camera (and Shot a Roll With It) — SplitShare",
+    "description": "30 scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot · October 13, 2026"
+  },
+  "markdownExport": {
+    "bytes": 17147,
+    "sha256": "d4983fcc9a5aaba06b84ae004189d2cb454f113b8dcdd960e1155fc449eb2dda"
+  },
+  "markdownExportPreview": {
+    "bytes": 1525,
+    "sha256": "237e12b0abb57acd374edc801f7f25d4e5c0deb447453db89dcf31b7e1ccd507"
+  },
+  "markdownTableExport": {
+    "bytes": 16068,
+    "sha256": "c672181c273d1c87d9690d7db9ec93daac83d7bc47f9ed95549e2291a772e6d6"
+  },
+  "markdownImages": [],
+  "facts": {
+    "title": "I Fixed a $40 Film Camera (and Shot a Roll With It)",
+    "scenes": 30,
+    "seconds": 584.4,
+    "runtime": "9:44",
+    "target": {
+      "seconds": 540,
+      "text": "9:00",
+      "delta": "0:44",
+      "over": true
+    },
+    "status": {
+      "todo": 10,
+      "ready": 7,
+      "shot": 13
+    },
+    "words": 1416,
+    "wpm": 150,
+    "exportedAt": "2026-10-13T17:30:00.000Z",
+    "date": "October 13, 2026"
+  }
+}

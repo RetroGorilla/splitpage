@@ -9,6 +9,7 @@ import { TAG_CATEGORIES, collectTagsFromRows, __init as initTags } from "../js/0
 import { brollInCell } from "../js/08c-broll.js";
 import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
 import { LONG_DEMO, STARTERS, starterById } from "../js/_starters.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initSceneStatus();
 initTags();
@@ -104,6 +105,6 @@ test("a video link or two in a gallery, and no picture bytes", () => {
 
 test("survives a .splitpage round trip", () => {
   const opened = migrateRows(copy(doc));
-  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(opened)));
+  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(opened))));
   assert.deepEqual(round, opened);
 });

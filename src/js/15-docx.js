@@ -17,7 +17,7 @@ import {
   TAG_STATUS_PRINT,
   breakdownGroups,
   brollSummaryText,
-  commentNumbers,
+  captureExportDocument,
   exportBrollScenes,
   exportComments,
   exportFacts,
@@ -403,7 +403,8 @@ export function buildDocx() {
 
   var pictureParts = {};
 
-  var facts = exportFacts();
+  var doc = captureExportDocument();
+  var facts = exportFacts(doc);
   var body = titleParaXml(facts.title) + metaParaXml(exportSummaryParts(facts).concat(facts.date).join(" · "));
 
   var rowsXml = "";
@@ -414,8 +415,8 @@ export function buildDocx() {
     headCellXml("Read", COL_READ, null, { jc: "right", mar: { right: 0 } }) +
     "</w:tr>";
 
-  var scenes = sceneFacts();
-  var ann = { nums: commentNumbers(), open: commentOpenness() };
+  var scenes = sceneFacts(doc);
+  var ann = { nums: doc.commentNumbers, open: commentOpenness() };
   var maxW = (COL_VISUAL - 200) * 635;
   S.state.rows.forEach(function (row, idx) {
     var visual = "";
@@ -452,7 +453,7 @@ export function buildDocx() {
 
   body += tableXml([COL_SCENE, COL_VISUAL, COL_AUDIO, COL_READ], rowsXml);
   var appendix = 0;
-  var groups = breakdownGroups();
+  var groups = breakdownGroups(doc);
   if (groups.length) {
     var itemCount = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
     body += headingParaXml("Production breakdown", !appendix++) +
@@ -507,7 +508,7 @@ export function buildDocx() {
     body += tableXml(bCols, bRows);
   }
 
-  var shots = exportBrollScenes();
+  var shots = exportBrollScenes(doc);
   if (shots.length) {
     body += headingParaXml("B-roll shot list", !appendix++) + metaParaXml(brollSummaryText(shots));
     shots.forEach(function (g) {
@@ -541,7 +542,7 @@ export function buildDocx() {
     });
   }
 
-  var comments = exportComments({ pieces: true });
+  var comments = exportComments(doc, { pieces: true });
   if (comments.length) {
     var openCount = comments.filter(function (c) { return !c.resolved; }).length;
     body += headingParaXml("Comments", !appendix) +

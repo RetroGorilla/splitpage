@@ -15,6 +15,7 @@ import {
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { setBackend: setBlobBackend } = await import("../js/02c-blobs.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -40,11 +41,11 @@ function script(title, extra) {
 }
 
 function splitpageFile(doc, name) {
-  return new File([buildSplitpageFile(doc)], name || "m4.splitpage", { lastModified: 1 });
+  return new File([buildSplitpageFile(exportDocumentOf(doc))], name || "m4.splitpage", { lastModified: 1 });
 }
 
 function heldFile(doc, name) {
-  return createHeldFileHandle({ name: name || "held.splitpage", text: buildSplitpageFile(doc), lastModified: 1000 });
+  return createHeldFileHandle({ name: name || "held.splitpage", text: buildSplitpageFile(exportDocumentOf(doc)), lastModified: 1000 });
 }
 
 function useDocument(doc) {
@@ -81,7 +82,7 @@ function withHeldDesktop(options) {
 
 async function openFromDesktop(fake, doc) {
   const picked = await fake.saveFileDialog({ suggestedName: "disk.splitpage" });
-  await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(doc)));
+  await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(doc))));
   const handle = makeDesktopHandle(picked);
   useDocument(script("Placeholder"));
   await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
@@ -466,7 +467,7 @@ async function importFrom(target) {
   assert.equal(homeModule.home.dirty, false, "and nothing unsaved");
 }
 
-wrongToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", scene(async () => {
+rightToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", scene(async () => {
   const target = importDocument();
   await importFrom(target);
   const imported = homeModule.home;
@@ -483,7 +484,7 @@ wrongToday("I1", "an edit while import writeback awaits its bytes leaves the imp
   await saving;
   assert.equal(target.commits.length, 1, "the file was written");
   assert.equal(imported.dirty, true, "the import home is still unsaved after an edit made while its bytes were prepared");
-}), /the import home is still unsaved after an edit made while its bytes were prepared/);
+}));
 
 rightToday("I2", "import writeback acknowledges only the import home", scene(async () => {
   const target = importDocument();

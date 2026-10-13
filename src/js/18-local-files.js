@@ -32,6 +32,7 @@ import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
 import { brollEntries } from "./08c-broll.js";
 import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
 import { commentBodyText, commentEntries, formatTimestamp } from "./10-comments.js";
+import { captureExportDocument, exportFacts } from "./14b-export-kit.js";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
@@ -187,7 +188,8 @@ export function exportBaseName() {
 
 export async function buildFileData(kind, baseName, opts) {
   opts = opts || {};
-  await ensureBytes(refsIn(S.state));
+  var captured = captureExportDocument();
+  await ensureBytes(refsIn(captured.document));
   var filename = exportFileName(kind, baseName);
   if (kind === "docx") return { data: buildDocx(), filename: filename };
   if (kind === "csv") return { data: buildCsv(), filename: filename };
@@ -202,26 +204,26 @@ export async function buildFileData(kind, baseName, opts) {
   if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
   if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
   if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
-  if (kind === "md-table") return { data: toMarkdownTableDoc(null, { export: true }), filename: filename };
+  if (kind === "md-table") return { data: toMarkdownTableDoc(captured, { export: true }), filename: filename };
   if (kind === "html") {
-    warnImagesLeftOut(missingInlineImages(S.state).length, filename);
+    warnImagesLeftOut(missingInlineImages(captured.document).length, filename);
     return {
-      data: standaloneHtmlFor(S.state, {
-        title: (S.state.title || "Untitled Script") + " — SplitShare",
-        description: exportMetaLine()
+      data: standaloneHtmlFor(captured, {
+        title: (captured.title || "Untitled Script") + " — SplitShare",
+        description: exportMetaLine(exportFacts(captured))
       }),
       filename: filename
     };
   }
   if (kind === "md" && opts.allowImageBundle) {
-    var images = markdownExportImages();
+    var images = markdownExportImages(captured);
     if (images.length) {
-      var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
+      var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc(captured)) }];
       images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
       return { data: zipWrite(entries), filename: exportFileName(kind, baseName, { imageBundle: true }) };
     }
   }
-  return { data: toMarkdownDoc(), filename: filename };
+  return { data: toMarkdownDoc(captured), filename: filename };
 }
 
 function htmlToPlainScript() {
@@ -233,7 +235,8 @@ function htmlToPlainScript() {
     lines.push("");
   });
 
-  var breakdown = breakdownRows();
+  var doc = captureExportDocument();
+  var breakdown = breakdownRows(doc);
   if (breakdown.length) {
     lines.push("PRODUCTION BREAKDOWN");
     lines.push("====================");
@@ -254,7 +257,7 @@ function htmlToPlainScript() {
     lines.push("");
   }
 
-  var comments = commentEntries({ pieces: true });
+  var comments = commentEntries(doc, { pieces: true });
   if (comments.length) {
     lines.push("COMMENTS");
     lines.push("========");
@@ -599,6 +602,8 @@ export async function saveBackToFile(opts) {
   var imported = importHome();
   if (!imported) return;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
+  var docIdAtBuild = S.state.docId;
+  var seqAtBuild = S.editSeq;
   var built;
   try {
     built = await buildFileData(imported.format, baseName);
@@ -606,8 +611,6 @@ export async function saveBackToFile(opts) {
     showToast("Could not build the file.", "error");
     return;
   }
-  var docIdAtBuild = S.state.docId;
-  var seqAtBuild = S.editSeq;
   function bytesStillCurrent() {
     return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
   }

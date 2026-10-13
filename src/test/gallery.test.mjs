@@ -15,6 +15,7 @@ import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
 import { buildPdf } from "../js/17-pdf.js";
 import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -82,7 +83,7 @@ test("a video item survives migrateRows, refsIn and a .splitpage round trip", ()
     { imageRef: P2, links: [{ name: "a.mp4", size: 1, poster: true }] }
   ], "an item with neither a picture nor a video of its own is dropped");
   assert.deepEqual(refsIn(s).sort(), [P1.sha256, P2.sha256].sort());
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(s))));
   assert.deepEqual(back.rows[0].moreImages, s.rows[0].moreImages);
 });
 
@@ -110,7 +111,7 @@ test("the merge keeps both sides' pictures and links, and either side's removals
 
 test("a .splitpage file carries every picture inline and reads back the same gallery", () => {
   const s = doc([{ imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }], moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]);
-  const text = buildSplitpageFile(s);
+  const text = buildSplitpageFile(exportDocumentOf(s));
   const raw = JSON.parse(text);
   assert.ok(raw.rows[0].visualImage.indexOf("data:image/jpeg;base64,") === 0);
   assert.ok(raw.rows[0].moreImages[0].visualImage.indexOf("data:image/jpeg;base64,") === 0, "a further picture inline too");
@@ -140,7 +141,7 @@ test("Word: every picture in the Visual cell, the video links under them, and ba
 test("Markdown and PDF name every picture and every link", () => {
   S.state = doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
     moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]);
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.ok(md.indexOf("](images/scene-01.jpg)") !== -1);
   assert.ok(md.indexOf("](images/scene-01-2.jpg)") !== -1);
   assert.ok(md.indexOf("▶ [youtu.be/abc](https://youtu.be/abc)") !== -1);
