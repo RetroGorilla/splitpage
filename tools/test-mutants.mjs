@@ -1,7 +1,8 @@
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyEdit, formatTable, loadMutants, makeScratch, parseArgs, summarize } from "./mutants.mjs";
+import { applyEdit, confinedPath, formatTable, killTree, loadMutants, makeScratch, parseArgs, summarize } from "./mutants.mjs";
 
 let passed = 0;
 const failures = [];
@@ -67,14 +68,43 @@ try {
   writeFileSync(join(repo, "src", "a.ts"), "export const a = 1;\n");
   writeFileSync(join(repo, "node_modules", "dep", "index.js"), "");
   writeFileSync(join(repo, ".git", "HEAD"), "");
-  const copy = makeScratch(repo, scratchParent);
+  writeFileSync(join(repo, "src", "untracked-ignored.js"), "");
+  mkdirSync(join(repo, "desktop", "node_modules", "x"), { recursive: true });
+  writeFileSync(join(repo, "desktop", "node_modules", "x", "i.js"), "");
+  const copy = makeScratch(repo, scratchParent, ["src/a.ts"]);
   check("scratch copy holds the source", existsSync(join(copy, "src", "a.ts")));
+  check("scratch copy holds only the listed files", !existsSync(join(copy, "src", "untracked-ignored.js")));
+  check("scratch copy leaves nested node_modules behind", !existsSync(join(copy, "desktop")));
   check("scratch copy leaves .git behind", !existsSync(join(copy, ".git")));
   check("scratch node_modules is a link", lstatSync(join(copy, "node_modules")).isSymbolicLink());
   check("scratch node_modules reaches the dependencies", existsSync(join(copy, "node_modules", "dep", "index.js")));
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
+
+const work = mkdtempSync(join(tmpdir(), "mutants-kill-"));
+const here = join(work, "x");
+check("confinedPath accepts a source file", confinedPath(here, "src/a.ts") === join(here, "src", "a.ts"));
+check("confinedPath refuses a parent path", confinedPath(here, "../a.ts") === null);
+check("confinedPath refuses an absolute path", confinedPath(here, join(work, "elsewhere", "a.ts")) === null);
+check("confinedPath refuses node_modules", confinedPath(here, "node_modules/dep/index.js") === null);
+check("confinedPath refuses nested node_modules", confinedPath(here, "desktop/node_modules/dep/index.js") === null);
+check("confinedPath refuses the root itself", confinedPath(here, ".") === null);
+
+const pidFile = join(work, "grandchild.pid");
+const spinner = `require("fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); for (;;) {}`;
+const parentSrc = `const { spawn } = require("child_process"); spawn(process.execPath, ["-e", ${JSON.stringify(spinner)}], { stdio: "ignore" }); setInterval(() => {}, 1000);`;
+const parent = spawn(process.execPath, ["-e", parentSrc], { stdio: "ignore", detached: process.platform !== "win32" });
+const deadline = Date.now() + 10000;
+while (!existsSync(pidFile) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+const grandchild = existsSync(pidFile) ? Number(readFileSync(pidFile, "utf8")) : 0;
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+check("grandchild is running before the kill", grandchild > 0 && alive(grandchild));
+killTree(parent);
+const gone = Date.now() + 10000;
+while (alive(grandchild) && Date.now() < gone) await new Promise((r) => setTimeout(r, 50));
+check("killTree stops the grandchild too", grandchild > 0 && !alive(grandchild));
+rmSync(work, { recursive: true, force: true });
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

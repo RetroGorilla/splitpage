@@ -1,11 +1,10 @@
-import { spawn } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 
-const EXCLUDED = new Set(["node_modules", ".git"]);
 const DEFAULT_TIMEOUT_MS = 300000;
 
 export function defaultConcurrency() {
@@ -72,19 +71,35 @@ process.exitCode = runTests({
 });
 `;
 
-export function makeScratch(repo, parent) {
+export function confinedPath(root, file) {
+  const base = resolve(root);
+  const target = resolve(base, file);
+  const rel = relative(base, target);
+  if (rel === "" || rel.startsWith("..") || resolve(rel) === rel) return null;
+  if (rel.split(sep).includes("node_modules")) return null;
+  return target;
+}
+
+export function makeScratch(repo, parent, files) {
   const dir = mkdtempSync(join(parent, "mutant-"));
   const root = resolve(repo);
-  cpSync(root, dir, {
-    recursive: true,
-    filter: (src) => {
-      const rel = src.slice(root.length + 1);
-      return !EXCLUDED.has(rel.split(sep)[0]);
-    }
-  });
+  for (const f of files) {
+    const to = join(dir, f);
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(join(root, f), to);
+  }
   const modules = join(root, "node_modules");
   if (existsSync(modules)) symlinkSync(modules, join(dir, "node_modules"), "junction");
   return dir;
+}
+
+export function killTree(child) {
+  if (child.pid === undefined) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    return;
+  }
+  try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
 }
 
 function childEnv() {
@@ -95,9 +110,9 @@ function childEnv() {
 
 function runChild(scratch, files, only, timeoutMs, node) {
   return new Promise((resolveRun) => {
-    const child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, JSON.stringify(files), JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv() });
+    const child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, JSON.stringify(files), JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
     child.on("error", () => { clearTimeout(timer); resolveRun({ code: -1, timedOut }); });
     child.on("close", (code) => { clearTimeout(timer); resolveRun({ code, timedOut }); });
   });
@@ -108,11 +123,12 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
   const done = (status, detail, extra = {}) => ({ label: mutant.label, status, detail, ms: Date.now() - started, ...extra });
   let scratch;
   try {
-    const original = join(repo, mutant.file);
+    const original = confinedPath(repo, mutant.file);
+    if (!original) return done("error", `${mutant.file} is outside the repository or under node_modules`);
     if (!existsSync(original)) return done("error", `${mutant.file} not found`);
     const edit = applyEdit(readFileSync(original, "utf8"), mutant.find, mutant.replace);
     if (edit.error) return done("error", edit.error);
-    scratch = makeScratch(repo, parent);
+    scratch = makeScratch(repo, parent, files);
     writeFileSync(join(scratch, mutant.file), edit.text);
     const run = await runChild(scratch, files, mutant.tests, timeoutMs, node);
     if (run.timedOut) return done("caught", "timeout");
@@ -127,7 +143,7 @@ export async function runMutant(mutant, { repo, files, parent, timeoutMs, node, 
 }
 
 export async function baselinePasses({ repo, files, parent, timeoutMs, node, tests }) {
-  const scratch = makeScratch(repo, parent);
+  const scratch = makeScratch(repo, parent, files);
   try {
     const run = await runChild(scratch, files, tests, timeoutMs, node);
     return run.code === 0 && !run.timedOut;
