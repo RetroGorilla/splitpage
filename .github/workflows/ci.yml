@@ -18,7 +18,7 @@ env:
 
 jobs:
   changes:
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
@@ -41,7 +41,7 @@ jobs:
   checks:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
@@ -135,7 +135,7 @@ jobs:
   node-24:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -153,7 +153,7 @@ jobs:
   gate:
     needs: [changes, checks, node-24]
     if: always()
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
