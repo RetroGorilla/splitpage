@@ -252,7 +252,7 @@ rightToday("S2", "a hosted save that completes after a same-id reopen does not m
   assert.equal(server.texts("srv-a")[0], "Typed before the save.", "the server still holds the saved text after the next edit");
 }));
 
-wrongToday("S3", "a tab pointed at another server mid-save sends none of the remaining uploads or the PUT there", hostedCase(async ({ server, held }) => {
+rightToday("S3", "a tab pointed at another server mid-save sends none of the remaining uploads or the PUT there", hostedCase(async ({ server, held }) => {
   const first = intern(pngBytes(40, 30));
   const second = intern(pngBytes(41, 30));
   const doc = script("Pictures", idOf("a"));
@@ -270,7 +270,7 @@ wrongToday("S3", "a tab pointed at another server mid-save sends none of the rem
   await settle();
   const strays = held.requests.filter((r) => r.url.startsWith("http://other.test/")).map((r) => r.method + " " + r.url);
   assert.deepEqual(strays, [], "no request of the save reached the server the tab was pointed at later: " + strays.join(", "));
-}), /no request of the save reached the server the tab was pointed at later/);
+}));
 
 async function requestsOfSaveChangedMidway(change) {
   let sent = [];
@@ -308,12 +308,12 @@ rightToday("S4", "a token, role or scope change mid-save is seen as a different 
   }
 });
 
-wrongToday("S4-token", "a token changed mid-save is carried by no request of that save", async (t) => {
+rightToday("S4-token", "a token changed mid-save is carried by no request of that save", async (t) => {
   mockClock(t);
   const sent = await requestsOfSaveChangedMidway({ token: "another-token" });
   const carrying = sent.filter((r) => r.headers["x-splitpage-token"] === "another-token").map((r) => r.method + " " + r.url);
   assert.deepEqual(carrying, [], "no request of the save carries the token set mid-save: " + carrying.join(", "));
-}, /no request of the save carries the token set mid-save/);
+});
 
 rightToday("S5", "an edit during a hosted save leaves the document dirty", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
@@ -372,7 +372,7 @@ rightToday("S6-switch", "a 409 that arrives after the document was switched merg
   assert.equal(puts(held, "srv-a").length, 1, "no retry was sent");
 }));
 
-wrongToday("S6-reopen", "a 409 that arrives after a same-id reopen merges nothing and sends no retry", hostedCase(async ({ server, held }) => {
+rightToday("S6-reopen", "a 409 that arrives after a same-id reopen merges nothing and sends no retry", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
   openHosted(script("A", idOf("a")), "srv-a", 1);
   editRow(0, "Mine.");
@@ -389,7 +389,7 @@ wrongToday("S6-reopen", "a 409 that arrives after a same-id reopen merges nothin
   assert.equal(conflicts.length, 1, "setup: the first save was answered 409");
   assert.equal(puts(held, "srv-a").length, 1, "no retry was sent for the save of the replaced session");
   assert.deepEqual(summary(), before, "the reopened session was not touched by the conflict");
-}), /no retry was sent for the save of the replaced session|the reopened session was not touched by the conflict/);
+}));
 
 rightToday("S7", "overlapping manual and automatic saves send one PUT at a time per document", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
