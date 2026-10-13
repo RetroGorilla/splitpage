@@ -467,7 +467,7 @@ async function importFrom(target) {
   assert.equal(homeModule.home.dirty, false, "and nothing unsaved");
 }
 
-wrongToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", scene(async () => {
+rightToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", scene(async () => {
   const target = importDocument();
   await importFrom(target);
   const imported = homeModule.home;
@@ -484,7 +484,7 @@ wrongToday("I1", "an edit while import writeback awaits its bytes leaves the imp
   await saving;
   assert.equal(target.commits.length, 1, "the file was written");
   assert.equal(imported.dirty, true, "the import home is still unsaved after an edit made while its bytes were prepared");
-}), /the import home is still unsaved after an edit made while its bytes were prepared/);
+}));
 
 rightToday("I2", "import writeback acknowledges only the import home", scene(async () => {
   const target = importDocument();
