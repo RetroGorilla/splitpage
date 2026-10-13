@@ -5,7 +5,8 @@ import { productionReaders, withDocumentPorts } from "../../src/legacy/document-
 import { STATE_FIELDS, migrateRows } from "../../src/js/02-state.js";
 import * as state from "../../src/js/02-state.js";
 import { deriveDocId, loadInitialState, migrateDocument } from "../../src/js/02b-doc-id.js";
-import { has, inlineStateImages, recordFor, setBackend } from "../../src/js/02c-blobs.js";
+import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/js/02c-blobs.js";
+import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/js/03-sync.js";
 import * as tags from "../../src/js/07-production-tags.js";
 import { checksumText } from "../../src/js/20b-onboarding.js";
@@ -49,6 +50,18 @@ test("a pass records its pictures, and interns then persists them once it ends, 
   assert.equal(has(a.sha256) && has(b.sha256), true);
   assert.deepEqual(recordFor(a.sha256), a.record);
   assert.deepEqual(await settled(), [{ sha: b.sha256, interned: true }, { sha: a.sha256, interned: true }]);
+});
+
+test("a pass leaves each picture in the registry as the bytes it decoded, under those bytes' own hash", async () => {
+  const a = image("png", 98, 3), b = image("jpeg", 99, 3);
+  withDocumentPorts(STATE_FIELDS, (ports) => ports.sanitize('<img src="' + a.dataUrl + '"><img src="' + b.dataUrl + '">'));
+  for (const pic of [a, b]) {
+    const held = Buffer.from((dataUrlForSync(pic.sha256) as string).split(",")[1] as string, "base64");
+    assert.deepEqual(new Uint8Array(held), pic.bytes);
+    assert.equal(createHash("sha256").update(held).digest("hex"), pic.sha256);
+    assert.deepEqual(recordFor(pic.sha256), pic.record);
+  }
+  assert.deepEqual((await settled()).map((p) => p.sha), [a.sha256, b.sha256]);
 });
 
 test("a pass that throws still keeps the pictures it decoded", async () => {

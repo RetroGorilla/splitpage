@@ -20,6 +20,16 @@ export interface DecodedImage {
 
 export interface ImageIngestion extends ImageSource {
   pending: () => DecodedImage[];
+  take: () => DecodedImage[];
+}
+
+const handedOver: WeakMap<Uint8Array, string> = new WeakMap();
+
+export function claimHandedOver(image: DecodedImage): boolean {
+  const sha = handedOver.get(image.bytes);
+  if (sha === undefined) return false;
+  handedOver.delete(image.bytes);
+  return sha === image.ref.sha256;
 }
 
 export type MediaField = "visualText" | "audioText";
@@ -123,28 +133,30 @@ function freshRef(ref: ImageRef): ImageRef {
 }
 
 export function createImageIngestion(known: (sha: string) => ImageRef | null): ImageIngestion {
-  const pending: Record<string, DecodedImage> = Object.create(null);
-  const order: string[] = [];
+  let pending: Map<string, DecodedImage> = new Map();
   return {
     known: function (sha) {
-      const held = pending[sha];
+      const held = pending.get(sha);
       return held ? freshRef(held.ref) : known(sha);
     },
     fromDataUrl: function (url) {
       const decoded = decodeImageDataUrl(url);
       if (!decoded) return null;
-      const sha = decoded.ref.sha256;
-      if (!pending[sha]) {
-        pending[sha] = decoded;
-        order.push(sha);
-      }
+      if (!pending.has(decoded.ref.sha256)) pending.set(decoded.ref.sha256, decoded);
       return freshRef(decoded.ref);
     },
     pending: function () {
-      return order.map(function (sha) {
-        const held = pending[sha] as DecodedImage;
+      return Array.from(pending.values(), function (held) {
         return { ref: freshRef(held.ref), bytes: held.bytes.slice() };
       });
+    },
+    take: function () {
+      const taken = Array.from(pending.values(), function (held) {
+        handedOver.set(held.bytes, held.ref.sha256);
+        return { ref: freshRef(held.ref), bytes: held.bytes };
+      });
+      pending = new Map();
+      return taken;
     }
   };
 }
