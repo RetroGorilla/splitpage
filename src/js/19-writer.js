@@ -80,19 +80,27 @@ function writerCaretState() {
 }
 
 export function renderWriter() {
-  whilePainting(paintWriter);
+  whilePainting(function () { paintWriterDraw(drawWriter()); });
 }
 
-function paintWriter() {
+export function drawWriter() {
+  return {
+    title: S.state.title || "",
+    readOnly: !editAllowed(),
+    html: S.state.rows.length ? renderRowGroups(S.state.rows, writerBlockHtml) : null
+  };
+}
+
+export function paintWriterDraw(draw) {
   var doc = document.getElementById("writer-doc");
   var caret = writerCaretState();
   var titleEl = document.getElementById("writer-title");
-  if (document.activeElement !== titleEl) titleEl.value = S.state.title || "";
-  titleEl.readOnly = !editAllowed();
-  if (!S.state.rows.length) {
+  if (document.activeElement !== titleEl) titleEl.value = draw.title;
+  titleEl.readOnly = draw.readOnly;
+  if (draw.html === null) {
     doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
   } else {
-    doc.innerHTML = renderRowGroups(S.state.rows, writerBlockHtml);
+    doc.innerHTML = draw.html;
     doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
   }
   S.writerLastCell = null;

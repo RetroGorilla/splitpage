@@ -1815,7 +1815,7 @@ function init() {
   document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
 
   document.addEventListener("focusin", function (e) {
-    if (!writerOpen) return;
+    if (!writerOpen || paintingScreen()) return;
     var el = e.target;
     if (!el || !el.closest) return;
     if (el.closest("#writer")) return;
