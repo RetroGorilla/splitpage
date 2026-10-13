@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { applyEdit, confinedPath, formatTable, killTree, loadMutants, makeScratch, parseArgs, summarize } from "./mutants.mjs";
 
 let passed = 0;
@@ -104,6 +105,32 @@ killTree(parent);
 const gone = Date.now() + 10000;
 while (alive(grandchild) && Date.now() < gone) await new Promise((r) => setTimeout(r, 50));
 check("killTree stops the grandchild too", grandchild > 0 && !alive(grandchild));
+
+if (process.platform === "win32") {
+  console.log("  SKIP interrupt test — signals differ on Windows");
+} else {
+  const tmp = mkdtempSync(join(tmpdir(), "mutants-int-"));
+  try {
+    const config = join(tmp, "hang.json");
+    writeFileSync(config, JSON.stringify({
+      tests: ["tests/core/document/timing.test.ts"],
+      mutants: [{ label: "hang", file: "src/core/document/timing.ts", find: "export const DEFAULT_WPM = 150;", replace: "export const DEFAULT_WPM = 150; while (true) {}" }]
+    }));
+    const script = join(dirname(fileURLToPath(import.meta.url)), "mutants.mjs");
+    const runner = spawn(process.execPath, [script, config, "--no-baseline"], { stdio: "ignore", env: { ...process.env, TMPDIR: tmp } });
+    const exited = new Promise((r) => runner.on("close", (code, signal) => r({ code, signal })));
+    const leftovers = () => spawnSync("pgrep", ["-f", tmp], { encoding: "utf8" }).stdout.split("\n").filter((l) => l && Number(l) !== process.pid && Number(l) !== runner.pid);
+    const until = async (fn, ms) => { const end = Date.now() + ms; while (!fn() && Date.now() < end) await new Promise((r) => setTimeout(r, 100)); return fn(); };
+    const started = await until(() => leftovers().length > 0, 60000);
+    check("a hanging mutant's tests start", started);
+    runner.kill("SIGINT");
+    const result = await exited;
+    check("SIGINT ends the run with 130", result.code === 130, JSON.stringify(result));
+    check("SIGINT leaves no test process behind", await until(() => leftovers().length === 0, 10000));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
 rmSync(work, { recursive: true, force: true });
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);

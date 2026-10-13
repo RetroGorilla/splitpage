@@ -102,6 +102,13 @@ export function killTree(child) {
   try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
 }
 
+const running = new Set();
+
+export function killRunning() {
+  for (const child of running) killTree(child);
+  running.clear();
+}
+
 function childEnv() {
   const env = { ...process.env };
   delete env.GOLDEN_UPDATE;
@@ -111,10 +118,11 @@ function childEnv() {
 function runChild(scratch, files, only, timeoutMs, node) {
   return new Promise((resolveRun) => {
     const child = spawn(node, ["--input-type=module", "-e", CHILD, scratch, JSON.stringify(files), JSON.stringify(only)], { cwd: scratch, stdio: "ignore", env: childEnv(), detached: process.platform !== "win32" });
+    running.add(child);
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; killTree(child); }, timeoutMs);
-    child.on("error", () => { clearTimeout(timer); resolveRun({ code: -1, timedOut }); });
-    child.on("close", (code) => { clearTimeout(timer); resolveRun({ code, timedOut }); });
+    child.on("error", () => { running.delete(child); clearTimeout(timer); resolveRun({ code: -1, timedOut }); });
+    child.on("close", (code) => { running.delete(child); clearTimeout(timer); resolveRun({ code, timedOut }); });
   });
 }
 
@@ -204,6 +212,18 @@ export async function main(args, { repo = REPO, print = console.log, printError 
   }
   const files = listRepoFiles(repo).filter((p) => existsSync(join(repo, p)));
   const parent = mkdtempSync(join(tmpdir(), "splitpage-mutants-"));
+  const interrupt = (signal, code) => () => {
+    killRunning();
+    if (!opts.keep) {
+      try { rmSync(parent, { recursive: true, force: true }); } catch {}
+    }
+    printError(`mutants: interrupted by ${signal}`);
+    process.exit(code);
+  };
+  const onInt = interrupt("SIGINT", 130);
+  const onTerm = interrupt("SIGTERM", 143);
+  process.on("SIGINT", onInt);
+  process.on("SIGTERM", onTerm);
   const base = { repo, files, parent, timeoutMs: opts.timeoutMs, node, keep: opts.keep };
   try {
     if (opts.baseline) {
@@ -222,6 +242,8 @@ export async function main(args, { repo = REPO, print = console.log, printError 
     for (const r of results.filter((x) => x.status === "error")) print(`error: ${r.label}: ${r.detail}`);
     return s.errors > 0 ? 2 : 0;
   } finally {
+    process.off("SIGINT", onInt);
+    process.off("SIGTERM", onTerm);
     if (!opts.keep) rmSync(parent, { recursive: true, force: true });
     else print(`scratch copies kept under ${parent}`);
   }
