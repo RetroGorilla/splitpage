@@ -423,7 +423,7 @@ export function queueAutoSave() {
   if (!autoSaveAllowed()) return;
   clearAutoSaveTimers();
   if (saveRunning() && !autoSaveWriting) { scheduleAutoSave(); return; }
-  requestSave({ kind: "autosave" });
+  Promise.resolve().then(function () { return requestSave({ kind: "autosave" }); }).catch(function () {});
 }
 
 function writeAutoSave(job) {
