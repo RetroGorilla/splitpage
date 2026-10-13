@@ -343,7 +343,7 @@ export function restorePastePlace(cellEl, place) {
 }
 
 export function showPictureNotAdded() {
-  showToast("The picture finished loading after you opened another script, so it was not added.", "warn");
+  showToast("The picture finished loading after the script changed, so it was not added.", "warn");
 }
 
 export function handleImageFile(rowId, file, slot) {

@@ -312,7 +312,10 @@ function retryThumbnail() {
   paint();
   fetchThumbnailRecord(poster.href).then(function (rec) {
     if (view && view.fetching === key) view.fetching = null;
-    if (!stillOwns(ctx)) return;
+    if (!stillOwns(ctx)) {
+      if (view) refreshGalleryOverlay();
+      return;
+    }
     var done = rec && rowOf(rowId) && galleryEdit(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
     if (!done) showToast("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && view.rowId === rowId) refreshGalleryOverlay();
