@@ -73,6 +73,8 @@ import { startActions } from "../bootstrap/actions.ts";
 import { documentIdentityPort, liveDocumentPort } from "./02b-doc-id.js";
 import { documentDestinationPort } from "./03-sync.js";
 import { startTransitions } from "../legacy/transition-bridge.ts";
+import { startRecovery } from "../legacy/recovery-bridge.ts";
+import { draftRecoveryPorts } from "./20g-drafts.js";
 
 init_00_prelude();
 init_00p_prefs();
@@ -145,4 +147,5 @@ init_20k_phone_bar();
 init_20s_settings();
 init_21_events();
 startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
+startRecovery(draftRecoveryPorts());
 startActions(appActions, window);
