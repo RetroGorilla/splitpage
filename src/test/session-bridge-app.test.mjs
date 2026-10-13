@@ -23,7 +23,13 @@ after(closeApp);
 
 const session = liveSession();
 const heard = [];
-session.subscribe((c) => heard.push(c.kind));
+let stopHearing = session.subscribe((c) => heard.push(c.kind));
+
+function listen() {
+  stopHearing();
+  heard.length = 0;
+  stopHearing = session.subscribe((c) => heard.push(c.kind));
+}
 
 const held = () => session.read((doc) => doc);
 
@@ -47,7 +53,7 @@ test("the booted app's session holds the live document it adopted when the file 
 
 test("markDirty is one session edit: one generation, one S.editSeq, dirty, and one undo entry once the edit is flushed", () => {
   const gen = session.generation(), seq = S.editSeq, entries = undoSizes().undo;
-  heard.length = 0;
+  listen();
   S.state.rows[0].audioText = "One, edited.";
   markDirty();
   assert.equal(session.generation(), gen + 1);
@@ -61,9 +67,12 @@ test("markDirty is one session edit: one generation, one S.editSeq, dirty, and o
 
 test("opening another document, or restoring one with the same id, opens a new epoch and is no edit", () => {
   const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
+  listen();
   startNewScript();
-  assert.equal(session.epoch(), epoch + 1);
+  assert.equal(session.epoch(), epoch + 1, "a new script is adopted at the transition, with no flush or render first");
   assert.equal(held(), S.state);
+  assert.deepEqual(heard, [], "and its session is a new one: a subscription made for the old document hears nothing of it");
+  listen();
   const docId = S.state.docId;
   adoptRestoredState(cloneState(S.state));
   assert.equal(S.state.docId, docId, "the same document id");
@@ -81,7 +90,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
   const epoch = session.epoch(), gen = session.generation();
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
-  heard.length = 0;
+  listen();
   applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "server-conflict", report: false });
   assert.deepEqual(heard, ["adopt", "server"], "12a adopts the swapped-in document as the merge flushes, then the merge lands");
   assert.equal(session.epoch(), epoch + 1);
@@ -105,7 +114,7 @@ test("a server update over undo entries forgets the ones on a field their side c
   const epoch = session.epoch();
   const theirs = cloneState(S.state);
   theirs.rows[1].visualText = "Their close.";
-  heard.length = 0;
+  listen();
   applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.epoch(), epoch);
@@ -123,7 +132,7 @@ test("a reported merge marks the document dirty and advances S.editSeq as before
   const mine = cloneState(base);
   mine.rows[0].audioText = "Mine.";
   const gen = session.generation(), seq = S.editSeq;
-  heard.length = 0;
+  listen();
   applyMerge({ base: base, mine: mine, theirs: theirs, source: "server-conflict" });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.generation(), gen);
@@ -137,7 +146,7 @@ test("a reload in place is its own kind: same epoch, no generation, S.editSeq an
   await openProjectFile(disk, handle, { skipSnapshot: true });
   const doc = S.state;
   const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
-  heard.length = 0;
+  listen();
   disk = new File(["Wide\tOne, again.\nClose\tTwo."], "reload.txt", { lastModified: 2 });
   await reloadFileFromDisk();
   assert.equal(S.state, doc, "reloaded in place");
@@ -156,7 +165,7 @@ test("a reload into a document swapped in with no flush lands in the document th
   const beforeText = JSON.stringify(before);
   S.state = cloneState(script("Swapped"));
   const doc = S.state;
-  heard.length = 0;
+  listen();
   const taken = noteReload({ title: "Reloaded", rows: [{ id: "r1", visualText: "Wide", audioText: "Reloaded." }] });
   assert.equal(S.state, doc);
   assert.equal(taken, doc);
@@ -180,7 +189,7 @@ test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kep
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Server.";
   const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
-  heard.length = 0;
+  listen();
   applyMerge({ base: base, mine: S.state, theirs: theirs, source: "server-resume", newBase: cloneState(theirs), noAutoSave: true });
   assert.deepEqual(heard, ["recovery"]);
   assert.equal(session.epoch(), epoch + 1);
@@ -206,7 +215,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   };
   try {
     const epoch = session.epoch(), gen = session.generation();
-    heard.length = 0;
+    listen();
     await applyTakenDraft({
       header: { origin: { kind: "file", fileName: "disk.splitpage" }, docIdWrittenOut: true },
       file: { id: "f1", name: "disk.splitpage" },
@@ -224,7 +233,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
     S.DESKTOP = desktop;
   }
   const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
-  heard.length = 0;
+  listen();
   await applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(script("Untitled draft")) });
   assert.deepEqual(heard, ["adopt"]);
   assert.equal(session.epoch(), epoch + 1);
@@ -236,7 +245,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
 
 test("importing a file is an adoption that marks the document dirty and advances S.editSeq as before, with no edit generation", async () => {
   const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
-  heard.length = 0;
+  listen();
   await openProjectFile(new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), null, { skipSnapshot: true });
   assert.deepEqual(heard, ["adopt"]);
   assert.equal(session.epoch(), epoch + 1);
@@ -256,7 +265,7 @@ test("restoring a version from history is an adoption that marks the document di
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);
   const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
-  heard.length = 0;
+  listen();
   assert.equal(await restoreSnapshotFromCard(button), "restored");
   assert.equal(S.state.rows[0].audioText, "As it was.");
   assert.deepEqual(heard, ["adopt"]);

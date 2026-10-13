@@ -240,14 +240,14 @@ function serverFetch(answerFor) {
   return held;
 }
 
-adoptionLag("T2a", "a new document opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2a", "a new document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before new"));
   const epoch = session.epoch();
   const events = await traced(() => startNewScript());
   assertAdoptedAtOnce(events, epoch);
 });
 
-adoptionLag("T2a-tab", "a new tab's blank document opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2a-tab", "a new tab's blank document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before new tab"));
   const epoch = session.epoch();
   const events = await traced(async () => {
@@ -258,7 +258,7 @@ adoptionLag("T2a-tab", "a new tab's blank document opens its epoch at the transi
   assertAdoptedAtOnce(events, epoch);
 });
 
-adoptionLag("T2a-boot","the boot document opens its epoch at the transition, not at the next render", () => {
+rightToday("T2a-boot", "the boot document opens its epoch at the transition, not at the next render", () => {
   assert.ok(bootTrace.events.some((e) => e.field === "state" && e.value !== null), "the boot assigned a document");
   const late = firstWriteBeforeAdoption(bootTrace.events, "state");
   assert.equal(late, null, "the session already held the boot document at every write that follows its assignment: " + JSON.stringify(late));
@@ -540,7 +540,7 @@ rightToday("T6", "with autosave off, nothing is scheduled after a restore or an 
   }
 });
 
-wrongToday("L1a", "a refresh the old document asked for does not run once the document was replaced", async (t) => {
+rightToday("L1a", "a refresh the old document asked for does not run once the document was replaced", async (t) => {
   const clock = mockClock(t);
   const jobs = [];
   provideRefreshRunner((due) => jobs.push(...due));
@@ -552,7 +552,7 @@ wrongToday("L1a", "a refresh the old document asked for does not run once the do
   jobs.length = 0;
   clock.tick(5000);
   assert.equal(jobs.includes("m4-old-document"), false, "the old document's refresh did not run after the replacement: " + jobs.join(","));
-}, /the old document's refresh did not run after the replacement/);
+});
 
 rightToday("L1b", "an autosave or draft the old document armed writes nothing for itself once the document was replaced", async (t) => {
   const clock = mockClock(t);
@@ -578,6 +578,23 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
   } finally {
     restore();
   }
+});
+
+rightToday("L1d", "no subscription made for the old document survives its replacement", () => {
+  useDocument(script("Subscribed"));
+  const heardOld = [];
+  liveSession().subscribe((change) => heardOld.push(change.kind));
+  S.state.rows[0].audioText = "Typed in the old document.";
+  markDirty();
+  assert.deepEqual(heardOld, ["edit"], "setup: the subscription hears the document it was made for");
+  startNewScript();
+  assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+  const heardNew = [];
+  liveSession().subscribe((change) => heardNew.push(change.kind));
+  S.state.rows[0].audioText = "Typed in the replacement.";
+  markDirty();
+  assert.deepEqual(heardOld, ["edit"], "the old document's subscription heard nothing after the replacement");
+  assert.deepEqual(heardNew, ["edit"], "a subscription made for the replacement hears it");
 });
 
 wrongToday("L1c", "an object URL made for the old document's session video is revoked once the document was replaced", async () => {

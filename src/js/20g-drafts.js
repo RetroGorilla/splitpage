@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { conn, fileHome, home, importHome, setHome } from "./_home.js";
+import { conn, fileHome, home, importHome, setHome, stillOnServer } from "./_home.js";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, persist } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
@@ -851,7 +851,7 @@ export function armBrowserServerDraft(docId) {
   return browserDraftStore().get(key).then(function (rec) {
     if (!rec) return false;
     return browserWriterIsLive(rec.writerId).then(function (live) {
-      if (live || via !== conn || draftRestorePending || S.draftServerResume) return false;
+      if (live || !stillOnServer(via) || draftRestorePending || S.draftServerResume) return false;
       var t = takenFromBrowserDraft(rec, key);
       armServerDraftResume(t);
       if (!S.draftServerResume) return false;

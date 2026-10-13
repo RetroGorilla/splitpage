@@ -294,7 +294,7 @@ async function requestsOfSaveChangedMidway(change) {
   return sent;
 }
 
-wrongToday("S4", "a token, role or scope change mid-save is seen as a different connection", async (t) => {
+rightToday("S4", "a token, role or scope change mid-save is seen as a different connection", async (t) => {
   const changes = [
     ["token", { token: "another-token" }],
     ["role", { role: "review" }],
@@ -306,7 +306,7 @@ wrongToday("S4", "a token, role or scope change mid-save is seen as a different 
     const used = new Set(sent.map((r) => r.connection));
     assert.equal(used.size, 2, "a token, role or scope change mid-save is a different connection (" + name + ")");
   }
-}, /a token, role or scope change mid-save is a different connection/);
+});
 
 wrongToday("S4-token", "a token changed mid-save is carried by no request of that save", async (t) => {
   mockClock(t);
