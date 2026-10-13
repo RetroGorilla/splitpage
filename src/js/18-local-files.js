@@ -602,6 +602,8 @@ export async function saveBackToFile(opts) {
   var imported = importHome();
   if (!imported) return;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
+  var docIdAtBuild = S.state.docId;
+  var seqAtBuild = S.editSeq;
   var built;
   try {
     built = await buildFileData(imported.format, baseName);
@@ -609,8 +611,6 @@ export async function saveBackToFile(opts) {
     showToast("Could not build the file.", "error");
     return;
   }
-  var docIdAtBuild = S.state.docId;
-  var seqAtBuild = S.editSeq;
   function bytesStillCurrent() {
     return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
   }

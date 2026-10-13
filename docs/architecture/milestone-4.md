@@ -145,7 +145,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | F7 | A handle whose permission is refused fails without retargeting and without a write: the open file's handle (the `getFile` of the conflict check is refused) and a Save As picked handle (`createWritable` is refused) | right (measured) | stays |
 | F8 | After a write, the baseline timestamp is the one that write produced, not a later read's | wrong (measured, desktop: the home takes the timestamp of the `readFile` that follows the write, so a change in between replaces the write's own) | 4.13 |
 | F9 | No history copy happens before the write is confirmed, and a save never waits on a history write that does not resolve (INV-36, INV-39). Measured on the desktop, where `historyCopy` can be held | right (measured) | stays |
-| I1 | An edit while import writeback awaits its bytes leaves the import home dirty. The bytes wait on a held blob load; the case claims no byte capture (Spec notes) | wrong (measured: `docIdAtBuild` and `seqAtBuild` are taken after the build, so the edit counts as written and the import home reads saved) | 4.12 |
+| I1 | An edit while import writeback awaits its bytes leaves the import home dirty. The bytes wait on a held blob load; the case claims no byte capture (Spec notes) | right since 4.6: `saveBackToFile` takes `docIdAtBuild` and `seqAtBuild` before the build, where `buildFileData` captures (was wrong, measured: taken after the build, so the edit counted as written and the import home read saved) | 4.6 |
 | I2 | Import writeback acknowledges only the import home | right (measured) | stays |
 | D1 | An export or download acknowledges nothing. The case runs the md, html, csv and txt exports in the browser and the md export on the desktop. It does not cover Save's own download fallback, which by the code sets the baseline and clears the dirty state when the download succeeds (`saveDoc`'s no-handle branch); Ruled in the review of #537: Save's download fallback stays as today's behaviour and is outside D1's scope | right (measured, exports only) | stays |
 | S1 | A hosted save whose document is switched for another acknowledges nothing in the new one | right (measured) | stays |
@@ -253,7 +253,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 - `13-hosted.js`: 4.9 (`publishAndCopyShareLink`'s save), then 4.14 (the save chain and transport), then 4.15 (open, resume, pull, publish) and 4.16 (connect, roles, Drive) in parallel. If Adam prefers strictly disjoint files, 4.16 waits for 4.15, which adds one PR to the critical path.
 - `21-events.js`: 4.8 (the boot load), then 4.9 (the save-error retry, the conflict overwrite and copy), then 4.18 (the resume check), 4.20 (`insertIntoScriptCell`) and 4.21 (the focus handlers) in parallel.
 - `03-sync.js`: 4.9 (`setBaseState`), then 4.15 (`applyMerge`) and 4.18 (`restoreSnapshot`) in parallel.
-- `18-local-files.js`: 4.6 (`buildFileData`'s md and html branches), then 4.12 (`saveBackToFile`, the open and import adoption, the `.html` open parse); 4.11 runs beside 4.12 and calls the file's conflict, delivery and chip functions without editing them. If 4.11 finds it must change one of them, it waits for 4.12.
+- `18-local-files.js`: 4.6 (`buildFileData`'s md and html branches, and the two lines of `saveBackToFile` that take the edit generation), then 4.12 (`saveBackToFile`, the open and import adoption, the `.html` open parse); 4.11 runs beside 4.12 and calls the file's conflict, delivery and chip functions without editing them. If 4.11 finds it must change one of them, it waits for 4.12.
 
 Others are shared only by PRs that dependency already orders: `14-export.js` (4.6, then 4.9 on `queueAutoSave`, `scheduleAutoSave` and `saveDoc`'s entry, then 4.11 on `saveDoc`'s body), `02b-doc-id.js` (4.6, then 4.18), `12-dirty-toast.js` (4.7, then 4.9), `20g-drafts.js` (4.17, then 4.18), `20f-desktop.js` (4.9, then 4.13) and `session-bridge.ts` (4.7, then 4.8).
 
@@ -310,7 +310,7 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 - F1, F2 green. Suites 19, 22, 24, 28, 42, 60, 185 to 187, 249, 269, 270, 283, 285. Desktop groups `open/save`, `save-in-place`, `duplicate document id`, `history:`.
 
 **4.12 Import writeback and file open.**
-- `saveBackToFile` captures before it builds (I1) and completes through the coordinator for the import destination only (I2). `deliverFile` stays the download path both writers call.
+- `saveBackToFile` completes through the coordinator for the import destination only (I2). `deliverFile` stays the download path both writers call.
 - `adoptProjectState` and `loadFileIntoEditor` (both its import branch and its reload branch through `noteReload`) go through the transition API (T2b).
 - #501 (D9): read the `state-data` script from the raw text before the bounded parse, so T4 passes and no file that opens today is refused.
 - Suites 17, 35, 42, 46, 261; `open-html-bound.test.mjs`. Desktop group `open/save`.
@@ -388,7 +388,7 @@ None of the measured defects is cheap data loss reachable today: each needs an o
 | `saveDoc` lowers `rev` on whatever document is live; a same-id reopen passes its checks | F1, F2 | 4.11 | the F cases |
 | Direct `saveDoc` and `saveToServer` callers are not serialized | F5, S7, S10 | 4.9 | — |
 | Desktop baseline taken from a second read | F8 | 4.13 | — |
-| Import writeback captures after building | I1 | 4.12 | — |
+| Import writeback captures after building | I1 | 4.6 | — |
 | Requests of one save follow the live connection; token changes are invisible | S3, S4 | 4.8, 4.14 | — |
 | Hosted completion after a same-id reopen | S2 | 4.14 | — |
 | Publish orphan unreported | P1 | 4.15 | — |
@@ -446,7 +446,7 @@ Where the spec does not match the measured code, and what this plan does instead
 - **Fourteen sites, twelve adoptions.** Two of the 14 `S.state` assignments set `null` (the prelude's initial value and the boot reset). The target is 9 assigners → 2, not 0.
 - **Publish adopts nothing.** It changes the document id and the destination; the transition API's `publish` covers identity, not adoption.
 - **The capture contract reaches further than five functions.** `buildMarkdownProject` and `toMarkdownDoc` read the live document through `appendMarkdownTail`, `breakdownRows`, `commentEntries`, `sceneFacts`, `commentNumbers`, `appendExportTail` and the picture helpers; those take the captured document too (4.6). `settleDerivedRecords` writes the live document before every save that goes through `saveDoc` (#325) and stays the named exception until milestone 6.
-- **Import writeback in other formats still reads the live document.** For `.docx`, `.csv` and `.txt`, `saveBackToFile` builds through `buildDocx`, `buildCsv` and `htmlToPlainScript`, which read the live document after `ensureBytes` until milestone 5 gives them the captured document. 4.12 captures the edit generation before the build, so I1 proves only that the file stays unsaved after a later edit; the bytes written can still include that edit, and 4.12 claims no byte capture for those formats.
+- **Import writeback in other formats still reads the live document.** For `.docx`, `.csv` and `.txt`, `saveBackToFile` builds through `buildDocx`, `buildCsv` and `htmlToPlainScript`, which read the live document after `ensureBytes` until milestone 5 gives them the captured document. 4.6 takes the edit generation before the build (moved forward from 4.12: once `buildFileData` captured before `ensureBytes`, the `.md` writeback would otherwise drop an edit and read saved), so I1 proves only that the file stays unsaved after a later edit; the bytes written can still include that edit, and 4.12 claims no byte capture for those formats.
 - **#320 has a third hash.** Besides the ingestion port's double hash and copy, every IndexedDB load re-hashes and copies through `loadBlob` → `intern`. 4.5 measures it with the rest.
 - **The "existing injected IndexedDB draft store"** is a lazy module singleton injected only through a test hook; D3 replaces it with an explicit constructor (4.17).
 - **Strict expected failures.** "Cases failing where today's code is wrong" needs a wrapper that fails when such a case starts passing; node's `todo` does not (4.0).
