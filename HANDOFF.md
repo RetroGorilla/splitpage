@@ -788,7 +788,8 @@ tabs**.
 - **The browser keeps drafts too, for server documents only** (PR #233 —
   a Collaborate guest has no desktop app). `20g-drafts.js` is one writer
   and one restore over a pluggable backend: `S.DESKTOP` → the bridge
-  above; otherwise `03d-drafts-idb.js` (IndexedDB `splitpage-drafts` v1:
+  above (`src/adapters/storage/draft-store-desktop.ts`); otherwise the IndexedDB
+  adapter `src/adapters/storage/draft-store-idb.ts` (`splitpage-drafts` v1:
   `meta` + `bodies`, keyPath `key`), live only while the page's document
   is on a server and not in review mode (`browserDraftTarget`). Same
   triggers, throttle, dedup, NEED_BASE handshake, blobs-first and backoff
@@ -1965,7 +1966,6 @@ evaluation order via `_entry.js`):
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
 | `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v3: `index` + `bodies`, one strict transaction per job; the v3 upgrade drops 2.1's v1 stores only when they hold no snapshot), `hashText` |
-| `03d-drafts-idb.js` | the browser's store for crash-safe drafts of server documents (PR #233): `createIdbDraftStore` (`splitpage-drafts` v1: `meta` + `bodies`; `put` with the NEED_BASE rule and `keepBase`, `get`, `list`, `remove(key, writerId)`, `claim`; every call resolves, `UNAVAILABLE` with no IndexedDB), pure `browserDraftKey`, `draftBaseOf` (origin + folder), `planDraftEviction` (30 days, 20, 64 MiB); `src/test/browser-drafts.test.mjs` |
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |

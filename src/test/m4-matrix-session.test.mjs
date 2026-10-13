@@ -42,7 +42,8 @@ const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, publishToServer } 
 const homeModule = await import("../js/_home.js");
 const { setHome } = homeModule;
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
-const { browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../js/03d-drafts-idb.js");
+const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
+const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { makeDesktopHandle } = await import("../js/20f-desktop.js");
 const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
@@ -293,7 +294,7 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   mine.rows[0].audioText = "Unsaved in the browser.";
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Changed on the server.";
-  const store = createIdbDraftStore({ indexedDB: window.indexedDB });
+  const store = openDraftStore({ indexedDB: window.indexedDB });
   const key = browserDraftKey(draftBaseOf("", location.href), "server-r");
   assert.deepEqual(await store.put({
     key: key, base: draftBaseOf("", location.href), docId: "server-r", rev: 2, title: "Server draft", writerId: "another-tab",
