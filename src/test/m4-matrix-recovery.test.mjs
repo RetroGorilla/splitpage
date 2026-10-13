@@ -31,7 +31,7 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft, armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../js/20g-drafts.js");
 const { browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../js/03d-drafts-idb.js");
-const { createMemoryBackend, internDataUrl, setBackend: setBlobBackend } = await import("../js/02c-blobs.js");
+const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../js/02c-blobs.js");
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
 const homeModule = await import("../js/_home.js");
 
@@ -464,6 +464,40 @@ rightToday("B10", "a draft whose pictures could not be persisted carries them in
     assert.equal(slot && slot.sha256, rec.sha256, "restoring gives the same picture back");
   } finally {
     consoles.forEach((c, i) => { c.warn = warns[i]; });
+    setBlobBackend(null);
+    await endCase();
+  }
+});
+
+rightToday("B10b", "a draft whose pictures are stored locally carries only their refs, and after a restart they come back from the store", async (t) => {
+  const clock = mockClock(t);
+  const idb = browserStore();
+  const disk = Object.assign(createMemoryBackend(), { name: "disk", persistent: true });
+  setBlobBackend(disk);
+  try {
+    serverDocument("srv-q", "Stored pictures", "8");
+    const rec = internDataUrl(PNG);
+    assert.deepEqual(await persist([rec.sha256]), [], "setup: the picture is stored");
+    assert.equal(isDurableSync(rec.sha256), true);
+    addGalleryPicture(S.state.rows[0], rec, "q.png");
+    window.__hostedTest.setSession({ docId: "srv-q", rev: 1 });
+    typeInto("With a stored picture.");
+    await advance(clock, 1500);
+    const stored = await idb.store.get(draftKey("srv-q"));
+    assert.notEqual(stored, null, "the draft was written");
+    assert.doesNotMatch(stored.stateJson, /data:image\//, "the draft carries no picture bytes");
+    assert.match(stored.stateJson, new RegExp(rec.sha256), "the draft names the picture by its hash");
+
+    window.__blobsTest.forgetMemory();
+    assert.equal(has(rec.sha256), false, "setup: after the restart the picture is not in memory");
+    const restored = migrateRows(JSON.parse(stored.stateJson));
+    const slot = restored.rows[0].imageRef;
+    assert.equal(slot && slot.sha256, rec.sha256, "restoring gives the same picture back");
+    assert.deepEqual(await ensureBytes([rec.sha256]), [], "its bytes come back from the store");
+    const bytes = bytesForSync(rec.sha256);
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    assert.equal(Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join(""), rec.sha256, "and they are the picture's own bytes");
+  } finally {
     setBlobBackend(null);
     await endCase();
   }
