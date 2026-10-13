@@ -671,7 +671,7 @@ function done() {
     ed.saving = false;
     if (!stillOwns(ctx)) {
       closeAnnotator();
-      showToast("The annotations were not saved because another script was opened.", "warn");
+      showToast("The annotations were not saved because the script changed.", "warn");
       return;
     }
     paintTools();

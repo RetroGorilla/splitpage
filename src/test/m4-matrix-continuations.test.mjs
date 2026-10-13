@@ -380,6 +380,8 @@ function annotatedSource(title, docId, ids) {
 rightToday("M7", "an annotation saved after the same document was reopened changes nothing in the reopened session", withObjectUrls(async () => {
   const before = await lateAnnotation(() => reopen(annotatedSource("Annotated", idOf("a"), ["r1", "r2"])));
   assert.deepEqual(edits(), before, "the late annotation changed nothing in the reopened session");
+  assert.equal(annotate.annotatorOpen(), false, "the annotator closed");
+  assert.ok(toasts().some((text) => /not saved/.test(text)), "the user is told the annotations were not saved: " + JSON.stringify(toasts()));
 }));
 
 rightToday("M7-switch", "an annotation saved after an unrelated document was opened changes nothing in it", withObjectUrls(async () => {
