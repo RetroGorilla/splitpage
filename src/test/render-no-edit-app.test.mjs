@@ -27,12 +27,6 @@ const published = [];
 session.subscribe((c) => { published.push(c.kind); });
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
-const WRONG_TODAY = process.env.RENDER_NO_EDIT_WRONG_TODAY === "1";
-
-function wrongToday(id, owner, name, run) {
-  test(id + ": " + name, { skip: WRONG_TODAY ? false : "wrongToday " + id + ", owned by " + owner }, run);
-}
-
 function fixture(title) {
   return {
     schema: 2,
@@ -503,7 +497,7 @@ test("R4e: a render that throws before any scene is drawn leaves the whole scree
   }
 });
 
-wrongToday("R4m", "4.21 (#463)", "a render that throws in the middle of the scenes leaves the whole screen as it was", () => {
+test("R4m: a render that throws in the middle of the scenes leaves the whole screen as it was", () => {
   try {
     const run = failingRender(PLACES[0], THROWS[1]);
     sameScreen(screenMarkup(), run.before, "after the failed render");
@@ -512,7 +506,7 @@ wrongToday("R4m", "4.21 (#463)", "a render that throws in the middle of the scen
   }
 });
 
-wrongToday("R4l", "4.21 (#463)", "a render that throws when the title is read, after the scenes were drawn, leaves the whole screen as it was", () => {
+test("R4l: a render that throws when the title is read, after the scenes were drawn, leaves the whole screen as it was", () => {
   try {
     const run = failingRender(PLACES[0], THROWS[2]);
     sameScreen(screenMarkup(), run.before, "after the failed render");
@@ -521,7 +515,7 @@ wrongToday("R4l", "4.21 (#463)", "a render that throws when the title is read, a
   }
 });
 
-wrongToday("R4w", "4.21 (#463)", "a render that throws when the title is read, between the grid and the Writer, leaves the Writer and the grid as they were", () => {
+test("R4w: a render that throws when the title is read, between the grid and the Writer, leaves the Writer and the grid as they were", () => {
   try {
     const run = failingRender(PLACES[1], THROWS[2]);
     sameScreen(screenMarkup(), run.before, "after the failed render");
@@ -530,6 +524,46 @@ wrongToday("R4w", "4.21 (#463)", "a render that throws when the title is read, b
     renderAbsorbed();
   }
 });
+
+function throwAtRow(id) {
+  const target = row(id);
+  const value = target.audioText;
+  Object.defineProperty(target, "audioText", {
+    configurable: true,
+    enumerable: true,
+    get() { throw new Error("render broke (R4a)"); }
+  });
+  return () => { Object.defineProperty(target, "audioText", { configurable: true, enumerable: true, writable: true, value: value }); };
+}
+
+for (const place of PLACES) {
+  for (const id of ["r1", "r2", "r3"]) {
+    test("R4a: a render that throws at scene " + id + " with " + place.name + " leaves the whole screen as it was (#463)", () => {
+      fresh("R4a " + id + " " + place.name);
+      place.setup();
+      try {
+        const before = screenMarkup();
+        incomingForThrow();
+        S.state.rows.push(migrateRows({ schema: 2, title: "x", rows: [{ id: "r9", visualText: "New", audioText: "Theirs new.", status: "todo" }] }).rows[0]);
+        const out = logging(() => {
+          const disarm = throwAtRow(id);
+          try {
+            return renderAbsorbed();
+          } finally {
+            disarm();
+          }
+        });
+        assert.equal(out.value, false);
+        assert.deepEqual(out.logged, ["render broke (R4a)"]);
+        sameScreen(screenMarkup(), before, "after the failed render");
+        assert.equal(screenIsStale(), true);
+      } finally {
+        if (writer.writerOpen) writer.closeWriter();
+        renderAbsorbed();
+      }
+    });
+  }
+}
 
 function focusGridUnderWriter(cell) {
   const hold = (e) => e.stopImmediatePropagation();
@@ -577,7 +611,7 @@ test("R5b: with the Writer open and a grid cell still the active element, a rend
   }
 });
 
-wrongToday("R5d", "4.21 (#463)", "with the Writer open and a grid cell still the active element, the render focuses no cell of the grid", () => {
+test("R5d: with the Writer open and a grid cell still the active element, the render focuses no cell of the grid", () => {
   underWriter("R5d");
   try {
     const calls = focusCalls(() => { observe(() => render()); });
