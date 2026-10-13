@@ -1,12 +1,12 @@
 import { S } from "./_state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
 import { findRowIndex, getEditorName } from "./03-sync.js";
-import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
+import { safeHref, safeId, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { syncCommentAnchors } from "./04c-doc-model.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
-import { cellSelection } from "./05b-cell-edit.js";
+import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
@@ -14,6 +14,7 @@ import { placeCaretAtTextOffset } from "./19-writer.js";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import { cellHtml, mediaHalves, splitSceneCommand, textCut } from "../application/commands/split-join.ts";
 import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../core/document/gallery.ts";
@@ -332,8 +333,23 @@ export function compressImageFile(file, maxDim, quality) {
   });
 }
 
+export function capturePastePlace(cellEl) {
+  return { html: storedHtmlFromDom(cellEl.innerHTML), sel: cellSelection(cellEl) };
+}
+
+export function restorePastePlace(cellEl, place) {
+  var unchanged = place.sel && storedHtmlFromDom(cellEl.innerHTML) === place.html;
+  setCellSelection(cellEl, unchanged ? place.sel.from : Infinity, unchanged ? place.sel.to : Infinity);
+}
+
+export function showPictureNotAdded() {
+  showToast("The picture finished loading after the script changed, so it was not added.", "warn");
+}
+
 export function handleImageFile(rowId, file, slot) {
+  var ctx = captureOperation();
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
+    if (!stillOwns(ctx)) { showPictureNotAdded(); return; }
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
     var rec = internDataUrl(dataUrl);
