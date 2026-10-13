@@ -17,8 +17,17 @@ import { __init as initHistory } from "../js/03a-history-store.js";
 import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
+import { startSaves } from "../legacy/save-bridge.ts";
 
 freezeClockAndRandom(0x70726f64);
+startSaves({
+  write: async () => ({ kind: "saved" }),
+  destination: () => null,
+  keyOf: () => ({ owner: null, name: "none" }),
+  obsolete: () => {},
+  running: () => {},
+  ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false }
+});
 initBroll();
 initHistory();
 

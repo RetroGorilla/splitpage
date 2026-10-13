@@ -303,15 +303,13 @@ async function finishSaves(target, others) {
   await turns(80);
 }
 
-const OWN_TURN = /no second writer was opened while the first save was writing/;
-
 function assertEndsWithLaterSave(target, copy) {
   const file = homeModule.home.handle === copy.handle ? copy : target;
   assert.ok(file.text().includes("Second save's text."), "the file ends with the later save's text");
 }
 
 function directCaller(id, title, trigger) {
-  wrongToday(id, title, scene(async () => {
+  rightToday(id, title, scene(async () => {
     const target = await firstSaveInFlight();
     const copy = createHeldFileHandle({ name: "copy.splitpage" });
     window.showSaveFilePicker = async () => copy.handle;
@@ -320,7 +318,7 @@ function directCaller(id, title, trigger) {
     assert.equal(writers(target, copy), 1, "no second writer was opened while the first save was writing");
     await finishSaves(target, [copy]);
     assertEndsWithLaterSave(target, copy);
-  }), OWN_TURN);
+  }));
 }
 
 directCaller("F5-retry", "the save-error retry waits for the save that is running", async () => {
@@ -337,15 +335,15 @@ directCaller("F5-copy", "the conflict copy waits for the save that is running", 
   document.getElementById("file-conflict-copy").click();
 });
 
-wrongToday("F5-stale", "overlapping saves never leave the file older than the document says it is saved", scene(async () => {
+rightToday("F5-stale", "overlapping saves never leave the file older than the document says it is saved", scene(async () => {
   const target = await firstSaveInFlight();
   document.getElementById("save-error-retry").click();
   await turns(60);
   await finishSaves(target);
   assert.ok(S.dirty || target.text().includes(S.state.rows[0].audioText), "the document is not marked saved while its file holds older text");
-}), /the document is not marked saved while its file holds older text/);
+}));
 
-wrongToday("F5-link","the turned-off link's copy waits for the save that is running", scene(async () => {
+rightToday("F5-link", "the turned-off link's copy waits for the save that is running", scene(async () => {
   const target = await firstSaveInFlight();
   const copy = createHeldFileHandle({ name: "copy.splitpage" });
   window.showSaveFilePicker = async () => copy.handle;
@@ -364,9 +362,9 @@ wrongToday("F5-link","the turned-off link's copy waits for the save that is runn
   assert.equal(writers(target, copy), 1, "no second writer was opened while the first save was writing");
   await finishSaves(target, [copy]);
   assertEndsWithLaterSave(target, copy);
-}), OWN_TURN);
+}));
 
-wrongToday("F5-prompter", "the prompter's save waits for the save that is running", scene(async () => {
+rightToday("F5-prompter", "the prompter's save waits for the save that is running", scene(async () => {
   const { fake, held } = withHeldDesktop();
   await openFromDesktop(fake, script("Prompter", { docId: ID("6") }));
   edit("First save's text.");
@@ -381,7 +379,7 @@ wrongToday("F5-prompter", "the prompter's save waits for the save that is runnin
   await prompting;
   await turns(40);
   assert.ok(new TextDecoder().decode((await fake.readFile(homeModule.home.handle._desktopId)).bytes).includes("Second save's text."), "the file ends with the later save's text");
-}), /no second write was started while the first save was writing/);
+}));
 
 rightToday("F6", "a write that fails at write or close keeps the document dirty and the home and rev as they were", scene(async () => {
   for (const op of ["write", "close"]) {
