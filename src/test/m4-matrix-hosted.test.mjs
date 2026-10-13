@@ -1,5 +1,5 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { after } from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import blobPolicy from "../../shared/blob-policy.js";
@@ -697,6 +697,28 @@ rightToday("S10", "copying a share link on a dirty document while a save runs se
   await sharing;
   await settle();
   assert.equal(sent, 1, "only one PUT was sent while the first was still in flight, got " + sent);
+}));
+
+test("INV-20: while a share-link save waits behind a save and then runs, both Save buttons stay busy", hostedCase(async ({ server, held }) => {
+  server.put("srv-a", script("A", idOf("a")), 1);
+  openHosted(script("A", idOf("a")), "srv-a", 1);
+  editRow(0, "Typed once.");
+  held.holdWhen((r) => r.method === "PUT" && r.url.includes("api/docs/srv-a"), 2);
+  const saving = saveDoc({ auto: true });
+  await held.gates.arrived("fetch");
+  editRow(1, "Typed again.");
+  const sharing = hosted.publishAndCopyShareLink();
+  held.gates.release("fetch");
+  await saving;
+  await held.gates.arrived("fetch");
+  const busy = ["btn-save", "wr-save"].map((id) => {
+    const btn = document.getElementById(id);
+    return { text: btn.textContent, disabled: btn.disabled };
+  });
+  held.gates.releaseAll("fetch");
+  await sharing;
+  await settle();
+  assert.deepEqual(busy, [{ text: "Saving…", disabled: true }, { text: "Saving…", disabled: true }]);
 }));
 
 async function capabilityRecord(role, scope) {

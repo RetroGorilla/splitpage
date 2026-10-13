@@ -472,6 +472,18 @@ function showSaveRunning(running) {
   setSaveButtons();
 }
 
+function saveOwnership(ownership) {
+  return {
+    capture: ownership.capture,
+    stillOwns: function (ctx) {
+      if (ownership.stillOwns(ctx)) return true;
+      if (ctx.destination && ctx.destination.kind === "server") return false;
+      var now = ownership.capture();
+      return now.epoch === ctx.epoch && now.docId === ctx.docId && now.destination === ctx.destination;
+    }
+  };
+}
+
 export function legacySavePorts(ownership) {
   return {
     write: writeQueued,
@@ -479,7 +491,7 @@ export function legacySavePorts(ownership) {
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,
     running: showSaveRunning,
-    ownership: ownership
+    ownership: saveOwnership(ownership)
   };
 }
 
