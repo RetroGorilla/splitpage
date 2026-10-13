@@ -7,6 +7,7 @@ import { markDirty } from "./12-dirty-toast.js";
 import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 
 var testHooks = { fetch: null, bases: null, protocol: null };
 
@@ -111,13 +112,13 @@ function touchesGallery(rowId) {
 
 export function thumbnailsAfterPaste(rowId, hrefs, entry) {
   if (!S.state || !hrefs || !hrefs.length || !thumbnailsAllowed()) return;
-  var docId = S.state.docId;
+  var ctx = captureOperation();
   hrefs.forEach(function (href) {
     var link = normalizeVideoLink({ href: href });
     if (!link || !parseVideoLink(link.href)) return;
     var key = videoLinkKey(link);
     fetchThumbnailRecord(link.href).then(function (rec) {
-      if (!rec || !S.state || S.state.docId !== docId || findRowIndex(rowId) === -1) return;
+      if (!rec || !stillOwns(ctx) || findRowIndex(rowId) === -1) return;
       var done = foldIntoEdit(entry, touchesGallery(rowId), function (state) {
         var idx = findRowIndex(rowId);
         return idx !== -1 && setVideoThumbnail(state.rows[idx], key, rec);

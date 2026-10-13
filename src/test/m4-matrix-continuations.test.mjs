@@ -3,7 +3,7 @@ import { after } from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import { S } from "../js/_state.js";
-import { createHeldFetch, createHeldImageDecode, rightToday, wrongToday } from "./_m4-matrix.mjs";
+import { createHeldFetch, createHeldImageDecode, rightToday } from "./_m4-matrix.mjs";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -159,27 +159,27 @@ rightToday("M0", "a delayed paste into an untouched document lands at the caret 
   assert.ok(S.state.rows[0].imageRef || S.state.rows[0].moreImages, "the picture is on the scene: " + JSON.stringify(Object.keys(S.state.rows[0])));
 });
 
-wrongToday("M1", "a delayed paste that completes after another document was opened changes nothing and tells the user", async () => {
+rightToday("M1", "a delayed paste that completes after another document was opened changes nothing and tells the user", async () => {
   const before = await latePaste(() => reopen(script("Another script", idOf("b"), ["x1", "x2"])));
   assertDropped(before, "after a switch");
-}, /after a switch: the user is told the picture was not added/);
+});
 
-wrongToday("M1b", "a delayed paste that completes after another document with the same scene ids was opened changes nothing", async () => {
+rightToday("M1b", "a delayed paste that completes after another document with the same scene ids was opened changes nothing", async () => {
   const before = await latePaste(() => reopen(script("A copy", idOf("c"), ["r1", "r2"])));
   assertDropped(before, "after a switch to a copy");
-}, /after a switch to a copy: the late picture and text changed nothing in the replacement/);
+});
 
-wrongToday("M2", "a delayed paste that completes after the same document was reopened changes nothing and tells the user", async () => {
+rightToday("M2", "a delayed paste that completes after the same document was reopened changes nothing and tells the user", async () => {
   const before = await latePaste(() => reopen(script("Paste target", idOf("a"), ["r1", "r2"])));
   assertDropped(before, "after a same-id reopen");
-}, /after a same-id reopen: the late picture and text changed nothing in the replacement/);
+});
 
-wrongToday("M3a", "a delayed paste puts its text at the place captured when it began if the cell is unchanged, however the caret moved (D11)", async () => {
+rightToday("M3a", "a delayed paste puts its text at the place captured when it began if the cell is unchanged, however the caret moved (D11)", async () => {
   await latePaste(async () => { select(cellOf("r1", "audioText"), 0); });
   assert.equal(S.state.rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the captured place");
-}, /the text went in at the captured place/);
+});
 
-wrongToday("M3b", "a delayed paste puts its text at the end of the cell if the cell was edited while the picture loaded (D11)", async () => {
+rightToday("M3b", "a delayed paste puts its text at the end of the cell if the cell was edited while the picture loaded (D11)", async () => {
   await latePaste(async () => {
     const cell = cellOf("r1", "audioText");
     const node = textNodes(cell)[textNodes(cell).length - 1];
@@ -190,9 +190,9 @@ wrongToday("M3b", "a delayed paste puts its text at the end of the cell if the c
     select(cell, 0);
   });
   assert.equal(S.state.rows[0].audioText, AUDIO + "!Pasted ", "the text went in at the end of the edited cell");
-}, /the text went in at the end of the edited cell/);
+});
 
-wrongToday("M3c", "a delayed paste puts its text in the cell it began in when the caret moved to another cell (D11)", async () => {
+rightToday("M3c", "a delayed paste puts its text in the cell it began in when the caret moved to another cell (D11)", async () => {
   await latePaste(async () => {
     const other = cellOf("r2", "audioText");
     other.focus();
@@ -200,7 +200,7 @@ wrongToday("M3c", "a delayed paste puts its text in the cell it began in when th
   });
   assert.equal(S.state.rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the captured place");
   assert.equal(S.state.rows[1].audioText, "Hello world 1.", "the other cell is untouched");
-}, /the text went in at the captured place/);
+});
 
 function dropPicture(target) {
   const event = new window.Event("drop", { bubbles: true, cancelable: true });
@@ -209,7 +209,7 @@ function dropPicture(target) {
   target.dispatchEvent(event);
 }
 
-wrongToday("M2d", "a delayed drop on a scene's image section that completes after the same document was reopened changes nothing and tells the user", async () => {
+rightToday("M2d", "a delayed drop on a scene's image section that completes after the same document was reopened changes nothing and tells the user", async () => {
   showDocument(script("Drop target", idOf("a"), ["r1", "r2"]));
   const media = document.querySelector('#rows .row[data-id="r1"] .visual-cell');
   assert.ok(media, "setup: the scene has an image section to drop on");
@@ -223,7 +223,7 @@ wrongToday("M2d", "a delayed drop on a scene's image section that completes afte
   await settle();
   assert.equal(decode.gates.parked("image.decode").length, 0, "setup: the held decode was released");
   assertDropped(before, "after a same-id reopen");
-}, /after a same-id reopen: the late picture and text changed nothing in the replacement/);
+});
 
 async function lateGalleryPicture(replace) {
   showDocument(script("Gallery target", idOf("a"), ["r1", "r2"]));
@@ -239,15 +239,15 @@ async function lateGalleryPicture(replace) {
   return before;
 }
 
-wrongToday("M4", "a gallery picture that finishes loading after another document was opened changes nothing and tells the user", async () => {
+rightToday("M4", "a gallery picture that finishes loading after another document was opened changes nothing and tells the user", async () => {
   const before = await lateGalleryPicture(() => reopen(script("Another script", idOf("b"), ["x1", "x2"])));
   assertDropped(before, "after a switch");
-}, /after a switch: the user is told the picture was not added/);
+});
 
-wrongToday("M4b", "a gallery picture that finishes loading after the same document was reopened changes nothing and tells the user", async () => {
+rightToday("M4b", "a gallery picture that finishes loading after the same document was reopened changes nothing and tells the user", async () => {
   const before = await lateGalleryPicture(() => reopen(script("Gallery target", idOf("a"), ["r1", "r2"])));
   assertDropped(before, "after a same-id reopen");
-}, /after a same-id reopen: the late picture and text changed nothing in the replacement/);
+});
 
 const VIDEO = "https://youtu.be/dQw4w9WgXcQ";
 
@@ -283,10 +283,10 @@ async function lateRetry(replace) {
   return before;
 }
 
-wrongToday("M5", "a retried thumbnail that arrives after another document with the same scene and link was opened changes nothing in it", async () => {
+rightToday("M5", "a retried thumbnail that arrives after another document with the same scene and link was opened changes nothing in it", async () => {
   const before = await lateRetry(() => reopen(videoScript("A copy with the same video", idOf("c"), ["r1", "r2"])));
   assert.deepEqual(edits(), before, "the late thumbnail changed nothing in the replacement");
-}, /the late thumbnail changed nothing in the replacement/);
+});
 
 rightToday("M5b", "a retried thumbnail that arrives after an unrelated document was opened changes nothing in it", async () => {
   const before = await lateRetry(() => reopen(script("Another script", idOf("b"), ["x1", "x2"])));
@@ -305,10 +305,10 @@ async function lateThumbnailAfterPaste(replace) {
   return before;
 }
 
-wrongToday("M6", "a thumbnail fetched for a paste that arrives after the same document was reopened changes nothing in it", async () => {
+rightToday("M6", "a thumbnail fetched for a paste that arrives after the same document was reopened changes nothing in it", async () => {
   const before = await lateThumbnailAfterPaste(() => reopen(videoScript("Video target", idOf("a"), ["r1", "r2"])));
   assert.deepEqual(edits(), before, "the late thumbnail changed nothing in the reopened session");
-}, /the late thumbnail changed nothing in the reopened session/);
+});
 
 rightToday("M6-switch", "a thumbnail fetched for a paste that arrives after a copy with another id and the same scenes was opened changes nothing in it", async () => {
   const before = await lateThumbnailAfterPaste(() => reopen(videoScript("A copy", idOf("c"), ["r1", "r2"])));
@@ -377,10 +377,10 @@ function annotatedSource(title, docId, ids) {
   return migrateRows(JSON.parse(JSON.stringify(doc)));
 }
 
-wrongToday("M7", "an annotation saved after the same document was reopened changes nothing in the reopened session", withObjectUrls(async () => {
+rightToday("M7", "an annotation saved after the same document was reopened changes nothing in the reopened session", withObjectUrls(async () => {
   const before = await lateAnnotation(() => reopen(annotatedSource("Annotated", idOf("a"), ["r1", "r2"])));
   assert.deepEqual(edits(), before, "the late annotation changed nothing in the reopened session");
-}), /the late annotation changed nothing in the reopened session/);
+}));
 
 rightToday("M7-switch", "an annotation saved after an unrelated document was opened changes nothing in it", withObjectUrls(async () => {
   const before = await lateAnnotation(() => reopen(script("Another script", idOf("b"), ["x1", "x2"])));
