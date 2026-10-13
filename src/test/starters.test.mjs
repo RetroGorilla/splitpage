@@ -7,6 +7,7 @@ import { collectTagsFromRows } from "../js/07-production-tags.js";
 import { brollInCell } from "../js/08c-broll.js";
 import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
 import { STARTERS, starterById } from "../js/_starters.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 const copy = (o) => JSON.parse(JSON.stringify(o));
 
@@ -67,7 +68,7 @@ for (const starter of STARTERS) {
 
   test(`${starter.id}: survives a .splitpage round trip`, () => {
     const opened = migrateRows(copy(doc));
-    const round = migrateRows(parseSplitpageFile(buildSplitpageFile(opened)));
+    const round = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(opened))));
     assert.deepEqual(round, opened);
   });
 }

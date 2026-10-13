@@ -7,6 +7,7 @@ import { home } from "../js/_home.js";
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { initDocIdentityChannel, reassignDocId, syncDocIdentity } = await import("../js/02b-doc-id.js");
 const { videoLinkLabel } = await import("../js/02d-gallery.js");
 const { render } = await import("../js/05-render.js");
@@ -100,7 +101,7 @@ test("05h a new script from selected scenes cuts its title by code point (#434)"
 
 test("20d a Markdown project's title is cut by code point (#434)", async () => {
   load();
-  const proj = parseMarkdownProject(buildMarkdownProject());
+  const proj = parseMarkdownProject(buildMarkdownProject(exportDocumentOf(S.state)));
   proj.title = x(299) + GRIN + "y";
   const back = await applyMarkdownProject(proj, { noAsk: true });
   assert.equal(back.title, x(299) + GRIN);

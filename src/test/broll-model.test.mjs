@@ -14,7 +14,7 @@ import { renameTag } from "../js/07-production-tags.js";
 import { buildBreakdownCsv } from "../js/08-production-panels.js";
 import { brollShotListForPrint, buildBrollCsv } from "../js/08d-broll-panel.js";
 import { buildShotListPdf } from "../js/17-pdf.js";
-import { sceneFacts } from "../js/14b-export-kit.js";
+import { exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 brollInit();
@@ -604,7 +604,7 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
   assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
-  const at = (i) => sceneFacts()[i].start;
+  const at = (i) => sceneFacts(exportDocumentOf(S.state))[i].start;
   assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
   assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
   assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,," + at(2));

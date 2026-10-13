@@ -10,6 +10,7 @@ import { commentBodyText, commentEntries } from "../js/10-comments.js";
 import { toMarkdownDoc, toMarkdownTableDoc, zipRead } from "../js/14-export.js";
 import { __init as initDocx, buildDocx } from "../js/15-docx.js";
 import { buildCsv } from "../js/16-csv.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -148,15 +149,15 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
     { kind: "conflict", rowId: "r1", field: "visualImage", conflictField: "Visual image", imageValue: c.rec, body: "" },
     { rowId: "r1", body: "Missing <img class=\"comment-img\" data-blob=\"" + MISSING + "\">" }
   ]);
-  for (const md of [toMarkdownDoc(), toMarkdownTableDoc(null, { export: true }), toMarkdownTableDoc()]) {
+  for (const md of [toMarkdownDoc(exportDocumentOf(S.state)), toMarkdownTableDoc(exportDocumentOf(S.state), { export: true }), toMarkdownTableDoc(exportDocumentOf(S.state))]) {
     const tail = md.slice(md.indexOf("## Comments"));
     assert.ok(tail.includes("Before  \n[image]  \nafter"), tail);
     assert.ok(tail.includes("> ↳ **Bob** · ") && /\*\*Bob\*\* · [^\n]*: {2}\[image\]/.test(tail), tail);
     assert.ok(tail.includes("Missing  \n[image]"), tail);
     assert.ok(!tail.includes("_(empty)_"), tail);
   }
-  assert.ok(toMarkdownDoc().includes("**Scene 01 · Audio** — Ann"));
-  assert.ok(toMarkdownTableDoc().includes("**Row 01 · Audio** — Ann"));
+  assert.ok(toMarkdownDoc(exportDocumentOf(S.state)).includes("**Scene 01 · Audio** — Ann"));
+  assert.ok(toMarkdownTableDoc(exportDocumentOf(S.state)).includes("**Row 01 · Audio** — Ann"));
 
   const csv = buildCsv();
   assert.ok(csv.includes(',"Before\n[image]\nafter"'), csv);
@@ -164,7 +165,7 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
   assert.equal(csv.split("\r\n").filter((l) => /,\[image\]$/.test(l)).length, 2, "the reply and the conflict card");
   assert.ok(csv.includes("\r\n,Scene 01 · Audio,Open,,Ann,"), csv);
 
-  const [one, conflict, missing] = commentEntries({ pieces: true });
+  const [one, conflict, missing] = commentEntries(exportDocumentOf(S.state), { pieces: true });
   assert.equal(commentBodyText(one), "Before\n[image]\nafter");
   assert.equal(commentBodyText(one.replies[0]), "[image]");
   assert.equal(commentBodyText(conflict), "[image]");
@@ -173,10 +174,10 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
 
 test("a text-only comment reads exactly as its plain body", () => {
   setDoc(null, [{ body: "One&nbsp;<b>two</b><br>three", replies: [{ id: "rp", author: "Bob", body: "" }] }, { body: "" }]);
-  const [c, empty] = commentEntries({ pieces: true });
+  const [c, empty] = commentEntries(exportDocumentOf(S.state), { pieces: true });
   assert.equal(commentBodyText(c), c.body);
   assert.equal(commentBodyText(c.replies[0]), "");
   assert.equal(commentBodyText(empty), "");
-  const [plain] = commentEntries();
+  const [plain] = commentEntries(exportDocumentOf(S.state));
   assert.equal(commentBodyText(plain), plain.body);
 });

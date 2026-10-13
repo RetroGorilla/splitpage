@@ -23,6 +23,7 @@ import {
   parseMarkdownProject,
   parseSplitpageFile
 } from "../js/20d-formats.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initSceneStatus();
@@ -141,10 +142,10 @@ test("an older file has no key and reads as the estimate", () => {
 
 test(".splitpage and .md both carry it, and read it back", async () => {
   const s = doc([{ id: "r1", audioText: TEN, lengthSeconds: 75 }, { id: "r2", audioText: "Two." }]);
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(s))));
   assert.equal(back.rows[0].lengthSeconds, 75);
   assert.ok(!("lengthSeconds" in back.rows[1]));
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const fromMd = await withState(clone(s), () => applyMarkdownProject(parseMarkdownProject(md), { noAsk: true }));
   const got = fromMd.state || fromMd;
   assert.equal(got.rows[0].lengthSeconds, 75);

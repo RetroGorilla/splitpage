@@ -50,7 +50,7 @@ import {
 import {
   breakdownGroups,
   brollSummaryText,
-  commentNumbers,
+  captureExportDocument,
   exportBrollScenes,
   exportComments,
   exportFacts,
@@ -132,8 +132,8 @@ export async function saveDoc(opts) {
   S.state.rev = (S.state.rev || 0) + 1;
   S.state.lastEditedBy = getEditorName();
   S.state.lastEditedAt = nowIso();
-  var published = cloneState(S.state);
-  if (forkDocId) published.docId = forkDocId;
+  var captured = captureExportDocument({ docId: forkDocId });
+  var published = cloneState(captured.document);
   var seqAtSave = S.editSeq;
   var slug = slugify(published.title);
   var targetHandle = saveAs || !fileHome() ? null : fileHome().handle;
@@ -185,12 +185,12 @@ export async function saveDoc(opts) {
     }
 
     await ensureBytes(refsIn(published));
-    var imagesLeftOut = fileImagesMissing(published).length;
+    var imagesLeftOut = fileImagesMissing(captured).length;
 
     var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
     var body;
     try {
-      body = kind === "splitpage" ? buildSplitpageFile(published) : buildMarkdownProject(published);
+      body = kind === "splitpage" ? buildSplitpageFile(captured) : buildMarkdownProject(captured);
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
       S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
@@ -418,9 +418,9 @@ function mdCell(value) {
     .replace(/\r\n|\r|\n/g, " ");
 }
 
-function appendMarkdownTail(lines, opts) {
-  if (opts && opts.export) { appendExportTail(lines); return; }
-  var breakdown = breakdownRows();
+function appendMarkdownTail(lines, doc, opts) {
+  if (opts && opts.export) { appendExportTail(lines, doc); return; }
+  var breakdown = breakdownRows(doc);
   if (breakdown.length) {
     lines.push("## Production breakdown");
     lines.push("");
@@ -433,7 +433,7 @@ function appendMarkdownTail(lines, opts) {
     lines.push("");
   }
 
-  var comments = commentEntries({ pieces: true });
+  var comments = commentEntries(doc, { pieces: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -461,7 +461,6 @@ function appendMarkdownTail(lines, opts) {
 }
 
 export function exportMetaLine(facts) {
-  facts = facts || exportFacts();
   return exportSummaryParts(facts).concat(facts.date).join(" · ");
 }
 
@@ -529,8 +528,8 @@ function mdBrollTask(r) {
   return "- [" + (r.shot ? "x" : " ") + "] " + mdLine(r.name) + (parts.length ? " — " + parts.join(" · ") : "");
 }
 
-function appendExportTail(lines) {
-  var groups = breakdownGroups();
+function appendExportTail(lines, doc) {
+  var groups = breakdownGroups(doc);
   if (groups.length) {
     lines.push("## Production breakdown");
     lines.push("");
@@ -546,7 +545,7 @@ function appendExportTail(lines) {
     });
   }
 
-  var broll = exportBrollScenes();
+  var broll = exportBrollScenes(doc);
   if (broll.length) {
     lines.push("## B-roll shot list");
     lines.push("");
@@ -560,7 +559,7 @@ function appendExportTail(lines) {
     });
   }
 
-  var comments = exportComments({ pieces: true });
+  var comments = exportComments(doc, { pieces: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -615,9 +614,9 @@ function markdownMorePictures(row, i) {
   return out;
 }
 
-export function markdownExportImages() {
+export function markdownExportImages(doc) {
   var out = [];
-  S.state.rows.forEach(function (row, i) {
+  doc.scenes.forEach(function (row, i) {
     var pic = rowImage(row) && rowImageBytes(row);
     if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
     out = out.concat(markdownMorePictures(row, i));
@@ -625,22 +624,22 @@ export function markdownExportImages() {
   return out;
 }
 
-export function toMarkdownDoc(opts) {
+export function toMarkdownDoc(doc, opts) {
   var limit = opts && opts.scenes;
-  var facts = exportFacts();
-  var scenes = sceneFacts();
-  var nums = commentNumbers();
+  var facts = exportFacts(doc);
+  var scenes = sceneFacts(doc);
+  var nums = doc.commentNumbers;
   var lines = [];
   lines.push("# " + facts.title);
   lines.push("");
-  if (!S.state.rows.length) {
+  if (!doc.scenes.length) {
     lines.push("_No scenes yet._");
     lines.push("");
   } else {
     lines.push("_" + exportMetaLine(facts) + "_");
     lines.push("");
   }
-  (limit ? S.state.rows.slice(0, limit) : S.state.rows).forEach(function (row, i) {
+  (limit ? doc.scenes.slice(0, limit) : doc.scenes).forEach(function (row, i) {
     lines.push("### Scene " + scenes[i].number + " · " + scenes[i].start);
     lines.push("");
     lines.push(mdSceneFactsLine(scenes[i]));
@@ -677,7 +676,7 @@ export function toMarkdownDoc(opts) {
     lines.push("---");
     lines.push("");
   });
-  if (!limit) appendMarkdownTail(lines, { export: true });
+  if (!limit) appendMarkdownTail(lines, doc, { export: true });
   return lines.join("\n");
 }
 
@@ -701,21 +700,21 @@ export function mdSceneCellSource(row, i, model) {
   };
 }
 
-export function toMarkdownTableDoc(s, opts) {
-  s = s || S.state;
+export function toMarkdownTableDoc(doc, opts) {
+  var s = doc.document;
   var exporting = !!(opts && opts.export);
   var limit = exporting && opts.scenes;
   var lines = [];
   lines.push("# " + (s.title || "Untitled Script"));
   lines.push("");
   if (exporting && s.rows.length) {
-    lines.push("_" + exportMetaLine() + "_");
+    lines.push("_" + exportMetaLine(exportFacts(doc)) + "_");
     lines.push("");
   }
   if (!s.rows.length) {
     lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
   } else if (exporting) {
-    var scenes = sceneFacts();
+    var scenes = sceneFacts(doc);
     lines.push("| # | Start | Status | Visual | Audio | Read |");
     lines.push("| --- | --- | --- | --- | --- | --- |");
     (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
@@ -734,7 +733,7 @@ export function toMarkdownTableDoc(s, opts) {
     });
   }
   lines.push("");
-  if (!limit) appendMarkdownTail(lines, { export: exporting });
+  if (!limit) appendMarkdownTail(lines, doc, { export: exporting });
   return lines.join("\n");
 }
 
