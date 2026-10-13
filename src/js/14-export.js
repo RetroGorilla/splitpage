@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
-import { fileHome, home, restoreHome, setHome } from "./_home.js";
+import { fileHome, home, restoreHome, serverOf, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -69,6 +69,8 @@ import { makeDesktopHandle } from "./20f-desktop.js";
 import { pad2 } from "../core/production/timing.ts";
 import { toMarkdown } from "../core/text/projections.ts";
 import { cellOf, htmlToMarkdown, inertBody } from "../legacy/richtext.ts";
+import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
+import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 
 export var autoSaveEnabled;
 
@@ -78,7 +80,26 @@ function settleDerivedRecords() {
   brollEntries();
 }
 
-export async function saveDoc(opts) {
+function saveKind(opts) {
+  if (opts.saveAs) return "saveAs";
+  if (opts.force) return "force";
+  return opts.auto ? "auto" : "save";
+}
+
+export function saveDoc(opts) {
+  opts = opts || {};
+  if (!opts.auto) resumeAutoSave();
+  return requestSave({ kind: saveKind(opts) }).then(function () {});
+}
+
+var SAVED = Object.freeze({ kind: "saved" });
+var COPIED = Object.freeze({ kind: "copied" });
+var CANCELLED = Object.freeze({ kind: "cancelled" });
+var FAILED = Object.freeze({ kind: "failed" });
+var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
+
+async function writeDoc(opts, job) {
   opts = opts || {};
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
@@ -96,6 +117,7 @@ export async function saveDoc(opts) {
     prevHome = home;
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
+    if (job) job.moved();
     if (prevHome.kind === "import") updateFileChip();
   }
   function undoRetarget() {
@@ -120,7 +142,7 @@ export async function saveDoc(opts) {
       S.saveButtonBusy = false;
       setSaveButtons(S.dirty ? "Save •" : "Save", false);
     }
-    return;
+    return sentToServer === false ? FAILED : SAVED;
   }
 
   var converting = !saveAs && home.kind === "file" && home.format === "html";
@@ -140,6 +162,7 @@ export async function saveDoc(opts) {
   var kind = saveAs ? "md" : ((fileHome() && fileHome().format) || "md");
 
   var reusingHandle = !!targetHandle;
+  var written;
 
   try {
     if (!targetHandle && S.DESKTOP) {
@@ -154,7 +177,7 @@ export async function saveDoc(opts) {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
         S.saveButtonBusy = false;
         setSaveButtons(S.dirty ? "Save •" : "Save", false);
-        return;
+        return CANCELLED;
       }
       targetHandle = makeDesktopHandle(pickedDesktop);
       kind = fileKindFromName(pickedDesktop.name) === "splitpage" ? "splitpage" : "md";
@@ -180,7 +203,7 @@ export async function saveDoc(opts) {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
         S.saveButtonBusy = false;
         setSaveButtons(S.dirty ? "Save •" : "Save", false);
-        return;
+        return CONFLICTED;
       }
     }
 
@@ -197,7 +220,7 @@ export async function saveDoc(opts) {
       undoRetarget();
       S.saveButtonBusy = false;
       setSaveButtons(S.dirty ? "Save •" : "Save", false);
-      return;
+      return FAILED;
     }
 
     if (targetHandle) {
@@ -220,6 +243,7 @@ export async function saveDoc(opts) {
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
       else noteSaveStatus();
       warnImagesLeftOut(imagesLeftOut, targetHandle.name);
+      written = copyOfHosted ? COPIED : SAVED;
     } else {
       var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
       if (ok) {
@@ -229,24 +253,29 @@ export async function saveDoc(opts) {
         adoptSavedCopyDocId(forkDocId, docIdAtSave);
         if (downloadedOurs && !copyOfHosted && S.editSeq === seqAtSave) clearDirty();
         warnImagesLeftOut(imagesLeftOut, filename);
+        written = copyOfHosted ? COPIED : SAVED;
       } else {
         S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+        written = CANCELLED;
       }
     }
   } catch (err) {
     if (err && err.name === "AbortError") {
       S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+      written = CANCELLED;
     } else {
       var why = err && err.message ? err.message : "please try again";
       showToast("Could not save — " + why + ".", "error");
       if (auto) haltAutoSave("Autosave is paused — the last save failed (" + why + "). Press Save to try again.");
       S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+      written = { kind: "failed", error: err };
     }
   } finally {
     undoRetarget();
     S.saveButtonBusy = false;
     setSaveButtons(S.dirty ? "Save •" : "Save", false);
   }
+  return written;
 }
 
 export function warnImagesLeftOut(n, name) {
@@ -314,12 +343,17 @@ function readAutoSavePref() {
 }
 
 export function autoSaveTarget() {
-  if (serverSessionExpired || (linkTurnedOff && onServerDoc())) return null;
-  if (onServerDoc()) return "server";
   var file = fileHome();
-  if (!file || !file.handle) return null;
-  if (file.format === "html") return null;
-  return "file";
+  return autoSaveWhere({
+    onServer: onServerDoc(),
+    signedOut: !!serverSessionExpired,
+    linkOff: !!linkTurnedOff,
+    file: file ? { handle: file.handle, format: file.format || null } : null
+  });
+}
+
+function autoSaveAllowed() {
+  return autoSaveMay({ on: !!autoSaveEnabled, halted: autoSaveHalt, target: autoSaveTarget() });
 }
 
 export function setAutoSaveEnabled(on) {
@@ -346,9 +380,8 @@ export function updateAutoSaveMenu() {
 }
 
 export function scheduleAutoSave() {
-  if (!autoSaveEnabled || autoSaveHalt) return;
+  if (!autoSaveAllowed()) return;
   var target = autoSaveTarget();
-  if (!target) return;
   if (autoSaveIdleTimer) clearTimeout(autoSaveIdleTimer);
   autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveIdleFor(target));
   if (!autoSaveMaxTimer) autoSaveMaxTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.max);
@@ -385,23 +418,69 @@ export function resumeAutoSave() {
   updateFileChip();
 }
 
-var saveInFlight = false;
-var saveQueued = false;
+var autoSaveWriting = false;
 export function queueAutoSave() {
-  if (!autoSaveEnabled) return;
-  if (!autoSaveTarget()) return;
-  if (autoSaveHalt) return;
+  if (!autoSaveAllowed()) return;
   clearAutoSaveTimers();
-  if (saveInFlight) { saveQueued = true; return; }
-  if (S.saveButtonBusy) { scheduleAutoSave(); return; }
-  saveInFlight = true;
-  Promise.resolve()
-    .then(function () { return saveDoc({ auto: true }); })
-    .catch(function () {})
-    .then(function () {
-      saveInFlight = false;
-      if (saveQueued) { saveQueued = false; queueAutoSave(); }
-    });
+  if (saveRunning() && !autoSaveWriting) { scheduleAutoSave(); return; }
+  requestSave({ kind: "autosave" });
+}
+
+function writeAutoSave(job) {
+  if (!autoSaveAllowed() || !S.dirty) return Promise.resolve(NOT_AUTOSAVING);
+  autoSaveWriting = true;
+  return writeDoc({ auto: true }, job).then(function (result) {
+    autoSaveWriting = false;
+    return result;
+  }, function (error) {
+    autoSaveWriting = false;
+    throw error;
+  });
+}
+
+function writeQueued(job) {
+  var kind = job.request.kind;
+  if (kind === "autosave") return writeAutoSave(job);
+  if (kind === "server") {
+    return saveToServer().then(function (sent) { return sent === false ? FAILED : SAVED; });
+  }
+  return writeDoc({ auto: kind === "auto", force: kind === "force", saveAs: kind === "saveAs" }, job);
+}
+
+var NO_DESTINATION_KEY = Object.freeze({});
+
+export function destinationKeyOf(h) {
+  if (!h || h.kind === "none") return { owner: NO_DESTINATION_KEY, name: "none" };
+  if (h.kind === "server") return { owner: serverOf(h.conn) || h, name: "doc:" + String(h.id) };
+  var handle = h.handle;
+  if (handle && handle._desktopId) return { owner: "desktop:" + String(handle._desktopId), name: "handle" };
+  if (handle) return { owner: handle, name: "handle" };
+  return { owner: h, name: h.kind };
+}
+
+function reportObsoleteSave(request, here) {
+  if (!here || home.kind === "server" || !S.state) return;
+  showToast(obsoleteSaveText(S.state.title), "warn");
+}
+
+export function obsoleteSaveText(title) {
+  return "An earlier save of “" + (title || "Untitled Script") + "” finished after you reopened it. Your open copy is unchanged.";
+}
+
+function showSaveRunning(running) {
+  S.saveButtonBusy = running;
+  setSaveButtons();
+}
+
+export function legacySavePorts(ownership) {
+  return {
+    write: writeQueued,
+    destination: function () { return home; },
+    keyOf: destinationKeyOf,
+    obsolete: reportObsoleteSave,
+    running: showSaveRunning,
+    ownership: ownership
+  };
 }
 
 export function slugify(s) {

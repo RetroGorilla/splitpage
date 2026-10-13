@@ -67,11 +67,23 @@ test("a replacement through the API disposes the old document's session: its arm
 test("captureOperation and stillOwns follow the live session, document, destination and connection", async () => {
   const stop = startWith([]);
   const home = await import("../js/_home.js");
+  const saves = await import("../legacy/save-bridge.ts");
+  const stopSaves = saves.startSaves({
+    write: async () => ({ kind: "saved" }),
+    destination: () => home.home,
+    keyOf: (h) => ({ owner: h, name: "" }),
+    obsolete: () => {},
+    running: () => {},
+    ownership: { capture: bridge.captureOperation, stillOwns: bridge.stillOwns }
+  });
   try {
     bridge.documentTransitions().open({ from: { document: script("Owned") }, reason: "opened" });
+    saves.noteSaveChange();
+    saves.confirmSavedNow();
     const ctx = bridge.captureOperation();
     assert.equal(ctx.docId, S.state.docId);
     assert.equal(ctx.destination, home.home);
+    assert.equal(ctx.destinationGeneration, saves.confirmedGeneration(), "the destination's confirmed generation is captured");
     assert.equal(ctx.connection, home.conn);
     assert.equal(bridge.stillOwns(ctx), true);
     home.updateConnection({ token: "another" });
@@ -81,6 +93,7 @@ test("captureOperation and stillOwns follow the live session, document, destinat
     assert.equal(bridge.stillOwns(again), false, "a same-id reopen is another epoch");
     home.updateConnection({ token: "" });
   } finally {
+    stopSaves();
     stop();
   }
 });

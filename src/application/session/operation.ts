@@ -2,6 +2,7 @@ export interface OperationContext {
   readonly epoch: number;
   readonly docId: string | null;
   readonly destination: unknown;
+  readonly destinationGeneration: number;
   readonly generation: number;
   readonly connection: unknown;
   readonly revision: number | null;
@@ -10,7 +11,11 @@ export interface OperationContext {
 export interface OperationPorts {
   readonly session: { readonly epoch: () => number; readonly generation: () => number };
   readonly document: { readonly id: () => string | null };
-  readonly destination: { readonly identity: () => unknown; readonly revision: () => number | null };
+  readonly destination: {
+    readonly identity: () => unknown;
+    readonly generation: () => number;
+    readonly revision: () => number | null;
+  };
   readonly connection: { readonly current: () => unknown };
 }
 
@@ -25,6 +30,7 @@ export function createOperations(ports: OperationPorts): Operations {
       epoch: ports.session.epoch(),
       docId: ports.document.id(),
       destination: ports.destination.identity(),
+      destinationGeneration: ports.destination.generation(),
       generation: ports.session.generation(),
       connection: ports.connection.current(),
       revision: ports.destination.revision()

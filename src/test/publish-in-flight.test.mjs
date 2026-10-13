@@ -8,7 +8,13 @@ const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
 const { setBaseState, cloneState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
-const { setAutoSaveEnabled, autoSaveTiming } = await import("../js/14-export.js");
+const { setAutoSaveEnabled, autoSaveTiming, legacySavePorts } = await import("../js/14-export.js");
+const { startSaves } = await import("../legacy/save-bridge.ts");
+
+startSaves(legacySavePorts({
+  capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.home, destinationGeneration: 0, generation: 0, connection: homeMod.conn, revision: null }),
+  stillOwns: (ctx) => ctx.destination === homeMod.home && ctx.docId === (S.state && S.state.docId)
+}));
 
 dom.window.document.body.innerHTML =
   '<div id="toast-host"></div>' +

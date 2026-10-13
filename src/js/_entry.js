@@ -72,10 +72,13 @@ import { appActions } from "../legacy/app-actions.ts";
 import { startActions } from "../bootstrap/actions.ts";
 import { documentIdentityPort, liveDocumentPort } from "./02b-doc-id.js";
 import { documentDestinationPort } from "./03-sync.js";
-import { startTransitions } from "../legacy/transition-bridge.ts";
+import { captureOperation, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import { startSaves } from "../legacy/save-bridge.ts";
+import { legacySavePorts } from "./14-export.js";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 
+startSaves(legacySavePorts({ capture: captureOperation, stillOwns: stillOwns }));
 init_00_prelude();
 init_00p_prefs();
 init_01_scene_status();
