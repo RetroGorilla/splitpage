@@ -16,6 +16,7 @@
     "check:deps": "node tools/dep-report.mjs",
     "check:comments": "node tools/comment-gate.mjs",
     "typecheck": "node tools/typecheck.mjs",
+    "mutants": "node tools/mutants.mjs",
     "verify": "npm run lint && npm run typecheck && npm run check:deps && npm run check:comments && node build.mjs && git diff --exit-code -- sw.js && npm run test:all"
   },
   "engines": {
