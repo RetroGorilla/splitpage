@@ -1,5 +1,6 @@
 import { isSha256Hex } from "../../../shared/blob-policy.js";
-import { base64Encode, imageDataUrlBytes, imageRecordOf } from "../../core/document/media.ts";
+import { base64Encode, claimHandedOver, imageDataUrlBytes, imageRecordOf } from "../../core/document/media.ts";
+import type { DecodedImage } from "../../core/document/media.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
 
 export interface StoredBlob {
@@ -40,6 +41,7 @@ export type RemoteBlobSource = (sha: string) => Uint8Array | ArrayBuffer | null 
 export interface BlobStore {
   intern: (bytes: unknown) => ImageRef | null;
   internDataUrl: (dataUrl: unknown) => ImageRef | null;
+  adopt: (images: readonly DecodedImage[]) => void;
   has: (sha: unknown) => boolean;
   recordFor: (sha: unknown) => ImageRef | null;
   bytesFor: (sha: unknown) => Uint8Array | null;
@@ -124,7 +126,15 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
 
   function internDataUrl(dataUrl: unknown): ImageRef | null {
     const bytes = imageDataUrlBytes(dataUrl);
-    return bytes ? intern(bytes) : null;
+    const record = bytes ? imageRecordOf(bytes) : null;
+    return bytes && record ? keep(record, bytes) : null;
+  }
+
+  function adopt(images: readonly DecodedImage[]): void {
+    images.forEach(function (image) {
+      if (claimHandedOver(image)) keep(freshRecord(image.ref), image.bytes);
+      else intern(image.bytes);
+    });
   }
 
   function has(sha: unknown): boolean {
@@ -326,6 +336,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   return {
     intern: intern,
     internDataUrl: internDataUrl,
+    adopt: adopt,
     has: has,
     recordFor: recordFor,
     bytesFor: bytesFor,
