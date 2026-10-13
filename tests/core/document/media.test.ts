@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mediaCommentId } from "../../../src/core/document/ids.ts";
 import {
   base64Encode,
+  claimHandedOver,
   createImageIngestion,
   decodeImageDataUrl,
   forgivingBase64Decode,
@@ -142,6 +143,35 @@ test("the pending list is a copy too: changing it changes neither known() nor th
   assert.equal(ingest.known("0".repeat(64)), null);
   assert.deepEqual(ingest.pending(), [{ ref: REF_A, bytes: PNG_A }]);
   assert.notEqual(ingest.pending()[0]?.bytes, ingest.pending()[0]?.bytes, "each call hands out its own bytes");
+});
+
+test("take hands the decoded bytes over once, in first-seen order, and the ingestion forgets them (#320)", () => {
+  const registry = lookup([]);
+  const ingest = createImageIngestion(registry.known);
+  ingest.fromDataUrl(dataUrl(PNG_B));
+  ingest.fromDataUrl(dataUrl(PNG_A));
+  ingest.fromDataUrl(dataUrl(PNG_B, "gif"));
+  const taken = ingest.take();
+  assert.deepEqual(taken, [{ ref: REF_B, bytes: PNG_B }, { ref: REF_A, bytes: PNG_A }]);
+  assert.deepEqual(ingest.take(), [], "nothing is handed over twice");
+  assert.deepEqual(ingest.pending(), []);
+  assert.equal(ingest.known(REF_A.sha256), null, "after the hand-over the registry answers");
+  assert.deepEqual(registry.asked, [REF_A.sha256]);
+});
+
+test("claimHandedOver vouches only for bytes an ingestion handed over, under the sha it hashed them to, and only once", () => {
+  const ingest = createImageIngestion(() => null);
+  ingest.fromDataUrl(dataUrl(PNG_A));
+  ingest.fromDataUrl(dataUrl(PNG_B));
+  const [a, b] = ingest.take() as [{ ref: ImageRef; bytes: Uint8Array }, { ref: ImageRef; bytes: Uint8Array }];
+  assert.equal(claimHandedOver(a), true);
+  assert.equal(claimHandedOver(a), false, "a second claim of the same bytes is refused");
+  assert.equal(claimHandedOver({ ref: REF_A, bytes: b.bytes }), false, "another sha for the bytes is refused");
+  assert.equal(claimHandedOver(b), false, "and that refusal used the claim up");
+  const decoded = decodeImageDataUrl(dataUrl(PNG_A)) as { ref: ImageRef; bytes: Uint8Array };
+  assert.equal(claimHandedOver(decoded), false, "decoded but never handed over");
+  const pendingCopy = (() => { const i = createImageIngestion(() => null); i.fromDataUrl(dataUrl(PNG_A)); return i.pending()[0]; })();
+  assert.equal(claimHandedOver(pendingCopy as { ref: ImageRef; bytes: Uint8Array }), false, "a pending() copy is not handed over");
 });
 
 test("a row's picture is its legacy data URL first, else its normalised reference", () => {

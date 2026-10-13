@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { IDBFactory } from "fake-indexeddb";
 import { createBlobStore, createIdbBlobBackend, createMemoryBlobBackend } from "../../../src/adapters/storage/blob-store.ts";
 import type { BlobBackend, BlobStoreHost, PreferredBlobBackend } from "../../../src/adapters/storage/blob-store.ts";
+import { createImageIngestion } from "../../../src/core/document/media.ts";
 import { image } from "../../../src/test/golden-helpers.mjs";
 
 const sha = (b: Uint8Array): string => createHash("sha256").update(b).digest("hex");
@@ -139,4 +140,35 @@ test("the IndexedDB backend stores a picture as a Blob record and reads the same
   assert.equal((await idb.record(a.sha256))?.usedAt, now, "a put of a held picture a day later touches it");
   assert.equal(createIdbBlobBackend(() => null, () => now).available(), false);
   await assert.rejects(createIdbBlobBackend(() => null, () => now).open(), /no-indexeddb/);
+});
+
+test("adopt keeps what an ingestion handed over as it is, in order, and checks anything else by hashing it (#320)", () => {
+  const rec = hostWith(null);
+  const store = createBlobStore(rec.host);
+  const a = image("png", 17, 2), b = image("jpeg", 18, 2), c = image("gif", 19, 2);
+  const ingest = createImageIngestion(store.recordFor);
+  ingest.fromDataUrl(b.dataUrl);
+  ingest.fromDataUrl(a.dataUrl);
+  const taken = ingest.take();
+  store.adopt(taken);
+  assert.deepEqual(store.recordFor(b.sha256), b.record);
+  assert.deepEqual(store.recordFor(a.sha256), a.record);
+  assert.deepEqual(store.bytesFor(a.sha256), a.bytes);
+  assert.deepEqual(ingest.known(a.sha256), a.record, "the ingestion now finds it in the store");
+
+  const forged = { ref: { sha256: "f".repeat(64), width: 1, height: 1, mime: "image/png" }, bytes: new Uint8Array(c.bytes as Uint8Array) };
+  store.adopt([forged]);
+  assert.equal(store.has("f".repeat(64)), false, "a ref nobody hashed is not believed");
+  assert.deepEqual(store.recordFor(c.sha256), c.record, "the bytes are kept under their own hash");
+  forged.bytes.fill(0);
+  assert.deepEqual(store.bytesFor(c.sha256), c.bytes, "and copied, since the caller still holds them");
+});
+
+test("internDataUrl hashes the decoded bytes once and keeps them: the same picture however it is spelled", () => {
+  const store = createBlobStore(hostWith(null).host);
+  const a = image("webp", 20, 2);
+  assert.deepEqual(store.internDataUrl(a.dataUrl), a.record);
+  assert.deepEqual(store.internDataUrl(a.dataUrl.replace("base64,", "base64,\n")), a.record);
+  assert.deepEqual(store.bytesFor(a.sha256), a.bytes);
+  assert.equal(store.internDataUrl("data:image/png;base64,aGVsbG8="), null);
 });
