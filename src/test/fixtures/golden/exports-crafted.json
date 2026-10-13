@@ -1,0 +1,61 @@
+{
+  "splitpage": {
+    "bytes": 5388,
+    "sha256": "2c691503c0aa317f87dea2e1d888be56cdfb34cee70dac9e8b66d2110d7f77a8"
+  },
+  "markdownProject": {
+    "bytes": 6787,
+    "sha256": "56c90b45f644d110c11f1a9f768062d303b3eaad9b723510b1b8b5e0592e905e"
+  },
+  "standaloneHtml": {
+    "stateData": {
+      "bytes": 3758,
+      "sha256": "07921c1479c560a536031e4d263132e174565a0780f0efa95218ea58a78c99c6"
+    },
+    "title": "Every export path — SplitShare",
+    "description": "3 scenes · 0:15 running time · Target 0:30 · 0:15 under · 1 of 3 shot · October 13, 2026"
+  },
+  "markdownExport": {
+    "bytes": 1959,
+    "sha256": "5ac411e9e86f6644ff0fec59e32a3280246515cc57c8d39e8ca1edf6ed866133"
+  },
+  "markdownExportPreview": {
+    "bytes": 752,
+    "sha256": "06fec958255427ff6e780d8a1572e8b0fa61b6b9fa4348e33cbbcf0902dd18b9"
+  },
+  "markdownTableExport": {
+    "bytes": 1844,
+    "sha256": "2261dd559258dfafd6127da062cd7e36d9701e2c6b0aa56eaaa2e4d58943deef"
+  },
+  "markdownImages": [
+    {
+      "path": "images/scene-01.png",
+      "bytes": 41
+    },
+    {
+      "path": "images/scene-01-2.jpg",
+      "bytes": 23
+    }
+  ],
+  "facts": {
+    "title": "Every export path",
+    "scenes": 3,
+    "seconds": 15,
+    "runtime": "0:15",
+    "target": {
+      "seconds": 30,
+      "text": "0:30",
+      "delta": "0:15",
+      "over": false
+    },
+    "status": {
+      "todo": 1,
+      "ready": 1,
+      "shot": 1
+    },
+    "words": 25,
+    "wpm": 150,
+    "exportedAt": "2026-10-13T17:30:00.000Z",
+    "date": "October 13, 2026"
+  }
+}
