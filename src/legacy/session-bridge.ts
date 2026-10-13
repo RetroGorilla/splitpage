@@ -1,6 +1,6 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent } from "../application/session/document-session.ts";
-import type { SessionChange } from "../application/session/change-set.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, SessionCounters, SessionListener } from "../application/session/document-session.ts";
+import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { Capability, CellTextPorts, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
@@ -50,27 +50,61 @@ function enter(raw: unknown): ValidatedDocument {
   return migrateRows(raw);
 }
 
-const session: DocumentSession = createDocumentSession({
-  entry: enter,
-  undo: createUndoAdapter(),
-  effects: {
-    dirty: function (change) { given.dirty(change); },
-    draft: function (change) { given.draft(change); },
-    save: function (change) { given.save(change); },
-    refresh: function (jobs) { refreshRunner(jobs); }
-  },
-  capability: { edit: function () { return given.edit(); } },
-  reconcile: { anchors: function (doc) { return syncCommentAnchors(doc, cellOf); } },
-  attribution: { attribute: function (doc) { return given.attribute(doc); } },
-  report: function (error) { console.error(error); },
-  timers: {
-    now: function () { return Date.now(); },
-    start: function (run, ms) { return setTimeout(run, ms); },
-    stop: function (handle) { clearTimeout(handle as number); }
-  }
-});
+function startSession(after: SessionCounters): DocumentSession {
+  return createDocumentSession({
+    entry: enter,
+    undo: createUndoAdapter(),
+    effects: {
+      dirty: function (change) { given.dirty(change); },
+      draft: function (change) { given.draft(change); },
+      save: function (change) { given.save(change); },
+      refresh: function (jobs) { refreshRunner(jobs); }
+    },
+    capability: { edit: function () { return given.edit(); } },
+    reconcile: { anchors: function (doc) { return syncCommentAnchors(doc, cellOf); } },
+    attribution: { attribute: function (doc) { return given.attribute(doc); } },
+    report: function (error) { console.error(error); },
+    timers: {
+      now: function () { return Date.now(); },
+      start: function (run, ms) { return setTimeout(run, ms); },
+      stop: function (handle) { clearTimeout(handle as number); }
+    },
+    after: after
+  });
+}
 
-watchUndoAdoption(function (doc) { session.adopt(doc); });
+let current: DocumentSession = startSession({ epoch: 0, generation: 0 });
+let ended = false;
+
+watchUndoAdoption(function (doc) { current.adopt(doc); });
+
+const session: DocumentSession = {
+  epoch: function () { return current.epoch(); },
+  generation: function () { return current.generation(); },
+  read: function <T>(select: (doc: DocumentView | null) => T): T { return current.read(select); },
+  adopt: function (raw: unknown) { return current.adopt(raw); },
+  absorbServer: function (raw: unknown) { return current.absorbServer(raw); },
+  absorbRecovery: function (raw: unknown) { return current.absorbRecovery(raw); },
+  absorbReload: function (content: ReloadedContent) { return current.absorbReload(content); },
+  settle: function (kind: AbsorbedKind) { current.settle(kind); },
+  run: function (command: Command) { return current.run(command); },
+  noteEdit: function (changes?: ChangeSet) { current.noteEdit(changes); },
+  refresh: function (job: string) { current.refresh(job); },
+  subscribe: function (listener: SessionListener) { return current.subscribe(listener); },
+  dispose: function () {
+    ended = true;
+    current.dispose();
+  }
+};
+
+export function adoptReplacement(doc: ValidatedDocument): void {
+  if (ended) return;
+  const old = current;
+  current = startSession({ epoch: old.epoch(), generation: old.generation() });
+  old.dispose();
+  followLiveDocument();
+  if (current.read(function (held) { return held; }) !== doc) current.adopt(doc);
+}
 
 export function provideSessionEffects(effects: Partial<LegacyEffects>): void {
   if (effects.dirty) given.dirty = effects.dirty;
