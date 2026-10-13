@@ -42,7 +42,7 @@ import {
 import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
-import { renderWriter, writerOpen } from "./19-writer.js";
+import { drawWriter, paintWriterDraw, writerOpen } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -426,7 +426,6 @@ function newRowEl(row, index) {
   var el = nodeFromHtml(rowHtmlFromParts(row, p));
   el[ROW_SIG] = p;
   el.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
-  cellsPainted += 2;
   return el;
 }
 
@@ -442,7 +441,7 @@ function resetRowShell(rowEl, cls) {
   if (ac && ac.className !== "cell audio-cell") ac.className = "cell audio-cell";
 }
 
-function paintRow(rowEl, row, index) {
+function planRowPatch(rowEl, row, index) {
   var sig = rowEl[ROW_SIG];
   if (!sig) return null;
   var p = rowParts(row, index);
@@ -452,26 +451,30 @@ function paintRow(rowEl, row, index) {
     if (sig[k] === p[k]) continue;
     var old = rowPartEl(rowEl, k);
     if (!old) return null;
-    parts.push({ key: k, el: old });
+    var fresh = nodeFromHtml(p[k]);
+    if (k === "visualText" || k === "audioText") ensureTrailingCaretSpot(fresh.querySelector(".cell-editable"));
+    parts.push({ key: k, el: old, fresh: fresh });
   }
-  resetRowShell(rowEl, p.cls);
-  parts.forEach(function (part) {
+  return { p: p, parts: parts };
+}
+
+function commitRowPatch(rowEl, patch) {
+  resetRowShell(rowEl, patch.p.cls);
+  patch.parts.forEach(function (part) {
     var active = document.activeElement;
     var action = active && active !== part.el && part.el.contains(active) &&
       active.getAttribute && active.getAttribute("data-action");
-    var fresh = nodeFromHtml(p[part.key]);
-    part.el.parentNode.replaceChild(fresh, part.el);
+    part.el.parentNode.replaceChild(part.fresh, part.el);
     if (part.key === "visualText" || part.key === "audioText") {
-      ensureTrailingCaretSpot(fresh.querySelector(".cell-editable"));
       cellsPainted++;
-    } else if (action) {
-      var again = fresh.querySelector('[data-action="' + cssAttr(action) + '"]');
+    } else if (action && !writerOpen) {
+      var again = part.fresh.querySelector('[data-action="' + cssAttr(action) + '"]');
       if (again) again.focus({ preventScroll: true });
     }
   });
-  rowEl[ROW_SIG] = p;
-  if (parts.length) rowsPainted++;
-  return parts.length > 0;
+  rowEl[ROW_SIG] = patch.p;
+  if (patch.parts.length) rowsPainted++;
+  return patch.parts.length > 0;
 }
 
 var painting = 0;
@@ -517,11 +520,14 @@ function paintOneRow(rowId) {
   if (idx === -1 || !rowsEl) return false;
   var rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return false;
-  var touched = paintRow(rowEl, S.state.rows[idx], idx);
-  if (touched === null) {
-    rowsEl.replaceChild(newRowEl(S.state.rows[idx], idx), rowEl);
+  var patch = planRowPatch(rowEl, S.state.rows[idx], idx);
+  var whole = patch ? null : newRowEl(S.state.rows[idx], idx);
+  var touched = true;
+  if (patch) touched = commitRowPatch(rowEl, patch);
+  else {
+    rowsEl.replaceChild(whole, rowEl);
     rowsPainted++;
-    touched = true;
+    cellsPainted += 2;
   }
   if (touched) paintPresence();
   if (touched) paintRowTimes();
@@ -560,33 +566,48 @@ var EMPTY_ROWS_HTML =
     '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
   '</div>';
 
-function reconcileRows(rowsEl, pinned) {
-  if (!S.state.rows.length) {
-    rowsEl.innerHTML = EMPTY_ROWS_HTML;
-    return;
-  }
-  var items = rowGroupItems(S.state.rows);
+function planRows(rowsEl) {
+  if (!S.state.rows.length) return { empty: true };
   var existing = new Map();
+  var drop = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el) {
     var key = rowMotionKey(el);
     var reusable = key && !existing.has(key) && (key.indexOf("strip:") === 0 || el[ROW_SIG]);
     if (reusable) existing.set(key, el);
-    else rowsEl.removeChild(el);
+    else drop.push(el);
   });
 
-  var nodes = items.map(function (item) {
+  var steps = rowGroupItems(S.state.rows).map(function (item) {
     var key = item.strip ? "strip:" + item.strip.join(",") : "row:" + item.row.id;
     var el = existing.get(key);
     if (el) {
       existing.delete(key);
-      if (item.strip || paintRow(el, item.row, item.index) !== null) return el;
-      rowsEl.removeChild(el);
+      if (item.strip) return { node: el };
+      var patch = planRowPatch(el, item.row, item.index);
+      if (patch) return { node: el, patch: patch };
+      drop.push(el);
     }
-    if (item.strip) return nodeFromHtml(hiddenShotStripHtml(item.strip));
-    rowsPainted++;
-    return newRowEl(item.row, item.index);
+    if (item.strip) return { node: nodeFromHtml(hiddenShotStripHtml(item.strip)) };
+    return { node: newRowEl(item.row, item.index), added: true };
   });
-  existing.forEach(function (el) { rowsEl.removeChild(el); });
+  existing.forEach(function (el) { drop.push(el); });
+  return { steps: steps, drop: drop };
+}
+
+function commitRows(rowsEl, plan, pinned) {
+  if (plan.empty) {
+    rowsEl.innerHTML = EMPTY_ROWS_HTML;
+    return;
+  }
+  plan.drop.forEach(function (el) { if (el.parentNode === rowsEl) rowsEl.removeChild(el); });
+  var nodes = plan.steps.map(function (step) {
+    if (step.patch) commitRowPatch(step.node, step.patch);
+    if (step.added) {
+      rowsPainted++;
+      cellsPainted += 2;
+    }
+    return step.node;
+  });
 
   var at = new Map();
   for (var c = 0; c < rowsEl.children.length; c++) at.set(rowsEl.children[c], c);
@@ -698,17 +719,21 @@ function paintAll() {
   trackDocument();
   if (!S.state) return;
   renderCalls++;
-  resetTransientUiState();
   var rowsEl = document.getElementById("rows");
-  var focus = captureRenderFocus(rowsEl);
+  var plan = planRows(rowsEl);
+  var title = S.state.title || "";
+  var writerDraw = writerOpen ? drawWriter() : null;
 
+  resetTransientUiState();
+  var focus = captureRenderFocus(rowsEl);
   withRowMotion(rowsEl, function () {
-    reconcileRows(rowsEl, focus && focus.rowEl);
+    commitRows(rowsEl, plan, focus && focus.rowEl);
   });
-  restoreRenderFocus(rowsEl, focus);
+  if (!writerOpen) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");
-  if (document.activeElement !== titleInput) titleInput.value = S.state.title || "";
+  if (document.activeElement !== titleInput) titleInput.value = title;
+  if (writerDraw) paintWriterDraw(writerDraw);
   syncPageTitle();
   syncAnchorResolvedClasses();
   updateScriptStats();
@@ -719,7 +744,6 @@ function paintAll() {
   renderProduction();
   captureReplyDrafts();
   renderComments();
-  if (writerOpen) renderWriter();
   scheduleUntaggedScan();
   paintPresence();
   refreshGalleryOverlay();

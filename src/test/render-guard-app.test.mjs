@@ -937,9 +937,13 @@ test("on a stale screen no editing event reaches the script's parts, while one a
     outside.remove();
   }
   const box = document.getElementById("find-input");
+  const bar = document.getElementById("findbar");
+  const wasHidden = bar.hidden;
+  bar.hidden = false;
   box.focus();
   const ev = new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true });
   box.dispatchEvent(ev);
+  bar.hidden = wasHidden;
   assert.equal(ev.defaultPrevented, false, "a text box keeps its own undo");
   await pressRedraw();
 });
