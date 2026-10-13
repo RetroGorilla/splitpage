@@ -324,6 +324,55 @@ comparison itself, because it ships in the release zip without `tools/`.
 `tools/test-main-module.mjs` starts every tool and the updater through such a
 link, with the same skip rule.
 
+## Running mutants in parallel
+
+[review.md](review.md) asks for mutation testing on new core policy: plant
+deliberate bugs ("mutants") in a scratch copy and check that the tests fail.
+`tools/mutants.mjs` does the copying, the editing and the test runs, several
+mutants at a time.
+
+```
+npm run mutants -- tools/mutants-example.json
+npm run mutants -- my-mutants.json --concurrency 2 --timeout 120
+```
+
+The file is a JSON array of mutants, or an object with a `mutants` array and a
+shared `tests` list. Each mutant has:
+
+| Field | Meaning |
+| --- | --- |
+| `label` | A short unique name, shown in the table |
+| `file` | The file to change, relative to the repository root |
+| `find` | The exact text to replace; it must occur once in the file |
+| `replace` | The text to put there; it must differ from `find` |
+| `tests` | Optional. Paths or substrings that pick the unit tests to run, as for `--only` in `tools/run-tests.mjs`. Falls back to the file's shared `tests`, then to every unit test |
+
+For each mutant the script copies the repository's files (the ones git lists,
+tracked or not ignored, so no `.git` and no nested `node_modules`) into its own
+temporary folder, links the root `node_modules` rather than copying it, applies
+the one edit there, and runs the chosen unit tests through
+`tools/run-tests.mjs`. Your working tree is never touched. A mutant is
+**caught** when the tests fail or run past the timeout, and **survived** when
+they pass. A timed-out mutant's whole process tree is killed, and so is every running mutant's (with the scratch copies removed) when you stop the run with Ctrl+C. A mutant whose `find` text
+is missing or ambiguous, or whose `file` is outside the repository or under
+`node_modules`, is reported as an error and makes the exit code 2.
+
+First the script runs the unmutated copy and stops if its tests fail, because
+every mutant would then look caught. `--no-baseline` skips that run.
+
+| Flag | Default |
+| --- | --- |
+| `--concurrency N` | CPU count minus one |
+| `--timeout SECONDS` | 300 per mutant |
+| `--keep` | Delete the scratch copies when done; this keeps them for inspection |
+
+The output is a table of label, result and duration, then the line to paste
+into the review record, for example `Mutants caught: 4/6`. Each survivor needs
+either a new test or a recorded reason it was accepted. A change that cannot
+alter behavior (an *equivalent* mutant) is a valid reason. The example file
+has two: `href-blocks-data` and `href-allows-vbscript` remove a check that the
+final scheme test makes redundant.
+
 ## TypeScript
 
 Node runs `.ts` files directly by stripping types; it does not read

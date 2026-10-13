@@ -122,6 +122,22 @@ test("B1: a late write for the previous document neither removes the key tracked
   assert.equal(mem.records.has("doc-a"), true, "its own record is kept: it is the previous document's work");
 });
 
+test("a write whose own key was taken by this writer since its capture is still acknowledged", async () => {
+  const mem = memoryStore();
+  const writer = createDraftWriter({ store: mem.store, writerId: "w1", ownership: ownership().port });
+  await mem.store.put({ key: "doc-a", writerId: "dead-tab", generation: 1, stateJson: "{}" });
+  mem.hold();
+  const captured = writer.capture("doc-a");
+  assert.equal(captured.before, null);
+  const landing = writer.write(captured, fields("A, newer"));
+  await flush();
+  await writer.take("doc-a");
+  mem.releaseAll();
+  assert.deepEqual(await landing, { ok: true, evicted: 0, obsolete: false }, "the tracked key is the write's own, so it is not obsolete");
+  assert.equal(writer.tracked(), "doc-a");
+  assert.equal(await writer.discard(), true, "the acknowledged generation is the write's, so a discard removes it");
+});
+
 test("a write whose operation no longer owns the document is obsolete even when no other key was tracked since", async () => {
   const own = ownership();
   const mem = memoryStore();

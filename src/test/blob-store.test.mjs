@@ -82,6 +82,34 @@ test("intern copies: a caller reusing its buffer cannot change what a sha names"
   assert.deepEqual(recordFor(rec.sha256), rec);
 });
 
+test("bytesForSync hands out bytes the caller owns: writing into them leaves the picture as it was (E14)", () => {
+  const original = png(43, 30);
+  const rec = intern(original);
+  const first = bytesForSync(rec.sha256);
+  first.fill(0x41);
+  const again = bytesForSync(rec.sha256);
+  assert.notEqual(again, first, "a fresh array each read");
+  assert.deepEqual(again, original);
+  assert.equal(sha(again), rec.sha256);
+  const row = { imageRef: rec };
+  const pic = rowImageBytes(row);
+  pic.bytes.fill(0x42);
+  assert.deepEqual(rowImageBytes(row).bytes, original);
+  assert.equal(sha(Buffer.from(dataUrlForSync(rec.sha256).split(",")[1], "base64")), rec.sha256);
+});
+
+test("the memory backend keeps its own copy of what it is given and hands out copies", async () => {
+  const mem = createMemoryBackend();
+  const bytes = png(44, 30);
+  const s = sha(bytes);
+  await mem.put(s, bytes, "image/png");
+  bytes.fill(0);
+  const got = await mem.get(s);
+  assert.equal(sha(got.bytes), s);
+  got.bytes.fill(0);
+  assert.equal(sha((await mem.get(s)).bytes), s);
+});
+
 test("intern refuses what is not a measurable raster image", () => {
   assert.equal(intern(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>")), null, "SVG");
   assert.equal(intern(png(0, 5)), null, "zero width");
@@ -258,6 +286,31 @@ test("ensureBytes reads what memory lacks from the backend and reports the rest"
   assert.deepEqual(backend.gets, [storedSha, nowhere], "nothing re-read");
 });
 
+test("persist hands the backend the picture's own bytes and type", async () => {
+  const backend = gatedBackend(true);
+  setBackend(backend);
+  const bytes = jpeg(86, 2);
+  const a = intern(bytes).sha256;
+  const p = persist([a]);
+  await tick();
+  backend.release();
+  assert.deepEqual(await p, []);
+  assert.deepEqual(backend.held.get(a), bytes);
+  assert.equal(sha(backend.held.get(a)), a);
+});
+
+test("ensureBytes keeps its own copy: the backend changing the bytes it handed out changes nothing", async () => {
+  const backend = gatedBackend(true);
+  setBackend(backend);
+  const stored = png(94, 1);
+  const storedSha = sha(stored);
+  backend.held.set(storedSha, stored);
+  assert.deepEqual(await ensureBytes([storedSha]), []);
+  stored.fill(0);
+  assert.equal(sha(Buffer.from(dataUrlForSync(storedSha).split(",")[1], "base64")), storedSha);
+  assert.deepEqual(recordFor(storedSha), { sha256: storedSha, width: 94, height: 1, mime: "image/png" });
+});
+
 test("ensureBytes re-hashes what the backend returns and refuses a mismatch", async () => {
   const backend = gatedBackend(true);
   setBackend(backend);
@@ -339,7 +392,7 @@ test("rowImageUrl / Key / DataUrl / Bytes answer for either form, synchronously"
   assert.equal(rowImageDataUrl(absent), null);
 
   const fromRef = rowImageBytes(ref);
-  assert.equal(fromRef.bytes, bytesForSync(rec.sha256));
+  assert.deepEqual(fromRef.bytes, bytesForSync(rec.sha256));
   assert.deepEqual([fromRef.mime, fromRef.width, fromRef.height], ["image/png", 14, 9]);
   const fromLegacy = rowImageBytes(legacy);
   assert.deepEqual(Array.from(fromLegacy.bytes), Array.from(bytes));

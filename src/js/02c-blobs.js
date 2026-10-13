@@ -1,8 +1,10 @@
 import {
-  base64Encode,
+  createBlobStore,
+  createIdbBlobBackend,
+  createMemoryBlobBackend
+} from "../adapters/storage/blob-store.ts";
+import {
   forgivingBase64Decode,
-  imageDataUrlBytes,
-  imageRecordOf,
   rowImage,
   rowImageKey,
   rowImageShas
@@ -10,59 +12,24 @@ import {
 import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 export { rowImage, rowImageKey, rowImageShas };
 
-var BLOB_DB_NAME = "splitpage-blobs";
-var BLOB_DB_VERSION = 1;
-var BLOB_STORE = "blobs";
-var BLOB_TOUCH_MS = 24 * 60 * 60 * 1000;
+var idbBlobs = createIdbBlobBackend(function () {
+  return typeof window !== "undefined" && "indexedDB" in window && window.indexedDB ? window.indexedDB : null;
+}, function () { return Date.now(); });
 
-var blobEntries = {};
-var blobDurable = {};
-var blobPersisting = {};
-var blobLoading = {};
+export var blobStore = createBlobStore({
+  preferred: idbBlobs,
+  fallback: createMemoryBlobBackend,
+  objectUrl: function (bytes, mime) { return URL.createObjectURL(new Blob([bytes], { type: mime })); },
+  revokeObjectUrl: function (url) { URL.revokeObjectURL(url); },
+  later: function (run) { setTimeout(run, 0); },
+  now: function () { return Date.now(); },
+  warn: function () {
+    if (typeof window !== "undefined" && window.console) console.warn.apply(console, arguments);
+  }
+});
 
-var blobRemote = null;
-var blobFetching = {};
-var blobRemoteMissAt = {};
-var REMOTE_MISS_MS = 5 * 60 * 1000;
-
-var blobBackend = null;
-var blobBackendPromise = null;
-var blobBackendGen = 0;
-var blobIdbFailed = false;
-var blobDb = null;
-var blobDbPromise = null;
-
-function blobNoop() {}
-
-function freshRecord(rec) {
-  return { sha256: rec.sha256, width: rec.width, height: rec.height, mime: rec.mime };
-}
-
-function uniqueStrings(list) {
-  var out = [], seen = {};
-  (Array.isArray(list) ? list : []).forEach(function (s) {
-    if (typeof s !== "string" || Object.prototype.hasOwnProperty.call(seen, s)) return;
-    seen[s] = true;
-    out.push(s);
-  });
-  return out;
-}
-
-export function intern(bytes) {
-  if (bytes instanceof ArrayBuffer) bytes = new Uint8Array(bytes);
-  if (!bytes || typeof bytes.length !== "number" || typeof bytes.byteLength !== "number") return null;
-  var record = imageRecordOf(bytes);
-  if (!record) return null;
-  var have = blobEntries[record.sha256];
-  if (have) return freshRecord(have.record);
-  blobEntries[record.sha256] = { record: record, bytes: new Uint8Array(bytes), url: null };
-  return freshRecord(record);
-}
-
-export function internDataUrl(dataUrl) {
-  var bytes = imageDataUrlBytes(dataUrl);
-  return bytes ? intern(bytes) : null;
-}
+export function intern(bytes) { return blobStore.intern(bytes); }
+export function internDataUrl(dataUrl) { return blobStore.internDataUrl(dataUrl); }
 
 export var registryImages = {
   known: recordFor,
@@ -73,50 +40,21 @@ export var registryImages = {
   }
 };
 
-export function has(sha) {
-  return isSha256Hex(sha) && !!blobEntries[sha];
-}
-
-export function recordFor(sha) {
-  return has(sha) ? freshRecord(blobEntries[sha].record) : null;
-}
-
-export function bytesForSync(sha) {
-  return has(sha) ? blobEntries[sha].bytes : null;
-}
-
-export function urlForSync(sha) {
-  if (!has(sha)) return null;
-  var e = blobEntries[sha];
-  if (!e.url) {
-    try {
-      e.url = URL.createObjectURL(new Blob([e.bytes], { type: e.record.mime }));
-    } catch (x) {
-      e.url = null;
-    }
-  }
-  return e.url;
-}
-
-export function revokeObjectUrls() {
-  Object.keys(blobEntries).forEach(function (sha) {
-    var e = blobEntries[sha];
-    if (e.url) {
-      try { URL.revokeObjectURL(e.url); } catch (x) {}
-      e.url = null;
-    }
-  });
-}
-
-export function dataUrlForSync(sha) {
-  if (!has(sha)) return null;
-  var e = blobEntries[sha];
-  return "data:" + e.record.mime + ";base64," + base64Encode(e.bytes);
-}
-
-export function isDurableSync(sha) {
-  return has(sha) && !!blobDurable[sha] && !!(blobBackend && blobBackend.persistent);
-}
+export function has(sha) { return blobStore.has(sha); }
+export function recordFor(sha) { return blobStore.recordFor(sha); }
+export function bytesForSync(sha) { return blobStore.bytesFor(sha); }
+export function urlForSync(sha) { return blobStore.urlFor(sha); }
+export function revokeObjectUrls() { blobStore.revokeUrls(); }
+export function dataUrlForSync(sha) { return blobStore.dataUrlFor(sha); }
+export function isDurableSync(sha) { return blobStore.isDurable(sha); }
+export function queuePersist(shas) { blobStore.queuePersist(shas); }
+export function persist(shas) { return blobStore.persist(shas); }
+export function ensureBytes(shas, opts) { return blobStore.ensureBytes(shas, opts); }
+export function setBackend(backend) { blobStore.setBackend(backend); }
+export function backendInfo() { return blobStore.backendInfo(); }
+export function setRemoteSource(fn) { blobStore.setRemoteSource(fn); }
+export function forgetRemoteMisses() { blobStore.forgetRemoteMisses(); }
+export var createMemoryBackend = createMemoryBlobBackend;
 
 export function rowImageUrl(row) {
   var img = rowImage(row);
@@ -246,24 +184,6 @@ export function missingInlineImages(s) {
   return refsIn(s).filter(function (sha) { return !has(sha); });
 }
 
-var persistQueue = {};
-var persistQueued = false;
-
-export function queuePersist(shas) {
-  (Array.isArray(shas) ? shas : []).forEach(function (sha) {
-    if (isSha256Hex(sha) && !blobDurable[sha]) persistQueue[sha] = true;
-  });
-  if (persistQueued || !Object.keys(persistQueue).length) return;
-  if (!blobBackend && !(typeof window !== "undefined" && window.indexedDB)) { persistQueue = {}; return; }
-  persistQueued = true;
-  setTimeout(function () {
-    persistQueued = false;
-    var list = Object.keys(persistQueue);
-    persistQueue = {};
-    if (list.length) persist(list);
-  }, 0);
-}
-
 var BLOB_MISSING_TEXT = "Image unavailable";
 var hydrateQueued = {};
 var hydrateScheduled = false;
@@ -345,276 +265,6 @@ function startBlobHydrator() {
   if (initial.length) scheduleHydrate(initial);
 }
 
-export function setBackend(backend) {
-  blobBackendGen++;
-  blobBackend = backend || null;
-  blobBackendPromise = null;
-  blobDurable = {};
-  blobPersisting = {};
-  blobLoading = {};
-}
-
-export function backendInfo() {
-  return blobBackend ? { name: String(blobBackend.name || ""), persistent: !!blobBackend.persistent } : null;
-}
-
-function resolveBlobBackend() {
-  if (blobBackend) return Promise.resolve(blobBackend);
-  if (blobBackendPromise) return blobBackendPromise;
-  var gen = blobBackendGen;
-  var p = (blobIdbFailed ? Promise.reject(new Error("idb-failed")) : openBlobDb()).then(function () {
-    return idbBlobBackend;
-  }, function (e) {
-    if (!blobIdbFailed && window.console) console.warn("Image store: IndexedDB unavailable, keeping images in memory", e);
-    blobIdbFailed = true;
-    return createMemoryBackend();
-  }).then(function (b) {
-    if (gen === blobBackendGen && !blobBackend) blobBackend = b;
-    blobBackendPromise = null;
-    return blobBackend || b;
-  });
-  blobBackendPromise = p;
-  return p;
-}
-
-export function ensureBytes(shas, opts) {
-  var list = uniqueStrings(shas);
-  var need = list.filter(function (sha) { return isSha256Hex(sha) && !blobEntries[sha]; });
-  var report = function () { return list.filter(function (sha) { return !has(sha); }); };
-  if (!need.length) return Promise.resolve(report());
-  var remote = !(opts && opts.remote === false);
-  return resolveBlobBackend().then(function (backend) {
-    return Promise.all(need.map(function (sha) { return loadBlob(backend, sha); }));
-  }).then(function () {
-    if (!remote || !blobRemote) return null;
-    return Promise.all(need.filter(function (sha) { return !blobEntries[sha]; }).map(fetchRemoteBlob));
-  }).then(report, report);
-}
-
-export function setRemoteSource(fn) {
-  blobRemote = typeof fn === "function" ? fn : null;
-  blobFetching = {};
-  blobRemoteMissAt = {};
-}
-
-export function forgetRemoteMisses() {
-  blobRemoteMissAt = {};
-}
-
-function remoteMissFresh(sha) {
-  var at = blobRemoteMissAt[sha];
-  if (!at) return false;
-  if (Date.now() - at < REMOTE_MISS_MS) return true;
-  delete blobRemoteMissAt[sha];
-  return false;
-}
-
-function fetchRemoteBlob(sha) {
-  if (blobFetching[sha]) return blobFetching[sha];
-  if (remoteMissFresh(sha)) return Promise.resolve();
-  var source = blobRemote;
-  var p = Promise.resolve().then(function () { return source ? source(sha) : null; }).then(function (bytes) {
-    if (blobEntries[sha]) return;
-    if (!bytes) { if (source && source === blobRemote) blobRemoteMissAt[sha] = Date.now(); return; }
-    var rec = intern(bytes);
-    if (rec && rec.sha256 !== sha && window.console) {
-      console.warn("Image store: the server's blob " + sha + " failed its hash check");
-    }
-  }).then(null, blobNoop).then(function () {
-    if (blobFetching[sha] === p) delete blobFetching[sha];
-  });
-  blobFetching[sha] = p;
-  return p;
-}
-
-function loadBlob(backend, sha) {
-  if (blobLoading[sha]) return blobLoading[sha];
-  var gen = blobBackendGen;
-  var p = Promise.resolve().then(function () { return backend.get(sha); }).then(function (r) {
-    if (!r || !r.bytes || blobEntries[sha]) return;
-    var rec = intern(r.bytes);
-    if (!rec) return;
-    if (rec.sha256 !== sha) {
-      if (window.console) console.warn("Image store: blob " + sha + " failed its hash check");
-      return;
-    }
-    if (gen === blobBackendGen) blobDurable[sha] = true;
-  }).then(null, blobNoop).then(function () {
-    if (blobLoading[sha] === p) delete blobLoading[sha];
-  });
-  blobLoading[sha] = p;
-  return p;
-}
-
-export function persist(shas) {
-  var list = uniqueStrings(shas);
-  if (!list.length) return Promise.resolve([]);
-  return resolveBlobBackend().then(function (backend) {
-    return Promise.all(list.map(function (sha) { return persistBlob(backend, sha); }));
-  }).then(function (ok) {
-    return list.filter(function (sha, i) { return !ok[i]; });
-  }, function () { return list.slice(); });
-}
-
-function persistBlob(backend, sha) {
-  if (!isSha256Hex(sha)) return Promise.resolve(false);
-  if (blobDurable[sha]) return Promise.resolve(true);
-  if (blobPersisting[sha]) return blobPersisting[sha];
-  var gen = blobBackendGen;
-  var e = blobEntries[sha];
-  var p = Promise.resolve().then(function () {
-    if (e) return backend.put(sha, e.bytes, e.record.mime).then(function () { return true; });
-    return backend.missing([sha]).then(function (m) { return Array.isArray(m) && m.indexOf(sha) === -1; });
-  }).then(function (ok) {
-    if (ok && gen === blobBackendGen) blobDurable[sha] = true;
-    return !!ok;
-  }, function (err) {
-    if (window.console) console.warn("Image store: could not store blob " + sha, err);
-    return false;
-  }).then(function (ok) {
-    if (blobPersisting[sha] === p) delete blobPersisting[sha];
-    return ok;
-  });
-  blobPersisting[sha] = p;
-  return p;
-}
-
-export function createMemoryBackend() {
-  var held = {};
-  return {
-    name: "memory",
-    persistent: false,
-    get: function (sha) {
-      var r = isSha256Hex(sha) ? held[sha] : null;
-      return Promise.resolve(r ? { bytes: r.bytes, mime: r.mime } : null);
-    },
-    put: function (sha, bytes, mime) {
-      if (!isSha256Hex(sha)) return Promise.reject(new Error("bad sha"));
-      if (!held[sha]) held[sha] = { bytes: bytes, mime: mime };
-      return Promise.resolve();
-    },
-    missing: function (shas) {
-      return Promise.resolve(uniqueStrings(shas).filter(function (sha) {
-        return !isSha256Hex(sha) || !held[sha];
-      }));
-    }
-  };
-}
-
-function openBlobDb() {
-  if (blobDb) return Promise.resolve(blobDb);
-  if (blobDbPromise) return blobDbPromise;
-  var p = new Promise(function (resolve, reject) {
-    var failed = false;
-    function fail(e) { failed = true; reject(e); }
-    if (!("indexedDB" in window) || !window.indexedDB) { fail(new Error("no-indexeddb")); return; }
-    var req;
-    try { req = indexedDB.open(BLOB_DB_NAME, BLOB_DB_VERSION); } catch (e) { fail(e); return; }
-    req.onupgradeneeded = function (e) {
-      var db = req.result;
-      if ((e.oldVersion || 0) < 1) db.createObjectStore(BLOB_STORE);
-    };
-    req.onsuccess = function () {
-      var db = req.result;
-      if (failed) { try { db.close(); } catch (e) {} return; }
-      function forget() {
-        if (blobDb === db) { blobDb = null; blobDbPromise = null; }
-      }
-      db.onversionchange = function () { try { db.close(); } catch (e) {} forget(); };
-      db.onclose = forget;
-      blobDb = db;
-      resolve(db);
-    };
-    req.onerror = function () { fail(req.error || new Error("idb-open")); };
-    req.onblocked = function () { fail(new Error("idb-blocked")); };
-  });
-  blobDbPromise = p;
-  p.then(null, function () { if (blobDbPromise === p) blobDbPromise = null; });
-  return p;
-}
-
-function blobTx(mode, body) {
-  return openBlobDb().then(function (db) {
-    return new Promise(function (resolve, reject) {
-      var tx = mode === "readwrite"
-        ? db.transaction([BLOB_STORE], "readwrite", { durability: "strict" })
-        : db.transaction([BLOB_STORE], "readonly");
-      var result;
-      tx.oncomplete = function () { resolve(result); };
-      tx.onabort = function () { reject(tx.error || new Error("transaction aborted")); };
-      tx.onerror = function () { };
-      try {
-        body(tx.objectStore(BLOB_STORE), function (r) { result = r; });
-      } catch (e) {
-        try { tx.abort(); } catch (x) {}
-        reject(e);
-      }
-    });
-  });
-}
-
-function blobToBytes(blob) {
-  if (blob && typeof blob.arrayBuffer === "function") {
-    return blob.arrayBuffer().then(function (ab) { return new Uint8Array(ab); });
-  }
-  return new Promise(function (resolve, reject) {
-    var fr = new FileReader();
-    fr.onload = function () { resolve(new Uint8Array(fr.result)); };
-    fr.onerror = function () { reject(fr.error); };
-    fr.readAsArrayBuffer(blob);
-  });
-}
-
-var idbBlobBackend = {
-  name: "idb",
-  persistent: true,
-  get: function (sha) {
-    if (!isSha256Hex(sha)) return Promise.resolve(null);
-    return blobTx("readonly", function (store, done) {
-      var req = store.get(sha);
-      req.onsuccess = function () { done(req.result || null); };
-    }).then(function (rec) {
-      if (!rec || !(rec.bytes instanceof Blob)) return null;
-      return blobToBytes(rec.bytes).then(function (bytes) { return { bytes: bytes, mime: rec.mime }; });
-    });
-  },
-  put: function (sha, bytes, mime) {
-    if (!isSha256Hex(sha)) return Promise.reject(new Error("bad sha"));
-    return blobTx("readwrite", function (store) {
-      var req = store.get(sha);
-      req.onsuccess = function () {
-        var now = Date.now();
-        var rec = req.result;
-        if (rec && rec.bytes instanceof Blob) {
-          if (!(now - (rec.usedAt || 0) < BLOB_TOUCH_MS)) {
-            rec.usedAt = now;
-            store.put(rec, sha);
-          }
-          return;
-        }
-        store.put({ mime: mime, size: bytes.length, bytes: new Blob([bytes], { type: mime }), addedAt: now, usedAt: now }, sha);
-      };
-    });
-  },
-  missing: function (shas) {
-    var list = uniqueStrings(shas);
-    var valid = list.filter(isSha256Hex);
-    if (!valid.length) return Promise.resolve(list);
-    return blobTx("readonly", function (store, done) {
-      var held = {}, left = valid.length;
-      valid.forEach(function (sha) {
-        var req = store.count(sha);
-        req.onsuccess = function () {
-          if (req.result > 0) held[sha] = true;
-          if (--left === 0) done(held);
-        };
-      });
-    }).then(function (held) {
-      return list.filter(function (sha) { return !held[sha]; });
-    });
-  }
-};
-
 export function __init() {
   startBlobHydrator();
   window.__blobsTest = {
@@ -631,26 +281,17 @@ export function __init() {
     rowImageUrl: rowImageUrl,
     hydrate: hydrateBlobImages,
     backendInfo: function () {
-      return resolveBlobBackend().then(function () { return backendInfo(); });
+      return blobStore.resolveBackend().then(function () { return backendInfo(); });
     },
-    idbRecord: function (sha) {
-      return blobTx("readonly", function (store, done) {
-        var req = store.get(sha);
-        req.onsuccess = function () { done(req.result || null); };
-      }).then(function (rec) {
-        return rec ? { mime: rec.mime, size: rec.size, isBlob: rec.bytes instanceof Blob, addedAt: rec.addedAt, usedAt: rec.usedAt } : null;
-      });
-    },
-    remoteMisses: function () { return Object.keys(blobRemoteMissAt); },
+    idbRecord: function (sha) { return idbBlobs.record(sha); },
+    remoteMisses: function () { return blobStore.remoteMisses(); },
     forgetRemoteMisses: forgetRemoteMisses,
     ageRemoteMisses: function () {
-      Object.keys(blobRemoteMissAt).forEach(function (sha) { blobRemoteMissAt[sha] -= REMOTE_MISS_MS; });
+      blobStore.ageRemoteMisses();
       return true;
     },
     forgetMemory: function () {
-      revokeObjectUrls();
-      blobEntries = {};
-      blobLoading = {};
+      blobStore.forgetMemory();
       return true;
     }
   };

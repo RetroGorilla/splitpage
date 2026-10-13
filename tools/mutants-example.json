@@ -1,0 +1,11 @@
+{
+  "tests": ["tests/core/document/timing.test.ts", "tests/core/document/text-policy.test.ts"],
+  "mutants": [
+    { "label": "wpm-lower-bound", "file": "src/core/document/timing.ts", "find": "wpm >= 60 &&", "replace": "wpm > 60 &&" },
+    { "label": "wpm-default", "file": "src/core/document/timing.ts", "find": "export const DEFAULT_WPM = 150;", "replace": "export const DEFAULT_WPM = 151;" },
+    { "label": "status-wraps", "file": "src/core/document/timing.ts", "find": "ROW_STATUS_IDS[(i + 1) % ROW_STATUS_IDS.length]", "replace": "ROW_STATUS_IDS[(i + 1) % (ROW_STATUS_IDS.length - 1)]" },
+    { "label": "href-blocks-data", "file": "src/core/document/text-policy.ts", "find": "if (probe.indexOf(\"data:\") === 0) return null;", "replace": "" },
+    { "label": "href-allows-vbscript", "file": "src/core/document/text-policy.ts", "find": " || probe.indexOf(\"vbscript:\") === 0", "replace": "" },
+    { "label": "scene-length-max", "file": "src/core/document/timing.ts", "find": "v > SCENE_LENGTH_MAX) return undefined", "replace": "v >= SCENE_LENGTH_MAX) return undefined" }
+  ]
+}
