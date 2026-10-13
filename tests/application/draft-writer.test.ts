@@ -68,7 +68,7 @@ function ownership() {
     state: state,
     port: {
       capture: function (): OperationContext {
-        return Object.freeze({ epoch: state.epoch, docId: null, destination: null, generation: 0, connection: null, revision: null });
+        return Object.freeze({ epoch: state.epoch, docId: null, destination: null, destinationGeneration: 0, generation: 0, connection: null, revision: null });
       },
       stillOwns: function (ctx: OperationContext) { return ctx.epoch === state.epoch; }
     }

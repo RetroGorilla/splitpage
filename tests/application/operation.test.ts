@@ -3,21 +3,25 @@ import assert from "node:assert/strict";
 import { createOperations } from "../../src/application/session/operation.ts";
 
 function live() {
-  const state = { epoch: 3, generation: 7, docId: "d" + "1".repeat(32) as string | null, destination: {} as object, revision: 4 as number | null, connection: {} as object };
+  const state = { epoch: 3, generation: 7, destinationGeneration: 5, docId: "d" + "1".repeat(32) as string | null, destination: {} as object, revision: 4 as number | null, connection: {} as object };
   const operations = createOperations({
     session: { epoch: function () { return state.epoch; }, generation: function () { return state.generation; } },
     document: { id: function () { return state.docId; } },
-    destination: { identity: function () { return state.destination; }, revision: function () { return state.revision; } },
+    destination: {
+      identity: function () { return state.destination; },
+      generation: function () { return state.destinationGeneration; },
+      revision: function () { return state.revision; }
+    },
     connection: { current: function () { return state.connection; } }
   });
   return { state: state, operations: operations };
 }
 
-test("captureOperation reads the epoch, document id, destination, edit generation, connection instance and server revision at once", () => {
+test("captureOperation reads the epoch, document id, destination and its confirmed generation, edit generation, connection instance and server revision at once", () => {
   const { state, operations } = live();
   const ctx = operations.capture();
   assert.deepEqual({ ...ctx }, {
-    epoch: 3, docId: state.docId, destination: state.destination, generation: 7, connection: state.connection, revision: 4
+    epoch: 3, docId: state.docId, destination: state.destination, destinationGeneration: 5, generation: 7, connection: state.connection, revision: 4
   });
   assert.ok(Object.isFrozen(ctx));
   state.generation = 8;
@@ -38,8 +42,9 @@ test("stillOwns holds through edits and revisions, and fails on a new epoch, id,
     const { state, operations } = live();
     const ctx = operations.capture();
     state.generation += 2;
+    state.destinationGeneration += 1;
     state.revision = 9;
-    assert.equal(operations.stillOwns(ctx), true, "edits and a new server revision keep ownership");
+    assert.equal(operations.stillOwns(ctx), true, "edits, a new confirmed generation and a new server revision keep ownership");
     change(state);
     assert.equal(operations.stillOwns(ctx), false, name);
   }

@@ -48,7 +48,7 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
   const operations = createOperations({
     session: { epoch: function () { return epoch; }, generation: function () { return 0; } },
     document: { id: function () { return held ? held.docId : null; } },
-    destination: { identity: function () { return destination; }, revision: function () { return null; } },
+    destination: { identity: function () { return destination; }, generation: function () { return 0; }, revision: function () { return null; } },
     connection: { current: function () { return connection; } }
   });
   const transitions = createTransitions<Destination>({

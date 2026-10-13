@@ -56,6 +56,7 @@ import {
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
+import { requestSave } from "../legacy/save-bridge.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -1100,7 +1101,10 @@ export async function publishAndCopyShareLink() {
     return false;
   }
   if (onServerDoc()) {
-    if (S.dirty && !(await saveToServer())) return false;
+    if (S.dirty) {
+      var shared = await requestSave({ kind: "server" });
+      if (shared.kind !== "saved" && !(shared.kind === "obsolete" && shared.here)) return false;
+    }
   } else if (!(await publishToServer()) || !onServerDoc()) {
     return false;
   }

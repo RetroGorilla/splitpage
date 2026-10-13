@@ -17,6 +17,8 @@ import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
 import { REVIEW_ONLY, noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { confirmSavedNow, noteSaveChange, unsavedFor } from "../legacy/save-bridge.ts";
+import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 
 S.saveButtonBusy = false;
@@ -37,8 +39,8 @@ function signLegacyEdit() {
 
 provideSessionEffects({
   dirty: function () {
-    S.dirty = true;
-    S.editSeq++;
+    S.editSeq = noteSaveChange();
+    S.dirty = unsavedFor();
   },
   attribute: myColorPlan,
   draft: function () {
@@ -56,13 +58,14 @@ provideSessionEffects({
   }
 });
 
-export function setSaveButtons(text, disabled) {
+export function setSaveButtons() {
+  var view = saveButtonView({ busy: !!S.saveButtonBusy, dirty: !!S.dirty });
   ["btn-save", "wr-save"].forEach(function (id) {
     var btn = document.getElementById(id);
     if (!btn) return;
-    btn.textContent = text;
-    if (disabled !== undefined) btn.disabled = disabled;
-    btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
+    btn.textContent = view.label;
+    btn.disabled = view.disabled;
+    btn.classList.toggle("is-dirty", view.dirty);
   });
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
@@ -81,7 +84,8 @@ export function markAbsorbedDirty(kind) {
 }
 
 export function clearDirty() {
-  S.dirty = false;
+  confirmSavedNow();
+  S.dirty = unsavedFor();
   clearAutoSaveTimers();
   resumeAutoSave();
   savedAt = 0;
@@ -105,31 +109,20 @@ function saveStatusView() {
     : home.kind === "import" ? home.name || ""
     : "";
 
-  if (typeof onServerDoc === "function" && onServerDoc() && serverSessionExpired) {
-    return { text: "Not saving", cls: "warn",
-             title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
-  }
-  if (typeof onServerDoc === "function" && onServerDoc() && linkTurnedOff) {
-    return { text: "Not saving", cls: "warn",
-             title: "The owner turned off the link you opened this with — File ▸ Save a copy… keeps what's on screen." };
-  }
-  if (S.saveButtonBusy) {
-    return { text: "Saving…", cls: "busy",
-             title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
-  }
-  if (autoSaveHalt) return { text: "Not saving", cls: "warn", title: autoSaveHalt };
-  if (!S.dirty) {
-    if (!target && home.kind !== "file" && !where) return null;
-    return { text: "Saved", cls: "ok", title: "", where: where };
-  }
-  if (target && autoSaveEnabled) {
-    return { text: "Unsaved changes", cls: "pending",
-             title: "Autosave will write these to " + where + " a moment after you stop typing." };
-  }
-  return { text: "Unsaved changes", cls: "pending",
-           title: target
-             ? "Autosave is off — press Save to write these to " + where + "."
-             : "Press Save to choose where this script is kept." };
+  var onServer = typeof onServerDoc === "function" && onServerDoc();
+  var line = saveStatus({
+    busy: !!S.saveButtonBusy,
+    dirty: !!S.dirty,
+    halted: autoSaveHalt || "",
+    autoSaveOn: !!autoSaveEnabled,
+    target: target,
+    where: where,
+    homeKind: home.kind,
+    onServer: !!onServer,
+    signedOut: !!serverSessionExpired,
+    linkOff: !!linkTurnedOff
+  }).line;
+  return line ? Object.assign({}, line) : null;
 }
 
 var savedAt = 0;

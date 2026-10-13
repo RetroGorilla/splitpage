@@ -391,7 +391,7 @@ wrongToday("S6-reopen", "a 409 that arrives after a same-id reopen merges nothin
   assert.deepEqual(summary(), before, "the reopened session was not touched by the conflict");
 }), /no retry was sent for the save of the replaced session|the reopened session was not touched by the conflict/);
 
-wrongToday("S7", "overlapping manual and automatic saves send one PUT at a time per document", hostedCase(async ({ server, held }) => {
+rightToday("S7", "overlapping manual and automatic saves send one PUT at a time per document", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
   openHosted(script("A", idOf("a")), "srv-a", 1);
   editRow(0, "Typed once.");
@@ -406,7 +406,7 @@ wrongToday("S7", "overlapping manual and automatic saves send one PUT at a time 
   await first;
   await settle();
   assert.equal(sent, 1, "only one PUT was sent while the first was still in flight, got " + sent);
-}), /only one PUT was sent while the first was still in flight/);
+}));
 
 rightToday("S8", "a failed upload or PUT writes no record and keeps the document dirty", async (t) => {
   const failures = [
@@ -681,7 +681,7 @@ rightToday("C3-download", "a Drive download started before the modal closed is s
   }
 }));
 
-wrongToday("S10", "copying a share link on a dirty document while a save runs sends one PUT at a time", hostedCase(async ({ server, held }) => {
+rightToday("S10", "copying a share link on a dirty document while a save runs sends one PUT at a time", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
   openHosted(script("A", idOf("a")), "srv-a", 1);
   editRow(0, "Typed once.");
@@ -697,7 +697,7 @@ wrongToday("S10", "copying a share link on a dirty document while a save runs se
   await sharing;
   await settle();
   assert.equal(sent, 1, "only one PUT was sent while the first was still in flight, got " + sent);
-}), /only one PUT was sent while the first was still in flight/);
+}));
 
 async function capabilityRecord(role, scope) {
   let record = null;

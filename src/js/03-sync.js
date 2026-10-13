@@ -47,6 +47,7 @@ import { driveFormatSize, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
+import { confirmBaseline } from "../legacy/save-bridge.ts";
 export { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
@@ -877,7 +878,7 @@ var baseStateWhy = "";
 
 export function setBaseState(next, why) {
   baseStateWhy = String(why || "");
-  S.baseState = next;
+  S.baseState = confirmBaseline(next);
   return next;
 }
 
