@@ -6,7 +6,9 @@ import {
   normalizeServerUrl,
   serverHomeId,
   setConnection,
+  serverOf,
   setHome,
+  stillOnServer,
   updateConnection
 } from "./_home.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
@@ -317,11 +319,14 @@ var CLIENT_GENERATION = "2";
 var serverCaps = new WeakMap();
 
 function capsOf(c) {
-  return (c && serverCaps.get(c)) || { blobs: false, noClientHeader: false, known: false };
+  var server = serverOf(c);
+  return (server && serverCaps.get(server)) || { blobs: false, noClientHeader: false, known: false };
 }
 
 function noteCaps(c, health, noClientHeader) {
-  serverCaps.set(c, {
+  var server = serverOf(c);
+  if (!server) return;
+  serverCaps.set(server, {
     blobs: !!(health && Number(health.blobs) >= 1),
     noClientHeader: !!noClientHeader,
     known: true
@@ -512,7 +517,7 @@ async function resumeServerDoc() {
   var via = conn;
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
-    if (via !== conn) return false;
+    if (!stillOnServer(via)) return false;
     forgetRemoteMisses();
   } catch (err) {
     if (override && err && err.code === "not-found") {
@@ -697,13 +702,13 @@ export async function detectServer() {
   var probing = conn;
   try {
     var health = await probeHealth(probing);
-    if (probing !== conn) return;
+    if (!stillOnServer(probing)) return;
     applyHealth(health);
   } catch (e) {
-    if (probing !== conn) return;
+    if (!stillOnServer(probing)) return;
     S.serverMode.available = false;
   }
-  if (probing !== conn) return;
+  if (!stillOnServer(probing)) return;
   S.serverMode.checked = true;
   updateConnectMenu();
   updateServerMenu();
@@ -727,7 +732,7 @@ export async function detectServer() {
     var reason = null;
     if (useKey) {
       var r = await joinWithLinkKey();
-      if (probing !== conn) return;
+      if (!stillOnServer(probing)) return;
       if (r === "ok") { finishServerDetect(); return; }
       if (r === "off") { updateServerMenu(); return; }
       if (r === "gone") reason = "This link no longer works — ask whoever sent it for a new one. " +
@@ -760,7 +765,7 @@ async function joinWithLinkKey() {
   var key = linkKey;
   var via = conn;
   var joined = await joinServer(conn.serverUrl, null, key);
-  if (via !== conn) return "moved";
+  if (!stillOnServer(via)) return "moved";
   if (joined && joined.ok) {
     linkKeyFresh = false;
     setLinkToken(joined.token);
@@ -788,12 +793,12 @@ async function probeHealth(probing) {
   try {
     health = await apiFetch("api/health");
   } catch (e) {
-    if (!(e && e.code === "offline" && probing.serverUrl) || probing !== conn) throw e;
+    if (!(e && e.code === "offline" && probing.serverUrl) || !stillOnServer(probing)) throw e;
     health = await apiFetch("api/health", { noClientHeader: true });
-    if (probing === conn) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
+    if (stillOnServer(probing)) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
     return health;
   }
-  if (probing === conn) noteCaps(probing, health, false);
+  if (stillOnServer(probing)) noteCaps(probing, health, false);
   return health;
 }
 
@@ -801,7 +806,7 @@ export async function finishServerDetect() {
   var asking = conn;
   try {
     var me = await apiFetch("api/me");
-    if (asking !== conn) return;
+    if (!stillOnServer(asking)) return;
     serverIdentity = me;
     var role = (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit";
     var scope = serverIdentity && typeof serverIdentity.scope === "string" ? serverIdentity.scope
@@ -813,13 +818,13 @@ export async function finishServerDetect() {
       updateIdentityChip();
     }
   } catch (e) {
-    if (asking !== conn) return;
+    if (!stillOnServer(asking)) return;
     if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
     if (e && e.code === "pin" && linkKey && !linkTurnedOff) {
       updateConnection({ token: "", role: "", scope: "" });
       saveTabServer();
       var again = await joinWithLinkKey();
-      if (asking !== conn) return;
+      if (!stillOnServer(asking)) return;
       if (again === "ok") { finishServerDetect(); return; }
       if (again === "gone" || again === "none") flagLinkOff("gone");
       updateServerMenu();
@@ -966,10 +971,10 @@ export async function openServerDoc(id) {
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(id));
   } catch (err) {
-    if (via !== conn) return false;
+    if (!stillOnServer(via)) return false;
     handleApiError(err, "Could not open that document"); return false;
   }
-  if (via !== conn) return false;
+  if (!stillOnServer(via)) return false;
   if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return false; }
   forgetRemoteMisses();
 
@@ -1025,7 +1030,7 @@ export async function publishToServer(opts) {
     else handleApiError(err, "Could not put that on the server");
     return false;
   }
-  if (via !== conn) return false;
+  if (!stillOnServer(via)) return false;
   if (S.state.docId !== oldId || home !== homeAtStart) {
     showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
       "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");

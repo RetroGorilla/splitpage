@@ -480,6 +480,14 @@ The persistence suite costs little: on its first hosted run (PR #270,
 checks in 8.0 s, from the runner's start line to its `ALL PASS`; the step
 running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
 
+CI runs on the maintainer's self-hosted runners (repository variable
+`CI_RUNNER`). When runs are queued there, add the label `ci-github` to the
+pull request and its jobs run on GitHub's runners instead; no other run
+moves. Adding the label does not rerun CI: push to the pull request after
+labelling it, because a run reads the labels from the moment it started. First compare the queue with the median recent run time (about
+8 to 14 minutes) and wait if the run in front is nearly done. Remove the
+label once the pull request is green. Never change `CI_RUNNER` for this.
+
 `gate` is the one check to mark required in branch protection: a
 prose-only pull request completes it without waiting on the others. Prose
 means Markdown other than `docs/help.md` (the build renders it into the app),

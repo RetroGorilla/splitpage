@@ -1,11 +1,11 @@
 import { S } from "./_state.js";
 import { readDefaultWpm } from "./00p-prefs.js";
-import { home, setHome } from "./_home.js";
+import { home } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
+import { updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { openGdocModal, openImportModal } from "./11-import.js";
@@ -18,6 +18,7 @@ import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js"
 import { draftRestorePending } from "./20g-drafts.js";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
+import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 
 var newTabPageShown = false;
 
@@ -72,10 +73,8 @@ function starterDocumentState(id) {
 }
 
 function adoptNewDocument(next, reason) {
-  S.state = next;
-  setBaseState(cloneState(S.state), reason);
-  S.docIdWrittenOut = false;
-  if (home.kind === "file" || home.kind === "import") setHome("none");
+  var leaves = home.kind === "file" || home.kind === "import";
+  documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   clearDirty();
   resetProductionPanelState();
   renderAbsorbed();

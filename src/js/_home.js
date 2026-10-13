@@ -63,15 +63,31 @@ function buildConn(fields, base) {
   return rec;
 }
 
-export var conn = buildConn({}, CONN_FIELDS);
+var serverOfConn = new WeakMap();
+
+function onNewServer(rec) {
+  serverOfConn.set(rec, Object.freeze({}));
+  return Object.freeze(rec);
+}
+
+export var conn = onNewServer(buildConn({}, CONN_FIELDS));
 
 export function setConnection(fields) {
   if (home.kind === "server") {
     throw new Error("setConnection: this tab has a server document open — leave it (setHome) " +
                     "before pointing the tab somewhere else, or use updateConnection()");
   }
-  conn = buildConn(fields, CONN_FIELDS);
+  conn = onNewServer(buildConn(fields, CONN_FIELDS));
   return conn;
+}
+
+export function serverOf(c) {
+  return (c && serverOfConn.get(c)) || null;
+}
+
+export function stillOnServer(c) {
+  var server = serverOf(c);
+  return server !== null && server === serverOf(conn);
 }
 
 export function updateConnection(fields) {
@@ -83,9 +99,10 @@ export function updateConnection(fields) {
     throw new Error("updateConnection: the tunnel belongs to the server — use setConnection()");
   }
   var next = buildConn(fields, conn);
-  conn.token = next.token;
-  conn.role = next.role;
-  conn.scope = next.scope;
+  serverOfConn.set(next, serverOf(conn));
+  var was = conn;
+  conn = Object.freeze(next);
+  if (home.kind === "server" && home.conn === was) home.conn = conn;
   return conn;
 }
 
@@ -147,6 +164,10 @@ export function restoreHome(record) {
 
 export function serverHomeId() {
   return home.kind === "server" ? home.id : null;
+}
+
+export function serverHomeRev() {
+  return home.kind === "server" ? home.rev : null;
 }
 
 export function fileHome() {

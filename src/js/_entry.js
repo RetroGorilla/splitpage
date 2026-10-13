@@ -70,6 +70,9 @@ import { __init as init_20s_settings } from "./20s-settings.js";
 import { __init as init_21_events } from "./21-events.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { startActions } from "../bootstrap/actions.ts";
+import { documentIdentityPort, liveDocumentPort } from "./02b-doc-id.js";
+import { documentDestinationPort } from "./03-sync.js";
+import { startTransitions } from "../legacy/transition-bridge.ts";
 
 init_00_prelude();
 init_00p_prefs();
@@ -141,4 +144,5 @@ init_20j_newtab();
 init_20k_phone_bar();
 init_20s_settings();
 init_21_events();
+startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 startActions(appActions, window);
