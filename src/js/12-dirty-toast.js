@@ -17,11 +17,15 @@ import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
 import { REVIEW_ONLY, noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
-import { confirmSavedNow, noteSaveChange, unsavedFor } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 
 S.saveButtonBusy = false;
+
+function saveBusy() {
+  return !!S.saveButtonBusy || (savesStarted() && saveRunning());
+}
 
 var MY_COLOR = changeSet({ docFields: ["personColors"] });
 
@@ -47,7 +51,7 @@ provideSessionEffects({
     if (typeof noteDraftChange === "function") noteDraftChange();
   },
   save: function (change) {
-    if (!S.saveButtonBusy) setSaveButtons("Save •");
+    if (!saveBusy()) setSaveButtons();
     scheduleAutoSave();
     if (home.kind === "import") { home.dirty = true; updateFileChip(); }
     else if (onServerDoc()) { updateFileChip(); }
@@ -59,7 +63,7 @@ provideSessionEffects({
 });
 
 export function setSaveButtons() {
-  var view = saveButtonView({ busy: !!S.saveButtonBusy, dirty: !!S.dirty });
+  var view = saveButtonView({ busy: saveBusy(), dirty: !!S.dirty });
   ["btn-save", "wr-save"].forEach(function (id) {
     var btn = document.getElementById(id);
     if (!btn) return;
@@ -111,7 +115,7 @@ function saveStatusView() {
 
   var onServer = typeof onServerDoc === "function" && onServerDoc();
   var line = saveStatus({
-    busy: !!S.saveButtonBusy,
+    busy: saveBusy(),
     dirty: !!S.dirty,
     halted: autoSaveHalt || "",
     autoSaveOn: !!autoSaveEnabled,
