@@ -258,6 +258,31 @@ test("ensureBytes reads what memory lacks from the backend and reports the rest"
   assert.deepEqual(backend.gets, [storedSha, nowhere], "nothing re-read");
 });
 
+test("persist hands the backend the picture's own bytes and type", async () => {
+  const backend = gatedBackend(true);
+  setBackend(backend);
+  const bytes = jpeg(86, 2);
+  const a = intern(bytes).sha256;
+  const p = persist([a]);
+  await tick();
+  backend.release();
+  assert.deepEqual(await p, []);
+  assert.deepEqual(backend.held.get(a), bytes);
+  assert.equal(sha(backend.held.get(a)), a);
+});
+
+test("ensureBytes keeps its own copy: the backend changing the bytes it handed out changes nothing", async () => {
+  const backend = gatedBackend(true);
+  setBackend(backend);
+  const stored = png(94, 1);
+  const storedSha = sha(stored);
+  backend.held.set(storedSha, stored);
+  assert.deepEqual(await ensureBytes([storedSha]), []);
+  stored.fill(0);
+  assert.equal(sha(Buffer.from(dataUrlForSync(storedSha).split(",")[1], "base64")), storedSha);
+  assert.deepEqual(recordFor(storedSha), { sha256: storedSha, width: 94, height: 1, mime: "image/png" });
+});
+
 test("ensureBytes re-hashes what the backend returns and refuses a mismatch", async () => {
   const backend = gatedBackend(true);
   setBackend(backend);
