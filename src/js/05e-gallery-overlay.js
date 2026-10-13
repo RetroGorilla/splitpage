@@ -26,6 +26,7 @@ import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 
 var view = null;
 var returnFocus = null;
@@ -306,10 +307,15 @@ function retryThumbnail() {
   var poster = slot && slotPoster(slot);
   if (!poster || !poster.href || reviewMode()) return;
   var key = videoLinkKey(poster);
+  var ctx = captureOperation();
   view.fetching = key;
   paint();
   fetchThumbnailRecord(poster.href).then(function (rec) {
     if (view && view.fetching === key) view.fetching = null;
+    if (!stillOwns(ctx)) {
+      if (view) refreshGalleryOverlay();
+      return;
+    }
     var done = rec && rowOf(rowId) && galleryEdit(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
     if (!done) showToast("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && view.rowId === rowId) refreshGalleryOverlay();

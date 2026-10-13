@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
@@ -68,6 +68,7 @@ import {
   addRow,
   addRowAndFocus,
   armDelete,
+  capturePastePlace,
   clearDropMarkers,
   compressImageFile,
   grantVideoFile,
@@ -78,7 +79,9 @@ import {
   openGalleryLink,
   removeImage,
   removeImageLink,
+  restorePastePlace,
   setDropMarkerForRow,
+  showPictureNotAdded,
   splitCellField,
   stopDragScroll,
   swapAdjacentRows,
@@ -874,10 +877,15 @@ function insertIntoScriptCell(cellEl, html, text, files) {
   if (hasMediaFiles(files)) {
     var rowId = cellEl.getAttribute("data-id");
     var field = cellEl.getAttribute("data-field");
+    var ctx = captureOperation();
+    var began = capturePastePlace(cellEl);
     readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: grantVideoFile }).then(function (extra) {
+      if (!stillOwns(ctx)) { showPictureNotAdded(); return; }
       var live = cellEl.isConnected ? cellEl
         : document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
-      if (live) insertIntoScriptCellNow(live, html, text, extra);
+      if (!live) return;
+      if (html || text) restorePastePlace(live, began);
+      insertIntoScriptCellNow(live, html, text, extra);
     });
     return;
   }
