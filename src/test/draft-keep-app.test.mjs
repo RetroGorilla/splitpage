@@ -6,6 +6,7 @@ import { S } from "../js/_state.js";
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
@@ -41,7 +42,7 @@ async function withDesktop(fn) {
 
 async function openCleanFile(id, title) {
   const name = id + ".splitpage";
-  await openProjectFile(new File([buildSplitpageFile(script(title))], name, { lastModified: 1 }), desktopHandle(id, name), { skipSnapshot: true, silent: true });
+  await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script(title)))], name, { lastModified: 1 }), desktopHandle(id, name), { skipSnapshot: true, silent: true });
   clearDirty();
   await flushDraftNow();
   calls.length = 0;

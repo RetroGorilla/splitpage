@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 const SEED = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));
 
@@ -49,7 +50,7 @@ test("a merged document is still a complete document", () => {
 });
 
 test("a .splitpage save carries every registry field", () => {
-  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(migrateRows(JSON.parse(JSON.stringify(SEED))))));
+  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(migrateRows(JSON.parse(JSON.stringify(SEED)))))));
   assert.deepEqual(missingStateFields(round), []);
 });
 
@@ -78,7 +79,7 @@ test("INV-04: a field added to STATE_FIELDS survives migrateRows, mergeStates an
     mine.probe = "  mine  ";
     const merged = mergeStates(base, mine, JSON.parse(JSON.stringify(base))).merged;
     assert.equal(merged.probe, "mine");
-    const file = buildSplitpageFile(merged);
+    const file = buildSplitpageFile(exportDocumentOf(merged));
     assert.equal(JSON.parse(file).probe, "mine");
     const round = migrateRows(parseSplitpageFile(file));
     assert.equal(round.probe, "mine");
@@ -100,7 +101,7 @@ test("a b-roll shot keeps every field it has — props too — through a merge a
   const merged = mergeStates(doc(), doc(), doc()).merged.brollShots[0];
   assert.deepEqual(Object.keys(merged).sort(), shotKeys);
   assert.deepEqual(merged.props, doc().brollShots[0].props);
-  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(doc()))).brollShots[0];
+  const round = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(doc())))).brollShots[0];
   assert.deepEqual(Object.keys(round).sort(), shotKeys);
   assert.deepEqual(round.props, doc().brollShots[0].props);
 });

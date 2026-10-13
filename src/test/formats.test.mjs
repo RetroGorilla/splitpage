@@ -21,6 +21,7 @@ import {
   parseSplitpageFile
 } from "../js/20d-formats.js";
 import { STORED } from "./_stored-cells.mjs";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -82,7 +83,7 @@ function withState(s, fn) {
 
 test(".splitpage has no envelope: the file IS the state object", () => {
   const s = fixture();
-  const parsed = JSON.parse(buildSplitpageFile(s));
+  const parsed = JSON.parse(buildSplitpageFile(exportDocumentOf(s)));
   assert.equal(parsed.schema, 2);
   assert.ok(Array.isArray(parsed.rows));
   assert.equal(parsed.rows.length, s.rows.length);
@@ -92,7 +93,7 @@ test(".splitpage has no envelope: the file IS the state object", () => {
 
 test(".splitpage round-trips the whole document, byte for byte", () => {
   const s = fixture();
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(s))));
   assert.equal(norm(back), norm(s));
   assert.equal(back.docId, s.docId);
   assert.deepEqual(back.rows[0].imageRef, PNG_REF);
@@ -102,7 +103,7 @@ test(".splitpage round-trips the whole document, byte for byte", () => {
 });
 
 test("buildSplitpage never writes an unmigrated document", () => {
-  const raw = JSON.parse(buildSplitpageFile({ title: "<b>Raw</b>", rows: [{ id: "r1", audioText: "one" }] }));
+  const raw = JSON.parse(buildSplitpageFile(exportDocumentOf({ title: "<b>Raw</b>", rows: [{ id: "r1", audioText: "one" }] })));
   assert.equal(raw.title, "Raw");
   assert.equal(raw.schema, 2);
   assert.match(raw.docId, /^d[0-9a-f]{32}$/);
@@ -111,7 +112,7 @@ test("buildSplitpage never writes an unmigrated document", () => {
 test("buildSplitpage does not mutate the document it is handed", () => {
   const s = fixture();
   const before = JSON.stringify(s);
-  buildSplitpageFile(s);
+  buildSplitpageFile(exportDocumentOf(s));
   assert.equal(JSON.stringify(s), before);
 });
 
@@ -126,13 +127,13 @@ test("parseSplitpage throws on anything that is not one of ours", () => {
 
 test(".md carries the id exactly once, and only inside the data block", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   assert.equal((md.match(new RegExp(s.docId, "g")) || []).length, 1);
   assert.ok(md.indexOf(s.docId) > md.indexOf("leave this block alone"));
 });
 
 test(".md's human half is a table anyone can read", () => {
-  const md = withState(fixture(), buildMarkdownProject);
+  const md = withState(fixture(), (v) => buildMarkdownProject(exportDocumentOf(v)));
   assert.ok(md.includes("| # | Visual | Audio | Status |"));
   assert.ok(md.includes("| shot |"));
   assert.ok(md.includes("## Production breakdown"));
@@ -140,17 +141,17 @@ test(".md's human half is a table anyone can read", () => {
 });
 
 test(".md's fence outgrows any run of tildes in the script", () => {
-  const md = withState(fixture(), buildMarkdownProject);
+  const md = withState(fixture(), (v) => buildMarkdownProject(exportDocumentOf(v)));
   assert.match(md, /\n~{6}splitpage\n/);
   assert.match(md.slice(md.indexOf("~~~~~~splitpage")), /\n~{6}\n/);
 
   const plain = migrateRows({ schema: 2, title: "P", rows: [{ id: "r1", audioText: "no tildes" }] });
-  assert.match(withState(plain, buildMarkdownProject), /\n~{4}splitpage\n/);
+  assert.match(withState(plain, (v) => buildMarkdownProject(exportDocumentOf(v))), /\n~{4}splitpage\n/);
 });
 
 test(".md round-trips the whole document, including what the table cannot say", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const proj = parseMarkdownProject(md);
   assert.ok(proj);
   assert.equal(proj.docIdEmbedded, true);
@@ -181,7 +182,7 @@ test("Markdown that is not one of ours parses as null, not as an error", () => {
 
 test("the LAST opening fence wins", () => {
   const s = fixture();
-  const real = withState(s, buildMarkdownProject);
+  const real = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const decoy = "# Decoy\n\n~~~~splitpage\n" + JSON.stringify({ title: "Decoy", rows: [], docId: "d" + "0".repeat(32) }) + "\n~~~~\n\n";
   const proj = parseMarkdownProject(decoy + real);
   assert.ok(proj);
@@ -191,13 +192,13 @@ test("the LAST opening fence wins", () => {
 
 test("only the scene table is read, never the breakdown below it", () => {
   const s = fixture();
-  const proj = parseMarkdownProject(withState(s, buildMarkdownProject));
+  const proj = parseMarkdownProject(withState(s, (v) => buildMarkdownProject(exportDocumentOf(v))));
   assert.equal(proj.table.length, s.rows.length);
 });
 
 test("a cell edited outside Splitpage: the table wins for that cell only", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const edited = md.replace(/^(\| 01 \|.*)\| (todo|ready|shot) \|$/m, (m, head, st) => head + "right now | " + st + " |");
   assert.notEqual(edited, md);
 
@@ -218,7 +219,7 @@ test("a cell edited outside Splitpage: the table wins for that cell only", () =>
 
 test("a Visual cell's inline image travels in the table and comes back", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   assert.ok(md.includes("![visual for scene 01](" + PNG + ")"), "the image is in the human half too");
   const proj = parseMarkdownProject(md);
   return withState(proj.state, async () => {
@@ -231,7 +232,7 @@ test(".splitpage carries its pictures inline; the page names them by imageRef", 
   const s = fixture();
   assert.deepEqual(s.rows[0].imageRef, PNG_REF, "the migrated document holds a ref");
   assert.equal("visualImage" in s.rows[0], false);
-  const text = buildSplitpageFile(s);
+  const text = buildSplitpageFile(exportDocumentOf(s));
   assert.ok(text.includes('"visualImage": "' + PNG + '"'), "the file holds the picture itself");
   assert.ok(!text.includes('"imageRef"'), "and no ref an older client would not understand");
   const parsed = parseSplitpageFile(text);
@@ -251,7 +252,7 @@ test("three pictures: the state stays small, the file carries all three", () => 
   const shas = s.rows.map((r) => r.imageRef && r.imageRef.sha256);
   assert.equal(new Set(shas).size, 3);
   assert.ok(JSON.stringify(s).length < 10240, "state is " + JSON.stringify(s).length + " bytes");
-  const file = buildSplitpageFile(s);
+  const file = buildSplitpageFile(exportDocumentOf(s));
   assert.ok(file.length > 600000, "the file carries the bytes: " + file.length);
   assert.equal((file.match(/"visualImage": "data:image\/png;base64,/g) || []).length, 3);
 });
@@ -259,17 +260,17 @@ test("three pictures: the state stays small, the file carries all three", () => 
 test("a picture whose bytes are nowhere stays a ref in the file, with no picture", () => {
   const ghost = { sha256: "b".repeat(64), width: 4, height: 3, mime: "image/png" };
   const s = migrateRows({ schema: 2, title: "Ghost", rows: [{ id: "g1", imageRef: ghost, audioText: "x" }] });
-  const parsed = JSON.parse(buildSplitpageFile(s));
+  const parsed = JSON.parse(buildSplitpageFile(exportDocumentOf(s)));
   assert.deepEqual(parsed.rows[0].imageRef, ghost);
   assert.equal("visualImage" in parsed.rows[0], false);
-  assert.deepEqual(fileImagesMissing(s), [ghost.sha256]);
-  assert.deepEqual(fileImagesMissing(fixture()), []);
+  assert.deepEqual(fileImagesMissing(exportDocumentOf(s)), [ghost.sha256]);
+  assert.deepEqual(fileImagesMissing(exportDocumentOf(fixture())), []);
 });
 
 test("an image conflict card goes into the file with its picture in the body", () => {
   const s = fixture();
   s.comments.push({ id: "cimg", rowId: "r1", field: "visualImage", kind: "conflict", body: "", imageValue: PNG_REF, conflictField: "Visual image" });
-  const parsed = JSON.parse(buildSplitpageFile(s));
+  const parsed = JSON.parse(buildSplitpageFile(exportDocumentOf(s)));
   const card = parsed.comments.find((c) => c.id === "cimg");
   assert.ok(card.body.includes('src="' + PNG + '"'), card.body);
   const back = migrateRows(parsed).comments.find((c) => c.id === "cimg");
@@ -279,7 +280,7 @@ test("an image conflict card goes into the file with its picture in the body", (
 
 test(".md: a cell an older client wrote with the picture spelled differently is unchanged", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const respelled = "data:image/jpg;base64," + PNG.slice(PNG.indexOf(",") + 1).replace(/=+$/, "");
   const older = md.split(PNG).join(respelled);
   assert.notEqual(older, md);
@@ -293,7 +294,7 @@ test(".md: a cell an older client wrote with the picture spelled differently is 
 
 test("a scene added by hand is never adopted silently", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const added = md.replace(/^\| 01 \|.*$/m, (l) => l + "\n| 01b | extra visual | extra audio | todo |");
   const proj = parseMarkdownProject(added);
   assert.equal(proj.table.length, s.rows.length + 1);
@@ -309,13 +310,13 @@ test("a blank scene is still a row of the table", () => {
     schema: 2, title: "Blank",
     rows: [{ id: "r1", audioText: "one" }, { id: "r2" }, { id: "r3", audioText: "three" }]
   });
-  const proj = parseMarkdownProject(withState(s, buildMarkdownProject));
+  const proj = parseMarkdownProject(withState(s, (v) => buildMarkdownProject(exportDocumentOf(v))));
   assert.equal(proj.table.length, 3);
 });
 
 test("the .md title heading beats the block's title", () => {
   const s = fixture();
-  const md = withState(s, buildMarkdownProject).replace("# Round Trip", "# Renamed Elsewhere");
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v))).replace("# Round Trip", "# Renamed Elsewhere");
   const proj = parseMarkdownProject(md);
   return withState(proj.state, async () => {
     const back = await applyMarkdownProject(proj, { noAsk: true });
@@ -338,12 +339,12 @@ function storedDocument() {
 test(".md: stored-shape cells come back byte for byte, and a second save writes the same file", async () => {
   const s = storedDocument();
   const html = s.rows.map((r) => [r.visualText, r.audioText]);
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const proj = parseMarkdownProject(md);
   await withState(proj.state, async () => {
     const back = await applyMarkdownProject(proj, { noAsk: true });
     assert.deepEqual(back.rows.map((r) => [r.visualText, r.audioText]), html, "no cell rebuilt from the table");
-    assert.equal(withState(back, buildMarkdownProject), md);
+    assert.equal(withState(back, (v) => buildMarkdownProject(exportDocumentOf(v))), md);
   });
 });
 
@@ -366,7 +367,7 @@ test(".md: a table cell in the model's Markdown reads as unchanged", async () =>
       resolved: false, kind: "anchor", createdAt: "", updatedAt: "", replies: [] }],
     productionTags: [{ cat: "prop", name: "gaffer tape" }]
   });
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const was = mdSceneCellSource(s.rows[0], 0).audio, model = mdSceneCellSource(s.rows[0], 0, true).audio;
   assert.equal(was, "**bo****ld** *x *gaffer tape");
   assert.equal(model, "**bold** *x* gaffer tape");
@@ -395,14 +396,14 @@ test(".splitpage carries a shot's props, id and name, and they come back the sam
   const s = withBrollProps();
   const drone = s.productionTags.find((t) => t.name === "Drone").id;
   assert.deepEqual(s.brollShots[0].props, [{ id: drone, name: "Drone" }, { id: "", name: "Bird seed" }]);
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(s))));
   assert.equal(norm(back), norm(s));
   assert.deepEqual(back.brollShots[0].props, s.brollShots[0].props);
 });
 
 test(".md carries a shot's props in its data block, and they come back the same", () => {
   const s = withBrollProps();
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const proj = parseMarkdownProject(md);
   return withState(proj.state, async () => {
     const back = await applyMarkdownProject(proj, { noAsk: true });
@@ -415,7 +416,7 @@ test("writing a .md lists shots without adding any to the list", () => {
   const s = withBrollProps();
   s.rows[0].visualText = "B-roll: a line nobody has opened the panel for";
   const before = JSON.stringify(s.brollShots);
-  withState(s, buildMarkdownProject);
+  withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   assert.equal(JSON.stringify(s.brollShots), before);
 });
 
@@ -425,7 +426,7 @@ function oldMdCell(value) {
     .replace(/\r\n|\r|\n/g, " ");
 }
 function oldAppendMarkdownTail(lines) {
-  var breakdown = breakdownRows();
+  var breakdown = breakdownRows(exportDocumentOf(S.state));
   if (breakdown.length) {
     lines.push("## Production breakdown");
     lines.push("");
@@ -437,7 +438,7 @@ function oldAppendMarkdownTail(lines) {
     });
     lines.push("");
   }
-  var comments = commentEntries({ pieces: true });
+  var comments = commentEntries(exportDocumentOf(S.state), { pieces: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -504,10 +505,10 @@ test("a saved .md project is byte for byte what it was before the exports change
   ];
   docs.forEach((s) => withState(s, () => {
     const was = oldToMarkdownTableDoc(s);
-    assert.equal(toMarkdownTableDoc(s), was, s.title);
-    const project = buildMarkdownProject(s);
+    assert.equal(toMarkdownTableDoc(exportDocumentOf(s)), was, s.title);
+    const project = buildMarkdownProject(exportDocumentOf(s));
     assert.ok(project.startsWith(was + "\n<!-- splitpage: "), s.title);
     assert.ok(!/^## B-roll shot list$|^\| # \| Start \||^### .* \(\d+\)$|<sup>\d+<\/sup>|running time · /m.test(project.slice(0, was.length)), s.title);
   }));
-  withState(docs[0], (s) => assert.notEqual(toMarkdownTableDoc(s, { export: true }), oldToMarkdownTableDoc(s)));
+  withState(docs[0], (s) => assert.notEqual(toMarkdownTableDoc(exportDocumentOf(s), { export: true }), oldToMarkdownTableDoc(s)));
 });

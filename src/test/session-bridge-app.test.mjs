@@ -8,6 +8,7 @@ await bootApp();
 
 const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../js/07-production-tags.js");
@@ -36,7 +37,7 @@ function script(title) {
   });
 }
 
-await openProjectFile(new File([buildSplitpageFile(script("Bridge"))], "bridge.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
+await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Bridge")))], "bridge.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
 
 test("the booted app's session holds the live document it adopted when the file opened", () => {
   assert.equal(S.state.title, "Bridge");
@@ -199,7 +200,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   mine.rows[0].audioText = "Unsaved here.";
   const desktop = S.DESKTOP;
   S.DESKTOP = {
-    readFile: async () => ({ name: "disk.splitpage", bytes: new TextEncoder().encode(buildSplitpageFile(changed)), lastModified: 2 }),
+    readFile: async () => ({ name: "disk.splitpage", bytes: new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(changed))), lastModified: 2 }),
     setDocumentState: () => {},
     draftRestoreDone: () => {}
   };

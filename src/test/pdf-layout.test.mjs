@@ -8,6 +8,7 @@ import { intern } from "../js/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentEntries } from "../js/10-comments.js";
 import { buildPdf, pdfCommentImagesFor } from "../js/17-pdf.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initStatus();
 initTags();
@@ -378,17 +379,17 @@ test("a comment near the bottom of a page carries on at the top of the next, nev
   assert.ok(carried > 10 && within > 5, "only " + carried + " variants reached a second page, " + within + " mid-paragraph");
 });
 
-test("commentEntries() keeps its plain-text shape; pieces only when asked", () => {
+test("commentEntries(exportDocumentOf(S.state)) keeps its plain-text shape; pieces only when asked", () => {
   const pic = cimg(120, 90);
   S.state = migrateRows({
     schema: 2, title: "t", rows: [{ id: "r0", visualText: "v", audioText: "a", status: "todo" }],
     comments: [{ id: "c0", rowId: "r0", field: "audioText", author: "Ann", body: "One&nbsp;" + pic.html + "<br>two <b>three</b>",
       replies: [{ id: "rp0", author: "Bob", body: "plain <i>reply</i>" }] }]
   });
-  const [plain] = commentEntries();
+  const [plain] = commentEntries(exportDocumentOf(S.state));
   assert.equal(plain.body, "One \ntwo three");
   assert.ok(!("pieces" in plain) && !("pieces" in plain.replies[0]));
-  const [withPieces] = commentEntries({ pieces: true });
+  const [withPieces] = commentEntries(exportDocumentOf(S.state), { pieces: true });
   assert.equal(withPieces.body, plain.body);
   assert.deepEqual(withPieces.pieces, [{ text: "One" }, { image: pic.rec.sha256 }, { text: "two three" }]);
   assert.deepEqual(withPieces.replies[0].pieces, [{ text: "plain reply" }]);

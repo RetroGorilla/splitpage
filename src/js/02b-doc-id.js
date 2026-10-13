@@ -192,8 +192,8 @@ export function docIdEvents() {
   return docIdEventLog.slice();
 }
 
-export function standaloneHtmlFor(s, head) {
-  var copy = migrateRows(cloneState(s || S.state));
+export function standaloneHtmlFor(doc, head) {
+  var copy = migrateRows(cloneState(doc.document));
   inlineStateImages(copy);
   delete copy.docId;
   var html = buildPublishHtml(JSON.stringify(copy));

@@ -10,6 +10,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { S } from "../js/_state.js";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, parseSplitpageFile } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const O1 = intern(jpegBytes(300, 200, 11));
@@ -129,7 +130,7 @@ test("refsIn names the originals, so their bytes are kept", () => {
 
 test("a .splitpage file carries the originals inline and reads back the same annotations", () => {
   const s = doc([{ imageRef: F1, imageAnnotation: { imageRef: O1, marks: [PEN, TEXT] }, moreImages: [{ imageRef: F2, name: "p.jpg", annotation: { imageRef: O2, marks: [TEXT] } }] }]);
-  const text = buildSplitpageFile(s);
+  const text = buildSplitpageFile(exportDocumentOf(s));
   const raw = JSON.parse(text);
   assert.ok(raw.rows[0].imageAnnotation.visualImage.indexOf("data:image/jpeg;base64,") === 0);
   assert.ok(!("imageRef" in raw.rows[0].imageAnnotation));
@@ -145,7 +146,7 @@ test(".md: an untouched file keeps the annotation; another picture put in the ce
   const was = S.state;
   S.state = s;
   try {
-    const md = buildMarkdownProject(s);
+    const md = buildMarkdownProject(exportDocumentOf(s));
     const same = await applyMarkdownProject(parseMarkdownProject(md), { noAsk: true });
     assert.equal(same.rows[0].imageRef.sha256, F1.sha256);
     assert.deepEqual(same.rows[0].imageAnnotation, { imageRef: O1, marks: [PEN] });

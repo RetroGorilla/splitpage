@@ -15,6 +15,7 @@ import {
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { setBackend: setBlobBackend } = await import("../js/02c-blobs.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -40,11 +41,11 @@ function script(title, extra) {
 }
 
 function splitpageFile(doc, name) {
-  return new File([buildSplitpageFile(doc)], name || "m4.splitpage", { lastModified: 1 });
+  return new File([buildSplitpageFile(exportDocumentOf(doc))], name || "m4.splitpage", { lastModified: 1 });
 }
 
 function heldFile(doc, name) {
-  return createHeldFileHandle({ name: name || "held.splitpage", text: buildSplitpageFile(doc), lastModified: 1000 });
+  return createHeldFileHandle({ name: name || "held.splitpage", text: buildSplitpageFile(exportDocumentOf(doc)), lastModified: 1000 });
 }
 
 function useDocument(doc) {
@@ -81,7 +82,7 @@ function withHeldDesktop(options) {
 
 async function openFromDesktop(fake, doc) {
   const picked = await fake.saveFileDialog({ suggestedName: "disk.splitpage" });
-  await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(doc)));
+  await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(doc))));
   const handle = makeDesktopHandle(picked);
   useDocument(script("Placeholder"));
   await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });

@@ -10,6 +10,7 @@ import { S } from "../js/_state.js";
 const atBoot = await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
@@ -199,7 +200,7 @@ test("13-hosted openServerDoc: migrateDocument's answer, a migrateRows fixed poi
 });
 
 test("18-local-files adoptProjectState, from a .splitpage file: a migrateRows fixed point", async () => {
-  const file = new File([buildSplitpageFile(migrated("On disk"))], "disk.splitpage", { lastModified: 1 });
+  const file = new File([buildSplitpageFile(exportDocumentOf(migrated("On disk")))], "disk.splitpage", { lastModified: 1 });
   const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
   assert.equal(fixedPoint(only(got, "18-local-files.js#adoptProjectState")), true);
 });
@@ -227,7 +228,7 @@ test("20g recoverDraftAsUnsavedCopy, an imported file's draft: a migrateRows fix
 test("20g restoreFileDraft, a desktop file untouched since the draft's base: the draft, a migrateRows fixed point", async () => {
   const docId = "d" + "2".repeat(32);
   const disk = migrateRows(Object.assign(rawDoc("On disk"), { docId }));
-  const bytes = new TextEncoder().encode(buildSplitpageFile(disk));
+  const bytes = new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(disk)));
   const desktop = S.DESKTOP;
   S.DESKTOP = {
     readFile: async () => ({ name: "disk.splitpage", bytes, lastModified: 1 }),

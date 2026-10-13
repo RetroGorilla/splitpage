@@ -22,7 +22,7 @@ const { intern } = await import("../js/02c-blobs.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14-export.js");
-const { exportFacts } = await import("../js/14b-export-kit.js");
+const { captureExportDocument, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
 
 const EM_DASH = String.fromCharCode(0x2014);
@@ -110,17 +110,17 @@ function htmlParts(html) {
 }
 
 function outputs() {
-  const doc = S.state;
-  const head = { title: (doc.title || "Untitled Script") + " " + EM_DASH + " SplitShare", description: exportMetaLine() };
+  const doc = captureExportDocument();
+  const head = { title: (doc.title || "Untitled Script") + " " + EM_DASH + " SplitShare", description: exportMetaLine(exportFacts(doc)) };
   return {
     splitpage: digest(buildSplitpageFile(doc)),
     markdownProject: digest(buildMarkdownProject(doc)),
     standaloneHtml: htmlParts(standaloneHtmlFor(doc, head)),
-    markdownExport: digest(toMarkdownDoc()),
-    markdownExportPreview: digest(toMarkdownDoc({ scenes: 3 })),
-    markdownTableExport: digest(toMarkdownTableDoc(null, { export: true })),
-    markdownImages: markdownExportImages().map((img) => ({ path: img.path, bytes: img.bytes.length })),
-    facts: exportFacts()
+    markdownExport: digest(toMarkdownDoc(doc)),
+    markdownExportPreview: digest(toMarkdownDoc(doc, { scenes: 3 })),
+    markdownTableExport: digest(toMarkdownTableDoc(doc, { export: true })),
+    markdownImages: markdownExportImages(doc).map((img) => ({ path: img.path, bytes: img.bytes.length })),
+    facts: exportFacts(doc)
   };
 }
 

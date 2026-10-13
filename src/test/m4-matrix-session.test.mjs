@@ -31,7 +31,7 @@ const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");
 const { exportMetaLine, saveDoc, setAutoSaveEnabled, toMarkdownDoc } = exportModule;
-const { exportFacts } = await import("../js/14b-export-kit.js");
+const { captureExportDocument, exportDocumentOf, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
 const { PERSON_COLORS, PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
 const { saveAuthorName } = await import("../js/10-comments.js");
@@ -77,7 +77,7 @@ function script(title, extra) {
 }
 
 function splitpageFile(doc, name) {
-  return new File([buildSplitpageFile(doc)], name || "m4.splitpage", { lastModified: 1 });
+  return new File([buildSplitpageFile(exportDocumentOf(doc))], name || "m4.splitpage", { lastModified: 1 });
 }
 
 function demo() {
@@ -112,27 +112,27 @@ function serializedAfterMutation(serialize) {
   return async (t) => {
     mockClock(t);
     useDocument(demo());
-    const before = serialize(S.state);
-    const captured = cloneState(S.state);
+    const before = serialize(captureExportDocument());
+    const captured = captureExportDocument();
     mutateLive();
-    assert.notEqual(serialize(S.state), before, "the mutation shows in the live bytes, so the case can tell");
+    assert.notEqual(serialize(captureExportDocument()), before, "the mutation shows in the live bytes, so the case can tell");
     assert.equal(serialize(captured), before, "the captured document gives the captured bytes");
   };
 }
 
 const EM_DASH = String.fromCharCode(0x2014);
 
-const htmlHead = (doc) => ({ title: (doc.title || "Untitled Script") + " " + EM_DASH + " SplitShare", description: exportMetaLine() });
+const htmlHead = (doc) => ({ title: (doc.title || "Untitled Script") + " " + EM_DASH + " SplitShare", description: exportMetaLine(exportFacts(doc)) });
 
 rightToday("X1", "buildSplitpageFile gives the captured bytes after the live document changed", serializedAfterMutation((doc) => buildSplitpageFile(doc)));
 
-wrongToday("X2", "buildMarkdownProject gives the captured bytes after the live document changed", serializedAfterMutation((doc) => buildMarkdownProject(doc)), /the captured document gives the captured bytes/);
+rightToday("X2", "buildMarkdownProject gives the captured bytes after the live document changed", serializedAfterMutation((doc) => buildMarkdownProject(doc)));
 
-wrongToday("X3", "standaloneHtmlFor with its head gives the captured bytes after the live document changed", serializedAfterMutation((doc) => standaloneHtmlFor(doc, htmlHead(doc))), /the captured document gives the captured bytes/);
+rightToday("X3", "standaloneHtmlFor with its head gives the captured bytes after the live document changed", serializedAfterMutation((doc) => standaloneHtmlFor(doc, htmlHead(doc))));
 
-wrongToday("X4", "toMarkdownDoc gives the captured bytes after the live document changed", serializedAfterMutation(() => toMarkdownDoc()), /the captured document gives the captured bytes/);
+rightToday("X4", "toMarkdownDoc gives the captured bytes after the live document changed", serializedAfterMutation((doc) => toMarkdownDoc(doc)));
 
-wrongToday("X5", "exportFacts gives the captured facts after the live document changed", serializedAfterMutation(() => JSON.stringify(exportFacts(new Date(0)))), /the captured document gives the captured bytes/);
+rightToday("X5", "exportFacts gives the captured facts after the live document changed", serializedAfterMutation((doc) => JSON.stringify(exportFacts(doc))));
 
 function undeclaredChanges(before, after, changes) {
   const out = [];
@@ -457,7 +457,7 @@ async function withRestoredFileDraft(variant, run) {
   const { fake, held, restore } = withHeldDesktop();
   try {
     const picked = await fake.saveFileDialog({ suggestedName: "disk.splitpage" });
-    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(disk)));
+    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(disk))));
     const outcome = await applyTakenDraft({
       header: { origin: { kind: "file", fileName: picked.name }, docIdWrittenOut: true },
       file: { id: picked.id, name: picked.name },
@@ -561,7 +561,7 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
   const { fake, held, restore } = withHeldDesktop();
   try {
     const picked = await fake.saveFileDialog({ suggestedName: "old.splitpage" });
-    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(script("Old file", { docId: "d" + "a".repeat(32) }))));
+    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(script("Old file", { docId: "d" + "a".repeat(32) })))));
     const handle = makeDesktopHandle(picked);
     await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
     held.calls.length = 0;

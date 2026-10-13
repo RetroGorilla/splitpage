@@ -11,6 +11,7 @@ import {
   commentNumbers,
   exportBrollScenes,
   exportComments,
+  exportDocumentOf,
   exportFacts,
   exportSummaryParts,
   sceneFacts
@@ -56,7 +57,7 @@ test("the title block: the title, the facts and the date, the rundown and its le
   const title = p1.texts.find((o) => o.size === 20);
   assert.equal(title.str, "I Fixed a $40 Film Camera \\(and Shot a Roll With It\\)");
   assert.equal(title.font, "F2");
-  const facts = exportFacts();
+  const facts = exportFacts(exportDocumentOf(S.state));
   const meta = p1.texts.find((o) => o.size === 8.5 && o.y < title.y);
   assert.equal(meta.str, exportSummaryParts(facts).concat(facts.date).join(" · "));
   assert.equal(meta.color, rgb(PRINT_COLORS.dim));
@@ -66,7 +67,7 @@ test("the title block: the title, the facts and the date, the rundown and its le
   assert.ok(strip.every((o, i) => i === 0 || +o.str > +strip[i - 1].str), "in scene order");
   assert.ok(strip.every((o) => o.x >= M && o.x < PW - M));
   assert.ok(p1.texts.some((o) => o.str === "Target 9:00" && o.size === 7));
-  const counts = sceneFacts().reduce((n, f) => { n[f.status.id]++; return n; }, { shot: 0, ready: 0, todo: 0 });
+  const counts = sceneFacts(exportDocumentOf(S.state)).reduce((n, f) => { n[f.status.id]++; return n; }, { shot: 0, ready: 0, todo: 0 });
   for (const [label, id] of [["Shot", "shot"], ["Ready", "ready"], ["To do", "todo"]]) {
     assert.ok(p1.texts.some((o) => o.str === label + " " + counts[id] && o.size === 7.5), label + " " + counts[id]);
   }
@@ -92,7 +93,7 @@ test("each scene's gutter: its number, its start, its status and its read time",
   demo();
   const doc = read(buildPdf(null));
   const all = doc.pages.flatMap((p, i) => p.texts.map((o) => Object.assign({ page: i }, o)));
-  const facts = sceneFacts();
+  const facts = sceneFacts(exportDocumentOf(S.state));
   facts.forEach((f) => {
     const num = all.find((o) => o.str === f.number && o.size === 12 && o.x === M && !o.color);
     assert.ok(num, "scene " + f.number + " has no number");
@@ -127,7 +128,7 @@ test("a tag in its category's colour, underlined in it; the b-roll key a chip", 
 test("each open thread's number after its words, in amber, as the appendix numbers it", () => {
   demo();
   const doc = read(buildPdf(null));
-  const nums = Object.values(commentNumbers()).sort();
+  const nums = Object.values(commentNumbers(exportDocumentOf(S.state))).sort();
   const amber = rgb(PRINT_COLORS.audio);
   const markers = doc.pages.flatMap((p) => p.texts.filter((o) => o.size === 6 && o.color === amber)).map((o) => +o.str);
   assert.deepEqual(markers, nums);
@@ -135,7 +136,7 @@ test("each open thread's number after its words, in amber, as the appendix numbe
   assert.ok(new RegExp("q " + rgb(PRINT_COLORS.faint) + " RG 0.9 w 1 J \\[0 1.8\\] 0 d").test(doc.t));
   const at = pageWith(doc, "Comments", 16);
   const badges = doc.pages.slice(at).flatMap((p) => p.texts.filter((o) => o.size === 7 && o.font === "F2" && o.color === "1.000 1.000 1.000")).map((o) => +o.str);
-  assert.deepEqual(badges, exportComments().filter((c) => c.number).map((c) => c.number));
+  assert.deepEqual(badges, exportComments(exportDocumentOf(S.state)).filter((c) => c.number).map((c) => c.number));
   const comments = words(doc.pages[at].texts);
   assert.match(comments, /\b3 open · 1 resolved\b/);
   assert.match(comments, /Scene 03 · Audio Jo \\\(editor\\\) · /);
@@ -196,7 +197,7 @@ test("the appendix: the breakdown by category, the b-roll by scene, a summary li
   }
   const bat = pageWith(doc, "B-roll shot list", 16);
   assert.equal((doc.t.match(/\/MediaBox \[0 0 792 612\]/g) || []).length, 1, "one landscape page, the shot list's");
-  const groups = exportBrollScenes();
+  const groups = exportBrollScenes(exportDocumentOf(S.state));
   const brollWords = doc.pages.slice(bat, pageWith(doc, "Comments", 16)).flatMap((p) => p.texts);
   groups.forEach((g) => assert.ok(brollWords.some((o) => o.str === g.scene && o.font === "F2"), g.label));
   assert.ok(brollWords.some((o) => o.str === "3 of 9 shot \xB7 1 flagged \xB7 by scene"));

@@ -11,6 +11,7 @@ await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { renderAbsorbed } = await import("../js/05-render.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
@@ -83,7 +84,7 @@ function showDocument(doc) {
 }
 
 function splitpageFile(doc) {
-  return new File([buildSplitpageFile(doc)], "m4.splitpage", { lastModified: 1 });
+  return new File([buildSplitpageFile(exportDocumentOf(doc))], "m4.splitpage", { lastModified: 1 });
 }
 
 async function reopen(doc) {
