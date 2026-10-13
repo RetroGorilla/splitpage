@@ -9,6 +9,7 @@ import { breakdownRows } from "../js/08-production-panels.js";
 import { TAG_PRINT_COLORS, htmlToPlainText, zipRead } from "../js/14-export.js";
 import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
 import { buildPackingListPdf, buildPdf } from "../js/17-pdf.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -51,7 +52,7 @@ async function documentXml(bytes) {
 
 test("breakdownRows says which category each row is", () => {
   load();
-  const rows = breakdownRows();
+  const rows = breakdownRows(exportDocumentOf(S.state));
   assert.deepEqual(rows.map((r) => [r.catId, r.categoryLabel]).sort(),
     [["cast", "Cast"], ["gear", "Gear"], ["location", "Location"], ["prop", "Prop"], ["prop", "Prop"], ["sound", "Music/SFX"], ["vfx", "VFX"]]);
 });
@@ -77,12 +78,12 @@ test("the .docx breakdown heads each category with its dot and name in its colou
       assert.ok(current, "a group head reads " + JSON.stringify(cells[0].textContent));
       seen.add(current.id);
       assert.deepEqual(runs.map((r) => r.textContent.trim()),
-        ["●", current.plural, String(breakdownRows().filter((r) => r.catId === current.id).length)]);
+        ["●", current.plural, String(breakdownRows(exportDocumentOf(S.state)).filter((r) => r.catId === current.id).length)]);
       for (const r of runs.slice(0, 2)) assert.equal(val(r.getElementsByTagNameNS(W, "color")[0]), TAG_PRINT_COLORS[current.id]);
       continue;
     }
     assert.ok(current, "an item before any group head");
-    assert.ok(breakdownRows().some((r) => r.catId === current.id && r.name === cells[0].textContent), cells[0].textContent + " under " + current.id);
+    assert.ok(breakdownRows(exportDocumentOf(S.state)).some((r) => r.catId === current.id && r.name === cells[0].textContent), cells[0].textContent + " under " + current.id);
     for (const c of Array.from(tr.getElementsByTagNameNS(W, "color"))) {
       assert.ok(!Object.values(TAG_PRINT_COLORS).includes(val(c)), "an item cell in a category colour");
     }

@@ -10,6 +10,7 @@ window.__splitpageNoRemote = true;
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { cellFromClipboard } = await import("../js/05c-clipboard.js");
@@ -110,7 +111,7 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  const file = new File([buildSplitpageFile(migrateRows(fixture()))], "fuzz-" + (++opened) + ".splitpage", { lastModified: opened });
+  const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "fuzz-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();
 }

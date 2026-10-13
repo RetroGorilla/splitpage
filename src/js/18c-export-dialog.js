@@ -4,7 +4,7 @@ import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { exportMetaLine, tagPrintColor, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
 import {
-  brollSummaryText, commentNumbers, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
+  brollSummaryText, captureExportDocument, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
 } from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
@@ -118,7 +118,7 @@ export function exportActionReason(action) {
     return has ? "" : "Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack";
   }
   if (action === "export-broll-pdf" || action === "export-broll-xlsx" || action === "export-broll-csv") {
-    return exportBrollScenes().length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
+    return exportBrollScenes(captureExportDocument()).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
   }
   return "";
 }
@@ -217,9 +217,9 @@ function pvRuns(html, n, nums) {
   return out;
 }
 
-function pvTitleBlock(title) {
+function pvTitleBlock(title, doc) {
   return '<div class="pv-title">' + title + '</div>' +
-    (S.state.rows.length ? '<div class="pv-meta">' + escapeHtml(exportMetaLine()) + '</div>' : '');
+    (S.state.rows.length ? '<div class="pv-meta">' + escapeHtml(exportMetaLine(exportFacts(doc))) + '</div>' : '');
 }
 
 function pvLamp(id) { return '<i class="pv-lamp pv-lamp-' + escapeHtml(id) + '" aria-hidden="true"></i>'; }
@@ -231,9 +231,9 @@ function pvPill(id) {
     ids.map(function (x, i) { return '<i' + (i <= level ? ' class="is-on"' : '') + '></i>'; }).join("") + '</span>';
 }
 
-function pvRundown(scenes, legend) {
+function pvRundown(scenes, legend, doc) {
   if (!scenes.length) return "";
-  var facts = exportFacts();
+  var facts = exportFacts(doc);
   var mark = facts.target && facts.seconds
     ? '<b class="pv-rd-target" style="left:' + Math.min(100, facts.target.seconds / Math.max(facts.seconds, facts.target.seconds) * 100).toFixed(2) + '%"></b>'
     : "";
@@ -245,10 +245,10 @@ function pvRundown(scenes, legend) {
     }).join("") + '</div>' : '<div class="pv-legend"></div>');
 }
 
-function pvScript(title, opts) {
-  var scenes = sceneFacts();
-  var nums = commentNumbers();
-  var html = (opts.app ? "" : pvTitleBlock(title)) + (opts.rundown ? pvRundown(scenes, !opts.app) : "");
+function pvScript(title, opts, doc) {
+  var scenes = sceneFacts(doc);
+  var nums = doc.commentNumbers;
+  var html = (opts.app ? "" : pvTitleBlock(title, doc)) + (opts.rundown ? pvRundown(scenes, !opts.app, doc) : "");
   if (!S.state.rows.length) return html + '<p class="pv-para pv-faint">(no scenes yet)</p>';
   html += '<div class="pv-script' + (opts.word ? ' pv-script-word' : '') + '">' +
     '<div class="pv-sh"><span>Scene</span><span><i class="pv-dot pv-dot-v"></i>Visual</span>' +
@@ -287,8 +287,8 @@ function pvGrid(head, rows, widths) {
     }).join("") + '</table>';
 }
 
-function pvShotList(title) {
-  var groups = exportBrollScenes();
+function pvShotList(title, doc) {
+  var groups = exportBrollScenes(doc);
   var rows = [];
   groups.forEach(function (g) {
     g.items.forEach(function (r, i) {
@@ -304,16 +304,16 @@ function pvShotList(title) {
     });
   });
   return '<div class="pv-eyebrow">B-roll shot list</div><div class="pv-title">' + title + '</div>' +
-    '<div class="pv-meta">' + escapeHtml(brollSummaryText(groups)) + ' · by scene · ' + escapeHtml(exportFacts().date) + '</div>' +
+    '<div class="pv-meta">' + escapeHtml(brollSummaryText(groups)) + ' · by scene · ' + escapeHtml(exportFacts(doc).date) + '</div>' +
     pvGrid(["Done", "Scene", "B-roll shot", "Location", "Props", "Flagged", "Notes"], rows.slice(0, 12), [6, 7, 30, 13, 16, 10, 18]) +
     pvFooter(title, "B-roll shot list");
 }
 
-function xlsxSheetNames() {
+function xlsxSheetNames(doc) {
   var names = ["Script"];
-  if (exportComments().length) names.push("Comments");
-  if (breakdownRows().length) names.push("Breakdown");
-  if (exportBrollScenes().length) names.push("B-roll");
+  if (exportComments(doc).length) names.push("Comments");
+  if (breakdownRows(doc).length) names.push("Breakdown");
+  if (exportBrollScenes(doc).length) names.push("B-roll");
   return names;
 }
 
@@ -327,10 +327,11 @@ function pvWorkbook(grid, sheets) {
 function previewHtml(action) {
   var title = escapeHtml(S.state.title || "Untitled Script");
   var rows = S.state.rows.slice(0, 7);
-  if (action === "export-broll-pdf") return pvShotList(title);
+  var doc = captureExportDocument();
+  if (action === "export-broll-pdf") return pvShotList(title, doc);
   if (action === "export-broll-csv" || action === "export-broll-xlsx") {
     var shots = [];
-    exportBrollScenes().forEach(function (g) {
+    exportBrollScenes(doc).forEach(function (g) {
       g.items.forEach(function (r) {
         shots.push({ cells: [escapeHtml(g.scene), escapeHtml(trunc(r.name, 24)), r.shot ? "Shot" : "To shoot",
                              r.flagged ? "yes" : "", escapeHtml(trunc(r.location, 12)), escapeHtml(g.start)] });
@@ -339,12 +340,12 @@ function previewHtml(action) {
     var shotGrid = pvGrid(["Scene", "Shot", "Status", "Flagged", "Location", "Scene start"], shots.slice(0, 14), [11, 33, 15, 13, 16, 12]);
     return action === "export-broll-xlsx" ? pvWorkbook(shotGrid, ["B-roll"]) : shotGrid;
   }
-  if (action === "export-pdf") return pvScript(title, { rundown: true }) + pvFooter(title);
-  if (action === "export-docx") return pvScript(title, { word: true }) + pvFooter(title);
-  if (action === "export-md") return pvTextLines(toMarkdownDoc({ scenes: 3 }), 40);
-  if (action === "export-md-table") return pvTextLines(toMarkdownTableDoc(null, { export: true, scenes: 7 }), 20);
+  if (action === "export-pdf") return pvScript(title, { rundown: true }, doc) + pvFooter(title);
+  if (action === "export-docx") return pvScript(title, { word: true }, doc) + pvFooter(title);
+  if (action === "export-md") return pvTextLines(toMarkdownDoc(doc, { scenes: 3 }), 40);
+  if (action === "export-md-table") return pvTextLines(toMarkdownTableDoc(doc, { export: true, scenes: 7 }), 20);
   if (action === "export-csv" || action === "export-xlsx") {
-    var scenes = sceneFacts();
+    var scenes = sceneFacts(doc);
     var sheetHead = ["Scene", "Start", "Status", "Read", "Visual", "Audio"];
     var sheetRows = rows.slice(0, 5).map(function (r, i) {
       var f = scenes[i];
@@ -352,25 +353,25 @@ function previewHtml(action) {
                        cellText(r.visualText, 34), cellText(r.audioText, 44)] };
     }).concat(rows.length ? [
       { cls: "pv-gap", cells: ["…", "", "", "", "", ""] },
-      { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts().status.shot + " of " + S.state.rows.length + " shot"),
-                                 escapeHtml(exportFacts().runtime), "", ""] }
+      { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts(doc).status.shot + " of " + S.state.rows.length + " shot"),
+                                 escapeHtml(exportFacts(doc).runtime), "", ""] }
     ] : []);
     if (action === "export-csv") return pvGrid(sheetHead, sheetRows, [12, 12, 14, 10, 25, 27]);
     return pvWorkbook(pvGrid(sheetHead.concat(["Notes"]), sheetRows.map(function (r) {
       return { cls: r.cls, cells: r.cells.concat([""]) };
-    }), [12, 12, 14, 10, 18, 20, 14]), xlsxSheetNames());
+    }), [12, 12, 14, 10, 18, 20, 14]), xlsxSheetNames(doc));
   }
   if (action === "export-html") {
     return '<div class="pv-app"><div class="pv-tabbar"><span class="pv-tab">' + title + ' — SplitShare</span></div>' +
       '<div class="pv-app-bar">Splitpage <span>' + title + '</span></div>' +
-      '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }) + '</div></div>';
+      '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }, doc) + '</div></div>';
   }
   if (action === "export-narration-docx" || action === "export-narration-txt") {
     var paras = narrationRows().slice(0, 8);
     var txt = action === "export-narration-txt";
     var said = narrationIncludesDirections() ? { cues: "omit" } : { directions: "omit", cues: "omit" };
-    var numbers = sceneFacts();
-    var words = String(exportFacts().words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    var numbers = sceneFacts(doc);
+    var words = String(exportFacts(doc).words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return (txt ? '<div class="pv-mono pv-md-h">' + title + '</div><br>'
       : '<div class="pv-title">' + title + '</div><div class="pv-meta">Narration · ' +
         escapeHtml(plural(narrationRows().length, "scene") + " · " + words + " words") + '</div>') +
@@ -381,8 +382,8 @@ function previewHtml(action) {
       }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
   if (action === "export-breakdown" || action === "export-breakdown-xlsx") {
-    var starts = sceneFacts().map(function (f) { return f.start; });
-    var items = breakdownRows().slice(0, 14);
+    var starts = sceneFacts(doc).map(function (f) { return f.start; });
+    var items = breakdownRows(doc).slice(0, 14);
     var itemGrid = pvGrid(["Category", "Item", "Status", "Scenes", "First at"], items.map(function (b) {
       var first = b.inScript === "no" ? "" : (starts[Number(b.scenes[0]) - 1] || "");
       return { cells: [escapeHtml(b.categoryLabel), escapeHtml(trunc(b.name, 24)), escapeHtml(b.statusLabel),
@@ -395,13 +396,13 @@ function previewHtml(action) {
     var cat = tagCategory(catId);
     var color = tagPrintColor(catId);
     var heading = cat ? cat.plural : catId;
-    var all = breakdownRows().filter(function (b) { return b.catId === catId; })
+    var all = breakdownRows(doc).filter(function (b) { return b.catId === catId; })
       .sort(function (a, b) { return a.name.localeCompare(b.name); });
     var list = all.slice(0, 12);
     return '<div class="pv-eyebrow">Packing list</div>' +
       '<div class="pv-pack-head"><i class="pv-dot" style="--pv-c:#' + (color || "171613") + '"></i>' +
         escapeHtml(heading) + '</div>' +
-      '<div class="pv-meta">' + title + ' · ' + escapeHtml(exportFacts().date) +
+      '<div class="pv-meta">' + title + ' · ' + escapeHtml(exportFacts(doc).date) +
         (all.length ? '<br>' + escapeHtml(packingSummary(all)) : '') + '</div>' +
       (list.length
         ? '<div class="pv-pill-legend">Status ' + pvPill(null) + '<span class="pv-faint">Needed · Sourcing · Have it · Returned</span></div>' +
@@ -442,10 +443,10 @@ function listed(parts) {
   return parts.length < 2 ? parts.join("") : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
 }
 
-function tailSummary() {
+function tailSummary(doc) {
   var parts = [];
-  if (breakdownRows().length) parts.push("breakdown");
-  if (exportBrollScenes().length) parts.push("b-roll shot list");
+  if (breakdownRows(doc).length) parts.push("breakdown");
+  if (exportBrollScenes(doc).length) parts.push("b-roll shot list");
   var comments = S.state.comments || [];
   if (comments.length) parts.push(comments.some(function (c) { return !c.resolved; }) ? "numbered comments" : "comments");
   return parts.length ? listed(parts) + " at the end" : "";
@@ -455,6 +456,7 @@ export function exportSummary(action) {
   var f = formatForAction(action);
   if (!f || !S.state) return "";
   var rows = S.state.rows;
+  var doc = captureExportDocument();
   var bits = [];
   if (f.format.group === "whole") {
     var pics = rows.filter(function (r) { return !!rowImage(r); }).length;
@@ -463,7 +465,7 @@ export function exportSummary(action) {
       if ((S.state.comments || []).length) bits.push("comments below");
     } else if (action === "export-xlsx") {
       bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
-      var more = xlsxSheetNames().slice(1).map(function (s) { return s.toLowerCase(); });
+      var more = xlsxSheetNames(doc).slice(1).map(function (s) { return s.toLowerCase(); });
       if (more.length) bits.push((more.length === 1 ? "a sheet for " : "sheets for ") + listed(more));
       bits.push("a Notes column to write in");
       bits.push("columns sized, header frozen, filters on");
@@ -475,7 +477,7 @@ export function exportSummary(action) {
     if (!f.format.pictures) bits.push("pictures not included");
     else if (pics) bits.push(plural(pics, "picture") + (action === "export-md" ? " in a zip beside it" : " included"));
     if (f.format.extras) {
-      var tail = tailSummary();
+      var tail = tailSummary(doc);
       if (tail) bits.push(tail);
     }
     if (action === "export-html") bits.push("the whole app built in — read, edit and present it in any browser, on any device");
@@ -485,17 +487,17 @@ export function exportSummary(action) {
     bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
       : "no visuals, stage directions, breakdown or comments");
   } else if (f.format.id === "breakdown") {
-    bits.push(plural(breakdownRows().length, "tagged item"));
+    bits.push(plural(breakdownRows(doc).length, "tagged item"));
     bits.push("category, status, owner, scenes and where each first appears");
     if (action === "export-breakdown-xlsx") bits.push("columns sized, header frozen, filters on");
   } else if (f.format.id === "packing") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
-    var items = breakdownRows().filter(function (b) { return b.catId === catId; });
+    var items = breakdownRows(doc).filter(function (b) { return b.catId === catId; });
     bits.push(plural(items.length, "item") + " to pack");
     var missing = items.filter(function (b) { return b.status === "needed" || b.status === "sourcing"; }).length;
     if (missing) bits.push(missing + " not in hand yet");
   } else if (f.format.id === "broll") {
-    var shotGroups = exportBrollScenes();
+    var shotGroups = exportBrollScenes(doc);
     var shotCount = shotGroups.reduce(function (n, g) { return n + g.items.length; }, 0);
     bits.push(plural(shotCount, "shot") + ", by scene");
     if (shotCount) bits.push(brollSummaryText(shotGroups));

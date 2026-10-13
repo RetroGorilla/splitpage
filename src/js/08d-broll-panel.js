@@ -1415,8 +1415,16 @@ export function renderBrollPage() {
   });
 }
 
-export function shotRecordForFile(e) {
-  var who = personById(e.owner);
+function personIn(people, id) {
+  if (!id) return null;
+  for (var i = 0; i < people.length; i++) {
+    if (people[i].id === id) return people[i];
+  }
+  return null;
+}
+
+export function shotRecordForFile(e, people) {
+  var who = personIn(people, e.owner);
   return {
     scene: e.rowId ? sceneLabel(e) : "",
     name: e.name || "Untitled shot",
@@ -1444,7 +1452,7 @@ export function brollTable() {
   };
   var starts = sceneStarts();
   brollSortedForList(brollEntries(true)).forEach(function (e) {
-    var r = shotRecordForFile(e);
+    var r = shotRecordForFile(e, S.state.people);
     out.rows.push({ shot: r.shot, flagged: r.flagged, cells: [r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location,
       r.props.join("; "), r.cuts, r.owner, r.note, r.desc, startOf(e, starts)] });
   });
@@ -1480,7 +1488,7 @@ export function brollShotListForPrint(as) {
         done: g.items.filter(function (e) { return e.status === "shot"; }).length,
         total: g.items.length,
         items: g.items.map(function (e) {
-          var rec = shotRecordForFile(e);
+          var rec = shotRecordForFile(e, S.state.people);
           rec.start = startOf(e, starts);
           return rec;
         })
