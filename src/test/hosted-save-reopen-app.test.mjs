@@ -242,7 +242,7 @@ test("a hosted save whose revision the reopen already fetched is not reported", 
   leave();
 });
 
-test("a hosted save whose own revision is pulled before its reply still completes in the same session", async (t) => {
+test("a pull noticed while a hosted save waits for its reply does not run, and the save completes in the same session", async (t) => {
   mockClock(t);
   const server = createServer();
   server.put("srv-b", script(), 1);
@@ -259,7 +259,7 @@ test("a hosted save whose own revision is pulled before its reply still complete
   const warnedBefore = warnToasts().length;
   hosted.notePresenceRev({ docId: "srv-b", rev: 2 });
   await settle();
-  assert.equal(homeModule.home.rev, 2, "the pull merged the server's revision 2 before the reply");
+  assert.equal(homeModule.home.rev, 1, "the pull waits while the save runs");
   releaseReply();
   assert.equal(await saving, true, "the save reports success");
   await settle();

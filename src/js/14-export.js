@@ -133,7 +133,7 @@ async function writeDoc(opts, job) {
 
   if (onServerDoc() && !saveAs) {
     try {
-      var sentToServer = await saveToServer();
+      var sentToServer = await saveToServer(job);
       if (auto && sentToServer === false) {
         haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
                      "Press Save to try again.");
@@ -442,7 +442,7 @@ function writeQueued(job) {
   var kind = job.request.kind;
   if (kind === "autosave") return writeAutoSave(job);
   if (kind === "server") {
-    return saveToServer().then(function (sent) { return sent === false ? FAILED : SAVED; });
+    return saveToServer(job).then(function (sent) { return sent === false ? FAILED : SAVED; });
   }
   return writeDoc({ auto: kind === "auto", force: kind === "force", saveAs: kind === "saveAs" }, job);
 }
