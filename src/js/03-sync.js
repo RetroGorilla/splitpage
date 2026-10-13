@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { setHome } from "./_home.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
@@ -879,6 +880,11 @@ export function setBaseState(next, why) {
   S.baseState = next;
   return next;
 }
+
+export var documentDestinationPort = Object.freeze({
+  set: function (destination) { setHome(destination.kind, destination.fields); },
+  confirm: function (baseline, why) { setBaseState(baseline ? cloneState(baseline) : null, why); }
+});
 
 export function baseStateReason() {
   return baseStateWhy;

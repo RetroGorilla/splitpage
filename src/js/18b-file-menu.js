@@ -1,9 +1,9 @@
 import { S } from "./_state.js";
-import { home, setHome } from "./_home.js";
+import { home } from "./_home.js";
 import { readDefaultWpm, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03-sync.js";
+import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
@@ -17,6 +17,7 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
+import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
 
@@ -342,10 +343,7 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
   var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
   if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
-  S.state = next;
-  setBaseState(cloneState(S.state), reason);
-  setHome("none");
-  S.docIdWrittenOut = false;
+  documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
   resetProductionPanelState();
   clearDirty();
   renderAbsorbed();

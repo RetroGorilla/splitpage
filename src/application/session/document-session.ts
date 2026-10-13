@@ -50,6 +50,12 @@ export interface SessionPorts {
   report: ReportPort;
   timers: TimerPort;
   timing?: RefreshTiming | undefined;
+  after?: SessionCounters | undefined;
+}
+
+export interface SessionCounters {
+  readonly epoch: number;
+  readonly generation: number;
 }
 
 export type AbsorbedKind = "server" | "reload" | "recovery" | "adopt";
@@ -167,8 +173,8 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
   const scheduler = createEffectScheduler(ports.effects, ports.timers, ports.timing);
   const listeners: SessionListener[] = [];
   let document: ValidatedDocument | null = null;
-  let epoch = 0;
-  let generation = 0;
+  let epoch = ports.after ? ports.after.epoch : 0;
+  let generation = ports.after ? ports.after.generation : 0;
   let disposed = false;
 
   function enter(raw: unknown): ValidatedDocument | null {
