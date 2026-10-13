@@ -455,6 +455,11 @@ compiler API only under `typescript/unstable/*`, which `tools/source-scan.mjs`,
 
 Supported Node versions are 22 (from 22.22.2) and 24 (from 24.15.0), per
 `package.json`'s `engines`; `.nvmrc` pins the one used locally and in CI.
+Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
+decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
+`…`, `“` and `”`, so `list-pdfs.test.mjs` and `pdf-script.test.mjs` fail there
+and pass on 22.22.2 and on Node 24. `tools/run-tests.mjs` prints a warning,
+and still runs, when `process.version` differs from `.nvmrc`.
 
 ## CI
 
