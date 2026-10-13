@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlin
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
-import { discover, runTests, parseArgs, SETS } from "./run-tests.mjs";
+import { discover, runTests, parseArgs, nodeVersionWarning, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
@@ -232,6 +232,18 @@ console.log("\na stray GOLDEN_UPDATE:\n");
   const cli = spawnSync(process.execPath, [join(REPO, "tools", "run-tests.mjs"), "unit", "--list"], { cwd: REPO, encoding: "utf8", env: { ...process.env, GOLDEN_UPDATE: "all" } });
   eq("npm test reads it from the real environment and exits 2", cli.status, 2);
   check("with the same advice", (cli.stderr ?? "").includes("node src/test/golden-helpers.mjs --update"), cli.stderr);
+}
+
+console.log("\nnodeVersionWarning():\n");
+
+{
+  const repo = mkdtempSync(join(tmpdir(), "splitpage-nvmrc-"));
+  eq("no .nvmrc means no warning", nodeVersionWarning("v22.22.0", repo), null);
+  writeFileSync(join(repo, ".nvmrc"), "22.22.2\n");
+  eq("the pinned version is silent", nodeVersionWarning("v22.22.2", repo), null);
+  const warning = nodeVersionWarning("v22.22.0", repo) ?? "";
+  check("another version names both and nvm use", warning.includes("22.22.0") && warning.includes("22.22.2") && warning.includes("nvm use"), warning);
+  rmSync(repo, { recursive: true, force: true });
 }
 
 console.log("\ntypecheck():\n");
