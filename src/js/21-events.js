@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
@@ -18,7 +19,6 @@ import {
   promptForWpm,
   reportMerge,
   restoreSnapshotFromCard,
-  setBaseState,
   stampRow,
   undoMerge,
   updateIdentityChip
@@ -1187,8 +1187,7 @@ function init() {
       report: false
     });
     if (S.state !== applied.state) {
-      S.state = applied.state;
-      setBaseState(cloneState(S.state), "boot: the version this page loaded, nothing to merge");
+      documentTransitions().open({ from: { document: applied.state }, reason: "boot: the version this page loaded, nothing to merge" });
       renderFirstDraw();
     }
     updateIdentityChip();
