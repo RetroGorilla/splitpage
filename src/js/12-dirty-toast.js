@@ -39,8 +39,8 @@ function signLegacyEdit() {
 
 provideSessionEffects({
   dirty: function () {
+    S.dirty = true;
     S.editSeq = noteSaveChange();
-    S.dirty = unsavedFor();
   },
   attribute: myColorPlan,
   draft: function () {

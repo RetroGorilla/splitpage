@@ -87,7 +87,7 @@ interface Held<B> {
   baseline: B | null;
 }
 
-export const NEVER_CONFIRMED = -1;
+export const NEVER_CONFIRMED = 0;
 
 function sameKey(a: DestinationKey, b: DestinationKey): boolean {
   return a.owner === b.owner && a.name === b.name;
