@@ -315,6 +315,19 @@ test("after dispose the session refuses commands and every entry does nothing, w
   assert.notEqual(DISPOSED, NO_DOCUMENT);
 });
 
+test("a session that takes over from another continues its epoch and generation, so a replacement never reuses either", () => {
+  const before = opened();
+  before.session.run(setAudio("r1", "Every evening."));
+  const after = harness(undefined, { after: { epoch: before.session.epoch(), generation: before.session.generation() } });
+  assert.equal(after.session.epoch(), 1);
+  assert.equal(after.session.generation(), 1);
+  assert.equal(after.session.read(function (doc) { return doc; }), null, "it holds nothing until it adopts");
+  after.session.adopt(rawScript("The replacement"));
+  assert.equal(after.session.epoch(), 2);
+  after.session.run(setAudio("r1", "Every night."));
+  assert.equal(after.session.generation(), 2);
+});
+
 test("dispose twice is the same as once", () => {
   const h = opened();
   h.session.refresh("broll");

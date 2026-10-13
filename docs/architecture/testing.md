@@ -504,6 +504,11 @@ compiler API only under `typescript/unstable/*`, which `tools/source-scan.mjs`,
 
 Supported Node versions are 22 (from 22.22.2) and 24 (from 24.15.0), per
 `package.json`'s `engines`; `.nvmrc` pins the one used locally and in CI.
+Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
+decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
+`…`, `“` and `”`, so `list-pdfs.test.mjs` and `pdf-script.test.mjs` fail there
+and pass on 22.22.2 and on Node 24. `tools/run-tests.mjs` prints a warning,
+and still runs, when `process.version` differs from `.nvmrc`.
 
 ## CI
 
@@ -523,6 +528,14 @@ The persistence suite costs little: on its first hosted run (PR #270,
 `ubuntu-latest`, 30 September 2026) `265-browser-drafts.txt` passed 80 of 80
 checks in 8.0 s, from the runner's start line to its `ALL PASS`; the step
 running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
+
+CI runs on the maintainer's self-hosted runners (repository variable
+`CI_RUNNER`). When runs are queued there, add the label `ci-github` to the
+pull request and its jobs run on GitHub's runners instead; no other run
+moves. Adding the label does not rerun CI: push to the pull request after
+labelling it, because a run reads the labels from the moment it started. First compare the queue with the median recent run time (about
+8 to 14 minutes) and wait if the run in front is nearly done. Remove the
+label once the pull request is green. Never change `CI_RUNNER` for this.
 
 `gate` is the one check to mark required in branch protection: a
 prose-only pull request completes it without waiting on the others. Prose

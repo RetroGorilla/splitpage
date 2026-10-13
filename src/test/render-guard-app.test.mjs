@@ -268,7 +268,8 @@ test("a new blank script whose render throws still replaces the document, as a c
   });
   assert.equal(seen.more, true);
   assert.notEqual(seen.book.title, "Before the blank");
-  assert.deepEqual(seen.book.heard, ["adopt"]);
+  assert.deepEqual(seen.book.heard, [], "the replaced script's listeners hear nothing of the new one (4.8)");
+  assert.equal(seen.book.sessionHoldsIt, true);
   assert.equal(seen.book.dirty, false);
 });
 
@@ -936,9 +937,13 @@ test("on a stale screen no editing event reaches the script's parts, while one a
     outside.remove();
   }
   const box = document.getElementById("find-input");
+  const bar = document.getElementById("findbar");
+  const wasHidden = bar.hidden;
+  bar.hidden = false;
   box.focus();
   const ev = new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true });
   box.dispatchEvent(ev);
+  bar.hidden = wasHidden;
   assert.equal(ev.defaultPrevented, false, "a text box keeps its own undo");
   await pressRedraw();
 });

@@ -7,7 +7,9 @@ import {
   normalizeServerUrl,
   restoreHome,
   setConnection,
+  serverOf,
   setHome,
+  stillOnServer,
   updateConnection
 } from "../js/_home.js";
 
@@ -55,16 +57,38 @@ test("a tunnel is host and ports, and nothing that could carry a secret", () => 
   setConnection({});
 });
 
-test("a server home holds this tab's connection, and sees a token that arrives later", () => {
+test("a server home holds this tab's connection, and moves to the new one when a token arrives later", () => {
   const c = setConnection({ serverUrl: "http://a:1/" });
   const h = setHome("server", { id: "doc-1", rev: 3 });
   assert.equal(h.conn, c);
   assert.equal(homeConn(), c);
-  updateConnection({ token: "tok", role: "review" });
+  const next = updateConnection({ token: "tok", role: "review" });
+  assert.notEqual(next, c, "a token or role change is a new connection instance");
+  assert.equal(conn, next);
+  assert.equal(home, h, "the home is the same destination");
+  assert.equal(home.conn, next, "and it moved to the new connection");
   assert.equal(home.conn.token, "tok");
   assert.equal(home.conn.role, "review");
-  assert.equal(conn, c, "updateConnection moves a fact in place, it does not replace the record");
+  assert.equal(c.token, "", "the old instance keeps what it had");
+  assert.equal(c.role, "");
+  assert.ok(Object.isFrozen(next), "an instance never changes once made");
+  assert.equal(stillOnServer(c), true, "the old instance is on the same server");
   setHome("none");
+  setConnection({ serverUrl: "http://a:1/" });
+  assert.equal(stillOnServer(c), false, "pointing the tab again is another server, even at the same address");
+  assert.equal(stillOnServer(null), false);
+  setConnection({});
+});
+
+test("each token, role or scope change is its own instance on the same server", () => {
+  const first = setConnection({ serverUrl: "https://s.example/" });
+  const seen = [first];
+  for (const change of [{ token: "t" }, { role: "edit" }, { scope: "doc-1" }, { scope: "" }]) {
+    seen.push(updateConnection(change));
+  }
+  assert.equal(new Set(seen).size, seen.length);
+  assert.ok(seen.every((c) => serverOf(c) === serverOf(first) && stillOnServer(c)));
+  assert.notEqual(serverOf(setConnection({ serverUrl: "https://s.example/" })), serverOf(first));
   setConnection({});
 });
 
@@ -89,7 +113,8 @@ test("a link's scope is a document id the server could have named, kept like the
   setHome("server", { id: "doc-7" });
   updateConnection({ role: "edit", scope: "doc-7" });
   assert.equal(home.conn.scope, "doc-7", "the home sees it without a second copy");
-  assert.equal(conn, c);
+  assert.equal(home.conn, conn);
+  assert.notEqual(conn, c);
   assert.throws(() => updateConnection({ scope: "../etc" }), /a scope is/);
   assert.throws(() => updateConnection({ scope: "Doc 7" }), /a scope is/);
   assert.throws(() => updateConnection({ scope: 7 }), /a scope is/);
