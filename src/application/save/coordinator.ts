@@ -23,6 +23,7 @@ export interface SaveJob<R> {
   readonly request: R;
   readonly generation: number;
   readonly operation: () => OperationContext;
+  readonly owns: () => boolean;
   readonly moved: () => void;
 }
 
@@ -184,6 +185,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       request: entry.request,
       generation: generation,
       operation: function () { return operation; },
+      owns: function () { return ports.ownership.stillOwns(operation); },
       moved: function () { operation = ports.ownership.capture(); }
     });
     let written: Promise<WriterResult>;
