@@ -9,13 +9,17 @@ import * as transitionPorts from "../../src/application/transitions/ports.ts";
 import * as transitions from "../../src/application/transitions/transitions.ts";
 import * as recoveryPorts from "../../src/application/recovery/ports.ts";
 import * as draftWriter from "../../src/application/recovery/draft-writer.ts";
+import * as saveCoordinator from "../../src/application/save/coordinator.ts";
+import * as saveStatus from "../../src/application/save/status.ts";
+import * as autoSave from "../../src/application/save/autosave.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 const OWNERS = [
   "src/application/session/operation.ts",
   "src/application/transitions",
-  "src/application/recovery"
+  "src/application/recovery",
+  "src/application/save"
 ];
 
 function sourcesOf(path: string): string[] {
@@ -66,7 +70,8 @@ test("E12: the owners' modules do nothing when they are loaded: only types, func
 
 test("E12: importing the owners constructs nothing: each export is a constructor function or frozen data", () => {
   const loaded: Record<string, Record<string, unknown>> = {
-    operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter
+    operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter,
+    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave
   };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {
@@ -77,4 +82,5 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   assert.equal(typeof transitions.createTransitions, "function");
   assert.equal(typeof operation.createOperations, "function");
   assert.equal(typeof draftWriter.createDraftWriter, "function");
+  assert.equal(typeof saveCoordinator.createSaveCoordinator, "function");
 });
