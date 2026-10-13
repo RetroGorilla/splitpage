@@ -13,7 +13,8 @@ const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
-const { browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../js/03d-drafts-idb.js");
+const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
+const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 
@@ -601,7 +602,7 @@ test("a reopen after a reload that is refused as no document does not stop the d
 });
 
 test("a server open that takes a pending browser draft and finds a state that is no document answers not opened: the picker stays open and the message shows once", async () => {
-  const store = createIdbDraftStore();
+  const store = openDraftStore({ indexedDB: window.indexedDB });
   const key = browserDraftKey(draftBaseOf("", window.location.href), "doc-draft");
   const draft = JSON.stringify(startingDocument("Draft"));
   const put = await store.put({

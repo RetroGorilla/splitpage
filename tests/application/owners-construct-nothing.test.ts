@@ -7,12 +7,15 @@ import ts from "typescript";
 import * as operation from "../../src/application/session/operation.ts";
 import * as transitionPorts from "../../src/application/transitions/ports.ts";
 import * as transitions from "../../src/application/transitions/transitions.ts";
+import * as recoveryPorts from "../../src/application/recovery/ports.ts";
+import * as draftWriter from "../../src/application/recovery/draft-writer.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 const OWNERS = [
   "src/application/session/operation.ts",
-  "src/application/transitions"
+  "src/application/transitions",
+  "src/application/recovery"
 ];
 
 function sourcesOf(path: string): string[] {
@@ -56,13 +59,15 @@ function topLevelWork(file: string): string[] {
 
 test("E12: the owners' modules do nothing when they are loaded: only types, functions and frozen constants", () => {
   const files = OWNERS.flatMap(sourcesOf);
-  assert.ok(files.length >= 3, "found the owners' sources: " + files.join(", "));
+  assert.ok(files.length >= 5, "found the owners' sources: " + files.join(", "));
   const work = files.flatMap(topLevelWork);
   assert.deepEqual(work, []);
 });
 
 test("E12: importing the owners constructs nothing: each export is a constructor function or frozen data", () => {
-  const loaded: Record<string, Record<string, unknown>> = { operation: operation, transitionPorts: transitionPorts, transitions: transitions };
+  const loaded: Record<string, Record<string, unknown>> = {
+    operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter
+  };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {
       const ok = typeof value === "function" || typeof value !== "object" || value === null || Object.isFrozen(value);
@@ -71,4 +76,5 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   }
   assert.equal(typeof transitions.createTransitions, "function");
   assert.equal(typeof operation.createOperations, "function");
+  assert.equal(typeof draftWriter.createDraftWriter, "function");
 });

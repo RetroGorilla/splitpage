@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { IDBFactory } from "fake-indexeddb";
-import { createIdbDraftStore } from "../js/03d-drafts-idb.js";
+import { DRAFT_LIMITS, createIdbDraftStore } from "../adapters/storage/draft-store-idb.ts";
+
+const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 import {
   createFakeLocks,
   createFaultyIdbFactory,
@@ -331,7 +333,7 @@ test("held fetch: a reply with bytes answers the raw bytes and not JSON", async 
 
 test("faulty indexedDB: a queued fault fails the next transaction of its mode with that error and later ones pass", async () => {
   const faulty = createFaultyIdbFactory(new IDBFactory());
-  const store = createIdbDraftStore({ indexedDB: faulty });
+  const store = openDraftStore({ indexedDB: faulty });
   const rec = { key: "k1", base: "https://s.test/", docId: "doc-1", rev: 1, title: "t", writerId: "w1", editSeq: 1, schema: 5, stateJson: "{}", baseJson: "{}" };
   assert.deepEqual(await store.put(rec), { ok: true, evicted: 0 });
   faulty.failNext(faulty.quotaError(), { mode: "readwrite" });
