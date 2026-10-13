@@ -23,6 +23,7 @@ import { prompterSceneHtml } from "../js/20-teleprompter.js";
 import {
   applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, parseSplitpageFile
 } from "../js/20d-formats.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initSceneStatus();
@@ -242,14 +243,14 @@ function directionDoc() {
 
 test(".splitpage carries it as it is", () => {
   const s = directionDoc();
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(s))));
   assert.equal(back.rows[0].audioText, s.rows[0].audioText);
   assert.equal(back.rows[1].audioText, s.rows[1].audioText);
 });
 
 test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand edit keeps its directions", async () => {
   const s = directionDoc();
-  const md = withState(s, () => buildMarkdownProject(s));
+  const md = withState(s, () => buildMarkdownProject(exportDocumentOf(s)));
   assert.ok(md.includes("| Welcome back. ((beat)) Today, the kettle. |"), "the table cell");
   S.state = s;
   try {
@@ -312,7 +313,7 @@ test("a Splitpage .docx reopens with its directions as directions; ((…)) in a 
 
 test("the other exports print it as (beat)", () => {
   withState(directionDoc(), () => {
-    assert.ok(toMarkdownDoc().includes("Welcome back. *(beat)* Today, the kettle."));
+    assert.ok(toMarkdownDoc(exportDocumentOf(S.state)).includes("Welcome back. *(beat)* Today, the kettle."));
     assert.ok(buildCsv().includes("Welcome back. (beat) Today, the kettle."));
   });
 });

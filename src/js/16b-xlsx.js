@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { breakdownTable } from "./08-production-panels.js";
 import { brollTable } from "./08d-broll-panel.js";
 import { strBytes, tagPrintColor, xmlEscape, zipWrite } from "./14-export.js";
-import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT } from "./14b-export-kit.js";
+import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT, captureExportDocument } from "./14b-export-kit.js";
 import { scriptTable } from "./16-csv.js";
 import { unitSafePrefix } from "../core/document/text-policy.ts";
 
@@ -274,7 +274,7 @@ function commentsSheet(L, t) {
 }
 
 function breakdownSheet(L, standalone) {
-  var t = breakdownTable();
+  var t = breakdownTable(captureExportDocument());
   if (!t.rows.length && !standalone) return null;
   var rows = t.rows.map(function (r) {
     var st = TAG_STATUS_PRINT[r.status] || TAG_STATUS_PRINT.needed;

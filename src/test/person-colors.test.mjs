@@ -14,6 +14,7 @@ import { S } from "../js/_state.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { buildSplitpageFile, parseSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../js/20d-formats.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 const [BLUE, AMBER, VIOLET, GREEN] = PERSON_COLORS;
 
@@ -120,13 +121,13 @@ test("mergeStates carries the map, and leaves it out when nobody picked", () => 
 
 test("both project formats round-trip the map, and an old file still has none", () => {
   const withMap = migrateRows({ title: "T", rows: [{ id: "r1", audioText: "words" }], personColors: { Adam: BLUE, "Priya M": AMBER } });
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(withMap)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(withMap))));
   assert.deepEqual(back.personColors, { Adam: BLUE, "Priya M": AMBER });
   const without = migrateRows({ title: "T", rows: [{ id: "r1", audioText: "words" }] });
-  const text = buildSplitpageFile(without);
+  const text = buildSplitpageFile(exportDocumentOf(without));
   assert.equal(text.indexOf("personColors"), -1);
   assert.equal("personColors" in migrateRows(parseSplitpageFile(text)), false);
-  const md = (s) => { const was = S.state; S.state = s; try { return buildMarkdownProject(s); } finally { S.state = was; } };
+  const md = (s) => { const was = S.state; S.state = s; try { return buildMarkdownProject(exportDocumentOf(s)); } finally { S.state = was; } };
   const fromMd = parseMarkdownProject(md(withMap));
   assert.ok(fromMd);
   assert.deepEqual(fromMd.state.personColors, { Adam: BLUE, "Priya M": AMBER });

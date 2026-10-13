@@ -12,6 +12,7 @@ import { buildBrollCsv } from "../js/08d-broll-panel.js";
 import { exportMetaLine } from "../js/14-export.js";
 import { buildCsv, csvToRows } from "../js/16-csv.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { exportDocumentOf, exportFacts } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -157,7 +158,7 @@ const SHELL = '<!doctype html><html lang="en"><head>\n<meta charset="utf-8">\n<!
 
 test("the standalone page is named for the script: its title and the export's meta line", () => {
   demo();
-  const html = withPageHead(SHELL, { title: LONG_DEMO.state.title + " — SplitShare", description: exportMetaLine() });
+  const html = withPageHead(SHELL, { title: LONG_DEMO.state.title + " — SplitShare", description: exportMetaLine(exportFacts(exportDocumentOf(S.state))) });
   assert.ok(html.includes("<title>I Fixed a $40 Film Camera (and Shot a Roll With It) — SplitShare</title>"));
   assert.ok(html.includes('<meta name="description" content="30 scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot · '));
   assert.equal((html.match(/<title>/g) || []).length, 2, "the document's own text in the body is left alone");

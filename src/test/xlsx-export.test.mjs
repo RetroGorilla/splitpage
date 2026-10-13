@@ -8,7 +8,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownTable } from "../js/08-production-panels.js";
 import { brollTable } from "../js/08d-broll-panel.js";
 import { TAG_PRINT_COLORS, zipRead } from "../js/14-export.js";
-import { PRINT_COLORS } from "../js/14b-export-kit.js";
+import { PRINT_COLORS, exportDocumentOf } from "../js/14b-export-kit.js";
 import { scriptTable } from "../js/16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../js/16b-xlsx.js";
 import { LONG_DEMO } from "../js/_starters.js";
@@ -97,7 +97,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   assert.deepEqual(comments.rows[0], t.commentHead);
   assert.deepEqual(asText(comments.rows.slice(1)), asText(t.comments.map((c) => c.cells)));
 
-  const bd = breakdownTable();
+  const bd = breakdownTable(exportDocumentOf(S.state));
   assert.deepEqual(asText(book.sheets[2].rows.slice(1)), asText(bd.rows.map((r) => r.cells)));
   assert.equal(typeof book.sheets[2].rows[1][4], "number");
   const br = brollTable();
@@ -159,7 +159,7 @@ test("the breakdown's and the shot list's own workbooks, and empty ones", async 
   demo();
   const bd = await open(buildBreakdownXlsx());
   assert.deepEqual(bd.sheets.map((s) => s.name), ["Breakdown"]);
-  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable().head);
+  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable(exportDocumentOf(S.state)).head);
   const br = await open(buildBrollXlsx());
   assert.deepEqual(br.sheets.map((s) => s.name), ["B-roll"]);
   assert.equal(br.sheets[0].rows.length, brollTable().rows.length + 1);

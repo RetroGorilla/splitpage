@@ -9,6 +9,7 @@ window.__splitpageNoRemote = true;
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
@@ -49,7 +50,7 @@ function fixture() {
 
 let opened = 0;
 async function open(doc) {
-  const file = new File([buildSplitpageFile(migrateRows(doc || fixture()))], "cut-" + (++opened) + ".splitpage", { lastModified: opened });
+  const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "cut-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();
 }

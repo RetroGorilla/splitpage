@@ -8,7 +8,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
 import { __init as initBrollPanel, brollShotListForPrint } from "../js/08d-broll-panel.js";
 import { TAG_PRINT_COLORS } from "../js/14-export.js";
-import { PRINT_COLORS, exportDateText, sceneFacts } from "../js/14b-export-kit.js";
+import { PRINT_COLORS, exportDateText, exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { buildPackingListPdf, buildShotListPdf, pdfTextWidth } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
 
@@ -403,7 +403,7 @@ test("by scene: no bands — the Scene column groups the rows, a scene named on 
   assert.deepEqual(all.filter((t) => / shot$/.test(t.str) && t.size === 8.5).map((t) => t.str), ["0/1 shot"]);
   const numbers = at(all, "scene").filter((t) => t.font === "F2").map((t) => t.str);
   assert.deepEqual(numbers, ["01", "02"]);
-  assert.deepEqual(at(all, "scene").filter((t) => t.font === "F1" && t.rgb === rgb(C.faint)).map((t) => t.str), sceneFacts().slice(0, 2).map((f) => f.start));
+  assert.deepEqual(at(all, "scene").filter((t) => t.font === "F1" && t.rgb === rgb(C.faint)).map((t) => t.str), sceneFacts(exportDocumentOf(S.state)).slice(0, 2).map((f) => f.start));
   one(all, "1 of 3 shot · 1 flagged · by scene · " + exportDateText());
 });
 
@@ -457,7 +457,7 @@ test("by person: a shot's description on its own lines, its props with their sta
   groupBy("location");
   const byPlace = pagesOf(buildShotListPdf(brollShotListForPrint())).map(textsOf).flat();
   const boats = rowTexts(byPlace, "boats at dawn");
-  assert.deepEqual(at(boats, "scene").map((t) => t.str), ["02", sceneFacts()[1].start]);
+  assert.deepEqual(at(boats, "scene").map((t) => t.str), ["02", sceneFacts(exportDocumentOf(S.state))[1].start]);
   assert.deepEqual(at(boats, "owner").map((t) => t.str), ["Ada Brenner"]);
 });
 

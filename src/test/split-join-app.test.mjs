@@ -8,6 +8,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
@@ -46,7 +47,7 @@ let opened = 0;
 async function open(doc) {
   if (writer.writerOpen) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
-  const file = new File([buildSplitpageFile(migrateRows(doc || fixture()))], "split-" + (++opened) + ".splitpage", { lastModified: opened });
+  const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "split-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();
 }

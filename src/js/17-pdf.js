@@ -11,7 +11,7 @@ import {
   STATUS_PRINT,
   TAG_STATUS_PRINT,
   breakdownGroups,
-  commentNumbers,
+  captureExportDocument,
   exportComments,
   exportDateText,
   exportFacts,
@@ -427,7 +427,7 @@ function commentImageShas(entries) {
 }
 
 export function pdfCommentImagesFor() {
-  var shas = commentImageShas(commentEntries({ pieces: true }));
+  var shas = commentImageShas(commentEntries(captureExportDocument(), { pieces: true }));
   return Promise.all(shas.map(function (sha) {
     return pdfJpegOf(commentPic(sha)).then(null, function () { return null; });
   })).then(function (list) {
@@ -482,9 +482,10 @@ export function buildPdf(jpegs, commentJpegs) {
   var CUE = tagPrintColor("sound") || "AB413E";
   var HIGHLIGHT = "FCE38A";
 
-  var facts = exportFacts();
-  var scenes = sceneFacts();
-  var nums = commentNumbers();
+  var doc = captureExportDocument();
+  var facts = exportFacts(doc);
+  var scenes = sceneFacts(doc);
+  var nums = doc.commentNumbers;
   var title = facts.title;
 
   var pages = [];
@@ -889,7 +890,7 @@ export function buildPdf(jpegs, commentJpegs) {
     return lines;
   }
 
-  var groups = breakdownGroups();
+  var groups = breakdownGroups(doc);
   if (groups.length) {
     var bdItems = [];
     groups.forEach(function (gr) { bdItems = bdItems.concat(gr.items); });
@@ -964,7 +965,7 @@ export function buildPdf(jpegs, commentJpegs) {
     pageLinks = [];
   }
 
-  var comments = exportComments({ pieces: true });
+  var comments = exportComments(doc, { pieces: true });
   if (comments.length) {
     var openN = comments.filter(function (c) { return !c.resolved; }).length;
     section("Comments", [openN + " open"].concat(comments.length > openN ? [(comments.length - openN) + " resolved"] : []).join(" · "));
@@ -1192,7 +1193,7 @@ export function buildPackingListPdf(catId) {
   var title = S.state.title || "Untitled Script";
   var heading = cat ? cat.plural : catId;
   var docTitle = title + " — " + heading + " packing list";
-  var group = breakdownGroups().filter(function (g) { return g.catId === catId; })[0];
+  var group = breakdownGroups(captureExportDocument()).filter(function (g) { return g.catId === catId; })[0];
   var items = (group ? group.items : []).slice()
     .sort(function (a, b) { return a.name.localeCompare(b.name); });
 
