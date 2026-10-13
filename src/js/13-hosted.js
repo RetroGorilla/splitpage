@@ -57,6 +57,7 @@ import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-d
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
+import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -102,11 +103,7 @@ export function reviewMode() {
   return !!c && c.role === "review";
 }
 
-function ApiError(code, message) {
-  var e = new Error(message || code);
-  e.code = code;
-  return e;
-}
+var ApiError = apiError;
 
 export var normalizeServerBase = normalizeServerUrl;
 
@@ -214,8 +211,7 @@ export function pointTabAt(serverUrl, opts) {
 }
 
 export function apiUrl(path) {
-  var rel = String(path || "").replace(/^\/+/, "");
-  return conn.serverUrl ? conn.serverUrl + rel : rel;
+  return serverTransport(conn).url(path);
 }
 
 export function setServerToken(token, remember) {
@@ -315,8 +311,6 @@ function holdsOwnerSignIn() {
   return !!conn.token && conn.token === rememberedTokenFor(conn.serverUrl);
 }
 
-var CLIENT_HEADER = "x-splitpage-client";
-var CLIENT_GENERATION = "2";
 var serverCaps = new WeakMap();
 
 function capsOf(c) {
@@ -334,97 +328,32 @@ function noteCaps(c, health, noClientHeader) {
   });
 }
 
-function serverTakesBlobs() {
-  return capsOf(conn).blobs;
+function sendFetch(url, init) {
+  return fetch(url, init);
 }
 
-function clientHeaders(headers, opts) {
-  var other = !!(opts && opts.base !== undefined);
-  var token = opts && opts.token !== undefined ? opts.token : conn.token;
-  if (token) headers["x-splitpage-token"] = token;
-  if (!(opts && opts.noClientHeader) && (other || !capsOf(conn).noClientHeader)) headers[CLIENT_HEADER] = CLIENT_GENERATION;
-  return headers;
+export function serverTransport(c, token) {
+  var held = token === undefined ? c : { serverUrl: c.serverUrl, token: token };
+  return createServerTransport(held, {
+    fetch: sendFetch,
+    caps: function () { return capsOf(c); }
+  });
 }
 
-export async function apiFetch(path, opts) {
+function otherServerTransport(base, token) {
+  return createServerTransport({ serverUrl: normalizeServerUrl(base), token: token }, {
+    fetch: sendFetch,
+    caps: function () { return { blobs: false, noClientHeader: false }; }
+  });
+}
+
+export function apiFetch(path, opts) {
   opts = opts || {};
-  var headers = opts.raw
-    ? { "Content-Type": opts.contentType || "application/octet-stream", "Accept": "application/json" }
-    : opts.body
-      ? { "Content-Type": "application/json", "Accept": "application/json" }
-      : { "Accept": "application/json" };
-  clientHeaders(headers, opts);
-  var base = opts.base !== undefined ? normalizeServerUrl(opts.base) : conn.serverUrl;
-  var rel = String(path || "").replace(/^\/+/, "");
-  var res;
-  try {
-    res = await fetch(base ? base + rel : rel, {
-      method: opts.method || "GET",
-      headers: headers,
-      body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
-      credentials: base ? "omit" : "same-origin",
-      cache: "no-store"
-    });
-  } catch (e) {
-    throw ApiError("offline", "no answer from the server");
-  }
-
-  var ctype = res.headers.get("content-type") || "";
-  if (opts.raw && res.status === 413) throw ApiError("blob-too-large", "too-large");
-  if (res.redirected || (!ctype.includes("application/json") && res.status !== 204)) {
-    throw ApiError("auth", "signed out");
-  }
-  if (res.status === 401 || res.status === 403) {
-    var body403 = await res.json().catch(function () { return null; });
-    if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
-    if (body403 && body403.error === "review-only") {
-      var e403 = ApiError("review-only", "this link can comment, but not change the script");
-      e403.detail = body403.detail || "";
-      throw e403;
-    }
-    if (body403 && (body403.error === "pin-required" || body403.error === "bad-pin")) {
-      throw ApiError("pin", "this server asks for a join PIN");
-    }
-    if (body403 && body403.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
-    if (body403 && body403.error === "owner-only") throw ApiError("owner-only", "only the script's owner can do that");
-    if (body403 && body403.error === "wrong-document") {
-      throw ApiError("wrong-document", "this link opens a different script");
-    }
-    throw ApiError("auth", "signed out");
-  }
-  if (res.status === 410) {
-    var body410 = await res.json().catch(function () { return null; });
-    if (body410 && body410.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
-    var gone = ApiError("410", (body410 && body410.error) || "HTTP 410");
-    gone.payload = body410;
-    throw gone;
-  }
-  if (res.status === 429) {
-    var body429 = await res.json().catch(function () { return null; });
-    if (body429 && body429.error === "too-many-attempts") {
-      throw ApiError("pin-blocked", "too many wrong codes — wait a minute and try again");
-    }
-    if (body429 && body429.error === "review-budget") {
-      throw ApiError("review-budget", "this link's image allowance is used up for now");
-    }
-  }
-  if (res.status === 426) throw ApiError("client-too-old", "this page is out of date");
-
-  var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
-  if (res.status === 409) { var c = ApiError("conflict"); c.payload = body; throw c; }
-  if (res.status === 404 && body && body.error === "not-found") throw ApiError("not-found");
-  if (res.status === 422 && body && body.error === "missing-blobs") {
-    var mb = ApiError("missing-blobs", "an image in it is not on the server");
-    mb.payload = body;
-    throw mb;
-  }
-  if (opts.raw && res.status === 415) throw ApiError("blob-unsupported", (body && body.error) || "unsupported-type");
-  if (!res.ok) {
-    var ge = ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
-    ge.payload = body;
-    throw ge;
-  }
-  return body;
+  var token = opts.token !== undefined ? opts.token : conn.token;
+  var transport;
+  if (opts.base !== undefined) transport = otherServerTransport(opts.base, token);
+  else transport = serverTransport(conn, token);
+  return transport.request(path, opts);
 }
 
 export var SERVER_RESUME_KEY = "splitpage-server-resume";
@@ -1017,13 +946,14 @@ export async function publishToServer(opts) {
   if (forkDocId) published.docId = forkDocId;
   var body;
   var via = conn;
+  var transport = serverTransport(via);
   var homeAtStart = home;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
-      return sendWithBlobs(published, function (sending, acceptMissing) {
+      return sendWithBlobs(transport, published, function (sending, acceptMissing) {
         var post = { state: sending, by: getEditorName() };
         if (acceptMissing.length) post.acceptMissing = acceptMissing;
-        return apiFetch("api/docs", { method: "POST", body: post });
+        return transport.request("api/docs", { method: "POST", body: post });
       }, true);
     });
   } catch (err) {
@@ -1175,11 +1105,11 @@ function uniqueShas(list) {
   return out;
 }
 
-async function blobsMissingOnServer(shas) {
+async function blobsMissingOnServer(transport, shas) {
   var out = [];
   for (var i = 0; i < shas.length; i += MISSING_BATCH) {
     var chunk = shas.slice(i, i + MISSING_BATCH);
-    var body = await apiFetch("api/blobs/missing", { method: "POST", body: { shas: chunk } });
+    var body = await transport.request("api/blobs/missing", { method: "POST", body: { shas: chunk } });
     uniqueShas(body && body.missing).forEach(function (sha) {
       if (chunk.indexOf(sha) !== -1 && out.indexOf(sha) === -1) out.push(sha);
     });
@@ -1187,10 +1117,10 @@ async function blobsMissingOnServer(shas) {
   return out;
 }
 
-async function uploadBlobs(shas, known) {
+async function uploadBlobs(transport, shas, known) {
   var list = uniqueShas(shas);
   if (!list.length) return [];
-  var need = known ? list : await blobsMissingOnServer(list);
+  var need = known ? list : await blobsMissingOnServer(transport, list);
   if (!need.length) return [];
   var absent = await ensureBytes(need, { remote: false });
   for (var i = 0; i < need.length; i++) {
@@ -1199,7 +1129,7 @@ async function uploadBlobs(shas, known) {
     var bytes = bytesForSync(sha);
     var rec = blobRecordFor(sha);
     if (!bytes || !rec) { absent.push(sha); continue; }
-    await apiFetch("api/blobs/" + sha, { method: "PUT", raw: bytes, contentType: rec.mime });
+    await transport.request("api/blobs/" + sha, { method: "PUT", raw: bytes, contentType: rec.mime });
   }
   return absent;
 }
@@ -1212,31 +1142,25 @@ async function inlineBlobsForServer(state, refs) {
   return out;
 }
 
-async function sendWithBlobs(state, send, canAccept) {
+async function sendWithBlobs(transport, state, send, canAccept) {
   var refs = refsIn(state);
-  if (!serverTakesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
-  if (refs.length) await uploadBlobs(refs, false);
+  if (!transport.takesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
+  if (refs.length) await uploadBlobs(transport, refs, false);
   try {
     return await send(state, []);
   } catch (err) {
     if (!(err && err.code === "missing-blobs")) throw err;
-    var absent = await uploadBlobs(err.payload && err.payload.missing, true);
+    var absent = await uploadBlobs(transport, err.payload && err.payload.missing, true);
     if (absent.length && !canAccept) throw err;
     return send(state, absent);
   }
 }
 
 export async function fetchBlob(sha) {
-  if (!isSha256Hex(sha) || !serverTakesBlobs()) return null;
-  var res;
-  try {
-    res = await fetch(apiUrl("api/blobs/" + sha), {
-      method: "GET",
-      headers: clientHeaders({ "Accept": "image/*" }),
-      credentials: conn.serverUrl ? "omit" : "same-origin"
-    });
-  } catch (e) { return null; }
-  if (!res.ok || res.redirected) return null;
+  var transport = serverTransport(conn);
+  if (!isSha256Hex(sha) || !transport.takesBlobs()) return null;
+  var res = await transport.get("api/blobs/" + sha, "image/*");
+  if (!res) return null;
   var bytes;
   try { bytes = new Uint8Array(await res.arrayBuffer()); } catch (e) { return null; }
   var rec = internBlob(bytes);
@@ -1251,44 +1175,59 @@ function reportLateServerSave() {
   showToast("An earlier save of this script arrived late. Your next save will merge both versions.", "warn");
 }
 
-export async function saveToServer() {
+function reportIfLandedHere(op, docId, rev) {
+  if (serverHomeId() !== docId || !stillOnServer(op.connection)) return;
+  if (home.rev < rev) reportLateServerSave();
+}
+
+var SENT_OUTCOMES = ["saved", "obsolete"];
+
+export function saveToServer(job) {
+  if (job) return writeToServer(job);
+  return requestSave({ kind: "server" }).then(function (outcome) {
+    return SENT_OUTCOMES.indexOf(outcome.kind) !== -1;
+  });
+}
+
+async function writeToServer(job) {
   if (serverSessionExpired || clientTooOld || linkTurnedOff) return false;
   if (reviewMode()) return sendReviewWrites();
   var docId = serverHomeId();
+  var op = job.operation();
+  var transport = serverTransport(op.connection);
   var attempts = 0;
   var mergeResult = null;
 
   while (attempts < 3) {
     attempts++;
-    if (serverHomeId() !== docId) return false;
+    if (!job.owns()) return true;
     S.state.lastEditedBy = getEditorName();
     S.state.lastEditedAt = nowIso();
     var published = cloneState(S.state);
     var seqAtSave = S.editSeq;
     var baseRevAtSave = home.rev;
-    var homeAtSave = home;
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
-        return sendWithBlobs(published, function (sending, acceptMissing) {
+        return sendWithBlobs(transport, published, function (sending, acceptMissing) {
           var put = { baseRev: baseRevAtSave, state: sending, by: getEditorName() };
           if (acceptMissing.length) put.acceptMissing = acceptMissing;
-          return apiFetch("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
+          return transport.request("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
         }, true);
       });
-      if (serverHomeId() !== docId) return true;
-      if (home !== homeAtSave) {
-        if (home.rev < body.rev) reportLateServerSave();
-        return true;
+      if (home === op.destination) {
+        home.rev = body.rev;
+        setBaseState(published, "saveToServer: what the server just accepted");
+      } else {
+        reportIfLandedHere(op, docId, body.rev);
       }
-      home.rev = body.rev;
-      setBaseState(published, "saveToServer: what the server just accepted");
+      if (!job.owns()) return true;
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
-      if (serverHomeId() !== docId) return false;
+      if (!job.owns()) return true;
 
       if (err && err.code === "conflict" && err.payload && isDocumentObject(err.payload.state)) {
         var prevDocId = S.state.docId;
@@ -1308,6 +1247,8 @@ export async function saveToServer() {
           report: false
         }).result;
         home.rev = err.payload.rev || home.rev;
+        job.moved();
+        op = job.operation();
         continue;
       }
 
@@ -1451,14 +1392,15 @@ function reviewRequest(op, c) {
 function sendReviewRequest(req) {
   var isReply = !!req.body.reply;
   var probe = { comments: [{ body: isReply ? req.body.reply.body : req.body.comment.body }] };
-  return sendWithBlobs(probe, function (sending) {
+  var transport = serverTransport(conn);
+  return sendWithBlobs(transport, probe, function (sending) {
     var body = req.body;
     if (sending !== probe) {
       body = jsonCopy(req.body);
       if (isReply) body.reply.body = sending.comments[0].body;
       else body.comment.body = sending.comments[0].body;
     }
-    return apiFetch(req.path, { method: req.method, body: body });
+    return transport.request(req.path, { method: req.method, body: body });
   }, false);
 }
 

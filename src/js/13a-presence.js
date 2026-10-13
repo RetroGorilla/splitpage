@@ -12,13 +12,14 @@ import { render } from "./05-render.js";
 import { paintRundownPresence } from "./05p-rundown-presence.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
-  apiFetch,
   apiUrl,
   linkTurnedOff,
   notePresenceRev,
   onServerDoc,
-  serverSessionExpired
+  serverSessionExpired,
+  serverTransport
 } from "./13-hosted.js";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { cappedName, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 
 var presenceLastActive;
@@ -26,6 +27,7 @@ var presenceLastActive;
 var PRESENCE_BEAT_MS = 2000;
 var PRESENCE_IDLE_MS = 4 * 60 * 1000;
 var PRESENCE_BACKOFF_MS = 30000;
+var PRESENCE_SOON_MS = 300;
 var PRESENCE_MAX_SHOWN = 8;
 var PRESENCE_ID_KEY = "splitpage-presence-id";
 
@@ -155,15 +157,19 @@ function setPresenceHere(list) {
 
 async function presenceTick() {
   var next = PRESENCE_BEAT_MS;
+  var ctx = null;
   try {
     if (!presenceWanted()) { clearPresence(); return; }
     presenceSends++;
-    var body = await apiFetch("api/presence", { method: "POST", body: presencePayload(false) });
+    ctx = captureOperation();
+    var body = await serverTransport(ctx.connection).request("api/presence", { method: "POST", body: presencePayload(false) });
+    if (!stillOwns(ctx)) { next = PRESENCE_SOON_MS; return; }
     presenceFailures = 0;
     presenceAnnounced = true;
     setPresenceHere((body && body.here) || []);
     notePresenceRev(body);
   } catch (e) {
+    if (ctx && !stillOwns(ctx)) { next = PRESENCE_SOON_MS; return; }
     presenceFailures++;
     if (presenceFailures >= 3) { clearPresence(); next = PRESENCE_BACKOFF_MS; }
   } finally {
@@ -178,7 +184,7 @@ function schedulePresence(ms) {
 
 function presenceBeatSoon() {
   if (!presenceWanted()) return;
-  schedulePresence(300);
+  schedulePresence(PRESENCE_SOON_MS);
 }
 
 export function paintPresence() {
