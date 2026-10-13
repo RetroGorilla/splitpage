@@ -7,6 +7,7 @@ import { showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
 import { cappedLongText, codePointPrefix } from "../core/document/text-policy.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
 var SIZES = {
@@ -661,12 +662,18 @@ function done() {
   if (locate() === -1) { lost(); return; }
   if (!marks.length) { save(null, marks); return; }
   var mine = ed;
+  var ctx = captureOperation();
   ed.saving = true;
   setStatus("Saving…");
   paintTools();
   flatten(marks).then(function (rec) {
     if (ed !== mine) return;
     ed.saving = false;
+    if (!stillOwns(ctx)) {
+      closeAnnotator();
+      showToast("The annotations were not saved because another script was opened.", "warn");
+      return;
+    }
     paintTools();
     if (!rec) { showToast("Could not save the annotated picture — it may be too large for this browser.", "warn"); return; }
     save(rec, marks);

@@ -183,20 +183,20 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | H1-switch | A history restore that completes after another document was opened is refused ("changed") and says so | right (measured) | stays |
 | H2 | A snapshot holds the document as it was when `pushSnapshot` was called (INV-39) | right (measured) | stays |
 | M0, M0b | Controls: in an untouched document a delayed paste lands at its caret with its picture, and a late gallery picture, retried thumbnail, pasted link's thumbnail and annotation each land on their scene | right (measured) | stays |
-| M1 | A delayed paste that completes after another document (other scene ids) was opened changes nothing and tells the user the picture was not added (D11; the cases check only that a toast other than the success toast appears, because the wording is Adam's) | wrong (measured: nothing is written, because the scene ids differ, but no toast) | 4.20 |
-| M1b | The same with a document whose scenes have the same ids (a copy) | wrong (measured: the picture and the text go into the other document) | 4.20 |
-| M2 | The same after a same-id reopen | wrong (measured: the picture and the text go into the reopened session) | 4.20 |
-| M2d | A delayed drop on a scene's image section after a same-id reopen | wrong (measured: the picture goes into the reopened session) | 4.20 |
-| M3a | A delayed paste puts its text where the paste began if the cell is unchanged, however the caret moved inside it (D11) | wrong (measured: the text goes in at the caret the user moved to) | 4.20 |
-| M3b | If the cell was edited while the picture loaded, the text goes at the end of the cell (D11) | wrong (measured: at the caret, which the case put at the start) | 4.20 |
-| M3c | If the caret moved to another cell, the text still goes into the cell the paste began in, where it began (D11) | wrong (measured: at the end of the original cell) | 4.20 |
-| M4 | A gallery picture (`handleImageFile`) that finishes after another document was opened changes nothing and tells the user | wrong (measured: nothing is written, no toast) | 4.20 |
-| M4b | The same after a same-id reopen | wrong (measured: the picture goes into the reopened session) | 4.20 |
-| M5 | `retryThumbnail` that arrives after another document with the same scene and video link was opened changes nothing in it | wrong (measured: the thumbnail is written into the other document) | 4.20 |
-| M5b | `retryThumbnail` that arrives after an unrelated document was opened changes nothing in it | right (measured: nothing is written, but the unrelated document shows "Could not get this video's thumbnail — you may be offline, or the video is private or gone." Whether that toast is acceptable is open: see Questions for Adam) | stays |
-| M6 | `thumbnailsAfterPaste` after a same-id reopen changes nothing in the reopened session | wrong (measured: the thumbnail is written into it, because the check is the document id) | 4.20 |
+| M1 | A delayed paste that completes after another document (other scene ids) was opened changes nothing and tells the user the picture was not added (D11; the cases check only that a toast other than the success toast appears, because the wording is Adam's) | right since 4.20: the paste captures the operation when it begins and refuses with D11's toast when it no longer owns the document (was wrong, measured: nothing was written, because the scene ids differ, but no toast) | 4.20 |
+| M1b | The same with a document whose scenes have the same ids (a copy) | right since 4.20, the same way (was wrong, measured: the picture and the text went into the other document) | 4.20 |
+| M2 | The same after a same-id reopen | right since 4.20: a same-id reopen is a new epoch (was wrong, measured: the picture and the text went into the reopened session) | 4.20 |
+| M2d | A delayed drop on a scene's image section after a same-id reopen | right since 4.20, the same way (was wrong, measured: the picture went into the reopened session) | 4.20 |
+| M3a | A delayed paste puts its text where the paste began if the cell is unchanged, however the caret moved inside it (D11) | right since 4.20: the selection is captured with the operation and put back when the cell's stored text is unchanged (was wrong, measured: the text went in at the caret the user moved to) | 4.20 |
+| M3b | If the cell was edited while the picture loaded, the text goes at the end of the cell (D11) | right since 4.20 (was wrong, measured: at the caret, which the case put at the start) | 4.20 |
+| M3c | If the caret moved to another cell, the text still goes into the cell the paste began in, where it began (D11) | right since 4.20 (was wrong, measured: at the end of the original cell) | 4.20 |
+| M4 | A gallery picture (`handleImageFile`) that finishes after another document was opened changes nothing and tells the user | right since 4.20: `handleImageFile` captures the operation and refuses with D11's toast (was wrong, measured: nothing was written, no toast) | 4.20 |
+| M4b | The same after a same-id reopen | right since 4.20 (was wrong, measured: the picture went into the reopened session) | 4.20 |
+| M5 | `retryThumbnail` that arrives after another document with the same scene and video link was opened changes nothing in it | right since 4.20: `retryThumbnail` captures the operation and drops a late result silently (was wrong, measured: the thumbnail was written into the other document) | 4.20 |
+| M5b | `retryThumbnail` that arrives after an unrelated document was opened changes nothing in it | right (measured: nothing is written). Since 4.20 the late result is dropped silently; before, the unrelated document showed "Could not get this video's thumbnail — you may be offline, or the video is private or gone." The choice goes to Adam with 4.20 (Questions for Adam) | stays |
+| M6 | `thumbnailsAfterPaste` after a same-id reopen changes nothing in the reopened session | right since 4.20: the check is `stillOwns`, not the document id (was wrong, measured: the thumbnail was written into it) | 4.20 |
 | M6-switch | `thumbnailsAfterPaste` after a copy with another document id and the same scenes was opened changes nothing in it | right (measured: the document id check catches it) | stays |
-| M7 | The annotator's save after a same-id reopen changes nothing in the reopened session | wrong (measured: the annotation is saved into it; the annotator stays open across the reopen) | 4.20 |
+| M7 | The annotator's save after a same-id reopen changes nothing in the reopened session | right since 4.20: the save captures the operation before it flattens, and on a late result closes the annotator with a toast (was wrong, measured: the annotation was saved into it; the annotator stays open across the reopen) | 4.20 |
 | M7-switch | The annotator's save after an unrelated document was opened changes nothing in it | right (measured: the annotator closes when its scene is gone) | stays |
 
 "record" means the outcome could not be predicted from reading alone; the matrix PR records it as `rightToday` or `wrongToday`, and a `wrongToday` case is turned green by the PR named.
@@ -433,9 +433,9 @@ The plan's gate names no list for "existing five repaired defects stay fixed". A
 The draft's seven questions are answered (D9 to D15). What stays open is wording, which comes back to Adam with the PR that adds it:
 
 - **The obsolete-save toast (D10)**, with 4.9. The draft wording to start from: "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged."
-- **The dropped-picture toast (D11)**, with 4.20. The draft wording to start from: "The picture finished loading after you opened another script, so it was not added."
+- **The dropped-picture toast (D11)**, with 4.20. 4.20 ships the draft wording: "The picture finished loading after you opened another script, so it was not added." The annotator's late save says "The annotations were not saved because another script was opened."
 - **The moved-file notice on "Review" (D15)**, with #500's PR, only if the close notice's text does not fit there.
-- **A retried thumbnail that arrives after the user opened an unrelated document (M5b)**, with 4.20. Today that document shows "Could not get this video's thumbnail — you may be offline, or the video is private or gone." Options: keep it, drop the result silently, or give it D11's dropped-picture toast. The case checks only that nothing is written.
+- **A retried thumbnail that arrives after the user opened an unrelated document (M5b)**, with 4.20. Before 4.20 that document showed "Could not get this video's thumbnail — you may be offline, or the video is private or gone." 4.20 drops the result silently, as `thumbnailsAfterPaste` already did. Other options: keep the old toast, or give it D11's dropped-picture toast. The case checks only that nothing is written.
 
 ## Spec notes
 
