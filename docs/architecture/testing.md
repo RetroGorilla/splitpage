@@ -347,13 +347,15 @@ shared `tests` list. Each mutant has:
 | `replace` | The text to put there; it must differ from `find` |
 | `tests` | Optional. Paths or substrings that pick the unit tests to run, as for `--only` in `tools/run-tests.mjs`. Falls back to the file's shared `tests`, then to every unit test |
 
-For each mutant the script copies the repository into its own temporary
-folder (without `.git`, with `node_modules` linked rather than copied), applies
+For each mutant the script copies the repository's files (the ones git lists,
+tracked or not ignored, so no `.git` and no nested `node_modules`) into its own
+temporary folder, links the root `node_modules` rather than copying it, applies
 the one edit there, and runs the chosen unit tests through
 `tools/run-tests.mjs`. Your working tree is never touched. A mutant is
 **caught** when the tests fail or run past the timeout, and **survived** when
-they pass. A mutant whose `find` text is missing or ambiguous is reported as an
-error and makes the exit code 2.
+they pass. A timed-out mutant's whole process tree is killed. A mutant whose `find` text
+is missing or ambiguous, or whose `file` is outside the repository or under
+`node_modules`, is reported as an error and makes the exit code 2.
 
 First the script runs the unmutated copy and stops if its tests fail, because
 every mutant would then look caught. `--no-baseline` skips that run.
