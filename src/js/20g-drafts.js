@@ -680,7 +680,7 @@ async function restoreServerDraft(t, mine, origin) {
 function keptForNextLaunch() {
   showToast("Another script was opened while the changes from the last session were being restored — " +
     "they have been kept for the next launch.", "warn", true);
-  return "failed";
+  return "kept";
 }
 
 async function restoreFileDraft(t, mine, base, origin, ctx) {
