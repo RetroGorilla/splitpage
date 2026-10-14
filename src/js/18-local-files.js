@@ -685,19 +685,25 @@ var WRITEBACK_FAILED = Object.freeze({ kind: "failed" });
 var WRITEBACK_CANCELLED = Object.freeze({ kind: "cancelled" });
 var WRITEBACK_CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 var NOTHING_IMPORTED = Object.freeze({ kind: "refused", reason: "The document has no imported file to write back to" });
+var IMPORT_REPLACED = Object.freeze({ kind: "refused", reason: "The imported file this write back was asked for is no longer open" });
 
 export function saveBackToFile(opts) {
   var imported = importHome();
   if (!imported) return Promise.resolve();
-  return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback" }).then(function (outcome) {
+  return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
     if (outcome.kind === "saved" && outcome.acknowledged) imported.dirty = unsavedFor(imported);
     updateFileChip();
   });
 }
 
+function stillWritingBack(job, imported) {
+  return importHome() === imported && job.owns();
+}
+
 export async function writeBackToFile(job) {
   var imported = importHome();
   if (!imported) return NOTHING_IMPORTED;
+  if (job.request.target !== imported || !stillWritingBack(job, imported)) return IMPORT_REPLACED;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
   var built;
   try {
@@ -706,6 +712,7 @@ export async function writeBackToFile(job) {
     showToast("Could not build the file.", "error");
     return WRITEBACK_FAILED;
   }
+  if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
 
   if (imported.handle && imported.handle.createWritable) {
     if (job.request.kind !== "writebackForce") {
@@ -714,6 +721,7 @@ export async function writeBackToFile(job) {
         showFileConflict(imported.name, check.current, { kind: "import" });
         return WRITEBACK_CONFLICTED;
       }
+      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     }
     try {
       var writable = await imported.handle.createWritable();
