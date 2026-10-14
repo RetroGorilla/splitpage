@@ -102,7 +102,7 @@ Two trims on acceptance: item 6's shared option interpretation for preview, summ
 
 ## External review of milestone 6's plan (2026-10-14)
 
-After milestone 5's gate passed, Adam had milestone 6's plan reviewed by Astra (Codex CLI, GPT-6-Astra, High) on `dcfb92d`, a plan review with no testing. Twelve items, eleven accepted and one trimmed and deferred, folded into the plan's section 5 (milestone 6), [milestone-6.md](milestone-6.md), `saving.md` section 8 and `session.md` section 6:
+After milestone 5's gate passed, Adam had milestone 6's plan reviewed by Astra (Codex CLI, GPT-6-Astra, High) on `dcfb92d`, a plan review with no testing. Twelve items, ten accepted, one trimmed and one deferred, folded into the plan's section 5 (milestone 6), [milestone-6.md](milestone-6.md), `saving.md` section 8 and `session.md` section 6:
 
 1. The M6 sequence made explicit: selection and composition, undo, editor commands and media, per-feature moves, then the deletion of `21-events.js`, in small slices with prerequisites and evidence. Accepted.
 2. The undo commit contract: one generation, one publication, no new undo entry, no effects on an empty or refused replay, and the pre-commit and post-commit failure split. Accepted.
