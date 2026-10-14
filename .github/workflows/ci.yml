@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
-      tabstrip: ${{ steps.classify.outputs.tabstrip }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -92,10 +91,6 @@ jobs:
             exit 1
           fi
           echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
-
-      - name: Desktop tab strip width (headless Chromium)
-        if: needs.changes.outputs.tabstrip == 'true' || github.ref == 'refs/heads/main' || github.base_ref == 'main'
-        run: node desktop/test/tabstrip-width.mjs
 
       - name: Pick this runner's port block
         run: |

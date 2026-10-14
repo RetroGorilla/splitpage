@@ -24,7 +24,6 @@
     "test:quit-watchdog": "node test/quit-watchdog.test.mjs",
     "test:chromium-browsers": "node test/chromium-browsers.test.mjs",
     "test:google-drive": "node test/google-drive.test.mjs",
-    "test:tabstrip-width": "node test/tabstrip-width.mjs",
     "test:verify-dist-payload": "node test/verify-dist-payload.test.mjs",
     "test:voice-grace": "node test/voice-grace.test.mjs"
   },

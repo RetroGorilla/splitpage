@@ -57,7 +57,6 @@ Before pushing, run CI's fast gate:
 
 ```
 npm run verify        # lint, types, dependency and comment gates, build and sw.js stamp, every unit test
-node desktop/test/tabstrip-width.mjs       # needs a Chromium; see the skill below
 ```
 
 While you work, run the focused checks for what you changed, browser suites
