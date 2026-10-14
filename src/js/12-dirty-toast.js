@@ -53,7 +53,7 @@ provideSessionEffects({
   },
   save: function (change) {
     if (!saveBusy()) setSaveButtons();
-    scheduleAutoSave();
+    if (change.kind !== "recovery") scheduleAutoSave();
     if (home.kind === "import") { home.dirty = true; updateFileChip(); }
     else if (onServerDoc()) { updateFileChip(); }
     if (change.changes.saveNow) queueAutoSave();

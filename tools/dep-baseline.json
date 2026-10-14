@@ -597,7 +597,6 @@
     {"rule":"state-write","source":"src/js/20f-desktop.js","target":"global:S.serverMode"},
     {"rule":"state-write","source":"src/js/20g-drafts.js","target":"global:S.docIdWrittenOut"},
     {"rule":"state-write","source":"src/js/20g-drafts.js","target":"global:S.draftServerResume"},
-    {"rule":"state-write","source":"src/js/20g-drafts.js","target":"global:S.state"},
     {"rule":"state-write","source":"src/js/20h-appdata.js","target":"global:S.commentSortMode"},
     {"rule":"state-write","source":"src/js/20h-appdata.js","target":"global:S.serverBookmarks"},
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.dragRowId"},

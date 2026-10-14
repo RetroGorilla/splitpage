@@ -49,6 +49,7 @@ import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { confirmBaseline } from "../legacy/save-bridge.ts";
+import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 export { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
@@ -94,7 +95,8 @@ async function restoreSnapshot(id, opts) {
   if (!S.state) return "missing";
   restoreInFlight = true;
   var docIdAtStart = S.state.docId;
-  var moved = function () { return !S.state || S.state.docId !== docIdAtStart; };
+  var ctx = captureRestore();
+  var moved = function () { return !S.state || !stillRestoring(ctx); };
   var releaseHold = historyNoop;
   try {
     releaseHold = protectHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
