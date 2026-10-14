@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -59,7 +60,7 @@ test("breakdownRows says which category each row is", () => {
 
 test("the .docx breakdown heads each category with its dot and name in its colour; the highlight is unchanged", async () => {
   load();
-  const doc = await documentXml(buildDocx());
+  const doc = await documentXml(buildDocx(...liveWithAssets()));
   const tables = doc.getElementsByTagNameNS(W, "tbl");
   assert.equal(tables.length, 2, "script table and breakdown table");
   const trs = Array.from(tables[1].getElementsByTagNameNS(W, "tr"));
@@ -98,7 +99,7 @@ test("the .docx breakdown heads each category with its dot and name in its colou
 
 test("the .docx script draws each tag in its category's colour and reopens without it", async () => {
   load();
-  const doc = await documentXml(buildDocx());
+  const doc = await documentXml(buildDocx(...liveWithAssets()));
   const runs = Array.from(doc.getElementsByTagNameNS(W, "tbl")[0].getElementsByTagNameNS(W, "r"));
   const tagged = runs.filter((r) => {
     const s = r.getElementsByTagNameNS(W, "rStyle")[0];
@@ -118,7 +119,7 @@ test("the .docx script draws each tag in its category's colour and reopens witho
 test("a .docx with coloured categories reopens as exactly its script, highlight included", async () => {
   load();
   const expected = S.state.rows.map((r) => ({ v: htmlToPlainText(r.visualText), a: htmlToPlainText(r.audioText) }));
-  const parsed = await docxToRows(new File([buildDocx()], "colours.docx"));
+  const parsed = await docxToRows(new File([buildDocx(...liveWithAssets())], "colours.docx"));
   assert.equal(parsed.title, "Colours");
   assert.deepEqual(parsed.rows.map((r) => ({ v: htmlToPlainText(r.visualText), a: htmlToPlainText(r.audioText) })), expected);
   assert.match(parsed.rows[0].audioText, /<mark>hello<\/mark>/, "the highlight no longer reads back as a mark");
@@ -130,7 +131,7 @@ test("a .docx with coloured categories reopens as exactly its script, highlight 
 
 test("the PDF breakdown heads each category's group with a dot in its colour and its plural", () => {
   load();
-  const pages = streams(buildPdf([null, null]));
+  const pages = streams(buildPdf(liveDoc(), [null, null]));
   const all = pages.join("\n");
   const at = all.indexOf("(Production breakdown) Tj");
   assert.ok(at > 0, "no breakdown page");
@@ -154,7 +155,7 @@ test("the PDF breakdown heads each category's group with a dot in its colour and
 
 test("the PDF script draws each tagged word in its category's colour, underlined in it", () => {
   load();
-  const pages = streams(buildPdf([null, null]));
+  const pages = streams(buildPdf(liveDoc(), [null, null]));
   const script = pages[0].split("\n");
   for (const [word, id] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
     const re = new RegExp("^q " + rgb(TAG_PRINT_COLORS[id]) + " rg BT /F1 [\\d.]+ Tf 1 0 0 1 ([\\d.]+) [\\d.]+ Tm \\(" + word + "\\) Tj ET Q$");
@@ -168,7 +169,7 @@ test("the PDF script draws each tagged word in its category's colour, underlined
 test("the PDF breakdown draws a note at the size it was wrapped at, a space between its words", () => {
   load();
   S.state.productionTags.find((t) => t.name === "Mug").notes = "Borrow from the prop house.";
-  const pdf = streams(buildPdf([null, null])).join("\n");
+  const pdf = streams(buildPdf(liveDoc(), [null, null])).join("\n");
   const all = pdf.slice(pdf.indexOf("(Production breakdown) Tj"));
   const words = [];
   for (const m of all.matchAll(/BT \/F1 ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((\w+\.?)\) Tj ET/g)) {
@@ -183,7 +184,7 @@ test("the packing list's heading names its category after a dot in that category
   load();
   for (const id of ["gear", "prop"]) {
     const cat = TAG_CATEGORIES.find((c) => c.id === id);
-    const page = streams(buildPackingListPdf(id))[0].split("\n");
+    const page = streams(buildPackingListPdf(liveDoc(), id))[0].split("\n");
     const colour = rgb(TAG_PRINT_COLORS[id]);
     const dots = page.filter((op) => op.includes(colour));
     assert.equal(dots.length, 1, id + ": the category's colour more than once");

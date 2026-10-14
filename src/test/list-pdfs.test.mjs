@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -6,7 +7,7 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
-import { __init as initBrollPanel, brollShotListForPrint } from "../js/08d-broll-panel.js";
+import { __init as initBrollPanel } from "../js/08d-broll-panel.js";
 import { TAG_PRINT_COLORS } from "../js/14-export.js";
 import { PRINT_COLORS, exportDateText, exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { buildPackingListPdf, buildShotListPdf, pdfTextWidth } from "../js/17-pdf.js";
@@ -85,7 +86,7 @@ function pillsOf(page, withKey) {
 
 test("the packing list: a kicker, the category large after its dot, the script and the day, and what is in hand", () => {
   demo();
-  const pages = pagesOf(buildPackingListPdf("prop"));
+  const pages = pagesOf(buildPackingListPdf(liveDoc(), "prop"));
   assert.equal(pages.length, 1);
   const texts = textsOf(pages[0]);
 
@@ -125,7 +126,7 @@ test("the packing list: a kicker, the category large after its dot, the script a
 
 test("the packing list: a row per item, alphabetical, two boxes, the status as a pill to fill in, who has it, where", () => {
   demo();
-  const page = pagesOf(buildPackingListPdf("prop"))[0];
+  const page = pagesOf(buildPackingListPdf(liveDoc(), "prop"))[0];
   const texts = textsOf(page);
   const names = texts.filter((t) => t.font === "F2" && t.size === 11).map((t) => t.str);
   assert.deepEqual(names, ["button cell battery", "light seal kit", "naphtha", "Pentax K1000", "Portra 400", "toothpick"]);
@@ -161,7 +162,7 @@ test("the packing list: a row per item, alphabetical, two boxes, the status as a
 test("the packing list ends with lines to sign, and a footer; the gear list is the same sheet", () => {
   demo();
   for (const [id, plural] of [["prop", "Props & set dressing"], ["gear", "Gear"]]) {
-    const pages = pagesOf(buildPackingListPdf(id));
+    const pages = pagesOf(buildPackingListPdf(liveDoc(), id));
     const texts = textsOf(pages[pages.length - 1]);
     const packed = one(texts, "Packed by"), back = one(texts, "Returned by");
     assert.ok(back.y < packed.y);
@@ -175,7 +176,7 @@ test("the packing list ends with lines to sign, and a footer; the gear list is t
     assertFooters(pages, LONG_DEMO.state.title);
     one(textsOf(pages[0]), plural);
   }
-  const gearPage = pagesOf(buildPackingListPdf("gear"))[0];
+  const gearPage = pagesOf(buildPackingListPdf(liveDoc(), "gear"))[0];
   const gearPills = pillsOf(gearPage);
   assert.deepEqual([gearPills[0].filled, gearPills[0].fill, gearPills[0].empty], [4, rgb(C.faint), 0]);
   one(textsOf(gearPage), "3 items · 2 have it · 1 returned");
@@ -183,7 +184,7 @@ test("the packing list ends with lines to sign, and a footer; the gear list is t
 
 test("the packing list's file: its title for a viewer, and the same bytes built twice", () => {
   demo();
-  const a = buildPackingListPdf("gear"), b = buildPackingListPdf("gear");
+  const a = buildPackingListPdf(liveDoc(), "gear"), b = buildPackingListPdf(liveDoc(), "gear");
   assert.ok(Buffer.from(a).equals(Buffer.from(b)), "the same list twice is the same file");
   const t = new TextDecoder("latin1").decode(a);
   const title = LONG_DEMO.state.title + " — Gear packing list";
@@ -219,7 +220,7 @@ function edgeDoc(n) {
 
 test("the packing list: a long title wraps, notes and the b-roll shots under the name, an item no longer in the script", () => {
   edgeDoc(0);
-  const pages = pagesOf(buildPackingListPdf("prop"));
+  const pages = pagesOf(buildPackingListPdf(liveDoc(), "prop"));
   assertInsideMargins(pages);
   const texts = textsOf(pages[0]);
   const metas = texts.filter((t) => t.size === 10.5 && t.rgb === rgb(C.dim));
@@ -243,7 +244,7 @@ test("the packing list: a long title wraps, notes and the b-roll shots under the
 
 test("the packing list runs onto more pages: the heads again, a footer on every page, the lines to sign once, at the end", () => {
   edgeDoc(60);
-  const pages = pagesOf(buildPackingListPdf("prop"));
+  const pages = pagesOf(buildPackingListPdf(liveDoc(), "prop"));
   assert.ok(pages.length >= 3, pages.length + " pages");
   assertInsideMargins(pages);
   assertFooters(pages, LONG_TITLE);
@@ -271,7 +272,7 @@ test("the packing list runs onto more pages: the heads again, a footer on every 
 
 test("an empty category keeps its one line, under the new head", () => {
   edgeDoc(0);
-  const pages = pagesOf(buildPackingListPdf("cast"));
+  const pages = pagesOf(buildPackingListPdf(liveDoc(), "cast"));
   assert.equal(pages.length, 1);
   const texts = textsOf(pages[0]);
   one(texts, "Packing list");
@@ -293,12 +294,12 @@ function groupBy(pageGroup, filter) {
 test("the print data says what each group is and where each scene starts", () => {
   demo();
   groupBy("scene");
-  const data = brollShotListForPrint();
+  const data = printData();
   const g = data.groups[0];
   assert.deepEqual([g.label, g.kind, g.start, g.none], ["Scene 04", "scene", "01:03", false]);
   assert.equal(g.items[0].start, "01:03");
   groupBy("location");
-  const byPlace = brollShotListForPrint().groups;
+  const byPlace = printData().groups;
   assert.deepEqual(byPlace.map((x) => [x.label, x.kind, x.none]),
     [["Camera shop", "location", false], ["Riverside park", "location", false], ["workbench", "location", false], ["No location", "location", true]]);
   assert.ok(byPlace.every((x) => x.start === ""), "only a scene group starts somewhere");
@@ -318,7 +319,7 @@ function rowTexts(all, name) {
 test("the shot list: a landscape table under the head, its columns on every page, a band per place", () => {
   demo();
   groupBy("location");
-  const bytes = buildShotListPdf(brollShotListForPrint());
+  const bytes = buildShotListPdf(liveDoc(), printData());
   const raw = new TextDecoder("latin1").decode(bytes);
   const pages = pagesOf(bytes);
   assert.equal((raw.match(/\/MediaBox \[0 0 792 612\]/g) || []).length, pages.length, "every page landscape");
@@ -356,7 +357,7 @@ test("the shot list's rows: done, the scene, the shot, its props, the flag and w
   const shot = (name) => S.state.brollShots.find((r) => r.name === name);
   shot("slow-motion shutter firing at one second").props = [{ name: "button cell battery" }, { name: "naphtha" }];
   shot("battery dropping into the base plate").notes = "Ask the shop first.";
-  const pages = pagesOf(buildShotListPdf(brollShotListForPrint({ filter: "all", group: "scene" })));
+  const pages = pagesOf(buildShotListPdf(liveDoc(), printData({ filter: "all", group: "scene" })));
   assert.equal(pages.length, 1, "nine shots, one page");
   assertInsideMargins(pages, SPW, SM);
   const ops = pages[0].split("\n");
@@ -396,7 +397,7 @@ test("the shot list's rows: done, the scene, the shot, its props, the flag and w
 test("by scene: no bands — the Scene column groups the rows, a scene named on its first shot only", () => {
   shotsDoc(0);
   groupBy("scene");
-  const pages = pagesOf(buildShotListPdf(brollShotListForPrint()));
+  const pages = pagesOf(buildShotListPdf(liveDoc(), printData()));
   assertInsideMargins(pages, SPW, SM);
   const all = pages.map(textsOf).flat();
   assert.deepEqual(all.filter((t) => t.font === "F2" && t.size === 9.5 && t.x < SM + 20).map((t) => t.str), ["Added here"]);
@@ -431,7 +432,7 @@ test("a shot's Cuts against opening never ends in half an emoji (#434)", () => {
   shotsDoc(0);
   groupBy("person");
   S.state.brollShots[0].audioRef = "Every " + "x".repeat(77) + String.fromCodePoint(0x1F600) + "tail";
-  const all = pagesOf(buildShotListPdf(brollShotListForPrint())).map(textsOf).flat();
+  const all = pagesOf(buildShotListPdf(liveDoc(), printData())).map(textsOf).flat();
   const joined = all.map((t) => t.str).join("");
   assert.ok(joined.includes("x".repeat(20)), "the opening is drawn");
   assert.ok(!joined.includes("?"), joined);
@@ -440,9 +441,9 @@ test("a shot's Cuts against opening never ends in half an emoji (#434)", () => {
 test("by person: a shot's description on its own lines, its props with their status, a note, and Flagged with none", () => {
   shotsDoc(0);
   groupBy("person");
-  const data = brollShotListForPrint();
+  const data = printData();
   assert.deepEqual(data.groups.map((g) => g.label), ["Ada Brenner", "Jordan Sato", "Unassigned"]);
-  const pages = pagesOf(buildShotListPdf(data));
+  const pages = pagesOf(buildShotListPdf(liveDoc(), data));
   assertInsideMargins(pages, SPW, SM);
   const all = pages.map(textsOf).flat();
   const gulls = rowTexts(all, "gulls over the nets");
@@ -455,7 +456,7 @@ test("by person: a shot's description on its own lines, its props with their sta
   assert.deepEqual(at(rowTexts(all, "Crowd at the auction"), "notes").map((t) => t.str), ["Ask the harbourmaster first."]);
   assert.equal(at(rowTexts(all, "Crowd at the auction"), "scene").length, 0);
   groupBy("location");
-  const byPlace = pagesOf(buildShotListPdf(brollShotListForPrint())).map(textsOf).flat();
+  const byPlace = pagesOf(buildShotListPdf(liveDoc(), printData())).map(textsOf).flat();
   const boats = rowTexts(byPlace, "boats at dawn");
   assert.deepEqual(at(boats, "scene").map((t) => t.str), ["02", sceneFacts(exportDocumentOf(S.state))[1].start]);
   assert.deepEqual(at(boats, "owner").map((t) => t.str), ["Ada Brenner"]);
@@ -464,7 +465,7 @@ test("by person: a shot's description on its own lines, its props with their sta
 test("a long shot list runs onto more pages: the group's head again, continued, and a footer on each", () => {
   shotsDoc(40);
   groupBy("location");
-  const pages = pagesOf(buildShotListPdf(brollShotListForPrint()));
+  const pages = pagesOf(buildShotListPdf(liveDoc(), printData()));
   assert.ok(pages.length >= 2);
   assertInsideMargins(pages, SPW, SM);
   assertFooters(pages, LONG_TITLE, SM);
@@ -480,7 +481,7 @@ test("a long shot list runs onto more pages: the group's head again, continued, 
 
 test("no shots to list: the head and one line", () => {
   demo();
-  const pages = pagesOf(buildShotListPdf({ title: "Empty", summary: "0 of 0 shot", scope: "by location", groups: [] }));
+  const pages = pagesOf(buildShotListPdf(liveDoc(), { title: "Empty", summary: "0 of 0 shot", scope: "by location", groups: [] }));
   assert.equal(pages.length, 1);
   const texts = textsOf(pages[0]);
   one(texts, "No shots to list.");

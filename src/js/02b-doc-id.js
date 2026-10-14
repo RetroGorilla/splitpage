@@ -7,6 +7,7 @@ import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
+import { base64Encode } from "../core/document/media.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "./02c-blobs.js";
 import { cloneState } from "./03-sync.js";
@@ -205,9 +206,12 @@ export function docIdEvents() {
   return docIdEventLog.slice();
 }
 
-export function standaloneHtmlFor(doc, head) {
+export function standaloneHtmlFor(doc, head, assets) {
   var copy = migrateRows(cloneState(doc.document));
-  inlineStateImages(copy);
+  inlineStateImages(copy, null, assets ? function (sha) {
+    var held = assets.picture(sha);
+    return held && held.mime ? "data:" + held.mime + ";base64," + base64Encode(held.bytes) : null;
+  } : null);
   delete copy.docId;
   var html = buildPublishHtml(JSON.stringify(copy));
   return head ? withPageHead(html, head) : html;

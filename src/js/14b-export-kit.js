@@ -1,4 +1,5 @@
 import { migrateRows } from "./02-state.js";
+import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "./02c-blobs.js";
 import {
   ROW_STATUSES,
   DEFAULT_WPM,
@@ -17,8 +18,10 @@ import { shotRecordForFile } from "./08d-broll-panel.js";
 import { commentEntries } from "./10-comments.js";
 import { htmlToPlainText, tagPrintColor } from "./14-export.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
+import { exportAssetRequest, heldExportAssets, resolveExportAssets } from "../application/export/assets.ts";
 import { captureExportDocument as captureWith } from "../application/save/capture.ts";
 import { buildExportDocument } from "../core/document/export-document.ts";
+import { rowImage } from "../core/document/media.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import { brollEntries } from "../core/production/broll.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
@@ -29,6 +32,7 @@ import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
 import { readSession } from "../legacy/session-bridge.ts";
+import { refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 
 export var PRINT_COLORS = {
   text: "171613",
@@ -72,7 +76,6 @@ export var TAG_STATUS_PRINT = {
 };
 
 export function exportDateText(d) {
-  d = d || new Date();
   try {
     return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long", year: "numeric" }).format(d);
   } catch (e) {
@@ -94,6 +97,43 @@ var capturePorts = { read: readSession, readModels: exportReadModels, clock: sys
 
 export function captureExportDocument(opts) {
   return captureWith(capturePorts, opts);
+}
+
+export function exportDay(doc) {
+  var at = new Date(doc.capturedAt);
+  return new Date(at.getFullYear(), at.getMonth(), at.getDate());
+}
+
+var assetPorts = {
+  load: function (shas, source) { return ensureBytes(shas, { source: source }); },
+  bytes: bytesForSync,
+  mime: function (sha, bytes) {
+    var rec = recordFor(sha);
+    return (rec && rec.mime) || sniffImageMime(bytes) || null;
+  }
+};
+
+export function exportAssetsRequest(doc, source) {
+  return exportAssetRequest(refsIn(doc.document), source || null);
+}
+
+export function loadExportAssets(request) {
+  return resolveExportAssets(request, assetPorts);
+}
+
+export function exportAssetsNow(doc) {
+  return heldExportAssets(exportAssetsRequest(doc, null), assetPorts);
+}
+
+export function capturedPicture(assets, ref) {
+  var held = ref && assets ? assets.picture(ref.sha256) : null;
+  return held ? { bytes: held.bytes, mime: ref.mime, width: ref.width, height: ref.height } : null;
+}
+
+export function capturedRowPicture(assets, row) {
+  var img = rowImage(row);
+  if (!img) return null;
+  return img.ref ? capturedPicture(assets, img.ref) : dataUrlPicture(img.dataUrl);
 }
 
 export function exportDocumentOf(state, opts) {
