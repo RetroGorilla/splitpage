@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { authorityOf, isOwner } from "../application/collaboration/authority.ts";
+import { runIsStale } from "../application/collaboration/workflow.ts";
 import { conn, home, normalizeServerUrl, serverHomeId, updateConnection } from "./_home.js";
 import { readPref, writePref } from "./00p-prefs.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
@@ -214,7 +215,9 @@ export function closeCollaborate() {
   }
 }
 
-function stale(c) { return !collab || collab !== c || c.seq !== collabSeq; }
+var workflowGate = { current: function () { return collab; }, seq: function () { return collabSeq; } };
+
+function stale(c) { return runIsStale(workflowGate, c); }
 
 function go(c, step) {
   if (stale(c)) return;
