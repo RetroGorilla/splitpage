@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsTabstrip, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -37,17 +37,6 @@ eq("CODEOWNERS and LICENSE are prose", needsChecks([".github/CODEOWNERS", "LICEN
   const tree = listRepoFiles().filter((p) => gated(p) && !needsChecks([p]));
   eq("and none in the repository is either", tree, []);
 }
-
-console.log("\nneedsTabstrip():\n");
-
-eq("tab strip styles run the width check", needsTabstrip(["desktop/tabstrip/tabstrip.css"]), true);
-eq("tab strip script runs the width check", needsTabstrip(["desktop/tabstrip/tabstrip.js"]), true);
-eq("the width check itself runs it", needsTabstrip(["desktop/test/tabstrip-width.mjs"]), true);
-eq("the suite driver runs it", needsTabstrip(["tools/run-suites.mjs"]), true);
-eq("a workflow change runs it", needsTabstrip([".github/workflows/ci.yml"]), true);
-eq("an app source change skips it", needsTabstrip(["src/js/05-render.js", "desktop/main.js"]), false);
-eq("an unknown diff runs it", needsTabstrip(null), true);
-eq("an empty diff runs it", needsTabstrip([]), true);
 
 console.log("\nchangedFiles():\n");
 

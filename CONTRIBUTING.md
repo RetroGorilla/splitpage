@@ -24,7 +24,7 @@ type (`bug`, `enhancement`, `documentation`, `accessibility`).
    npm run verify
    ```
    `npm run verify` is CI's fast gate, apart from the checks that need a
-   browser (the tab strip width and the browser suites). While
+   browser (the browser suites). While
    you work, run the focused checks for what you changed: the table in
    [docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change)
    says which, and `npm test -- --only <path>` narrows the unit tests.

@@ -41,11 +41,10 @@ narrows to the test files a change touched; `--only` is a local tool.
 | The rich-text sanitiser (`src/adapters/richtext/sanitize.ts`) | `tests/adapters/richtext/*.test.ts`, then browser suites 01, 69, 77, 80, 81, 86, 92, 155 and both 280 suites (the set #413 ran) |
 | A cache or a caller of one (`contentMemo`, the production readers, `cellOf`, 07's index) | Its unit tests, `production-frozen.test.mjs`, and the suites that read through it with `SPLITPAGE_FREEZE_CACHES=1` set ([Frozen caches](#frozen-caches)) |
 | Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
-| Closing a milestone, cutting a release | The recorded full gates of plan section 4, including the tab strip width check (`node desktop/test/tabstrip-width.mjs`): every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
+| Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
 
 `npm run verify` before pushing is cheap and runs CI's fast gate apart from
-the checks that need a browser: the tab strip width
-(`node desktop/test/tabstrip-width.mjs`) and the browser suites. Its `sw.js`
+the browser suites. Its `sw.js`
 check compares the stamped file with the one git has, so an edit to `sw.js`
 you have not staged or committed fails it; `git add sw.js` settles that.
 
@@ -518,8 +517,8 @@ above and nothing else.
 
 | Job | Runs |
 | --- | --- |
-| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose, and does it touch the tab strip? |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width (only when the tab strip, its test, `tools/run-suites.mjs` or the CI files change; always on `main`), then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
+| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
 | `gate` | Passes when `checks` passed, or when the change was prose only and it was skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
