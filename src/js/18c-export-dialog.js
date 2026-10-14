@@ -106,10 +106,14 @@ export function rememberExport(action) {
   try { localStorage.setItem(LAST_EXPORT_KEY, action); } catch (e) { }
 }
 
+function narrationOptions() {
+  return { directions: narrationIncludesDirections() };
+}
+
 export function exportActionReason(action) {
   if (!S.state) return "Still loading…";
   if (action === "export-narration-docx" || action === "export-narration-txt") {
-    return narrationRows().length ? "" : "The Audio column is empty — there is no narration yet";
+    return narrationRows(captureExportDocument(), narrationOptions()).length ? "" : "The Audio column is empty — there is no narration yet";
   }
   if (action === "export-packing-gear" || action === "export-packing-prop") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
@@ -367,17 +371,18 @@ function previewHtml(action) {
       '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }, doc) + '</div></div>';
   }
   if (action === "export-narration-docx" || action === "export-narration-txt") {
-    var paras = narrationRows().slice(0, 8);
+    var spoken = narrationRows(doc, narrationOptions());
+    var paras = spoken.slice(0, 8);
     var txt = action === "export-narration-txt";
     var said = narrationIncludesDirections() ? { cues: "omit" } : { directions: "omit", cues: "omit" };
     var numbers = sceneFacts(doc);
     var words = String(exportFacts(doc).words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return (txt ? '<div class="pv-mono pv-md-h">' + title + '</div><br>'
       : '<div class="pv-title">' + title + '</div><div class="pv-meta">Narration · ' +
-        escapeHtml(plural(narrationRows().length, "scene") + " · " + words + " words") + '</div>') +
+        escapeHtml(plural(spoken.length, "scene") + " · " + words + " words") + '</div>') +
       '<div class="' + (txt ? 'pv-mono' : 'pv-narr') + '">' +
       (paras.length ? paras.map(function (r) {
-        var n = txt ? "" : '<span class="pv-margin">' + numbers[S.state.rows.indexOf(r)].number + '</span>';
+        var n = txt ? "" : '<span class="pv-margin">' + numbers[doc.scenes.indexOf(r)].number + '</span>';
         return '<p class="pv-para">' + n + cellText(r.audioText, 180, said) + '</p>';
       }).join("") : '<p class="pv-para">(no narration yet)</p>') + '</div>';
   }
@@ -482,7 +487,7 @@ export function exportSummary(action) {
     }
     if (action === "export-html") bits.push("the whole app built in — read, edit and present it in any browser, on any device");
   } else if (f.format.id === "narration") {
-    bits.push(plural(narrationRows().length, "scene") + " of narration");
+    bits.push(plural(narrationRows(doc, narrationOptions()).length, "scene") + " of narration");
     if (action === "export-narration-docx") bits.push("scene numbers in the margin");
     bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
       : "no visuals, stage directions, breakdown or comments");

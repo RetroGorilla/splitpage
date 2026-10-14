@@ -1178,8 +1178,17 @@ async function sendWithBlobs(transport, state, send, canAccept) {
   }
 }
 
-export async function fetchBlob(sha) {
+export function fetchBlob(sha) {
+  return fetchBlobVia(serverTransport(conn), sha);
+}
+
+export function blobSourceNow() {
+  if (!onServerDoc()) return null;
   var transport = serverTransport(conn);
+  return function (sha) { return fetchBlobVia(transport, sha); };
+}
+
+async function fetchBlobVia(transport, sha) {
   if (!isSha256Hex(sha) || !transport.takesBlobs()) return null;
   var res = await transport.get("api/blobs/" + sha, "image/*");
   if (!res) return null;

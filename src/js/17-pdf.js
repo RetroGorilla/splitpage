@@ -1,6 +1,4 @@
-import { S } from "./_state.js";
-import { bytesForSync, recordFor, rowImageBytes } from "./02c-blobs.js";
-import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
+import { morePictureRefs, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import { videoHostLabel } from "./05-render.js";
 import { TAG_STATUSES, tagCategory } from "./07-production-tags.js";
 import { brollShotListForPrint } from "./08d-broll-panel.js";
@@ -11,16 +9,17 @@ import {
   STATUS_PRINT,
   TAG_STATUS_PRINT,
   breakdownGroups,
-  captureExportDocument,
+  capturedPicture,
+  capturedRowPicture,
   exportComments,
   exportDateText,
+  exportDay,
   exportFacts,
   exportRuns,
   exportSummaryParts,
   sceneFacts
 } from "./14b-export-kit.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
-import { sniffImageMime } from "../../shared/blob-policy.js";
 import { unitSafePrefix } from "../core/document/text-policy.ts";
 
 var HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
@@ -207,7 +206,7 @@ export function assemblePdf(spec) {
   var info = spec.info || {};
   startObj(OBJ_INFO);
   put("<< " + (info.title ? "/Title " + pdfInfoString(info.title) + " " : "") +
-    "/Creator (Splitpage) /Producer (Splitpage) /CreationDate (" + pdfDate(info.date || new Date()) + ") >>\nendobj\n");
+    "/Creator (Splitpage) /Producer (Splitpage) /CreationDate (" + pdfDate(info.date || new Date(1980, 0, 1)) + ") >>\nendobj\n");
 
   pages.forEach(function (pg, idx) {
     startObj(firstPageObj + idx);
@@ -388,14 +387,14 @@ function pdfJpegOf(pic) {
   });
 }
 
-export function pdfImagesFor(rows) {
-  rows = rows || [];
+export function pdfImagesFor(doc, assets) {
+  var rows = doc.scenes;
   var first = Promise.all(rows.map(function (row) {
-    return pdfJpegOf(rowImageBytes(row)).then(null, function () { return null; });
+    return pdfJpegOf(capturedRowPicture(assets, row)).then(null, function () { return null; });
   }));
   var more = Promise.all(rows.map(function (row) {
     return Promise.all(morePictureRefs(row).map(function (ref) {
-      return pdfJpegOf(pictureBytes(ref)).then(null, function () { return null; });
+      return pdfJpegOf(capturedPicture(assets, ref)).then(null, function () { return null; });
     })).then(function (list) { return list.filter(Boolean); });
   }));
   return Promise.all([first, more]).then(function (both) {
@@ -404,12 +403,9 @@ export function pdfImagesFor(rows) {
   });
 }
 
-function commentPic(sha) {
-  var bytes = bytesForSync(sha);
-  if (!bytes) return null;
-  var rec = recordFor(sha);
-  var mime = sniffImageMime(bytes) || (rec && rec.mime);
-  return mime ? { bytes: bytes, mime: mime } : null;
+function commentPic(assets, sha) {
+  var held = assets ? assets.picture(sha) : null;
+  return held && held.mime ? { bytes: held.bytes, mime: held.mime } : null;
 }
 
 function commentImageShas(entries) {
@@ -426,10 +422,10 @@ function commentImageShas(entries) {
   return out;
 }
 
-export function pdfCommentImagesFor() {
-  var shas = commentImageShas(commentEntries(captureExportDocument(), { pieces: true }));
+export function pdfCommentImagesFor(doc, assets) {
+  var shas = commentImageShas(commentEntries(doc, { pieces: true }));
   return Promise.all(shas.map(function (sha) {
-    return pdfJpegOf(commentPic(sha)).then(null, function () { return null; });
+    return pdfJpegOf(commentPic(assets, sha)).then(null, function () { return null; });
   })).then(function (list) {
     var out = {};
     shas.forEach(function (sha, i) { out[sha] = list[i]; });
@@ -465,7 +461,7 @@ function pdfAddress(href) {
 
 function pdfCount(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
-export function buildPdf(jpegs, commentJpegs) {
+export function buildPdf(doc, jpegs, commentJpegs) {
   var PW = 612, PH = 792, M = 54;
   var C = PRINT_COLORS;
   var TW = PW - 2 * M;
@@ -482,7 +478,6 @@ export function buildPdf(jpegs, commentJpegs) {
   var CUE = tagPrintColor("sound") || "AB413E";
   var HIGHLIGHT = "FCE38A";
 
-  var doc = captureExportDocument();
   var facts = exportFacts(doc);
   var scenes = sceneFacts(doc);
   var nums = doc.commentNumbers;
@@ -728,7 +723,7 @@ export function buildPdf(jpegs, commentJpegs) {
   titleBlock();
   if (scenes.length) drawHeads();
 
-  S.state.rows.forEach(function (row, idx) {
+  doc.scenes.forEach(function (row, idx) {
     var f = scenes[idx];
     var g = gutterOf(f);
     var vLines = [];
@@ -747,7 +742,7 @@ export function buildPdf(jpegs, commentJpegs) {
     var imgH = 0, imgRef = null;
     var jpeg = jpegs ? jpegs[idx] : null;
     if (!jpegs) {
-      var pic = rowImageBytes(row);
+      var pic = capturedRowPicture(null, row);
       if (pic && pic.mime === "image/jpeg") jpeg = { bytes: pic.bytes, size: jpegSize(pic.bytes) };
     }
     if (jpeg) {
@@ -766,12 +761,6 @@ export function buildPdf(jpegs, commentJpegs) {
     }
 
     var moreJpegs = jpegs && jpegs.more ? (jpegs.more[idx] || []) : [];
-    if (!jpegs) {
-      morePictureRefs(row).forEach(function (ref) {
-        var mp = pictureBytes(ref);
-        if (mp && mp.mime === "image/jpeg") moreJpegs.push({ bytes: mp.bytes, size: jpegSize(mp.bytes) });
-      });
-    }
     var STRIP_GAP = 6, STRIP_N = 3;
     var thumbW = (VW - STRIP_GAP * (STRIP_N - 1)) / STRIP_N;
     var stripLines = [];
@@ -953,7 +942,7 @@ export function buildPdf(jpegs, commentJpegs) {
     });
   }
 
-  var shotData = brollShotListForPrint({ filter: "all", group: "scene" });
+  var shotData = brollShotListForPrint(doc, { filter: "all", group: "scene" });
   if (shotData.groups.length) {
     pages.push({ ops: ops, images: pageImages, links: pageLinks });
     outline.push({ title: "B-roll shot list", page: pages.length, y: SHOT_PH });
@@ -981,9 +970,7 @@ export function buildPdf(jpegs, commentJpegs) {
     var commentImageNames = {};
 
     function commentJpeg(sha) {
-      if (commentJpegs) return commentJpegs[sha] || null;
-      var pic = commentPic(sha);
-      return pic && pic.mime === "image/jpeg" ? { bytes: pic.bytes, size: jpegSize(pic.bytes) } : null;
+      return commentJpegs ? commentJpegs[sha] || null : null;
     }
 
     function commentPicItem(sha, x) {
@@ -1100,7 +1087,7 @@ export function buildPdf(jpegs, commentJpegs) {
     pg.ops.push("EMC");
   });
 
-  return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: title },
+  return assemblePdf({ size: [PW, PH], pages: pages, images: images, info: { title: title, date: exportDay(doc) },
     outline: outline.length > 1 ? outline : [] });
 }
 
@@ -1187,24 +1174,24 @@ function listHead(sheet, kicker, heading, dotHex, meta) {
   sheet.y = y - 24;
 }
 
-export function buildPackingListPdf(catId) {
+export function buildPackingListPdf(doc, catId) {
   var C = PRINT_COLORS, M = LIST_M, W = LIST_PW - 2 * LIST_M;
   var cat = tagCategory(catId);
-  var title = S.state.title || "Untitled Script";
+  var title = doc.title || "Untitled Script";
   var heading = cat ? cat.plural : catId;
   var docTitle = title + " — " + heading + " packing list";
-  var group = breakdownGroups(captureExportDocument()).filter(function (g) { return g.catId === catId; })[0];
+  var group = breakdownGroups(doc).filter(function (g) { return g.catId === catId; })[0];
   var items = (group ? group.items : []).slice()
     .sort(function (a, b) { return a.name.localeCompare(b.name); });
 
   var sheet = listSheet();
-  var meta = [title + " · " + exportDateText()];
+  var meta = [title + " · " + exportDateText(exportDay(doc))];
   if (items.length) meta.push(packingSummary(items));
   listHead(sheet, "Packing list", heading, cat ? tagPrintColor(cat.id) : null, meta);
 
   if (!items.length) {
     sheet.text("Nothing tagged " + (cat ? cat.label : catId) + " yet.", M, sheet.y + 4, "F1", 11, C.dim);
-    return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
+    return assembleTextPdf(doc, sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
   }
 
   var ky = sheet.y - 4;
@@ -1306,7 +1293,7 @@ export function buildPackingListPdf(catId) {
     sy -= SIGN_LEAD;
   });
 
-  return assembleTextPdf(sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
+  return assembleTextPdf(doc, sheet.finish(docTitle), LIST_PW, LIST_PH, docTitle);
 }
 
 function pillFill(id) {
@@ -1355,11 +1342,11 @@ function packingSummary(items) {
   return out.join(" · ");
 }
 
-function assembleTextPdf(pages, PW, PH, title) {
+function assembleTextPdf(doc, pages, PW, PH, title) {
   return assemblePdf({
     size: [PW, PH],
     pages: pages.map(function (ops) { return { ops: ops }; }),
-    info: { title: title }
+    info: { title: title, date: exportDay(doc) }
   });
 }
 
@@ -1375,14 +1362,14 @@ function shotCutsOpening(text, max) {
 
 var SHOT_PW = 792, SHOT_PH = 612, SHOT_M = 36, SHOT_BOTTOM = 54;
 
-export function buildShotListPdf(data) {
+export function buildShotListPdf(doc, data) {
   var C = PRINT_COLORS, M = SHOT_M;
   var docTitle = data.title + " — B-roll shot list";
   var sheet = listSheet([SHOT_PW, SHOT_PH, SHOT_M]);
-  listHead(sheet, "B-roll shot list", data.title, null, [data.summary + " · " + data.scope + " · " + exportDateText()]);
+  listHead(sheet, "B-roll shot list", data.title, null, [data.summary + " · " + data.scope + " · " + exportDateText(exportDay(doc))]);
   if (!data.groups.length) sheet.text("No shots to list.", M, sheet.y + 4, "F1", 11, C.dim);
   else drawShotTable(sheet, data, "B-roll shot list");
-  return assembleTextPdf(sheet.finish(docTitle), SHOT_PW, SHOT_PH, docTitle);
+  return assembleTextPdf(doc, sheet.finish(docTitle), SHOT_PW, SHOT_PH, docTitle);
 }
 
 export function shotListAppendixPages(data) {

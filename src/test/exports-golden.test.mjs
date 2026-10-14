@@ -22,7 +22,7 @@ const { intern } = await import("../js/02c-blobs.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14-export.js");
-const { captureExportDocument, exportFacts } = await import("../js/14b-export-kit.js");
+const { captureExportDocument, exportAssetsNow, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
 
 const EM_DASH = String.fromCharCode(0x2014);
@@ -119,7 +119,7 @@ function outputs() {
     markdownExport: digest(toMarkdownDoc(doc)),
     markdownExportPreview: digest(toMarkdownDoc(doc, { scenes: 3 })),
     markdownTableExport: digest(toMarkdownTableDoc(doc, { export: true })),
-    markdownImages: markdownExportImages(doc).map((img) => ({ path: img.path, bytes: img.bytes.length })),
+    markdownImages: markdownExportImages(doc, exportAssetsNow(doc)).map((img) => ({ path: img.path, bytes: img.bytes.length })),
     facts: exportFacts(doc)
   };
 }

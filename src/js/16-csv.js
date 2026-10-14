@@ -1,7 +1,6 @@
-import { S } from "./_state.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { commentBodyText } from "./10-comments.js";
-import { captureExportDocument, exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
+import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";
@@ -45,8 +44,7 @@ function sceneBrollLists(doc) {
 
 export var COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
 
-export function scriptTable() {
-  var doc = captureExportDocument();
+export function scriptTable(doc) {
   var facts = exportFacts(doc);
   var scenes = sceneFacts(doc);
   var tags = sceneTagLists(doc);
@@ -66,7 +64,7 @@ export function scriptTable() {
   }
 
   var out = { head: CSV_HEAD.slice(), scenes: [], summary: [], commentHead: COMMENT_HEAD.slice(), comments: [] };
-  S.state.rows.forEach(function (row, i) {
+  doc.scenes.forEach(function (row, i) {
     var f = scenes[i];
     out.scenes.push({ status: f.status.id, cells: [
       f.number,
@@ -104,8 +102,8 @@ export function scriptTable() {
   return out;
 }
 
-export function buildCsv() {
-  var t = scriptTable();
+export function buildCsv(doc) {
+  var t = scriptTable(doc);
   var line = function (cells) { return cells.map(csvEscape).join(","); };
   var lines = [t.head.join(",")];
   t.scenes.forEach(function (s) { lines.push(line(s.cells)); });

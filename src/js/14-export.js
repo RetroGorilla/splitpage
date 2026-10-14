@@ -11,13 +11,11 @@ import {
 } from "./02b-doc-id.js";
 import {
   ensureBytes,
-  has as hasBlob,
   rowImage,
-  rowImageBytes,
   rowImageDataUrl,
   rowImageKey
 } from "./02c-blobs.js";
-import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkLabel } from "./02d-gallery.js";
+import { morePictureRefs, rowVideoLinks, videoLinkLabel } from "./02d-gallery.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   RELOAD_GUARD_KEY,
@@ -51,9 +49,12 @@ import {
   breakdownGroups,
   brollSummaryText,
   captureExportDocument,
+  capturedPicture,
+  capturedRowPicture,
   exportBrollScenes,
   exportComments,
   exportFacts,
+  exportAssetsNow,
   exportSummaryParts,
   sceneFacts
 } from "./14b-export-kit.js";
@@ -689,33 +690,34 @@ function markdownImagePath(row, i) {
   return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(img && img.ref ? "data:" + img.ref.mime : img && img.dataUrl);
 }
 
-function markdownHasPicture(row) {
+function markdownHasPicture(row, assets) {
   var img = rowImage(row);
-  return !!img && (!!img.dataUrl || hasBlob(img.ref.sha256));
+  return !!img && (!!img.dataUrl || !!assets.picture(img.ref.sha256));
 }
 
-function markdownMorePictures(row, i) {
+function markdownMorePictures(row, i, assets) {
   var out = [];
   morePictureRefs(row).forEach(function (ref, k) {
-    var pic = pictureBytes(ref);
+    var pic = capturedPicture(assets, ref);
     if (!pic) return;
     out.push({ path: "images/scene-" + pad2(i + 1) + "-" + (k + 2) + "." + dataUrlImageExt("data:" + ref.mime), bytes: pic.bytes });
   });
   return out;
 }
 
-export function markdownExportImages(doc) {
+export function markdownExportImages(doc, assets) {
   var out = [];
   doc.scenes.forEach(function (row, i) {
-    var pic = rowImage(row) && rowImageBytes(row);
+    var pic = rowImage(row) && capturedRowPicture(assets, row);
     if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
-    out = out.concat(markdownMorePictures(row, i));
+    out = out.concat(markdownMorePictures(row, i, assets));
   });
   return out;
 }
 
 export function toMarkdownDoc(doc, opts) {
   var limit = opts && opts.scenes;
+  var assets = (opts && opts.assets) || exportAssetsNow(doc);
   var facts = exportFacts(doc);
   var scenes = sceneFacts(doc);
   var nums = doc.commentNumbers;
@@ -734,11 +736,11 @@ export function toMarkdownDoc(doc, opts) {
     lines.push("");
     lines.push(mdSceneFactsLine(scenes[i]));
     lines.push("");
-    if (markdownHasPicture(row)) {
+    if (markdownHasPicture(row, assets)) {
       lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
       lines.push("");
     }
-    var more = markdownMorePictures(row, i);
+    var more = markdownMorePictures(row, i, assets);
     more.forEach(function (m, k) {
       lines.push("![visual " + (k + 2) + " for scene " + pad2(i + 1) + "](" + m.path + ")");
       lines.push("");
@@ -861,10 +863,9 @@ function crc32(bytes) {
 function u16(n) { return new Uint8Array([n & 0xff, (n >>> 8) & 0xff]); }
 function u32(n) { return new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]); }
 
-export function zipWrite(entries) {
-  var now = new Date();
-  var dosTime = ((now.getHours() & 0x1f) << 11) | ((now.getMinutes() & 0x3f) << 5) | ((now.getSeconds() / 2) & 0x1f);
-  var dosDate = (((now.getFullYear() - 1980) & 0x7f) << 9) | (((now.getMonth() + 1) & 0xf) << 5) | (now.getDate() & 0x1f);
+export function zipWrite(entries, day) {
+  var dosTime = 0;
+  var dosDate = day ? (((day.getFullYear() - 1980) & 0x7f) << 9) | (((day.getMonth() + 1) & 0xf) << 5) | (day.getDate() & 0x1f) : 0x21;
 
   var local = [], central = [], offset = 0;
   entries.forEach(function (e) {

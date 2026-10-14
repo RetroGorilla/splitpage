@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -12,7 +13,7 @@ import {
 } from "../js/08c-broll.js";
 import { renameTag } from "../js/07-production-tags.js";
 import { buildBreakdownCsv } from "../js/08-production-panels.js";
-import { brollShotListForPrint, buildBrollCsv } from "../js/08d-broll-panel.js";
+import { buildBrollCsv } from "../js/08d-broll-panel.js";
 import { buildShotListPdf } from "../js/17-pdf.js";
 import { exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
@@ -585,7 +586,7 @@ test("a pasted copy of a shot's line gets none of its hand-added props", () => {
 test("the breakdown CSV names the b-roll shots each prop is needed for, after the old columns", () => {
   propsDoc();
   addBrollProp("b2", "Kettle");
-  const lines = buildBreakdownCsv().replace(/^\uFEFF/, "").split("\r\n");
+  const lines = buildBreakdownCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group");
   const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
   assert.ok(kettle.endsWith(",drone over the pier,,Props & set dressing"), kettle);
@@ -600,7 +601,7 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   s.brollShots[1].reshoot = true;
   s.rows.push({ id: "r2", visualText: "B-roll: an unanchored line", audioText: "" });
   const before = JSON.stringify(s.brollShots);
-  const lines = buildBrollCsv().replace(/^\uFEFF/, "").split("\r\n");
+  const lines = buildBrollCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
   assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
@@ -614,7 +615,7 @@ test("the printed shot list is a PDF of the shots as shown, flagged ones marked"
   const s = propsDoc();
   s.brollShots[1].reshoot = true;
   s.brollShots[1].notes = "too dark";
-  const text = Buffer.from(buildShotListPdf(brollShotListForPrint())).toString("latin1");
+  const text = Buffer.from(buildShotListPdf(liveDoc(), printData())).toString("latin1");
   assert.ok(text.startsWith("%PDF-1.4"));
   assert.ok(text.includes("(the red mug on the sill) Tj"));
   assert.ok(text.includes("(drone over the pier) Tj"));
