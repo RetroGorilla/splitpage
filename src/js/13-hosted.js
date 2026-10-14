@@ -57,6 +57,7 @@ import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-d
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
+import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
@@ -508,8 +509,11 @@ async function resumeServerDoc() {
       if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
       return true;
     }
-    S.state = theirs;
-    setBaseState(cloneState(S.state), "resumeServerDoc: reopened as the server has it, nothing to merge");
+    documentTransitions().open({
+      from: { document: theirs },
+      reason: "resumeServerDoc: reopened as the server has it, nothing to merge",
+      writtenOut: true
+    });
     clearDirty();
     renderAbsorbed();
     updateIdentityChip();
@@ -910,11 +914,13 @@ export async function openServerDoc(id) {
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
-  S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
-  setBaseState(cloneState(S.state), "openServerDoc: the document as the server sent it");
+  documentTransitions().open({
+    from: { document: migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null }) },
+    reason: "openServerDoc: the document as the server sent it",
+    destination: { kind: "server", fields: { id: body.id, rev: body.rev || 0 } },
+    writtenOut: true
+  });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  setHome("server", { id: body.id, rev: body.rev || 0 });
-  S.docIdWrittenOut = true;
   resetProductionPanelState();
 
   clearDirty();
