@@ -740,7 +740,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
     return "applied";
   }
 
-  await applyStashedWork(disk, { base: base, mine: mine }, {
+  var merged = await applyStashedWork(disk, { base: base, mine: mine }, {
     recovery: true,
     awaitUndoPoint: true,
     keepLabel: "Your unsaved changes, recovered",
@@ -755,6 +755,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
       sticky: true
     }
   });
+  if (merged && merged.replaced) return keptForNextLaunch();
   S.docIdWrittenOut = !!t.header.docIdWrittenOut;
   return "merged";
 }

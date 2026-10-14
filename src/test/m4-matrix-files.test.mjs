@@ -378,6 +378,41 @@ rightToday("F5-prompter", "the prompter's save waits for the save that is runnin
   assert.ok(new TextDecoder().decode((await fake.readFile(homeModule.home.handle._desktopId)).bytes).includes("Second save's text."), "the file ends with the later save's text");
 }));
 
+rightToday("F5-saveas", "a save asked for while a Save As is writing its new file waits for it", scene(async () => {
+  const copy = createHeldFileHandle({ name: "copy.splitpage" });
+  window.showSaveFilePicker = async () => copy.handle;
+  useDocument(script("Saving as", { docId: ID("5") }));
+  edit("First save's text.");
+  copy.holdOp("write");
+  const saving = saveDoc({ saveAs: true });
+  await copy.arrivedAt("write");
+  assert.equal(homeModule.home.handle, copy.handle, "setup: Save As already points Save at the new file");
+  edit("Second save's text.");
+  document.getElementById("save-error-retry").click();
+  await turns(60);
+  assert.equal(writers(copy), 1, "no second writer was opened while the Save As was writing");
+  copy.gates.releaseAll("file.write");
+  await saving;
+  await turns(80);
+  copy.gates.releaseAll("file.write");
+  await turns(80);
+  assert.ok(copy.text().includes("Second save's text."), "the file ends with the later save's text");
+  assert.equal(S.dirty, false, "and the document is saved");
+}));
+
+rightToday("F5-replaced", "a save waiting behind a running save is dropped when the document is replaced, not run against the replacement", scene(async () => {
+  const target = await firstSaveInFlight();
+  document.getElementById("save-error-retry").click();
+  await turns(20);
+  const other = heldFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage");
+  await openProjectFile(await other.handle.getFile(), other.handle, { skipSnapshot: true, silent: true });
+  assert.equal(S.state.title, "Replacement", "setup: the document was replaced");
+  const before = observed();
+  await finishSaves(target);
+  assert.equal(writers(other), 0, "the replacement's file was not written");
+  assertSame(before, "replacement");
+}));
+
 rightToday("F6", "a write that fails at write or close keeps the document dirty and the home and rev as they were", scene(async () => {
   for (const op of ["write", "close"]) {
     const target = heldFile(script("Fails at " + op, { docId: ID("1") }));
@@ -452,6 +487,20 @@ rightToday("F9", "no history copy happens before the write is confirmed, and a s
   assert.equal(finished, true, "the save finished while the history copy was still held");
   assert.equal(held.calls.filter((c) => c.op === "historyCopy").length, 1, "the history was copied once the write was confirmed");
   held.gates.releaseAll("desktop.historyCopy");
+}));
+
+rightToday("F9-warn", "a Save As that gives the copy a new document id is not reported as finishing after a reopen", scene(async () => {
+  const copy = createHeldFileHandle({ name: "copy.splitpage" });
+  window.showSaveFilePicker = async () => copy.handle;
+  useDocument(script("Forked", { docId: ID("8") }));
+  S.docIdWrittenOut = true;
+  edit("Typed before Save As.");
+  document.getElementById("toast-host").textContent = "";
+  await saveDoc({ saveAs: true });
+  assert.equal(copy.commits.length, 1, "setup: the copy was written");
+  assert.notEqual(S.state.docId, ID("8"), "setup: the copy has its own document id");
+  assert.equal(S.dirty, false, "the document is saved");
+  assert.equal(/after you reopened it/.test(document.getElementById("toast-host").textContent), false, "no reopen warning was shown");
 }));
 
 function importDocument() {
