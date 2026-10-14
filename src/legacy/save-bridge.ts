@@ -9,10 +9,11 @@ import type {
   WriterResult
 } from "../application/save/coordinator.ts";
 
-export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "server";
+export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "server" | "writeback" | "writebackForce";
 
 export interface LegacySaveRequest {
   readonly kind: LegacySaveKind;
+  readonly target?: unknown;
 }
 
 export type LegacySaveJob = SaveJob<LegacySaveRequest>;
@@ -65,7 +66,7 @@ export function savesStarted(): boolean {
 }
 
 export function requestSave(request: LegacySaveRequest): Promise<SaveOutcome> {
-  return running().request(Object.freeze({ kind: request.kind }));
+  return running().request(Object.freeze(request.target === undefined ? { kind: request.kind } : { kind: request.kind, target: request.target }));
 }
 
 export function saveRunning(): boolean {

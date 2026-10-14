@@ -25,7 +25,12 @@ const RELOADS = Math.max(24, Math.round((Number(process.env.SPLITPAGE_FUZZ_SEEDS
 
 const session = liveSession();
 const heard = [];
-session.subscribe((c) => heard.push(c.kind));
+let stopHearing = session.subscribe((c) => heard.push(c.kind));
+
+function hearReplacement() {
+  stopHearing();
+  stopHearing = session.subscribe((c) => heard.push(c.kind));
+}
 const held = () => session.read((doc) => doc);
 const migrate = (raw) => migrateRows(raw);
 
@@ -225,6 +230,7 @@ async function openImport() {
   disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   handle.name = "reload.txt";
   await openProjectFile(disk, handle, { skipSnapshot: true });
+  hearReplacement();
 }
 
 async function reloadWith(file) {

@@ -29,8 +29,6 @@ const SITES = [
   "02b-doc-id.js#adoptRestoredState",
   "02b-doc-id.js#assign",
   "03-sync.js#adopt",
-  "18-local-files.js#adoptProjectState",
-  "18-local-files.js#loadFileIntoEditor",
   "20g-drafts.js#recoverDraftAsUnsavedCopy",
   "20g-drafts.js#restoreFileDraft",
   "20g-drafts.js#adoptUntitledDraft",
@@ -182,16 +180,16 @@ test("13-hosted openServerDoc: migrateDocument's answer through the transition A
   }
 });
 
-test("18-local-files adoptProjectState, from a .splitpage file: a migrateRows fixed point", async () => {
+test("18-local-files adoptProjectState, from a .splitpage file, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrated("On disk")))], "disk.splitpage", { lastModified: 1 });
   const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
-  assert.equal(fixedPoint(only(got, "18-local-files.js#adoptProjectState")), true);
+  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
 });
 
-test("18-local-files loadFileIntoEditor, from a .txt import: a migrateRows fixed point", async () => {
+test("18-local-files loadFileIntoEditor, from a .txt import, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File(["Wide on the harbour\tEvery morning.\nClose\tMara mends nets."], "import.txt", { lastModified: 1 });
   const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
-  assert.equal(fixedPoint(only(got, "18-local-files.js#loadFileIntoEditor")), true);
+  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
 });
 
 test("18b replaceWithNewDocument, a new script and the long demo, through the live-document port: migrateRows fixed points", async () => {
