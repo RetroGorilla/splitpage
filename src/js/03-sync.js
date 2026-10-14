@@ -873,7 +873,11 @@ export function applyMerge(opts) {
 
   if (!opts.awaitUndoPoint) return adopt();
   var written = snap && snap.done ? snap.done : null;
-  return Promise.resolve(written).then(null, function () {}).then(adopt);
+  var ctx = captureRestore();
+  return Promise.resolve(written).then(null, function () {}).then(function () {
+    if (!stillRestoring(ctx)) return { state: S.state, result: null, snapshot: snap, replaced: true };
+    return adopt();
+  });
 }
 
 var baseStateWhy = "";
