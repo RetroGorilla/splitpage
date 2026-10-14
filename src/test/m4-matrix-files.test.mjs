@@ -8,8 +8,7 @@ import {
   createHeldFetch,
   createHeldFileHandle,
   mockClock,
-  rightToday,
-  wrongToday
+  rightToday
 } from "./_m4-matrix.mjs";
 
 await bootApp();
@@ -412,24 +411,28 @@ rightToday("F7", "a handle whose permission is refused fails without retargeting
   assertSame(before, "document after a refused Save As");
 }));
 
-wrongToday("F8", "after a desktop write the baseline timestamp is the one that write produced, not a later read's", scene(async () => {
+rightToday("F8", "after a desktop write the baseline timestamp is the one that write produced, not a later read's", scene(async () => {
   const { fake, held } = withHeldDesktop();
   const picked = await openFromDesktop(fake, script("Stamped", { docId: ID("7") }));
   edit("Typed before the save.");
   held.holdOp("writeFile");
   const saving = saveDoc();
   await held.arrivedAt("writeFile");
-  held.releaseOp("writeFile");
+  const readsBefore = held.calls.filter((c) => c.op === "readFile").length;
   held.holdOp("readFile");
-  await held.arrivedAt("readFile");
+  held.releaseOp("writeFile");
+  const first = await Promise.race([saving.then(() => "saved"), held.arrivedAt("readFile").then(() => "read", () => "none")]);
   const written = (await fake.statFile(picked.id)).lastModified;
-  await fake.writeFile(picked.id, new TextEncoder().encode("changed by something else"));
-  const later = (await fake.statFile(picked.id)).lastModified;
-  assert.notEqual(later, written, "the file changed again before the read");
-  held.releaseOp("readFile");
-  await saving;
+  if (first === "read") {
+    await fake.writeFile(picked.id, new TextEncoder().encode("changed by something else"));
+    assert.notEqual((await fake.statFile(picked.id)).lastModified, written, "the file changed again before the read");
+    held.releaseOp("readFile");
+    await saving;
+  }
+  held.gates.releaseAll("desktop.readFile");
   assert.equal(homeModule.home.lastModified, written, "the baseline timestamp is the one the write produced");
-}), /the baseline timestamp is the one the write produced/);
+  assert.equal(held.calls.filter((c) => c.op === "readFile").length, readsBefore, "and no second full read followed the write");
+}));
 
 rightToday("F9", "no history copy happens before the write is confirmed, and a save never waits on a history copy that does not resolve", scene(async () => {
   const { fake, held } = withHeldDesktop({ history: true });

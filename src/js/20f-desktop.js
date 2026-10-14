@@ -52,7 +52,10 @@ export function makeDesktopHandle(entry) {
           return Promise.resolve();
         },
         close: function () {
-          return S.DESKTOP.writeFile(id, concatBytes(chunks)).then(function () {});
+          return S.DESKTOP.writeFile(id, concatBytes(chunks)).then(function (written) {
+            var stamp = written && written.lastModified;
+            return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
+          });
         }
       });
     },
