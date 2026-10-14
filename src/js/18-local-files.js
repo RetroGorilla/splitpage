@@ -2,9 +2,9 @@ import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
+import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
-import { migrateRows } from "./02-state.js";
 import {
   docIdEmbeddedIn,
   migrateDocument,
@@ -17,7 +17,6 @@ import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
   pushSnapshot,
-  setBaseState,
   stampRow,
   updateIdentityChip
 } from "./03-sync.js";
@@ -424,13 +423,15 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
-  S.state = newState;
-  setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
-  setHome("file", { handle: handle || null, format: kind, lastModified: file.lastModified || null,
-                    name: file.name, diskBase: cloneState(S.state) });
+  documentTransitions().open({
+    from: { document: newState },
+    reason: "adoptProjectState: the project file as it was just read",
+    destination: { kind: "file", fields: { handle: handle || null, format: kind, lastModified: file.lastModified || null,
+                                           name: file.name, diskBase: cloneState(newState) } },
+    writtenOut: true
+  });
   resetProductionPanelState();
 
-  S.docIdWrittenOut = true;
   clearDirty();
   renderAbsorbed();
   updateIdentityChip();
@@ -528,14 +529,8 @@ async function loadFileIntoEditor(file, handle, opts) {
   if (opts.reload) {
     flushEdits();
     noteReload({ title: openedTitle, rows: newRows });
-  } else {
-    S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
-    setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
-    resetProductionPanelState();
-    S.docIdWrittenOut = false;
   }
-
-  var imported = setHome("import", {
+  var importFields = {
     name: file.name,
     handle: handle || null,
     format: kind,
@@ -543,7 +538,19 @@ async function loadFileIntoEditor(file, handle, opts) {
     dirty: false,
     lastModified: file.lastModified || null,
     size: file.size || null
-  });
+  };
+  if (opts.reload) {
+    setHome("import", importFields);
+  } else {
+    documentTransitions().open({
+      from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
+      reason: "loadFileIntoEditor: the imported document as it was just read",
+      destination: { kind: "import", fields: importFields },
+      writtenOut: false
+    });
+    resetProductionPanelState();
+  }
+  var imported = importHome();
 
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   imported.dirty = false;

@@ -265,7 +265,7 @@ rightToday("T2a-boot", "the boot document opens its epoch at the transition, not
   assert.equal(late, null, "the session already held the boot document at every write that follows its assignment: " + JSON.stringify(late));
 });
 
-adoptionLag("T2b", "an opened file opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2b", "an opened file opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before open"));
   const epoch = session.epoch();
   const events = await traced(() => openProjectFile(splitpageFile(script("Opened", { docId: "d" + "5".repeat(32) })), null, { skipSnapshot: true, silent: true }));
