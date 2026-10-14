@@ -137,9 +137,7 @@ function writers(...targets) {
   return targets.reduce((n, t) => n + t.calls.filter((c) => c === "createWritable").length, 0);
 }
 
-const REPLACED = /the replacement's rev is unchanged/;
-
-wrongToday("F1", "a file save that fails after its document was replaced leaves the replacement alone", scene(async () => {
+rightToday("F1", "a file save that fails after its document was replaced leaves the replacement alone", scene(async () => {
   const target = heldFile(script("Saving", { docId: ID("1") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -155,9 +153,9 @@ wrongToday("F1", "a file save that fails after its document was replaced leaves 
   await saving;
   assert.equal(target.commits.length, 0, "the failed write stored nothing");
   assertSame(before, "replacement");
-}), REPLACED);
+}));
 
-wrongToday("F1-abort", "a Save As picker that is cancelled after its document was replaced leaves the replacement alone", scene(async () => {
+rightToday("F1-abort", "a Save As picker that is cancelled after its document was replaced leaves the replacement alone", scene(async () => {
   const picks = createGates();
   window.showSaveFilePicker = async () => {
     await picks.pass("picker");
@@ -175,9 +173,9 @@ wrongToday("F1-abort", "a Save As picker that is cancelled after its document wa
   picks.release("picker");
   await saving;
   assertSame(before, "replacement");
-}), REPLACED);
+}));
 
-wrongToday("F1-dialog", "a desktop save dialog that is cancelled after its document was replaced leaves the replacement alone", scene(async () => {
+rightToday("F1-dialog", "a desktop save dialog that is cancelled after its document was replaced leaves the replacement alone", scene(async () => {
   const { fake, held } = withHeldDesktop();
   useDocument(script("Saving as", { docId: ID("1") }));
   edit("Typed before the dialog.");
@@ -192,7 +190,7 @@ wrongToday("F1-dialog", "a desktop save dialog that is cancelled after its docum
   held.releaseOp("saveFileDialog");
   await saving;
   assertSame(before, "replacement");
-}), REPLACED);
+}));
 
 rightToday("F1-done", "a file save that completes after its document was replaced writes its own file and touches nothing in the replacement", scene(async () => {
   const target = heldFile(script("Saving", { docId: ID("1") }));
@@ -210,7 +208,7 @@ rightToday("F1-done", "a file save that completes after its document was replace
   assertSame(before, "replacement");
 }));
 
-wrongToday("F2", "a file save that completes after a same-id reopen leaves the reopened session's baseline and dirty state alone", scene(async () => {
+rightToday("F2", "a file save that completes after a same-id reopen leaves the reopened session's baseline and dirty state alone", scene(async () => {
   const target = heldFile(script("Same id", { docId: ID("3") }));
   await openFrom(target);
   edit("Typed before the save.");
@@ -226,7 +224,7 @@ wrongToday("F2", "a file save that completes after a same-id reopen leaves the r
   await saving;
   assert.equal(S.dirty, true, "the reopened session is still unsaved");
   assert.equal(JSON.stringify(S.baseState), baselineBefore, "the reopened session's baseline is the one it opened with");
-}), /the reopened session's baseline is the one it opened with/);
+}));
 
 rightToday("F3", "a Save As that is cancelled or fails leaves Save's target and the document id as they were", scene(async () => {
   const target = heldFile(script("Saved as", { docId: ID("1") }));

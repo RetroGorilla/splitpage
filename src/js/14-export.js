@@ -67,6 +67,7 @@ import {
 } from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
+import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { toMarkdown } from "../core/text/projections.ts";
 import { cellOf, htmlToMarkdown, inertBody } from "../legacy/richtext.ts";
@@ -100,34 +101,53 @@ var FAILED = Object.freeze({ kind: "failed" });
 var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
 
+function finishWriting() {
+  S.saveButtonBusy = false;
+  setSaveButtons(S.dirty ? "Save •" : "Save", false);
+}
+
+function saveDialogs(slug) {
+  return {
+    desktop: S.DESKTOP ? function () {
+      return S.DESKTOP.saveFileDialog({
+        suggestedName: slug + ".md",
+        filters: [
+          { name: "Markdown script", extensions: ["md"] },
+          { name: "Splitpage script", extensions: ["splitpage"] }
+        ]
+      }).then(function (picked) { return picked ? makeDesktopHandle(picked) : null; });
+    } : null,
+    browser: window.showSaveFilePicker ? function () {
+      return window.showSaveFilePicker({
+        suggestedName: slug + ".md",
+        types: [
+          { description: "Markdown script", accept: { "text/markdown": [".md"] } },
+          { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
+        ]
+      });
+    } : null
+  };
+}
+
+function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, landed) {
+  var stamp = captured.document;
+  S.state.rev = stamp.rev;
+  S.state.lastEditedBy = stamp.lastEditedBy;
+  S.state.lastEditedAt = stamp.lastEditedAt;
+  if (!copyOfHosted) setBaseState(published, "saveDoc: the bytes just written");
+  if (landed) {
+    landed.home.diskBase = published;
+    if (landed.lastModified !== null) landed.home.lastModified = landed.lastModified;
+  }
+  adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
+  if (!copyOfHosted && S.editSeq === seqAtSave) clearDirty();
+}
+
 async function writeDoc(opts, job) {
   opts = opts || {};
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
   if (!auto) resumeAutoSave();
-  var forkDocId = (opts.saveAs && S.docIdWrittenOut) ? mintDocId() : null;
-  var docIdAtSave = S.state.docId;
-  var prevHome = null;
-  var retarget = null;
-  var pickedFor = null;
-  var wrote = false;
-  var copyOfHosted = home.kind === "server";
-  function retargetTo(handle, k) {
-    if (S.state.docId !== docIdAtSave) return;
-    if (home.kind === "server") { pickedFor = home; return; }
-    prevHome = home;
-    retarget = setHome("file", { handle: handle, format: k, name: handle.name });
-    pickedFor = retarget;
-    if (job) job.moved();
-    if (prevHome.kind === "import") updateFileChip();
-  }
-  function undoRetarget() {
-    if (retarget && !wrote && home === retarget) {
-      restoreHome(prevHome);
-      if (prevHome.kind === "import") updateFileChip();
-    }
-    retarget = null;
-  }
   settleDerivedRecords();
   S.saveButtonBusy = true;
   setSaveButtons("Saving…", true);
@@ -140,8 +160,7 @@ async function writeDoc(opts, job) {
                      "Press Save to try again.");
       }
     } finally {
-      S.saveButtonBusy = false;
-      setSaveButtons(S.dirty ? "Save •" : "Save", false);
+      finishWriting();
     }
     return sentToServer === false ? FAILED : SAVED;
   }
@@ -152,58 +171,56 @@ async function writeDoc(opts, job) {
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
   }
 
-  S.state.rev = (S.state.rev || 0) + 1;
-  S.state.lastEditedBy = getEditorName();
-  S.state.lastEditedAt = nowIso();
-  var captured = captureExportDocument({ docId: forkDocId });
+  var forkDocId = (saveAs && opts.saveAs && S.docIdWrittenOut) ? mintDocId() : null;
+  var docIdAtSave = S.state.docId;
+  var homeAtSave = home;
+  var copyOfHosted = homeAtSave.kind === "server";
+  var captured = captureExportDocument({
+    docId: forkDocId,
+    stamp: { rev: (S.state.rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
+  });
   var published = cloneState(captured.document);
   var seqAtSave = S.editSeq;
   var slug = slugify(published.title);
-  var targetHandle = saveAs || !fileHome() ? null : fileHome().handle;
-  var kind = saveAs ? "md" : ((fileHome() && fileHome().format) || "md");
+  var reusing = !saveAs && fileHome() ? fileHome() : null;
+  var kind = saveAs ? "md" : ((reusing && reusing.format) || "md");
+  var prevHome = null;
+  var retarget = null;
+  var pickedFor = null;
+  var wrote = false;
 
-  var reusingHandle = !!targetHandle;
+  function retargetTo(handle, k) {
+    if (!job.owns()) return;
+    if (home.kind === "server") { pickedFor = home; return; }
+    prevHome = home;
+    retarget = setHome("file", { handle: handle, format: k, name: handle.name });
+    pickedFor = retarget;
+    job.moved();
+    if (prevHome.kind === "import") updateFileChip();
+  }
+  function undoRetarget() {
+    if (retarget && !wrote && home === retarget) {
+      restoreHome(prevHome);
+      if (prevHome.kind === "import") updateFileChip();
+    }
+    retarget = null;
+  }
+
   var written;
-
   try {
-    if (!targetHandle && S.DESKTOP) {
-      var pickedDesktop = await S.DESKTOP.saveFileDialog({
-        suggestedName: slug + ".md",
-        filters: [
-          { name: "Markdown script", extensions: ["md"] },
-          { name: "Splitpage script", extensions: ["splitpage"] }
-        ]
-      });
-      if (!pickedDesktop) {
-        S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-        S.saveButtonBusy = false;
-        setSaveButtons(S.dirty ? "Save •" : "Save", false);
-        return CANCELLED;
-      }
-      targetHandle = makeDesktopHandle(pickedDesktop);
-      kind = fileKindFromName(pickedDesktop.name) === "splitpage" ? "splitpage" : "md";
-      retargetTo(targetHandle, kind);
-    } else if (!targetHandle && window.showSaveFilePicker) {
-      targetHandle = await window.showSaveFilePicker({
-        suggestedName: slug + ".md",
-        types: [
-          { description: "Markdown script", accept: { "text/markdown": [".md"] } },
-          { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
-        ]
-      });
-      kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
-      retargetTo(targetHandle, kind);
+    var target = reusing ? existingTarget(reusing.handle) : await pickTarget(saveDialogs(slug));
+    if (target.kind === "cancelled") return CANCELLED;
+    if (target.kind === "handle" && target.picked) {
+      kind = fileKindFromName(target.handle.name) === "splitpage" ? "splitpage" : "md";
+      retargetTo(target.handle, kind);
     }
 
-    if (reusingHandle && !opts.force) {
-      var check = await checkFileConflict(targetHandle, home.lastModified);
+    if (reusing && !opts.force) {
+      var check = await checkFileConflict(reusing.handle, homeAtSave.lastModified);
       if (!check.ok) {
-        if (auto) haltAutoSave("Autosave is paused — " + targetHandle.name +
+        if (auto) haltAutoSave("Autosave is paused — " + reusing.handle.name +
                                " changed on disk since it was opened. Press Save to sort it out.");
-        else showFileConflict(targetHandle.name, check.current, { kind: "project" });
-        S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-        S.saveButtonBusy = false;
-        setSaveButtons(S.dirty ? "Save •" : "Save", false);
+        else showFileConflict(reusing.handle.name, check.current, { kind: "project" });
         return CONFLICTED;
       }
     }
@@ -217,64 +234,44 @@ async function writeDoc(opts, job) {
       body = kind === "splitpage" ? buildSplitpageFile(captured) : buildMarkdownProject(captured);
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-      undoRetarget();
-      S.saveButtonBusy = false;
-      setSaveButtons(S.dirty ? "Save •" : "Save", false);
       return FAILED;
     }
 
-    if (targetHandle) {
-      var writable = await targetHandle.createWritable();
-      await writable.write(body);
-      await writable.close();
+    if (target.kind === "handle") {
+      var handle = target.handle;
+      var landedOn = await writeToHandle(handle, body);
       wrote = true;
-      var stillOurs = S.state.docId === docIdAtSave;
-      var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
-      if (stillOurs && !copyOfHosted) setBaseState(published, "saveDoc: the bytes just written to the file");
-      if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
-      adoptSavedCopyDocId(forkDocId, docIdAtSave);
-      var docIdAfterSave = S.state.docId;
-      if (homeAtWrite && stillOurs) homeAtWrite.diskBase = published;
-      try {
-        var afterFile = await targetHandle.getFile();
-        if (homeAtWrite && home === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
-      } catch (e) { }
-      if (stillOurs && !copyOfHosted && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
-      if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
+      if (job.owns()) {
+        var landedHome = fileHome() && fileHome().handle === handle ? home : null;
+        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted,
+          landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null);
+      } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+      if (pickedFor && home === pickedFor) rememberLastFileHandle(handle);
+      if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       else noteSaveStatus();
-      warnImagesLeftOut(imagesLeftOut, targetHandle.name);
+      warnImagesLeftOut(imagesLeftOut, handle.name);
       written = copyOfHosted ? COPIED : SAVED;
     } else {
       var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
-      if (ok) {
-        wrote = true;
-        var downloadedOurs = S.state.docId === docIdAtSave;
-        if (downloadedOurs && !copyOfHosted) setBaseState(published, "saveDoc: the copy just downloaded");
-        adoptSavedCopyDocId(forkDocId, docIdAtSave);
-        if (downloadedOurs && !copyOfHosted && S.editSeq === seqAtSave) clearDirty();
-        warnImagesLeftOut(imagesLeftOut, filename);
-        written = copyOfHosted ? COPIED : SAVED;
-      } else {
-        S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-        written = CANCELLED;
-      }
+      if (!ok) return CANCELLED;
+      wrote = true;
+      if (job.owns()) confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, null);
+      else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+      warnImagesLeftOut(imagesLeftOut, filename);
+      written = copyOfHosted ? COPIED : SAVED;
     }
   } catch (err) {
-    if (err && err.name === "AbortError") {
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+    if (isAbort(err)) {
       written = CANCELLED;
     } else {
       var why = err && err.message ? err.message : "please try again";
       showToast("Could not save — " + why + ".", "error");
       if (auto) haltAutoSave("Autosave is paused — the last save failed (" + why + "). Press Save to try again.");
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
       written = { kind: "failed", error: err };
     }
   } finally {
     undoRetarget();
-    S.saveButtonBusy = false;
-    setSaveButtons(S.dirty ? "Save •" : "Save", false);
+    finishWriting();
   }
   return written;
 }
@@ -285,14 +282,11 @@ export function warnImagesLeftOut(n, name) {
     " — the picture" + (n === 1 ? " was" : "s were") + " not available on this computer.", "warn");
 }
 
-function adoptSavedCopyDocId(forkDocId, docIdAtSave) {
+function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   forkDocId = normalizeDocId(forkDocId);
-  var sameDocument = !!S.state && S.state.docId === docIdAtSave;
-  if (forkDocId) {
-    if (sameDocument && !onServerDoc()) S.state.docId = forkDocId;
-    copyDocHistorySafe(docIdAtSave, forkDocId);
-  }
-  if (!sameDocument) return;
+  if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
+  if (!owned) return;
+  if (forkDocId && !onServerDoc()) S.state.docId = forkDocId;
   S.docIdWrittenOut = true;
   syncDocIdentity();
 }
