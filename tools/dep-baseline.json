@@ -558,7 +558,6 @@
     {"rule":"state-write","source":"src/js/13-hosted.js","target":"global:S.draftServerResume"},
     {"rule":"state-write","source":"src/js/13-hosted.js","target":"global:S.serverMode"},
     {"rule":"state-write","source":"src/js/13-hosted.js","target":"global:S.serverMode.*"},
-    {"rule":"state-write","source":"src/js/13-hosted.js","target":"global:S.state"},
     {"rule":"state-write","source":"src/js/13-hosted.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/13b-collaborate.js","target":"global:S.serverMode"},
     {"rule":"state-write","source":"src/js/14-export.js","target":"global:S.docIdWrittenOut"},
