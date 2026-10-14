@@ -6,7 +6,7 @@ import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { TAG_PRINT_COLORS } from "../js/14-export.js";
+import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import {
   PRINT_COLORS,
   commentNumbers,

@@ -1,9 +1,7 @@
 import { readPref, writePref } from "./00p-prefs.js";
-import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { internDataUrl, queuePersist, rowImage } from "./02c-blobs.js";
 import { morePictureRefs, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
-import { htmlToPlainText } from "./14-export.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,
@@ -25,13 +23,16 @@ import { xmlEscape } from "../adapters/formats/xml.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml, safeHref, unitSafePrefix } from "../core/document/text-policy.ts";
-import { pad2 } from "../core/production/timing.ts";
+import { DEFAULT_WPM } from "../core/document/timing.ts";
+import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
 import { importDirections } from "../core/text/directions.ts";
 import { setMark } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { OMIT_CLOSES, toDocxRuns, toPlainText } from "../core/text/projections.ts";
 import { cellLength } from "../core/text/runs.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, fromHtml, inertBody } from "../legacy/richtext.ts";
 
 var DOCX_CATEGORY_DOT = "● ";
@@ -822,7 +823,7 @@ export function buildNarrationDocx(doc, opts) {
   var links = [];
   var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
   var rows = narrationRows(doc, opts);
-  var words = rows.reduce(function (n, row) { return n + wordCount(row.audioText); }, 0);
+  var words = rows.reduce(function (n, row) { return n + productionReaders.wordCount(row.audioText); }, 0);
   var wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
   var body = titleParaXml(doc.title || "Untitled Script") +

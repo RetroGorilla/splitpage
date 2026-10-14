@@ -6,10 +6,10 @@ import { paintTargetOverlay } from "./05t-target.js";
 import { productionReaders } from "./07-production-tags.js";
 import { showToast } from "./12-dirty-toast.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
+import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import {
   DEFAULT_WPM,
-  ROW_STATUS_IDS,
   SCENE_LENGTH_MAX,
   hasSetLength,
   normalizeSceneLength,
@@ -27,6 +27,7 @@ import {
 } from "../core/production/timing.ts";
 export {
   DEFAULT_WPM,
+  ROW_STATUSES,
   SCENE_LENGTH_MAX,
   formatDuration,
   formatTimecode,
@@ -34,29 +35,12 @@ export {
   normalizeSceneLength,
   normalizeTargetLength,
   parseSceneLength,
+  rowStatus,
   targetClock,
   targetLengthOf
 };
 
 export var wordCount;
-
-var ROW_STATUS_LOOKS = {
-  todo:  { label: "To do", cls: "is-open", color: "var(--text-faint)" },
-  ready: { label: "Ready", cls: "is-half", color: "var(--audio)" },
-  shot:  { label: "Shot",  cls: "",        color: "var(--text)" }
-};
-
-export var ROW_STATUSES = ROW_STATUS_IDS.map(function (id) {
-  var look = ROW_STATUS_LOOKS[id];
-  return { id: id, label: look.label, cls: look.cls, color: look.color };
-});
-
-export function rowStatus(id) {
-  for (var i = 0; i < ROW_STATUSES.length; i++) {
-    if (ROW_STATUSES[i].id === id) return ROW_STATUSES[i];
-  }
-  return null;
-}
 
 export function estimatedSeconds(row) {
   return estimatedSecondsIn(row, S.state, productionReaders);

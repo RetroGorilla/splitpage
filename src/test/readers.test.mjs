@@ -5,7 +5,7 @@ import { cellOf, toDocxRuns, toMarkdown, toPlainText } from "../js/04c-doc-model
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { tagsInField } from "../js/07-production-tags.js";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
-import { htmlToPlainText } from "../js/14-export.js";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 import { STORED, tagSpan } from "./_stored-cells.mjs";
 

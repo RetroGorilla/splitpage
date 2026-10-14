@@ -10,7 +10,7 @@ Merged as PR #576. Described in [saving.md](saving.md) section 6.
 
 ### Step 2, helper-move PR (PR #577): the byte helpers
 
-Step 2 stays open. The plan splits it into small PRs in this order: capture and projection changes, mechanical helper moves, registry integration. This is the helper-move PR. A follow-up step-2 PR owns the rest, listed at the end of this section.
+The plan splits step 2 into small PRs in this order: capture and projection changes, mechanical helper moves, registry integration. This is the helper-move PR. It left the writers in the import cycle; the projection PR below closed step 2.
 
 `zipWrite`, `zipRead`, `strBytes`, `latin1Bytes`, `concatBytes`, `xmlEscape` and `htmlToRuns` left `14-export.js` for `src/adapters/formats/`, one file per concern:
 
@@ -51,12 +51,56 @@ The helper move alone does not take any writer out of the cycle, and the plan sa
 | `16b-xlsx.js` | `08-production-panels`, `08d-broll-panel`, `14-export`, `14b-export-kit`, `16-csv` | `14-export` then `18-local-files`; `08d-broll-panel` then `18-local-files` |
 | `17-pdf.js` | `05-render`, `07-production-tags`, `08d-broll-panel`, `10-comments`, `14-export`, `14b-export-kit`, `15-docx` | `14-export` then `18-local-files`; `05-render` then `03-sync` then `18-local-files` |
 
-#### Still open in step 2
+### Step 2, projection PR: the writers read the captured document
 
-A follow-up step-2 PR (capture and projection cut, before the registry) owns:
+Step 2 is done. The writers no longer import the production, comment or b-roll modules, `01-scene-status.js` or `14-export.js`; every fact they print comes from the `ExportDocument` or from a module outside the cycle. Output bytes are unchanged for unchanged inputs: the existing byte fixtures, goldens and the gated race matrix pass untouched.
 
-- the production, comment and b-roll read models the writers import from `05`, `07`, `08`, `08c`, `08d` and `10` reaching them through the `ExportDocument` (the `14b-export-kit.js` projection cut);
-- `htmlToPlainText`, `tagPrintColor` and `TAG_PRINT_COLORS` leaving `14-export.js` for a module outside the cycle;
-- explicit inputs for the presentation helpers, preferences and asset access the writers still reach for, or permitted adapters.
+What moved, and where it went:
 
-Only the `14-export.js` imports of `18-local-files.js` and the hosted and desktop modules are left to step 4, when the registry owns dispatch. The follow-up PR records `--metrics` and each writer's remaining path again, and the four writers leaving the cycle is its acceptance result.
+| Moved | From | To |
+| --- | --- | --- |
+| `htmlToPlainText` | `14-export.js` | `src/legacy/plain-text.ts` (it parses through the rich-text bridge, so it stays in the legacy layer) |
+| `tagPrintColor`, `TAG_PRINT_COLORS` | `14-export.js` | `src/adapters/formats/print-colors.ts` |
+| `videoHostLabel` | `05-render.js` | `src/adapters/formats/video-host.ts` |
+| `ROW_STATUSES`, `rowStatus` | `01-scene-status.js` | `src/core/production/looks.ts` |
+| `TAG_CATEGORIES`, `TAG_STATUSES`, `tagCategory`, `tagStatus`, and the sorting half of `tagsByCategory` (now `groupTagsByCategory`) | `07-production-tags.js` | `src/core/production/looks.ts` |
+| `sceneFacts` | `14b-export-kit.js` | `14c-export-projections.js` |
+| `breakdownRows`, `breakdownTable` | `08-production-panels.js` | `14c-export-projections.js` |
+| `shotRecordForFile`, `brollTable`, `brollShotListForPrint`, `brollGroups` and the filter and group tables they read | `08d-broll-panel.js` | `14c-export-projections.js` |
+| `commentEntries`, `commentBodyText` and the body-piece helpers | `10-comments.js` | `14c-export-projections.js` |
+
+`14c-export-projections.js` is the reusable projection half that the plan separates from capture: every function in it takes an `ExportDocument` (or rows and people taken from one) and imports nothing from the cycle. `14b-export-kit.js` keeps capture, the read-model derivation, asset glue and the document facts. The old homes re-export the names the panels, the dialog, `18-local-files.js` and the tests still import (`breakdownRows`, `breakdownTable`, `brollTable`, `brollShotListForPrint`, `shotRecordForFile`, `commentEntries`, `commentBodyText`, `sceneFacts`, and the looks tables), so those importers did not change. `htmlToPlainText`, `tagPrintColor` and `videoHostLabel` are not re-exported: their importers (`05e`, `08c`, `10`, `15`, `16b`, `17`, `18a`, `18c`, `19` and the tests that read them from `14-export.js`) import them from the new homes. The writers import the projections from `14c-export-projections.js`.
+
+Three behaviours differ from a plain move:
+
+- `brollGroups` no longer falls back to `S.state` in the projection module. Callers outside the writers use a one-line wrapper in `08d-broll-panel.js` that supplies the open document's rows and people.
+- `commentEntries` takes the clock (`clockMode`) as an explicit option. `exportComments` reads the stored clock preference once and passes it, so a writer formats every comment time with one clock. With no option the old behaviour (read the preference per call) is unchanged for the Markdown and menu callers.
+- `wordCount` in the writers is `productionReaders.wordCount`, the same function `01-scene-status.js` exported.
+
+#### Cycle result
+
+`node tools/dep-report.mjs --metrics`, before (the helper-move PR, `3d7bc81`) and after:
+
+| | Before | After |
+| --- | --- | --- |
+| Frontend modules | 182 | 187 |
+| Largest frontend runtime cycle | 53 | 48 |
+| Runtime cycle edges | 413 | 370 |
+| Baseline exceptions | 619 | 576 |
+
+`14b-export-kit.js`, `15-docx.js`, `16-csv.js`, `16b-xlsx.js` and `17-pdf.js` are out of the cycle, and so is the new `14c-export-projections.js`. None of the six has an outgoing edge into it any more, and the 43 cycle-edge exceptions that described those edges are pruned from `tools/dep-baseline.json`. `tools/test-dep-report.mjs` now fails if any of the six returns to a runtime cycle.
+
+Each writer's remaining imports, all outside the cycle:
+
+| Writer | Imports that remain |
+| --- | --- |
+| `14b-export-kit.js` | `00p-prefs` (clock preference, read once by `exportComments`), `02-state`, `02c-blobs` (the asset ports passed to `application/export/assets.ts`), `14c-export-projections`, and core, adapter and legacy-bridge modules |
+| `14c-export-projections.js` | `00p-prefs` (`formatDateClock`, only when the caller names no clock), and core, adapter and legacy-bridge modules |
+| `15-docx.js` | `00p-prefs` (`narrationIncludesDirections` and its setter, read by dispatch and the dialog, not by the narration builders, which take `opts.directions`), `02c-blobs` (stored pictures, DOCX import) and `02d-gallery` (picture links), `14b`, `14c` |
+| `16-csv.js` | `14b`, `14c` |
+| `16b-xlsx.js` | `14b`, `14c`, `16-csv` |
+| `17-pdf.js` | `02d-gallery` (picture links), `14b`, `14c`, `15-docx` (`jpegSize`, `safeAspect`) |
+
+What is left of the plan's list for step 2 is step 4's: the `14-export.js` dispatch edges (`18-local-files.js`, the hosted and desktop modules) stay until the registry owns dispatch, and the preference accessors above move with it.
+
+Tests: `export-projections.test.mjs` captures a demo document, empties and renames everything live, and asserts every projection (scenes, breakdown, breakdown table, b-roll table, shot list, comments) returns the same answer; asserts the comment clock comes from the caller, not the stored preference; and pins `brollGroups` to the rows and people it is given. The existing unit tests that imported the moved names now import them from their new homes.

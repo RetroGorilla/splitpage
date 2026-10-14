@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "./02c-blobs.js";
-import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   findRowIndex,
   getEditorName,
@@ -23,7 +23,8 @@ import { resetDraftHistory } from "./05d-draft-edit.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
-import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
+import { queueAutoSave, resumeAutoSave } from "./14-export.js";
+import { commentBodyText, commentEntries, formatTimestampAbsolute } from "./14c-export-projections.js";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import {
   commentMatchesFilterMode,
@@ -35,7 +36,7 @@ import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { EDITOR_NAME_MAX, normalizeEditorName } from "../core/document/fields.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
-export { nowIso };
+export { commentBodyText, commentEntries, nowIso };
 
 var commentFilter;
 
@@ -412,109 +413,8 @@ function commentTimeHtml(iso, cls) {
     escapeHtml(formatTimestampAbsolute(iso)) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
 }
 
-function formatTimestampAbsolute(iso) {
-  try {
-    var d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return formatDateClock(d, { year: true });
-  } catch (e) { return ""; }
-}
-
 function commentPositionCompare(a, b) {
   return compareCommentPositions(a, b, findRowIndex);
-}
-
-function capturedRowIndex(doc) {
-  var at = Object.create(null);
-  doc.scenes.forEach(function (row, i) { if (!(row.id in at)) at[row.id] = i; });
-  return function (id) { return typeof id === "string" && id in at ? at[id] : -1; };
-}
-
-function capturedLocationLabel(rowIndex, field) {
-  if (field === "title") return "Document title";
-  var rowLabel = rowIndex === -1 ? "Deleted row" : ("Row " + pad2(rowIndex + 1));
-  return rowLabel + " · " + (field === "audioText" ? "Audio" : "Visual");
-}
-
-export function commentEntries(doc, opts) {
-  var pieces = !!(opts && opts.pieces);
-  var rowIndexOf = capturedRowIndex(doc);
-  var list = (doc.comments || []).slice();
-  list.sort(function (a, b) { return compareCommentPositions(a, b, rowIndexOf); });
-  return list.map(function (c) {
-    var rowIndex = rowIndexOf(c.rowId);
-    var entry = {
-      id: c.id,
-      rowIndex: c.field === "title" ? -1 : rowIndex,
-      field: c.field,
-      location: capturedLocationLabel(rowIndex, c.field),
-      author: c.author || "Anonymous",
-      body: htmlToPlainText(c.body),
-      quoted: c.quotedText || "",
-      resolved: !!c.resolved,
-      resolvedBy: c.resolved ? (c.resolvedBy || "") : "",
-      assignee: c.assignee || "",
-      when: formatTimestampAbsolute(c.createdAt),
-      replies: (c.replies || []).map(function (rp) {
-        var reply = {
-          author: rp.author || "Anonymous",
-          body: htmlToPlainText(rp.body),
-          when: formatTimestampAbsolute(rp.createdAt)
-        };
-        if (pieces) reply.pieces = bodyPieces(rp.body);
-        return reply;
-      })
-    };
-    if (pieces) entry.pieces = commentBodyPieces(c);
-    return entry;
-  });
-}
-
-export function bodyPieces(html) {
-  var out = [];
-  if (!html) return out;
-  var root = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
-  if (!root.querySelector("img[data-blob]")) {
-    var only = htmlToPlainText(html);
-    if (only) out.push({ text: only });
-    return out;
-  }
-  var buf = "";
-  function flush() {
-    var t = buf.replace(/\u00A0/g, " ").trim();
-    if (t) out.push({ text: t });
-    buf = "";
-  }
-  (function walk(node) {
-    Array.prototype.forEach.call(node.childNodes, function (child) {
-      if (child.nodeType === 3) { buf += child.nodeValue || ""; return; }
-      if (child.nodeType !== 1) return;
-      if (child.tagName === "IMG") {
-        var sha = child.getAttribute("data-blob");
-        if (isSha256Hex(sha)) { flush(); out.push({ image: sha }); }
-        return;
-      }
-      walk(child);
-    });
-  })(root);
-  flush();
-  return out;
-}
-
-function commentBodyPieces(c) {
-  if (c.kind === "conflict" && c.field === "visualImage") {
-    var ref = normalizeImageRef(c.imageValue);
-    return ref ? [{ image: ref.sha256 }] : [];
-  }
-  return bodyPieces(c.body);
-}
-
-export var COMMENT_IMAGE_TEXT = "[image]";
-
-export function commentBodyText(entry) {
-  var pieces = (entry && entry.pieces) || [];
-  if (!pieces.some(function (p) { return p.image; })) return entry.body;
-  return pieces.map(function (p) { return p.image ? COMMENT_IMAGE_TEXT : p.text; }).join("\n");
 }
 
 function anchorTextFromState(cmtId) {

@@ -4,7 +4,7 @@ import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
-import { pad2, render } from "./05-render.js";
+import { render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
 import {
   findOrAddPerson,
@@ -33,21 +33,13 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
+import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "./14c-export-projections.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
-import { rowSeconds as rowSecondsIn } from "../core/production/timing.ts";
 import { appActions } from "../legacy/app-actions.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
-
-var FILTERS = [
-  { id: "all",     label: "All" },
-  { id: "unshot",  label: "To shoot" },
-  { id: "flagged", label: "Flagged" },
-  { id: "shot",    label: "Shot" }
-];
 
 var GROUPS = [
   { id: "scene",    label: "Scene",    button: "By scene" },
@@ -56,11 +48,6 @@ var GROUPS = [
 ];
 
 var view = { filter: "all", group: "scene" };
-
-function oneOf(list, id, fallback) {
-  for (var i = 0; i < list.length; i++) if (list[i].id === id) return id;
-  return fallback;
-}
 
 function loadView() {
   try {
@@ -83,22 +70,6 @@ function setFilter(id) {
   view.filter = oneOf(FILTERS, id, "all");
   saveView();
   renderBrollViews();
-}
-
-function matchesFilter(e, filter) {
-  if (filter === "unshot") return e.status !== "shot";
-  if (filter === "shot") return e.status === "shot";
-  if (filter === "flagged") return e.reshoot;
-  return true;
-}
-
-function filterCounts(entries) {
-  var n = { all: entries.length, unshot: 0, shot: 0, flagged: 0 };
-  entries.forEach(function (e) {
-    if (e.status === "shot") n.shot++; else n.unshot++;
-    if (e.reshoot) n.flagged++;
-  });
-  return n;
 }
 
 var openId = null;
@@ -174,10 +145,6 @@ function avatarHtml(person) {
     escapeHtml(personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
-function sceneLabel(e) {
-  return e.rowIndex === -1 ? "" : pad2(e.rowIndex + 1);
-}
-
 function plural(n, one, many) {
   return n + " " + (n === 1 ? one : many);
 }
@@ -186,10 +153,6 @@ function sceneStarts() {
   var t = 0, out = Object.create(null);
   S.state.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row); });
   return out;
-}
-
-function startOf(e, starts) {
-  return e.rowId && starts[e.rowId] !== undefined ? formatTimecode(starts[e.rowId]) : "";
 }
 
 function propChipHtml(e, p, removable) {
@@ -352,38 +315,10 @@ function groupMenuHtml() {
     '</div>';
 }
 
+export { brollShotListForPrint, brollTable, shotRecordForFile };
+
 export function brollGroups(entries, by, from) {
-  var rows = from ? from.rows : S.state.rows;
-  var people = from ? from.people : S.state.people;
-  var sorted = brollSortedForList(entries);
-  if (by === "flat") return [{ key: "all", kind: "flat", label: "", items: sorted }];
-  var groups = [], byKey = Object.create(null);
-  sorted.forEach(function (e) {
-    var key, label, kind = by, row = null;
-    if (by === "scene") {
-      if (e.rowIndex === -1) { key = "added"; label = "Added here"; kind = "added"; }
-      else { key = "r:" + e.rowId; label = "Scene " + pad2(e.rowIndex + 1); row = rows[e.rowIndex] || null; }
-    } else if (by === "location") {
-      key = e.location ? "l:" + normalizeTagName(e.location) : "none";
-      label = e.location || "No location";
-    } else {
-      var who = personIn(people, e.owner);
-      key = who ? "p:" + who.id : "none";
-      label = who ? who.name : "Unassigned";
-    }
-    if (!byKey[key]) {
-      byKey[key] = { key: key, kind: kind, label: label, row: row, items: [], none: key === "none" };
-      groups.push(byKey[key]);
-    }
-    byKey[key].items.push(e);
-  });
-  if (by !== "scene") {
-    groups.sort(function (a, b) {
-      if (a.none !== b.none) return a.none ? 1 : -1;
-      return a.label.localeCompare(b.label);
-    });
-  }
-  return groups;
+  return brollGroupsFrom(entries, by, from || { rows: S.state.rows, people: S.state.people });
 }
 
 function doneCountHtml(items, cls) {
@@ -1279,12 +1214,6 @@ export function wireBrollPanel() {
   });
 }
 
-var PAGE_GROUPS = [
-  { id: "location", label: "Location" },
-  { id: "scene",    label: "Scene" },
-  { id: "person",   label: "Person" }
-];
-
 var pageView = { group: "location" };
 var pageReturnFocus = null;
 var pagePanelWasOpen = false;
@@ -1336,11 +1265,6 @@ export function closeBrollPage(andThen) {
     var btn = document.getElementById(pagePanelWasOpen ? "broll-open-page" : "btn-broll");
     if (btn) btn.focus();
   }
-}
-
-function pageSummaryText(entries) {
-  var n = filterCounts(entries);
-  return n.shot + " of " + n.all + " shot" + (n.flagged ? " · " + n.flagged + " flagged" : "");
 }
 
 function pageGroupHeadHtml(g) {
@@ -1419,56 +1343,6 @@ export function renderBrollPage() {
   });
 }
 
-function personIn(people, id) {
-  if (!id) return null;
-  for (var i = 0; i < people.length; i++) {
-    if (people[i].id === id) return people[i];
-  }
-  return null;
-}
-
-export function shotRecordForFile(e, people) {
-  var who = personIn(people, e.owner);
-  return {
-    scene: e.rowId ? sceneLabel(e) : "",
-    name: e.name || "Untitled shot",
-    status: e.status === "shot" ? "Shot" : "To shoot",
-    shot: e.status === "shot",
-    flagged: !!e.reshoot,
-    location: e.location || "",
-    props: e.props.map(function (p) { return p.name; }),
-    propsWithStatus: e.props.map(function (p) {
-      var st = tagStatus(p.status);
-      return p.name + (st ? " (" + st.label.toLowerCase() + ")" : "");
-    }),
-    cuts: e.audioRef || "",
-    owner: who ? who.name : "",
-    note: e.notes || "",
-    desc: e.desc || ""
-  };
-}
-
-function capturedStarts(doc) {
-  var t = 0, out = Object.create(null);
-  doc.scenes.forEach(function (row) { out[row.id] = t; t += rowSecondsIn(row, doc.document, productionReaders); });
-  return out;
-}
-
-export function brollTable(doc) {
-  var out = {
-    head: ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
-           "Scene start"],
-    rows: []
-  };
-  var starts = capturedStarts(doc);
-  brollSortedForList(doc.broll).forEach(function (e) {
-    var r = shotRecordForFile(e, doc.people);
-    out.rows.push({ shot: r.shot, flagged: r.flagged, cells: [r.scene, r.name, r.status, r.flagged ? "yes" : "", r.location,
-      r.props.join("; "), r.cuts, r.owner, r.note, r.desc, startOf(e, starts)] });
-  });
-  return out;
-}
-
 export function buildBrollCsv(doc) {
   var t = brollTable(doc);
   var lines = [t.head.join(",")];
@@ -1481,36 +1355,6 @@ export function brollPrintView(as) {
   return {
     filter: as && as.filter ? oneOf(FILTERS, as.filter, "all") : view.filter,
     group: as && as.group ? oneOf(PAGE_GROUPS, as.group, "scene") : pageView.group
-  };
-}
-
-export function brollShotListForPrint(doc, as) {
-  var filterId = oneOf(FILTERS, as && as.filter, "all");
-  var groupId = oneOf(PAGE_GROUPS, as && as.group, "scene");
-  var entries = doc.broll;
-  var shown = entries.filter(function (e) { return matchesFilter(e, filterId); });
-  var filter = FILTERS.filter(function (f) { return f.id === filterId; })[0];
-  var group = PAGE_GROUPS.filter(function (g) { return g.id === groupId; })[0];
-  var starts = capturedStarts(doc);
-  return {
-    title: doc.title || "Untitled Script",
-    summary: pageSummaryText(entries),
-    scope: (filter && filter.id !== "all" ? filter.label + ", " : "") + "by " + group.label.toLowerCase(),
-    groups: brollGroups(shown, groupId, { rows: doc.scenes, people: doc.people }).map(function (g) {
-      return {
-        label: g.label,
-        kind: g.kind,
-        none: !!g.none,
-        start: g.row && starts[g.row.id] !== undefined ? formatTimecode(starts[g.row.id]) : "",
-        done: g.items.filter(function (e) { return e.status === "shot"; }).length,
-        total: g.items.length,
-        items: g.items.map(function (e) {
-          var rec = shotRecordForFile(e, doc.people);
-          rec.start = startOf(e, starts);
-          return rec;
-        })
-      };
-    })
   };
 }
 
