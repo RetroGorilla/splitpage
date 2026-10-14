@@ -75,7 +75,11 @@ export function rowImageBytes(row) {
     var held = bytesForSync(img.ref.sha256);
     return held ? { bytes: held, mime: img.ref.mime, width: img.ref.width, height: img.ref.height } : null;
   }
-  var url = img.dataUrl.replace(/[\t\n\r]/g, "");
+  return dataUrlPicture(img.dataUrl);
+}
+
+export function dataUrlPicture(dataUrl) {
+  var url = String(dataUrl || "").replace(/[\t\n\r]/g, "");
   var bytes = forgivingBase64Decode(url.slice(url.indexOf(",") + 1));
   if (!bytes) return null;
   var declared = /^data:(image\/[a-z0-9.+-]+)/i.exec(url);
@@ -99,14 +103,15 @@ function blobAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function inlineStateImages(s, only) {
+export function inlineStateImages(s, only, urlOf) {
+  var dataUrlOf = urlOf || dataUrlForSync;
   var missing = [];
   var want = only ? {} : null;
   if (only) only.forEach(function (sha) { want[sha] = true; });
   function pick(rec) {
     var ref = normalizeImageRef(rec);
     if (!ref || (want && !want[ref.sha256])) return null;
-    var url = dataUrlForSync(ref.sha256);
+    var url = dataUrlOf(ref.sha256);
     if (!url && missing.indexOf(ref.sha256) === -1) missing.push(ref.sha256);
     return url;
   }
@@ -138,7 +143,7 @@ export function inlineStateImages(s, only) {
       var m = IMG_BLOB_ATTR_RE.exec(tag);
       var sha = m ? (m[1] || m[2] || m[3]) : null;
       if (!sha || (want && !want[sha])) return tag;
-      var url = dataUrlForSync(sha);
+      var url = dataUrlOf(sha);
       if (!url) {
         if (missing.indexOf(sha) === -1) missing.push(sha);
         return tag;

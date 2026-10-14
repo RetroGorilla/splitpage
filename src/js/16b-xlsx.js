@@ -1,8 +1,7 @@
-import { S } from "./_state.js";
 import { breakdownTable } from "./08-production-panels.js";
 import { brollTable } from "./08d-broll-panel.js";
 import { strBytes, tagPrintColor, xmlEscape, zipWrite } from "./14-export.js";
-import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT, captureExportDocument } from "./14b-export-kit.js";
+import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT, exportDay } from "./14b-export-kit.js";
 import { scriptTable } from "./16-csv.js";
 import { unitSafePrefix } from "../core/document/text-policy.ts";
 
@@ -137,7 +136,7 @@ function sheetXml(sheet, index, strings) {
 
 function sheetRef(name) { return "'" + name.replace(/'/g, "''") + "'"; }
 
-export function buildWorkbook(sheets, title, styles) {
+export function buildWorkbook(doc, sheets, title, styles) {
   var strings = stringTable();
   var parts = sheets.map(function (sh, i) { return sheetXml(sh, i, strings); });
   var names = [];
@@ -183,7 +182,7 @@ export function buildWorkbook(sheets, title, styles) {
     '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
     '<Relationship Id="rId3" Type="' + NS_R + '/extended-properties" Target="docProps/app.xml"/>' +
     "</Relationships>";
-  var d = new Date();
+  var d = exportDay(doc);
   var day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
   var core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"' +
@@ -208,7 +207,7 @@ export function buildWorkbook(sheets, title, styles) {
   parts.forEach(function (xml, i) { entries.push({ name: "xl/worksheets/sheet" + (i + 1) + ".xml", data: strBytes(xml) }); });
   entries.push({ name: "xl/styles.xml", data: strBytes(styles.xml()) });
   entries.push({ name: "xl/sharedStrings.xml", data: strBytes(strings.xml()) });
-  return zipWrite(entries);
+  return zipWrite(entries, d);
 }
 
 function looks(styles) {
@@ -273,8 +272,8 @@ function commentsSheet(L, t) {
   };
 }
 
-function breakdownSheet(L, standalone) {
-  var t = breakdownTable(captureExportDocument());
+function breakdownSheet(doc, L, standalone) {
+  var t = breakdownTable(doc);
   if (!t.rows.length && !standalone) return null;
   var rows = t.rows.map(function (r) {
     var st = TAG_STATUS_PRINT[r.status] || TAG_STATUS_PRINT.needed;
@@ -307,8 +306,8 @@ function opening(s) {
   return (sp > CUTS_CHARS / 2 ? cut.slice(0, sp) : cut).replace(/[\s.,;:!?—–-]+$/, "") + "…";
 }
 
-function brollSheet(L, standalone) {
-  var t = brollTable();
+function brollSheet(doc, L, standalone) {
+  var t = brollTable(doc);
   if (!t.rows.length && !standalone) return null;
   var rows = t.rows.map(function (r) {
     r = { shot: r.shot, flagged: r.flagged, cells: r.cells.slice() };
@@ -331,24 +330,24 @@ function brollSheet(L, standalone) {
   };
 }
 
-function titleOf() { return (S.state && S.state.title) || "Untitled Script"; }
+function titleOf(doc) { return doc.title || "Untitled Script"; }
 
-export function buildScriptXlsx() {
+export function buildScriptXlsx(doc) {
   var styles = styleSheet();
   var L = looks(styles);
-  var t = scriptTable();
-  var sheets = [scriptSheet(L, t), commentsSheet(L, t), breakdownSheet(L, false), brollSheet(L, false)].filter(Boolean);
-  return buildWorkbook(sheets, titleOf(), styles);
+  var t = scriptTable(doc);
+  var sheets = [scriptSheet(L, t), commentsSheet(L, t), breakdownSheet(doc, L, false), brollSheet(doc, L, false)].filter(Boolean);
+  return buildWorkbook(doc, sheets, titleOf(doc), styles);
 }
 
-export function buildBreakdownXlsx() {
+export function buildBreakdownXlsx(doc) {
   var styles = styleSheet();
-  return buildWorkbook([breakdownSheet(looks(styles), true)], titleOf() + " - breakdown", styles);
+  return buildWorkbook(doc, [breakdownSheet(doc, looks(styles), true)], titleOf(doc) + " - breakdown", styles);
 }
 
-export function buildBrollXlsx() {
+export function buildBrollXlsx(doc) {
   var styles = styleSheet();
-  return buildWorkbook([brollSheet(looks(styles), true)], titleOf() + " - b-roll shot list", styles);
+  return buildWorkbook(doc, [brollSheet(doc, looks(styles), true)], titleOf(doc) + " - b-roll shot list", styles);
 }
 
 export function __init() {}

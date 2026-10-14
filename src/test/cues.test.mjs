@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -292,13 +293,13 @@ test("a tag or a direction on a cue line is not part of its name, and a rename l
 
 test("narration export leaves cues out, directions or not", () => {
   withState(cueDoc(), () => {
-    assert.equal(buildNarrationText({ directions: true }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
-    assert.equal(buildNarrationText({ directions: false }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
+    assert.equal(buildNarrationText(liveDoc(), { directions: true }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
+    assert.equal(buildNarrationText(liveDoc(), { directions: false }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
   });
 });
 
 test("the script .docx writes a cue in its own style, small and in the Music/SFX colour", async () => {
-  const bytes = await withState(cueDoc(), () => buildDocx());
+  const bytes = await withState(cueDoc(), () => buildDocx(...liveWithAssets()));
   const zip = await zipRead(bytes.buffer ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : bytes);
   const xml = new TextDecoder().decode(await zip.get("word/document.xml"));
   assert.match(xml, /<w:rStyle w:val="SplitpageCue"\/><w:color w:val="AB413E"\/><w:sz w:val="18"\/><\/w:rPr><w:t xml:space="preserve">SFX: door slam<\/w:t>/);

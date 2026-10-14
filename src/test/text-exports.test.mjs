@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -41,7 +42,7 @@ const HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", 
 
 test("the script's sheet: a row per scene with its start, status, read time, tags, b-roll and open threads", () => {
   const s = demo();
-  const rows = sheet(buildCsv());
+  const rows = sheet(buildCsv(liveDoc()));
   assert.deepEqual(rows[0], HEAD);
   const scene = (n) => rows[n];
   assert.deepEqual(scene(1).slice(0, 5), ["01", "00:00", "Shot", "0:10", ""]);
@@ -63,7 +64,7 @@ test("the script's sheet: a row per scene with its start, status, read time, tag
 
 test("the sheet's totals are labelled, the target beside them, and the comments carry their numbers", () => {
   demo();
-  const rows = sheet(buildCsv());
+  const rows = sheet(buildCsv(liveDoc()));
   assert.deepEqual(rows[31], ["Total", "", "13 of 30 shot", "9:44", "", "", "", "", "", ""]);
   assert.deepEqual(rows[32], ["Target", "", "0:44 over", "9:00", "", "", "", "", "", ""]);
   assert.deepEqual(rows[33], [""]);
@@ -76,12 +77,12 @@ test("the sheet's totals are labelled, the target beside them, and the comments 
   assert.deepEqual(c[2].slice(0, 3), ["", "Scene 09 · Audio", "Resolved by Sam"], "resolved: no number");
   assert.deepEqual(c[3].slice(0, 5), ["2", "Scene 18 · Audio", "Open", "Jo (editor)", "Sam"]);
   assert.deepEqual(c[4].slice(0, 2), ["3", "Scene 24 · Audio"]);
-  assert.ok(!buildCsv().includes("Row "), "the app says Scene");
+  assert.ok(!buildCsv(liveDoc()).includes("Row "), "the app says Scene");
 });
 
 test("the new sheet reopens as exactly its scenes: no totals, no comments", () => {
   const s = demo();
-  const back = csvToRows(buildCsv());
+  const back = csvToRows(buildCsv(liveDoc()));
   assert.equal(back.length, 30);
   back.forEach((r, i) => {
     assert.equal(r.visualText, escapeHtml(toPlainText(cellOf(s.rows[i].visualText))).replace(/\n/g, "<br>"), "scene " + (i + 1));
@@ -117,17 +118,17 @@ test("somebody else's sheet keeps what follows a row that says Comments", () => 
 
 test("a script with no target and no comments: no Target row, no Comments block", () => {
   S.state = migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] });
-  const rows = sheet(buildCsv());
+  const rows = sheet(buildCsv(liveDoc()));
   assert.equal(rows.length, 3);
   assert.deepEqual(rows[1].slice(0, 3), ["01", "00:00", "Ready"]);
   assert.equal(rows[2][0], "Total");
   assert.equal(rows[2][2], "0 of 1 shot");
-  assert.equal(csvToRows(buildCsv()).length, 1);
+  assert.equal(csvToRows(buildCsv(liveDoc())).length, 1);
 });
 
 test("the breakdown sheet: the old columns where they were, when each item is first needed and its group after them", () => {
   demo();
-  const rows = sheet(buildBreakdownCsv());
+  const rows = sheet(buildBreakdownCsv(liveDoc()));
   assert.deepEqual(rows[0], ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
                              "First scene at", "Group"]);
   const item = (name) => rows.find((r) => r[1] === name);
@@ -142,7 +143,7 @@ test("the breakdown sheet: the old columns where they were, when each item is fi
 
 test("the b-roll sheet: the scene's start after the columns it had", () => {
   demo();
-  const rows = sheet(buildBrollCsv());
+  const rows = sheet(buildBrollCsv(liveDoc()));
   assert.deepEqual(rows[0], ["Scene", "Shot", "Status", "Flagged", "Location", "Props", "Cuts against", "Assigned to", "Note", "Description",
                              "Scene start"]);
   assert.equal(rows.length, 10);
