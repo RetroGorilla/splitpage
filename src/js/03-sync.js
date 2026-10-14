@@ -853,8 +853,7 @@ export function applyMerge(opts) {
     if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
     armUndoPoint(S.state.docId);
     if (opts.newBase !== undefined) {
-      baseStateWhy = "merge: " + (opts.source || "");
-      S.baseState = typeof opts.newBase === "function" ? opts.newBase() : opts.newBase;
+      setBaseState(typeof opts.newBase === "function" ? opts.newBase() : opts.newBase, "merge: " + (opts.source || ""));
     }
     renderAbsorbed();
     if (opts.chips) { updateIdentityChip(); updateFileChip(); }
