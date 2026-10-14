@@ -409,7 +409,7 @@ Tooling PRs that landed in the same window: #549 (Node version guard), #550 (mut
 
 `node tools/dep-report.mjs` on the closing tree reports 623 exceptions, 0 new and 0 resolved, so `--prune` has nothing left to remove. Each lane ran `--prune` after merging the base and committed what it removed; the baseline fell by seven entries over the milestone.
 
-The race matrix: 106 cases (105 at the start of 4.22, plus `P1-token`) in 81 rows of the table above, in six case files under `src/test/` (`m4-matrix-boot`, `-continuations`, `-files`, `-hosted`, `-recovery` and `-session`), beside the harness (`_m4-matrix.mjs`) and its own test (`m4-matrix-harness.test.mjs`). Every case is declared `rightToday`; none is `wrongToday`. Run with `SPLITPAGE_M4_GATE=1`, which fails any case still `wrongToday`, all of `src/test/m4-matrix-*.test.mjs` pass. The lifecycle test is `src/test/m4-lifecycle.test.mjs`.
+The race matrix: 110 cases (105 at the start of 4.22, plus `P1-token` here and `F5-saveas`, `F5-replaced`, `F9-warn` and `K1b` from the Astra follow-ups, PR #572) in 81 rows of the table above, in six case files under `src/test/` (`m4-matrix-boot`, `-continuations`, `-files`, `-hosted`, `-recovery` and `-session`), beside the harness (`_m4-matrix.mjs`) and its own test (`m4-matrix-harness.test.mjs`). Every case is declared `rightToday`; none is `wrongToday`. Run with `SPLITPAGE_M4_GATE=1`, which fails any case still `wrongToday`, all of `src/test/m4-matrix-*.test.mjs` pass. The lifecycle test is `src/test/m4-lifecycle.test.mjs`.
 
 The #320 case on the closing tree: open -1.4% and merge -4.4% against `d18adde` on a Linux rerun (the 4.5 record, on Windows, had `c4d5944` at +35% and +32%). See [performance-record.md](performance-record.md).
 
