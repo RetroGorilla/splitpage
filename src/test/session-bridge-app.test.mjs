@@ -222,9 +222,8 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
       stateJson: JSON.stringify(mine),
       baseJson: JSON.stringify(original)
     });
-    assert.ok(heard.includes("recovery"), "heard: " + heard.join(", "));
-    assert.equal(heard.includes("edit"), false);
-    assert.ok(session.epoch() > epoch);
+    assert.deepEqual(heard, [], "the file opens at the transition, so a subscription made for the old document hears nothing of the merge");
+    assert.equal(session.epoch(), epoch + 2, "the file opens an epoch at the transition and the recovery merge opens another");
     assert.equal(session.generation(), gen);
     assert.equal(held(), S.state);
     assert.equal(S.state.rows[0].audioText, "Unsaved here.");
@@ -243,11 +242,11 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   assert.equal(held(), S.state);
 });
 
-test("importing a file is an adoption that marks the document dirty and advances S.editSeq as before, with no edit generation", async () => {
+test("importing a file is an adoption at the transition that marks the document dirty and advances S.editSeq as before, with no edit generation", async () => {
   const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
   listen();
   await openProjectFile(new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), null, { skipSnapshot: true });
-  assert.deepEqual(heard, ["adopt"]);
+  assert.deepEqual(heard, [], "the import is a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(S.editSeq, seq + 1);
