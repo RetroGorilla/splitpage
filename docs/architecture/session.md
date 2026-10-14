@@ -247,6 +247,8 @@ Typing that ends where it began (#427, 3.12; Adam's decisions on #380) and cance
   - Known limits, recorded in DOCUMENT-MODEL.md §7: an undo or redo of the composition's own updates and then a cancel can give back a redo that shows the cancelled text, only in a browser whose composition survives Ctrl+Z (#459); and a co-editor's change reaching the cell during the composition keeps the cancel's entries as made.
 - **`undoSerial()`** is a flush and the history serial, with no break in coalescing. The Writer's Ctrl+Y reopen compares it, so typing that left no step still blocks the reopen. In a Writer you have just opened, the first Ctrl+Z after a cancelled composition or a type-and-delete closes it (Adam's decision, kept).
 
+Milestone 6 changes the replay path: it becomes a transaction of its own with the commit contract in [milestone-6.md](milestone-6.md) step 6.2. Today `commit` in `document-session.ts` advances the generation, records an undo entry and publishes `"edit"` unconditionally, so it cannot be reused as it is for a replay.
+
 Outside the adapter: the replay path above (it reaches the session only afterwards, as `afterUndoApplied`'s `markDirty`); the composition marks and drops above; `foldIntoEdit`; comment and reply draft undo (INV-55), which is untouched; the `undo()`/`redo()` calls from `21-events.js`; and 12a's own `restart()`, which is how the session learns of adoption.
 
 ## 7. Testing a command
