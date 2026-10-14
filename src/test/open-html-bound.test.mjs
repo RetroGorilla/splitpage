@@ -104,3 +104,36 @@ test("an ordinary saved .html file opens to the source data, identical to an unb
   const plain = new window.DOMParser().parseFromString(EXPORT, "text/html");
   assert.ok(elements <= weight(plain) + 2);
 });
+
+test("over the bound, the script data keeps its bold and italic (#501)", async () => {
+  const markup = SHELL_HEAD + STATE_SCRIPT + SHAPES["distinct formatting tags then many paragraphs"]() + SHELL_TAIL;
+  const { parsed } = await parsedWithCount(markup);
+  const rich = parsed.state.rows.find((row) => row.id === "rich-row");
+  assert.match(rich.visualText, /<strong>bold<\/strong> <em>italic<\/em>/);
+  assert.match(rich.audioText, /<strong>spoken<\/strong>/);
+});
+
+test("the script data is read from the real script, not from a comment or another script's text", async () => {
+  const decoy = JSON.stringify({ title: "Decoy", rows: [] });
+  const markup = SHELL_HEAD +
+    '<!-- <script id="state-data" type="application/json">' + decoy + "</script> -->" +
+    '<script>var shell = \'<script id="state-data" type="application/json">' + decoy + "';</script>" +
+    '<div title="<script id=state-data>">x</div>' +
+    STATE_SCRIPT + SHELL_TAIL;
+  const { parsed } = await parsedWithCount(markup);
+  assert.equal(parsed.state.title, SOURCE.title);
+  assert.equal(JSON.stringify(JSON.parse(JSON.stringify(parsed.state))), JSON.stringify(unboundedState(markup)));
+});
+
+test("attributes in any order and quoting, and CRLF line ends, still find the script data", async () => {
+  const markup = SHELL_HEAD + "<script type=application/json ID='state-data'>\r\n" + SOURCE_JSON.replace(/<\//g, "<\\/") + "\r\n</SCRIPT >" + SHELL_TAIL;
+  const { parsed } = await parsedWithCount(markup);
+  assert.equal(parsed.state.title, SOURCE.title);
+  assert.equal(JSON.stringify(JSON.parse(JSON.stringify(parsed.state))), JSON.stringify(unboundedState(markup)));
+});
+
+test("a file whose script data is not a document is refused as before", async () => {
+  const markup = SHELL_HEAD + '<script id="state-data" type="application/json">[1, 2]</script>' + SHELL_TAIL;
+  const parsed = await parseProjectFileState(file(markup));
+  assert.deepEqual(parsed, { error: "not-splitpage" });
+});

@@ -236,6 +236,7 @@ async function openImport() {
   disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   handle.name = "reload.txt";
   await openProjectFile(disk, handle, { skipSnapshot: true });
+  hearReplacement();
 }
 
 async function reloadWith(file) {
