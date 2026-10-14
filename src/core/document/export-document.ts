@@ -57,7 +57,13 @@ export type ExportDocument = Frozen<{
   broll: ExportShotEntry[];
 }>;
 
-export type ExportCaptureOptions = { docId?: string | null | undefined };
+export interface ExportStamp {
+  readonly rev: number;
+  readonly lastEditedBy: string;
+  readonly lastEditedAt: string;
+}
+
+export type ExportCaptureOptions = { docId?: string | null | undefined; stamp?: ExportStamp | null | undefined };
 
 function jsonCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -85,7 +91,8 @@ export function buildExportDocument(
   opts?: ExportCaptureOptions | null
 ): ExportDocument {
   const copied = jsonCopy(source);
-  const document = opts && opts.docId ? Object.assign({}, copied, { docId: opts.docId }) : copied;
+  const forked = opts && opts.docId ? Object.assign({}, copied, { docId: opts.docId }) : copied;
+  const document = opts && opts.stamp ? Object.assign({}, forked, opts.stamp) : forked;
   const people = Array.isArray(document.people) ? document.people as ExportPerson[] : [];
   return deepFreeze({
     document: document,
