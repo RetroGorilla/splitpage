@@ -249,3 +249,45 @@ This machine was shared with other lanes throughout, and it shows. `d18adde`'s s
 The two cases that ingest ten new pictures, open and merge, are about a third slower on `c4d5944` than on `d18adde` (about 99 and 96 ms), and `1aa1eed` reads the same. Each set alone gives the same answer (+35.7% and +31.1%, then +33.7% and +33.4%), so the slowdown is far outside the spread. The cost came in between `d18adde` and `c4d5944`, and the commits since have not moved it. The size matches the extra hash of ten 1 MiB pictures that the PR review measured in Node (96 to 100 ms).
 
 The load from IndexedDB was 102 to 106 ms on every `d18adde` run and 102.7 to 108.5 on four of `c4d5944`'s six; the other two (set 2 runs 2 and 4) read 122 ms, and the second of them was taken with the CPU quiet, so the +3.6% of the median over all runs is not explained by load alone. The code is the same on both builds (`loadBlob` calls `intern` on `d18adde` too, so its extra hash and copy is not new), `1aa1eed` reads 104.6, and the four ordinary `c4d5944` runs equal `d18adde`'s, so I read the 122 ms runs as store timing noise, but this data cannot prove it. A trim of the ingestion port leaves the load path as it is. Whether the 10% line named in E14 calls for the trim is for 4.19; both ingesting cases are above it by a factor of three.
+
+## Image-heavy load and merge, #320, on milestone 4's closing tree (Linux)
+
+Recorded 2026-10-14 by `node tools/perf-record.mjs --only images` (PR 4.22), on `511dce0` plus the 4.22 branch (the same app source as `511dce0` except for the L1c fix, which touches no image path). The 4.5 record above was taken on Windows; this rerun is on the Linux container the 4.22 thread runs in, so its absolute numbers are not comparable with those, and the comparison that counts is between the three builds inside this run. A rerun on the Windows machine under 4.5's exact conditions can be added at the gate and would supersede this one.
+
+The tool as committed on 4.0-development was copied into `git worktree` checkouts of `d18adde` (where milestone 2 started) and `c4d5944` (milestone 2's final tree), each built with `node build.mjs`, and the three builds ran in turn, `d18adde`, `c4d5944`, closing tree, three times (nine runs, one at a time). Each run is three trials on pictures no earlier trial used.
+
+### Conditions
+
+- Machine: linux 6.18.44-fc-v114 x64, Intel(R) Xeon(R) Processor @ 2.10GHz x4, 15.7 GB, Node v22.22.2
+- Browser: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36, headless, viewport 1400x900 at 1x. The same browser ran every build
+- Load at the time: the tool read 0 to 4% of the CPU busy before and after each run, except the second closing-tree run (37% before) and the second `c4d5944` run (61% after). No other test ran during the nine runs
+- Fixture, open, load from IndexedDB and merge: as in the 4.5 record above
+
+### Results, median of three runs (ms; each run is the median of its 3 trials)
+
+| Case | `d18adde` | `c4d5944` | Closing tree |
+| --- | --- | --- | --- |
+| open, 10 pictures | 626.8 | 741 | 617.8 |
+| load from IndexedDB, 10 pictures | 147.2 | 134.5 | 151 |
+| merge, 10 + 10 pictures | 792.3 | 899.4 | 757.8 |
+
+Against `d18adde`:
+
+| Case | `c4d5944` | Closing tree |
+| --- | --- | --- |
+| open | +18.2% | -1.4% |
+| load from IndexedDB | -8.6% | +2.6% |
+| merge | +13.5% | -4.4% |
+
+### Every run (ms, the three runs of each build in order; each entry is that run's median trial)
+
+| Build | open | load from IndexedDB | merge |
+| --- | --- | --- | --- |
+| `d18adde` | 618.5, 626.8, 638.5 | 169, 141.2, 147.2 | 866.5, 792.3, 662.3 |
+| `c4d5944` | 741, 705.9, 747.7 | 132.6, 134.5, 155.4 | 899.4, 938.6, 831.3 |
+| Closing tree | 615.8, 617.8, 651.5 | 140.4, 171, 151 | 820.9, 757.8, 695.6 |
+
+### Reading it
+
+The direction matches the 4.5 record: the two cases that ingest new pictures were slower on `c4d5944` than on `d18adde` (here by 18% and 14%, against 35% and 32% on Windows; a different machine, so the sizes are not comparable). The closing tree is not slower than `d18adde` on either: open -1.4% and merge -4.4%, well inside the 10% line of E14, which is what 4.19's trim of the second hash and copy (`905a5d03`) was for. The load from IndexedDB reads +2.6%, inside the spread of the `d18adde` runs themselves (141 to 169 ms); the plan's note that this path hashes once more than ingestion stands, and 4.19 left it as it was. The spread within a build is large on this machine (the `d18adde` merge runs span 662 to 867 ms), so the figures show "not slower", not a gain.
+

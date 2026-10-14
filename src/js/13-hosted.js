@@ -987,8 +987,12 @@ export async function publishToServer(opts) {
     reason: "publishToServer: what the server just accepted"
   });
   if (outcome.kind === "obsolete") {
-    showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
-      "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
+    var now = captureOperation();
+    var sameDocument = now.epoch === op.epoch && now.docId === op.docId && now.destination === op.destination;
+    showToast("Published “" + (published.title || body.id) + "” to the server, but " +
+      (sameDocument ? "your sign-in changed while it was uploading, so this script was left as it was. "
+        : "you had opened another script by then, so that one was left as it was. ") +
+      "You can open the published copy from File ▸ Open from the server….", "warn");
     return false;
   }
   if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
