@@ -491,7 +491,7 @@ rightToday("P3", "typing during a publish leaves the document dirty (#248)", hos
   assert.deepEqual(S.baseState.rows.map((r) => r.audioText), ["One.", "Two."], "the baseline is what the server accepted");
 }));
 
-wrongToday("P1", "a publish whose connection changed reports the document it created on the old server", hostedCase(async ({ server, held }) => {
+rightToday("P1", "a publish whose connection changed reports the document it created on the old server", hostedCase(async ({ server, held }) => {
   startUnpublished(script("To publish", idOf("a")));
   const before = new Set(toastElements());
   holdFirst(held, "POST", "api/docs");
@@ -503,7 +503,7 @@ wrongToday("P1", "a publish whose connection changed reports the document it cre
   await settle();
   assert.equal(server.docs.size, 1, "the old server did create the document");
   assert.ok(newToasts(before).some((text) => text.includes("To publish") || text.includes("srv-new-1")), "the document created on the old server is reported");
-}), /the document created on the old server is reported/);
+}));
 
 rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge ancestor", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
