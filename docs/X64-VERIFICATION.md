@@ -156,7 +156,7 @@ legacy launcher; it can't be invoked here to bootstrap Node because it is
 itself a Node script and needs Node already):
 
 ```powershell
-$v = "22.22.2"
+$v = "24.22.0"
 Invoke-WebRequest "https://nodejs.org/dist/v$v/SHASUMS256.txt" -OutFile sums.txt
 Invoke-WebRequest "https://nodejs.org/dist/v$v/node-v$v-win-x64.zip" -OutFile node.zip
 $expected = (Select-String "node-v$v-win-x64.zip" sums.txt).Line.Split(" ")[0]
@@ -165,13 +165,10 @@ if ($actual -ne $expected) { throw "checksum mismatch: expected $expected got $a
 Expand-Archive node.zip -DestinationPath .cache
 Rename-Item ".cache\node-v$v-win-x64" ".cache\node-win-x64"
 $env:PATH = "$PWD\.cache\node-win-x64;$env:PATH"
-node --version   # expect v22.22.2
+node --version   # expect v24.22.0
 ```
 
-(`v22.22.2` is the version this repo's own portable Node is pinned to —
-`tools/fetch-runtime.mjs:38` (`NODE_VERSION` default) and confirmed by
-`.cache/node-win-x64/node.exe --version` on the ARM64 laptop, which prints
-`v22.22.2`.) If a system Node is already on PATH and is a reasonably
+(`v24.22.0` is the version `.nvmrc` pins.) If a system Node is already on PATH and is a reasonably
 current LTS/current release, skip this and use it instead — the exact
 minor version doesn't matter for running these scripts, only for what
 gets embedded in the legacy zip's payload (not built in this round).

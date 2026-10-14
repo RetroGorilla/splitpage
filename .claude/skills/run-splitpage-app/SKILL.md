@@ -50,7 +50,7 @@ where you are, never by what you are testing:
 
 | | `driver.ps1` | `driver.mjs` |
 | --- | --- | --- |
-| Runs on | Windows only | anywhere with Node 22 + a Chromium |
+| Runs on | Windows only | anywhere with Node 24 + a Chromium |
 | Built from | PowerShell 5.1 + .NET + `msedge.exe` | Node built-ins + Playwright's Chromium |
 | Suite runner | `run-tests.ps1` (parallel lanes) | `tools/run-suites.mjs` (parallel lanes; see "Driving it from the cloud") |
 
@@ -59,8 +59,8 @@ under it and the Linux half under `driver.mjs`. `driver.mjs` also lets a
 source change be driven from the Linux cloud container, which has no
 PowerShell and no Edge, and it is what CI runs.
 
-Building needs Node 22 (22.22.2 or later) or 24 (24.15.0 or later), per
-`package.json`'s `engines`; `.nvmrc` pins the one CI uses. If `node build.mjs`
+Building needs Node 22 (22.22.2 or later), 24 (24.15.0 or later) or 26+, per
+`package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one CI uses. If `node build.mjs`
 cannot run, you cannot test a source change at all, and saying so is better
 than testing a stale `index.html`.
 

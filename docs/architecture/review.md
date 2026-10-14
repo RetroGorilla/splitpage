@@ -30,7 +30,7 @@ A PR that moves code keeps the bugs it moves. Each one is filed as an issue and 
 
 ## 3. Automated checks
 
-- **CI on PRs into 4.0 and main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core, content-security-policy and persistence browser suites, and a Node 24 run of `verify`. `docker.yml` runs when app or server inputs change.
+- **CI on PRs into 4.0 and main** (the `gate` job): lint, type check, dependency gate, comment gate, the build with its `sw.js` stamp check, `test:all`, the core, content-security-policy and persistence browser suites. `docker.yml` runs when app or server inputs change.
 - **Locally before review:** the browser suites for the affected areas, chosen with the change table in [testing.md](testing.md#what-to-run-for-which-change).
 - **Full browser run before merge** for:
   - changes to `02-state.js` or its shim, `build.mjs`, or the test harness or driver

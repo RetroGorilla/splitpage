@@ -150,7 +150,7 @@ run whose checks all passed.
 
 The owner's server does not use the artifact. `deploy.sh` pulls `main` and
 builds the root `Dockerfile`, which is two-stage: `npm ci` + `node build.mjs`
-in a `node:22-alpine` build stage, then only the built `index.html`/`sw.js`,
+in a `node:24-alpine` build stage, then only the built `index.html`/`sw.js`,
 the static files, `VERSION` and `server/` in the runtime stage. Docker is not
 on the Windows machine, so `.github/workflows/docker.yml` is where that image
 is really built: `bash -n` and shellcheck over `deploy.sh`, a legacy-builder
