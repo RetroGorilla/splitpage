@@ -272,7 +272,7 @@ adoptionLag("T2b", "an opened file opens its epoch at the transition, not at the
   assertAdoptedAtOnce(events, epoch);
 });
 
-adoptionLag("T2c-open", "a server document opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2c-open", "a server document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before server"));
   const served = script("From the server", { docId: "d" + "6".repeat(32) });
   const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-b") ? { status: 200, body: { id: "server-b", rev: 3, state: served } } : null));
@@ -318,7 +318,7 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   }
 });
 
-adoptionLag("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before reopen"));
   const served = script("Reopened from the server", { docId: "d" + "d".repeat(32) });
   const held = serverFetch((r) => {

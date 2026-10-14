@@ -29,8 +29,6 @@ const SITES = [
   "02b-doc-id.js#adoptRestoredState",
   "02b-doc-id.js#assign",
   "03-sync.js#adopt",
-  "13-hosted.js#resumeServerDoc",
-  "13-hosted.js#openServerDoc",
   "18-local-files.js#adoptProjectState",
   "18-local-files.js#loadFileIntoEditor",
   "20g-drafts.js#recoverDraftAsUnsavedCopy",
@@ -126,23 +124,8 @@ function migrated(title) {
   return migrateRows(rawDoc(title));
 }
 
-test("there are twelve S.state assignments, in these functions", () => {
+test("there are ten S.state assignments, in these functions", () => {
   assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
-});
-
-test("13-hosted resumeServerDoc assigns `theirs`, which is migrateDocument's answer and nothing else", () => {
-  const site = assignments().filter((a) => a.site === "13-hosted.js#resumeServerDoc")[0];
-  assert.ok(ts.isIdentifier(site.node.right) && site.node.right.text === "theirs", "S.state = " + site.node.right.getText());
-  const writes = [];
-  walk(site.fn, (node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "theirs") writes.push(node.initializer);
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isIdentifier(node.left) && node.left.text === "theirs") writes.push(node.right);
-  });
-  assert.equal(writes.length, 1, "theirs is set once in resumeServerDoc");
-  const init = writes[0];
-  assert.ok(init && ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === "migrateDocument",
-    "theirs = " + (init ? init.getText() : "nothing"));
 });
 
 test("boot from the seed: 00-prelude and init assign null, then the transition API's live-document port the seed script, a migrateRows fixed point", () => {
@@ -184,7 +167,7 @@ test("03-sync applyMerge's adopt, nothing to merge: theirs as handed over, migra
   assert.equal(fixedPoint(raw), true, "in place: the very object handed over is now a migrateRows fixed point");
 });
 
-test("13-hosted openServerDoc: migrateDocument's answer, a migrateRows fixed point", async () => {
+test("13-hosted openServerDoc: migrateDocument's answer through the transition API's live-document port, a migrateRows fixed point", async () => {
   const realFetch = globalThis.fetch;
   const desktop = S.DESKTOP;
   globalThis.fetch = async () => new Response(JSON.stringify({ id: "doc1", rev: 3, state: rawDoc("From the server") }),
@@ -192,7 +175,7 @@ test("13-hosted openServerDoc: migrateDocument's answer, a migrateRows fixed poi
   S.DESKTOP = {};
   try {
     const got = await drive(() => openServerDoc("doc1"));
-    assert.equal(fixedPoint(only(got, "13-hosted.js#openServerDoc")), true);
+    assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
   } finally {
     globalThis.fetch = realFetch;
     S.DESKTOP = desktop;
