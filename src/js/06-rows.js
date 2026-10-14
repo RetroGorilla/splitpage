@@ -13,7 +13,7 @@ import { queueAutoSave } from "./14-export.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import { cellHtml, mediaHalves, splitSceneCommand, textCut } from "../application/commands/split-join.ts";
-import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { onDocumentReplaced, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
@@ -405,6 +405,15 @@ export function sessionVideoUrl(link) {
   }
   return sessionVideoUrls[key];
 }
+
+export function releaseSessionVideoUrls() {
+  Object.keys(sessionVideoUrls).forEach(function (key) {
+    try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
+    delete sessionVideoUrls[key];
+  });
+}
+
+onDocumentReplaced(releaseSessionVideoUrls);
 
 export function openVideoFile(link) {
   var name = link.name || "that video";
