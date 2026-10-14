@@ -10,6 +10,11 @@ const { setBaseState, cloneState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
 const { setAutoSaveEnabled, autoSaveTiming, legacySavePorts } = await import("../js/14-export.js");
 const { startSaves } = await import("../legacy/save-bridge.ts");
+const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
+const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
+const { documentDestinationPort } = await import("../js/03-sync.js");
+
+startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 
 startSaves(legacySavePorts({
   capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.home, destinationGeneration: 0, generation: 0, connection: homeMod.conn, revision: null }),
@@ -61,12 +66,9 @@ function stubTimers() {
 
 function startOn(state, opts) {
   opts = opts || {};
-  S.state = state;
   S.serverMode.readOnly = false;
   S.serverMode.available = true;
-  S.docIdWrittenOut = !!opts.written;
-  setHome("none");
-  setBaseState(cloneState(state), "test: the document as opened");
+  documentTransitions().open({ from: { document: state }, reason: "test: the document as opened", destination: NO_DESTINATION, writtenOut: !!opts.written });
   clearDirty();
   S.editSeq = 0;
   if (opts.dirty) markDirty();

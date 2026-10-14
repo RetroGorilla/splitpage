@@ -57,7 +57,7 @@ import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-d
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentTransitions } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
@@ -934,6 +934,15 @@ export async function openServerDoc(id) {
   return true;
 }
 
+function serverLabel(c) {
+  try { return new URL(c.serverUrl).host || "the other server"; } catch (e) { return "the other server"; }
+}
+
+function reportPublishOnLeftServer(title, via) {
+  showToast("Published “" + title + "” to " + serverLabel(via) + ", but this tab had switched to another server by then, " +
+    "so the script you have open was left unpublished. The published copy stays on that server.", "warn", true);
+}
+
 export async function publishToServer(opts) {
   opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
   if (S.serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
@@ -951,9 +960,9 @@ export async function publishToServer(opts) {
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
-  var via = conn;
+  var op = captureOperation();
+  var via = op.connection;
   var transport = serverTransport(via);
-  var homeAtStart = home;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
       return sendWithBlobs(transport, published, function (sending, acceptMissing) {
@@ -967,19 +976,22 @@ export async function publishToServer(opts) {
     else handleApiError(err, "Could not put that on the server");
     return false;
   }
-  if (!stillOnServer(via)) return false;
-  if (S.state.docId !== oldId || home !== homeAtStart) {
+  if (!stillOnServer(via)) {
+    reportPublishOnLeftServer(published.title || body.id, via);
+    return false;
+  }
+  var outcome = documentTransitions().publish(op, {
+    destination: { kind: "server", fields: { id: body.id, rev: body.rev || 1 } },
+    docId: forkDocId || oldId,
+    baseline: published,
+    reason: "publishToServer: what the server just accepted"
+  });
+  if (outcome.kind === "obsolete") {
     showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
       "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
     return false;
   }
-  setHome("server", { id: body.id, rev: body.rev || 1 });
-  setBaseState(published, "publishToServer: what the server just accepted");
-  if (forkDocId) {
-    S.state.docId = forkDocId;
-    copyDocHistorySafe(oldId, forkDocId);
-  }
-  S.docIdWrittenOut = true;
+  if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
   if (S.editSeq === seqAtPublish) clearDirty();
   else scheduleAutoSave();
   updateFileChip();
