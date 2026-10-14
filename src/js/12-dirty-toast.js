@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { home, homeConn } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
@@ -16,10 +16,11 @@ import {
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { REVIEW_ONLY, noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
 import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
+import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
 
 S.saveButtonBusy = false;
 
@@ -58,7 +59,7 @@ provideSessionEffects({
     if (change.changes.saveNow) queueAutoSave();
   },
   edit: function () {
-    return reviewMode() ? { allowed: false, reason: REVIEW_ONLY } : { allowed: true };
+    return editCapability(authorityOf(homeConn()));
   }
 });
 
