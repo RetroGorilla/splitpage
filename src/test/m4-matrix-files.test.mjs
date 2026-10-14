@@ -539,6 +539,28 @@ test("an import writeback that lands after another file was imported leaves the 
   assert.equal(replaced.dirty, true, "and still unsaved");
 }));
 
+test("a writeback queued behind another writes nothing once a different file was imported while it waited", scene(async () => {
+  const gates = createGates();
+  const target = createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000, gates: gates });
+  await importFrom(target);
+  edit("Typed before the write backs.");
+  gates.hold("file.close");
+  const first = saveBackToFile();
+  await gates.arrived("file.close");
+  const second = saveBackToFile();
+  const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
+  await openProjectFile(await other.handle.getFile(), other.handle);
+  const replaced = homeModule.home;
+  edit("Typed in the other file.");
+  gates.release("file.close");
+  await first;
+  await second;
+  assert.equal(target.commits.length, 1, "the first write back reached its own file");
+  assert.equal(other.commits.length, 0, "the queued write back did not write the file imported after it was asked for");
+  assert.equal(homeModule.home, replaced, "the other file is still the import home");
+  assert.equal(replaced.dirty, true, "and still unsaved");
+}));
+
 function noDownloads() {
   const clicks = [];
   const make = URL.createObjectURL;
