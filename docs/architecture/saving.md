@@ -108,7 +108,9 @@ When a queue starts a request it fixes three things before calling the writer:
 2. An `OperationContext`, from the ownership port's `capture`.
 3. A `SaveJob`: `request`, `generation`, `operation()` (the captured context), `owns()` (4.14: `ownership.stillOwns` on that context, for a writer that must stop mid-run) and `moved()`.
 
-`moved()` recaptures the context. A writer calls it when it deliberately changes the destination mid-run, which Save As does when it retargets the document to the file just picked. Without it the run would see its own retarget as a loss of ownership.
+`moved()` recaptures the context. A writer calls it when it deliberately changes the destination mid-run, which Save As does when it retargets the document to the file just picked. Without it the run would see its own retarget as a loss of ownership. It also re-keys the running queue to the destination current now (unless another queue already has that key), so a Save asked for while a Save As is still writing waits behind it instead of opening a second writer on the new file (F5-saveas, PR #572). Save As calls it after a fork gives the copy a new document id, so that change is not reported as a reopen (F9-warn).
+
+Each queue entry records the session epoch it was asked in. A request joins only a waiting entry of the same epoch, and when a queue reaches an entry from an earlier epoch it settles `obsolete` (`here: false`) without calling the writer, so a save queued before a document was replaced never runs against the replacement (F5-replaced, PR #572, b47fe86).
 
 The writer port returns a `WriterResult`, which the coordinator judges:
 
