@@ -15,9 +15,10 @@ on `2cc8bf2` itself.
 | Gate requirement | Result | Status |
 | --- | --- | --- |
 | Full Windows browser run, plain | 10378/10378 checks across 194 suites | passed |
-| Full Windows browser run, caches frozen (`SPLITPAGE_FREEZE_CACHES=1`) | not run | **not run** |
-| Electron smoke, dev target, every group | the groups below, each run alone, all passed | passed for the groups listed; the one-command `--only-target dev` run over every group was not made |
-| Windows x64 packaged check (stage, build, `verify-dist.mjs --arch x64`, packaged-x64 smoke) | not run | **not run** |
+| Full Windows browser run, caches frozen (`SPLITPAGE_FREEZE_CACHES=1`) | 10572/10572 checks across 194 suites | passed |
+| Electron smoke, dev target, every group | `--only-target dev`, one invocation: 974/974, 0 skipped (the groups run alone earlier are listed below) | passed |
+| Windows x64 packaged check (stage, build, `verify-dist.mjs --arch x64`, packaged-x64 smoke) | stage and build exit 0; verify-dist 6/6; packaged smoke 974/974 | passed |
+| `npm run verify` | exit 0; `test:all` 254 of 254 files | passed |
 | External review | Astra (Codex CLI), 2026-10-14: 6 bugs reported, 4 fixed in #572, 2 deferred; 4 modularity suggestions accepted and scheduled | recorded ([below](#external-review)) |
 | Every matrix case `rightToday` | 110 cases, none `wrongToday` | passed |
 | Lifecycle test (E9) and capture-contract tests (E8) | `m4-lifecycle.test.mjs` and `export-capture-app.test.mjs` pass in the matrix gate run and `npm run verify` of #571 | passed |
@@ -26,9 +27,10 @@ on `2cc8bf2` itself.
 | Existing five repaired defects stay fixed (D16) | their suites are in the Windows run (249, 261, 22, and `publish-in-flight` in `npm run verify`) | passed |
 | Linux full run and native ARM64 | moved to the 4.0 release gate | not run here |
 
-Two requirements of the plan's gate are open: the frozen-caches browser run
-and the Windows x64 packaged check. Neither was run. They are listed under
-[Blockers for Adam](#blockers-for-adam).
+Every run ran once, on `2cc8bf2` itself, with no flake and no rerun. The
+runs were made in two parts on 2026-10-14 (the plain browser run and the
+smoke groups first; the frozen-caches run, the packaged check, the whole dev
+smoke and `npm run verify` after), on the same machine and tree.
 
 ## Code
 
@@ -56,8 +58,18 @@ The suites that were flaky or hot during the milestone passed: 77 (51/51), 92
 first run; it had failed about one run in three earlier with a test-tool error
 opening the starting file, and no rerun was needed here.
 
-The frozen-caches run (milestone-4.md D1 and the gate list ask for both) was
-not made.
+## Full Windows browser run (caches frozen)
+
+| | |
+| --- | --- |
+| Commit | `2cc8bf2c0a45cce8478c5fe0c190a6174fd538bc` |
+| Date | 2026-10-14 |
+| Machine | Windows 11 Pro 10.0.26300, x64, about 1.2 GB of RAM free at the time |
+| Command | `SPLITPAGE_FREEZE_CACHES=1`, then `run-tests.ps1` over every suite, 4 lanes |
+| Result | `ALL PASS`, 10572/10572 checks across 194 suites |
+| Reruns | none |
+
+The plain run above had 10378 checks over the same 194 suites.
 
 ## Electron smoke (dev target)
 
@@ -79,15 +91,41 @@ Each group ran alone, from `desktop/`, on the dev target, on `2cc8bf2`:
 
 There is no group named "import/open"; open/save covers the import and open
 paths. These are the groups the milestone deferred to the gate, plus two more
-that ran with them. The single `--only-target dev` command over every group
-(milestone 3 recorded 809 checks that way) was not run, so there is no total
-for the desktop smoke.
+that ran with them.
+
+The whole dev smoke then ran as one invocation, `node test/smoke.mjs
+--only-target dev` from `desktop/`: `ALL PASS - 974/974 desktop checks`, 0
+skipped, 306 s, no rerun. Milestone 3 recorded 809 checks the same way.
 
 ## Windows x64 packaged check
 
-Not run. The stage, build, `verify-dist.mjs --arch x64` and packaged-x64 smoke
-steps in [milestone-3-gate.md](milestone-3-gate.md#windows-x64-packaged-check)
-have no counterpart for milestone 4.
+| | |
+| --- | --- |
+| Commit | `2cc8bf2c0a45cce8478c5fe0c190a6174fd538bc` |
+| Date | 2026-10-14 |
+| Machine | Windows 11 Pro 10.0.26300, x64 |
+| Tools | Node v22.23.2 (`.nvmrc` says 22.22.2), Electron 44.4.5 (x64), electron-builder 26.15.3 |
+| Environment | as in [milestone-3-gate.md](milestone-3-gate.md#windows-x64-packaged-check): `desktop/.npmrc` pins ARM64, so the x64 Electron binary was installed by hand; nothing published or uploaded |
+
+| Step | Command | Result |
+| --- | --- | --- |
+| Stage | `node stage.mjs` | exit 0 |
+| Build | `npx electron-builder --config electron-builder.yml --win --x64 --publish never` | exit 0 in 62 s; `win-unpacked`, `win-arm64-unpacked` and the x64, arm64 and combined installers; `Splitpage.exe` is `NotSigned` |
+| Verify | `node verify-dist.mjs --arch x64` | `ALL PASS - 6/6 architecture checks (x64, version 3.1.0)` |
+| Smoke | `node test/smoke.mjs --only-target packaged-x64` | `ALL PASS - 974/974 desktop checks`, 0 skipped, 313 s |
+
+As in milestone 3, the build also produced the arm64 artifacts because
+`electron-builder.yml` lists both architectures; they were not run, and
+building an ARM64 artifact on x64 is not an ARM64 runtime check.
+
+## Fast gates
+
+`npm run verify` on `2cc8bf2`, Windows: exit 0 in 237 s. Lint, types, the
+dependency and comment gates passed; the type-check cases ran 255 passed, 0
+failed; `test:all` ran 254 of 254 files (frontend 136, tests 87, desktop 15,
+tools 16). That covers the node-side milestone checks, including
+`publish-in-flight.test.mjs` among the five repaired defects; the browser
+suites cover 249, 261 and `22-doc-id`.
 
 ## #320 performance rerun
 
@@ -147,12 +185,11 @@ tests. The four `S.state` assigners (target two) are recorded in
 
 ## Blockers for Adam
 
-- **Frozen-caches browser run.** Not run on `2cc8bf2`. Milestone 3 ran both.
-- **Windows x64 packaged check.** Not run.
-- **One-command dev smoke total.** Optional: the groups above all passed, but
-  the single run over every group was not made.
-- **A3, the server-resume takeover race.** Open as a follow-up, not a gate
-  blocker (milestone-4.md's bug rule).
+None from the runs: every run the gate section requires on this machine
+passed on the exact merged tree. The Linux full run and native ARM64 wait for
+the 4.0 release gate, as the gate section says. The external review is
+recorded above with its disposition.
 
-Milestone 4 should not be called closed until the first two are run or Adam
-decides to move them, as he did for ARM64 and Linux.
+One item stays open as a follow-up, not a gate blocker (milestone-4.md's bug
+rule): A3, the server-resume takeover race, to be added as a matrix case with
+its fix.

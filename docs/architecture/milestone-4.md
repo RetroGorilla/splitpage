@@ -432,7 +432,7 @@ The #320 case on the closing tree: open -1.4% and merge -4.4% against `d18adde` 
 | E13 | Held (4.4 and 4.21). The typing and render medians are re-run at the gate |
 | E14 | Held. 4.19 trimmed the second hash and copy; the closing tree is not slower than `d18adde` (performance-record.md) |
 | E15 | Held (`export-capture-app.test.mjs`) |
-| E16 | Recorded in [milestone-4-gate.md](milestone-4-gate.md): the Windows run, the dev smoke groups, the perf rerun and the external review; the frozen-caches run and the x64 packaged check are open there |
+| E16 | Recorded in [milestone-4-gate.md](milestone-4-gate.md): the Windows runs (plain and frozen), the dev smoke, the x64 packaged check, the perf rerun and the external review |
 
 ### Where the build differs from the plan
 
