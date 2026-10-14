@@ -1,99 +1,53 @@
 import { S } from "./_state.js";
-import { productionEntries, tagCategory } from "./07-production-tags.js";
-import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
 import {
   brollSummaryText, captureExportDocument, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
 } from "./14b-export-kit.js";
-import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
-import { exportBaseName, exportFileName } from "./18-local-files.js";
+import { breakdownRows } from "./14c-export-projections.js";
+import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14d-export-text.js";
+import { exportToggleOptions } from "./14e-export-formats.js";
+import { narrationRows } from "./15-docx.js";
+import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
 import { onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { rowImage } from "../core/document/media.ts";
+import { tagCategory } from "../core/production/looks.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";
+import { exportFormats } from "../legacy/export-formats.ts";
 import { cellOf } from "../legacy/richtext.ts";
 
 var LAST_EXPORT_KEY = "splitpage-last-export";
 
-export var EXPORT_FORMATS = [
-  { id: "pdf", group: "whole", name: "PDF", ext: ".pdf", icon: "i-file",
-    purpose: "To print, or to send someone to read", action: "export-pdf", pictures: true, extras: true },
-  { id: "docx", group: "whole", name: "Word", ext: ".docx", icon: "i-file",
-    purpose: "To keep writing in Word or Google Docs", action: "export-docx", pictures: true, extras: true },
-  { id: "md", group: "whole", name: "Markdown", ext: ".md", icon: "i-file",
-    purpose: "Plain text that reads anywhere", pictures: true, extras: true,
-    option: "Shape", choices: [
-      { value: "stacked", label: "Stacked", action: "export-md" },
-      { value: "table", label: "Two columns", action: "export-md-table" }
-    ] },
-  { id: "csv", group: "whole", name: "Spreadsheet", ext: ".xlsx / .csv", icon: "i-file",
-    purpose: "A row per scene, for Excel, Sheets or Numbers",
-    option: "Format", choices: [
-      { value: "xlsx", label: "Excel (.xlsx)", action: "export-xlsx" },
-      { value: "csv", label: "CSV (.csv)", action: "export-csv" }
-    ] },
-  { id: "html", group: "whole", name: "SplitShare", ext: ".html", icon: "i-globe",
-    purpose: "The script and the whole app in one file. Any device, nothing to install", action: "export-html", pictures: true },
-  { id: "narration", group: "part", name: "Narration only", ext: ".docx / .txt", icon: "i-mic",
-    purpose: "The Audio column, for a voice artist",
-    option: "Format", choices: [
-      { value: "docx", label: "Word (.docx)", action: "export-narration-docx" },
-      { value: "txt", label: "Plain text (.txt)", action: "export-narration-txt" }
-    ],
-    toggle: { id: "directions", label: "Include stage directions",
-              on: narrationIncludesDirections, set: setNarrationIncludesDirections } },
-  { id: "breakdown", group: "part", name: "Breakdown", ext: ".xlsx / .csv", icon: "i-tag",
-    purpose: "Every tagged item, its status and owner",
-    option: "Format", choices: [
-      { value: "xlsx", label: "Excel (.xlsx)", action: "export-breakdown-xlsx" },
-      { value: "csv", label: "CSV (.csv)", action: "export-breakdown" }
-    ] },
-  { id: "packing", group: "part", name: "Packing list", ext: ".pdf", icon: "i-box",
-    purpose: "A checklist for the shoot: out, back, and signed off",
-    option: "List", choices: [
-      { value: "gear", label: "Gear", action: "export-packing-gear" },
-      { value: "prop", label: "Props", action: "export-packing-prop" }
-    ] },
-  { id: "broll", group: "part", name: "B-roll shot list", ext: ".pdf / .xlsx / .csv", icon: "i-camera",
-    purpose: "Every shot, with props, flags and room for notes",
-    option: "Format", choices: [
-      { value: "pdf", label: "PDF, landscape", action: "export-broll-pdf" },
-      { value: "xlsx", label: "Excel (.xlsx)", action: "export-broll-xlsx" },
-      { value: "csv", label: "CSV (.csv)", action: "export-broll-csv" }
-    ] }
-];
+function dialogFormat(card) {
+  var variants = card.variants;
+  var out = {
+    id: card.id, group: card.group, name: card.name, ext: card.ext, icon: card.icon, purpose: card.purpose,
+    pictures: !!card.pictures, extras: !!card.extras
+  };
+  if (card.toggle) out.toggle = card.toggle;
+  if (variants.length === 1 && !variants[0].choice) {
+    out.action = variants[0].action;
+    return out;
+  }
+  out.option = card.option;
+  out.choices = variants.map(function (v) {
+    return { value: v.choice.value, label: v.choice.label, action: v.action };
+  });
+  return out;
+}
 
-export var EXPORT_ACTION_NAMES = {
-  "export-pdf": "PDF",
-  "export-docx": "Word",
-  "export-md": "Markdown",
-  "export-md-table": "Markdown, two columns",
-  "export-xlsx": "Excel",
-  "export-csv": "CSV",
-  "export-html": "SplitShare",
-  "export-narration-docx": "Narration (.docx)",
-  "export-narration-txt": "Narration (.txt)",
-  "export-breakdown-xlsx": "Breakdown (Excel)",
-  "export-breakdown": "Breakdown (.csv)",
-  "export-packing-gear": "Gear packing list",
-  "export-packing-prop": "Props packing list",
-  "export-broll-pdf": "B-roll shot list",
-  "export-broll-xlsx": "B-roll shot list (Excel)",
-  "export-broll-csv": "B-roll shot list (.csv)"
-};
+export function exportFormatList() {
+  return exportFormats.cards().map(dialogFormat);
+}
 
-var ACTION_KINDS = {
-  "export-pdf": "pdf", "export-docx": "docx", "export-md": "md", "export-md-table": "md-table",
-  "export-xlsx": "xlsx", "export-csv": "csv", "export-html": "html", "export-narration-docx": "narration-docx",
-  "export-narration-txt": "narration-txt", "export-breakdown-xlsx": "breakdown xlsx", "export-breakdown": "breakdown",
-  "export-packing-gear": "packing-gear", "export-packing-prop": "packing-prop",
-  "export-broll-pdf": "b-roll pdf", "export-broll-xlsx": "b-roll xlsx", "export-broll-csv": "b-roll csv"
-};
+export function exportActionName(action) {
+  var exporter = exportFormats.byAction(action);
+  return exporter ? exporter.name : "";
+}
 
 export function isExportAction(action) {
-  return Object.prototype.hasOwnProperty.call(EXPORT_ACTION_NAMES, action);
+  return exportFormats.isAction(action);
 }
 
 export function lastExportAction() {
@@ -107,30 +61,20 @@ export function rememberExport(action) {
   try { localStorage.setItem(LAST_EXPORT_KEY, action); } catch (e) { }
 }
 
-function narrationOptions() {
-  return { directions: narrationIncludesDirections() };
+function exportOptionsFor(action) {
+  return exportToggleOptions(exportFormats.byAction(action));
 }
 
 export function exportActionReason(action) {
   if (!S.state) return "Still loading…";
-  if (action === "export-narration-docx" || action === "export-narration-txt") {
-    return narrationRows(captureExportDocument(), narrationOptions()).length ? "" : "The Audio column is empty — there is no narration yet";
-  }
-  if (action === "export-packing-gear" || action === "export-packing-prop") {
-    var catId = action === "export-packing-gear" ? "gear" : "prop";
-    var has = productionEntries().some(function (e) { return e.cat.id === catId; });
-    var cat = tagCategory(catId);
-    return has ? "" : "Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack";
-  }
-  if (action === "export-broll-pdf" || action === "export-broll-xlsx" || action === "export-broll-csv") {
-    return exportBrollScenes(captureExportDocument()).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
-  }
-  return "";
+  var exporter = exportFormats.byAction(action);
+  return exporter && exporter.reason ? exporter.reason(captureExportDocument()) : "";
 }
 
 function formatForAction(action) {
-  for (var i = 0; i < EXPORT_FORMATS.length; i++) {
-    var f = EXPORT_FORMATS[i];
+  var formats = exportFormatList();
+  for (var i = 0; i < formats.length; i++) {
+    var f = formats[i];
     if (f.action === action) return { format: f, choice: null };
     if (f.choices) {
       for (var j = 0; j < f.choices.length; j++) {
@@ -160,10 +104,11 @@ function buildCards() {
   if (!host || host.getAttribute("data-built")) return;
   host.setAttribute("data-built", "1");
   var groups = [["whole", "Whole script"], ["part", "Part of it"]];
+  var formats = exportFormatList();
   host.innerHTML = groups.map(function (g) {
     return '<div class="export-group-head" id="export-g-' + g[0] + '">' + g[1] + '</div>' +
       '<div class="export-cards" role="group" aria-labelledby="export-g-' + g[0] + '">' +
-      EXPORT_FORMATS.filter(function (f) { return f.group === g[0]; }).map(function (f) {
+      formats.filter(function (f) { return f.group === g[0]; }).map(function (f) {
         return '<label class="export-card" data-format="' + f.id + '">' +
           '<input type="radio" name="export-format" value="' + f.id + '">' +
           '<svg class="export-card-icon" aria-hidden="true"><use href="#' + f.icon + '"/></svg>' +
@@ -372,10 +317,10 @@ function previewHtml(action) {
       '<div class="pv-app-page">' + pvScript(title, { app: true, rundown: true }, doc) + '</div></div>';
   }
   if (action === "export-narration-docx" || action === "export-narration-txt") {
-    var spoken = narrationRows(doc, narrationOptions());
+    var spoken = narrationRows(doc, exportOptionsFor(action));
     var paras = spoken.slice(0, 8);
     var txt = action === "export-narration-txt";
-    var said = narrationIncludesDirections() ? { cues: "omit" } : { directions: "omit", cues: "omit" };
+    var said = exportOptionsFor(action).directions ? { cues: "omit" } : { directions: "omit", cues: "omit" };
     var numbers = sceneFacts(doc);
     var words = String(exportFacts(doc).words).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     return (txt ? '<div class="pv-mono pv-md-h">' + title + '</div><br>'
@@ -488,9 +433,9 @@ export function exportSummary(action) {
     }
     if (action === "export-html") bits.push("the whole app built in — read, edit and present it in any browser, on any device");
   } else if (f.format.id === "narration") {
-    bits.push(plural(narrationRows(doc, narrationOptions()).length, "scene") + " of narration");
+    bits.push(plural(narrationRows(doc, exportOptionsFor(action)).length, "scene") + " of narration");
     if (action === "export-narration-docx") bits.push("scene numbers in the margin");
-    bits.push(narrationIncludesDirections() ? "no visuals, breakdown or comments"
+    bits.push(exportOptionsFor(action).directions ? "no visuals, breakdown or comments"
       : "no visuals, stage directions, breakdown or comments");
   } else if (f.format.id === "breakdown") {
     bits.push(plural(breakdownRows(doc).length, "tagged item"));
@@ -515,10 +460,10 @@ export function exportSummary(action) {
 }
 
 export function exportFileNameFor(action) {
-  var kind = ACTION_KINDS[action];
-  if (!kind || !S.state) return "";
-  var bundle = kind === "md" && S.state.rows.some(function (r) { return !!rowImage(r); });
-  return exportFileName(kind, exportBaseName(), { imageBundle: bundle });
+  var exporter = exportFormats.byAction(action);
+  if (!exporter || !S.state) return "";
+  var bundle = !!exporter.bundlesPictures && S.state.rows.some(function (r) { return !!rowImage(r); });
+  return exportFileName(exporter.id, exportBaseName(), { imageBundle: bundle });
 }
 
 function renderSide() {
@@ -533,10 +478,10 @@ function renderSide() {
   whyEl.textContent = why;
   whyEl.hidden = !why;
   var go = el("export-go");
-  go.textContent = "Export " + EXPORT_ACTION_NAMES[action];
+  go.textContent = "Export " + exportActionName(action);
   go.disabled = !!why;
   go.setAttribute("data-export-action", action);
-  EXPORT_FORMATS.forEach(function (f) {
+  exportFormatList().forEach(function (f) {
     var card = document.querySelector('.export-card[data-format="' + f.id + '"]');
     if (!card) return;
     var actions = f.choices ? f.choices.map(function (c) { return c.action; }) : [f.action];
@@ -548,7 +493,9 @@ function renderSide() {
 }
 
 function choose(formatId, focus) {
-  var f = EXPORT_FORMATS.filter(function (x) { return x.id === formatId; })[0] || EXPORT_FORMATS[0];
+  var formats = exportFormatList();
+  var f = formats.filter(function (x) { return x.id === formatId; })[0] || formats[0];
+  if (!f) return;
   chosenFormat = f;
   var radio = document.querySelector('#export-formats input[value="' + f.id + '"]');
   if (radio) {
@@ -587,13 +534,6 @@ export function closeExportDialog() {
   if (back && document.contains(back) && typeof back.focus === "function") back.focus();
 }
 
-export function runExportAction(action) {
-  var btn = document.querySelector('#file-menu [data-file-action="' + action + '"]');
-  if (!btn || btn.disabled) return false;
-  btn.click();
-  return true;
-}
-
 function exportChosen() {
   var action = chosenAction();
   if (!action || exportActionReason(action)) return;
@@ -613,7 +553,7 @@ export function exportAgainItemState() {
   var action = lastExportAction();
   if (!action) return { hidden: true, disabled: false, reason: "", label: "" };
   var why = exportActionReason(action);
-  return { hidden: false, disabled: !!why, reason: why, label: "Export again as " + EXPORT_ACTION_NAMES[action] };
+  return { hidden: false, disabled: !!why, reason: why, label: "Export again as " + exportActionName(action) };
 }
 
 function refreshExportAgainItem() {
@@ -637,6 +577,23 @@ function trapTab(e) {
   var last = focusables[focusables.length - 1];
   if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
+function syncExportMenu() {
+  var host = document.querySelector("#file-menu .menu-hidden-actions");
+  if (!host) return;
+  host.innerHTML = exportFormats.exporters().map(function (e) {
+    return '<button type="button" data-file-action="' + escapeHtml(e.action) + '">' + escapeHtml(e.menuLabel) + '</button>';
+  }).join("");
+}
+
+function refreshExportDialog() {
+  var host = el("export-formats");
+  if (host) host.removeAttribute("data-built");
+  if (!exportDialogOpen()) return;
+  var keep = chosenFormat ? chosenFormat.id : null;
+  buildCards();
+  choose(keep, false);
 }
 
 export function __init() {
@@ -667,13 +624,18 @@ export function __init() {
   el("export-go").addEventListener("click", exportChosen);
   el("export-share-link").addEventListener("click", function () {
     closeExportDialog();
-    runExportAction("collaborate");
+    handleFileMenuAction("collaborate");
   });
   onFileMenuRefresh(refreshExportAgainItem);
+  syncExportMenu();
+  exportFormats.onChange(function () {
+    syncExportMenu();
+    refreshExportDialog();
+  });
 
   window.__exportTest = {
-    formats: EXPORT_FORMATS,
-    names: EXPORT_ACTION_NAMES,
+    formats: exportFormatList,
+    name: exportActionName,
     last: lastExportAction,
     reason: exportActionReason,
     fileName: exportFileNameFor,

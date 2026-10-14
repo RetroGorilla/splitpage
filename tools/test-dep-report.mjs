@@ -1155,11 +1155,11 @@ try {
 
 const WRITERS_OUT_OF_THE_CYCLE = [
   "src/js/14b-export-kit.js", "src/js/14c-export-projections.js", "src/js/15-docx.js", "src/js/16-csv.js",
-  "src/js/16b-xlsx.js", "src/js/17-pdf.js"
+  "src/js/16b-xlsx.js", "src/js/17-pdf.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js"
 ];
 const repoGraph = loadGraph(ROOT);
 const inCycle = new Set(stronglyConnected(repoGraph, false).flat());
-eq("the writers and the export projections are outside every runtime import cycle", WRITERS_OUT_OF_THE_CYCLE.filter((p) => inCycle.has(p)), []);
+eq("the writers, the export projections, the text builders and the format declarations are outside every runtime import cycle", WRITERS_OUT_OF_THE_CYCLE.filter((p) => inCycle.has(p)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

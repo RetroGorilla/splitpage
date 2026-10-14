@@ -12,7 +12,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14-export.js");
+const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14d-export-text.js");
 const { captureExportDocument, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
 
@@ -45,7 +45,7 @@ test("E15: a capture taken with a live connection and a file home holds no token
       assert.equal(text.includes(FILE_NAME), false, "output " + i + " holds the file name");
     });
     assert.deepEqual(Object.keys(doc).sort(),
-      ["broll", "capturedAt", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
+      ["broll", "capturedAt", "clockMode", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
   } finally {
     setHome("none");
     setConnection({});

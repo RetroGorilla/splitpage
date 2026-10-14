@@ -17,7 +17,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { replaceInHtml } from "../js/09-find-replace.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
-import { toMarkdownDoc } from "../js/14-export.js";
+import { toMarkdownDoc } from "../js/14d-export-text.js";
 import {
   __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../js/15-docx.js";

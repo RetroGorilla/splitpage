@@ -1,4 +1,4 @@
-import { breakdownRows, commentBodyText } from "./14c-export-projections.js";
+import { breakdownRows, breakdownTable, brollTable, commentBodyText } from "./14c-export-projections.js";
 import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -8,6 +8,22 @@ import { cellOf } from "../legacy/richtext.ts";
 export function csvEscape(v) {
   var s = String(v == null ? "" : v);
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+export function buildBreakdownCsv(doc) {
+  var t = breakdownTable(doc);
+  var lines = [t.head.join(",")];
+  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
+  if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
+  return "﻿" + lines.join("\r\n");
+}
+
+export function buildBrollCsv(doc) {
+  var t = brollTable(doc);
+  var lines = [t.head.join(",")];
+  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
+  if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
+  return "﻿" + lines.join("\r\n");
 }
 
 var CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
