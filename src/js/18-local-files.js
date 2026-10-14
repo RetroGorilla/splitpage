@@ -3,6 +3,7 @@ import { flushEdits } from "./12a-undo.js";
 import { inertBody } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { requestSave, unsavedFor } from "../legacy/save-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
@@ -679,46 +680,54 @@ function fileConflictHome() {
   return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
 }
 
-export async function saveBackToFile(opts) {
+var WRITTEN_BACK = Object.freeze({ kind: "saved" });
+var WRITEBACK_FAILED = Object.freeze({ kind: "failed" });
+var WRITEBACK_CANCELLED = Object.freeze({ kind: "cancelled" });
+var WRITEBACK_CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var NOTHING_IMPORTED = Object.freeze({ kind: "refused", reason: "The document has no imported file to write back to" });
+
+export function saveBackToFile(opts) {
   var imported = importHome();
-  if (!imported) return;
+  if (!imported) return Promise.resolve();
+  return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback" }).then(function (outcome) {
+    if (outcome.kind === "saved" && outcome.acknowledged) imported.dirty = unsavedFor(imported);
+    updateFileChip();
+  });
+}
+
+export async function writeBackToFile(job) {
+  var imported = importHome();
+  if (!imported) return NOTHING_IMPORTED;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
-  var docIdAtBuild = S.state.docId;
-  var seqAtBuild = S.editSeq;
   var built;
   try {
     built = await buildFileData(imported.format, baseName);
   } catch (e) {
     showToast("Could not build the file.", "error");
-    return;
-  }
-  function bytesStillCurrent() {
-    return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
+    return WRITEBACK_FAILED;
   }
 
   if (imported.handle && imported.handle.createWritable) {
-    if (!opts || !opts.force) {
+    if (job.request.kind !== "writebackForce") {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
         showFileConflict(imported.name, check.current, { kind: "import" });
-        return;
+        return WRITEBACK_CONFLICTED;
       }
     }
     try {
       var writable = await imported.handle.createWritable();
       await writable.write(built.data);
       await writable.close();
-      if (bytesStillCurrent()) imported.dirty = false;
       try {
         var after = await imported.handle.getFile();
         imported.lastModified = after.lastModified;
         imported.size = after.size;
       } catch (e) { }
-      updateFileChip();
       showToast("Saved to " + imported.name, "ok");
-      return;
+      return WRITTEN_BACK;
     } catch (err) {
-      if (err && err.name === "AbortError") return;
+      if (err && err.name === "AbortError") return WRITEBACK_CANCELLED;
       imported.inPlace = false;
       updateFileChip();
     }
@@ -727,7 +736,7 @@ export async function saveBackToFile(opts) {
   var ok = await deliverFile(imported.name, built.data, {
     savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
-  if (ok) { if (bytesStillCurrent()) imported.dirty = false; updateFileChip(); }
+  return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
 }
 
 export function showFileConflict(fileName, currentFile, ctx) {

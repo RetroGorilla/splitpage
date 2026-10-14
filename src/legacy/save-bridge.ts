@@ -9,7 +9,7 @@ import type {
   WriterResult
 } from "../application/save/coordinator.ts";
 
-export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "server";
+export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "server" | "writeback" | "writebackForce";
 
 export interface LegacySaveRequest {
   readonly kind: LegacySaveKind;

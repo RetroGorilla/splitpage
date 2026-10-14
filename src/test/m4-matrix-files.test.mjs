@@ -1,5 +1,5 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { after } from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import {
@@ -498,6 +498,45 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   assert.equal(JSON.stringify(S.baseState), before.base, "the document's baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "the document's rev is unchanged");
   assert.equal(S.state.docId, before.docId, "the document's id is unchanged");
+}));
+
+test("import writeback is the import destination's save: it waits behind a writeback in flight and runs after it", scene(async () => {
+  const gates = createGates();
+  const target = createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000, gates: gates });
+  await importFrom(target);
+  edit("Typed before the first write back.");
+  gates.hold("file.close");
+  const first = saveBackToFile();
+  await gates.arrived("file.close");
+  edit("Typed while the first write back was writing.");
+  const second = saveBackToFile();
+  for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(target.calls.filter((op) => op === "createWritable").length, 1, "the second write back has not opened the file while the first holds it");
+  gates.release("file.close");
+  await first;
+  await second;
+  assert.equal(target.commits.length, 2, "both write backs reached the file, one after the other");
+  assert.equal(homeModule.home.dirty, false, "the import home is saved once the second has landed");
+}));
+
+test("an import writeback that lands after another file was imported leaves the new import home's unsaved state alone", scene(async () => {
+  const gates = createGates();
+  const target = createHeldFileHandle({ name: "notes.txt", text: "Alpha line.\n\nBeta line.\n", lastModified: 1000, gates: gates });
+  await importFrom(target);
+  edit("Typed before the write back.");
+  gates.hold("file.close");
+  const saving = saveBackToFile();
+  await gates.arrived("file.close");
+  const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
+  await openProjectFile(await other.handle.getFile(), other.handle);
+  const replaced = homeModule.home;
+  edit("Typed in the other file.");
+  assert.equal(replaced.dirty, true);
+  gates.release("file.close");
+  await saving;
+  assert.equal(target.commits.length, 1, "the first file was written");
+  assert.equal(homeModule.home, replaced, "the other file is still the import home");
+  assert.equal(replaced.dirty, true, "and still unsaved");
 }));
 
 function noDownloads() {
