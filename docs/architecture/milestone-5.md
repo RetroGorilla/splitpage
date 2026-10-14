@@ -8,7 +8,9 @@ The working notes for milestone 5 of [the implementation plan](../IMPLEMENTATION
 
 Merged as PR #576. Described in [saving.md](saving.md) section 6.
 
-### Step 2: the byte helpers
+### Step 2, helper-move PR (PR #577): the byte helpers
+
+Step 2 stays open. The plan splits it into small PRs in this order: capture and projection changes, mechanical helper moves, registry integration. This is the helper-move PR. A follow-up step-2 PR owns the rest, listed at the end of this section.
 
 `zipWrite`, `zipRead`, `strBytes`, `latin1Bytes`, `concatBytes`, `xmlEscape` and `htmlToRuns` left `14-export.js` for `src/adapters/formats/`, one file per concern:
 
@@ -19,11 +21,12 @@ Merged as PR #576. Described in [saving.md](saving.md) section 6.
 | `xml.ts` | `xmlEscape` |
 | `html-runs.ts` | `htmlToRuns` |
 
-Behaviour is unchanged. Three details differ from a plain copy:
+Behaviour is unchanged. Four details differ from a plain copy:
 
 - `htmlToRuns` takes the HTML parser as its second argument, because an adapter may not import the legacy rich-text bridge. Only tests call it; production code reads runs through `toDocxRuns`.
 - `xmlEscape` builds its control-character pattern from character codes, so the lint suppression that sat on the old regex is gone and `tools/comment-baseline.json` drops that entry.
 - `zipWrite` with no day still writes 1980-01-01 and never reads the clock.
+- `zipRead().get` checks for an own entry name, so a name such as `toString` or `__proto__` returns `null` where it used to reach `Object.prototype` and throw.
 
 Importers: `15-docx.js`, `16b-xlsx.js`, `17-pdf.js`, `18-local-files.js`, `20f-desktop.js` and seven test files. `14-export.js` keeps `htmlToPlainText`, `tagPrintColor` and `TAG_PRINT_COLORS`, which are the next cut.
 
@@ -48,4 +51,12 @@ The helper move alone does not take any writer out of the cycle, and the plan sa
 | `16b-xlsx.js` | `08-production-panels`, `08d-broll-panel`, `14-export`, `14b-export-kit`, `16-csv` | `14-export` then `18-local-files`; `08d-broll-panel` then `18-local-files` |
 | `17-pdf.js` | `05-render`, `07-production-tags`, `08d-broll-panel`, `10-comments`, `14-export`, `14b-export-kit`, `15-docx` | `14-export` then `18-local-files`; `05-render` then `03-sync` then `18-local-files` |
 
-What takes them out, in the plan's order: the production, comment and b-roll read models the writers import from `07`, `08`, `08c`, `08d` and `10` have to reach them through the captured document (the `14b-export-kit.js` projection cut); `htmlToPlainText` and `tagPrintColor` leave `14-export.js` for a module outside the cycle; and `14-export.js` stops importing `18-local-files.js` and the hosted and desktop modules once the registry owns dispatch. None of these is a mechanical move, so they stay with the capture and registry PRs.
+#### Still open in step 2
+
+A follow-up step-2 PR (capture and projection cut, before the registry) owns:
+
+- the production, comment and b-roll read models the writers import from `05`, `07`, `08`, `08c`, `08d` and `10` reaching them through the `ExportDocument` (the `14b-export-kit.js` projection cut);
+- `htmlToPlainText`, `tagPrintColor` and `TAG_PRINT_COLORS` leaving `14-export.js` for a module outside the cycle;
+- explicit inputs for the presentation helpers, preferences and asset access the writers still reach for, or permitted adapters.
+
+Only the `14-export.js` imports of `18-local-files.js` and the hosted and desktop modules are left to step 4, when the registry owns dispatch. The follow-up PR records `--metrics` and each writer's remaining path again, and the four writers leaving the cycle is its acceptance result.
