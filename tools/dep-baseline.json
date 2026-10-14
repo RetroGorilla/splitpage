@@ -502,7 +502,6 @@
     {"rule":"state-write","source":"src/js/10-comments.js","target":"global:S.savedRangeCell"},
     {"rule":"state-write","source":"src/js/10-comments.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/11-import.js","target":"global:S.importModeTouched"},
-    {"rule":"state-write","source":"src/js/11-import.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/12-dirty-toast.js","target":"global:S.dirty"},
     {"rule":"state-write","source":"src/js/12-dirty-toast.js","target":"global:S.editSeq"},
     {"rule":"state-write","source":"src/js/12-dirty-toast.js","target":"global:S.saveButtonBusy"},
