@@ -3,7 +3,8 @@ import { setHome } from "./_home.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
-import { noteRecovery, noteServerUpdate, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { noteMerged, noteRecovery, noteServerUpdate, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { mergeIncoming } from "../application/session/merge-incoming.ts";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
@@ -826,11 +827,10 @@ export function applyMerge(opts) {
   if (!opts.unchanged) {
     if (opts.undoPoint) snap = pushSnapshot(UNDO_LABELS[opts.source], opts.undoPoint);
     if (opts.keepLabel) pushSnapshot(opts.keepLabel, opts.mine);
-    result = mergeStates(
-      isDocumentObject(opts.base) ? migrateRows(cloneState(opts.base)) : null,
-      migrateRows(cloneState(opts.mine)),
-      migrateRows(cloneState(opts.theirs))
-    );
+    result = mergeIncoming(opts, isDocumentObject, {
+      entry: function (raw) { return migrateRows(cloneState(raw)); },
+      merge: mergeStates
+    });
   }
   var next = result ? result.merged : opts.theirs;
 
@@ -847,7 +847,8 @@ export function applyMerge(opts) {
   var kind = opts.recovery || opts.source === "server-resume" ? "recovery" : "server";
 
   function adopt() {
-    next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
+    if (result) next = noteMerged(kind, next);
+    else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
     S.state = next;
     if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
     armUndoPoint(S.state.docId);

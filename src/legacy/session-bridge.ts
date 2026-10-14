@@ -85,6 +85,7 @@ const session: DocumentSession = {
   adopt: function (raw: unknown) { return current.adopt(raw); },
   absorbServer: function (raw: unknown) { return current.absorbServer(raw); },
   absorbRecovery: function (raw: unknown) { return current.absorbRecovery(raw); },
+  absorbMerged: function (kind: "server" | "recovery", merged: ValidatedDocument) { return current.absorbMerged(kind, merged); },
   absorbReload: function (content: ReloadedContent) { return current.absorbReload(content); },
   settle: function (kind: AbsorbedKind) { current.settle(kind); },
   run: function (command: Command) { return current.run(command); },
@@ -143,6 +144,10 @@ export function noteServerUpdate(next: unknown): ValidatedDocument | null {
 
 export function noteRecovery(next: unknown): ValidatedDocument | null {
   return session.absorbRecovery(next);
+}
+
+export function noteMerged(kind: "server" | "recovery", merged: ValidatedDocument): ValidatedDocument | null {
+  return session.absorbMerged(kind, merged);
 }
 
 export function noteReload(content: ReloadedContent): ValidatedDocument | null {

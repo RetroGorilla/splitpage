@@ -74,6 +74,7 @@ export interface DocumentSession {
   adopt: (raw: unknown) => ValidatedDocument | null;
   absorbServer: (raw: unknown) => ValidatedDocument | null;
   absorbRecovery: (raw: unknown) => ValidatedDocument | null;
+  absorbMerged: (kind: "server" | "recovery", merged: ValidatedDocument) => ValidatedDocument | null;
   absorbReload: (content: ReloadedContent) => ValidatedDocument | null;
   settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
@@ -231,7 +232,10 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
   function absorb(kind: "server" | "recovery", raw: unknown): ValidatedDocument | null {
     if (disposed) return null;
     if (refuses(raw)) return document;
-    const doc = enter(raw);
+    return take(kind, enter(raw));
+  }
+
+  function take(kind: "server" | "recovery", doc: ValidatedDocument | null): ValidatedDocument | null {
     ports.undo.absorbServer(doc);
     if (kind === "recovery") epoch++;
     document = doc;
@@ -320,6 +324,11 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     adopt: adopt,
     absorbServer: function (raw) { return absorb("server", raw); },
     absorbRecovery: function (raw) { return absorb("recovery", raw); },
+    absorbMerged: function (kind, merged) {
+      if (disposed) return null;
+      if (refuses(merged)) return document;
+      return take(kind, merged);
+    },
     absorbReload: absorbReload,
     settle: settle,
     run: run,
