@@ -167,12 +167,6 @@ function committedPrecondition() {
   return { row: row, before: row.status };
 }
 
-const ADOPTION_LAG = /the session already held the (boot )?document at every write that follows its assignment/;
-
-function adoptionLag(id, title, run) {
-  wrongToday(id, title, run, ADOPTION_LAG);
-}
-
 const COMMITTED = ["applied", "noop", "rejected", "failed"];
 
 function assertReportedAfterCommit(inject, message) {
@@ -343,7 +337,7 @@ rightToday("T2c-reopen", "a server document reopened after a sign-in opens its e
   }
 });
 
-adoptionLag("T2d", "a restored draft opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2d", "a restored draft opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before draft"));
   const epoch = session.epoch();
   const draft = script("Draft", { docId: "d" + "7".repeat(32) });
@@ -354,7 +348,7 @@ adoptionLag("T2d", "a restored draft opens its epoch at the transition, not at t
   assertAdoptedAtOnce(events, epoch);
 });
 
-adoptionLag("T2e", "a restored history version opens its epoch at the transition, not at the next render", async () => {
+rightToday("T2e", "a restored history version opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("History"));
   const point = cloneState(S.state);
   point.rows[0].audioText = "As it was.";
@@ -482,7 +476,7 @@ async function settleSaves(clock) {
   for (let turn = 0; turn < 40; turn++) await new Promise((resolve) => setImmediate(resolve));
 }
 
-wrongToday("T5", "restoring a draft onto an unchanged file schedules no save and leaves the confirmed baseline as it was", async (t) => {
+rightToday("T5", "restoring a draft onto an unchanged file schedules no save and leaves the confirmed baseline as it was", async (t) => {
   const clock = mockClock(t);
   setAutoSaveEnabled(true);
   useDocument(script("Before restore"));
@@ -500,7 +494,7 @@ wrongToday("T5", "restoring a draft onto an unchanged file schedules no save and
     assert.equal(homeModule.home.kind, "file", "the destination is still the file");
     assert.equal(homeModule.home.handle._desktopId, restored.fileId, "and it is the same file");
   });
-}, /nothing was written to the file after the restore/);
+});
 
 rightToday("T5-merge", "restoring a draft onto a changed file merges, halts autosave and leaves the file and baseline as they were", async (t) => {
   const clock = mockClock(t);

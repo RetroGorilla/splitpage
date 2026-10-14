@@ -11,7 +11,7 @@ const crypto = require("node:crypto");
 const os = require("node:os");
 const net_ = require("node:net");
 const { spawn } = require("node:child_process");
-const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, restoreDoneAction, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createGoogleDrive } = require("./google-drive");
 const { documentServerHost } = require("./bind-host");
@@ -3578,11 +3578,14 @@ function registerIpc() {
     const tab = tabOf(event);
     if (!tab || !draftStore) return;
     const outcome = payload && typeof payload.outcome === "string" ? payload.outcome : "";
-    if (outcome === "failed") {
+    const action = restoreDoneAction(outcome);
+    if (action === "open") {
       flushPendingPayload(tab, { force: true });
       return;
     }
-    try { draftStore.release(tab.id); } catch { }
+    if (action === "release") {
+      try { draftStore.release(tab.id); } catch { }
+    }
     tab.pendingPayload = null;
   });
 

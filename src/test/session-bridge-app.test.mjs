@@ -234,7 +234,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
   listen();
   await applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(script("Untitled draft")) });
-  assert.deepEqual(heard, ["adopt"]);
+  assert.deepEqual(heard, [], "the draft is recovered at the transition, a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(S.editSeq, seq + 1);
@@ -254,7 +254,7 @@ test("importing a file is an adoption at the transition that marks the document 
   assert.equal(held(), S.state);
 });
 
-test("restoring a version from history is an adoption that marks the document dirty as before, with no edit generation", async () => {
+test("restoring a version from history is an adoption at the transition that marks the document dirty as before, with no edit generation", async () => {
   S.state = cloneState(script("History"));
   flushEdits();
   const point = cloneState(S.state);
@@ -267,7 +267,7 @@ test("restoring a version from history is an adoption that marks the document di
   listen();
   assert.equal(await restoreSnapshotFromCard(button), "restored");
   assert.equal(S.state.rows[0].audioText, "As it was.");
-  assert.deepEqual(heard, ["adopt"]);
+  assert.deepEqual(heard, [], "the version is restored at the transition, a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(S.editSeq, seq + 1);

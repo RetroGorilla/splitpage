@@ -26,12 +26,8 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 
 const SITES = [
   "00-prelude.js#(anonymous)",
-  "02b-doc-id.js#adoptRestoredState",
   "02b-doc-id.js#assign",
   "03-sync.js#adopt",
-  "20g-drafts.js#recoverDraftAsUnsavedCopy",
-  "20g-drafts.js#restoreFileDraft",
-  "20g-drafts.js#adoptUntitledDraft",
   "21-events.js#init"
 ];
 
@@ -122,7 +118,7 @@ function migrated(title) {
   return migrateRows(rawDoc(title));
 }
 
-test("there are ten S.state assignments, in these functions", () => {
+test("there are four S.state assignments, in these functions", () => {
   assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
 });
 
@@ -137,9 +133,9 @@ test("boot from the seed: 00-prelude and init assign null, then the transition A
   assert.equal(fixedPoint(atBoot[2].value), true);
 });
 
-test("02b adoptRestoredState: a migrateRows fixed point, its docId kept", async () => {
+test("02b adoptRestoredState, through the transition API's live-document port: a migrateRows fixed point, its docId kept", async () => {
   const before = S.state.docId;
-  const value = only(await drive(() => adoptRestoredState(rawDoc("Restored"))), "02b-doc-id.js#adoptRestoredState");
+  const value = only(await drive(() => adoptRestoredState(rawDoc("Restored"))), "02b-doc-id.js#assign");
   assert.equal(fixedPoint(value), true);
   assert.equal(S.state.docId, before, "the docId is put back after the assignment");
   assert.equal(fixedPoint(S.state), true);
@@ -197,16 +193,16 @@ test("18b replaceWithNewDocument, a new script and the long demo, through the li
   assert.equal(fixedPoint(only(await drive(() => openLongDemo()), "02b-doc-id.js#assign")), true);
 });
 
-test("20g recoverDraftAsUnsavedCopy, an imported file's draft: a migrateRows fixed point with a minted docId", async () => {
+test("20g recoverDraftAsUnsavedCopy, an imported file's draft, through the live-document port: a migrateRows fixed point with a minted docId", async () => {
   const draftId = "d" + "1".repeat(32);
   const t = { header: { origin: { kind: "import", importName: "a.docx" } }, stateJson: JSON.stringify(Object.assign(rawDoc("Import draft"), { docId: draftId })) };
-  const value = only(await drive(() => applyTakenDraft(t)), "20g-drafts.js#recoverDraftAsUnsavedCopy");
+  const value = only(await drive(() => applyTakenDraft(t)), "02b-doc-id.js#assign");
   assert.equal(fixedPoint(value), true);
   assert.match(value.docId, /^d[0-9a-f]{32}$/);
   assert.notEqual(value.docId, draftId, "the copy is given a docId of its own before it is assigned");
 });
 
-test("20g restoreFileDraft, a desktop file untouched since the draft's base: the draft, a migrateRows fixed point", async () => {
+test("20g restoreFileDraft, a desktop file untouched since the draft's base: the draft, last through the live-document port, a migrateRows fixed point", async () => {
   const docId = "d" + "2".repeat(32);
   const disk = migrateRows(Object.assign(rawDoc("On disk"), { docId }));
   const bytes = new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(disk)));
@@ -224,7 +220,7 @@ test("20g restoreFileDraft, a desktop file untouched since the draft's base: the
   };
   try {
     const got = await drive(() => applyTakenDraft(t));
-    const value = only(got, "20g-drafts.js#restoreFileDraft");
+    const value = got.records.filter((r) => r.site === "02b-doc-id.js#assign").pop().value;
     assert.equal(fixedPoint(value), true);
     assert.equal(value.title, "Edited since");
   } finally {
@@ -232,9 +228,9 @@ test("20g restoreFileDraft, a desktop file untouched since the draft's base: the
   }
 });
 
-test("20g adoptUntitledDraft: a migrateRows fixed point", async () => {
+test("20g adoptUntitledDraft, through the live-document port: a migrateRows fixed point", async () => {
   const t = { header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(rawDoc("Untitled draft")) };
-  assert.equal(fixedPoint(only(await drive(() => applyTakenDraft(t)), "20g-drafts.js#adoptUntitledDraft")), true);
+  assert.equal(fixedPoint(only(await drive(() => applyTakenDraft(t)), "02b-doc-id.js#assign")), true);
 });
 
 test("20j adoptNewDocument, from the new-tab page's New script, through the live-document port: a migrateRows fixed point", async () => {

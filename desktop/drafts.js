@@ -773,4 +773,10 @@ function createDraftStore(opts) {
   };
 }
 
-module.exports = { createDraftStore, writeFileDurableSync, TAB_ID_RE, MAX_BODY_BYTES };
+function restoreDoneAction(outcome) {
+  if (outcome === "failed") return "open";
+  if (outcome === "kept") return "drop";
+  return "release";
+}
+
+module.exports = { createDraftStore, restoreDoneAction, writeFileDurableSync, TAB_ID_RE, MAX_BODY_BYTES };

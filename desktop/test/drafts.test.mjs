@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { createDraftStore, writeFileDurableSync } = require(path.join(here, "..", "drafts.js"));
+const { createDraftStore, restoreDoneAction, writeFileDurableSync } = require(path.join(here, "..", "drafts.js"));
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-drafts-test-"));
 const TAB = "0123456789abcdef0123456789abcdef";
@@ -476,6 +476,14 @@ test("session states, take never deletes, list fields, init sweeps trash and old
   assert.equal((await b.take(TAB)).stateJson, stateJ("x"), "a second take reads the same draft");
   assert.equal(await b.take(TAB2), null, "no draft -> null");
   assert.equal(await b.take("nope"), null);
+});
+
+test("restore-done: failed keeps the draft and opens the tab's file, kept keeps it and drops the open, anything else releases it (K1)", async () => {
+  assert.equal(restoreDoneAction("failed"), "open", "an unreadable draft: open the file the tab was restoring");
+  assert.equal(restoreDoneAction("kept"), "drop", "the user opened another script meanwhile: keep the draft, open nothing over their script");
+  for (const outcome of ["applied", "merged", "nothing-unsaved", "untitled-copy", "unreadable", "server-copy", "server-resumed", "", "bogus"]) {
+    assert.equal(restoreDoneAction(outcome), "release", outcome);
+  }
 });
 
 const failures = [];

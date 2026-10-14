@@ -1,21 +1,28 @@
 import { S } from "./_state.js";
-import { conn, fileHome, home, importHome, setHome, stillOnServer } from "./_home.js";
+import { conn, fileHome, home, importHome, stillOnServer } from "./_home.js";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, persist } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   copyDocHistorySafe,
-  mintDocId,
   normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
+import { cloneState, updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
-import { browserDrafts, desktopDrafts, recoveryStarted, useBrowserDraftFactory } from "../legacy/recovery-bridge.ts";
+import {
+  browserDrafts,
+  captureRestore,
+  desktopDrafts,
+  recoveryStarted,
+  stillRestoring,
+  useBrowserDraftFactory
+} from "../legacy/recovery-bridge.ts";
+import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { applyStashedWork } from "./14-export.js";
 import {
   adoptProjectState,
@@ -24,6 +31,7 @@ import {
 } from "./18-local-files.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
+import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
 
 export var draftRestorePending;
 var draftOnDisk;
@@ -39,15 +47,18 @@ var draftTiming = {
   serverWait: 20000
 };
 
+var draftSchedule = createCaptureSchedule({
+  timing: function () { return draftTiming; },
+  timers: {
+    set: function (run, ms) { return setTimeout(run, ms); },
+    clear: function (handle) { clearTimeout(handle); }
+  },
+  capture: function () { captureAndSendDraft(); }
+});
+
 var draftSeq = 0;
-var draftIdleTimer = null;
-var draftMaxTimer = null;
-var draftBackoffTimer = null;
 var draftInFlight = null;
-var draftChangePending = false;
-var draftSlow = false;
 var draftStopped = false;
-var draftBackoffMs = 0;
 var draftPausedReason = "";
 var draftPausedToast = null;
 var draftSentEditSeq = -1;
@@ -184,27 +195,7 @@ function browserWriterIsLive(writerId) {
 
 export function noteDraftChange() {
   if (!draftWriterLive()) return;
-  draftChangePending = true;
-  if (draftBackoffTimer) return;
-  scheduleDraftCapture();
-}
-
-function scheduleDraftCapture() {
-  var idle = draftSlow ? draftTiming.slow : draftTiming.idle;
-  var max = draftSlow ? draftTiming.slow : draftTiming.max;
-  if (draftIdleTimer) clearTimeout(draftIdleTimer);
-  draftIdleTimer = setTimeout(runDraftTimer, idle);
-  if (!draftMaxTimer) draftMaxTimer = setTimeout(runDraftTimer, max);
-}
-
-function clearDraftTimers() {
-  if (draftIdleTimer) { clearTimeout(draftIdleTimer); draftIdleTimer = null; }
-  if (draftMaxTimer) { clearTimeout(draftMaxTimer); draftMaxTimer = null; }
-}
-
-function runDraftTimer() {
-  clearDraftTimers();
-  captureAndSendDraft();
+  draftSchedule.noteChange();
 }
 
 function draftOriginOf() {
@@ -253,14 +244,14 @@ function draftOriginSignature(origin) {
 }
 
 function captureAndSendDraft(keepClean) {
-  clearDraftTimers();
+  draftSchedule.cancel();
   if (!draftWriterLive() || !S.state) return Promise.resolve(null);
-  if (draftRestorePending) { draftChangePending = true; return Promise.resolve(null); }
-  if (draftInFlight) { draftChangePending = true; return draftInFlight; }
+  if (draftRestorePending) { draftSchedule.keepPending(); return Promise.resolve(null); }
+  if (draftInFlight) { draftSchedule.keepPending(); return draftInFlight; }
 
   var keepCleanFile = !S.dirty && keepClean === true && !!S.DESKTOP && draftOriginOf().kind === "file";
   if (!S.dirty && !keepCleanFile) {
-    draftChangePending = false;
+    draftSchedule.dropPending();
     if (!draftOnDisk || !draftBackendCanDiscard()) return Promise.resolve(null);
     var discardSeq = ++draftSeq;
     draftOnDisk = false;
@@ -278,13 +269,13 @@ function captureAndSendDraft(keepClean) {
 
   var origin = draftOriginOf();
   if (!S.DESKTOP && origin.kind !== "server") {
-    draftChangePending = false;
+    draftSchedule.dropPending();
     return Promise.resolve(null);
   }
   var signature = draftOriginSignature(origin);
   if ((draftOnDisk || !keepCleanFile) &&
       S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
-    draftChangePending = false;
+    draftSchedule.dropPending();
     return Promise.resolve(null);
   }
 
@@ -298,7 +289,7 @@ function captureAndSendDraft(keepClean) {
     return Promise.resolve({ ok: false, code: "TOO_LARGE" });
   }
   var elapsed = Date.now() - startedAt;
-  draftSlow = stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs;
+  draftSchedule.setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
 
   var editSeqAtCapture = S.editSeq;
   var baseAtCapture = S.baseState;
@@ -337,7 +328,7 @@ function captureAndSendDraft(keepClean) {
     refsIn(baseAtCapture).forEach(function (sha) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
   }
 
-  draftChangePending = false;
+  draftSchedule.dropPending();
   var sent = draftRefs.length
     ? persist(draftRefs).then(function (failed) {
         if (failed.length) {
@@ -356,14 +347,14 @@ function captureAndSendDraft(keepClean) {
       draftStats.lastCode = null;
       if (r.obsolete) {
         draftStats.obsolete++;
-        draftChangePending = true;
+        draftSchedule.keepPending();
       } else {
         draftOnDisk = true;
         draftSentEditSeq = editSeqAtCapture;
         draftSentBase = baseAtCapture;
         draftSentSignature = signature;
       }
-      draftBackoffMs = 0;
+      draftSchedule.landed();
       if (draftPausedReason) {
         draftPausedReason = "";
         clearDraftPausedToast();
@@ -372,7 +363,7 @@ function captureAndSendDraft(keepClean) {
     } else {
       noteDraftWriteRefused((r && r.code) || "error");
     }
-    if (draftChangePending && !draftBackoffTimer) scheduleDraftCapture();
+    draftSchedule.resume();
     return r;
   }, function (err) {
     draftInFlight = null;
@@ -434,26 +425,18 @@ function noteDraftWriteRefused(code) {
   if (code !== "HELD") draftStats.failures++;
 
   if (code === "DISCARDED" || code === "NO_TAB") { draftStopped = true; return; }
-  if (code === "UNAVAILABLE" && !S.DESKTOP) { browserDraftsOff = true; draftChangePending = false; return; }
+  if (code === "UNAVAILABLE" && !S.DESKTOP) { browserDraftsOff = true; draftSchedule.dropPending(); return; }
 
   if (code !== "STALE_SEQ") showDraftPaused(code);
 
-  draftChangePending = true;
-  draftBackoffMs = draftBackoffMs
-    ? Math.min(draftBackoffMs * 2, draftTiming.backoffMax)
-    : draftTiming.backoffMin;
-  if (draftBackoffTimer) clearTimeout(draftBackoffTimer);
-  draftBackoffTimer = setTimeout(function () {
-    draftBackoffTimer = null;
-    captureAndSendDraft();
-  }, draftBackoffMs);
+  draftSchedule.refused();
 }
 
 export function flushDraftNow(opts) {
   if (!draftWriterLive()) return Promise.resolve({ ok: true });
   var keepClean = !!(opts && opts.keep === true);
-  clearDraftTimers();
-  if (draftBackoffTimer) { clearTimeout(draftBackoffTimer); draftBackoffTimer = null; }
+  draftSchedule.cancel();
+  draftSchedule.cancelRetry();
   return Promise.resolve(draftInFlight).then(function () {
     return captureAndSendDraft(keepClean);
   }).then(function (r) {
@@ -564,18 +547,16 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   var origin = t.header.origin || {};
   var wasUntitled = origin.kind === "untitled";
 
-  if (!wasUntitled) {
-    var fromId = normalizeDocId(mine.docId);
-    var newId = mintDocId();
-    mine.docId = newId;
-    copyDocHistorySafe(fromId, newId);
-  }
-
-  S.state = mine;
-  setBaseState(null, "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor");
-  setHome("none");
+  var arrived = documentTransitions().recover({
+    from: { document: mine },
+    reason: "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor",
+    destination: NO_DESTINATION,
+    baseline: null,
+    detached: !wasUntitled,
+    writtenOut: wasUntitled ? !!t.header.docIdWrittenOut : false
+  });
+  if (arrived.forkedFrom) copyDocHistorySafe(arrived.forkedFrom, arrived.document.docId);
   resetProductionPanelState();
-  S.docIdWrittenOut = wasUntitled ? !!t.header.docIdWrittenOut : false;
   renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
@@ -696,7 +677,13 @@ async function restoreServerDraft(t, mine, origin) {
   return "server-copy";
 }
 
-async function restoreFileDraft(t, mine, base, origin) {
+function keptForNextLaunch() {
+  showToast("Another script was opened while the changes from the last session were being restored — " +
+    "they have been kept for the next launch.", "warn", true);
+  return "kept";
+}
+
+async function restoreFileDraft(t, mine, base, origin, ctx) {
   var title = draftTitleOf(mine, origin.fileName);
   var missingName = origin.fileName || title;
 
@@ -714,6 +701,7 @@ async function restoreFileDraft(t, mine, base, origin) {
   var file;
   try { file = await handle.getFile(); } catch (e) { file = null; }
   var parsed = file ? await parseProjectFileState(file) : null;
+  if (!stillRestoring(ctx)) return keptForNextLaunch();
   if (!parsed || parsed.error) {
     recoverDraftAsUnsavedCopy(t,
       "The file these recovered changes belong to (" + missingName + ") could not be read — they " +
@@ -741,8 +729,7 @@ async function restoreFileDraft(t, mine, base, origin) {
   }
 
   if (sameDocContent(base, disk)) {
-    S.state = mine;
-    setBaseState(diskCopy, "restoreFileDraft: the file, untouched since the draft's own base");
+    documentTransitions().restore({ from: { document: mine } });
     renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
@@ -773,11 +760,15 @@ async function restoreFileDraft(t, mine, base, origin) {
 }
 
 function adoptUntitledDraft(t, mine, base) {
-  S.state = mine;
-  setBaseState(base || null, "adoptUntitledDraft: the draft's own base, if it had one");
-  setHome("none");
+  documentTransitions().recover({
+    from: { document: mine },
+    reason: "adoptUntitledDraft: the draft's own base, if it had one",
+    destination: NO_DESTINATION,
+    baseline: base || null,
+    detached: false,
+    writtenOut: !!t.header.docIdWrittenOut
+  });
   resetProductionPanelState();
-  S.docIdWrittenOut = !!t.header.docIdWrittenOut;
   renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
@@ -810,9 +801,10 @@ async function runDraftRestore(t) {
   }
   var base = t.baseJson ? draftMigrate(t.baseJson) : null;
   var origin = t.header.origin || { kind: "untitled" };
+  var ctx = captureRestore();
 
   if (origin.kind === "server") return await restoreServerDraft(t, mine, origin);
-  if (origin.kind === "file") return await restoreFileDraft(t, mine, base, origin);
+  if (origin.kind === "file") return await restoreFileDraft(t, mine, base, origin, ctx);
   if (origin.kind === "import") {
     recoverDraftAsUnsavedCopy(t,
       "Your unsaved changes to " + (origin.importName || "an imported file") + " were recovered. " +
@@ -959,10 +951,10 @@ export function __init() {
           lastCode: draftStats.lastCode,
           paused: !!draftPausedReason,
           pausedReason: draftPausedReason,
-          pending: draftChangePending,
+          pending: draftSchedule.pending(),
           onDisk: draftOnDisk,
           stopped: draftStopped,
-          slow: draftSlow,
+          slow: draftSchedule.slow(),
           restorePending: draftRestorePending
         };
       },
