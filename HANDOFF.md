@@ -1588,8 +1588,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 19. **A full-screen overlay must own the focus and the stacking, not just
     the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
     `#writer` lets modals/toasts through.
-20. **There are two Save buttons and one save state**, via
-    `setSaveButtons()`/`mirrorFileChipToWriter()`.
+20. Absorbed in milestone 4: see INV-20 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-20--two-save-buttons-one-save-state). Both Save buttons render one view from `saveStatus` (`src/application/save/status.ts`) through `setSaveButtons()`/`mirrorFileChipToWriter()`.
 21. **There is one place a field gets split, not two** (§3.10) —
     `splitRowFieldCore()`.
 22. **Scroll to the caret's own rect, never the cell's**, when the cell
@@ -1684,6 +1683,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     main's memory between a route-open and the new tab's boot. Collaborate's
     owner token and link keys follow the same rule — where each may live is
     #62.
+    Held in milestone 4: see INV-29 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-29--connection-secrets-never-persist-in-shared-places).
 30. **The first-run setup wizard may only appear over a genuinely pristine
     copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
     `build.mjs`, checked by `seedCheckPasses()`) plus
@@ -1711,11 +1711,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     Never in the seed, `#state-data`, or Standalone HTML export.
     `SCHEMA_VERSION` deliberately not bumped for it. A missing id must fail
     as *unique*, never as *shared*.
-36. **The id follows the Save target, not the edit.** A fork happens only
-    on Save As, publish of an id already written out, or detached draft
-    recovery, and history copies only after the write succeeds. Restoring a
-    snapshot never changes the id. "Already open" is decided by path or
-    server doc id, never by `docId`.
+36. Absorbed in milestone 4: see INV-36 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-36--the-id-follows-the-save-target). The transition API is the only writer of `docId` (`docs/architecture/saving.md`); "already open" is still decided by path or server doc id, never by `docId`.
 37. **`sha256Hex` and `deriveDocId` are frozen.** Changing either
     re-identifies every legacy file and every duplicate-replacement id,
     splitting history on the next open.
@@ -1729,6 +1725,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 39. **`pushSnapshot()` captures synchronously, and no save ever waits on
     history.** A restore overwrites the document only after its "Before
     restoring" backup is stored or an explicit second confirm.
+    Held in milestone 4: see INV-39 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-39--snapshots-are-captured-synchronously-saves-never-wait-on-history).
 40. **A crash draft is deleted only when its tab becomes clean, or on an
     explicit user decision** — never on crash, kill, renderer loss,
     session-end, quit, or restore. A discard writes a tombstone before
@@ -1739,10 +1736,12 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     plus the store's own bounds (30 days, 20 drafts, 64 MiB). A link turned
     off, a lapsed sign-in or a page too old never stops the writer; they
     stop saves, and a restore never saves.
+    Held in milestone 4: see INV-40 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-40--a-crash-draft-is-removed-only-when-clean-or-by-the-user).
 41. **Restoring a draft never writes the user's file by itself.**
     "Unchanged on disk" is decided by content, never mtime. The draft
     header is built only by main from allowlisted scalar fields; draft
     bodies are written with fsync and two generations.
+    Held in milestone 4: see INV-41 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-41--restoring-a-draft-never-writes-the-users-file).
 42. **Each tab is its own page, and the main process is the only authority
     on tab identity, unsaved state, and what is already open** (§3.13).
     Moving a tab moves its `WebContentsView`, never copies it.
@@ -1816,6 +1815,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
     the automatic writes again (#41). A failed or conflicted automatic save
     halts too, rather than repeating a toast or a modal every two seconds.
+    Held in milestone 4: see INV-51 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-51--autosave-writes-only-where-the-user-sent-the-document-only-reviewed-work-only-when-on).
 52. **No durable record names a blob its store does not already hold
     durably** (#82). An image is uploaded (and fsynced) before anything
     that refers to it by sha is written; the list of what a record names
@@ -1833,6 +1833,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
       stash carries non-durable blobs as `data:` URIs; app-data import
       stores blobs before snapshots (#49); file writers inline everything
       (#31, #32). Capture stays synchronous (#39) — only the job awaits.
+    Held in milestone 4: see INV-52 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-52--no-durable-record-names-a-blob-its-store-lacks).
 
 53. Absorbed in milestone 3: see INV-53 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-53--every-edit-is-recorded-once-nothing-else-is-recorded). The seven session commands record themselves; every other edit path still ends in `markDirty()`, and a change that is not somebody's edit must say so (the ledger row lists how).
 54. **A b-roll key's id is one line's** (`docs/DOCUMENT-MODEL.md` §3.3):
@@ -1945,6 +1946,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     moment it is read. `link-off` forgets the key in the tab and on the
     device; Settings ▸ Collaboration ▸ Sign out forgets the owner's token
     for that server only.
+    Held in milestone 4: see INV-62 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-62--collaborate-credentials-stay-in-this-browser-per-server).
 ---
 
 ## 6. Map of the source
