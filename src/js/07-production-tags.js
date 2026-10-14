@@ -20,8 +20,6 @@ import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import {
-  TAG_CATEGORY_IDS,
-  TAG_STATUS_IDS,
   ensureTagIds,
   isTagId,
   mintTagId,
@@ -33,6 +31,7 @@ import {
   tagStatusRank
 } from "../core/document/tags.ts";
 import { cappedName, cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagCategory, tagStatus } from "../core/production/looks.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -56,6 +55,8 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { provideRefreshRunner, requestRefresh } from "../legacy/session-bridge.ts";
 export {
+  TAG_CATEGORIES,
+  TAG_STATUSES,
   contentMemo,
   ensureTagIds,
   isBlankTagName,
@@ -65,35 +66,14 @@ export {
   normalizeTagName,
   registryKey,
   registryTagHooks,
+  tagCategory,
   tagKey,
   tagOccurrences,
+  tagStatus,
   tagStatusRank
 };
 
 var TAG_SHORTCUT_CHARS;
-
-var TAG_ICON_PATHS = {
-  prop: '<path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
-  location: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.25"/>',
-  cast: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
-  vfx: '<path d="M11 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"/><path d="M19 15.5v5M16.5 18h5"/>',
-  sound: '<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
-  gear: '<rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/>'
-};
-
-var TAG_CATEGORY_LOOKS = {
-  prop:     { label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)",     icon: TAG_ICON_PATHS.prop },
-  location: { label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)", icon: TAG_ICON_PATHS.location },
-  cast:     { label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)",     icon: TAG_ICON_PATHS.cast },
-  vfx:      { label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)",      icon: TAG_ICON_PATHS.vfx },
-  sound:    { label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)",    icon: TAG_ICON_PATHS.sound },
-  gear:     { label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)",     icon: TAG_ICON_PATHS.gear }
-};
-
-export var TAG_CATEGORIES = TAG_CATEGORY_IDS.map(function (id) {
-  var look = TAG_CATEGORY_LOOKS[id];
-  return { id: id, label: look.label, plural: look.plural, color: look.color, icon: look.icon };
-});
 
 export function tagIconSvg(cat) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" ' +
@@ -106,31 +86,12 @@ export function tagIconCss() {
   }).join("\n");
 }
 
-var TAG_STATUS_LOOKS = {
-  needed:   { label: "Needed",   color: "var(--text-faint)" },
-  sourcing: { label: "Sourcing", color: "var(--audio)" },
-  have:     { label: "Have it",  color: "var(--text)" },
-  returned: { label: "Returned", color: "var(--text-faint)" }
-};
-
-export var TAG_STATUSES = TAG_STATUS_IDS.map(function (id) {
-  var look = TAG_STATUS_LOOKS[id];
-  return { id: id, label: look.label, color: look.color };
-});
-
 export function tagStatusLampHtml(id) {
   var st = tagStatus(id) || TAG_STATUSES[0];
   if (st.id === "returned") {
     return '<svg class="item-lamp is-returned" aria-hidden="true" focusable="false"><use href="#i-return"/></svg>';
   }
   return '<span class="item-lamp is-' + st.id + '" aria-hidden="true"></span>';
-}
-
-export function tagStatus(id) {
-  for (var i = 0; i < TAG_STATUSES.length; i++) {
-    if (TAG_STATUSES[i].id === id) return TAG_STATUSES[i];
-  }
-  return null;
 }
 
 var TAG_SHORTCUTS = [
@@ -145,13 +106,6 @@ function hasShortcutChar(s) {
     if (TAG_SHORTCUT_CHARS.indexOf(s.charAt(i)) !== -1) return true;
   }
   return false;
-}
-
-export function tagCategory(id) {
-  for (var i = 0; i < TAG_CATEGORIES.length; i++) {
-    if (TAG_CATEGORIES[i].id === id) return TAG_CATEGORIES[i];
-  }
-  return null;
 }
 
 export function isInsideTagOrLink(el) {
@@ -314,16 +268,7 @@ export function resetProductionIndexStats() {
 }
 
 export function tagsByCategory(all) {
-  all = all || productionEntries();
-  return TAG_CATEGORIES.map(function (cat) {
-    var items = all.filter(function (t) { return t.cat.id === cat.id; });
-    items.sort(function (a, b) {
-      if (!!a.orphaned !== !!b.orphaned) return a.orphaned ? 1 : -1;
-      if (b.mentions.length !== a.mentions.length) return b.mentions.length - a.mentions.length;
-      return a.name.localeCompare(b.name);
-    });
-    return { cat: cat, items: items };
-  }).filter(function (g) { return g.items.length; });
+  return groupTagsByCategory(all || productionEntries());
 }
 
 var idleFlushes = 0;

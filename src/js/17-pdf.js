@@ -1,9 +1,4 @@
 import { morePictureRefs, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
-import { videoHostLabel } from "./05-render.js";
-import { TAG_STATUSES, tagCategory } from "./07-production-tags.js";
-import { brollShotListForPrint } from "./08d-broll-panel.js";
-import { commentEntries } from "./10-comments.js";
-import { tagPrintColor } from "./14-export.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,
@@ -19,9 +14,13 @@ import {
   exportSummaryParts,
   sceneFacts
 } from "./14b-export-kit.js";
+import { brollShotListForPrint, commentEntries } from "./14c-export-projections.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { concatBytes, latin1Bytes } from "../adapters/formats/bytes.ts";
+import { tagPrintColor } from "../adapters/formats/print-colors.ts";
+import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { unitSafePrefix } from "../core/document/text-policy.ts";
+import { TAG_STATUSES, tagCategory } from "../core/production/looks.ts";
 
 var HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 var HELVB_W = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];

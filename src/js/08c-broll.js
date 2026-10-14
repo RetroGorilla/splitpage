@@ -17,7 +17,6 @@ import {
 } from "./07-production-tags.js";
 import { renderBrollViews } from "./08d-broll-panel.js";
 import { markDirty } from "./12-dirty-toast.js";
-import { htmlToPlainText } from "./14-export.js";
 import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
@@ -49,6 +48,7 @@ import { holdsMedia } from "../core/production/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf } from "../legacy/richtext.ts";
 export {
   BROLL_MARKER_RE,

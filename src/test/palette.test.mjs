@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TAG_CATEGORIES } from "../js/07-production-tags.js";
-import { TAG_PRINT_COLORS, tagPrintColor } from "../js/14-export.js";
+import { TAG_PRINT_COLORS, tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, PRINT_TOKENS } from "../js/14b-export-kit.js";
 
 const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");

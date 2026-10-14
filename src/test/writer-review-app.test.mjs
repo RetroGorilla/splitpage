@@ -14,7 +14,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import("../legacy/session-bridge.ts");
 const { joinScenesCommand, splitSceneCommand, textCut } = await import("../application/commands/split-join.ts");
-const { htmlToPlainText } = await import("../js/14-export.js");
+const { htmlToPlainText } = await import("../legacy/plain-text.ts");
 const writer = await import("../js/19-writer.js");
 const { syncFieldFromDom } = await import("../js/05-render.js");
 

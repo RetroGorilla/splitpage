@@ -43,6 +43,7 @@ import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { drawWriter, paintWriterDraw, writerOpen } from "./19-writer.js";
+import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -272,17 +273,6 @@ export function gallerySlotPictureHtml(slot) {
 
 export function galleryBadgeHtml(big) {
   return '<span class="scene-gallery-play' + (big ? ' is-big' : '') + '" aria-hidden="true"></span>';
-}
-
-export function videoHostLabel(l) {
-  if (!l.href) return "File";
-  var host;
-  try { host = new URL(l.href).hostname.replace(/^www\./i, "").toLowerCase(); } catch (e) { return "Link"; }
-  var known = { "youtube.com": "YouTube", "youtu.be": "YouTube", "youtube-nocookie.com": "YouTube", "vimeo.com": "Vimeo",
-    "player.vimeo.com": "Vimeo", "loom.com": "Loom", "dailymotion.com": "Dailymotion", "dai.ly": "Dailymotion",
-    "twitch.tv": "Twitch", "tiktok.com": "TikTok", "wistia.com": "Wistia", "frame.io": "Frame.io", "vidyard.com": "Vidyard",
-    "streamable.com": "Streamable" };
-  return known[host] || host;
 }
 
 function galleryTileHtml(row, slots, i, kind) {

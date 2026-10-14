@@ -16,8 +16,7 @@ import {
   galleryBadgeHtml,
   gallerySlotPictureHtml,
   render,
-  slotPoster,
-  videoHostLabel
+  slotPoster
 } from "./05-render.js";
 import { embeddableVideo, embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
 import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
@@ -25,6 +24,7 @@ import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js"
 import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
+import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 
