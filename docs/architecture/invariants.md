@@ -549,7 +549,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - the breakdown by category and the b-roll by scene.
 
   No format works these out for itself. The print colours are a second copy of `:root`, held to it by `palette.test.mjs`.
-- **Tests:** `src/test/export-kit.test.mjs`; `src/test/palette.test.mjs` ("the exports' print palette is the light theme's :root values"); `src/test/pdf-script.test.mjs`; `src/test/export-colours.test.mjs`; `src/test/xlsx-export.test.mjs`; `src/test/markdown-table.test.mjs` (the stacked-export cases); browser `41-export-polish.txt`.
+- **Tests:** `src/test/export-kit.test.mjs`; `src/test/m4-matrix-exports.test.mjs` (X6–X18: every writer and every `buildFileData` kind gives the captured bytes with the live document changed after capture; 5.1); `src/test/palette.test.mjs` ("the exports' print palette is the light theme's :root values"); `src/test/pdf-script.test.mjs`; `src/test/export-colours.test.mjs`; `src/test/xlsx-export.test.mjs`; `src/test/markdown-table.test.mjs` (the stacked-export cases); browser `41-export-polish.txt`.
 - **Owner:** `src/application` (`ExportDocument`), consumed by `src/adapters/formats` · **Milestone:** 5 · **Class:** absorb
 - **Replacement:** one frozen `ExportDocument` projection, captured from the session and the options, plus a format registry whose writers read only that projection (M5).
 - **Acceptance:**
@@ -581,9 +581,9 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-60 — An export is the same bytes all day
 
 - **Behaviour:** The same document exported twice on the same day gives identical bytes in every format. A PDF's `/CreationDate` and a .docx's `docProps` dates carry the day, not the time. Nothing prints the time of export; comments' own timestamps are data and are allowed.
-- **Tests:** browser `98-export-dialog.txt` (every format exported twice by two routes and the bytes compared); `src/test/xlsx-export.test.mjs` ("two exports of one script are the same bytes"); `src/test/list-pdfs.test.mjs` ("the packing list's file: its title for a viewer, and the same bytes built twice"); `src/test/export-kit.test.mjs` (`/CreationDate` is a date only).
+- **Tests:** browser `98-export-dialog.txt` (every format exported twice by two routes and the bytes compared); `src/test/m4-matrix-exports.test.mjs` (X22: every kind `buildFileData` writes, captured at two times on one day and serialized after midnight; 5.1); `src/test/xlsx-export.test.mjs` ("exports captured either side of a two-second boundary are the same bytes; the zip carries the captured day", which until 5.1 pinned bytes that differed because the ZIP read the clock); `src/test/list-pdfs.test.mjs` ("the packing list's file: its title for a viewer, and the same bytes built twice"); `src/test/export-kit.test.mjs` (`/CreationDate` is a date only).
 - **Owner:** `src/adapters/formats` · **Milestone:** 5 · **Class:** keep
-- **Replacement:** — (the `ExportDocument` captures the date from an injected clock).
+- **Replacement:** — (the `ExportDocument` captures the date; since 5.1 every date and ZIP timestamp is `exportDay` of it, [saving.md](saving.md#6-capture-46)).
 - **Acceptance:** suite 98 and the unit checks pass. New unit test: two `ExportDocument`s captured at different times on the same day give identical bytes for every registered format.
 
 ### INV-61 — The PDF footer is a pagination artifact
