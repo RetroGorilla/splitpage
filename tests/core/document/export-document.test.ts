@@ -52,3 +52,15 @@ test("a new document id replaces the copy's, never the source's", () => {
   assert.equal(doc.document.docId, "d" + "3".repeat(32));
   assert.equal(source.docId, "d" + "2".repeat(32));
 });
+
+test("a stamp puts rev and the last-edited fields on the copy and leaves the source alone", () => {
+  const source = migratedDoc(SOURCE);
+  const stamp = { rev: 4, lastEditedBy: "Ana", lastEditedAt: "2026-10-14T17:00:00.000Z" };
+  const doc = buildExportDocument(source, "2026-10-14T17:00:00.000Z", MODELS, { docId: "d" + "3".repeat(32), stamp: stamp });
+  assert.equal(doc.document.rev, 4);
+  assert.equal(doc.document.lastEditedBy, "Ana");
+  assert.equal(doc.document.lastEditedAt, "2026-10-14T17:00:00.000Z");
+  assert.equal(doc.document.docId, "d" + "3".repeat(32));
+  assert.equal(source.rev, 3);
+  assert.equal(Object.isFrozen(doc.document), true);
+});
