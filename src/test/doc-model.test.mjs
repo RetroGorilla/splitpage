@@ -9,8 +9,9 @@ import {
   toMarkdown, toggleMark, typingMarks,
   toPlainText, touchedCells
 } from "../js/04c-doc-model.js";
-import { htmlToMarkdown, sanitizeHtml } from "../js/04-richtext.js";
-import { htmlToPlainText, htmlToRuns } from "../js/14-export.js";
+import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { htmlToRuns } from "../adapters/formats/html-runs.ts";
+import { htmlToPlainText } from "../js/14-export.js";
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const B = (id, text, marks) => ({ atom: "broll", id, text: text || "B-roll:", marks: marks || {} });
@@ -143,7 +144,7 @@ test("the plain-text and Word readers agree with the HTML readers they replace",
   for (const cell of cells) {
     const html = toHtml(cell);
     assert.equal(toPlainText(cell), htmlToPlainText(html), html);
-    assert.deepEqual(toDocxRuns(cell), htmlToRuns(html), html);
+    assert.deepEqual(toDocxRuns(cell), htmlToRuns(html, inertBody), html);
   }
 });
 

@@ -8,7 +8,9 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../js/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { htmlToPlainText, strBytes, zipRead, zipWrite } from "../js/14-export.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
+import { htmlToPlainText } from "../js/14-export.js";
 import { __init as initDocx, buildDocx, buildNarrationDocx, docxToRows } from "../js/15-docx.js";
 
 initTags();
