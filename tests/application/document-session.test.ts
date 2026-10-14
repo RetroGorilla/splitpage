@@ -519,3 +519,15 @@ test("an unsubscribed listener hears nothing more", () => {
   assert.deepEqual(heard, ["edit"]);
   assert.equal(h.published.length, 2, "other listeners still hear");
 });
+
+test("#415: a merged document enters as it is, without a second migration, through the server or the recovery path", () => {
+  const h = opened();
+  const merged = migrateFake(rawScript("Merged"));
+  assert.equal(h.session.absorbMerged("server", merged), merged);
+  assert.equal(h.session.read(function (d) { return d; }), merged);
+  assert.equal(h.session.epoch(), 1);
+  const recovered = migrateFake(rawScript("Recovered"));
+  assert.equal(h.session.absorbMerged("recovery", recovered), recovered);
+  assert.equal(h.session.epoch(), 2);
+  assert.deepEqual(h.log, ["undo.server:Merged", "publish:server", "undo.server:Recovered", "publish:recovery"]);
+});
