@@ -284,6 +284,78 @@ function htmlToPlainScript() {
   return lines.join("\n");
 }
 
+var RAW_TEXT_ELEMENTS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1 };
+
+function tagAttributes(text, from) {
+  var attrs = {};
+  var i = from;
+  var n = text.length;
+  while (i < n) {
+    while (i < n && /[\t\n\f\r /]/.test(text[i])) i++;
+    if (i >= n) return null;
+    if (text[i] === ">") return { attrs: attrs, end: i + 1 };
+    var nameStart = i;
+    i++;
+    while (i < n && !/[\t\n\f\r />=]/.test(text[i])) i++;
+    var name = text.slice(nameStart, i).toLowerCase();
+    while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
+    var value = "";
+    if (text[i] === "=") {
+      i++;
+      while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
+      var quote = text[i];
+      if (quote === "\"" || quote === "'") {
+        var close = text.indexOf(quote, i + 1);
+        if (close === -1) return null;
+        value = text.slice(i + 1, close);
+        i = close + 1;
+      } else {
+        var valueStart = i;
+        while (i < n && !/[\t\n\f\r >]/.test(text[i])) i++;
+        value = text.slice(valueStart, i);
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(attrs, name)) attrs[name] = value;
+  }
+  return null;
+}
+
+function stateDataScriptText(text) {
+  var opening = /<(!--|[a-zA-Z][^\t\n\f\r />]*)/g;
+  for (var m = opening.exec(text); m; m = opening.exec(text)) {
+    if (m[1] === "!--") {
+      var commentEnd = text.indexOf("-->", m.index + 4);
+      if (commentEnd === -1) return null;
+      opening.lastIndex = commentEnd + 3;
+      continue;
+    }
+    var tag = tagAttributes(text, m.index + m[0].length);
+    if (!tag) return null;
+    var name = m[1].toLowerCase();
+    opening.lastIndex = tag.end;
+    if (!RAW_TEXT_ELEMENTS[name]) continue;
+    var closing = new RegExp("</" + name + "[\\t\\n\\f\\r />]", "ig");
+    closing.lastIndex = tag.end;
+    var closed = closing.exec(text);
+    var contentEnd = closed ? closed.index : text.length;
+    if (name === "script" && tag.attrs.id === "state-data") return text.slice(tag.end, contentEnd);
+    if (!closed) return null;
+    opening.lastIndex = contentEnd;
+  }
+  return null;
+}
+
+function stateDataFromRawText(text) {
+  var data = stateDataScriptText(text);
+  if (data === null) return null;
+  try {
+    var parsed = JSON.parse(data.replace(/\r\n?/g, "\n"));
+    return isDocumentObject(parsed) ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function parseProjectFileState(file, opts) {
   var kind = fileKindFromName(file.name);
   if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
@@ -307,12 +379,14 @@ export async function parseProjectFileState(file, opts) {
   }
 
   if (kind === "html") {
-    var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
-    var legacy;
-    try {
-      legacy = JSON.parse(dataEl.textContent);
-    } catch (e) {
-      return { error: "not-splitpage" };
+    var legacy = stateDataFromRawText(text);
+    if (!legacy) {
+      var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
+      try {
+        legacy = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        return { error: "not-splitpage" };
+      }
     }
     if (!isDocumentObject(legacy)) return { error: "not-splitpage" };
     var legacyEmbedded = docIdEmbeddedIn(legacy);
