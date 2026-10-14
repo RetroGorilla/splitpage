@@ -9,7 +9,7 @@ import { intern } from "../js/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
 import { zipRead } from "../adapters/formats/zip.ts";
-import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14-export.js";
+import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { __init as initDocx, buildDocx } from "../js/15-docx.js";
 import { buildCsv } from "../js/16-csv.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
