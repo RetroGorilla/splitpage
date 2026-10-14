@@ -58,18 +58,19 @@ test("the projections give the same answer after the live document changes, beca
 
 test("a comment's time is formatted with the clock the caller names, not the stored preference", () => {
   demo();
-  const doc = exportDocumentOf(S.state);
-  const stamped = (opts) => commentEntries(doc, opts).map((c) => c.when);
   writePref(CLOCK_KEY, "12");
   try {
+    const doc = exportDocumentOf(S.state);
+    const stamped = (opts) => commentEntries(doc, opts).map((c) => c.when);
     const twentyFour = stamped({ clockMode: "24" });
     const twelve = stamped({ clockMode: "12" });
     assert.ok(twentyFour.length > 0);
     assert.ok(twentyFour.every((w) => !/\b[AP]M\b/i.test(w)), twentyFour.join(" | "));
     assert.ok(twelve.every((w) => /\b[AP]M\b/i.test(w)), twelve.join(" | "));
     assert.deepEqual(stamped({}), twelve, "with no clock named, the stored preference decides");
-    assert.deepEqual(exportComments(doc).map((c) => c.when), twelve, "the writers read the preference once, in exportComments");
     writePref(CLOCK_KEY, "24");
+    assert.deepEqual(stamped({}), twentyFour, "setup: the stored preference now says 24-hour");
+    assert.deepEqual(exportComments(doc).map((c) => c.when), twelve, "the writers use the clock captured with the document");
     assert.deepEqual(stamped({ clockMode: "12" }), twelve, "a clock named by the caller ignores the stored preference");
   } finally {
     writePref(CLOCK_KEY, null);

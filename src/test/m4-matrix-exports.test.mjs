@@ -196,7 +196,7 @@ function swapPictures(replacement) {
 
 rightToday("X19", "an export whose local picture reads are held keeps the captured pictures and their places when the document, connection and pictures change", async (t) => {
   mockClock(t);
-  for (const kind of ["docx", "md", "html"]) {
+  for (const kind of ["docx", "md", "md-table", "html"]) {
     await withHeldStore(async ({ gates, held }) => {
       const row = freshPicture(jpegBytes, 300, 200, 31);
       const more = freshPicture(jpegBytes, 200, 300, 32);

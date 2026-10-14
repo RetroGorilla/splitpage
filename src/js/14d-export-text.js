@@ -13,6 +13,7 @@ import {
   sceneFacts
 } from "./14b-export-kit.js";
 import { breakdownRows, commentBodyText, commentEntries } from "./14c-export-projections.js";
+import { base64Encode } from "../core/document/media.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { cellOf, htmlToMarkdown } from "../legacy/richtext.ts";
@@ -38,7 +39,7 @@ function appendMarkdownTail(lines, doc, opts) {
     lines.push("");
   }
 
-  var comments = commentEntries(doc, { pieces: true });
+  var comments = commentEntries(doc, { pieces: true, clockMode: doc.clockMode });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -275,7 +276,7 @@ export function toMarkdownDoc(doc, opts) {
     if (amd) {
       lines.push(amd);
       lines.push("");
-    } else if (!vmd && !markdownHasPicture(row) && !more.length && !vlinks.length) {
+    } else if (!vmd && !markdownHasPicture(row, assets) && !more.length && !vlinks.length) {
       lines.push("_(blank scene)_");
       lines.push("");
     }
@@ -290,11 +291,19 @@ function mdRichTableCell(md) {
   return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
 }
 
-export function mdSceneCellSource(row, i, model) {
+function capturedRowDataUrl(assets, row) {
+  var img = rowImage(row);
+  if (!img) return null;
+  if (img.dataUrl) return img.dataUrl;
+  var pic = capturedPicture(assets, img.ref);
+  return pic ? "data:" + pic.mime + ";base64," + base64Encode(pic.bytes) : null;
+}
+
+export function mdSceneCellSource(row, i, model, assets) {
   var toMd = model ? function (html) { return toMarkdown(cellOf(html)); } : htmlToMarkdown;
   var text = toMd(row.visualText);
   var visual = text;
-  var image = rowImageDataUrl(row);
+  var image = assets ? capturedRowDataUrl(assets, row) : rowImageDataUrl(row);
   if (image) {
     visual = "![visual for scene " + pad2(i + 1) + "](" + image + ")" + (visual ? "<br>" + visual : "");
   }
@@ -310,6 +319,7 @@ export function toMarkdownTableDoc(doc, opts) {
   var s = doc.document;
   var exporting = !!(opts && opts.export);
   var limit = exporting && opts.scenes;
+  var assets = (opts && opts.assets) || null;
   var lines = [];
   lines.push("# " + (s.title || "Untitled Script"));
   lines.push("");
@@ -324,7 +334,7 @@ export function toMarkdownTableDoc(doc, opts) {
     lines.push("| # | Start | Status | Visual | Audio | Read |");
     lines.push("| --- | --- | --- | --- | --- | --- |");
     (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
-      var cell = mdSceneCellSource(row, i);
+      var cell = mdSceneCellSource(row, i, false, assets);
       lines.push("| " + [scenes[i].number, scenes[i].start, scenes[i].status.label].join(" | ") + " | " +
                  mdRichTableCell(cell.visual) + " | " + mdRichTableCell(cell.audio) + " | " +
                  mdReadCell(scenes[i]) + " |");
@@ -333,7 +343,7 @@ export function toMarkdownTableDoc(doc, opts) {
     lines.push("| # | Visual | Audio | Status |");
     lines.push("| --- | --- | --- | --- |");
     s.rows.forEach(function (row, i) {
-      var cell = mdSceneCellSource(row, i);
+      var cell = mdSceneCellSource(row, i, false, assets);
       lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(cell.visual) + " | " +
                  mdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
     });
@@ -373,7 +383,7 @@ export function htmlToPlainScript(doc) {
     lines.push("");
   }
 
-  var comments = commentEntries(doc, { pieces: true });
+  var comments = commentEntries(doc, { pieces: true, clockMode: doc.clockMode });
   if (comments.length) {
     lines.push("COMMENTS");
     lines.push("========");

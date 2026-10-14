@@ -129,7 +129,7 @@ var EXPORTERS = [
   { id: "md-table", action: "export-md-table", card: "md", choice: { value: "table", label: "Two columns" },
     name: "Markdown, two columns", menuLabel: "Markdown, two columns (.md)",
     words: "markdown md table two columns side by side", fileName: suffixed(" - two column.md"),
-    build: function (ctx) { return product(toMarkdownTableDoc(ctx.doc, { export: true })); } },
+    build: function (ctx) { return product(toMarkdownTableDoc(ctx.doc, { export: true, assets: ctx.assets })); } },
   { id: "xlsx", action: "export-xlsx", card: "csv", choice: { value: "xlsx", label: "Excel (.xlsx)" },
     name: "Excel", menuLabel: "Spreadsheet (.xlsx)",
     words: "excel xlsx spreadsheet workbook sheets numbers table", fileName: suffixed(".xlsx"),
