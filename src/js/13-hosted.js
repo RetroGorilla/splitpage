@@ -57,6 +57,7 @@ import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-d
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
+import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
@@ -508,8 +509,11 @@ async function resumeServerDoc() {
       if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
       return true;
     }
-    S.state = theirs;
-    setBaseState(cloneState(S.state), "resumeServerDoc: reopened as the server has it, nothing to merge");
+    documentTransitions().open({
+      from: { document: theirs },
+      reason: "resumeServerDoc: reopened as the server has it, nothing to merge",
+      writtenOut: true
+    });
     clearDirty();
     renderAbsorbed();
     updateIdentityChip();
@@ -910,11 +914,13 @@ export async function openServerDoc(id) {
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
-  S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
-  setBaseState(cloneState(S.state), "openServerDoc: the document as the server sent it");
+  documentTransitions().open({
+    from: { document: migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null }) },
+    reason: "openServerDoc: the document as the server sent it",
+    destination: { kind: "server", fields: { id: body.id, rev: body.rev || 0 } },
+    writtenOut: true
+  });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  setHome("server", { id: body.id, rev: body.rev || 0 });
-  S.docIdWrittenOut = true;
   resetProductionPanelState();
 
   clearDirty();
@@ -926,6 +932,15 @@ export async function openServerDoc(id) {
   showToast("Opened " + (S.state.title || id) + " from the server — " + S.state.rows.length +
     " scene" + (S.state.rows.length === 1 ? "" : "s"), "ok");
   return true;
+}
+
+function serverLabel(c) {
+  try { return new URL(c.serverUrl).host || "the other server"; } catch (e) { return "the other server"; }
+}
+
+function reportPublishOnLeftServer(title, via) {
+  showToast("Published “" + title + "” to " + serverLabel(via) + ", but this tab had switched to another server by then, " +
+    "so the script you have open was left unpublished. The published copy stays on that server.", "warn", true);
 }
 
 export async function publishToServer(opts) {
@@ -945,9 +960,9 @@ export async function publishToServer(opts) {
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
-  var via = conn;
+  var op = captureOperation();
+  var via = op.connection;
   var transport = serverTransport(via);
-  var homeAtStart = home;
   try {
     body = await withBusyBar("Publishing to the server…", function () {
       return sendWithBlobs(transport, published, function (sending, acceptMissing) {
@@ -961,19 +976,22 @@ export async function publishToServer(opts) {
     else handleApiError(err, "Could not put that on the server");
     return false;
   }
-  if (!stillOnServer(via)) return false;
-  if (S.state.docId !== oldId || home !== homeAtStart) {
+  if (!stillOnServer(via)) {
+    reportPublishOnLeftServer(published.title || body.id, via);
+    return false;
+  }
+  var outcome = documentTransitions().publish(op, {
+    destination: { kind: "server", fields: { id: body.id, rev: body.rev || 1 } },
+    docId: forkDocId || oldId,
+    baseline: published,
+    reason: "publishToServer: what the server just accepted"
+  });
+  if (outcome.kind === "obsolete") {
     showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
       "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
     return false;
   }
-  setHome("server", { id: body.id, rev: body.rev || 1 });
-  setBaseState(published, "publishToServer: what the server just accepted");
-  if (forkDocId) {
-    S.state.docId = forkDocId;
-    copyDocHistorySafe(oldId, forkDocId);
-  }
-  S.docIdWrittenOut = true;
+  if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
   if (S.editSeq === seqAtPublish) clearDirty();
   else scheduleAutoSave();
   updateFileChip();
@@ -1571,14 +1589,15 @@ export function notePresenceRev(body) {
 }
 
 async function pullServerDoc(docId) {
+  var op = captureOperation();
   var body;
   try {
-    body = await apiFetch("api/docs/" + encodeURIComponent(docId));
+    body = await serverTransport(op.connection).request("api/docs/" + encodeURIComponent(docId), {});
   } catch (err) {
     return;
   }
   if (!body || !isDocumentObject(body.state)) return;
-  if (serverHomeId() !== docId) return;
+  if (serverHomeId() !== docId || !stillOwns(op)) return;
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;
