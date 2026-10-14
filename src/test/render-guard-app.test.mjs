@@ -32,7 +32,12 @@ const BROKE = "render broke (#418)";
 
 const session = liveSession();
 const heard = [];
-session.subscribe((c) => heard.push(c.kind));
+let stopHearing = session.subscribe((c) => heard.push(c.kind));
+
+function hearReplacement() {
+  stopHearing();
+  stopHearing = session.subscribe((c) => heard.push(c.kind));
+}
 const held = () => session.read((doc) => doc);
 const toastHost = () => document.getElementById("toast-host");
 const idle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
@@ -230,6 +235,7 @@ test("a reload in place whose render throws still marks the reload unsaved and s
     fresh("Before reload");
     disk = new File(["Wide\tOne.\nClose\tTwo."], "guard.txt", { lastModified: 1 });
     await openProjectFile(disk, fileHandle, { skipSnapshot: true });
+    hearReplacement();
     flushEdits();
     quiet();
     disk = new File(["# Reloaded\n\nWide\tOne, again.\nClose\tTwo.\nTight\tThree."], "guard.txt", { lastModified: 2 });
