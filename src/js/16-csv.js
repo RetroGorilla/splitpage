@@ -1,5 +1,4 @@
-import { breakdownRows } from "./08-production-panels.js";
-import { commentBodyText } from "./10-comments.js";
+import { breakdownRows, commentBodyText } from "./14c-export-projections.js";
 import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";

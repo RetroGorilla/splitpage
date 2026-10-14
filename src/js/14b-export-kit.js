@@ -1,38 +1,29 @@
+import { readClockPref } from "./00p-prefs.js";
 import { migrateRows } from "./02-state.js";
 import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "./02c-blobs.js";
-import {
-  ROW_STATUSES,
-  DEFAULT_WPM,
-  formatDuration,
-  formatTimecode,
-  hasSetLength,
-  rowStatus,
-  targetClock,
-  targetLengthOf,
-  wordCount
-} from "./01-scene-status.js";
-import { TAG_CATEGORIES } from "./07-production-tags.js";
-import { breakdownRows } from "./08-production-panels.js";
-import { brollSortedForList } from "./08c-broll.js";
-import { shotRecordForFile } from "./08d-broll-panel.js";
-import { commentEntries } from "./10-comments.js";
-import { htmlToPlainText, tagPrintColor } from "./14-export.js";
+import { breakdownRows, commentEntries, sceneFacts, shotRecordForFile } from "./14c-export-projections.js";
+import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
 import { exportAssetRequest, heldExportAssets, resolveExportAssets } from "../application/export/assets.ts";
 import { captureExportDocument as captureWith } from "../application/save/capture.ts";
 import { buildExportDocument } from "../core/document/export-document.ts";
 import { rowImage } from "../core/document/media.ts";
 import { contentMemo } from "../core/document/memo.ts";
-import { brollEntries } from "../core/production/broll.ts";
+import { DEFAULT_WPM, targetLengthOf } from "../core/document/timing.ts";
+import { brollEntries, brollSortedForList } from "../core/production/broll.ts";
+import { ROW_STATUSES, TAG_CATEGORIES, rowStatus } from "../core/production/looks.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
-import { pad2, rowSeconds as rowSecondsIn } from "../core/production/timing.ts";
+import { formatDuration, pad2, rowSeconds as rowSecondsIn, targetClock } from "../core/production/timing.ts";
 import { toHtml } from "../core/text/html.ts";
 import { toDocxRuns } from "../core/text/projections.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { refsIn, sniffImageMime } from "../../shared/blob-policy.js";
+
+export { sceneFacts };
 
 export var PRINT_COLORS = {
   text: "171613",
@@ -148,7 +139,7 @@ export function exportFacts(doc) {
   var status = { todo: 0, ready: 0, shot: 0 };
   rows.forEach(function (r) {
     seconds += rowSecondsIn(r, s, productionReaders);
-    words += wordCount(r.audioText);
+    words += productionReaders.wordCount(r.audioText);
     var st = rowStatus(r.status) || ROW_STATUSES[0];
     status[st.id]++;
   });
@@ -177,26 +168,6 @@ export function exportSummaryParts(facts) {
   }
   if (facts.scenes) out.push(facts.status.shot + " of " + facts.scenes + " shot");
   return out;
-}
-
-export function sceneFacts(doc) {
-  var at = 0;
-  return (doc.scenes || []).map(function (r, i) {
-    var sec = rowSecondsIn(r, doc.document, productionReaders);
-    var st = rowStatus(r.status) || ROW_STATUSES[0];
-    var out = {
-      index: i,
-      number: pad2(i + 1),
-      start: formatTimecode(at),
-      startSeconds: at,
-      seconds: sec,
-      read: formatDuration(sec),
-      readSet: hasSetLength(r),
-      status: { id: st.id, label: st.label }
-    };
-    at += sec;
-    return out;
-  });
 }
 
 export function commentNumbers(doc) {
@@ -235,7 +206,7 @@ function numberComments(state) {
 
 export function exportComments(doc, opts) {
   var nums = doc.commentNumbers;
-  var list = commentEntries(doc, opts || { pieces: true }).map(function (c) {
+  var list = commentEntries(doc, Object.assign({ clockMode: readClockPref() }, opts || { pieces: true })).map(function (c) {
     var scene = c.rowIndex >= 0 ? pad2(c.rowIndex + 1) : "";
     var field = c.field === "audioText" ? "Audio" : "Visual";
     return Object.assign(c, {

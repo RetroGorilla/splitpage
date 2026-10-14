@@ -71,7 +71,7 @@ import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { toMarkdown } from "../core/text/projections.ts";
-import { cellOf, htmlToMarkdown, inertBody } from "../legacy/richtext.ts";
+import { cellOf, htmlToMarkdown } from "../legacy/richtext.ts";
 import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 
@@ -827,25 +827,6 @@ export function toMarkdownTableDoc(doc, opts) {
   lines.push("");
   if (!limit) appendMarkdownTail(lines, doc, { export: exporting });
   return lines.join("\n");
-}
-
-export function htmlToPlainText(html) {
-  if (!html) return "";
-  var c = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
-  return (c.textContent || "").replace(/\u00A0/g, " ").trim();
-}
-
-export var TAG_PRINT_COLORS = {
-  prop: "764AA2",
-  location: "2A7449",
-  cast: "A53C75",
-  vfx: "5E6C00",
-  sound: "AB413E",
-  gear: "44693C"
-};
-
-export function tagPrintColor(catId) {
-  return Object.prototype.hasOwnProperty.call(TAG_PRINT_COLORS, catId) ? TAG_PRINT_COLORS[catId] : null;
 }
 
 export function __init() {

@@ -16,7 +16,7 @@ import {
 } from "../js/07-production-tags.js";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { __init as initBroll, brollEntries, newBrollRecord, updateBrollBadge } from "../js/08c-broll.js";
-import { htmlToPlainText } from "../js/14-export.js";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { brollEntries as readBrollEntries } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
 

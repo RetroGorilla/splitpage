@@ -12,11 +12,12 @@ import {
   tagCategory,
   tagStatus
 } from "./07-production-tags.js";
-import { applyStashedWork, htmlToPlainText } from "./14-export.js";
+import { applyStashedWork } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 import { idMap } from "../core/document/id-map.ts";
 import { safeImageSrc } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 
 var mergeCandidate = null;
 var mergeProbeToken = 0;
