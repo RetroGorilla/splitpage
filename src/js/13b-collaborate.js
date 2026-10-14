@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { authorityOf, isOwner } from "../application/collaboration/authority.ts";
 import { conn, home, normalizeServerUrl, serverHomeId, updateConnection } from "./_home.js";
 import { readPref, writePref } from "./00p-prefs.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
@@ -98,7 +99,7 @@ export function collabServerView() {
   var here = servedByServer();
   var url = here ? "" : readCollabServer();
   var signedIn = !!rememberedTokenForServer(url) ||
-    (conn.serverUrl === url && !!conn.token && conn.role !== "review" && !conn.scope);
+    (conn.serverUrl === url && isOwner(authorityOf(conn)));
   return { servedHere: here, url: url, label: serverLabel(url), signedIn: signedIn,
            isDefault: !here && url === DEFAULT_COLLAB_SERVER };
 }
