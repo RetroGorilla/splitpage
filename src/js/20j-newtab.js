@@ -107,9 +107,10 @@ function startStarterScript(id) {
 
 function openPasteAsNewDocument() {
   openImportModal({
-    intoNewDocument: function (rows) {
-      adoptNewDocument(migrateRows({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows }),
-        "newtab paste: a new document from pasted text");
+    intoNewDocument: function (rows, scan) {
+      var next = migrateRows({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows });
+      scan(next);
+      adoptNewDocument(next, "newtab paste: a new document from pasted text");
     }
   });
 }

@@ -9,8 +9,11 @@ import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { fileKindFromName } from "./18-local-files.js";
 import { MD_IMAGE_PREFIX_RE } from "./20d-formats.js";
+import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml, legacyMdToHtml, unitSafePrefix } from "../core/document/text-policy.ts";
+import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 
 S.importModeTouched = false;
 
@@ -287,7 +290,7 @@ var IMPORT_SCANS = [
     id: "broll",
     label: "Look for B-roll lines and track them",
     hint: "A line starting “B-roll:” becomes a shot on the b-roll list, and keeps its status when the line is reworded.",
-    apply: function (rows) { return anchorBrollInRows(rows); },
+    apply: function (rows, doc) { return anchorBrollInRows(rows, doc); },
     decline: function (rows) { declineBrollAnchoring(rows); },
     found: function (n) {
       return n + " B-roll line" + (n === 1 ? "" : "s") + " found and tracked.";
@@ -333,19 +336,24 @@ function saveImportScanPrefs() {
   try { localStorage.setItem(IMPORT_SCAN_KEY, JSON.stringify(saved)); } catch (e) {}
 }
 
-function runImportScans(rows) {
-  var notes = [];
-  IMPORT_SCANS.forEach(function (scan) {
+function chosenImportScan() {
+  var chosen = IMPORT_SCANS.filter(function (scan) {
     var box = importScanBox(scan.id);
-    if (box ? !box.checked : !importScanEnabled(scan.id)) {
-      if (scan.decline) scan.decline(rows);
-      return;
-    }
-    var n = scan.apply(rows);
-    if (n) notes.push(scan.found(n));
+    return box ? box.checked : importScanEnabled(scan.id);
   });
   saveImportScanPrefs();
-  return notes.join(" ");
+  return function (doc, rows) {
+    var notes = [];
+    IMPORT_SCANS.forEach(function (scan) {
+      if (chosen.indexOf(scan) === -1) {
+        if (scan.decline) scan.decline(rows);
+        return;
+      }
+      var n = scan.apply(rows, doc);
+      if (n) notes.push(scan.found(n));
+    });
+    return notes.join(" ");
+  };
 }
 
 function getImportMode() {
@@ -399,9 +407,14 @@ export function clearPendingFileRows() {
 }
 
 var importIntoNewDocument = null;
+var importModalEpoch = 0;
+var importDecodes = 0;
+var importOperation = null;
 
 export function openImportModal(opts) {
+  importModalEpoch++;
   importIntoNewDocument = (opts && typeof opts.intoNewDocument === "function") ? opts.intoNewDocument : null;
+  importOperation = importIntoNewDocument ? null : captureOperation();
   document.getElementById("import-modal").classList.toggle("is-new-document", !!importIntoNewDocument);
   document.getElementById("import-textarea").value = "";
   document.getElementById("import-replace").checked = false;
@@ -417,12 +430,24 @@ export function openImportModal(opts) {
 }
 
 export function closeImportModal() {
+  importModalEpoch++;
   document.getElementById("import-modal").hidden = true;
   importIntoNewDocument = null;
+  importOperation = null;
+}
+
+function importAsked() {
+  return { modal: importModalEpoch, decode: ++importDecodes, operation: importOperation };
+}
+
+function stillAsked(asked) {
+  return asked.modal === importModalEpoch && asked.decode === importDecodes &&
+    (!asked.operation || stillOwns(asked.operation));
 }
 
 export async function handleImportFile(file) {
   if (!file) return;
+  var asked = importAsked();
   var kind = fileKindFromName(file.name);
   if (kind === "splitpage" || kind === "html") {
     showToast("That is a Splitpage project — open it with File ▸ Open…", "warn");
@@ -442,9 +467,10 @@ export async function handleImportFile(file) {
         }
       }
     } catch (err) {
-      showToast(importFileErrorMessage(err), "error");
+      if (stillAsked(asked)) showToast(importFileErrorMessage(err), "error");
       return;
     }
+    if (!stillAsked(asked)) return;
     if (!rows || !rows.length) { showToast("No scenes found in that file.", "warn"); return; }
     pendingFileRows = rows;
     pendingFileName = file.name;
@@ -456,9 +482,10 @@ export async function handleImportFile(file) {
   try {
     text = await file.text();
   } catch (err) {
-    showToast("Could not read that file.", "error");
+    if (stillAsked(asked)) showToast("Could not read that file.", "error");
     return;
   }
+  if (!stillAsked(asked)) return;
   pendingFileRows = null;
   pendingFileName = "";
   document.getElementById("import-textarea").value = text;
@@ -485,19 +512,45 @@ export function confirmImport() {
     }
     newRows = normalizeImportedRows(rows);
   }
-  newRows.forEach(stampRow);
+  var scan = chosenImportScan();
   if (importIntoNewDocument) {
-    importIntoNewDocument(newRows);
-  } else {
-    var replace = document.getElementById("import-replace").checked;
-    if (replace && S.state.rows.length) pushSnapshot("Before replacing rows on import");
-    S.state.rows = replace ? newRows : S.state.rows.concat(newRows);
+    var found = "";
+    newRows.forEach(stampRow);
+    importIntoNewDocument(newRows, function (doc) { found = scan(doc, doc.rows); });
+    markDirty();
+    finishImport(newRows.length, found);
+    return;
   }
-  var found = runImportScans(newRows);
-  markDirty();
+  if (!importOperation || !stillOwns(importOperation)) {
+    closeImportModal();
+    showToast(IMPORT_MOVED, "warn");
+    return;
+  }
+  var replace = document.getElementById("import-replace").checked;
+  if (replace && editAllowed() && readSession(hasRows)) pushSnapshot("Before replacing rows on import");
+  var imported = importRowsCommand({ rows: newRows, replace: replace, scan: scan }, sessionStamps);
+  var outcome = runCommand(imported.command);
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") {
+    if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(IMPORT_REVIEW_REFUSAL, "warn");
+    closeImportModal();
+    return;
+  }
+  var report = imported.report();
+  finishImport(report.count, report.found);
+}
+
+var IMPORT_MOVED = "The script changed while the import was open, so nothing was imported. Open the import again to bring the text in.";
+var IMPORT_REVIEW_REFUSAL = "Viewing only — you can comment, but not change the script.";
+
+function hasRows(doc) {
+  return !!doc && doc.rows.length > 0;
+}
+
+function finishImport(count, found) {
   render();
   closeImportModal();
-  showToast("Imported " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") + "." +
+  showToast("Imported " + count + " row" + (count === 1 ? "" : "s") + "." +
     (found ? " " + found : ""), "ok");
 }
 
