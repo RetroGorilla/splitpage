@@ -62,7 +62,8 @@ import {
   deliverFile,
   fileKindFromName,
   showFileConflict,
-  updateFileChip
+  updateFileChip,
+  writeBackToFile
 } from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
@@ -441,6 +442,7 @@ function writeAutoSave(job) {
 function writeQueued(job) {
   var kind = job.request.kind;
   if (kind === "autosave") return writeAutoSave(job);
+  if (kind === "writeback" || kind === "writebackForce") return writeBackToFile(job);
   if (kind === "server") {
     return saveToServer(job).then(function (sent) { return sent === false ? FAILED : SAVED; });
   }
