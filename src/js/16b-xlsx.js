@@ -1,8 +1,11 @@
 import { breakdownTable } from "./08-production-panels.js";
 import { brollTable } from "./08d-broll-panel.js";
-import { strBytes, tagPrintColor, xmlEscape, zipWrite } from "./14-export.js";
+import { tagPrintColor } from "./14-export.js";
 import { PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT, exportDay } from "./14b-export-kit.js";
 import { scriptTable } from "./16-csv.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { xmlEscape } from "../adapters/formats/xml.ts";
+import { zipWrite } from "../adapters/formats/zip.ts";
 import { unitSafePrefix } from "../core/document/text-policy.ts";
 
 var NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";

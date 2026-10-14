@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { cellOf, toDocxRuns, toMarkdown, toPlainText } from "../js/04c-doc-model.js";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { tagsInField } from "../js/07-production-tags.js";
-import { htmlToPlainText, htmlToRuns } from "../js/14-export.js";
+import { htmlToRuns } from "../adapters/formats/html-runs.ts";
+import { htmlToPlainText } from "../js/14-export.js";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 import { STORED, tagSpan } from "./_stored-cells.mjs";
 
@@ -35,7 +36,7 @@ function coalesce(runs) {
 test("docx/pdf runs: the same text in the same formats as htmlToRuns, for every stored cell", () => {
   let merged = 0;
   for (const html of STORED) {
-    const before = htmlToRuns(html);
+    const before = htmlToRuns(html, inertBody);
     const after = toDocxRuns(cellOf(html));
     assert.deepEqual(coalesce(after), coalesce(before), html);
     assert.ok(after.length <= before.length, html);

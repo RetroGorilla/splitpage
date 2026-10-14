@@ -246,9 +246,6 @@
     "src/js/13-hosted.js": [
       "/* global google -- injected at runtime by Google Identity Services; see above */"
     ],
-    "src/js/14-export.js": [
-      "/* eslint-disable-next-line no-control-regex -- see the line above. */"
-    ],
     "src/js/16-csv.js": [
       "/* eslint-disable-next-line no-control-regex -- C0 controls are what a CSV field must not carry into a row. */"
     ],
