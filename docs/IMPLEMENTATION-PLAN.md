@@ -283,6 +283,8 @@ The blob registry (`02c-blobs.js`) moves into a store adapter here, so two crite
 
 ### 5 — Make formats consume captured data and one registry
 
+**Status (2026-10-14):** code complete, gate passed on `dcfb92d`; closes when the external review's triage is recorded ([gate record](architecture/milestone-5-gate.md)). PRs: #576 (`3e37ede`), #577 (`1f096dd`), #579 (`74f6ecd`), #581 (`ab9e301`), #582 (`dcfb92d`); tooling #578, CI #580. The Linux full run and native ARM64 stay with the 4.0 release gate. Node 24 (#583) lands right after.
+
 **Source:** `14b-export-kit.js`, `15-docx.js`, `16-csv.js`, `16b-xlsx.js`, `17-pdf.js`, `20d-formats.js`, import readers and export menus/dialogs.
 
 **Work:** Milestone 4 defines the frozen `ExportDocument` projection from the originating session and options; the writers here take it. Capture relevant timing/date/selection data and image availability; asynchronous asset resolution uses the captured context. Writers never read `S.state`, live UI controls or whichever connection happens to be current.
