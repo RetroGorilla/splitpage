@@ -558,6 +558,7 @@ rightToday("K1", "a desktop file-draft restore whose document is replaced across
     held.releaseOp("readFile");
     const outcome = await restoring;
     assert.ok(!["unreadable", "untitled-copy"].includes(outcome), "setup: the restore read the file");
+    assert.equal(outcome, "kept", "the restore tells the desktop app the draft is kept, so it opens nothing over the replacement");
     assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
     assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here."), false, "the late restore put none of its text into the replacement");
   } finally {
