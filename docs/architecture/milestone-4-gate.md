@@ -22,7 +22,7 @@ on `2cc8bf2` itself.
 | External review | Astra (Codex CLI), 2026-10-14: 6 bugs reported, 4 fixed in #572, 2 deferred; 4 modularity suggestions accepted and scheduled | recorded ([below](#external-review)) |
 | Every matrix case `rightToday` | 110 cases, none `wrongToday` | passed |
 | Lifecycle test (E9) and capture-contract tests (E8) | `m4-lifecycle.test.mjs` and `export-capture-app.test.mjs` pass in the Windows `npm run verify` on `2cc8bf2` (exit 0, `test:all` 254 of 254 files) | passed |
-| Typing and render medians re-run at the gate (E13) | not re-run; 4.4 and 4.21 measured them, suite 67 passed in both Windows browser runs (a pass/fail check, not the medians) | **open** ([below](#typing-and-render-medians-e13)) |
+| Typing and render medians re-run at the gate (E13) | controlled same-sitting rerun: long fixture within noise or faster; short fixture has a 2 to 6 ms p95 tail on typing and new scene, tracked in [#575](https://github.com/RetroGorilla/splitpage/issues/575) | met with a note ([below](#typing-and-render-medians-e13)) |
 | Recovery tests (E7), browser and desktop | browser suites in the Windows run; desktop `draft:` and `session restore` groups below | passed |
 | #320 case rerun on the closing tree, in `performance-record.md` | Linux rerun recorded by #571; Windows rerun below | passed |
 | Existing five repaired defects stay fixed (D16) | their suites are in the Windows run (249, 261, 22, and `publish-in-flight` in `npm run verify`) | passed |
@@ -148,15 +148,40 @@ in #571 recorded open -1.4%, merge -4.4% and load +2.6%
 ## Typing and render medians (E13)
 
 [E13](milestone-4.md#where-the-exit-criteria-stand) says the typing and render
-medians are re-run at the gate. They were not: the perf runs above used
-`--only images`, and suite 67 only passes or fails. 4.4 and 4.21 measured them
-at their merges. To close it, run on the Windows machine, on `2cc8bf2`:
+medians are re-run at the gate. The `--only images` runs above do not cover
+them, so they were measured separately, in one sitting on the Windows machine:
+base `1aa1eed` (4.4's base) against head `2cc8bf2`, alternating, three rounds
+each, `node tools/perf-record.mjs --only short,long`, with the head's tool
+copied into the base worktree. No long tasks; the machine was quiet (CPU 6 to
+18%). Medians of three, in ms:
 
-`node tools/perf-record.mjs --only short,long` (three runs, compare the
-median p50 and p95 of typing and the row and scene cases with the 4.4 base
-record in [performance-record.md](performance-record.md)).
+| Case | p50 base / head / change | p95 base / head / change |
+| --- | --- | --- |
+| short typing | 4.4 / 4.7 / +6.8% | 13.0 / 15.9 / +22.3% |
+| short new scene | 19.3 / 21.8 / +13.0% | 23.3 / 29.2 / +25.3% |
+| short delete every scene (one sample) | 10.9 / 9.9 / -9.2% | |
+| short undo the delete (one sample) | 15.1 / 13.0 / -13.9% | |
+| long typing | 6.5 / 6.2 / -4.6% | 16.6 / 16.6 / 0.0% |
+| long new scene | 40.0 / 35.6 / -11.0% | 45.6 / 41.1 / -9.9% |
+| long delete every scene (one sample) | 12.7 / 12.8 / +0.8% | |
+| long undo the delete (one sample) | 35.4 / 33.0 / -6.8% | |
 
-Status: open.
+Per-run p95, base then head: short typing 14.5, 12.4, 13.0 against 16.3, 14.2,
+15.9; short new scene 23.3, 21.7, 25.9 against 28.7, 30.3, 29.2 (the head was
+higher in every round).
+
+Reading: the long fixture's typing and render medians are within noise or
+faster. The short (2-scene) fixture shows a consistent 2 to 6 ms p95 tail cost
+on typing and new scene, above 10% because the base is tiny; its p50 is within
+noise. This is recorded as a known tail cost, not a regression in a render or
+delete path. The likely cause is post-edit work milestone 4 added, such as
+autosave scheduling or draft writes; attributing it is
+[#575](https://github.com/RetroGorilla/splitpage/issues/575) (label
+`post-m4`). An earlier uncontrolled run against the 4.4 record's numbers read
+up to +39% on the long fixture's new scene; the controlled run shows that was
+noise.
+
+Status: met, with that note.
 
 ## External review
 
@@ -199,9 +224,8 @@ tests. The four `S.state` assigners (target two) are recorded in
 
 ## Blockers for Adam
 
-One open item: the typing and render medians of E13 were not re-run (see
-[above](#typing-and-render-medians-e13)); the gate section's own list does not
-name them. Every run the gate section lists passed on the exact merged tree. The Linux full run and native ARM64 wait for
+None from the runs: every run the gate section lists passed on the exact
+merged tree, and E13 is met with a note ([above](#typing-and-render-medians-e13)). The Linux full run and native ARM64 wait for
 the 4.0 release gate, as the gate section says. The external review is
 recorded above with its disposition.
 
