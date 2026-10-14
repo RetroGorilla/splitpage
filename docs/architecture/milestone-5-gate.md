@@ -19,7 +19,7 @@ steps are merged (see [the PR list](#pull-requests)). Every run below ran on
 | `SPLITPAGE_M4_GATE=1 npm run verify` (race matrix, no case demoted) | exit 0; 255 type-check cases; `test:all` 262 of 262 files | passed |
 | Capture-after-mutation, held-asset, import stored-bytes, INV-60 and exporter-route checks added by #574 | all located by content and passing ([below](#checks-added-by-574)) | passed |
 | Windows x64 packaged check | stage and build exit 0; verify-dist 6/6; packaged smoke 974/974 | passed (run although the plan does not require it) |
-| External review | Codex `gpt-6.1-sol` (xhigh), in progress | [pending](#external-review) |
+| External review | Sol (Codex CLI), 2026-10-14: 0 blockers, 3 should-fix, 1 nit; all fixed in #586 (`6993fcf`) | recorded ([below](#external-review)) |
 | Linux full run and native ARM64 | moved to the 4.0 release gate | not run here |
 
 Every run ran once, on `dcfb92d` itself, with no failure, flake or rerun.
@@ -33,6 +33,7 @@ Every run ran once, on `dcfb92d` itself, with no failure, flake or rerun.
 | 5.2b Writers read the captured document (projection) | #579 | `74f6ecd` |
 | 5.3 Import as a session command | #581 | `ab9e301` |
 | 5.4 The format registry | #582 | `dcfb92d` |
+| 5.5 Sol review fixes | #586 | `6993fcf` |
 | Tooling: `perf-ab` | #578 | |
 | CI cleanup | #580 | |
 
@@ -73,7 +74,7 @@ or todo.
 
 | File | Result | Holds |
 | --- | --- | --- |
-| `m4-matrix-exports` | 17/17 | X18 (every export route builds from the one capture taken before its first await) and X19 (held local picture reads keep the captured pictures) |
+| `m4-matrix-exports` | 17/17 | X18 (every export route builds from the one capture taken before its first await), X19 (held local picture reads keep the captured pictures) and X22 (INV-60, captures at different times) |
 | `m4-matrix-files` | 31/31 | the stored-byte import writeback cases (I3 to I6) |
 | `export-registry-app` | 4/4 | a new exporter reaches the menu, palette, dialog and Export Again from one registration; the matrix lists every registered exporter |
 | `export-capture-app` | 2/2 | the captured document's key list |
@@ -84,10 +85,10 @@ Other export and import files, which also pass: `m4-matrix-hosted` 24/24,
 `exports-golden` 5/5, `text-exports` 10/10, `xlsx-export` 8/8,
 `docx-reimport` 16/16, `comment-images-export` 4/4, `export-kit` 10/10.
 
-No test is named for INV-60 or capture-after-mutation, so they were matched by
-content: the plan names `m4-matrix-exports` and `import-rows` for them, and
-the tests' own labels are the evidence. The INV-60 different-times case was
-not confirmed individually.
+No test is named for capture-after-mutation, so it was matched by content: the
+plan names `m4-matrix-exports` and `import-rows`, and the tests' own labels are
+the evidence. INV-60's different-times check is X22 in `m4-matrix-exports`
+(17/17 above).
 
 ## Electron smoke (dev target)
 
@@ -116,12 +117,36 @@ and the build entry did not change); it was run anyway.
 
 ## External review
 
-A Codex `gpt-6.1-sol` (xhigh) code review of `2cc8bf2..dcfb92d` is in progress.
-Adam decided that milestone 5 is done only after its findings are triaged
-(blockers fixed, the rest filed as issues). The triage and the disposition
-table are added here when the review lands.
+| | |
+| --- | --- |
+| Reviewer | Sol (Codex CLI), model `gpt-6.1-sol` at xhigh effort, on the maintainer's machine: an independent session that took no part in building or reviewing milestone 5 |
+| Kind | A different model. Adam chose Sol over Astra for this milestone because it was small and its plan had already been reviewed by Astra |
+| Scope | Code review of `2cc8bf2..dcfb92d`, read-only |
+| Date | 2026-10-14 |
+| Verdict | 0 blockers, 3 should-fix, 1 nit, all in the text exporters; all four fixed in PR #586 (merge `6993fcf`) |
+| Vetting | Each finding was checked against the code before the verdict. Sol ran 17 focused application and core tests on Node 22.23.2 and confirmed findings 1 to 3 and the locale mismatch in finding 4 by running the source functions in isolation. It could not run the app tests or the race matrix in its read-only checkout (`jsdom` and `fake-indexeddb` were absent), and ran no build or browser suites; those runs are the gate runs above |
+
+The raw review is kept with the project's files (`sol-m5-review.md`); this
+table is the disposition.
+
+| # | Severity | Finding | Decision | Pinned by |
+| --- | --- | --- | --- | --- |
+| 1 | should-fix | `14d-export-text.js`: picture-only Markdown exports throw, because `markdownHasPicture` needs `assets` and the call omits it | Fixed in #586 (`c461669`) | `export-text-captures.test.mjs`, picture-only scene with the bytes held and missing |
+| 2 | should-fix | `14d-export-text.js`: plain-text serialization and the human half of project Markdown read the live clock preference instead of the captured `clockMode` | Fixed in #586 (`c461669`) | `export-text-captures.test.mjs`, preference changed after capture |
+| 3 | should-fix | `14d-export-text.js`: two-column Markdown reads the shared blob cache, not the operation's asset map | Fixed in #586 (`c461669`) | `export-text-captures.test.mjs`, shared cache cleared after capture. The new `md-table` variant of X19 in `m4-matrix-exports` also passes on the old code, so the unit test, not the matrix case, pins this bug |
+| 4 | nit | `export-projections.test.mjs`: the clock assertion depends on the machine's locale | Fixed in #586 (`c461669`) | `export-projections.test.mjs`, preference set to 12-hour before capture and 24-hour after |
+
+Sol checked these and found them sound: append and replace import (one session
+transaction, rows copied and stamped once, anchors reconciled, a failed scan
+rolls back, new-document scanning before adoption); the registry (action IDs,
+filenames and persisted Export Again values preserved); import writeback
+ownership checks and hosted Save As; PDF, DOCX, XLSX and ZIP dates derived from
+the capture, with golden fixture payloads unchanged; and the `perf-ab` fixture's
+`node_modules` ignore entry.
 
 ## Blockers for Adam
 
-None from the runs: every run passed on the exact merged tree. Milestone 5
-closes when the external review's triage is recorded.
+None. Every run passed on the exact merged tree, and the external review's
+findings are fixed. The gate runs were made on `dcfb92d`, before the review
+fixes; #586 changed only the text exporters and their tests (five files), and
+its own CI and independent review ran on it.
