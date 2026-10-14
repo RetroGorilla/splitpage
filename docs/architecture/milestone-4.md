@@ -420,7 +420,7 @@ The #320 case on the closing tree: open -1.4% and merge -4.4% against `d18adde` 
 | E1 | Held. A confirmed generation and baseline per destination; one status selector (saving.md §4, §8). The selector's inputs are still read from legacy globals |
 | E2 | Held, without the authority field: the context carries the connection instance, so a role or scope change already makes `stillOwns` false, and the authority model (`authority.ts`) is separate (saving.md §2) |
 | E3 | Held. Writes are serialised per destination; one transport owns an operation's blob transfer and write; an obsolete write that landed is reported. `sendReviewWrites` still uses the live connection (saving.md §8) |
-| E4 | Held, with four `S.state` assigners instead of the planned two: the prelude's `null` and the live-document port, plus `applyMerge`'s adopt (its screen side stays for milestone 6) and the boot init in `21-events.js` |
+| E4 | Held, with four `S.state` assigners instead of the planned two: the prelude's `null` and the live-document port, plus `applyMerge`'s adopt (its screen side stays for milestone 6) and the boot reset in `21-events.js` |
 | E5 | Held (C1, I1, I2, F3 are `rightToday`; import writeback queues on its own destination) |
 | E6 | Held. The authority model and the workflow behind interfaces; `publishToServer`'s own role check stays inline |
 | E7 | Held (4.17, 4.18). The desktop and browser recovery groups run at the gate |
@@ -432,7 +432,7 @@ The #320 case on the closing tree: open -1.4% and merge -4.4% against `d18adde` 
 | E13 | Held (4.4 and 4.21). The typing and render medians are re-run at the gate |
 | E14 | Held. 4.19 trimmed the second hash and copy; the closing tree is not slower than `d18adde` (performance-record.md) |
 | E15 | Held (`export-capture-app.test.mjs`) |
-| E16 | The gate, recorded in a separate docs PR |
+| E16 | Recorded in [milestone-4-gate.md](milestone-4-gate.md): the Windows runs (plain and frozen), the dev smoke, the x64 packaged check, the perf rerun and the external review |
 
 ### Where the build differs from the plan
 
