@@ -828,7 +828,7 @@ export function reviewBlocked() {
 }
 
 export async function fetchReviewLink() {
-  if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
+  if (!S.serverMode.available || !S.serverMode.reviewAvailable || isReviewer(authorityOf(conn))) return "";
   if (S.serverMode.links || isLinkGuest()) return "";
   if (!onServerDoc()) return "";
   var body;
@@ -882,7 +882,7 @@ function renderServerPicker() {
         '</span>' +
       '</button>' +
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-      (S.serverMode.readOnly || conn.role === "review" ? '' :
+      (S.serverMode.readOnly || isReviewer(authorityOf(conn)) ? '' :
         '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
           escapeHtml(d.id) + '" title="Delete this document from the server" aria-label="Delete from the server">' +
           spriteIcon("i-trash") + '</button>') +
