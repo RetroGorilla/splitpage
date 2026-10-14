@@ -191,6 +191,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (save status), `src/features/writer` · **Milestone:** 4 · **Class:** absorb
 - **Replacement:** one Save action in the action registry (M1, done: both buttons, Ctrl+S, the command menu and the native menu invoke `save`; `docs/architecture/actions.md`), plus one destination-specific save-status selector from the save coordinator (M4) that every Save control renders.
 - **Acceptance:** browser: during a save, after a failed save and after an edit, both Save buttons show the same text, dirty mark and disabled state. `06-writer.txt` passes.
+- **Milestone 4 (4.22):** done. `saveStatus(input)` (`src/application/save/status.ts`, 4.9) is the one selector; `setSaveButtons` renders both buttons from `saveButtonView`, and both read the coordinator's running state, so no second save starts while one runs (saves queue per destination). Each destination has its own dirty state (`dirty(identity)`). Tests: `tests/application/save-status.test.ts` ("INV-20: the Save buttons render one view…"), `tests/application/save-coordinator.test.ts`, matrix cases F5-*, S7 and S10 in `src/test/m4-matrix-*.test.mjs`; the browser suites above are re-run at the gate. Left: the selector's inputs (`dirty`, `halted`, `target`, `signedOut`, `linkOff`) are still read from legacy globals (saving.md §8). `HANDOFF.md` §5.20 now points here.
 
 ### INV-21 — One place splits a field
 
@@ -275,6 +276,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (the session keeps credentials out of serialised content), `server/`, `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: credentials never enter project exports or recovery metadata).
 - **Acceptance:** application test: serialising a session with a live server connection yields no token, PIN or key. New server test: after a join, no file under the static root contains the PIN or token.
+- **Milestone 4 (4.22):** held. `captureExportDocument` carries no connection, token, link key, handle or path (E15: `src/test/export-capture-app.test.mjs`, "a capture taken with a live connection and a file home holds no token, file name or handle"). A server transport holds a frozen copy of server and token for one operation and is never serialised (`src/test/server-transport.test.mjs`). The authority model reads connection facts and stores none (`src/test/collaboration-authority.test.mjs`). Still no test for `update-status.json` or statically served files. `HANDOFF.md` §5.29 points here.
 
 ### INV-30 — The setup wizard appears only over a pristine copy
 
@@ -334,6 +336,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - Save As, publish and detached recovery fork the id; open, restore and a same-id reopen do not.
   - A failed or cancelled Save As leaves both the id and the destination unchanged.
   - No history copy happens before the write is confirmed.
+- **Milestone 4 (4.22):** done. `createTransitions` (`src/application/transitions/`, 4.8) is the one writer of `docId` for open, new, restore, recover and publish, and every app caller uses it (saving.md §3). The file writer forks the id only when the write landed and the save still owns its document (4.11), and the history copy runs after a landed write. Tests: `tests/application/transitions.test.ts` ("INV-36: …"), matrix T1, T2*, F1 to F3, F9 and C1 in `src/test/m4-matrix-*.test.mjs`. `HANDOFF.md` §5.36 now points here.
 
 ### INV-37 — `sha256Hex` and `deriveDocId` are frozen
 
@@ -358,6 +361,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (effect scheduler, save coordinator) · **Milestone:** 4 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** application test with a history port that never resolves: a save still completes, and a later edit does not change the captured snapshot. If the backup is refused, the restore does not overwrite without the second confirmation.
+- **Milestone 4 (4.22):** held, and now covered. Matrix case F9 (`src/test/m4-matrix-files.test.mjs`): no history copy happens before the write is confirmed, and a save never waits on a history copy that does not resolve. The "Before restoring" backup rule is unchanged (`restoreSnapshot` checks ownership after each await, 4.18; case H1). Still no direct test of `pushSnapshot()`'s synchronous capture. `HANDOFF.md` §5.39 points here.
 
 ### INV-40 — A crash draft is removed only when clean or by the user
 
@@ -376,6 +380,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (recovery writer ownership), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: recovery preserves source work through failed adoption, writer conflict or revoked access).
 - **Acceptance:** the M4 gate's recovery tests pass (multi-tab ownership, revoked links, restart), and a writer discards only the draft generation acknowledged to it.
+- **Milestone 4 (4.22):** held, with the recovery split of 4.17 and 4.18: `draft-writer.ts` discards only the generation acknowledged to it (B1, B7), `capture-schedule.ts` owns the timers and backoff (B4, B4b), `restore-policy.ts` the ownership check (K1, H1). A superseded desktop file-draft restore keeps its draft (outcome `kept`, `restoreDoneAction` in `desktop/drafts.js`); the one way to lose it is the user answering "Don't save" for the script that replaced it (the same as the unreadable-draft path; saving.md §7). Tests: `src/test/m4-matrix-recovery.test.mjs`, `tests/application/draft-writer.test.ts`, `tests/application/capture-schedule.test.ts`, `desktop/test/drafts.test.mjs`. The desktop and browser recovery groups run at the gate. `HANDOFF.md` §5.40 points here.
 
 ### INV-41 — Restoring a draft never writes the user's file
 
@@ -384,6 +389,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (restore and adoption policy), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: restoration does not silently save a user file).
 - **Acceptance:** application test: adopting a restored draft leaves the destination's confirmed generation and baseline unchanged and schedules no save.
+- **Milestone 4 (4.22):** held, and now an application rule. A recovery settle arms no autosave (`12-dirty-toast.js`), and the restores go through `transitions.restore` and `transitions.recover`, which leave the destination's confirmed generation and baseline as they were. Tests: matrix T5, T5-merge, T6, B8, B11 and K1 (`src/test/m4-matrix-*.test.mjs`), `tests/application/restore-policy.test.ts`. One behaviour change to know: "Undo merge" after a server conflict no longer autosaves a couple of seconds later. `HANDOFF.md` §5.41 points here.
 
 ### INV-42 — Main is the authority on tabs
 
@@ -471,6 +477,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (save coordinator) · **Milestone:** 4 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the suites pass. Application test with a fake clock: after a recovery adoption or a `noAutoSave` merge, no automatic write is scheduled until an explicit Save; with autosave off, none is scheduled at all.
+- **Milestone 4 (4.22):** held. `autoSaveWhere` and `autoSaveMay` (`src/application/save/autosave.ts`) are pure and tested (`tests/application/save-status.test.ts`, "INV-51 where…"), and a restore schedules no automatic write (T5). The timers and the halt state stay in `14-export.js` (saving.md §8). `HANDOFF.md` §5.51 points here.
 
 ### INV-52 — No durable record names a blob its store lacks
 
@@ -481,6 +488,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (save coordinator: blob transfer before the write), `server/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (M4: one transport instance owns both the blob transfer and the write that follows).
 - **Acceptance:** M4 race matrix: when a blob upload fails or is cancelled, no record is written. The server checks are unchanged.
+- **Milestone 4 (4.22):** held. A hosted save builds one transport from the connection it captured and sends the blobs and the write through it (4.14); a failed or cancelled upload writes no record and keeps the document dirty (matrix S8), and a save that no longer owns its document sends nothing more (S3, S4-token, S6-reopen). `sendReviewWrites` still builds a transport from the live connection per comment (saving.md §8). `HANDOFF.md` §5.52 points here.
 
 ### INV-53 — Every edit is recorded once; nothing else is recorded
 
@@ -598,3 +606,5 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (connection and authority) over browser storage adapters in `src/adapters/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: credentials and invitation fragments never enter exports or recovery metadata).
 - **Acceptance:** the suites pass after collaboration moves behind application interfaces. Application test: serialising any session to a project, export or recovery record yields no token or key.
+- **Milestone 4 (4.22):** held. The authority model (`src/application/collaboration/authority.ts`, 4.16) derives who may edit from the connection's token, role and scope and stores no credential; credentials stay per server in this browser. Tests: `src/test/collaboration-authority.test.mjs` and the Collaborate suites above, re-run at the gate. `HANDOFF.md` §5.62 points here.
+

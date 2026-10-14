@@ -76,7 +76,20 @@ function startSession(after: SessionCounters): DocumentSession {
 let current: DocumentSession = startSession({ epoch: 0, generation: 0 });
 let ended = false;
 
-watchUndoAdoption(function (doc) { current.adopt(doc); });
+const replacedListeners: Array<() => void> = [];
+
+function announceReplaced(): void {
+  for (const listener of replacedListeners.slice()) listener();
+}
+
+watchUndoAdoption(function (doc) {
+  current.adopt(doc);
+  announceReplaced();
+});
+
+export function onDocumentReplaced(listener: () => void): void {
+  replacedListeners.push(listener);
+}
 
 const session: DocumentSession = {
   epoch: function () { return current.epoch(); },
@@ -105,6 +118,7 @@ export function adoptReplacement(doc: ValidatedDocument): void {
   old.dispose();
   followLiveDocument();
   if (current.read(function (held) { return held; }) !== doc) current.adopt(doc);
+  announceReplaced();
 }
 
 export function provideSessionEffects(effects: Partial<LegacyEffects>): void {

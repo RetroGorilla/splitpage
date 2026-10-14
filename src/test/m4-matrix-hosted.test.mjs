@@ -505,6 +505,23 @@ rightToday("P1", "a publish whose connection changed reports the document it cre
   assert.ok(newToasts(before).some((text) => text.includes("To publish") || text.includes("srv-new-1")), "the document created on the old server is reported");
 }));
 
+rightToday("P1-token", "a publish that lands after a token change on the same server says the sign-in changed, not that another script was opened", hostedCase(async ({ server, held }) => {
+  startUnpublished(script("To publish", idOf("a")));
+  const before = new Set(toastElements());
+  holdFirst(held, "POST", "api/docs");
+  const publishing = hosted.publishToServer();
+  await held.gates.arrived("fetch");
+  homeModule.updateConnection({ token: "a-new-token" });
+  held.gates.releaseAll("fetch");
+  assert.equal(await publishing, false);
+  await settle();
+  assert.equal(server.docs.size, 1, "the server did create the document");
+  const toasts = newToasts(before);
+  assert.ok(toasts.some((text) => text.includes("sign-in changed") && text.includes("To publish")), "the toast names the script and says the sign-in changed: " + toasts.join(" | "));
+  assert.equal(toasts.some((text) => text.includes("opened another script")), false, "it does not claim another script was opened");
+  assert.equal(S.state.title, "To publish", "the open document is untouched");
+}));
+
 rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge ancestor", hostedCase(async ({ server, held }) => {
   server.put("srv-a", script("A", idOf("a")), 1);
   openHosted(script("A", idOf("a")), "srv-a", 1);

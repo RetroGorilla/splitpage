@@ -9,8 +9,7 @@ import {
   firstWriteBeforeAdoption,
   mockClock,
   rightToday,
-  traceFields,
-  wrongToday
+  traceFields
 } from "./_m4-matrix.mjs";
 
 const { liveSession, provideRefreshRunner, requestRefresh, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
@@ -592,7 +591,7 @@ rightToday("L1d", "no subscription made for the old document survives its replac
   assert.deepEqual(heardNew, ["edit"], "a subscription made for the replacement hears it");
 });
 
-wrongToday("L1c", "an object URL made for the old document's session video is revoked once the document was replaced", async () => {
+rightToday("L1c", "an object URL made for the old document's session video is revoked once the document was replaced", async () => {
   const created = [];
   const revoked = [];
   const make = URL.createObjectURL;
@@ -616,4 +615,4 @@ wrongToday("L1c", "an object URL made for the old document's session video is re
     URL.createObjectURL = make;
     URL.revokeObjectURL = revoke;
   }
-}, /every object URL made for the old document is revoked/);
+});
