@@ -86,8 +86,12 @@ function exportReadModels(doc) {
 
 var capturePorts = { read: readSession, readModels: exportReadModels, clock: systemClock };
 
+function withClock(opts) {
+  return Object.assign({ clockMode: readClockPref() }, opts);
+}
+
 export function captureExportDocument(opts) {
-  return captureWith(capturePorts, opts);
+  return captureWith(capturePorts, withClock(opts));
 }
 
 export function exportDay(doc) {
@@ -129,7 +133,7 @@ export function capturedRowPicture(assets, row) {
 
 export function exportDocumentOf(state, opts) {
   var doc = migrateRows(JSON.parse(JSON.stringify(state)));
-  return buildExportDocument(doc, systemClock.nowIso(), exportReadModels(doc), opts);
+  return buildExportDocument(doc, systemClock.nowIso(), exportReadModels(doc), withClock(opts));
 }
 
 export function exportFacts(doc) {
@@ -206,7 +210,7 @@ function numberComments(state) {
 
 export function exportComments(doc, opts) {
   var nums = doc.commentNumbers;
-  var list = commentEntries(doc, Object.assign({ clockMode: readClockPref() }, opts || { pieces: true })).map(function (c) {
+  var list = commentEntries(doc, Object.assign({ clockMode: doc.clockMode }, opts || { pieces: true })).map(function (c) {
     var scene = c.rowIndex >= 0 ? pad2(c.rowIndex + 1) : "";
     var field = c.field === "audioText" ? "Audio" : "Visual";
     return Object.assign(c, {

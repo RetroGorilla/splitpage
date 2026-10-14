@@ -10,7 +10,7 @@ import { pad2 } from "../js/05-render.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../js/08-production-panels.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
-import { mdSceneCellSource, toMarkdownTableDoc } from "../js/14-export.js";
+import { mdSceneCellSource, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import {
   applyMarkdownProject,

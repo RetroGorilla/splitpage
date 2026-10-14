@@ -34,7 +34,6 @@ import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "./14c-export-projections.js";
-import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -1341,14 +1340,6 @@ export function renderBrollPage() {
         '</table>'
       : emptyListHtml(entries);
   });
-}
-
-export function buildBrollCsv(doc) {
-  var t = brollTable(doc);
-  var lines = [t.head.join(",")];
-  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
-  if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
-  return "﻿" + lines.join("\r\n");
 }
 
 export function brollPrintView(as) {

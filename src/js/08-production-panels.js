@@ -40,7 +40,6 @@ import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
-import { csvEscape } from "./16-csv.js";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
@@ -1051,14 +1050,6 @@ export function saveTagRename(key) {
   } else {
     renderProduction();
   }
-}
-
-export function buildBreakdownCsv(doc) {
-  var t = breakdownTable(doc);
-  var lines = [t.head.join(",")];
-  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
-  if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
-  return "﻿" + lines.join("\r\n");
 }
 
 var openTagMenu = null;

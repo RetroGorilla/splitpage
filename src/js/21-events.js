@@ -241,8 +241,6 @@ import {
   closeFileConflict,
   deliverFile,
   exportAs,
-  exportNarration,
-  exportPackingList,
   fileConflictCtx,
   handleFileMenuAction,
   hideResumeBanner,
@@ -251,6 +249,7 @@ import {
   reloadFileFromDisk,
   reloadProjectFromDisk,
   resumeFromHandle,
+  runExport,
   saveBackToFile,
   tryResumeLastProject
 } from "./18-local-files.js";
@@ -480,7 +479,7 @@ export function onRootClick(e) {
   if (breakdownBtn) { exportAs("breakdown"); return; }
 
   var packingGearBtn = e.target.closest('[data-action="export-packing-gear"]');
-  if (packingGearBtn) { exportPackingList("gear"); return; }
+  if (packingGearBtn) { runExport("export-packing-gear"); return; }
 
   var tagRenameBtn = e.target.closest('[data-action="tag-rename"]');
   if (tagRenameBtn) { S.tagRenaming = tagRenameBtn.getAttribute("data-key"); renderProduction(); return; }
@@ -1818,7 +1817,7 @@ function init() {
     var fmt = e.target.closest(".wr-fmt");
     if (fmt) { onWriterFormat(fmt); return; }
     if (e.target.closest("#wr-gutter-mode")) { cycleWriterGutter(); return; }
-    if (e.target.closest("#wr-export")) { exportNarration("narration-docx"); return; }
+    if (e.target.closest("#wr-export")) { runExport("export-narration-docx"); return; }
   });
   document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
 

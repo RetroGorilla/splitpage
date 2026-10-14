@@ -43,6 +43,8 @@ export type ExportReadModels = {
   broll: readonly ExportShotEntry[];
 };
 
+export type ClockMode = "system" | "12" | "24";
+
 export type ExportDocument = Frozen<{
   document: ValidatedDocument;
   title: string;
@@ -52,6 +54,7 @@ export type ExportDocument = Frozen<{
   shots: DocumentShot[];
   comments: DocumentComment[];
   capturedAt: string;
+  clockMode: ClockMode;
   production: ExportTagEntry[];
   commentNumbers: Record<string, number>;
   broll: ExportShotEntry[];
@@ -63,7 +66,11 @@ export interface ExportStamp {
   readonly lastEditedAt: string;
 }
 
-export type ExportCaptureOptions = { docId?: string | null | undefined; stamp?: ExportStamp | null | undefined };
+export type ExportCaptureOptions = {
+  docId?: string | null | undefined;
+  stamp?: ExportStamp | null | undefined;
+  clockMode?: ClockMode | null | undefined;
+};
 
 function jsonCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -103,6 +110,7 @@ export function buildExportDocument(
     shots: document.brollShots,
     comments: document.comments,
     capturedAt: capturedAt,
+    clockMode: opts && opts.clockMode ? opts.clockMode : "system",
     production: jsonCopy(models.production.slice()),
     commentNumbers: numbering(models.commentNumbers),
     broll: jsonCopy(models.broll.map(shotEntry))
