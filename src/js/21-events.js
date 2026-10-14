@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
@@ -1209,7 +1210,7 @@ function init() {
       toastLastEditor(loaded);
     }
 
-    if (!applied.report && !loaded.rev && !loaded.lastEditedBy) {
+    if (!applied.report && neverWrittenOut(loaded)) {
       if (!S.DESKTOP) tryResumeLastProject();
     }
     if (typeof syncDocIdentity === "function") syncDocIdentity();

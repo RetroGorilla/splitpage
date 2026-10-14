@@ -15,8 +15,7 @@ import {
   createHeldDraftStore,
   createHeldFetch,
   mockClock,
-  rightToday,
-  wrongToday
+  rightToday
 } from "./_m4-matrix.mjs";
 
 await bootApp();
@@ -275,7 +274,7 @@ rightToday("B4", "quota pauses crash recovery with a notice and backs off 5, 10,
   assert.equal(S.dirty, true, "the document stayed unsaved throughout");
 }));
 
-wrongToday("B4b", "a change noted while a retry is in flight does not bring the next retry forward from its backoff", (t) => cleanly(async () => {
+rightToday("B4b", "a change noted while a retry is in flight does not bring the next retry forward from its backoff", (t) => cleanly(async () => {
   const clock = mockClock(t);
   const { attempts } = await quotaSetup(clock, 3);
   typeInto("First edit.");
@@ -289,7 +288,7 @@ wrongToday("B4b", "a change noted while a retry is in flight does not bring the 
   assert.equal(drafts().status().paused, true, "setup: crash recovery is still paused after the retry failed");
   await advance(clock, 9999);
   assert.equal(attempts(), 2, "the next retry waited its whole backoff");
-}), /the next retry waited its whole backoff/);
+}));
 
 rightToday("B5", "unavailable storage turns browser drafts off quietly, with no retry and no notice", (t) => cleanly(async () => {
   const clock = mockClock(t);
@@ -537,7 +536,7 @@ function withHeldDesktop() {
   return { fake: fake, held: held, restore: () => window.__desktopTest.restoreBackend() };
 }
 
-wrongToday("K1", "a desktop file-draft restore whose document is replaced across its awaits does not overwrite the replacement", async () => {
+rightToday("K1", "a desktop file-draft restore whose document is replaced across its awaits does not overwrite the replacement", async () => {
   useDocument(script("Before the restore"));
   const original = script("On disk", { docId: idOf("9") });
   const mine = cloneState(original);
@@ -559,6 +558,7 @@ wrongToday("K1", "a desktop file-draft restore whose document is replaced across
     held.releaseOp("readFile");
     const outcome = await restoring;
     assert.ok(!["unreadable", "untitled-copy"].includes(outcome), "setup: the restore read the file");
+    assert.equal(outcome, "kept", "the restore tells the desktop app the draft is kept, so it opens nothing over the replacement");
     assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
     assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here."), false, "the late restore put none of its text into the replacement");
   } finally {
@@ -566,7 +566,7 @@ wrongToday("K1", "a desktop file-draft restore whose document is replaced across
     restore();
     homeModule.setHome("none");
   }
-}, /the replacement document is still the open document/);
+});
 
 rightToday("K2", "a desktop draft write that lands after the tab navigated is refused, pauses nothing, and the next write lands", async () => {
   const dir = mkdtempSync(join(tmpdir(), "m4-k2-"));
@@ -627,7 +627,7 @@ async function snapshotRestore(setup) {
   return restoring;
 }
 
-wrongToday("H1", "a history restore that completes after a same-id reopen does not overwrite the reopened session", async () => {
+rightToday("H1", "a history restore that completes after a same-id reopen does not overwrite the reopened session", async () => {
   const outcome = await snapshotRestore(async (doc) => {
     const replaced = S.state;
     await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
@@ -640,7 +640,7 @@ wrongToday("H1", "a history restore that completes after a same-id reopen does n
   assert.equal(S.state.rows[0].audioText, "One.", "the reopened session's first scene is untouched");
   assert.equal(S.state.rows[1].audioText, "Typed in the reopened session.", "its own typing is still there");
   assert.notEqual(outcome, "restored", "the late restore was refused");
-}, /the reopened session's first scene is untouched/);
+});
 
 rightToday("H1-switch", "a history restore that completes after another document was opened is refused and says so", async () => {
   const other = script("Another script", { docId: idOf("c") });

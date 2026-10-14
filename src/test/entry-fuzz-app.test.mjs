@@ -73,6 +73,7 @@ const ENTRIES = {
   draft: {
     kind: "adopt",
     opens: true,
+    replaces: true,
     run: (raw) => applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(raw) })
   },
   server: {
@@ -144,7 +145,12 @@ async function through(name, raw, where, tally, spoilMine, broken) {
     return;
   }
   bump(tally.kinds, name);
-  assert.deepEqual(heard, [entry.kind], where + ": published");
+  if (entry.replaces) {
+    hearReplacement();
+    assert.deepEqual(heard, [], where + ": a new session, so the old one's subscription heard nothing");
+  } else {
+    assert.deepEqual(heard, [entry.kind], where + ": published");
+  }
   assert.equal(session.epoch(), epoch + (entry.opens ? 1 : 0), where + ": epoch");
   assert.equal(session.generation(), gen, where + ": generation");
   assert.equal(held(), S.state, where + ": the session holds the document the app shows");

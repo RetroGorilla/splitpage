@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { rightToday, wrongToday } from "./_m4-matrix.mjs";
+import { rightToday } from "./_m4-matrix.mjs";
 
 const opened = [];
 const factory = globalThis.indexedDB;
@@ -32,10 +32,10 @@ rightToday("T3-boot", "the page boots the document its state data holds", async 
   assert.equal(S.state.docId, "d" + "b".repeat(32));
 });
 
-wrongToday("T3", "the pristine check and the resume check agree on a document with a junk editor name and no revision", async () => {
+rightToday("T3", "the pristine check and the resume check agree on a document with a junk editor name and no revision", async () => {
   await settled;
   assert.equal(Boolean(S.state.lastEditedBy), false, "the loaded document's editor name is cleaned to nothing");
   const pristineSaid = S.docIdWrittenOut === false;
   const resumeTried = opened.includes("splitpage-files");
   assert.equal(resumeTried, pristineSaid, "pristine says " + pristineSaid + " and the resume check says " + resumeTried);
-}, /pristine says .* and the resume check says/);
+});
