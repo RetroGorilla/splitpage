@@ -57,7 +57,7 @@ import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-d
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
-import { captureOperation, documentTransitions } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
@@ -1589,14 +1589,15 @@ export function notePresenceRev(body) {
 }
 
 async function pullServerDoc(docId) {
+  var op = captureOperation();
   var body;
   try {
-    body = await apiFetch("api/docs/" + encodeURIComponent(docId));
+    body = await serverTransport(op.connection).request("api/docs/" + encodeURIComponent(docId), {});
   } catch (err) {
     return;
   }
   if (!body || !isDocumentObject(body.state)) return;
-  if (serverHomeId() !== docId) return;
+  if (serverHomeId() !== docId || !stillOwns(op)) return;
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;

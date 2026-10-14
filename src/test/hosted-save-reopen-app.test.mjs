@@ -270,6 +270,30 @@ test("a pull noticed while a hosted save waits for its reply does not run, and t
   leave();
 });
 
+test("a pull whose connection changes before the answer arrives merges nothing; the next pull does", async (t) => {
+  mockClock(t);
+  const server = createServer();
+  server.put("srv-p", script(), 1);
+  withServer(t, server);
+  openHosted("srv-p", 1);
+  const changed = script();
+  changed.rows[0].audioText = "Saved by someone else.";
+  server.put("srv-p", changed, 2);
+
+  const before = textOf(S.state.rows[0]);
+  hosted.notePresenceRev({ docId: "srv-p", rev: 2 });
+  hosted.setServerToken("another-token");
+  await settle();
+  assert.equal(textOf(S.state.rows[0]), before, "nothing fetched under the old connection was merged into the document");
+  assert.equal(homeModule.home.rev, 1, "the tracked revision did not move");
+  hosted.notePresenceRev({ docId: "srv-p", rev: 2 });
+  await settle();
+  assert.equal(textOf(S.state.rows[0]), "Saved by someone else.", "a pull under the current connection merges");
+  assert.equal(homeModule.home.rev, 2);
+  hosted.clearServerToken();
+  leave();
+});
+
 test("a plain hosted save adopts its revision and baseline and clears the unsaved flag", async (t) => {
   mockClock(t);
   const server = createServer();
