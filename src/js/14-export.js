@@ -245,6 +245,7 @@ async function writeDoc(opts, job) {
         var landedHome = fileHome() && fileHome().handle === handle ? home : null;
         confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted,
           landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null);
+        if (forkDocId) job.moved();
       } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
       if (pickedFor && home === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
@@ -255,8 +256,10 @@ async function writeDoc(opts, job) {
       var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
       if (!ok) return CANCELLED;
       wrote = true;
-      if (job.owns()) confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, null);
-      else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+      if (job.owns()) {
+        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, null);
+        if (forkDocId) job.moved();
+      } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
       warnImagesLeftOut(imagesLeftOut, filename);
       written = copyOfHosted ? COPIED : SAVED;
     }
@@ -310,7 +313,7 @@ export function applyStashedWork(loaded, override, apply) {
     var out = applyMerge(Object.assign(
       { theirs: loaded, source: "stash", mergeOnly: !apply }, extra, apply || {}
     ));
-    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot }; }
+    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot, replaced: !!o.replaced }; }
     return out && typeof out.then === "function" ? out.then(answer) : answer(out);
   }
 

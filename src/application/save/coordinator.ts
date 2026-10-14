@@ -73,12 +73,13 @@ export interface SaveCoordinator<R, B> {
 
 interface Entry<R> {
   request: R;
+  readonly epoch: number;
   readonly done: Promise<SaveOutcome>;
   readonly settle: (outcome: SaveOutcome) => void;
 }
 
 interface Queue<R> {
-  readonly key: DestinationKey;
+  key: DestinationKey;
   readonly entries: Entry<R>[];
   active: boolean;
 }
@@ -170,23 +171,40 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     return { kind: "saved", acknowledged: true };
   }
 
+  function follow(queue: Queue<R>): void {
+    const key = keyNow();
+    if (sameKey(queue.key, key)) return;
+    for (const q of queues) if (q !== queue && sameKey(q.key, key)) return;
+    queue.key = key;
+  }
+
   function runNext(queue: Queue<R>): void {
     if (queue.active) return;
-    const entry = queue.entries.shift();
+    let entry = queue.entries.shift();
+    const epoch = ports.ownership.capture().epoch;
+    while (entry && entry.epoch !== epoch) {
+      ports.report.obsolete(entry.request, false);
+      entry.settle({ kind: "obsolete", here: false });
+      entry = queue.entries.shift();
+    }
     if (!entry) {
       drop(queue);
       return;
     }
+    const current = entry;
     queue.active = true;
     setRunning(1);
     const generation = changes;
     let operation = ports.ownership.capture();
     const job: SaveJob<R> = Object.freeze({
-      request: entry.request,
+      request: current.request,
       generation: generation,
       operation: function () { return operation; },
       owns: function () { return ports.ownership.stillOwns(operation); },
-      moved: function () { operation = ports.ownership.capture(); }
+      moved: function () {
+        operation = ports.ownership.capture();
+        follow(queue);
+      }
     });
     let written: Promise<WriterResult>;
     try {
@@ -195,19 +213,21 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       written = Promise.resolve({ kind: "failed", error: error });
     }
     written
-      .then(function (result) { return judge(entry, ofWriter(result), operation, generation); },
+      .then(function (result) { return judge(current, ofWriter(result), operation, generation); },
         function (error: unknown): SaveOutcome { return { kind: "failed", error: error }; })
       .then(function (outcome) {
         queue.active = false;
         runNext(queue);
         setRunning(-1);
-        entry.settle(outcome);
+        current.settle(outcome);
       });
   }
 
   function request(next: R): Promise<SaveOutcome> {
     const queue = queueFor(keyNow());
+    const epoch = ports.ownership.capture().epoch;
     for (const pending of queue.entries) {
+      if (pending.epoch !== epoch) continue;
       const joined = ports.join(pending.request, next);
       if (joined !== null) {
         pending.request = joined;
@@ -216,7 +236,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     }
     let settle: (outcome: SaveOutcome) => void = function () {};
     const done = new Promise<SaveOutcome>(function (resolve) { settle = resolve; });
-    queue.entries.push({ request: next, done: done, settle: settle });
+    queue.entries.push({ request: next, epoch: epoch, done: done, settle: settle });
     runNext(queue);
     return done;
   }
