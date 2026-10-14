@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
   conn,
   home,
@@ -100,8 +101,7 @@ var serverDocs = [];
 export function onServerDoc() { return home.kind === "server"; }
 
 export function reviewMode() {
-  var c = homeConn();
-  return !!c && c.role === "review";
+  return isReviewer(authorityOf(homeConn()));
 }
 
 var ApiError = apiError;
@@ -305,7 +305,7 @@ export function arrivingOnLink() {
 }
 
 export function isLinkGuest() {
-  return !!conn.scope;
+  return guestAuthority(authorityOf(conn));
 }
 
 function holdsOwnerSignIn() {
@@ -828,7 +828,7 @@ export function reviewBlocked() {
 }
 
 export async function fetchReviewLink() {
-  if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
+  if (!S.serverMode.available || !S.serverMode.reviewAvailable || isReviewer(authorityOf(conn))) return "";
   if (S.serverMode.links || isLinkGuest()) return "";
   if (!onServerDoc()) return "";
   var body;
@@ -882,7 +882,7 @@ function renderServerPicker() {
         '</span>' +
       '</button>' +
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-      (S.serverMode.readOnly || conn.role === "review" ? '' :
+      (S.serverMode.readOnly || isReviewer(authorityOf(conn)) ? '' :
         '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
           escapeHtml(d.id) + '" title="Delete this document from the server" aria-label="Delete from the server">' +
           spriteIcon("i-trash") + '</button>') +
@@ -1885,7 +1885,9 @@ async function driveListCurrentDesktop() {
   if (!folder) return;
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
+  var epoch = driveModalEpoch;
   var res = await driveDesktopCall("driveList", folder.id);
+  if (epoch !== driveModalEpoch) return;
   if (!res.ok) {
     if (await driveDesktopSignedOut(res)) return;
     list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(driveDesktopMessage(res)) + '</div>';
@@ -1928,7 +1930,10 @@ async function driveUploadOneDesktop(file, parentId) {
   return same.length === 1 ? "updated" : "created";
 }
 
+var driveModalEpoch = 0;
+
 export function openDriveModal() {
+  driveModalEpoch++;
   if (S.DESKTOP) {
     if (!driveDesktopBridge()) {
       showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open… instead.", "warn");
@@ -1949,6 +1954,7 @@ export function openDriveModal() {
 }
 
 export function closeDriveModal() {
+  driveModalEpoch++;
   document.getElementById("drive-modal").hidden = true;
 }
 
@@ -2048,6 +2054,7 @@ export async function driveListCurrent() {
   var folder = driveState.path[driveState.path.length - 1];
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
+  var epoch = driveModalEpoch;
   try {
     var q = encodeURIComponent("'" + folder.id.replace(/'/g, "\\'") + "' in parents and trashed = false");
     var url = "https://www.googleapis.com/drive/v3/files?q=" + q +
@@ -2056,10 +2063,12 @@ export async function driveListCurrent() {
       "&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true&" + driveApiKeyParam();
     var res = await driveFetch(url);
     var body = await res.json();
+    if (epoch !== driveModalEpoch) return;
     driveState.items = body.files || [];
     renderDriveBreadcrumb();
     renderDriveList();
   } catch (err) {
+    if (epoch !== driveModalEpoch) return;
     list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(plainReason(err)) + '</div>';
   }
 }

@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import blobPolicy from "../../shared/blob-policy.js";
-import { createHeldFetch, createHeldFileHandle, mockClock, rightToday, wrongToday } from "./_m4-matrix.mjs";
+import { createHeldFetch, createHeldFileHandle, mockClock, rightToday } from "./_m4-matrix.mjs";
 
 const { refsIn } = blobPolicy;
 
@@ -637,7 +637,7 @@ function withDriveCredentials() {
 
 const DRIVE_FILES = [{ id: "file-aaaaaaaaaa", name: "clip.txt", mimeType: "text/plain", size: "5" }];
 
-wrongToday("C3", "a Drive listing that completes after the modal closed changes nothing", hostedCase(async ({ server, held }) => {
+rightToday("C3", "a Drive listing that completes after the modal closed changes nothing", hostedCase(async ({ server, held }) => {
   withDriveCredentials();
   server.override = driveAnswer(DRIVE_FILES);
   hosted.openDriveModal();
@@ -654,7 +654,7 @@ wrongToday("C3", "a Drive listing that completes after the modal closed changes 
   await listing;
   await settle();
   assert.equal(document.getElementById("drive-list").innerHTML, afterClose, "the Drive list was not redrawn after the modal closed");
-}), /the Drive list was not redrawn after the modal closed/);
+}));
 
 rightToday("C3-download", "a Drive download started before the modal closed is still delivered after it closes", hostedCase(async ({ server, held }) => {
   withDriveCredentials();
