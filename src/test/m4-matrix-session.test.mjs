@@ -167,12 +167,6 @@ function committedPrecondition() {
   return { row: row, before: row.status };
 }
 
-const ADOPTION_LAG = /the session already held the (boot )?document at every write that follows its assignment/;
-
-function adoptionLag(id, title, run) {
-  wrongToday(id, title, run, ADOPTION_LAG);
-}
-
 const COMMITTED = ["applied", "noop", "rejected", "failed"];
 
 function assertReportedAfterCommit(inject, message) {
