@@ -2,9 +2,10 @@ import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
+import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { requestSave, unsavedFor } from "../legacy/save-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
-import { migrateRows } from "./02-state.js";
 import {
   docIdEmbeddedIn,
   migrateDocument,
@@ -17,7 +18,6 @@ import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
   pushSnapshot,
-  setBaseState,
   stampRow,
   updateIdentityChip
 } from "./03-sync.js";
@@ -284,6 +284,78 @@ function htmlToPlainScript() {
   return lines.join("\n");
 }
 
+var RAW_TEXT_ELEMENTS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1 };
+
+function tagAttributes(text, from) {
+  var attrs = {};
+  var i = from;
+  var n = text.length;
+  while (i < n) {
+    while (i < n && /[\t\n\f\r /]/.test(text[i])) i++;
+    if (i >= n) return null;
+    if (text[i] === ">") return { attrs: attrs, end: i + 1 };
+    var nameStart = i;
+    i++;
+    while (i < n && !/[\t\n\f\r />=]/.test(text[i])) i++;
+    var name = text.slice(nameStart, i).toLowerCase();
+    while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
+    var value = "";
+    if (text[i] === "=") {
+      i++;
+      while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
+      var quote = text[i];
+      if (quote === "\"" || quote === "'") {
+        var close = text.indexOf(quote, i + 1);
+        if (close === -1) return null;
+        value = text.slice(i + 1, close);
+        i = close + 1;
+      } else {
+        var valueStart = i;
+        while (i < n && !/[\t\n\f\r >]/.test(text[i])) i++;
+        value = text.slice(valueStart, i);
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(attrs, name)) attrs[name] = value;
+  }
+  return null;
+}
+
+function stateDataScriptText(text) {
+  var opening = /<(!--|[a-zA-Z][^\t\n\f\r />]*)/g;
+  for (var m = opening.exec(text); m; m = opening.exec(text)) {
+    if (m[1] === "!--") {
+      var commentEnd = text.indexOf("-->", m.index + 4);
+      if (commentEnd === -1) return null;
+      opening.lastIndex = commentEnd + 3;
+      continue;
+    }
+    var tag = tagAttributes(text, m.index + m[0].length);
+    if (!tag) return null;
+    var name = m[1].toLowerCase();
+    opening.lastIndex = tag.end;
+    if (!RAW_TEXT_ELEMENTS[name]) continue;
+    var closing = new RegExp("</" + name + "[\\t\\n\\f\\r />]", "ig");
+    closing.lastIndex = tag.end;
+    var closed = closing.exec(text);
+    var contentEnd = closed ? closed.index : text.length;
+    if (name === "script" && tag.attrs.id === "state-data") return text.slice(tag.end, contentEnd);
+    if (!closed) return null;
+    opening.lastIndex = contentEnd;
+  }
+  return null;
+}
+
+function stateDataFromRawText(text) {
+  var data = stateDataScriptText(text);
+  if (data === null) return null;
+  try {
+    var parsed = JSON.parse(data.replace(/\r\n?/g, "\n"));
+    return isDocumentObject(parsed) ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function parseProjectFileState(file, opts) {
   var kind = fileKindFromName(file.name);
   if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
@@ -307,12 +379,14 @@ export async function parseProjectFileState(file, opts) {
   }
 
   if (kind === "html") {
-    var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
-    var legacy;
-    try {
-      legacy = JSON.parse(dataEl.textContent);
-    } catch (e) {
-      return { error: "not-splitpage" };
+    var legacy = stateDataFromRawText(text);
+    if (!legacy) {
+      var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
+      try {
+        legacy = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        return { error: "not-splitpage" };
+      }
     }
     if (!isDocumentObject(legacy)) return { error: "not-splitpage" };
     var legacyEmbedded = docIdEmbeddedIn(legacy);
@@ -350,13 +424,15 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
-  S.state = newState;
-  setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
-  setHome("file", { handle: handle || null, format: kind, lastModified: file.lastModified || null,
-                    name: file.name, diskBase: cloneState(S.state) });
+  documentTransitions().open({
+    from: { document: newState },
+    reason: "adoptProjectState: the project file as it was just read",
+    destination: { kind: "file", fields: { handle: handle || null, format: kind, lastModified: file.lastModified || null,
+                                           name: file.name, diskBase: cloneState(newState) } },
+    writtenOut: true
+  });
   resetProductionPanelState();
 
-  S.docIdWrittenOut = true;
   clearDirty();
   renderAbsorbed();
   updateIdentityChip();
@@ -454,14 +530,8 @@ async function loadFileIntoEditor(file, handle, opts) {
   if (opts.reload) {
     flushEdits();
     noteReload({ title: openedTitle, rows: newRows });
-  } else {
-    S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
-    setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
-    resetProductionPanelState();
-    S.docIdWrittenOut = false;
   }
-
-  var imported = setHome("import", {
+  var importFields = {
     name: file.name,
     handle: handle || null,
     format: kind,
@@ -469,7 +539,19 @@ async function loadFileIntoEditor(file, handle, opts) {
     dirty: false,
     lastModified: file.lastModified || null,
     size: file.size || null
-  });
+  };
+  if (opts.reload) {
+    setHome("import", importFields);
+  } else {
+    documentTransitions().open({
+      from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
+      reason: "loadFileIntoEditor: the imported document as it was just read",
+      destination: { kind: "import", fields: importFields },
+      writtenOut: false
+    });
+    resetProductionPanelState();
+  }
+  var imported = importHome();
 
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   imported.dirty = false;
@@ -598,46 +680,62 @@ function fileConflictHome() {
   return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
 }
 
-export async function saveBackToFile(opts) {
+var WRITTEN_BACK = Object.freeze({ kind: "saved" });
+var WRITEBACK_FAILED = Object.freeze({ kind: "failed" });
+var WRITEBACK_CANCELLED = Object.freeze({ kind: "cancelled" });
+var WRITEBACK_CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var NOTHING_IMPORTED = Object.freeze({ kind: "refused", reason: "The document has no imported file to write back to" });
+var IMPORT_REPLACED = Object.freeze({ kind: "refused", reason: "The imported file this write back was asked for is no longer open" });
+
+export function saveBackToFile(opts) {
   var imported = importHome();
-  if (!imported) return;
+  if (!imported) return Promise.resolve();
+  return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
+    if (outcome.kind === "saved" && outcome.acknowledged) imported.dirty = unsavedFor(imported);
+    updateFileChip();
+  });
+}
+
+function stillWritingBack(job, imported) {
+  return importHome() === imported && job.owns();
+}
+
+export async function writeBackToFile(job) {
+  var imported = importHome();
+  if (!imported) return NOTHING_IMPORTED;
+  if (job.request.target !== imported || !stillWritingBack(job, imported)) return IMPORT_REPLACED;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
-  var docIdAtBuild = S.state.docId;
-  var seqAtBuild = S.editSeq;
   var built;
   try {
     built = await buildFileData(imported.format, baseName);
   } catch (e) {
     showToast("Could not build the file.", "error");
-    return;
+    return WRITEBACK_FAILED;
   }
-  function bytesStillCurrent() {
-    return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
-  }
+  if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
 
   if (imported.handle && imported.handle.createWritable) {
-    if (!opts || !opts.force) {
+    if (job.request.kind !== "writebackForce") {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
         showFileConflict(imported.name, check.current, { kind: "import" });
-        return;
+        return WRITEBACK_CONFLICTED;
       }
+      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     }
     try {
       var writable = await imported.handle.createWritable();
       await writable.write(built.data);
       await writable.close();
-      if (bytesStillCurrent()) imported.dirty = false;
       try {
         var after = await imported.handle.getFile();
         imported.lastModified = after.lastModified;
         imported.size = after.size;
       } catch (e) { }
-      updateFileChip();
       showToast("Saved to " + imported.name, "ok");
-      return;
+      return WRITTEN_BACK;
     } catch (err) {
-      if (err && err.name === "AbortError") return;
+      if (err && err.name === "AbortError") return WRITEBACK_CANCELLED;
       imported.inPlace = false;
       updateFileChip();
     }
@@ -646,7 +744,7 @@ export async function saveBackToFile(opts) {
   var ok = await deliverFile(imported.name, built.data, {
     savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
-  if (ok) { if (bytesStillCurrent()) imported.dirty = false; updateFileChip(); }
+  return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
 }
 
 export function showFileConflict(fileName, currentFile, ctx) {
