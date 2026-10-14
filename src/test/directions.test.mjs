@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -267,14 +268,14 @@ test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand
 
 test("narration export: directions in by default, as (beat); left out when switched off", () => {
   withState(directionDoc(), () => {
-    assert.equal(buildNarrationText({ directions: true }),
+    assert.equal(buildNarrationText(liveDoc(), { directions: true }),
       "Directions\n\nWelcome back. (beat) Today, the kettle.\n\nPour it (slowly).\n");
-    assert.equal(buildNarrationText({ directions: false }),
+    assert.equal(buildNarrationText(liveDoc(), { directions: false }),
       "Directions\n\nWelcome back. Today, the kettle.\n\nPour it.\n");
     const only = migrateRows({ schema: 2, title: "O", rows: [{ id: "a", audioText: DIR("beat") }, { id: "b", audioText: "Said." }] });
     withState(only, () => {
-      assert.equal(narrationRows({ directions: true }).length, 2);
-      assert.equal(narrationRows({ directions: false }).length, 1, "a scene that is only a direction has no narration");
+      assert.equal(narrationRows(liveDoc(), { directions: true }).length, 2);
+      assert.equal(narrationRows(liveDoc(), { directions: false }).length, 1, "a scene that is only a direction has no narration");
     });
   });
 });
@@ -285,7 +286,7 @@ async function documentXml(bytes) {
 }
 
 test("narration .docx: a direction in its own style, or not there at all", async () => {
-  const [on, off] = withState(directionDoc(), () => [buildNarrationDocx({ directions: true }), buildNarrationDocx({ directions: false })]);
+  const [on, off] = withState(directionDoc(), () => [buildNarrationDocx(liveDoc(), { directions: true }), buildNarrationDocx(liveDoc(), { directions: false })]);
   const withDirs = await documentXml(on);
   assert.match(withDirs, /<w:rStyle w:val="SplitpageDirection"\/><w:i\/><w:color w:val="6B6A65"\/><\/w:rPr><w:t xml:space="preserve">\(<\/w:t>/);
   assert.ok(withDirs.includes(">beat<"));
@@ -296,7 +297,7 @@ test("narration .docx: a direction in its own style, or not there at all", async
 
 test("a Splitpage .docx reopens with its directions as directions; ((…)) in a Word file's Audio is one too", async () => {
   const s = directionDoc();
-  const bytes = withState(s, () => buildDocx());
+  const bytes = withState(s, () => buildDocx(...liveWithAssets()));
   const parsed = await docxToRows(new File([bytes], "script.docx"));
   assert.equal(parsed.rows[0].audioText, s.rows[0].audioText);
   assert.equal(parsed.rows[1].audioText, s.rows[1].audioText);
@@ -314,7 +315,7 @@ test("a Splitpage .docx reopens with its directions as directions; ((…)) in a 
 test("the other exports print it as (beat)", () => {
   withState(directionDoc(), () => {
     assert.ok(toMarkdownDoc(exportDocumentOf(S.state)).includes("Welcome back. *(beat)* Today, the kettle."));
-    assert.ok(buildCsv().includes("Welcome back. (beat) Today, the kettle."));
+    assert.ok(buildCsv(liveDoc()).includes("Welcome back. (beat) Today, the kettle."));
   });
 });
 

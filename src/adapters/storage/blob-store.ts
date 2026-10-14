@@ -38,6 +38,8 @@ export interface BlobBackendInfo {
 
 export type RemoteBlobSource = (sha: string) => Uint8Array | ArrayBuffer | null | undefined | Promise<Uint8Array | ArrayBuffer | null | undefined>;
 
+export type EnsureBytesOptions = { remote?: boolean; source?: RemoteBlobSource | null };
+
 export interface BlobStore {
   intern: (bytes: unknown) => ImageRef | null;
   internDataUrl: (dataUrl: unknown) => ImageRef | null;
@@ -51,7 +53,7 @@ export interface BlobStore {
   isDurable: (sha: unknown) => boolean;
   queuePersist: (shas: unknown) => void;
   persist: (shas: unknown) => Promise<string[]>;
-  ensureBytes: (shas: unknown, opts?: { remote?: boolean }) => Promise<string[]>;
+  ensureBytes: (shas: unknown, opts?: EnsureBytesOptions) => Promise<string[]>;
   setBackend: (backend: BlobBackend | null | undefined) => void;
   backendInfo: () => BlobBackendInfo | null;
   resolveBackend: () => Promise<BlobBackend>;
@@ -230,17 +232,20 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     return p;
   }
 
-  function ensureBytes(shas: unknown, opts?: { remote?: boolean }): Promise<string[]> {
+  function ensureBytes(shas: unknown, opts?: EnsureBytesOptions): Promise<string[]> {
     const list = uniqueStrings(shas);
     const need = list.filter(function (sha) { return isSha256Hex(sha) && !entries[sha]; });
     const report = function (): string[] { return list.filter(function (sha) { return !has(sha); }); };
     if (!need.length) return Promise.resolve(report());
     const useRemote = !(opts && opts.remote === false);
+    const fixed = !!opts && "source" in opts;
+    const source = fixed ? (typeof opts.source === "function" ? opts.source : null) : remote;
     return resolveBackend().then(function (b) {
       return Promise.all(need.map(function (sha) { return loadBlob(b, sha); }));
     }).then(function () {
-      if (!useRemote || !remote) return null;
-      return Promise.all(need.filter(function (sha) { return !entries[sha]; }).map(fetchRemoteBlob));
+      if (!useRemote || !source) return null;
+      const absent = need.filter(function (sha) { return !entries[sha]; });
+      return Promise.all(absent.map(function (sha) { return fixed ? fetchFrom(source, sha) : fetchRemoteBlob(sha); }));
     }).then(report, report);
   }
 
@@ -277,6 +282,14 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     });
     fetching.set(sha, p);
     return p;
+  }
+
+  function fetchFrom(source: RemoteBlobSource, sha: string): Promise<void> {
+    return Promise.resolve().then(function () { return source(sha); }).then(function (bytes) {
+      if (entries[sha] || !bytes) return;
+      const rec = intern(bytes);
+      if (rec && rec.sha256 !== sha) host.warn("Image store: the server's blob " + sha + " failed its hash check");
+    }).then(null, noop);
   }
 
   function loadBlob(from: BlobBackend, sha: string): Promise<void> {

@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -31,7 +32,7 @@ function pdfFor(rows) {
     schema: 2, title: "Layout", comments: [],
     rows: rows.map((r, i) => ({ id: "r" + i, visualText: r.v || "", audioText: r.a || "", status: "todo" }))
   });
-  return buildPdf(rows.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
+  return buildPdf(liveDoc(), rows.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
 }
 
 function parse(bytes) {
@@ -141,7 +142,7 @@ const cimg = (w, h) => {
 };
 const MISSING = "f".repeat(64);
 
-function commentPdf(comments, opts) {
+function commentPdf(comments) {
   S.state = migrateRows({
     schema: 2, title: "Comment pictures",
     rows: [{ id: "r0", visualText: "A scene.", audioText: "Some audio.", status: "todo" }],
@@ -150,7 +151,8 @@ function commentPdf(comments, opts) {
       createdAt: "2026-09-0" + (i % 9 + 1) + "T10:00:00Z", replies: []
     }, c))
   });
-  return (opts && opts.map) ? pdfCommentImagesFor().then((map) => buildPdf(null, map)) : Promise.resolve(buildPdf(null));
+  const [doc, assets] = liveWithAssets();
+  return pdfCommentImagesFor(doc, assets).then((map) => buildPdf(doc, null, map));
 }
 
 function commentOps(bytes) {
@@ -191,14 +193,14 @@ const textIndex = (ops, str) => ops.findIndex((o) => o.kind === "text" && o.str 
 
 test("a comment's and a reply's pictures print in the thread, in order, clear of the text", async () => {
   const a = cimg(640, 480), b = cimg(200, 100), c = cimg(301, 202);
-  for (const map of [false, true]) {
+  {
     const { ops, xobjects } = commentOps(await commentPdf([{
       body: "Before " + a.html + "Between<br>" + b.html + " After",
       replies: [{ id: "rp0", author: "Bob", body: "Reply text " + c.html + " reply after", createdAt: "2026-09-02T10:00:00Z" }]
-    }], { map }));
+    }]));
     checkThread(ops);
     const imgs = ops.filter((o) => o.kind === "img");
-    assert.equal(imgs.length, 3, "three pictures drawn (map " + map + ")");
+    assert.equal(imgs.length, 3, "three pictures drawn");
     const order = ["Before", imgs[0].name, "Between", imgs[1].name, "After", "Reply", imgs[2].name, "reply"]
       .map((k) => ops.findIndex((o) => o.name === k || (o.kind === "text" && o.str === k)));
     assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), "out of order: " + order);
@@ -222,10 +224,10 @@ test("a comment picture is sized to the column, keeps its aspect and is never en
 });
 
 test("a picture whose bytes are missing prints \"[image unavailable]\"", async () => {
-  for (const map of [false, true]) {
+  {
     const { ops, embedded } = commentOps(await commentPdf([
       { body: "Look: <img class=\"comment-img\" data-blob=\"" + MISSING + "\"> there." }
-    ], { map }));
+    ]));
     checkThread(ops);
     assert.equal(embedded, 0);
     const strs = ops.map((o) => o.str);
@@ -238,7 +240,7 @@ test("an image conflict card prints its picture", async () => {
   const pic = cimg(320, 240);
   const { ops } = commentOps(await commentPdf([
     { kind: "conflict", field: "visualImage", conflictField: "Visual image", imageValue: pic.rec, body: "" }
-  ], { map: true }));
+  ]));
   const imgs = ops.filter((o) => o.kind === "img");
   assert.equal(imgs.length, 1);
   assert.equal(textIndex(ops, "\\(empty\\)"), -1);
@@ -446,7 +448,7 @@ function rowPdf(specs) {
       return Object.assign({}, migrated.get(key), { id: "r" + i });
     })
   });
-  return buildPdf(specs.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
+  return buildPdf(liveDoc(), specs.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
 }
 
 function checkRowRules(specs, label) {

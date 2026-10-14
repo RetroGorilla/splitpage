@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -128,7 +129,7 @@ test("Word: every picture in the Visual cell, the video links under them, and ba
       moreImages: [{ imageRef: P2 }, { links: [{ name: "take one.mp4", size: 3, poster: true }] }, { imageRef: P3 }] },
     { visualText: "▶ not a caption, just words", audioText: "Two." }
   ]);
-  const parsed = await docxToRows(new File([buildDocx()], "g.docx"));
+  const parsed = await docxToRows(new File([buildDocx(...liveWithAssets())], "g.docx"));
   const r0 = parsed.rows[0];
   assert.equal(r0.imageRef.sha256, P1.sha256);
   assert.deepEqual((r0.moreImages || []).map((m) => m.imageRef ? m.imageRef.sha256 : m.links[0].href || m.links[0].name),
@@ -149,7 +150,7 @@ test("Markdown and PDF name every picture and every link", () => {
   const jpeg = (w, h) => ({ bytes: jpegBytes(w, h, 9), size: { w, h } });
   const jpegs = [jpeg(300, 200)];
   jpegs.more = [[jpeg(200, 300)]];
-  const t = new TextDecoder("latin1").decode(buildPdf(jpegs));
+  const t = new TextDecoder("latin1").decode(buildPdf(liveDoc(), jpegs));
   assert.ok(t.indexOf("(YouTube) Tj") !== -1 && t.indexOf("(youtu.be/abc) Tj") !== -1);
   assert.ok(t.indexOf("/Subtype /Link") !== -1 && t.indexOf("/URI (https://youtu.be/abc)") !== -1);
   assert.ok(t.indexOf("(b.mov) Tj") !== -1);
