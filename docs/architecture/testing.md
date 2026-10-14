@@ -44,8 +44,7 @@ narrows to the test files a change touched; `--only` is a local tool.
 | Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
 
 `npm run verify` before pushing is cheap and runs CI's fast gate apart from
-the checks that need a browser: the tab strip width
-(`node desktop/test/tabstrip-width.mjs`) and the browser suites. Its `sw.js`
+the browser suites. Its `sw.js`
 check compares the stamped file with the one git has, so an edit to `sw.js`
 you have not staged or committed fails it; `git add sw.js` settles that.
 
@@ -519,9 +518,8 @@ above and nothing else.
 | Job | Runs |
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, tab strip width, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
-| `node-24` | A clean `npm ci` and `npm run verify` on Node 24 |
-| `gate` | Passes when `checks` and `node-24` passed, or when the change was prose only and both were skipped |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
+| `gate` | Passes when `checks` passed, or when the change was prose only and it was skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
 The persistence suite costs little: on its first hosted run (PR #270,
