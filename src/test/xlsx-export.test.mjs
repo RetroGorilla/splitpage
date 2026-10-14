@@ -9,7 +9,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownTable } from "../js/08-production-panels.js";
 import { brollTable } from "../js/08d-broll-panel.js";
 import { zipRead } from "../adapters/formats/zip.ts";
-import { TAG_PRINT_COLORS } from "../js/14-export.js";
+import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDocumentOf } from "../js/14b-export-kit.js";
 import { scriptTable } from "../js/16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../js/16b-xlsx.js";

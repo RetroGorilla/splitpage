@@ -11,7 +11,7 @@ import {
 } from "../js/04c-doc-model.js";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
-import { htmlToPlainText } from "../js/14-export.js";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const B = (id, text, marks) => ({ atom: "broll", id, text: text || "B-roll:", marks: marks || {} });

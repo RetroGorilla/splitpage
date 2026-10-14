@@ -2,13 +2,14 @@ import { S } from "./_state.js";
 import { productionEntries, tagCategory } from "./07-production-tags.js";
 import { breakdownRows } from "./08-production-panels.js";
 import { showToast } from "./12-dirty-toast.js";
-import { exportMetaLine, tagPrintColor, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
+import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14-export.js";
 import {
   brollSummaryText, captureExportDocument, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
 } from "./14b-export-kit.js";
 import { narrationIncludesDirections, narrationRows, setNarrationIncludesDirections } from "./15-docx.js";
 import { exportBaseName, exportFileName } from "./18-local-files.js";
 import { onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
+import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { rowImage } from "../core/document/media.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";

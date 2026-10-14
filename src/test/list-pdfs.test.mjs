@@ -8,7 +8,7 @@ import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
 import { __init as initBrollPanel } from "../js/08d-broll-panel.js";
-import { TAG_PRINT_COLORS } from "../js/14-export.js";
+import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDateText, exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { buildPackingListPdf, buildShotListPdf, pdfTextWidth } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
