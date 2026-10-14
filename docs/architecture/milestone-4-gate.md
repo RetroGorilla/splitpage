@@ -199,8 +199,9 @@ tests. The four `S.state` assigners (target two) are recorded in
 
 ## Blockers for Adam
 
-None from the runs: every run the gate section requires on this machine
-passed on the exact merged tree. The Linux full run and native ARM64 wait for
+One open item: the typing and render medians of E13 were not re-run (see
+[above](#typing-and-render-medians-e13)); the gate section's own list does not
+name them. Every run the gate section lists passed on the exact merged tree. The Linux full run and native ARM64 wait for
 the 4.0 release gate, as the gate section says. The external review is
 recorded above with its disposition.
 
