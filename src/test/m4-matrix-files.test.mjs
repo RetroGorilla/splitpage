@@ -14,7 +14,10 @@ import {
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportAssetsNow, exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { buildDocx } = await import("../js/15-docx.js");
+const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
+const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../js/02c-blobs.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -548,6 +551,109 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   assert.equal(JSON.stringify(S.baseState), before.base, "the document's baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "the document's rev is unchanged");
   assert.equal(S.state.docId, before.docId, "the document's id is unchanged");
+}));
+
+const WRITEBACK_SOURCES = [
+  ["txt", "notes.txt", () => "Alpha line.\n\nBeta line.\n"],
+  ["md", "notes.md", () => "Alpha line.\n\nBeta line.\n"],
+  ["csv", "plan.csv", () => "Visual,Audio\nWide,Alpha line.\nClose,Beta line.\n"],
+  ["docx", "plan.docx", () => {
+    const doc = exportDocumentOf(script("Source"));
+    return buildDocx(doc, exportAssetsNow(doc));
+  }]
+];
+
+async function writtenText(kind, bytes) {
+  if (kind !== "docx") return new TextDecoder().decode(bytes);
+  const zip = await zipRead(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  return new TextDecoder().decode(await zip.get("word/document.xml"));
+}
+
+rightToday("I3", "import writeback stores the document as it stood when the write back began, while its bytes are held, for every import format", scene(async () => {
+  for (const [kind, name, source] of WRITEBACK_SOURCES) {
+    const target = createHeldFileHandle({ name: name, text: source(), lastModified: 1000 });
+    await importFrom(target);
+    assert.equal(homeModule.home.format, kind, "setup: the " + kind + " file is the import home's format");
+    S.state.rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
+    edit("Captured words.");
+    const gates = createGates();
+    gates.hold("blob.get");
+    setBlobBackend({ name: "held", persistent: false, get: async (sha) => { await gates.pass("blob.get", sha); return null; } });
+    const saving = saveBackToFile();
+    await gates.arrived("blob.get");
+    edit("Typed while held.");
+    gates.release("blob.get");
+    await saving;
+    setBlobBackend(null);
+    assert.equal(target.commits.length, 1, "the " + kind + " file was written");
+    const stored = await writtenText(kind, target.commits[0].bytes);
+    assert.match(stored, /Captured words\./, "the stored " + kind + " holds the words typed before the write back");
+    assert.doesNotMatch(stored, /Typed while held/, "the stored " + kind + " leaves out the words typed while its bytes were held");
+    assert.match(S.state.rows[0].audioText, /Typed while held/, "the live document keeps the later words");
+    assert.equal(homeModule.home.dirty, true, "and the " + kind + " import home is still unsaved");
+  }
+}));
+
+function heldTextFile(name, text) {
+  const gates = createGates();
+  gates.hold("text");
+  return {
+    gates: gates,
+    file: { name: name, size: text.length, text: async () => { await gates.pass("text"); return text; } }
+  };
+}
+
+function importModalShows(pattern) {
+  return pattern.test(document.getElementById("import-preview").textContent);
+}
+
+rightToday("I4", "a file decoded for an import that was closed and opened again does not fill the reopened import", scene(async () => {
+  useDocument(script("Importing"));
+  const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
+  openImportModal();
+  const decoding = handleImportFile(late.file);
+  await late.gates.arrived("text");
+  closeImportModal();
+  openImportModal();
+  late.gates.release("text");
+  await decoding;
+  assert.equal(importModalShows(/late\.csv/), false, "the reopened import does not offer the earlier file");
+  document.getElementById("import-textarea").value = "Typed line.";
+  document.getElementById("import-confirm").click();
+  assert.equal(S.state.rows.length, 3, "only the typed scene was imported");
+  assert.doesNotMatch(JSON.stringify(S.state.rows), /Late words/, "the earlier file's scenes are not in the document");
+}));
+
+rightToday("I5", "a file decoded for an import into a document that was replaced meanwhile fills nothing", scene(async () => {
+  useDocument(script("Importing"));
+  const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
+  openImportModal();
+  const decoding = handleImportFile(late.file);
+  await late.gates.arrived("text");
+  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("5") })), null, { skipSnapshot: true, silent: true });
+  assert.equal(S.state.docId, ID("5"), "setup: the other document is open");
+  late.gates.release("text");
+  await decoding;
+  assert.equal(importModalShows(/late\.csv/), false, "the import does not offer the file decoded for the replaced document");
+  closeImportModal();
+}));
+
+rightToday("I6", "confirming an import after its document was replaced adds nothing to the replacement", scene(async () => {
+  useDocument(script("Importing"));
+  openImportModal();
+  document.getElementById("import-textarea").value = "Meant for the first document.";
+  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("6") })), null, { skipSnapshot: true, silent: true });
+  const replacement = S.state;
+  const before = observed();
+  const rows = JSON.stringify(replacement.rows);
+  document.getElementById("toast-host").textContent = "";
+  document.getElementById("import-confirm").click();
+  assert.equal(S.state, replacement, "the replacement is still open");
+  assert.equal(JSON.stringify(S.state.rows), rows, "its scenes are unchanged");
+  assertSame(before, "replacement");
+  assert.equal(document.getElementById("import-modal").hidden, true, "the import closed");
+  const told = document.getElementById("toast-host").textContent;
+  assert.ok(told && !/Imported/.test(told), "the user is told nothing was imported");
 }));
 
 test("import writeback is the import destination's save: it waits behind a writeback in flight and runs after it", scene(async () => {

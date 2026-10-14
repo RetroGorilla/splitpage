@@ -356,9 +356,10 @@ export function declineBrollAnchoring(rows) {
   (rows || []).forEach(function (row) { brollAnchorDeclined[row.id] = true; });
 }
 
-export function anchorBrollInRows(rows) {
-  if (!S.state || !rows || !rows.length) return 0;
-  var plan = planBrollAnchors(S.state, productionReaders, randomIds);
+export function anchorBrollInRows(rows, doc) {
+  doc = doc || S.state;
+  if (!doc || !rows || !rows.length) return 0;
+  var plan = planBrollAnchors(doc, productionReaders, randomIds);
   var total = 0;
   rows.forEach(function (row) {
     if (brollAnchorDeclined[row.id]) return;
