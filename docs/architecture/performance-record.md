@@ -2,6 +2,12 @@
 
 Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe this machine and browser; compare a later run only under the same conditions.
 
+## Comparing two commits
+
+Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs`, and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. Use compatible installed dependencies for the two commits; no install or network access is performed.
+
+The single Markdown table lists median p50 and p95, percentage changes from base (positive is slower), and every run's p50 then p95 in execution order, in milliseconds. Even run counts average the middle two values. Export and image cases supply only a median, shown in the p50 columns with p95 unavailable; a zero base also has no percentage change. Scratch worktrees are removed on completion or failure. Set `TEMP`/`TMP` to a writable path without spaces on Windows, and `PERF_PORT_BASE` to an unused port if needed (the driver also uses that port plus 1000).
+
 ## Conditions (Linux)
 
 - Machine: linux 6.18.44-fc-v50 x64, Intel(R) Xeon(R) Processor @ 2.80GHz x4, 15.7 GB, Node v22.22.2
