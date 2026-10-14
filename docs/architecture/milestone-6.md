@@ -108,10 +108,10 @@ One feature per PR, taking the rows of the ledger it owns and the styles of its 
 
 | Step | Feature | Modules |
 | --- | --- | --- |
-| 6.8.1 | Tags and production panels | `07`, `08` |
-| 6.8.2 | B-roll | `08c`, `08d` |
-| 6.8.3 | Comments (no review-mode work) | `10` |
-| 6.8.4 | Find | `09`, `19-find.js` |
+| 6.8.1 | Tags and production panels | `07-production-tags.js`, `08-production-panels.js` |
+| 6.8.2 | B-roll | `08c-broll.js`, `08d-broll-panel.js` |
+| 6.8.3 | Comments (no review-mode work) | `10-comments.js` |
+| 6.8.4 | Find | `09-find-replace.js` |
 | 6.8.5 | Panels, settings, gallery, prompter | the remaining view modules |
 | 6.8.6 | Overlay and focus ownership (INV-19), then #308 and #350 as focused repairs after core writing work | overlay modules, `12-dirty-toast.js` |
 
