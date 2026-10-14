@@ -3,7 +3,7 @@ import { videoHostLabel } from "./05-render.js";
 import { TAG_STATUSES, tagCategory } from "./07-production-tags.js";
 import { brollShotListForPrint } from "./08d-broll-panel.js";
 import { commentEntries } from "./10-comments.js";
-import { concatBytes, latin1Bytes, tagPrintColor } from "./14-export.js";
+import { tagPrintColor } from "./14-export.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,
@@ -20,6 +20,7 @@ import {
   sceneFacts
 } from "./14b-export-kit.js";
 import { jpegSize, safeAspect } from "./15-docx.js";
+import { concatBytes, latin1Bytes } from "../adapters/formats/bytes.ts";
 import { unitSafePrefix } from "../core/document/text-policy.ts";
 
 var HELV_W = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];

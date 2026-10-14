@@ -3,13 +3,7 @@ import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { internDataUrl, queuePersist, rowImage } from "./02c-blobs.js";
 import { morePictureRefs, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
-import {
-  htmlToPlainText,
-  strBytes,
-  xmlEscape,
-  zipRead,
-  zipWrite
-} from "./14-export.js";
+import { htmlToPlainText } from "./14-export.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,
@@ -26,6 +20,9 @@ import {
   exportSummaryParts,
   sceneFacts
 } from "./14b-export-kit.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { xmlEscape } from "../adapters/formats/xml.ts";
+import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml, safeHref, unitSafePrefix } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
