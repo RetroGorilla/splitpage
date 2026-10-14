@@ -133,17 +133,17 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | T6 | With autosave off, nothing is ever scheduled, after a restore or an edit (INV-51). The `noAutoSave` merge half is T5-merge | right (measured) | stays |
 | L1a | A refresh the old document asked for does not run after the document was replaced | right since 4.8: a replacement through the transition API starts a new session and disposes the old one, which stops its armed refresh (was wrong, measured) | 4.7, 4.8 |
 | L1b | An autosave or a draft the old document armed writes nothing for itself after the document was replaced | right (measured) | stays; extended by 4.11, 4.14, 4.17 |
-| L1c | An object URL made for the old document's session video is revoked when it is replaced. The file grants (`sessionVideoFiles`) and token grants (`videoFileTokens`, `06-rows.js`) are keyed by name and size, not by document, and are app-lifetime: they must survive a switch (a version restore, a same-file reopen, a paste into another document). The URL map is a lazy cache over the grants, so only the URLs are document-owned. The case also asserts that the grant survives | wrong (measured: the URL is never revoked; ruled document-owned for the URLs only) | 4.22 |
-| L1d | No document-owned subscription survives a replacement; app-lifetime subscriptions are named | right since 4.8 (written then): a subscription made for the old document hears nothing after a new document replaces it, and one made for the replacement hears it. No app module subscribes, so there is no app-lifetime subscription to name yet; 4.22 names them across the owners | 4.7, 4.8, 4.22 |
-| F1, F1-abort, F1-dialog, F1-done | A file save whose document is replaced mid-write changes nothing in the replacement: not its `rev`, baseline, dirty state or home. The write fails at `close` (F1), the Save As picker is cancelled (F1-abort), the desktop dialog returns nothing (F1-dialog) or the write completes (F1-done) | F1, F1-abort and F1-dialog wrong (measured: the replacement's `rev` 7 becomes 6; the failure and cancel paths reach nothing else). F1-done right (measured): a completed write goes to its own file and touches nothing in the replacement | 4.11 |
-| F2 | A file save that completes after a same-id reopen does not set the reopened session's baseline or clear its dirty state | wrong (measured: the baseline becomes the obsolete save's document, and by the code its home's `diskBase` and timestamp follow). The dirty half is right and unreachable through an edit: `S.editSeq` only grows, so any edit in the reopened session keeps it dirty | 4.11 |
+| L1c | An object URL made for the old document's session video is revoked when it is replaced. The file grants (`sessionVideoFiles`) and token grants (`videoFileTokens`, `06-rows.js`) are keyed by name and size, not by document, and are app-lifetime: they must survive a switch (a version restore, a same-file reopen, a paste into another document). The URL map is a lazy cache over the grants, so only the URLs are document-owned. The case also asserts that the grant survives | right since 4.22: `releaseSessionVideoUrls` (`06-rows.js`) revokes the cached URLs when the session replaces its document, through `onDocumentReplaced` in the session bridge; the grants survive (was wrong, measured: the URL was never revoked; ruled document-owned for the URLs only) | 4.22 |
+| L1d | No document-owned subscription survives a replacement; app-lifetime subscriptions are named | right since 4.8 (written then): a subscription made for the old document hears nothing after a new document replaces it, and one made for the replacement hears it. No app module subscribes to the session, so there is no app-lifetime subscription of that kind; the app-lifetime listeners, observers and the presence timer are named in `src/test/m4-lifecycle.test.mjs` (E9, 4.22) | 4.7, 4.8, 4.22 |
+| F1, F1-abort, F1-dialog, F1-done | A file save whose document is replaced mid-write changes nothing in the replacement: not its `rev`, baseline, dirty state or home. The write fails at `close` (F1), the Save As picker is cancelled (F1-abort), the desktop dialog returns nothing (F1-dialog) or the write completes (F1-done) | right since 4.11: the new `rev` and stamps go on the captured copy and the live document takes them only on a landed write while the save owns its document (F1, F1-abort and F1-dialog were wrong, measured: the replacement's `rev` 7 became 6; the failure and cancel paths reach nothing else). F1-done right (measured): a completed write goes to its own file and touches nothing in the replacement | 4.11 |
+| F2 | A file save that completes after a same-id reopen does not set the reopened session's baseline or clear its dirty state | right since 4.11: the baseline, `diskBase`, `lastModified` and the clean state move only under `job.owns()` (was wrong, measured: the baseline became the obsolete save's document, and by the code its home's `diskBase` and timestamp followed). The dirty half was right and unreachable through an edit: `S.editSeq` only grows, so any edit in the reopened session keeps it dirty | 4.11 |
 | F3 | A Save As that is cancelled or fails leaves Save's target and the document id unchanged. One case runs the picker cancelled, the picked file failing at `close` and the desktop dialog cancelled | right (measured) | stays |
 | F4 | An edit during the write leaves the document dirty, and the file holds the bytes without the edit | right (measured) | stays |
 | F5-retry, F5-overwrite, F5-copy, F5-link, F5-prompter (control F5-one) | A save started by the save-error retry (F5-retry), the conflict overwrite (F5-overwrite) or copy (F5-copy), `flagLinkOff`'s copy (F5-link) or the prompter's save (`openPrompterElsewhere`, F5-prompter) while another save runs waits its turn; completions apply in order. The first save is the Save button, held at `write` | right since 4.9: every caller asks the coordinator, which runs one save per destination at a time (all five were wrong, measured: a second writer opened while the first was held). F5-one right: a lone save opens one writer | 4.9 |
 | F5-stale | Overlapping saves never leave the file older than the document says it is saved | right since 4.9: saves to one destination are serialised, and a confirmed generation never moves back (was wrong, measured through the retry: the later save finished first and cleared the dirty state, the held earlier save then wrote its older text, and the file ended with it while the document read Saved. The conflict overwrite did the same) | 4.9 |
 | F6 | A write that fails at `write` or `close` keeps the document dirty, the home and the `rev` unchanged | right (measured) | stays |
 | F7 | A handle whose permission is refused fails without retargeting and without a write: the open file's handle (the `getFile` of the conflict check is refused) and a Save As picked handle (`createWritable` is refused) | right (measured) | stays |
-| F8 | After a write, the baseline timestamp is the one that write produced, not a later read's | wrong (measured, desktop: the home takes the timestamp of the `readFile` that follows the write, so a change in between replaces the write's own) | 4.13 |
+| F8 | After a write, the baseline timestamp is the one that write produced, not a later read's | right since 4.13: the desktop shim's `close()` answers the timestamp `writeFile` returned, so the writer skips the read-back (was wrong, measured, desktop: the home took the timestamp of the `readFile` that followed the write, so a change in between replaced the write's own) | 4.13 |
 | F9 | No history copy happens before the write is confirmed, and a save never waits on a history write that does not resolve (INV-36, INV-39). Measured on the desktop, where `historyCopy` can be held | right (measured) | stays |
 | I1 | An edit while import writeback awaits its bytes leaves the import home dirty. The bytes wait on a held blob load; the case claims no byte capture (Spec notes) | right since 4.6: `saveBackToFile` takes `docIdAtBuild` and `seqAtBuild` before the build, where `buildFileData` captures (was wrong, measured: taken after the build, so the edit counted as written and the import home read saved) | 4.6 |
 | I2 | Import writeback acknowledges only the import home | right (measured) | stays |
@@ -159,6 +159,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | S8 | A failed upload or `PUT` (500, `missing-blobs`, offline) writes no record and keeps the document dirty (INV-52). The case runs a `PUT` 500, offline, `missing-blobs` and a blob upload 500 | right (measured) | stays |
 | S9, S9-link | A role lowered mid-save (S9) or a link turned off mid-save (S9-link) authorizes no write; the work stays as an unsaved local copy. S9-link is the last case in its file, because the app has no way to reset `linkTurnedOff` | right (measured) | stays |
 | P1 | A publish whose connection changed reports the document it created on the old server | right (4.15: `transitions.publish`, a sticky toast naming the script and server) | 4.15 |
+| P1-token | A publish that lands after a token or role change on the same server says the sign-in changed, not that another script was opened. The case holds the upload, changes the token and releases it (added by 4.22 from the 4.15 review note) | right since 4.22: `publishToServer` compares the epoch, document id and destination it captured when the transition answers `obsolete`, and when only the connection moved it shows the sign-in text (was wrong, measured: the "you had opened another script" toast) | 4.22 |
 | P2, P3 | Publish while another document is opened (#247); typing during publish stays dirty (#248) | right (measured) | stays |
 | C1 | Hosted Save As acknowledges no server edit and keeps the merge ancestor | right (measured) | stays |
 | C2 | A collaboration modal step that completes after the modal closed changes nothing. The case runs the connect step, the sign-in step and the links step. The publish step is not covered: it completes the publish the user asked for and shows its own toast | right (measured) | stays |
@@ -177,7 +178,7 @@ A case is declared `rightToday` or `wrongToday`. A `wrongToday` case passes only
 | B9 | A revoked link keeps the draft as an unsaved local copy with a new id and never writes to the server | right (measured; the server answers 404 to the resume) | stays |
 | B10 | A draft whose pictures could not be persisted carries them inline and restores with them. This covers only the inline half of offline images. Pictures stored locally and brought back are covered by suite 26 and the `#82` smoke group on the desktop, and the browser case for them comes with 4.19's blob store | right (measured) | stays |
 | B11 | After a restart, the work left by the closed session comes back as unsaved work and writes nothing: an untitled draft, and a file draft whose file is gone (an unsaved copy) | right (measured) | stays |
-| K1 | A desktop file-draft restore whose document is replaced across its awaits does not overwrite the replacement | right since 4.18: the restore captures the operation before reading the file and, if it no longer owns the document after the read, changes nothing and keeps the draft for the next launch (outcome `failed`, with a toast) (was wrong, measured: the late restore replaced the new blank script with the file's document carrying the draft's text, and made the file its destination) | 4.18 |
+| K1 | A desktop file-draft restore whose document is replaced across its awaits does not overwrite the replacement | right since 4.18: the restore captures the operation before reading the file and, if it no longer owns the document after the read, changes nothing and keeps the draft for the next launch (outcome `kept`, with a toast; on the desktop main drops the tab's pending open and keeps the draft held) (was wrong, measured: the late restore replaced the new blank script with the file's document carrying the draft's text, and made the file its destination) | 4.18 |
 | K2 | A desktop draft write after the tab navigated is refused (`STALE_SEQ`), leaves no draft and pauses nothing; the next write lands. Runs the real `desktop/drafts.js` store as the bridge | right (measured) | stays |
 | H1 | A history restore that completes after a same-id reopen does not overwrite the reopened session. The case holds the restore's backup snapshot (`delay-put`) | right since 4.18: `restoreSnapshot` checks ownership (epoch, id, destination; the connection only on a server document) after each await, so a same-id reopen answers "changed" (was wrong, measured: the snapshot replaced the reopened session, so what was typed in it after the reopen was gone from the screen; the backup "Before restoring an earlier version" held it) | 4.18 |
 | H1-switch | A history restore that completes after another document was opened is refused ("changed") and says so | right (measured) | stays |
@@ -355,6 +356,93 @@ Every PR runs `npm run verify` and the suites of [testing.md's change table](tes
 **4.21 Atomic render (#463).** Build rows and title off-screen with the incremental row reuse, then commit in a guarded phase in which render-generated focus and blur commit nothing; restore focus within its own surface (a Writer paragraph in the Writer); a draw that throws leaves the old screen intact and is a recoverable presentation failure, with #456's editing block kept. Acceptance: 4.4's cases, including the four it leaves skipped as owned by this PR (R4m, R4l, R4w and R5d in `src/test/render-no-edit-app.test.mjs`, each converted to a passing test, or to a `wrongToday`-then-green case through the 4.0 wrapper, in the commit that fixes it; none may stay skipped at the gate), the issue's own (a throw at any row leaves the DOM byte-identical), and the typing and render medians within noise of 4.4's base on the long demo. Hot path: full browser run before merge, plain and frozen.
 
 **4.22 Close.** The lifecycle test complete across the owners, with the app-lifetime subscriptions named (E9). Every matrix case `rightToday`. Revise `saving.md` and `session.md`; this doc's as-built section with `--metrics` before and after and `--prune`; ledger rows INV-20, 29, 36, 39, 40, 41, 51, 52, 62 with their `HANDOFF.md` pointers; pinned-defects rows; the #320 case rerun on the closing tree under 4.5's conditions. The gate record is a separate docs PR after the runs.
+
+## As built
+
+Written by step 4.22 at `511dce0` plus 4.22's own branch. [saving.md](saving.md) and [session.md](session.md) describe the code; this section records what the milestone measured and where the build differs from the plan.
+
+### The steps, in merge order
+
+| Step | PR | Merge commit | Notes |
+| --- | --- | --- | --- |
+| 4.0 matrix harness | #527 | `8cc553d` | |
+| 4.1 matrix groups F, I, D | #537 | `ca96d32` | |
+| 4.2 matrix groups S, P, C, A | #536 | `b0d4282` | |
+| 4.3 matrix groups B, K, H, M | #546 | `2843334` | |
+| 4.4 render invariant tests | #526 | `06fb4e9` | |
+| 4.5 #320 measurement | #525 | `5f37d69` | |
+| 4.7 session effects and `dispose` | #544 | `ebf8d25` | |
+| 4.21 atomic render | #554 | `b008bc8` | |
+| 4.8 operation context and transition API | #555 | `8563dc9` | |
+| 4.19 blob store | #559 | `e5e99ab` | trimmed the second hash and copy (#320) |
+| 4.20 continuations | #560 | `41af3b5` | the broad ownership check, Adam's ruling |
+| 4.17 draft stores and writer ownership | #561 | `45454b0` | |
+| 4.6 capture contract | #557 | `e4911ed` | |
+| 4.9 save coordinator | #562 | `f0ae41a` | |
+| 4.10 `saving.md` | #563 | `fd0477f` | |
+| 4.14 hosted writer and transport | #564 | `c91e017` | |
+| 4.15 server open, resume, pull, publish | #565 | `7264e6e` | only the merge step of `applyMerge` moved |
+| 4.16 collaboration and authority | #566 | `129d52d` | Sonnet, as planned |
+| 4.12 import writeback and file open | #567 | `125d9fc` | |
+| 4.11 file writer | #568 | `bbc3598` | |
+| 4.13 desktop handle | #570 | `523ce72` | |
+| 4.18 restore and adoption | #569 | `511dce0` | new outcome and toast |
+| 4.22 close | #571 | | this PR |
+
+Tooling PRs that landed in the same window: #549 (Node version guard), #550 (mutant runner), #552 and #553 (dependabot targets), #558 (per-PR CI override).
+
+### Measured
+
+`node tools/dep-report.mjs --metrics`, at `f66789a` (where the plan was written) and at the closing tree:
+
+| | Start | End |
+| --- | --- | --- |
+| Frontend modules | 154 | 177 |
+| Migrated modules | 77 | 101 |
+| Runtime cycles, largest (modules), edges | 1, 53, 411 | 1, 53, 413 |
+| `S` importers | 54 | 53 |
+| `S` writers | 31 | 28 |
+| `S` field writers | 26 | 23 |
+| `S.state` assigners | 9 | 4 |
+| Dependency baseline entries | 630 | 623 |
+| Browser suites | 192 | 194 |
+
+`node tools/dep-report.mjs` on the closing tree reports 623 exceptions, 0 new and 0 resolved, so `--prune` has nothing left to remove. Each lane ran `--prune` after merging the base and committed what it removed; the baseline fell by seven entries over the milestone.
+
+The race matrix: 110 cases (105 at the start of 4.22, plus `P1-token` here and `F5-saveas`, `F5-replaced`, `F9-warn` and `K1b` from the Astra follow-ups, PR #572) in 81 rows of the table above, in six case files under `src/test/` (`m4-matrix-boot`, `-continuations`, `-files`, `-hosted`, `-recovery` and `-session`), beside the harness (`_m4-matrix.mjs`) and its own test (`m4-matrix-harness.test.mjs`). Every case is declared `rightToday`; none is `wrongToday`. Run with `SPLITPAGE_M4_GATE=1`, which fails any case still `wrongToday`, all of `src/test/m4-matrix-*.test.mjs` pass. The lifecycle test is `src/test/m4-lifecycle.test.mjs`.
+
+The #320 case on the closing tree: open -1.4% and merge -4.4% against `d18adde` on a Linux rerun (the 4.5 record, on Windows, had `c4d5944` at +35% and +32%). See [performance-record.md](performance-record.md).
+
+### Where the exit criteria stand
+
+| # | Status |
+| --- | --- |
+| E1 | Held. A confirmed generation and baseline per destination; one status selector (saving.md §4, §8). The selector's inputs are still read from legacy globals |
+| E2 | Held, without the authority field: the context carries the connection instance, so a role or scope change already makes `stillOwns` false, and the authority model (`authority.ts`) is separate (saving.md §2) |
+| E3 | Held. Writes are serialised per destination; one transport owns an operation's blob transfer and write; an obsolete write that landed is reported. `sendReviewWrites` still uses the live connection (saving.md §8) |
+| E4 | Held, with four `S.state` assigners instead of the planned two: the prelude's `null` and the live-document port, plus `applyMerge`'s adopt (its screen side stays for milestone 6) and the boot init in `21-events.js` |
+| E5 | Held (C1, I1, I2, F3 are `rightToday`; import writeback queues on its own destination) |
+| E6 | Held. The authority model and the workflow behind interfaces; `publishToServer`'s own role check stays inline |
+| E7 | Held (4.17, 4.18). The desktop and browser recovery groups run at the gate |
+| E8 | Held (4.6; the X cases) |
+| E9 | Held (4.22): `src/test/m4-lifecycle.test.mjs` |
+| E10 | Held (4.20, cases M1 to M7; 4.17's captured draft writes) |
+| E11 | Held (4.7) |
+| E12 | Held (the owners-construct-nothing test of 4.8, extended by 4.9 and 4.17) |
+| E13 | Held (4.4 and 4.21). The typing and render medians are re-run at the gate |
+| E14 | Held. 4.19 trimmed the second hash and copy; the closing tree is not slower than `d18adde` (performance-record.md) |
+| E15 | Held (`export-capture-app.test.mjs`) |
+| E16 | The gate, recorded in a separate docs PR |
+
+### Where the build differs from the plan
+
+- **`applyMerge` is partly TypeScript.** The merge step and the hand-off of a merged `ValidatedDocument` moved (4.15); the screen side stays in `03-sync.js` for milestone 6.
+- **The authority model is not part of the operation context.** `stillOwns` is decided by epoch, document id, destination and connection instance; a role or scope change is a new connection instance. The authority model answers who may edit (4.16).
+- **Four `S.state` assigners, not two** (E4 above).
+- **Ownership is broad for continuations** (4.20, Adam): Save As, a first server save, or a token change during a load drops a late picture with a toast.
+- **A superseded file-draft restore has its own outcome, `kept`** (4.18), because the desktop main process would otherwise open the draft's file over the new script. The kept draft is deleted if the user later closes with "Don't save" (saving.md §7).
+- **A publish that lands after a sign-in change has its own toast** (4.22, `P1-token`), where 4.15's note had proposed leaving it to a later step.
+- **Recorded, not done, in milestone 4:** `sendReviewWrites` per-comment transport; the Drive modal's folder-navigation race; `saveBackToFile`'s second read on the desktop; one constant for the review refusal reason. They are listed in saving.md §8 and the 4.22 PR body.
 
 ## Issue classification
 
