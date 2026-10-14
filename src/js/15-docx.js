@@ -1,4 +1,3 @@
-import { readPref, writePref } from "./00p-prefs.js";
 import { internDataUrl, queuePersist, rowImage } from "./02c-blobs.js";
 import { morePictureRefs, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
@@ -779,16 +778,6 @@ function packDocx(doc, body, links, media) {
   });
 
   return zipWrite(entries, day);
-}
-
-export var NARRATION_DIRECTIONS_KEY = "splitpage-export-directions";
-
-export function narrationIncludesDirections() {
-  return readPref(NARRATION_DIRECTIONS_KEY) !== "0";
-}
-
-export function setNarrationIncludesDirections(on) {
-  writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
 }
 
 function narrationTextOpts(opts) {

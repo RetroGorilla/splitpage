@@ -8,10 +8,8 @@ import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { withPageHead } from "../js/02b-doc-id.js";
 import { cellOf, toPlainText } from "../js/04c-doc-model.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { buildBreakdownCsv } from "../js/08-production-panels.js";
-import { buildBrollCsv } from "../js/08d-broll-panel.js";
-import { exportMetaLine } from "../js/14-export.js";
-import { buildCsv, csvToRows } from "../js/16-csv.js";
+import { exportMetaLine } from "../js/14d-export-text.js";
+import { buildBreakdownCsv, buildBrollCsv, buildCsv, csvToRows } from "../js/16-csv.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { exportDocumentOf, exportFacts } from "../js/14b-export-kit.js";
 

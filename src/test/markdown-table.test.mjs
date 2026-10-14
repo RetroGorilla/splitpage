@@ -7,7 +7,7 @@ import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { detectTwoColumnFormat, parseImportRows, parseMarkdownTable } from "../js/11-import.js";
 import { cellOf, toMarkdown } from "../js/04c-doc-model.js";
-import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../js/14-export.js";
+import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { exportDocumentOf, exportFacts } from "../js/14b-export-kit.js";
 

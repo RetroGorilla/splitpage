@@ -6,9 +6,11 @@ import {
   refreshFileMenu,
   toggleFileMenu
 } from "./18b-file-menu.js";
-import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
+import { exportActionName, exportActionReason } from "./18c-export-dialog.js";
+import { runExportAction } from "./18-local-files.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { exportFormats } from "../legacy/export-formats.ts";
 import { askingFromLauncher, launcherShown } from "../legacy/screen.ts";
 
 var RECENT_KEY = "splitpage-recent-commands";
@@ -19,40 +21,28 @@ function el(id) { return document.getElementById(id); }
 
 var OWN_ACTION = "command-menu";
 
-var EXPORT_COMMANDS = [
-  ["export-pdf", "pdf print"],
-  ["export-docx", "word docx document google docs"],
-  ["export-md", "markdown md text stacked"],
-  ["export-md-table", "markdown md table two columns side by side"],
-  ["export-xlsx", "excel xlsx spreadsheet workbook sheets numbers table"],
-  ["export-csv", "spreadsheet csv excel sheets table"],
-  ["export-html", "splitshare share standalone page html web browser send any device app"],
-  ["export-narration-docx", "narration voice over voiceover audio artist word docx"],
-  ["export-narration-txt", "narration voice over voiceover audio artist text txt"],
-  ["export-breakdown-xlsx", "breakdown excel xlsx spreadsheet workbook tags props locations cast list"],
-  ["export-breakdown", "breakdown csv tags props locations cast list"],
-  ["export-packing-gear", "packing list checklist gear equipment kit pdf"],
-  ["export-packing-prop", "packing list checklist props prop pdf"],
-  ["export-broll-pdf", "b-roll broll shot list shots second unit print pdf landscape"],
-  ["export-broll-xlsx", "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets"],
-  ["export-broll-csv", "b-roll broll shot list shots spreadsheet csv excel sheets"]
-];
-
-var LIST_ORDER = [
+var LIST_BEFORE_EXPORTS = [
   "save", "save-as", "save-back", "autosave", "new", "open", "server-open", "paste", "gdoc-import", "drive-open",
   "collaborate", "server-publish", "servers", "export"
-].concat(EXPORT_COMMANDS.map(function (e) { return e[0]; })).concat([
+];
+
+var LIST_AFTER_EXPORTS = [
   "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
   "history", "find", "toggle-hide-shot", "toggle-rundown-min", "set-target",
   "prompter-open-in-browser", "prompter-open-in-chromium",
   "settings", "help", "tour", "long-demo", "setup", "about", "tagging-help", "export-app-data", "import-app-data"
-]);
+];
 
-function exportEntry(action, words) {
+function listOrder() {
+  return LIST_BEFORE_EXPORTS.concat(exportFormats.exporters().map(function (e) { return e.action; }), LIST_AFTER_EXPORTS);
+}
+
+function exportEntry(exporter) {
+  var action = exporter.action;
   var why = exportActionReason(action);
   return {
-    cmd: { id: action, group: "Export", words: "export download " + words, run: function () { runExportAction(action); } },
-    view: { label: "Export as " + EXPORT_ACTION_NAMES[action], icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
+    cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), run: function () { runExportAction(action); } },
+    view: { label: "Export as " + exportActionName(action), icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
   };
 }
 
@@ -70,17 +60,18 @@ function actionEntry(view) {
   };
 }
 
-function listRank(id) {
-  var at = LIST_ORDER.indexOf(id);
-  return at === -1 ? LIST_ORDER.length : at;
+function listRank(id, order) {
+  var at = order.indexOf(id);
+  return at === -1 ? order.length : at;
 }
 
 function listedEntries() {
   var views = askingFromLauncher(function () { return appActions.list(); });
   var entries = views.filter(function (v) { return v.visible && v.id !== OWN_ACTION; }).map(actionEntry)
-    .concat(EXPORT_COMMANDS.map(function (e) { return exportEntry(e[0], e[1]); }));
+    .concat(exportFormats.exporters().map(exportEntry));
+  var order = listOrder();
   return entries.map(function (entry, i) { return { entry: entry, at: i }; })
-    .sort(function (a, b) { return (listRank(a.entry.cmd.id) - listRank(b.entry.cmd.id)) || (a.at - b.at); })
+    .sort(function (a, b) { return (listRank(a.entry.cmd.id, order) - listRank(b.entry.cmd.id, order)) || (a.at - b.at); })
     .map(function (x) { return x.entry; });
 }
 

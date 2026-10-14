@@ -12,7 +12,6 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { rowVideoLinks, videoLinkText } from "./02d-gallery.js";
 import {
   cloneState,
   pushSnapshot,
@@ -20,21 +19,13 @@ import {
   updateIdentityChip
 } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "./04b-busy.js";
-import { pad2, renderAbsorbed } from "./05-render.js";
-import {
-  productionEntries,
-  resetProductionPanelState,
-  tagCategory
-} from "./07-production-tags.js";
-import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
-import { brollEntries } from "./08c-broll.js";
-import { brollPrintView, brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
-import { commentBodyText, commentEntries, formatTimestamp } from "./10-comments.js";
+import { renderAbsorbed } from "./05-render.js";
+import { resetProductionPanelState } from "./07-production-tags.js";
+import { brollPrintView } from "./08d-broll-panel.js";
+import { formatTimestamp } from "./10-comments.js";
 import {
   captureExportDocument,
   exportAssetsRequest,
-  exportDay,
-  exportFacts,
   loadExportAssets
 } from "./14b-export-kit.js";
 import {
@@ -49,26 +40,10 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
-import {
-  autoSaveHalt,
-  exportMetaLine,
-  markdownExportImages,
-  slugify,
-  toMarkdownDoc,
-  toMarkdownTableDoc,
-  warnImagesLeftOut
-} from "./14-export.js";
-import {
-  buildDocx,
-  buildNarrationDocx,
-  buildNarrationText,
-  docxToRows,
-  narrationIncludesDirections,
-  narrationRows
-} from "./15-docx.js";
-import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.js";
-import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
+import { autoSaveHalt, slugify, warnImagesLeftOut } from "./14-export.js";
+import { exportToggleOptions } from "./14e-export-formats.js";
+import { docxToRows } from "./15-docx.js";
+import { csvToRows } from "./16-csv.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
@@ -82,11 +57,9 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
-import { zipWrite } from "../adapters/formats/zip.ts";
 import { isDocumentObject } from "../core/migrate.ts";
-import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { exportFormats } from "../legacy/export-formats.ts";
 
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
@@ -169,23 +142,8 @@ function updateHeaderFileChip() {
 }
 
 export function exportFileName(kind, baseName, opts) {
-  opts = opts || {};
-  if (kind === "breakdown") return baseName + " - breakdown.csv";
-  if (kind === "b-roll csv") return baseName + " - b-roll shot list.csv";
-  if (kind === "breakdown xlsx") return baseName + " - breakdown.xlsx";
-  if (kind === "b-roll xlsx") return baseName + " - b-roll shot list.xlsx";
-  if (kind === "b-roll pdf") return baseName + " - b-roll shot list.pdf";
-  if (kind === "narration-docx") return baseName + " - narration.docx";
-  if (kind === "narration-txt") return baseName + " - narration.txt";
-  if (kind.indexOf("packing-") === 0) {
-    var packCatId = kind.slice("packing-".length);
-    var packCat = tagCategory(packCatId);
-    return baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf";
-  }
-  if (kind === "md-table") return baseName + " - two column.md";
-  if (kind === "html") return baseName + " - SplitShare.html";
-  if (kind === "md" && opts.imageBundle) return baseName + " (with images).zip";
-  return baseName + "." + kind;
+  var exporter = exportFormats.byId(kind);
+  return exporter ? exporter.fileName(baseName, opts || {}) : baseName + "." + kind;
 }
 
 export function exportBaseName() {
@@ -194,119 +152,32 @@ export function exportBaseName() {
 
 export function exportRequest(kind, opts) {
   opts = opts || {};
+  var exporter = exportFormats.byId(kind) || exportFormats.byId("md");
   var doc = captureExportDocument();
   return Object.freeze({
     kind: kind,
     doc: doc,
-    options: Object.freeze({
+    options: Object.freeze(Object.assign(exportToggleOptions(exporter, opts), {
       allowImageBundle: !!opts.allowImageBundle,
-      directions: typeof opts.directions === "boolean" ? opts.directions : narrationIncludesDirections(),
       brollView: Object.freeze(brollPrintView(opts.brollView))
-    }),
+    })),
     assets: exportAssetsRequest(doc, blobSourceNow())
   });
 }
 
 export async function buildFileData(kind, baseName, opts) {
   var request = exportRequest(kind, opts);
-  var doc = request.doc;
-  var options = request.options;
+  var exporter = exportFormats.byId(kind) || exportFormats.byId("md");
   var assets = await loadExportAssets(request.assets);
-  var filename = exportFileName(kind, baseName);
-  if (kind === "docx") return { data: buildDocx(doc, assets), filename: filename };
-  if (kind === "csv") return { data: buildCsv(doc), filename: filename };
-  if (kind === "breakdown") return { data: buildBreakdownCsv(doc), filename: filename };
-  if (kind === "b-roll csv") return { data: buildBrollCsv(doc), filename: filename };
-  if (kind === "xlsx") return { data: buildScriptXlsx(doc), filename: filename };
-  if (kind === "breakdown xlsx") return { data: buildBreakdownXlsx(doc), filename: filename };
-  if (kind === "b-roll xlsx") return { data: buildBrollXlsx(doc), filename: filename };
-  if (kind === "b-roll pdf") return { data: buildShotListPdf(doc, brollShotListForPrint(doc, options.brollView)), filename: filename };
-  if (kind === "pdf") {
-    var jpegs = await pdfImagesFor(doc, assets);
-    var commentJpegs = await pdfCommentImagesFor(doc, assets);
-    return { data: buildPdf(doc, jpegs, commentJpegs), filename: filename };
-  }
-  if (kind === "txt") return { data: htmlToPlainScript(doc), filename: filename };
-  if (kind === "narration-docx") return { data: buildNarrationDocx(doc, { directions: options.directions }), filename: filename };
-  if (kind === "narration-txt") return { data: buildNarrationText(doc, { directions: options.directions }), filename: filename };
-  if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(doc, kind.slice("packing-".length)), filename: filename };
-  if (kind === "md-table") return { data: toMarkdownTableDoc(doc, { export: true }), filename: filename };
-  if (kind === "html") {
-    warnImagesLeftOut(assets.missing.length, filename);
-    return {
-      data: standaloneHtmlFor(doc, {
-        title: (doc.title || "Untitled Script") + " — SplitShare",
-        description: exportMetaLine(exportFacts(doc))
-      }, assets),
-      filename: filename
-    };
-  }
-  if (kind === "md" && options.allowImageBundle) {
-    var images = markdownExportImages(doc, assets);
-    if (images.length) {
-      var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc(doc, { assets: assets })) }];
-      images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
-      return { data: zipWrite(entries, exportDay(doc)), filename: exportFileName(kind, baseName, { imageBundle: true }) };
-    }
-  }
-  return { data: toMarkdownDoc(doc, { assets: assets }), filename: filename };
-}
-
-function htmlToPlainScript(doc) {
-  var lines = [doc.title || "Untitled Script", ""];
-  doc.scenes.forEach(function (row, i) {
-    lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(cellOf(row.visualText)));
-    rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
-    lines.push("      AUDIO: " + toPlainText(cellOf(row.audioText)));
-    lines.push("");
-  });
-
-  var breakdown = breakdownRows(doc);
-  if (breakdown.length) {
-    lines.push("PRODUCTION BREAKDOWN");
-    lines.push("====================");
-    lines.push("");
-    breakdown.forEach(function (r) {
-      var where = r.inScript === "no"
-        ? "not in script"
-        : r.mentions + " mention" + (r.mentions === 1 ? "" : "s") +
-          (r.scenes.length ? ", scene" + (r.scenes.length === 1 ? " " : "s ") + r.scenes.join(", ") : "");
-      lines.push(r.categoryLabel + ": " + r.name +
-        "  [" + r.statusLabel + "]" +
-        (r.owner ? "  —  " + r.owner : "") +
-        "  (" + where + ")");
-      if (r.notes) {
-        r.notes.split(/\r\n|\r|\n/).forEach(function (l) { lines.push("    " + l); });
-      }
-    });
-    lines.push("");
-  }
-
-  var comments = commentEntries(doc, { pieces: true });
-  if (comments.length) {
-    lines.push("COMMENTS");
-    lines.push("========");
-    lines.push("");
-    comments.forEach(function (c) {
-      lines.push(c.location + (c.resolved ? " (resolved)" : "") +
-                 "  —  " + c.author + (c.when ? ", " + c.when : ""));
-      if (c.quoted) {
-        c.quoted.split(/\r\n|\r|\n/).forEach(function (l) { lines.push('  "' + l + '"'); });
-      }
-      (commentBodyText(c) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l) { lines.push("  " + l); });
-      c.replies.forEach(function (rp) {
-        lines.push("");
-        var prefix = "  > " + rp.author + (rp.when ? ", " + rp.when : "") + ": ";
-        (commentBodyText(rp) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l, i) {
-          lines.push((i === 0 ? prefix : "    ") + l);
-        });
-      });
-      lines.push("");
-      lines.push("------------------------------");
-      lines.push("");
-    });
-  }
-  return lines.join("\n");
+  var made = await exporter.build({
+    doc: request.doc,
+    options: request.options,
+    assets: assets,
+    ports: { standaloneHtml: standaloneHtmlFor }
+  }, baseName);
+  var filename = exportFileName(kind, baseName, { imageBundle: !!made.imageBundle });
+  if (made.diagnostics) warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+  return { data: made.data, filename: filename };
 }
 
 var RAW_TEXT_ELEMENTS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1 };
@@ -842,32 +713,16 @@ export async function exportAs(kind, more) {
   await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
 }
 
-export async function exportNarration(kind) {
-  if (!narrationRows(captureExportDocument(), { directions: narrationIncludesDirections() }).length) {
-    showToast("There is no narration to export yet — the Audio column is empty.", "warn");
-    return;
+export async function runExport(action) {
+  var exporter = exportFormats.byAction(action);
+  if (!exporter) return false;
+  var why = exporter.reason ? exporter.reason(captureExportDocument()) : "";
+  if (why) {
+    showToast(exporter.refusal || why + ".", "warn");
+    return false;
   }
-  await exportAs(kind);
-}
-
-export async function exportPackingList(catId) {
-  var cat = tagCategory(catId);
-  var has = productionEntries().some(function (e) { return e.cat.id === catId; });
-  if (!has) {
-    showToast("Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack.", "warn");
-    return;
-  }
-  await exportAs("packing-" + catId);
-}
-
-export async function exportBrollList(action) {
-  if (!brollEntries(true).length) {
-    showToast("There is no b-roll to export yet — start a Visual line with B-roll:", "warn");
-    return;
-  }
-  if (action === "export-broll-csv") await exportAs("b-roll csv");
-  else if (action === "export-broll-xlsx") await exportAs("b-roll xlsx");
-  else await exportAs("b-roll pdf", { brollView: { filter: "all", group: "scene" } });
+  await exportAs(exporter.id, exporter.defaults);
+  return true;
 }
 
 var fileMenuChoiceListeners = [];
@@ -878,6 +733,12 @@ export function onFileMenuChoice(listener) {
 
 export function noteFileMenuChoice(action) {
   fileMenuChoiceListeners.forEach(function (listener) { listener(action); });
+}
+
+export function runExportAction(action) {
+  if (!exportFormats.isAction(action)) return false;
+  handleFileMenuAction(action, "command-menu");
+  return true;
 }
 
 export function handleFileMenuAction(action, source) {
@@ -891,20 +752,7 @@ export function handleFileMenuAction(action, source) {
   if (!S.state) {
     showToast("Still loading…", "warn"); return;
   }
-  if (action === "export-docx") exportAs("docx");
-  else if (action === "export-md") exportAs("md");
-  else if (action === "export-md-table") exportAs("md-table");
-  else if (action === "export-csv") exportAs("csv");
-  else if (action === "export-xlsx") exportAs("xlsx");
-  else if (action === "export-breakdown") exportAs("breakdown");
-  else if (action === "export-breakdown-xlsx") exportAs("breakdown xlsx");
-  else if (action === "export-pdf") exportAs("pdf");
-  else if (action === "export-html") exportAs("html");
-  else if (action === "export-narration-docx") exportNarration("narration-docx");
-  else if (action === "export-narration-txt") exportNarration("narration-txt");
-  else if (action === "export-packing-gear") exportPackingList("gear");
-  else if (action === "export-packing-prop") exportPackingList("prop");
-  else if (action === "export-broll-pdf" || action === "export-broll-csv" || action === "export-broll-xlsx") exportBrollList(action);
+  if (exportFormats.isAction(action)) runExport(action);
 }
 
 export function __init() {}
