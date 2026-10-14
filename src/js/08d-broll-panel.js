@@ -33,11 +33,12 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
-import { captureExportDocument, sceneFacts } from "./14b-export-kit.js";
 import { csvEscape } from "./16-csv.js";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
+import { rowSeconds as rowSecondsIn } from "../core/production/timing.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
 
@@ -1448,11 +1449,8 @@ export function shotRecordForFile(e, people) {
 }
 
 function capturedStarts(doc) {
-  var out = Object.create(null);
-  sceneFacts(doc).forEach(function (f, i) {
-    var row = doc.scenes[i];
-    if (row && !(row.id in out)) out[row.id] = f.startSeconds;
-  });
+  var t = 0, out = Object.create(null);
+  doc.scenes.forEach(function (row) { out[row.id] = t; t += rowSecondsIn(row, doc.document, productionReaders); });
   return out;
 }
 
@@ -1565,8 +1563,6 @@ export function __init() {
   loadView();
   window.__brollTest = {
     view: function () { return JSON.parse(JSON.stringify(Object.assign({}, view, pageViewToSave()))); },
-    selected: function () { return Object.keys(selection); },
-    csv: function () { return buildBrollCsv(captureExportDocument()); },
-    printData: function (as) { return brollShotListForPrint(captureExportDocument(), brollPrintView(as)); }
+    selected: function () { return Object.keys(selection); }
   };
 }
