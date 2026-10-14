@@ -7,7 +7,7 @@ import { breakdownRows } from "./14c-export-projections.js";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14d-export-text.js";
 import { exportToggleOptions } from "./14e-export-formats.js";
 import { narrationRows } from "./15-docx.js";
-import { exportBaseName, exportFileName, runExportAction } from "./18-local-files.js";
+import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
 import { onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { rowImage } from "../core/document/media.ts";
@@ -624,7 +624,7 @@ export function __init() {
   el("export-go").addEventListener("click", exportChosen);
   el("export-share-link").addEventListener("click", function () {
     closeExportDialog();
-    runExportAction("collaborate");
+    handleFileMenuAction("collaborate");
   });
   onFileMenuRefresh(refreshExportAgainItem);
   syncExportMenu();

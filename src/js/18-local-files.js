@@ -9,6 +9,7 @@ import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00
 import {
   docIdEmbeddedIn,
   migrateDocument,
+  standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
 import {
@@ -168,7 +169,12 @@ export async function buildFileData(kind, baseName, opts) {
   var request = exportRequest(kind, opts);
   var exporter = exportFormats.byId(kind) || exportFormats.byId("md");
   var assets = await loadExportAssets(request.assets);
-  var made = await exporter.build({ doc: request.doc, options: request.options, assets: assets }, baseName);
+  var made = await exporter.build({
+    doc: request.doc,
+    options: request.options,
+    assets: assets,
+    ports: { standaloneHtml: standaloneHtmlFor }
+  }, baseName);
   var filename = exportFileName(kind, baseName, { imageBundle: !!made.imageBundle });
   if (made.diagnostics) warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
   return { data: made.data, filename: filename };

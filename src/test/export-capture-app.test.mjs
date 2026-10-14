@@ -45,7 +45,7 @@ test("E15: a capture taken with a live connection and a file home holds no token
       assert.equal(text.includes(FILE_NAME), false, "output " + i + " holds the file name");
     });
     assert.deepEqual(Object.keys(doc).sort(),
-      ["broll", "capturedAt", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
+      ["broll", "capturedAt", "clockMode", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
   } finally {
     setHome("none");
     setConnection({});
