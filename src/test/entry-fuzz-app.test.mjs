@@ -25,7 +25,12 @@ const RELOADS = Math.max(24, Math.round((Number(process.env.SPLITPAGE_FUZZ_SEEDS
 
 const session = liveSession();
 const heard = [];
-session.subscribe((c) => heard.push(c.kind));
+let stopHearing = session.subscribe((c) => heard.push(c.kind));
+
+function hearReplacement() {
+  stopHearing();
+  stopHearing = session.subscribe((c) => heard.push(c.kind));
+}
 const held = () => session.read((doc) => doc);
 const migrate = (raw) => migrateRows(raw);
 
@@ -68,6 +73,7 @@ const ENTRIES = {
   draft: {
     kind: "adopt",
     opens: true,
+    replaces: true,
     run: (raw) => applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(raw) })
   },
   server: {
@@ -139,7 +145,12 @@ async function through(name, raw, where, tally, spoilMine, broken) {
     return;
   }
   bump(tally.kinds, name);
-  assert.deepEqual(heard, [entry.kind], where + ": published");
+  if (entry.replaces) {
+    hearReplacement();
+    assert.deepEqual(heard, [], where + ": a new session, so the old one's subscription heard nothing");
+  } else {
+    assert.deepEqual(heard, [entry.kind], where + ": published");
+  }
   assert.equal(session.epoch(), epoch + (entry.opens ? 1 : 0), where + ": epoch");
   assert.equal(session.generation(), gen, where + ": generation");
   assert.equal(held(), S.state, where + ": the session holds the document the app shows");

@@ -5,6 +5,8 @@ import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex, with
 import { cappedLongText, plainText } from "../core/document/text-policy.ts";
 import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
+import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "./02c-blobs.js";
 import { cloneState } from "./03-sync.js";
@@ -35,12 +37,15 @@ export async function loadInitialState() {
   if (!pristine) {
     try { raw = JSON.parse(document.getElementById("state-data").textContent); } catch (e) { raw = null; }
   }
-  if (pristine || !raw || typeof raw !== "object" || (!raw.rev && !raw.lastEditedBy)) {
+  var loaded = pristine || !raw || typeof raw !== "object" || neverWrittenOut(raw)
+    ? null
+    : migrateDocument(raw, { kind: "file" });
+  if (!loaded || neverWrittenOut(loaded)) {
     S.docIdWrittenOut = false;
     return migrateRows(defaultState());
   }
   S.docIdWrittenOut = true;
-  return migrateDocument(raw, { kind: "file" });
+  return loaded;
 }
 
 export function noteMergedDocId(prevId) {
@@ -51,10 +56,7 @@ export function noteMergedDocId(prevId) {
 }
 
 export function adoptRestoredState(snap) {
-  var keep = normalizeDocId(S.state && S.state.docId);
-  S.state = migrateRows(cloneState(snap));
-  if (keep) S.state.docId = keep;
-  return S.state;
+  return documentTransitions().restore({ from: { raw: cloneState(snap) } }).document;
 }
 
 export var liveDocumentPort = Object.freeze({

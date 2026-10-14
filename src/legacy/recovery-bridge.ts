@@ -1,9 +1,11 @@
 import { createDraftWriter } from "../application/recovery/draft-writer.ts";
 import type { DraftWriter } from "../application/recovery/draft-writer.ts";
+import { restoreOwnership } from "../application/recovery/restore-policy.ts";
 import type { DesktopDraftStore, DraftLimits, KeyedDraftStore } from "../application/recovery/ports.ts";
 import { createDesktopDraftStore } from "../adapters/storage/draft-store-desktop.ts";
 import type { DesktopDraftBridge } from "../adapters/storage/draft-store-desktop.ts";
 import { createIdbDraftStore } from "../adapters/storage/draft-store-idb.ts";
+import type { OperationContext } from "../application/session/operation.ts";
 import { captureOperation, stillOwns } from "./transition-bridge.ts";
 
 export interface LegacyRecoveryPorts {
@@ -71,4 +73,14 @@ export function useBrowserDraftFactory(factory: IDBFactory | null): BrowserDraft
   const now = running();
   now.browser = browserDraftsFor(now.ports, factory);
   return now.browser;
+}
+
+const restoring = restoreOwnership({ capture: captureOperation, stillOwns: stillOwns });
+
+export function captureRestore(): OperationContext {
+  return restoring.capture();
+}
+
+export function stillRestoring(ctx: OperationContext): boolean {
+  return restoring.stillOwns(ctx);
 }
