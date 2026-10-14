@@ -568,6 +568,43 @@ rightToday("K1", "a desktop file-draft restore whose document is replaced across
   }
 });
 
+rightToday("K1b", "a desktop file-draft merge whose document is replaced while its backup is stored does not overwrite the replacement", async () => {
+  useDocument(script("Before the restore"));
+  const original = script("On disk", { docId: idOf("9") });
+  const disk = cloneState(original);
+  disk.rows[1].audioText = "Changed on disk.";
+  const mine = cloneState(original);
+  mine.rows[0].audioText = "Unsaved here.";
+  const { fake, restore } = withHeldDesktop();
+  try {
+    const picked = await fake.saveFileDialog({ suggestedName: "disk.splitpage" });
+    await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(disk))));
+    window.__historyTest.injectFault("delay-put");
+    const restoring = applyTakenDraft({
+      header: { origin: { kind: "file", fileName: picked.name }, docIdWrittenOut: true },
+      file: { id: picked.id, name: picked.name },
+      stateJson: JSON.stringify(mine),
+      baseJson: JSON.stringify(original)
+    });
+    await until(() => S.state.title === "On disk", "the restore opened the changed file");
+    await settleIo(20);
+    assert.equal(S.state.rows[0].audioText, "One.", "setup: the merge is waiting for its backup");
+    startNewScript();
+    assert.equal(S.state.title, "Untitled Script", "setup: the user replaced the document meanwhile");
+    window.__historyTest.releaseDelayedPut();
+    const outcome = await restoring;
+    assert.equal(outcome, "kept", "the restore keeps the draft for the next launch");
+    assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
+    assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here." || r.audioText === "Changed on disk."), false,
+      "the late merge put none of its text into the replacement");
+    assert.equal(homeModule.home.kind, "none", "and the replacement keeps its own destination");
+  } finally {
+    window.__historyTest.injectFault(null);
+    restore();
+    homeModule.setHome("none");
+  }
+});
+
 rightToday("K2", "a desktop draft write that lands after the tab navigated is refused, pauses nothing, and the next write lands", async () => {
   const dir = mkdtempSync(join(tmpdir(), "m4-k2-"));
   const store = createDraftStore({ dir: dir, fs: require("node:fs"), fsp: require("node:fs/promises"), path: require("node:path"), crypto: require("node:crypto"), appVersion: "test", testHooks: { writeDelayMs: 120 } });
