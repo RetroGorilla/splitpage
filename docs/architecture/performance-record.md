@@ -2,12 +2,6 @@
 
 Recorded 2026-09-30 by `node tools/perf-record.mjs`, once. The numbers describe this machine and browser; compare a later run only under the same conditions.
 
-## Comparing two commits
-
-Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs`, and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. Use compatible installed dependencies for the two commits; no install or network access is performed.
-
-The single Markdown table lists median p50 and p95, percentage changes from base (positive is slower), and every run's p50 then p95 in execution order, in milliseconds. Even run counts average the middle two values. Export and image cases supply only a median, shown in the p50 columns with p95 unavailable; a zero base also has no percentage change. Scratch worktrees are removed on completion or failure. Set `TEMP`/`TMP` to a writable path without spaces on Windows, and `PERF_PORT_BASE` to an unused port if needed (the driver also uses that port plus 1000).
-
 ## Conditions (Linux)
 
 - Machine: linux 6.18.44-fc-v50 x64, Intel(R) Xeon(R) Processor @ 2.80GHz x4, 15.7 GB, Node v22.22.2
@@ -297,3 +291,8 @@ Against `d18adde`:
 
 The direction matches the 4.5 record: the two cases that ingest new pictures were slower on `c4d5944` than on `d18adde` (here by 18% and 14%, against 35% and 32% on Windows; a different machine, so the sizes are not comparable). The closing tree is not slower than `d18adde` on either: open -1.4% and merge -4.4%, well inside the 10% line of E14, which is what 4.19's trim of the second hash and copy (`905a5d03`) was for. The load from IndexedDB reads +2.6%, inside the spread of the `d18adde` runs themselves (141 to 169 ms); the plan's note that this path hashes once more than ingestion stands, and 4.19 left it as it was. The spread within a build is large on this machine (the `d18adde` merge runs span 662 to 867 ms), so the figures show "not slower", not a gain.
 
+## Comparing two commits
+
+Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs`, and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. Use compatible installed dependencies for the two commits; no install or network access is performed.
+
+The single Markdown table lists median p50 and p95, percentage changes from base (positive is slower), and every run's p50 then p95 in execution order, in milliseconds. Even run counts average the middle two values. Export and image cases supply only a median, shown in the p50 columns with p95 unavailable; a zero base also has no percentage change. Scratch worktrees are removed on completion or failure. Set `TEMP`/`TMP` to a writable path without spaces on Windows, and `PERF_PORT_BASE` to an unused port if needed (the driver also uses that port plus 1000).

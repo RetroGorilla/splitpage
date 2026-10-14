@@ -42,7 +42,7 @@ test("scratch comparisons use head helpers, alternate and clean up after success
     git("config", "user.name", "Test");
     git("config", "user.email", "test@example.invalid");
     symlinkSync(join(REPO, "node_modules"), join(repo, "node_modules"), process.platform === "win32" ? "junction" : "dir");
-    writeFileSync(join(repo, ".gitignore"), "node_modules/\nbuilt\n");
+    writeFileSync(join(repo, ".gitignore"), "node_modules\nbuilt\n");
     writeFileSync(join(repo, "build.mjs"), `import { appendFileSync, copyFileSync } from "node:fs"; if (process.env.PERF_AB_TEST_FAIL === "build") throw new Error("build failure"); if (process.env.PERF_AB_TEST_FAIL === "cancel") { appendFileSync(${JSON.stringify(log)}, "cancel\\n"); await new Promise((resolve) => setTimeout(resolve, 30000)); } copyFileSync("version", "built");`);
     writeFileSync(join(repo, "version"), "base");
     writeFileSync(join(repo, "tools/helper.mjs"), 'export const value = "base";');
