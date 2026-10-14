@@ -829,131 +829,10 @@ export function toMarkdownTableDoc(doc, opts) {
   return lines.join("\n");
 }
 
-export function strBytes(s) { return new TextEncoder().encode(s); }
-
-export function latin1Bytes(s) {
-  var out = new Uint8Array(s.length);
-  for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;
-  return out;
-}
-
-export function concatBytes(chunks) {
-  var total = 0, i;
-  for (i = 0; i < chunks.length; i++) total += chunks[i].length;
-  var out = new Uint8Array(total), at = 0;
-  for (i = 0; i < chunks.length; i++) { out.set(chunks[i], at); at += chunks[i].length; }
-  return out;
-}
-
-var CRC_TABLE = null;
-function crc32(bytes) {
-  if (!CRC_TABLE) {
-    CRC_TABLE = new Uint32Array(256);
-    for (var n = 0; n < 256; n++) {
-      var c = n;
-      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      CRC_TABLE[n] = c >>> 0;
-    }
-  }
-  var crc = 0xFFFFFFFF;
-  for (var i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-  return (crc ^ 0xFFFFFFFF) >>> 0;
-}
-
-function u16(n) { return new Uint8Array([n & 0xff, (n >>> 8) & 0xff]); }
-function u32(n) { return new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]); }
-
-export function zipWrite(entries, day) {
-  var dosTime = 0;
-  var dosDate = day ? (((day.getFullYear() - 1980) & 0x7f) << 9) | (((day.getMonth() + 1) & 0xf) << 5) | (day.getDate() & 0x1f) : 0x21;
-
-  var local = [], central = [], offset = 0;
-  entries.forEach(function (e) {
-    var nameB = strBytes(e.name);
-    var crc = crc32(e.data);
-    var lh = concatBytes([
-      u32(0x04034b50), u16(20), u16(0), u16(0), u16(dosTime), u16(dosDate),
-      u32(crc), u32(e.data.length), u32(e.data.length), u16(nameB.length), u16(0), nameB
-    ]);
-    local.push(lh, e.data);
-    central.push(concatBytes([
-      u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(dosTime), u16(dosDate),
-      u32(crc), u32(e.data.length), u32(e.data.length),
-      u16(nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), nameB
-    ]));
-    offset += lh.length + e.data.length;
-  });
-
-  var cd = concatBytes(central);
-  var eocd = concatBytes([
-    u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length),
-    u32(cd.length), u32(offset), u16(0)
-  ]);
-  return concatBytes([concatBytes(local), cd, eocd]);
-}
-
-async function inflateRaw(bytes) {
-  if (typeof DecompressionStream === "undefined") throw new Error("no-decompression-stream");
-  var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  var buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
-}
-
-export async function zipRead(arrayBuffer) {
-  var bytes = new Uint8Array(arrayBuffer);
-  var dv = new DataView(arrayBuffer);
-
-  var eocd = -1;
-  for (var i = bytes.length - 22; i >= 0 && i >= bytes.length - 22 - 65535; i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd === -1) throw new Error("not-a-zip");
-
-  var count = dv.getUint16(eocd + 10, true);
-  var cdOffset = dv.getUint32(eocd + 16, true);
-  var files = {};
-  var p = cdOffset;
-
-  for (var n = 0; n < count; n++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) break;
-    var method = dv.getUint16(p + 10, true);
-    var compSize = dv.getUint32(p + 20, true);
-    var nameLen = dv.getUint16(p + 28, true);
-    var extraLen = dv.getUint16(p + 30, true);
-    var commentLen = dv.getUint16(p + 32, true);
-    var localOff = dv.getUint32(p + 42, true);
-    var name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
-
-    var lNameLen = dv.getUint16(localOff + 26, true);
-    var lExtraLen = dv.getUint16(localOff + 28, true);
-    var dataStart = localOff + 30 + lNameLen + lExtraLen;
-    var raw = bytes.subarray(dataStart, dataStart + compSize);
-    files[name] = { method: method, raw: raw };
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-
-  return {
-    async get(name) {
-      var f = files[name];
-      if (!f) return null;
-      return f.method === 0 ? f.raw : await inflateRaw(f.raw);
-    },
-    names: Object.keys(files)
-  };
-}
-
 export function htmlToPlainText(html) {
   if (!html) return "";
   var c = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
   return (c.textContent || "").replace(/\u00A0/g, " ").trim();
-}
-
-export function xmlEscape(s) {
-  return String(s == null ? "" : s)
-    /* eslint-disable-next-line no-control-regex -- see the line above. */
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
 export var TAG_PRINT_COLORS = {
@@ -967,33 +846,6 @@ export var TAG_PRINT_COLORS = {
 
 export function tagPrintColor(catId) {
   return Object.prototype.hasOwnProperty.call(TAG_PRINT_COLORS, catId) ? TAG_PRINT_COLORS[catId] : null;
-}
-
-export function htmlToRuns(html) {
-  var container = inertBody(html);
-  var runs = [];
-  (function walk(node, fmt) {
-    Array.prototype.forEach.call(node.childNodes, function (child) {
-      if (child.nodeType === 3) {
-        var t = (child.nodeValue || "").replace(/\u00A0/g, " ");
-        if (t) runs.push({ text: t, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href });
-        return;
-      }
-      if (child.nodeType !== 1) return;
-      var tag = child.tagName;
-      if (tag === "BR") { runs.push({ text: "\n" }); return; }
-      var next = {
-        b: fmt.b || tag === "STRONG" || tag === "B",
-        i: fmt.i || tag === "EM" || tag === "I",
-        u: fmt.u || tag === "U",
-        s: fmt.s || tag === "S" || tag === "STRIKE" || tag === "DEL",
-        mark: fmt.mark || tag === "MARK",
-        href: tag === "A" ? (child.getAttribute("href") || fmt.href) : fmt.href
-      };
-      walk(child, next);
-    });
-  })(container, { b: false, i: false, u: false, s: false, mark: false, href: null });
-  return runs;
 }
 
 export function __init() {

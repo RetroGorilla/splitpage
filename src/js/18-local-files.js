@@ -54,11 +54,9 @@ import {
   exportMetaLine,
   markdownExportImages,
   slugify,
-  strBytes,
   toMarkdownDoc,
   toMarkdownTableDoc,
-  warnImagesLeftOut,
-  zipWrite
+  warnImagesLeftOut
 } from "./14-export.js";
 import {
   buildDocx,
@@ -83,6 +81,8 @@ import {
   makeDesktopHandle, notifyDesktopDocumentState
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { zipWrite } from "../adapters/formats/zip.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
