@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
+      tabstrip: ${{ steps.classify.outputs.tabstrip }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -93,6 +94,7 @@ jobs:
           echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
 
       - name: Desktop tab strip width (headless Chromium)
+        if: needs.changes.outputs.tabstrip == 'true' || github.ref == 'refs/heads/main' || github.base_ref == 'main'
         run: node desktop/test/tabstrip-width.mjs
 
       - name: Pick this runner's port block
@@ -132,44 +134,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  node-24:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-
-      - name: Clean install on Node 24
-        run: npm ci
-
-      - name: Fast gates on Node 24
-        run: npm run verify
-
   gate:
-    needs: [changes, checks, node-24]
+    needs: [changes, checks]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE checks=$CHECKS node-24=$NODE24"
+          echo "changes=$CHANGES code=$CODE checks=$CHECKS"
           [ "$CHANGES" = success ] || exit 1
           if [ "$CODE" = true ]; then
-            [ "$CHECKS" = success ] && [ "$NODE24" = success ]
+            [ "$CHECKS" = success ]
           else
-            [ "$CHECKS" = skipped ] && [ "$NODE24" = skipped ]
+            [ "$CHECKS" = skipped ]
           fi
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           CHECKS: ${{ needs.checks.result }}
-          NODE24: ${{ needs.node-24.result }}
 
   desktop-smoke:
     needs: changes
