@@ -429,7 +429,7 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
 
 const HTML_HEAD = '<!doctype html><html><head><meta charset="utf-8"><title>t</title></head><body>';
 
-wrongToday("T4", "opening an .html file over the parse bound keeps its script data byte for byte", async () => {
+rightToday("T4", "opening an .html file over the parse bound keeps its script data byte for byte", async () => {
   const hostile = Array.from({ length: 60 }, (_, i) => "<b id=i" + i + ">").join("") + "<p>x".repeat(300);
   const raw = {
     schema: 5, title: "Formatted", docId: "d" + "8".repeat(32),
@@ -445,7 +445,7 @@ wrongToday("T4", "opening an .html file over the parse bound keeps its script da
   assert.equal(parsed.kind, "html");
   assert.equal(parsed.state.rows[0].audioText, "<strong>bold</strong> and <em>italic</em>", "the bold and italic in the script data are still there");
   assert.equal(JSON.stringify(parsed.state), JSON.stringify(expected), "the opened state equals an unbounded parse of the same file");
-}, /the bold and italic in the script data are still there/);
+});
 
 
 async function withRestoredFileDraft(variant, run) {
