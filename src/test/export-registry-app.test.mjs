@@ -1,6 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 
 await bootApp();
@@ -63,6 +64,9 @@ test("one provider and one registration put a new exporter in the menu, the pale
   const demo = demoExporter();
   const docBefore = JSON.stringify(S.state);
   const dirtyBefore = S.dirty;
+  const baseBefore = JSON.stringify(S.baseState);
+  const seqBefore = S.editSeq;
+  const idBefore = S.state.docId;
   const files = delivered();
   const dropCard = exportFormats.defineCard(CARD);
   const drop = exportFormats.register(demo.decl);
@@ -70,7 +74,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
     const button = document.querySelector('#file-menu .menu-hidden-actions [data-file-action="export-demo-sheet"]');
     assert.ok(button, "a menu entry is drawn from the declaration");
     assert.equal(button.textContent, "Demo sheet (.demo)");
-    assert.equal(document.querySelectorAll('#file-menu [data-file-action^="export-"]').length, 17);
+    assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 17);
 
     const listed = exportItems("zebra");
     assert.deepEqual(listed.map((i) => i.cmd.id), ["export-demo-sheet"], "the palette finds it by its words");
@@ -109,6 +113,9 @@ test("one provider and one registration put a new exporter in the menu, the pale
 
     assert.equal(JSON.stringify(S.state), docBefore, "exporting left the document as it was");
     assert.equal(S.dirty, dirtyBefore);
+    assert.equal(JSON.stringify(S.baseState), baseBefore, "no baseline was confirmed");
+    assert.equal(S.editSeq, seqBefore);
+    assert.equal(S.state.docId, idBefore);
   } finally {
     closeExportDialog();
     files.restore();
@@ -119,7 +126,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
   assert.deepEqual(exportItems("zebra"), []);
   assert.equal(lastExportAction(), null, "an action nobody registers is not offered again");
   assert.equal(exportAgainItemState().hidden, true);
-  assert.equal(document.querySelectorAll('#file-menu [data-file-action^="export-"]').length, 16);
+  assert.equal(document.querySelectorAll('#file-menu .menu-hidden-actions [data-file-action]').length, 16);
 });
 
 test("an exporter's own availability reason greys it out everywhere", async () => {
@@ -170,4 +177,11 @@ test("a second variant joins an existing card as one more choice", () => {
     drop();
   }
   assert.deepEqual(exportFormats.card("md")?.variants.map((v) => v.choice?.value), ["stacked", "table"]);
+});
+
+test("the byte-capture matrix lists every registered exporter, so a new format cannot skip its cases", () => {
+  const matrix = readFileSync(new URL("./m4-matrix-exports.test.mjs", import.meta.url), "utf8");
+  const kinds = new Set((/const KINDS = \[([^\]]*)\]/.exec(matrix) || ["", ""])[1].match(/"[^"]+"/g)?.map((k) => k.slice(1, -1)));
+  const registered = exportFormats.exporters().map((e) => e.id).concat(["txt"]);
+  assert.deepEqual(registered.filter((id) => !kinds.has(id)), [], "add the new exporter to KINDS in m4-matrix-exports.test.mjs");
 });

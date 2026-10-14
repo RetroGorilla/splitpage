@@ -1,5 +1,4 @@
 import { readPref, writePref } from "./00p-prefs.js";
-import { standaloneHtmlFor } from "./02b-doc-id.js";
 import { exportDay, exportFacts, exportBrollScenes } from "./14b-export-kit.js";
 import { brollShotListForPrint } from "./14c-export-projections.js";
 import {
@@ -144,7 +143,7 @@ var EXPORTERS = [
     fileName: suffixed(" - SplitShare.html"),
     build: function (ctx) {
       return {
-        data: standaloneHtmlFor(ctx.doc, {
+        data: ctx.ports.standaloneHtml(ctx.doc, {
           title: (ctx.doc.title || "Untitled Script") + " — SplitShare",
           description: exportMetaLine(exportFacts(ctx.doc))
         }, ctx.assets),
