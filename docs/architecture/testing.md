@@ -507,7 +507,12 @@ Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
 decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
 `…`, `“` and `”`, so `list-pdfs.test.mjs` and `pdf-script.test.mjs` fail there
 and pass on 22.22.2 and later and on Node 24. `tools/run-tests.mjs` prints a warning,
-and still runs, when `process.version` differs from `.nvmrc`.
+and still runs, when `process.version` differs from `.nvmrc` but is inside `engines`.
+Outside `engines` it lists the tests but refuses to run them, exiting 2 with the
+range and the pinned version, so an unsupported runtime is not reported as failing
+tests. The Linux cloud containers ship Node 22.22.0, which is outside the range:
+there, install the pinned Node first (for example the
+`node-v24.22.0-linux-x64.tar.xz` build from nodejs.org, put on `PATH`).
 
 ## CI
 
