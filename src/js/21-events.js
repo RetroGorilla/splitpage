@@ -4,6 +4,7 @@ import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { mountComposition } from "../features/editing/composition.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
+import { mountMergeBanner } from "../features/merge/banner.ts";
 import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
@@ -18,16 +19,17 @@ import {
   cloneState,
   closeHistoryPanel,
   getEditorName,
+  installMergeBanner,
   promptForName,
   promptForWpm,
   reportMerge,
+  restoreMergeSnapshot,
   restoreSnapshotFromCard,
-  undoMerge,
   updateIdentityChip
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
 import { initSidePanelResizeHandles } from "./03b-side-panels.js";
-import { cssAttr, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
+import { cssAttr, safeId, sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "./04-richtext.js";
 import {
   cancelLink,
   cancelVideo,
@@ -1426,13 +1428,18 @@ function init() {
     exportAs("md");
   });
 
-  document.getElementById("merge-dismiss").addEventListener("click", function () {
-    document.getElementById("merge-banner").hidden = true;
-  });
-  document.getElementById("merge-undo").addEventListener("click", function (e) { undoMerge(e.currentTarget); });
-  document.getElementById("merge-review").addEventListener("click", function () {
-    document.getElementById("merge-banner").hidden = true;
-    openCommentsPanel();
+  mountMergeBanner({
+    window: window,
+    ports: {
+      lastUndo: function () { return S.lastMergeUndo; },
+      sameDocument: function (docId) { return !!S.state && docId === S.state.docId; },
+      restore: restoreMergeSnapshot,
+      warn: function (message) { showToast(message, "warn"); },
+      openComments: openCommentsPanel,
+      rowElement: function (rowId) { return document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]'); },
+      logError: function (e) { if (window.console) console.error(e); },
+      install: installMergeBanner
+    }
   });
 
   document.getElementById("file-conflict-close").addEventListener("click", closeFileConflict);
