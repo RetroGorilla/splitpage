@@ -20,7 +20,23 @@ test("CSS aggregation preserves listed order, separators and single-file bytes",
   assert.throws(() => appCss(["first.css", "FIRST.css"], read), /Duplicate CSS input/);
   assert.throws(() => appCss(["src/App.css"]), /incorrectly cased CSS input/);
   assert.throws(() => appCss(["src/missing.css"]), /Missing/);
-  assert.deepEqual(cssInputs, JSON.parse(readFileSync(new URL("css-inputs.json", repoUrl), "utf8")));
+  assert.deepEqual(cssInputs, [
+    "src/app.css",
+    "src/features/tags/styles.css",
+    "src/app-after-tags.css",
+    "src/features/tags/styles-scenes.css",
+    "src/styles/after-tag-scenes.css",
+    "src/features/tags/styles-badge.css",
+    "src/styles/after-tag-badge.css",
+    "src/features/tags/styles-gear.css",
+    "src/styles/after-gear.css",
+    "src/features/tags/styles-phone-controls.css",
+    "src/styles/after-tag-phone.css",
+    "src/features/tags/styles-touch-fields.css",
+    "src/styles/after-tag-touch-fields.css",
+    "src/features/tags/styles-touch-hint.css",
+    "src/styles/app-tail.css"
+  ]);
   assert.equal(cssInputs[0], "src/app.css");
   assert.equal(appCss(), cssInputs.map((path) => readFileSync(new URL(path, repoUrl), "utf8")).join("\n"));
   assert.deepEqual(readBuiltCss(), { paths: [...cssInputs], css: appCss() });
