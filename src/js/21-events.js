@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
+import { mountComposition } from "../features/editing/composition.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
@@ -308,7 +309,7 @@ import {
   draftRestorePending
 } from "./20g-drafts.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { editAllowed } from "../legacy/session-bridge.ts";
+import { editAllowed, liveSession } from "../legacy/session-bridge.ts";
 
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
@@ -819,31 +820,29 @@ function afterScriptCellChange(cellEl) {
   refreshPlainTag();
 }
 
-var composingSince = null;
-var endedSince = null;
-var COMPOSITION_INPUTS = { insertCompositionText: true, deleteCompositionText: true, deleteByComposition: true, insertFromComposition: true };
+var composition = null;
 
-function onScriptComposition(e) {
-  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (!cellEl || !isScriptCell(cellEl)) return;
-  if (e.type === "compositionstart") {
-    composingSince = compositionUndoMark(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
-    return;
-  }
-  var since = composingSince;
-  composingSince = null;
-  if (since === null || dropEmptyStepsSince(since, !e.data)) return;
-  endedSince = e.data ? null : since;
+function scriptCellOf(target) {
+  var cellEl = target && target.closest && target.closest(".cell-editable");
+  return cellEl && isScriptCell(cellEl) ? { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") } : null;
 }
 
-function onCompositionKeydown(e) {
-  if (!e.isComposing && e.keyCode !== 229) endedSince = null;
+function mountScriptComposition(roots) {
+  if (composition) composition.dispose();
+  composition = mountComposition({
+    roots: roots,
+    ports: {
+      cellOf: scriptCellOf,
+      epoch: function () { return liveSession().epoch(); },
+      mark: function (cell) { return compositionUndoMark(cell.rowId, cell.field); },
+      dropEmptySince: dropEmptyStepsSince
+    }
+  });
+  return composition;
 }
 
 function settleEndedComposition(e) {
-  var since = endedSince;
-  endedSince = null;
-  if (since !== null) dropEmptyStepsSince(since, COMPOSITION_INPUTS[e.inputType] === true);
+  if (composition) composition.settle(e);
 }
 
 function takeTitle(input) {
@@ -1252,9 +1251,6 @@ function init() {
   });
   rowsEl.addEventListener("beforeinput", onUndoBeforeInput);
   rowsEl.addEventListener("beforeinput", onFormatBeforeInput);
-  rowsEl.addEventListener("compositionstart", onScriptComposition);
-  rowsEl.addEventListener("compositionend", onScriptComposition);
-  rowsEl.addEventListener("keydown", onCompositionKeydown, true);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
   rowsEl.addEventListener("dragover", onRootDragOver);
@@ -1781,9 +1777,7 @@ function init() {
   writerDocEl.addEventListener("keydown", onRootKeydown);
   writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
   writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
-  writerDocEl.addEventListener("compositionstart", onScriptComposition);
-  writerDocEl.addEventListener("compositionend", onScriptComposition);
-  writerDocEl.addEventListener("keydown", onCompositionKeydown, true);
+  mountScriptComposition([rowsEl, writerDocEl]);
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);
   writerDocEl.addEventListener("focusin", function (e) {
     if (e.target.classList && e.target.classList.contains("wr-para")) {
