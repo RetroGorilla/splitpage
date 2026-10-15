@@ -548,7 +548,6 @@
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.productionGroupBy"},
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.prompterSkipShot"},
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.state"},
-    {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.tagAddingPersonFor"},
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.tagExpanded"},
     {"rule":"state-write","source":"src/js/21-events.js","target":"global:S.tagRenaming"},

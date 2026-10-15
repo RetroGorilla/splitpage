@@ -7,7 +7,9 @@ import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountMergeBanner } from "../features/merge/banner.ts";
 import { mountRowRoutes } from "../features/rows/routes.ts";
+import { mountTitleRoutes } from "../features/title/routes.ts";
 import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
+import { mountWriterRoutes } from "../features/writer/routes.ts";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
   expandHiddenShotStrip,
@@ -203,7 +205,7 @@ import {
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "./11-import.js";
-import { markDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   caretAfterStep,
   compositionUndoMark,
@@ -313,7 +315,7 @@ import {
   draftRestorePending
 } from "./20g-drafts.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { editAllowed, liveSession } from "../legacy/session-bridge.ts";
+import { liveSession, runCommand } from "../legacy/session-bridge.ts";
 
 var REVIEW_SAFE_ACTIONS = {
   "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
@@ -797,14 +799,38 @@ function settleEndedComposition(e) {
   if (composition) composition.settle(e);
 }
 
-function takeTitle(input) {
-  if (!S.state) return false;
-  if (!editAllowed()) {
-    input.value = S.state.title || "";
-    return false;
-  }
-  S.state.title = input.value;
-  return true;
+var titleRoutes = null;
+
+function mountTitles() {
+  if (titleRoutes) titleRoutes.dispose();
+  titleRoutes = mountTitleRoutes({
+    main: document.getElementById("doc-title"),
+    writer: document.getElementById("writer-title"),
+    ports: {
+      run: runCommand,
+      current: function () { return S.state ? S.state.title || "" : null; },
+      pageTitle: syncPageTitle
+    }
+  });
+}
+
+var writerRoutes = null;
+
+var writerRoutePorts = {
+  input: onRootInput,
+  paste: onRootPaste,
+  copy: onRootCopy,
+  cut: onRootCut,
+  keydown: onRootKeydown,
+  editKeydown: onWriterKeydown,
+  format: onWriterFormat,
+  gutter: cycleWriterGutter,
+  exportNarration: function () { runExport("export-narration-docx"); }
+};
+
+function mountWriter(writerDocEl) {
+  if (writerRoutes) writerRoutes.dispose();
+  writerRoutes = mountWriterRoutes({ window: window, doc: writerDocEl, bar: document.querySelector(".writer-bar"), ports: writerRoutePorts });
 }
 
 var editorFocusPorts = {
@@ -1522,11 +1548,7 @@ function init() {
     pendingImageSlot = undefined;
   });
 
-  document.getElementById("doc-title").addEventListener("input", function (e) {
-    if (!takeTitle(e.target)) return;
-    syncPageTitle();
-    markDirty();
-  });
+  mountTitles();
 
   document.getElementById("btn-save").addEventListener("click", saveFromButton);
   document.getElementById("btn-save").addEventListener("mouseenter", updateSaveStatus);
@@ -1697,14 +1719,9 @@ function init() {
       install: configureUndo
     }
   });
-  writerDocEl.addEventListener("input", onRootInput);
-  writerDocEl.addEventListener("paste", onRootPaste);
-  writerDocEl.addEventListener("copy", onRootCopy);
-  writerDocEl.addEventListener("cut", onRootCut);
-  writerDocEl.addEventListener("keydown", onRootKeydown);
   mountFocusAndSelection(rowsEl, writerDocEl);
   mountScriptComposition([rowsEl, writerDocEl]);
-  writerDocEl.addEventListener("keydown", onWriterKeydown, true);
+  mountWriter(writerDocEl);
   writerDocEl.addEventListener("click", function (e) {
     var gutter = e.target.closest('[data-action="writer-jump"]');
     if (gutter) { jumpFromWriterToRow(gutter.getAttribute("data-row")); return; }
@@ -1718,20 +1735,8 @@ function init() {
     applyWriterSize(parseInt(e.target.value, 10), true);
   });
 
-  document.getElementById("writer-title").addEventListener("input", function (e) {
-    if (!takeTitle(e.target)) return;
-    document.getElementById("doc-title").value = e.target.value;
-    markDirty();
-  });
-
   document.querySelector(".writer-bar").addEventListener("mousedown", function (e) {
     if (e.target.closest(".wr-fmt")) e.preventDefault();
-  });
-  document.querySelector(".writer-bar").addEventListener("click", function (e) {
-    var fmt = e.target.closest(".wr-fmt");
-    if (fmt) { onWriterFormat(fmt); return; }
-    if (e.target.closest("#wr-gutter-mode")) { cycleWriterGutter(); return; }
-    if (e.target.closest("#wr-export")) { runExport("export-narration-docx"); return; }
   });
   document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
 
