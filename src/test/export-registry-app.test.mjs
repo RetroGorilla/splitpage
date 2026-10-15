@@ -9,7 +9,7 @@ after(closeApp);
 
 const { exportFormats } = await import("../legacy/export-formats.ts");
 const { commandResults } = await import("../js/18d-command-menu.js");
-const { exportBaseName } = await import("../js/18-local-files.js");
+const { buildFileData, exportBaseName } = await import("../js/18-local-files.js");
 const {
   closeExportDialog, exportAgain, exportAgainItemState, exportActionReason, exportFileNameFor, exportSummary, lastExportAction,
   openExportDialog
@@ -155,6 +155,54 @@ test("an exporter's own availability reason greys it out everywhere", async () =
     dropCard();
   }
   assert.equal(files.files.length, 0);
+});
+
+test("the file name comes from the exporter that built the bytes, even if its registration changes mid-build", async () => {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  const demo = demoExporter({
+    build: async () => {
+      await held;
+      return { data: "bytes from the first registration" };
+    }
+  });
+  const dropCard = exportFormats.defineCard(CARD);
+  const drop = exportFormats.register(demo.decl);
+  let dropOther = () => {};
+  try {
+    const pending = buildFileData("demo-sheet", "report");
+    drop();
+    dropOther = exportFormats.register({
+      ...demo.decl,
+      fileName: (base) => base + " - replacement.demo",
+      build: () => ({ data: "bytes from the replacement" })
+    });
+    release();
+    const made = await pending;
+    assert.equal(made.data, "bytes from the first registration");
+    assert.equal(made.filename, "report - demo.demo", "the name follows the exporter that made the bytes, not the replacement");
+  } finally {
+    release();
+    dropOther();
+    drop();
+    dropCard();
+  }
+
+  let release2;
+  const held2 = new Promise((resolve) => { release2 = resolve; });
+  const dropCard2 = exportFormats.defineCard(CARD);
+  const drop2 = exportFormats.register(demoExporter({ build: async () => { await held2; return { data: "x" }; } }).decl);
+  try {
+    const pending = buildFileData("demo-sheet", "report");
+    drop2();
+    release2();
+    const made = await pending;
+    assert.equal(made.filename, "report - demo.demo", "unregistering mid-build does not change the name either");
+  } finally {
+    release2();
+    drop2();
+    dropCard2();
+  }
 });
 
 test("a second variant joins an existing card as one more choice", () => {
