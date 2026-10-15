@@ -1,16 +1,114 @@
-  .video-embed-card {
-    display: flex; align-items: center; gap: 8px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    margin: 4px 0;
-    background: var(--surface-2);
-    color: var(--text) !important;
-    text-decoration: none !important;
-    font-size: 12.5px;
-    width: fit-content;
-    max-width: 100%;
+
+  .prompter {
+    --pp-ground: #0A0A09;
+    --pp-band: #161614;
+    --pp-ink: #F2F1ED;
+    --pp-size: 60px;
+    --pp-line: calc(var(--pp-size) * 1.42);
+    position: fixed; inset: 0; z-index: 145;
+    background: var(--pp-ground);
+    color: var(--pp-ink);
+    color-scheme: dark;
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 450;
   }
-  .video-embed-card:hover { border-color: var(--visual); }
-  .video-embed-card .vec-play { font-size: 15px; }
-  .video-embed-card .vec-host { color: var(--text-faint); }
+  .prompter[hidden] { display: none; }
+  body.prompter-open { overflow: hidden; }
+
+  .prompter-top {
+    flex: none;
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 24px;
+    height: 60px;
+    box-sizing: border-box;
+    padding: 0 40px;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text);
+  }
+  .pp-where, .pp-clock {
+    display: flex;
+    align-items: baseline;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .pp-where { gap: 12px; }
+  .pp-scene-pos { font-size: 16px; line-height: 20px; }
+  .pp-scene-start { font-size: 14px; line-height: 20px; color: var(--text-faint); }
+  .pp-clock { gap: 10px; }
+  .pp-elapsed { font-size: 30px; line-height: 36px; letter-spacing: -0.01em; }
+  .pp-remaining { font-size: 16px; line-height: 20px; font-weight: 450; color: var(--text-faint); }
+  .pp-voice-state {
+    justify-self: end;
+    align-self: start;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+    margin-top: 20px;
+    text-align: right;
+    background: var(--pp-ground);
+    box-shadow: 0 0 0 10px var(--pp-ground);
+  }
+  .pp-voice-name { flex: none; white-space: nowrap; }
+  .pp-voice-state:not(.is-live):not(.has-msg) .pp-voice-name { display: none; }
+  .pp-voice-status { min-width: 0; color: var(--text-faint); }
+  .pp-voice-status.error { color: var(--danger); }
+  .pp-lamp {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tally);
+  }
+  .pp-voice-state .pp-lamp { display: none; margin-top: 6px; animation: pp-rec-pulse var(--dur-pulse) ease-in-out infinite; }
+  .pp-voice-state.is-live .pp-lamp { display: block; }
+  @keyframes pp-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pp-voice-state .pp-lamp { animation: none; }
+  }
+  .prompter-viewport {
+    position: relative; flex: 1; min-height: 0;
+    container-type: size;
+    overflow: clip;
+  }
+  .prompter-scroll {
+    position: absolute; inset: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 40vh 8vw;
+    padding-block: 50cqh calc(50cqh - 1px);
+    --pp-dim: rgba(0, 0, 0, 0.37);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--pp-dim) 24px, var(--pp-dim) calc(50% - 4px), var(--black) 50%, var(--black) calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, var(--pp-dim) 24px, var(--pp-dim) calc(50% - 4px), var(--black) 50%, var(--black) calc(100% - 24px), transparent 100%);
+  }
+  .prompter-scroll.is-following {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--black) 24px, var(--black) calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, var(--black) 24px, var(--black) calc(100% - 24px), transparent 100%);
+  }
+  .prompter-scroll::-webkit-scrollbar { display: none; }
+  .prompter-scroll.mirror { transform: scaleX(-1); }
+  .prompter-scroll.flip { transform: scaleY(-1); }
+  .prompter-scroll.mirror.flip { transform: scale(-1, -1); }
+  #prompter-content { font-size: var(--pp-size); line-height: 1.42; }
+  .prompter-line {
+    font-family: var(--font-script);
+    font-weight: 600;
+    line-height: 1.42;
+    letter-spacing: 0.002em;
+    max-width: 1040px;
+    margin: 0 auto 0.667em;
+    text-wrap: balance;
+  }
+  .prompter-line strong { font-weight: 800; }
+  .prompter-line u { text-underline-offset: 3px; }
+  .prompter-line a { color: var(--visual); text-decoration: underline; }

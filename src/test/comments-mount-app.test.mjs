@@ -10,6 +10,7 @@ await bootApp();
 const { mountCommentsFeature } = await import("../js/21-events.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
+const { updateConnection } = await import("../js/_home.js");
 const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../js/10-comments.js");
 after(closeApp);
 
@@ -102,7 +103,7 @@ test("comments app: every document, root and control registration is removed and
   }
 });
 
-for (const scenario of ["dispose and reopen", "same-ID document replacement", "stale completion after remount", "composer reopened", "same-ID body replacement", "normal completion"]) {
+for (const scenario of ["dispose and reopen", "same-ID document replacement", "stale completion after remount", "composer reopened", "same-ID body replacement", "token change while held", "normal completion"]) {
   test("comments app: held image completion, " + scenario, { timeout: 20000 }, async () => {
     open();
     const owner = mount();
@@ -135,6 +136,8 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
       } else if (scenario === "composer reopened") {
         closeCommentComposer(false);
         composer();
+      } else if (scenario === "token change while held") {
+        updateConnection({ token: "refreshed-" + Math.random() });
       } else if (scenario === "same-ID body replacement") {
         const body = document.getElementById("comment-body-editable");
         body.replaceWith(body.cloneNode(true));
@@ -148,7 +151,7 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
       await new Promise(setImmediate);
       assert.equal(decode.gates.parked("image.decode").length, 0);
       assert.equal(JSON.stringify(S.state), before);
-      if (scenario === "normal completion") {
+      if (scenario === "normal completion" || scenario === "token change while held") {
         assert.equal(body.querySelectorAll("img").length, 1);
         assert.match(body.textContent, /Replacement draft/);
       } else {
