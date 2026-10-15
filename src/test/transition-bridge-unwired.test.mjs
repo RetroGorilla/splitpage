@@ -6,6 +6,9 @@ import { S } from "../js/_state.js";
 const bridge = await import("../legacy/transition-bridge.ts");
 const { liveSession, provideRefreshRunner, provideSessionEffects, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
+const { startTestSession } = await import("./_session.mjs");
+
+startTestSession();
 
 function script(title) {
   return migrateRows({ title: title, docId: "d" + "1".repeat(32), rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });

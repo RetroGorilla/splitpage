@@ -3,6 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { commandResults } from "../../src/js/18d-command-menu.js";
 import { appActions } from "../../src/legacy/app-actions.ts";
+import { wireRegistries } from "../../src/test/_registries.mjs";
+
+wireRegistries();
 
 interface Listed {
   readonly group: string;

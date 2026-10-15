@@ -54,7 +54,7 @@ function minus(a, b) {
   return out;
 }
 
-const { bootApp, closeApp } = await import("./_app-boot.mjs");
+const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
 const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
@@ -70,7 +70,7 @@ after(() => {
 test("one throwing disposer does not stop the rest: every other mount is released, the app counts as stopped, and the failure is reported", async () => {
   app.stopApp();
   const stopped = snapshot();
-  app.startApp();
+  app.startApp(await rewireApp());
   await S.initialStateReady;
 
   const rows = document.getElementById("rows");
@@ -97,6 +97,7 @@ test("one throwing disposer does not stop the rest: every other mount is release
     "window dragover/B": 1
   }, "only the listeners of the disposer that threw survive");
 
-  assert.doesNotThrow(() => app.startApp(), "the app is not left marked as running");
+  const wiring = await rewireApp();
+  assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
   await S.initialStateReady;
 });

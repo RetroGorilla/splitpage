@@ -142,11 +142,18 @@ threw, is kept from the browser, as 3.1's handlers did by calling
 
 ## The legacy shim
 
-Until the explicit wiring step of milestone 7 and the composition root of 4.x
-exist, one registry instance lives in `src/legacy/app-actions.ts` for the
-numbered modules to share. Its `report` rethrows the error on a microtask, so a
-failing action still reaches the browser as an uncaught error, as it did
-before.
+Until the composition root of 4.x exists, the numbered modules share one
+registry through the facade `appActions` in `src/legacy/app-actions.ts`. Since
+milestone 7.1 the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
+by the legacy initializer shim `src/js/_entry.js`) builds the registry with
+`createAppActions()` and installs it into the facade; before that, and after
+the wiring's `dispose()`, every facade call throws "The action registry is not
+started yet". Its `report` rethrows the error on a microtask, so a failing
+action still reaches the browser as an uncaught error, as it did before. The
+export registry behind `exportFormats` (`src/legacy/export-formats.ts`) follows
+the same pattern, and `registerBuiltInExporters(registry)` in
+`14e-export-formats.js` fills it from the wiring instead of at module
+evaluation.
 
 `src/legacy/this-document-actions.ts` (the command menu's "This document"
 group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts`,
@@ -271,10 +278,17 @@ when a File menu item is chosen by registering with `onFileMenuChoice()` in
 `18-local-files.js`, which it already imported. The Settings dialog shows
 Import app data when the `import-app-data` action is visible, asking the
 registry rather than `20f-desktop.js`.
-`src/js/_entry.js` calls `startActions(appActions, window)` after every
-module's `__init`. It lives in the entry because `21-events.js` is inside the
-60-module import cycle, and a migrated file imported from there would join it
-(`npm run check:deps` refuses that). `tests/bootstrap/start-actions.test.ts`
+`startApp(wiring)` in `src/bootstrap/app.ts` calls
+`startActions(wiring.actions, wiring.keyTarget)` first, before `beginStartup`
+and the first feature mount, and the app's one stop stops the actions last,
+after the mounts (milestone 7.1). Before 7.1 the legacy shim called it after
+every module's `__init`, while the script evaluated; now it runs on DOM ready.
+A boot that holds DOM ready open (`bootApp` with `beforeStart`) records no
+action registry call between the wiring and DOM ready; the export registry is
+read in that gap (`18c`'s `__init`), and the wiring has filled it by then. A
+click handled by an initializer's listener in that gap would find no action
+registered; the shim is the last script in the body, so that gap holds no user
+input (inferred, not measured). `tests/bootstrap/start-actions.test.ts`
 starts, stops and starts again on the real definitions and finds one listener
 and no leftover action each time; `tests/features/shortcuts/mount-shortcuts.test.ts`
 does the same for the feature alone.

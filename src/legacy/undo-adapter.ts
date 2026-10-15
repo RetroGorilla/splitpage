@@ -12,8 +12,8 @@ export function createUndoAdapter(): UndoPort {
   };
 }
 
-export function watchUndoAdoption(adopted: (doc: unknown) => void): void {
-  configureUndo({ adopted: adopted });
+export function watchUndoAdoption(adopted: (doc: unknown) => void): () => void {
+  return configureUndo({ adopted: adopted });
 }
 
 export function followLiveDocument(): void {
@@ -22,6 +22,6 @@ export function followLiveDocument(): void {
 
 type ReplayRunner = (replay: Replay, live: ValidatedDocument | null) => CommandOutcome;
 
-export function routeReplays(run: ReplayRunner, stamps: StampPorts, amend: ReplayRunner): void {
-  routeUndoReplays(run, stamps, amend);
+export function routeReplays(run: ReplayRunner, stamps: StampPorts, amend: ReplayRunner): () => void {
+  return routeUndoReplays(run, stamps, amend);
 }

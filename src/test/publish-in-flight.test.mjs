@@ -13,6 +13,9 @@ const { startSaves } = await import("../legacy/save-bridge.ts");
 const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
 const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
 const { documentDestinationPort } = await import("../js/03-sync.js");
+const { startTestSession } = await import("./_session.mjs");
+
+startTestSession();
 
 startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 
