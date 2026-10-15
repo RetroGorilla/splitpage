@@ -60,7 +60,10 @@ source change be driven from the Linux cloud container, which has no
 PowerShell and no Edge, and it is what CI runs.
 
 Building needs Node 22 (22.22.2 or later), 24 (24.15.0 or later) or 26+, per
-`package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one CI uses. If `node build.mjs`
+`package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one CI uses. The Linux
+cloud container's default Node is 22.22.0, outside that range (its `TextDecoder("latin1")`
+breaks the PDF unit tests), and `npm test` refuses to run on it: put Node 24.22.0 from
+nodejs.org on `PATH` first. If `node build.mjs`
 cannot run, you cannot test a source change at all, and saying so is better
 than testing a stale `index.html`.
 
