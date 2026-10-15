@@ -1,3 +1,4 @@
+import { mountTagEntityContainer } from "../features/tags/mount.ts";
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
@@ -990,54 +991,23 @@ function startPrompterLaunch(launch) {
   });
 }
 
-function isTagField(t) {
-  return !!t.classList && (t.classList.contains("tag-owner-select") || t.classList.contains("tag-notes-input") ||
-    t.classList.contains("tag-rename-input") || t.classList.contains("tag-person-input"));
-}
-
 export function wireTagEntityContainer(id) {
-  var el = document.getElementById(id);
-  el.addEventListener("click", onRootClick);
-  el.addEventListener("keydown", function (e) {
-    if (!e.target.classList) return;
-    if (reviewMode() && e.key === "Enter" &&
-        (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input"))) {
-      e.preventDefault();
-      reviewBlocked();
-      renderProduction();
-      return;
+  return mountTagEntityContainer({
+    window: window,
+    id: id,
+    ports: {
+      rootClick: onRootClick,
+      reviewMode: reviewMode,
+      reviewBlocked: reviewBlocked,
+      renderProduction: renderProduction,
+      saveTagRename: saveTagRename,
+      addPersonForTag: addPersonForTag,
+      setRenaming: function (value) { S.tagRenaming = value; },
+      setAddingPerson: function (value) { S.tagAddingPersonFor = value; },
+      setTagOwner: setTagOwner,
+      setTagNotes: setTagNotes,
+      queueAutoSave: queueAutoSave
     }
-    if (e.target.classList.contains("tag-rename-input")) {
-      if (e.key === "Enter") { e.preventDefault(); saveTagRename(e.target.getAttribute("data-key")); }
-      else if (e.key === "Escape") { e.preventDefault(); S.tagRenaming = null; renderProduction(); }
-      return;
-    }
-    if (e.target.classList.contains("tag-person-input")) {
-      if (e.key === "Enter") { e.preventDefault(); addPersonForTag(e.target.getAttribute("data-key")); }
-      else if (e.key === "Escape") { e.preventDefault(); S.tagAddingPersonFor = null; renderProduction(); }
-    }
-  });
-  el.addEventListener("change", function (e) {
-    if (reviewMode()) {
-      if (isTagField(e.target)) { reviewBlocked(); renderProduction(); }
-      return;
-    }
-    if (e.target.classList && e.target.classList.contains("tag-owner-select")) {
-      setTagOwner(e.target.getAttribute("data-key"), e.target.value);
-    }
-  });
-  el.addEventListener("input", function (e) {
-    if (reviewMode()) {
-      if (isTagField(e.target)) { reviewBlocked(); renderProduction(); }
-      return;
-    }
-    if (e.target.classList && e.target.classList.contains("tag-notes-input")) {
-      setTagNotes(e.target.getAttribute("data-key"), e.target.value);
-    }
-  });
-  el.addEventListener("focusout", function (e) {
-    if (reviewMode()) return;
-    if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
   });
 }
 
