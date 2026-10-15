@@ -361,13 +361,35 @@ export var SERVER_RESUME_KEY = "splitpage-server-resume";
 
 S.draftServerResume = null;
 
+var resumeKeyOwner = null;
+
+function ownResumeKey(raw) {
+  resumeKeyOwner = { raw: raw, op: captureOperation() };
+}
+
+function dropResumeKey() {
+  resumeKeyOwner = null;
+  try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+}
+
+function keptServerResume() {
+  var raw;
+  try { raw = sessionStorage.getItem(SERVER_RESUME_KEY); } catch (e) { return null; }
+  if (!raw) { resumeKeyOwner = null; return null; }
+  if (!resumeKeyOwner || resumeKeyOwner.raw !== raw) ownResumeKey(raw);
+  else if (!sameDocumentAs(resumeKeyOwner.op)) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
 function stashForReload() {
   var stashed = false;
   if (onServerDoc()) {
     try {
-      sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: home.id, rev: home.rev }));
+      var raw = JSON.stringify({ id: home.id, rev: home.rev });
+      sessionStorage.setItem(SERVER_RESUME_KEY, raw);
       stashed = stashLocalWork();
-      if (!stashed) sessionStorage.removeItem(SERVER_RESUME_KEY);
+      if (stashed) ownResumeKey(raw);
+      else dropResumeKey();
     } catch (e) { stashed = false; }
   }
   return stashed;
@@ -430,10 +452,7 @@ function offerDraftAfterLinkOff() {
 function pendingServerResume() {
   var override = S.draftServerResume;
   if (override) return { id: override.id, rev: override.rev || 0 };
-  try {
-    var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
+  return keptServerResume();
 }
 
 function sameDocumentAs(op) {
@@ -479,11 +498,11 @@ async function resumeServerDoc() {
       samePending = rawPending ? JSON.parse(rawPending) : null;
     } catch (e) { samePending = null; }
     if (samePending && samePending.id === pending.id) {
-      try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+      dropResumeKey();
       clearStash();
     }
   } else {
-    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+    dropResumeKey();
   }
 
   var stash = override || readStash();
