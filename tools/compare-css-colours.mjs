@@ -5,15 +5,19 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { readBuiltCss, repoUrl, compareCssColours, cssRules } from "./css-colours.mjs";
 
-const { path, css } = readBuiltCss();
+const { css } = readBuiltCss();
 const revision = process.argv.slice(2).find((arg) => arg !== "--built") || "HEAD";
-const original = execFileSync("git", ["show", `${revision}:${path}`], { cwd: fileURLToPath(repoUrl), encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+const git = (args) => execFileSync("git", args, { cwd: fileURLToPath(repoUrl), encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+const manifest = "css-inputs.json";
+const inputs = git(["ls-tree", "--name-only", revision, "--", manifest]).trim()
+  ? JSON.parse(git(["show", `${revision}:${manifest}`])) : ["src/app.css"];
+const { css: original } = readBuiltCss({ inputs, read: (path) => git(["show", `${revision}:${path}`]) });
 const differences = compareCssColours(original, css);
 if (differences.length) {
   console.error(differences.join("\n"));
   process.exitCode = 1;
 } else {
-  console.log(`${cssRules(css).length} selector blocks unchanged in light, dark, system-dark and prompter contexts, including every media block; all resolved declarations match ${revision}:${path}`);
+  console.log(`${cssRules(css).length} selector blocks unchanged in light, dark, system-dark and prompter contexts, including every media block; all resolved declarations match ${revision}: ${inputs.join(", ")}`);
 }
 
 if (process.argv.includes("--built")) {

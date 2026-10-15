@@ -104,7 +104,9 @@ Each step is a small PR or a short series. A step starts only when its prerequis
 
 ### 6.8 Per-feature moves
 
-One feature per PR, taking the rows of the ledger it owns and the styles of its feature. The first of them adds the aggregation to `build.mjs`.
+One feature per PR, taking the rows of the ledger it owns and the styles of its feature.
+
+**As built.** CSS aggregation landed ahead of the feature moves because it has no code dependency on 6.1–6.6, only on 6.7. Steps 6.8.1–6.8.6 still wait for 6.1–6.6.
 
 | Step | Feature | Modules |
 | --- | --- | --- |
