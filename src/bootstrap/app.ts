@@ -67,8 +67,16 @@ function view(key: string, mount: () => unknown): [() => unknown, () => void] {
 export function startApp(wiring: Wiring): () => void {
   if (running) throw new Error("the app is already started; stop it first");
   const stops: (() => void)[] = [wiring.dispose];
-  const stopAll = (): void => {
-    while (stops.length) stops.pop()?.();
+  const stopAll = (): unknown[] => {
+    const failures: unknown[] = [];
+    while (stops.length) {
+      try {
+        stops.pop()?.();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    return failures;
   };
   const run = ([mount, stop]: [() => unknown, () => void]): void => {
     stops.push(stop);
@@ -125,12 +133,18 @@ export function startApp(wiring: Wiring): () => void {
     overlay.mountWriterFocus();
     startup.finish();
   } catch (error) {
-    stopAll();
+    const failures = stopAll();
+    if (failures.length) throw new AggregateError([error, ...failures], "the app failed to start, and stopping what had started also failed", { cause: error });
     throw error;
   }
   const stop = (): void => {
-    stopAll();
-    if (running === stop) running = null;
+    let failures: unknown[];
+    try {
+      failures = stopAll();
+    } finally {
+      if (running === stop) running = null;
+    }
+    if (failures.length) throw new AggregateError(failures, `${failures.length} of the app's cleanup steps failed; the rest still ran`);
   };
   running = stop;
   return stop;
@@ -155,8 +169,11 @@ export function startAppWhenReady(doc: Document, wiring: Wiring): void {
   });
   if (!started) {
     cancelReady = () => {
-      cancel();
-      wiring.dispose();
+      try {
+        cancel();
+      } finally {
+        wiring.dispose();
+      }
     };
   }
 }

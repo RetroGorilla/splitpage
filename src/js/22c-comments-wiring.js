@@ -102,8 +102,8 @@ export function mountCommentsFeature() {
     });
   }, function (owner) {
     return [
-      routeRootClick("comments", function (e) { return owner.click(e); }),
-      routeRootClick("comments-jump", function (e) { return owner.jumpClick(e); })
+      function () { return routeRootClick("comments", function (e) { return owner.click(e); }); },
+      function () { return routeRootClick("comments-jump", function (e) { return owner.jumpClick(e); }); }
     ];
   });
 }
