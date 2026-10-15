@@ -1,12 +1,12 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { TAG_CATEGORIES } from "../js/07-production-tags.js";
 import { TAG_PRINT_COLORS, tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, PRINT_TOKENS } from "../js/14b-export-kit.js";
 
-const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
+const { css } = readBuiltCss();
 
 function tokens(selector) {
   const at = css.indexOf(selector + " {");
