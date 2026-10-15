@@ -28,7 +28,6 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
-import { onRootClick } from "./21-events.js";
 import { pad2 } from "../core/production/timing.ts";
 import { withoutCues } from "../core/text/cues.ts";
 import { sliceCell } from "../core/text/edits.ts";
@@ -997,12 +996,12 @@ function startPrompterLaunch(launch) {
   });
 }
 
-export function wireTagEntityContainer(id) {
+export function wireTagEntityContainer(id, rootClick) {
   return mountTagEntityContainer({
     window: window,
     id: id,
     ports: {
-      rootClick: onRootClick,
+      rootClick: rootClick,
       reviewMode: reviewMode,
       reviewBlocked: reviewBlocked,
       renderProduction: renderProduction,

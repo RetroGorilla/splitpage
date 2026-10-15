@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 
 await bootApp();
-const { mountNoticesFeature } = await import("../js/21-events.js");
+const { mountNoticesFeature } = await import("../js/22d-views-wiring.js");
 after(closeApp);
 
 for (const source of ["browser", "desktop"]) {
