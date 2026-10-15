@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /build
 
@@ -11,7 +11,7 @@ COPY shared/ ./shared/
 COPY docs/help.md ./docs/help.md
 RUN node build.mjs
 
-FROM node:22-alpine
+FROM node:24-alpine
 
 ENV NODE_ENV=production \
     PORT=8791 \
