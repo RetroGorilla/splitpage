@@ -4,8 +4,9 @@ The recorded evidence that [the gate section of milestone 6](milestone-6.md#the-
 requires before milestone 6 closes, on the merged milestone 6 tree. The
 milestone is described in [milestone-6.md](milestone-6.md).
 
-Final milestone 6 tree: `9fcf363`, the merge of #626 (6.9 PR 2, which deletes
-`21-events.js`) into `4.0-development` on 2026-10-15. Every code step is merged
+Final milestone 6 tree: `2b891f8`, the merge of #629 (the external review fixes) into
+`4.0-development` on 2026-10-15; the tree the gate evidence below was taken on is `9fcf363`, the merge of #626 (6.9 PR 2, which deletes
+`21-events.js`). Every code step is merged
 (see [the PR list](#pull-requests)). The Windows runs below ran on the head of
 #626 before its merge, on the two heads named in each row; #626 merged
 `2d19032` unchanged, so `9fcf363` has the same files as `2d19032`.
@@ -23,7 +24,7 @@ Final milestone 6 tree: `9fcf363`, the merge of #626 (6.9 PR 2, which deletes
 | Electron smoke, dev target | `595c2c0`: 974/974. `2d19032`: 971/972 on the first run (one group, flake), 974/974 on the second | passed |
 | `npm run verify` on Linux (Node 24.22.0) | clean on `595c2c0` (reviewer) and `2d19032` (author); frontend 170/170, tests 133/133, desktop 15/15, tools 17/17 | passed |
 | CI on the merge | push run for `9fcf363` (run 38791487677) succeeded | passed |
-| External review | Astra (Codex CLI), 2026-10-15: 1 blocker, 3 concerns | **not passed yet**; fix PR pending ([below](#external-review)) |
+| External review | Astra (Codex CLI), 2026-10-15: 1 blocker, 3 concerns | findings fixed in #629; no re-review ([below](#external-review)) |
 | Linux full browser run, native ARM64, packaged check | the packaged check returns only if packaging or runtime inputs change; Linux full run and ARM64 go to the 4.0 release gate | not run here |
 
 Two one-off failures occurred during the gate and are described under
@@ -50,6 +51,7 @@ neither is in code a milestone 6 PR changed.
 | 6.8.5 Panels, settings, gallery, prompter | #619 | `7ca10ec` |
 | 6.8.6 Overlay and focus ownership | #622 | `ab93357` |
 | 6.9 Startup extraction, then deleting `21-events.js` | #613, #626 | `f0a56dc`, `9fcf363` |
+| External review fixes | #629 | `2b891f8` |
 | Fixes made during the milestone | #592 (suite 288 clock), #595 (suite 190), #599 and #601 (server-resume takeover race case and fix), #610 (undo keeps pictures and video), #620 (stale resume key), #623 (CI Node check and render-guard toast race) | `ece3437`, `803dc99`, `8634668`, `0b01317`, `e5bf21c`, `0d7777a`, `2e726fb` |
 | Docs and CI audit | #618 (milestone-6.md corrections), #624 (CI audit follow-ups), #625 (milestone 7 plan) | `6e6e855`, `76769c5`, `e73dd98` |
 
@@ -144,9 +146,9 @@ The full output of the suite 66 failure is in comment 6198540626 on #626. The
 smoke failure output is in comment 6200149613. If either recurs, keep the full
 log and investigate.
 
-## Shim status at `9fcf363`
+## Shim status at `2b891f8`
 
-Counted in the repository at `9fcf363`:
+Counted in the repository at `2b891f8` (the same counts as at `9fcf363`; #629 added no module or bridge):
 
 | | Count |
 | --- | --- |
@@ -167,6 +169,8 @@ The push run for `9fcf363` on `4.0-development` (run 38791487677) completed
 with success. It was not cancelled by the docs merges that followed (#628 merged
 as `51f30aa`; its own run, 38793635863, also succeeded).
 
+The push run for `2b891f8` (#629, run 38795879580) also completed with success.
+
 ## External review
 
 | | |
@@ -174,7 +178,7 @@ as `51f30aa`; its own run, 38793635863, also succeeded).
 | Reviewer | Astra (Codex CLI), an independent session that took no part in building or reviewing milestone 6 |
 | Scope | Read-only source review of the closing tree `9fcf363`: the "As built" sections, the rescope document, the plan, the review rules, `src/features/`, `src/bootstrap/`, `_entry.js`, the CSS split files, the `css-feature-balance` test and the remount test from #626 |
 | Date | 2026-10-15 |
-| Verdict | **Does not pass yet.** 1 blocker, 3 concerns |
+| Verdict | **Did not pass as reviewed.** 1 blocker, 3 concerns; findings 1 to 3 fixed in #629, finding 4 accepted |
 | Limits | No files changed and no tests ran. Historical byte equality and the closing-tree CI and race-matrix results were not independently verified |
 
 Astra confirmed the normal startup sequence, the staged comment and overlay
@@ -187,18 +191,26 @@ route occupancy but not the release of every resource the 294 rows represent.
 
 | # | Severity | Finding | Decision | Pinned by |
 | --- | --- | --- | --- | --- |
-| 1 | blocker | `src/features/rows/routes.ts:176`: disposal removes listeners but never clears the dragged row, markers or auto-scroll. Disposing during an edge drag leaves the animation in `06-rows.js:122` scrolling and updating the DOM, and a remount inherits `S.dragRowId` | Fix in #629 (merge commit to be added) | A held-animation disposal and remount case (to be added with the fix) |
-| 2 | concern | `src/features/routing/owned.ts:29`: unregister functions are recorded only after the whole registration callback returns, so a later slot that throws leaves earlier slots occupied and a retry fails. The existing failure test throws before registering anything | Fix in #629 | A test where a later slot throws (to be added) |
-| 3 | concern | `src/bootstrap/app.ts:68`: draining stops at the first throwing disposer, so earlier mounts and startup listeners survive and `running` stays set (line 130 is skipped). Comment cleanup dereferences required DOM nodes without checking | Fix in #629: drain every disposer, clear state in `finally`, report collected failures | A test with a throwing disposer (to be added) |
+| 1 | blocker | `src/features/rows/routes.ts:176`: disposal removes listeners but never clears the dragged row, markers or auto-scroll. Disposing during an edge drag leaves the animation in `06-rows.js:122` scrolling and updating the DOM, and a remount inherits `S.dragRowId` | Fixed in #629 (`2b891f8`) | The held-animation disposal and remount case added in #629 |
+| 2 | concern | `src/features/routing/owned.ts:29`: unregister functions are recorded only after the whole registration callback returns, so a later slot that throws leaves earlier slots occupied and a retry fails. The existing failure test throws before registering anything | Fixed in #629 (`2b891f8`) | The later-slot-throws test added in #629 |
+| 3 | concern | `src/bootstrap/app.ts:68`: draining stops at the first throwing disposer, so earlier mounts and startup listeners survive and `running` stays set (line 130 is skipped). Comment cleanup dereferences required DOM nodes without checking | Fixed in #629 (`2b891f8`): drain every disposer, clear state in `finally`, report collected failures | The throwing-disposer test added in #629 |
 | 4 | concern | `milestone-6.md` records byte equality for the CSS splits, but the CSS evidence criteria require browser captures | Accepted by Adam on 2026-10-15 (19:15 UTC): the comparator's byte-identical output on each mechanical split stands in for the captures, and the criteria text now says so | The comparator checks recorded in the 6.7 and 6.8 PRs |
 
-The fix PR for findings 1 to 3 is #629 (merge commit to be added). This record
-stays a draft until it merges; then its counts and the push run result are
-updated and the PR is marked ready.
+The fix PR for findings 1 to 3 is #629 "M6: external review fixes", merged as
+`2b891f8` on 2026-10-15 after an independent review. Its merge record (comment
+6200755354 on #629) reports `npm run verify` clean, the race matrix with
+`SPLITPAGE_M4_GATE=1` at 181/181, the 294-row remount test at 4/4 and 14 browser
+suites passing. One limitation was noted and not fixed: a throwing cleanup step
+inside a single feature skips that feature's remaining cleanup; nothing can
+throw there today.
+
+#629 changed code after the Windows runs above, which ran on `595c2c0` and
+`2d19032`. The Windows full runs and the Electron smoke were not repeated on
+`2b891f8`.
 
 The review text is kept with the project's files and on the maintainer's
 machine; this table is the disposition.
 
 ## Blockers for Adam
 
-The external review's blocker (finding 1) and two concerns (2, 3) are open until the fix PR merges. Finding 4 was accepted by Adam on 2026-10-15.
+None. Findings 1 to 3 are fixed in #629 and finding 4 was accepted by Adam on 2026-10-15. Astra has not re-reviewed the fixes.
