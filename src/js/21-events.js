@@ -6,6 +6,7 @@ import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountMergeBanner } from "../features/merge/banner.ts";
+import { mountRowRoutes } from "../features/rows/routes.ts";
 import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
 import { mountVideoPopover } from "../features/video/popover.ts";
 import { cycleRowStatus } from "./01-scene-status.js";
@@ -341,8 +342,7 @@ export function onRootClick(e) {
     }
   }
 
-  var addBtn = e.target.closest('[data-action="add-row"]');
-  if (addBtn) { addRow(null); return; }
+  if (rowRoutes && rowRoutes.addClick(e)) return;
 
   var tbBtn = e.target.closest(".mini-toolbar button[data-cmd]");
   if (tbBtn) { handleToolbarCmd(tbBtn); return; }
@@ -530,20 +530,7 @@ export function onRootClick(e) {
     return;
   }
 
-  var rowMenuBtn = e.target.closest('[data-action="row-menu"]');
-  if (rowMenuBtn) { toggleRowMenu(rowMenuBtn, e.detail === 0); return; }
-
-  var moveUp = e.target.closest('[data-action="move-up"]');
-  if (moveUp) { moveRow(moveUp.getAttribute("data-id"), -1); refocusRowMenu(moveUp.getAttribute("data-id")); return; }
-
-  var moveDown = e.target.closest('[data-action="move-down"]');
-  if (moveDown) { moveRow(moveDown.getAttribute("data-id"), 1); refocusRowMenu(moveDown.getAttribute("data-id")); return; }
-
-  var insertBelow = e.target.closest('[data-action="insert-below"]');
-  if (insertBelow) { addRow(insertBelow.getAttribute("data-id")); return; }
-
-  var del = e.target.closest('[data-action="delete-row"]');
-  if (del) { armDelete(del, del.getAttribute("data-id")); return; }
+  if (rowRoutes && rowRoutes.menuClick(e)) return;
 
   var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-add-more"], [data-action="image-replace"]');
   if (imgAdd) {
@@ -711,6 +698,27 @@ function refreshFormatState(cellEl) {
 var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
 
 var undoRoutes = null;
+
+var rowRoutes = null;
+
+var rowRoutePorts = {
+  dragging: function () { return S.dragRowId; },
+  setDragging: function (rowId) { S.dragRowId = rowId; },
+  clearMarkers: clearDropMarkers,
+  markDrop: setDropMarkerForRow,
+  scroll: updateDragScroll,
+  stopScroll: stopDragScroll,
+  move: moveRowTo,
+  add: addRow,
+  moveBy: function (rowId, dir) { moveRow(rowId, dir); refocusRowMenu(rowId); },
+  toggleMenu: toggleRowMenu,
+  armDelete: armDelete
+};
+
+function mountRows(rowsEl) {
+  if (rowRoutes) rowRoutes.dispose();
+  rowRoutes = mountRowRoutes({ window: window, rows: rowsEl, ports: rowRoutePorts });
+}
 
 function afterUndoApplied(steps) {
   var cellStep = null;
@@ -1009,22 +1017,6 @@ function onRootKeydown(e) {
   }
 }
 
-function onRootDragStart(e) {
-  var row = e.target.closest(".row");
-  if (!row || !row.getAttribute("draggable")) return;
-  S.dragRowId = row.getAttribute("data-id");
-  row.classList.add("is-dragging");
-  try {
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", S.dragRowId);
-  } catch (err) {}
-}
-
-function onRootDragEnd() {
-  S.dragRowId = null;
-  clearDropMarkers();
-}
-
 function isFileDrag(e) {
   var types = e.dataTransfer && e.dataTransfer.types;
   if (!types) return false;
@@ -1049,14 +1041,7 @@ function onRootDragOver(e) {
     drop.closest(".visual-cell").classList.add("drag-over");
     return;
   }
-  if (S.dragRowId) {
-    var row = e.target.closest(".row");
-    if (!row || row.getAttribute("data-id") === S.dragRowId) return;
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "move"; } catch (err) {}
-    setDropMarkerForRow(row, e.clientY);
-    return;
-  }
+  if (rowRoutes && rowRoutes.dragOver(e)) return;
   if (e.target.closest && e.target.closest(".cell-editable")) {
     e.preventDefault();
     try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
@@ -1085,18 +1070,7 @@ function onRootDrop(e) {
     if (visualCell) insertIntoScriptCell(visualCell, "", "", dropFiles);
     return;
   }
-  if (S.dragRowId) {
-    var row = e.target.closest(".row");
-    if (!row) return;
-    e.preventDefault();
-    var after = row.classList.contains("drop-after");
-    var targetId = row.getAttribute("data-id");
-    var movingId = S.dragRowId;
-    S.dragRowId = null;
-    clearDropMarkers();
-    moveRowTo(movingId, targetId, after);
-    return;
-  }
+  if (rowRoutes && rowRoutes.drop(e)) return;
   var cellEl = e.target.closest && e.target.closest(".cell-editable");
   if (cellEl) {
     e.preventDefault();
@@ -1211,19 +1185,10 @@ function init() {
   document.addEventListener("mousedown", function (e) {
     if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
   }, true);
-  rowsEl.addEventListener("dragstart", onRootDragStart);
-  rowsEl.addEventListener("dragend", onRootDragEnd);
+  mountRows(rowsEl);
   rowsEl.addEventListener("dragover", onRootDragOver);
   rowsEl.addEventListener("dragleave", onRootDragLeave);
   rowsEl.addEventListener("drop", onRootDrop);
-  document.addEventListener("mouseup", function () {
-    if (!S.dragRowId) clearDropMarkers();
-  });
-  window.addEventListener("dragover", function (e) {
-    if (!S.dragRowId) return;
-    if (e.target && e.target.closest && e.target.closest("#rundown:not(.is-min)")) { stopDragScroll(); return; }
-    updateDragScroll(e.clientX, e.clientY);
-  });
   document.querySelector(".add-row-bar").addEventListener("click", onRootClick);
   window.addEventListener("scroll", hideTagGhost, true);
   window.addEventListener("resize", hideTagGhost);
