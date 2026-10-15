@@ -360,6 +360,8 @@ Keep generated `index.html` untracked, inlined/self-contained output, authoritat
 
 **Gate:** Completed frontend areas have enforced acyclic dependencies, strict types, no authored comments and one document-mutation boundary. The wiring step's startup, failed partial startup and cleanup tests pass, and so does the test that nothing migrated imports or registers into the shim. The resource-release test for document/tab replacement is part of milestone 4's gate for the session and milestone 6's for each feature. Remaining legacy exceptions are exact and visible. The Windows run and the dev smoke pass; the x64 packaged check is required only if the build entry changes, which this milestone avoids. Pass section 7's release matrix before declaring 4.0 ready.
 
+The two PRs, their file lists and tests, the gate evidence and the release-checklist inputs are in [milestone-7.md](architecture/milestone-7.md).
+
 ## 6. Required ownership/race invariants
 
 These are architectural contracts, not optional tests or comments to add to source:
