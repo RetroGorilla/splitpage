@@ -5,7 +5,8 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-COPY build.mjs VERSION sw.js ./
+COPY build.mjs VERSION sw.js css-inputs.json ./
+COPY tools/css-inputs.mjs ./tools/css-inputs.mjs
 COPY src/ ./src/
 COPY shared/ ./shared/
 COPY docs/help.md ./docs/help.md
