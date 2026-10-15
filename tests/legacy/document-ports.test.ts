@@ -9,7 +9,7 @@ import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from ".
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/js/03-sync.js";
 import * as tags from "../../src/js/07-production-tags.js";
-import { checksumText } from "../../src/js/20b-onboarding.js";
+import { checksumText, seedCheckPasses } from "../../src/js/20b-onboarding.js";
 import { S } from "../../src/js/_state.js";
 import { image } from "../../src/test/golden-helpers.mjs";
 
@@ -142,34 +142,34 @@ test("loadInitialState lives in 02b: a saved page opens as its file, a pristine 
   assert.equal("loadInitialState" in state, false);
   const saved = JSON.stringify({ title: "Saved", rev: 3, rows: [{ id: "r1", audioText: "x" }] });
   pageWith(saved, null);
-  const opened = await loadInitialState() as Doc;
+  const opened = await loadInitialState(seedCheckPasses()) as Doc;
   assert.equal(opened.title, "Saved");
   assert.equal(opened.docId, deriveDocId("splitpage-file", saved));
   assert.equal(S.docIdWrittenOut, true);
 
   pageWith(saved, saved.length + "-" + checksumText(saved));
-  const pristine = await loadInitialState() as Doc;
+  const pristine = await loadInitialState(seedCheckPasses()) as Doc;
   assert.equal(pristine.title, "Saved");
   assert.notEqual(pristine.docId, deriveDocId("splitpage-file", saved), "a pristine copy is not the file it came from");
   assert.equal(S.docIdWrittenOut, false);
 
   const editedOnly = JSON.stringify({ title: "Edited", lastEditedBy: "Ann", rows: [] });
   pageWith(editedOnly, null);
-  const edited = await loadInitialState() as Doc;
+  const edited = await loadInitialState(seedCheckPasses()) as Doc;
   assert.equal(edited.docId, deriveDocId("splitpage-file", editedOnly), "a page someone edited is a saved file even at rev 0");
   assert.equal(S.docIdWrittenOut, true);
 
   const unsaved = JSON.stringify({ title: "Seed", rows: [] });
   pageWith(unsaved, null);
-  const fresh = await loadInitialState() as Doc;
+  const fresh = await loadInitialState(seedCheckPasses()) as Doc;
   assert.equal(fresh.title, "Seed");
   assert.equal(S.docIdWrittenOut, false);
 
   pageWith("{not json", null);
-  const broken = await loadInitialState() as Doc;
+  const broken = await loadInitialState(seedCheckPasses()) as Doc;
   assert.equal(broken.title, "Untitled Script");
   assert.equal(S.docIdWrittenOut, false);
 
   pageWith(null, null);
-  assert.equal((await loadInitialState() as Doc).title, "Untitled Script");
+  assert.equal((await loadInitialState(seedCheckPasses()) as Doc).title, "Untitled Script");
 });

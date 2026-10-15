@@ -67,7 +67,8 @@ function stateDataText(html) {
 export async function bootApp(stateData, opts) {
   const { checksumText } = await import("../js/20b-onboarding.js");
   const page = read("../page.html").replace("{{VERSION}}", () => read("../../VERSION").trim());
-  const seedText = stateDataText(page.replace("{{SEED_STATE}}", () => SEED_TEXT));
+  const shipped = opts && opts.pristine && stateData !== undefined ? stateData : SEED_TEXT;
+  const seedText = stateDataText(page.replace("{{SEED_STATE}}", () => shipped));
   const check = seedText.length + "-" + checksumText(seedText);
   const filled = page
     .replace("{{SEED_CHECK}}", () => check)
@@ -102,16 +103,23 @@ export function closeApp() {
 }
 
 export async function appWiringDeps() {
-  const [{ migrateRows }, docId, sync, exporting, formats, drafts] = await Promise.all([
+  const [{ migrateRows }, docId, sync, production, broll, dirty, exporting, formats, drafts] = await Promise.all([
     import("../js/02-state.js"),
     import("../js/02b-doc-id.js"),
     import("../js/03-sync.js"),
+    import("../js/07-production-tags.js"),
+    import("../js/08c-broll.js"),
+    import("../js/12-dirty-toast.js"),
     import("../js/14-export.js"),
     import("../js/14e-export-formats.js"),
     import("../js/20g-drafts.js")
   ]);
   return {
     entry: migrateRows,
+    effects: dirty.legacySessionEffects(),
+    editorName: sync.getEditorName,
+    refresh: production.runIdleRefresh,
+    records: broll.derivedRecordsPlan,
     exporters: formats.registerBuiltInExporters,
     saves: exporting.legacySavePorts,
     transitions: { live: docId.liveDocumentPort, destination: sync.documentDestinationPort, identity: docId.documentIdentityPort },
@@ -123,4 +131,11 @@ export async function appWiringDeps() {
 export async function rewireApp(overrides) {
   const { wireApp } = await import("../bootstrap/wiring.ts");
   return wireApp(Object.assign(await appWiringDeps(), overrides));
+}
+
+export async function rewireRunningApp(overrides) {
+  const app = await import("../bootstrap/app.ts");
+  app.stopApp();
+  app.startApp(await rewireApp(overrides));
+  await S.initialStateReady;
 }

@@ -80,7 +80,7 @@ test("lastEditedBy: the name the opening toast shows is a sane name", async () =
   el.textContent = JSON.stringify({ schema: 2, title: "T", rows: [], rev: 4, lastEditedBy: "x".repeat(300) + GRIN.slice(0, 1) });
   document.body.appendChild(el);
   try {
-    const loaded = await loadInitialState();
+    const loaded = await loadInitialState(false);
     assert.equal(loaded.lastEditedBy, "x".repeat(30));
   } finally {
     el.remove();

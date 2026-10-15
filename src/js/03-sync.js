@@ -3,7 +3,7 @@ import { setHome } from "./_home.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
-import { noteMerged, noteRecovery, noteServerUpdate, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
@@ -68,8 +68,6 @@ export function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
 export function getEditorName() {
   return getSavedAuthorName() || "Anonymous";
 }
-
-provideSessionEffects({ editorName: getEditorName });
 
 export function stampRow(row) {
   row.updatedAt = nowIso();

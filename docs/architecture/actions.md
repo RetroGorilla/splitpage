@@ -153,7 +153,11 @@ action still reaches the browser as an uncaught error, as it did before. The
 export registry behind `exportFormats` (`src/legacy/export-formats.ts`) follows
 the same pattern, and `registerBuiltInExporters(registry)` in
 `14e-export-formats.js` fills it from the wiring instead of at module
-evaluation.
+evaluation. Since milestone 7.2 no numbered module configures a bridge while it
+loads: `tests/bootstrap/legacy-shim.test.ts` imports each of the 79 alone, in a
+fresh process, with a spy on every configuration function of the bridges and
+of `src/bootstrap/` (the registry installers and `register` methods included),
+and finds no call and no started owner.
 
 `src/legacy/this-document-actions.ts` (the command menu's "This document"
 group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts`,

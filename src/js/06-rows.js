@@ -380,8 +380,6 @@ export function releaseSessionVideoUrls() {
   });
 }
 
-onDocumentReplaced(releaseSessionVideoUrls);
-
 export function openVideoFile(link) {
   var name = link.name || "that video";
   if (!S.DESKTOP || typeof S.DESKTOP.openVideoFile !== "function") {
@@ -459,4 +457,6 @@ export function videoFirstFrame(file) {
   });
 }
 
-export function __init() {}
+export function __init() {
+  onDocumentReplaced(releaseSessionVideoUrls);
+}

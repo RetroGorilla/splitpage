@@ -6,8 +6,9 @@ import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, redo, trackDocument, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
+import { appSessionDeps } from "./_app-session.mjs";
 
-startTestSession();
+startTestSession(appSessionDeps());
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const person = (id, name) => ({ id, name });
