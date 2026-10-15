@@ -1,20 +1,19 @@
 import { S } from "../js/_state.js";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../js/12a-undo.js";
-import { provideRefreshRunner, provideSessionEffects } from "../legacy/session-bridge.ts";
 import { startTestSession } from "./_session.mjs";
 
 export function wireSession(effects) {
-  provideSessionEffects(Object.assign({
+  const given = Object.assign({
     dirty: () => {},
     draft: () => {},
     save: () => {},
     edit: () => ({ allowed: true }),
     editorName: () => "Anonymous",
     attribute: () => null
-  }, effects));
-  provideRefreshRunner(() => {});
-  startTestSession();
+  }, effects);
+  startTestSession({ effects: given, editorName: () => given.editorName(), refresh: () => {}, records: () => null });
+  return given;
 }
 
 export const calls = [];

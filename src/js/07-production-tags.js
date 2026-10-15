@@ -53,7 +53,7 @@ import { namedTagId, projection } from "../core/text/runs.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { provideRefreshRunner, requestRefresh } from "../legacy/session-bridge.ts";
+import { requestRefresh } from "../legacy/session-bridge.ts";
 export {
   TAG_CATEGORIES,
   TAG_STATUSES,
@@ -288,7 +288,7 @@ export function scheduleIdleRefresh(job) {
   requestRefresh(job);
 }
 
-function runIdleRefresh(jobs) {
+export function runIdleRefresh(jobs) {
   if (!S.state) return;
   idleFlushes++;
   if (jobs.has("production")) refreshProductionNow();
@@ -296,8 +296,6 @@ function runIdleRefresh(jobs) {
   if (jobs.has("untagged")) scanUntaggedMentions();
   if (jobs.has("broll")) runBrollRefresh();
 }
-
-provideRefreshRunner(runIdleRefresh);
 
 function refreshProductionNow() {
   var panel = document.getElementById("production-panel");

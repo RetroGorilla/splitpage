@@ -17,7 +17,7 @@ const STATS = ["paintRowTimes", "setRundownExtraSeconds", "renderRundown", "pain
 
 const reviewing = { on: false };
 const published = [];
-stubs.wireSession({
+const wired = stubs.wireSession({
   dirty: function () {
     stubs.calls.push("dirty");
     stubs.dirtied.push(JSON.parse(JSON.stringify(S.state.rows)));
@@ -130,11 +130,11 @@ test("in review mode a status click only warns, with hidden shot scenes too; no 
 test("a status click whose command fails throws to the caller, leaves the row as it was and paints nothing", () => {
   stubs.resetFanout({ hideShot: true });
   const before = JSON.stringify(lengthDoc([{ id: "r1", status: "ready" }]));
-  bridge.provideSessionEffects({ editorName: function () { throw new Error("no editor"); } });
+  wired.editorName = function () { throw new Error("no editor"); };
   try {
     assert.throws(() => cycleRowStatus("r1"), /no editor/);
   } finally {
-    bridge.provideSessionEffects({ editorName: function () { return "Anonymous"; } });
+    wired.editorName = function () { return "Anonymous"; };
   }
   assert.deepEqual(stubs.calls, []);
   assert.equal(JSON.stringify(S.state), before);

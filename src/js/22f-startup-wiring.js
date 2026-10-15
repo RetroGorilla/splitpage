@@ -16,6 +16,7 @@ import { updateSaveStatus } from "./12-dirty-toast.js";
 import { detectServer } from "./13-hosted.js";
 import { applyStashedWork, updateAutoSaveMenu } from "./14-export.js";
 import { tryResumeLastProject } from "./18-local-files.js";
+import { seedCheckPasses } from "./20b-onboarding.js";
 import { initDesktop, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "./20g-drafts.js";
 
@@ -29,7 +30,8 @@ export function startupPorts() {
       applyDraft: applyTakenDraft
     },
     document: {
-      load: function () { return loadInitialDocument(); },
+      pristine: seedCheckPasses,
+      load: function (pristine) { return loadInitialDocument(pristine); },
       clone: cloneState,
       applyStash: function (loaded, options) { return applyStashedWork(loaded, null, options); },
       liveDocument: function () { return S.state; },

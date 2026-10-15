@@ -14,8 +14,9 @@ const { NO_DESTINATION, documentTransitions, startTransitions } = await import("
 const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
 const { documentDestinationPort } = await import("../js/03-sync.js");
 const { startTestSession } = await import("./_session.mjs");
+const { appSessionDeps } = await import("./_app-session.mjs");
 
-startTestSession();
+startTestSession(appSessionDeps());
 
 startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 
