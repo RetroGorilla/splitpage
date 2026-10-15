@@ -1,0 +1,17 @@
+    .topbar .rundown { padding: 0 16px; }
+    .rundown .rundown-ruler { display: none; }
+    .rundown .rundown-track { height: 51px; }
+    .rundown .rd-block { top: 15px; height: 22px; font-size: 10.5px; line-height: 12px; }
+    @container rdb (min-width: 26px) {
+      .rundown .rd-in { gap: 4px; padding: 0 6px; }
+    }
+    #rundown .rd-len, #rundown .rd-stat, #rundown .rd-snip { display: none; }
+    .rundown .rd-check { width: 9px; height: 9px; }
+    .rundown .rd-broll { height: 5px; }
+    .rundown .rundown-drop { top: 11px; height: 30px; }
+    .rundown .rd-target-hatch { top: 15px; height: 22px; }
+    .rundown .rundown-toggle { right: 0; top: 18px; }
+    .rundown .rundown-playhead,
+    .topbar.is-condensed .rundown .rundown-playhead { top: 10px; height: 32px; }
+    .rundown .rundown-playhead::before,
+    .topbar.is-condensed .rundown .rundown-playhead::before { display: block; left: -3px; top: -5px; border-width: 6px 4px 0 4px; }

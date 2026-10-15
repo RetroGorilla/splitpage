@@ -1,3 +1,4 @@
+import { mountPanels } from "../features/panels/mount.ts";
 import { closeHistoryPanel, syncPanelClass } from "./03-sync.js";
 import { closeGearPanel, closeProductionPanel } from "./08-production-panels.js";
 import { closeBrollPanel } from "./08d-broll-panel.js";
@@ -62,57 +63,15 @@ export function applySidePanelWidth(id, w) {
   document.body.style.setProperty("--open-panel-width", w + "px");
 }
 
-function initSidePanelResize(id) {
-  var panel = document.getElementById(id);
-  var handle = document.getElementById(id + "-resize-handle");
-  if (!panel || !handle) return;
-  applySidePanelWidth(id, readSidePanelWidth(id));
-
-  var dragging = false;
-  var startX = 0;
-  var startWidth = sidePanelWidthDefault(id);
-
-  function onMove(e) {
-    if (!dragging) return;
-    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    var w = clampSidePanelWidth(startWidth + (startX - clientX), id);
-    applySidePanelWidth(id, w);
-  }
-  function onUp() {
-    if (!dragging) return;
-    dragging = false;
-    handle.classList.remove("is-dragging");
-    document.body.classList.remove("is-panel-resizing");
-    document.removeEventListener("mousemove", onMove);
-    document.removeEventListener("mouseup", onUp);
-    document.removeEventListener("touchmove", onMove);
-    document.removeEventListener("touchend", onUp);
-    var current = parseFloat(getComputedStyle(panel).getPropertyValue("--panel-width")) || sidePanelWidthDefault(id);
-    saveSidePanelWidth(id, clampSidePanelWidth(current, id));
-  }
-  function onDown(e) {
-    dragging = true;
-    startX = e.touches ? e.touches[0].clientX : e.clientX;
-    startWidth = readSidePanelWidth(id);
-    handle.classList.add("is-dragging");
-    document.body.classList.add("is-panel-resizing");
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    document.addEventListener("touchmove", onMove, { passive: false });
-    document.addEventListener("touchend", onUp);
-    e.preventDefault();
-  }
-  handle.addEventListener("mousedown", onDown);
-  handle.addEventListener("touchstart", onDown, { passive: false });
-  handle.addEventListener("dblclick", function () {
-    var def = sidePanelWidthDefault(id);
-    applySidePanelWidth(id, def);
-    saveSidePanelWidth(id, def);
-  });
-}
-
 export function initSidePanelResizeHandles() {
-  SIDE_PANEL_IDS.forEach(initSidePanelResize);
+  return mountPanels({ window: window, ports: {
+    ids: SIDE_PANEL_IDS,
+    readWidth: readSidePanelWidth,
+    defaultWidth: sidePanelWidthDefault,
+    clampWidth: clampSidePanelWidth,
+    applyWidth: applySidePanelWidth,
+    saveWidth: saveSidePanelWidth
+  } }).dispose;
 }
 
 var placeHold = null;

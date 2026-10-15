@@ -22,6 +22,7 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile, parseSplitpageFile } = await import("../js/20d-formats.js");
 const homeModule = await import("../js/_home.js");
 const { cellRuns, cellTextCommand } = await import("../application/commands/cell-text.ts");
+const { changeSet } = await import("../application/session/change-set.ts");
 const { scriptCellOf } = await import("../legacy/richtext.ts");
 const { liveSession, runCommand, sessionTextPorts } = await import("../legacy/session-bridge.ts");
 
@@ -210,4 +211,38 @@ test("6.5: a panel action on a tag the registry lacks registers it inside the ac
   setTagStatus("prop mug", "have");
   assert.equal(S.state.productionTags.find((x) => x.name === "mug").status, "have");
   assert.equal(liveSession().generation(), gen + 2, "one edit for the registration and the status");
+});
+
+test("6.5 follow-up: a cue rename seen by an edit that rolls back is seen again when the edit is made again", async () => {
+  const cue = (inner) => `<span class="audio-cue">${inner}</span>`;
+  await open(migrateRows({
+    schema: 5, title: "Cue retry", docId: "d" + "8".repeat(32),
+    rows: [{ id: "r1", visualText: "Kitchen", audioText: cue("SFX: door slam"), status: "todo" }]
+  }));
+  const sounds = () => S.state.productionTags.filter((t) => t.cat === "sound").map((t) => t.id + " " + t.name);
+  const kept = S.state.productionTags.find((t) => t.cat === "sound" && t.name === "door slam");
+  assert.ok(kept, sounds().join(", "));
+  assert.equal(setCell("r1", "visualText", "Kitchen, morning").kind, "applied");
+
+  const comments = S.state.comments;
+  S.state.comments = { slice() { throw new Error("anchors broke"); } };
+  let failed;
+  try {
+    failed = runCommand({
+      name: "rename-cue",
+      needs: "edit",
+      plan: () => ({
+        changes: changeSet({ cells: [{ rowId: "r1", field: "audioText" }], runsMoved: true }),
+        apply: (live) => { live.rows[0].audioText = cue("SFX: door slams"); }
+      })
+    });
+  } finally {
+    S.state.comments = comments;
+  }
+  assert.equal(failed.kind, "failed");
+  assert.equal(S.state.rows[0].audioText, cue("SFX: door slam"), "the edit rolled back");
+  assert.deepEqual(sounds(), [kept.id + " door slam"], "the retitle rolled back with it");
+
+  assert.equal(setCell("r1", "audioText", cue("SFX: door slams")).kind, "applied");
+  assert.deepEqual(sounds(), [kept.id + " door slams"], "the same entry is renamed, not a second one registered");
 });

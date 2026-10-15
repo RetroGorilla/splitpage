@@ -458,6 +458,13 @@ async function withServer(answer, run) {
   try { return await run(asked); } finally { globalThis.fetch = was; }
 }
 
+let reloads = 0;
+
+function keptAfterReload(id) {
+  reloads += 1;
+  return JSON.stringify({ id: id, rev: reloads });
+}
+
 function holding(title) {
   twoScenes(title);
   heard.length = 0;
@@ -533,7 +540,7 @@ test("reopening a server document after a reload refuses a state that is no docu
     for (const raw of NOT_DOCUMENTS) {
       const where = "resume " + JSON.stringify(me) + " " + JSON.stringify(raw);
       const start = holding("Resume");
-      const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
+      const pending = keptAfterReload("doc-resume");
       sessionStorage.setItem(SERVER_RESUME_KEY, pending);
       await withServer((ask) => ask === "GET api/me" ? reply(200, me) : ask === "GET api/docs/doc-resume" ? reply(200, { id: "doc-resume", rev: 2, state: raw }) : null, async (asked) => {
         await finishServerDetect();
@@ -553,7 +560,7 @@ test("reopening a server document after a reload refuses a state that is no docu
 
 test("a reopen after a reload whose fetch fails still falls back to the link's document", async () => {
   const start = holding("Resume offline");
-  sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "doc-resume", rev: 1 }));
+  sessionStorage.setItem(SERVER_RESUME_KEY, keptAfterReload("doc-resume"));
   await withServer((ask) => {
     if (ask === "GET api/me") return reply(200, { role: "edit", scope: "doc-resume" });
     if (ask === "GET api/docs/doc-resume") throw new Error("offline");
@@ -574,7 +581,7 @@ test("a reopen after a reload that is refused as no document does not stop the d
     const opensOther = link.scope === "doc-other";
     const where = "reopen " + JSON.stringify(link);
     const start = holding("Resume then link");
-    const pending = JSON.stringify({ id: "doc-resume", rev: 1 });
+    const pending = keptAfterReload("doc-resume");
     sessionStorage.setItem(SERVER_RESUME_KEY, pending);
     await withServer((ask) => {
       if (ask === "GET api/me") return reply(200, link);
