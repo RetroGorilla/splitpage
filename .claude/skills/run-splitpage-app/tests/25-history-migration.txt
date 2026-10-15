@@ -4,7 +4,7 @@
 # (lastMergeUndo, 03-sync.js / 14-export.js). Every case starts with a fresh
 # __historyTest.resetForTest(); every docId fixture is 'd'+32 hex.
 #
-# Boot runs startHistoryMigration() once automatically (21-events.js) using
+# Boot runs startHistoryMigration() once automatically (src/bootstrap/startup.ts) using
 # whatever the legacy key held at that moment — on a fresh profile that is
 # nothing, so it is a harmless no-op and never races the scenarios below,
 # which all write the legacy key AFTER that boot has already settled.

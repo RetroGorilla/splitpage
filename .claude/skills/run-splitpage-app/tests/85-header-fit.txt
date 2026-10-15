@@ -143,7 +143,7 @@ expect window.__last === ''
 eval window.__check(1920)
 expect window.__last === ''
 eval window.__d().getElementById('doc-title').blur()
-# a real click on your name reaches it (21-events.js opens the name box)
+# a real click on your name reaches it (src/features/settings/mount.ts opens the name box)
 eval (function(){ var W=window; W.__nameClicks=0; W.__d().getElementById('identity-chip').addEventListener('click', function(){ W.__nameClicks++; }); var c=W.__d().getElementById('identity-chip').getBoundingClientRect(); return JSON.stringify([c.left,c.top,c.width,c.height]); })()
 eval (function(){ var d=window.__d(); var c=d.getElementById('identity-chip').getBoundingClientRect(); var el=d.elementFromPoint(c.left+c.width/2, c.top+c.height/2); el.click(); return window.__nameClicks; })()
 expect window.__nameClicks === 1

@@ -2,7 +2,7 @@
 # 53-service-worker.txt — sw.js: the stamped cache name and what stays out of
 # the cache (issue #79).
 #
-# The worker only registers over http(s) (21-events.js skips file:// and the
+# The worker only registers over http(s) (src/bootstrap/startup/page-lifetime.ts skips file:// and the
 # desktop shell), which is exactly what this harness serves, so this is one of
 # the few suites that can drive the real thing rather than a stand-in.
 #
@@ -36,7 +36,7 @@
 open /index.html
 expect document.querySelectorAll('#rows .row').length > 0
 
-# 21-events.js registers on window load, and sw.js calls skipWaiting() then
+# src/bootstrap/startup/page-lifetime.ts registers on window load, and sw.js calls skipWaiting() then
 # clients.claim() — so this page becomes controlled without a second load.
 wait navigator.serviceWorker.controller
 
