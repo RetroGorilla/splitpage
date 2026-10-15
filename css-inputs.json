@@ -18,6 +18,7 @@
   "src/features/comments/styles-badge.css",
   "src/styles/after-comments-1.css",
   "src/features/comments/styles-badge-narrow.css",
+  "src/styles/after-comments-1-close.css",
   "src/features/file-menu/styles-5.css",
   "src/styles/after-comments-2.css",
   "src/features/comments/styles-phone-controls.css",
