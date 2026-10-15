@@ -17,6 +17,9 @@ var TEXT_KEYS = { visualText: true, audioText: true };
 var COALESCE_MS = 1000;
 var MAX_ENTRIES = 200;
 
+var WITH_MEDIA = Object.freeze({ media: true });
+function cellRunsOf(html) { return fromHtml(html == null ? "" : html, WITH_MEDIA); }
+
 function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
 function same(a, b) { return a === b || JSON.stringify(a) === JSON.stringify(b); }
 
@@ -124,7 +127,7 @@ function listMergeFor(key) {
 
 function resolveCell(live, step) {
   if (live === step.before) return { value: step.after };
-  var mine = fromHtml(live), base = fromHtml(step.before), want = fromHtml(step.after);
+  var mine = cellRunsOf(live), base = cellRunsOf(step.before), want = cellRunsOf(step.after);
   if (JSON.stringify(mine) === JSON.stringify(base)) return { value: step.after };
   var r = mergeCells(base, mine, want);
   if (r.conflict) return null;
@@ -367,7 +370,7 @@ function replayChanges(steps, planned) {
 }
 
 function sameIds(before, after) {
-  return same(commentIds(fromHtml(before == null ? "" : before)), commentIds(fromHtml(after == null ? "" : after)));
+  return same(commentIds(cellRunsOf(before)), commentIds(cellRunsOf(after)));
 }
 
 function onlyCell(steps) {
@@ -386,7 +389,7 @@ function insertedText(a, b) {
 
 function projectionOf(html) {
   var out = "";
-  normalizeCell(fromHtml(html == null ? "" : html)).forEach(function (r) { out += r.atom ? "\uFFFC" : r.text; });
+  normalizeCell(cellRunsOf(html)).forEach(function (r) { out += r.atom ? "\uFFFC" : r.text; });
   return out;
 }
 
@@ -763,7 +766,7 @@ export function flushEdits() {
 
 function cosmetic(step) {
   if (step.op !== "rowField" || !TEXT_KEYS[step.key]) return false;
-  return JSON.stringify(fromHtml(step.before || "")) === JSON.stringify(fromHtml(step.after || ""));
+  return JSON.stringify(cellRunsOf(step.before)) === JSON.stringify(cellRunsOf(step.after));
 }
 
 export function noteEdit() {
