@@ -1,4 +1,4 @@
-import { OBJ, atomId, normalizeCell } from "./runs.ts";
+import { OBJ, atomId, isMediaRun, normalizeCell } from "./runs.ts";
 import type { CellInput } from "./runs.ts";
 
 export type SelectionField = "visualText" | "audioText";
@@ -40,13 +40,23 @@ export function unitKey(ch: string): string {
   return ch === "\u00a0" ? " " : ch;
 }
 
-export function cellKeys(cell: CellInput): string[] {
+export const MEDIA_KEY = atomKey("#media");
+
+function keysOf(cell: CellInput, mediaAsShown: boolean): string[] {
   const keys: string[] = [];
   normalizeCell(cell).forEach(function (r) {
-    if (r.atom) { keys.push(atomKey(atomId(r))); return; }
+    if (r.atom) { keys.push(mediaAsShown && isMediaRun(r) ? MEDIA_KEY : atomKey(atomId(r))); return; }
     for (let i = 0; i < r.text.length; i++) keys.push(unitKey(r.text[i] as string));
   });
   return keys;
+}
+
+export function cellKeys(cell: CellInput): string[] {
+  return keysOf(cell, false);
+}
+
+export function editorKeys(cell: CellInput): string[] {
+  return keysOf(cell, true);
 }
 
 export function isCollapsed(sel: { anchor: number; head: number }): boolean {
