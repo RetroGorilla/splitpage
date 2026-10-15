@@ -371,8 +371,8 @@ export function mountHistoryGalleryFeature() {
     return mountHistoryGallery({ restore: restoreSnapshotFromCard, open: openGalleryOverlay });
   }, function (owner) {
     return [
-      routeRootClick("history-restore", function (e) { return owner.restoreClick(e); }),
-      routeRootClick("gallery", function (e) { return owner.galleryClick(e); })
+      function () { return routeRootClick("history-restore", function (e) { return owner.restoreClick(e); }); },
+      function () { return routeRootClick("gallery", function (e) { return owner.galleryClick(e); }); }
     ];
   });
 }
