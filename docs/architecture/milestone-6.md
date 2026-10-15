@@ -106,7 +106,7 @@ Each step is a small PR or a short series. A step starts only when its prerequis
 
 One feature per PR, taking the rows of the ledger it owns and the styles of its feature.
 
-**As built.** CSS aggregation landed ahead of the feature moves because it has no code dependency on 6.1–6.6, only on 6.7. All six feature steps are built: 6.8.1 (#614), 6.8.2 (#615), 6.8.3 (#616), 6.8.4 (#617), 6.8.5 (#619) and 6.8.6 (this PR).
+**As built.** CSS aggregation landed ahead of the feature moves because it has no code dependency on 6.1–6.6, only on 6.7. All six feature steps are built: 6.8.1 (#614), 6.8.2 (#615), 6.8.3 (#616), 6.8.4 (#617), 6.8.5 (#619) and 6.8.6 (#622).
 
 | Step | Feature | Modules |
 | --- | --- | --- |
