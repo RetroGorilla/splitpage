@@ -8,6 +8,7 @@ import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountMergeBanner } from "../features/merge/banner.ts";
 import { mountRowRoutes } from "../features/rows/routes.ts";
 import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
+import { mountVideoPopover } from "../features/video/popover.ts";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
   expandHiddenShotStrip,
@@ -352,11 +353,7 @@ export function onRootClick(e) {
   var linkCancel = e.target.closest('[data-action="link-cancel"]');
   if (linkCancel) { cancelLink(linkCancel.closest(".field-wrap")); return; }
 
-  var videoConfirm = e.target.closest('[data-action="video-confirm"]');
-  if (videoConfirm) { confirmVideo(videoConfirm.closest(".field-wrap")); return; }
-
-  var videoCancel = e.target.closest('[data-action="video-cancel"]');
-  if (videoCancel) { cancelVideo(videoCancel.closest(".field-wrap")); return; }
+  if (videoPopover && videoPopover.click(e)) return;
 
   var toggleResolveBtn = e.target.closest('[data-action="toggle-resolve"]');
   if (toggleResolveBtn) { toggleResolve(toggleResolveBtn.getAttribute("data-id")); return; }
@@ -937,6 +934,13 @@ function onRootPaste(e) {
   pasteIntoDraft(cellEl, cd.getData("text/html"), cd.getData("text/plain"));
 }
 
+var videoPopover = null;
+
+function mountVideo() {
+  if (videoPopover) videoPopover.dispose();
+  videoPopover = mountVideoPopover({ window: window, ports: { confirm: confirmVideo, cancel: cancelVideo } });
+}
+
 function onRootKeydown(e) {
   if (rowMenuKeydown(e)) return;
   if (e.target.matches && e.target.matches(".link-popover input")) {
@@ -944,11 +948,7 @@ function onRootKeydown(e) {
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelLink(e.target.closest(".field-wrap")); }
     return;
   }
-  if (e.target.matches && e.target.matches(".video-popover input")) {
-    if (e.key === "Enter") { e.preventDefault(); confirmVideo(e.target.closest(".field-wrap")); }
-    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelVideo(e.target.closest(".field-wrap")); }
-    return;
-  }
+  if (videoPopover && videoPopover.keydown(e)) return;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
   if (reviewMode() && isScriptCell(cellEl)) return;
@@ -1173,6 +1173,7 @@ function init() {
     if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
   });
 
+  mountVideo();
   var rowsEl = document.getElementById("rows");
   rowsEl.addEventListener("click", onRootClick);
   rowsEl.addEventListener("mousedown", onRootMouseDown);
