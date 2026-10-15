@@ -14,7 +14,7 @@ import { blobImgHtml } from "./02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { cellSelection, editCell } from "./05b-cell-edit.js";
+import { cellSelection, editCell, notePaintedEpoch, placeEditorSelection, rememberCellSelection } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
 import { trackDocument } from "./12a-undo.js";
@@ -64,6 +64,8 @@ import { cellLength, projection } from "../core/text/runs.ts";
 import { cellRuns, cellTextCommand, sanitisedMediaHtml } from "../application/commands/cell-text.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+
+export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
 export { pad2 };
 
 var LINK_POPOVER_HTML =
@@ -512,6 +514,9 @@ function paintOneRow(rowId) {
   if (!rowEl) return false;
   var patch = planRowPatch(rowEl, S.state.rows[idx], idx);
   var whole = patch ? null : newRowEl(S.state.rows[idx], idx);
+  var active = document.activeElement;
+  var heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
+    rememberCellSelection(active) ? active : null;
   var touched = true;
   if (patch) touched = commitRowPatch(rowEl, patch);
   else {
@@ -519,6 +524,7 @@ function paintOneRow(rowId) {
     rowsPainted++;
     cellsPainted += 2;
   }
+  if (heldCell && !heldCell.isConnected) placeEditorSelection(rowsEl);
   if (touched) paintPresence();
   if (touched) paintRowTimes();
   if (touched) refreshGalleryOverlay();
@@ -662,19 +668,7 @@ function restoreRenderFocus(rowsEl, f) {
     }
     return;
   }
-  var cellEl = rowsEl.querySelector(
-    '.cell-editable[data-id="' + cssAttr(f.id) + '"][data-field="' + cssAttr(f.field) + '"]');
-  if (cellEl) {
-    cellEl.focus();
-    try {
-      var range = document.createRange();
-      range.selectNodeContents(cellEl);
-      range.collapse(false);
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } catch (e) {}
-  }
+  placeEditorSelection(rowsEl);
 }
 
 function resetTransientUiState() {
@@ -716,9 +710,11 @@ function paintAll() {
 
   resetTransientUiState();
   var focus = captureRenderFocus(rowsEl);
+  if (focus && focus.cell) rememberCellSelection(focus.cell);
   withRowMotion(rowsEl, function () {
     commitRows(rowsEl, plan, focus && focus.rowEl);
   });
+  notePaintedEpoch(rowsEl);
   if (!writerOpen) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");

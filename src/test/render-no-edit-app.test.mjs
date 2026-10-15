@@ -210,7 +210,7 @@ test("R1b: a render with a grid cell focused that the update rewrote takes the o
   holds(got, [["r1", "Wide", "Mine one."], ["r2", "Close", "Theirs two, longer."], ["r3", "Detail", "Mine three."]], "R1b");
   assert.ok(removals.some((r) => r.id === "r2" && r.connected && r.text === "Mine two."), "the old cell lost focus while it held the old text");
   assert.equal(document.activeElement, gridCell("r2", "audioText"));
-  assert.equal(caretOffset(document.activeElement), "Theirs two, longer.".length);
+  assert.equal(caretOffset(document.activeElement), "Theirs".length, "the caret inside the replaced word maps to that word's place (#464)");
 });
 
 test("R1c: a render that reorders the scenes around the focused one never takes that cell out of the page, so it keeps its focus and caret, and makes no edit", () => {
@@ -240,7 +240,7 @@ test("R2a: a render with a Writer paragraph focused redraws the Writer from the 
   assert.ok(removals.some((r) => r.id === "r2" && r.writer && r.text === "Mine two."), "the old paragraph lost focus while it held the old text");
   assert.deepEqual(calls.filter((el) => el.closest("#rows")).map((el) => el.getAttribute("data-id")), [], "no cell of the hidden grid was focused");
   assert.equal(document.activeElement, para("r2"));
-  assert.equal(caretOffset(document.activeElement), 4);
+  assert.equal(caretOffset(document.activeElement), "Theirs".length, "the caret at the end of the replaced word maps to the end of its replacement (#464)");
   writer.closeWriter();
 });
 
@@ -586,7 +586,7 @@ test("R5a: with the Writer open and a Writer paragraph focused, restoring the re
   });
   assert.deepEqual(calls.filter((el) => el.closest("#rows")), []);
   assert.equal(document.activeElement, para("r3"));
-  assert.equal(caretOffset(document.activeElement), 5);
+  assert.equal(caretOffset(document.activeElement), "Theirs ".length, "the caret after the kept space stays after it (#464)");
   writer.closeWriter();
 });
 

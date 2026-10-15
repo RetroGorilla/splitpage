@@ -190,6 +190,7 @@ test("in review mode, a comment a reviewer anchors on selected words is stored i
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
   try {
     const el = cellOf("r1", "audioText");
+    el.focus();
     const text = lastText(el);
     const r = document.createRange();
     r.setStart(text, 6);

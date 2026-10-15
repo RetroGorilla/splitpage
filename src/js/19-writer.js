@@ -13,7 +13,10 @@ import {
 import {
   cellFormatState,
   editableCellHtml,
+  notePaintedEpoch,
   pad2,
+  placeEditorSelection,
+  rememberCellSelection,
   renderAbsorbed,
   syncFieldFromDom,
   toggleCellDirection,
@@ -66,19 +69,6 @@ function writerBlockHtml(row, i) {
     '</div>';
 }
 
-function writerCaretState() {
-  var active = document.activeElement;
-  if (!writerOpen || !active || !active.classList || !active.classList.contains("wr-para")) return null;
-  var sel = window.getSelection();
-  if (!sel.rangeCount) return null;
-  var range = sel.getRangeAt(0);
-  if (!active.contains(range.startContainer)) return null;
-  var probe = document.createRange();
-  probe.selectNodeContents(active);
-  probe.setEnd(range.startContainer, range.startOffset);
-  return { id: active.getAttribute("data-id"), offset: probe.toString().length };
-}
-
 export function renderWriter() {
   whilePainting(function () { paintWriterDraw(drawWriter()); });
 }
@@ -93,7 +83,9 @@ export function drawWriter() {
 
 export function paintWriterDraw(draw) {
   var doc = document.getElementById("writer-doc");
-  var caret = writerCaretState();
+  var active = document.activeElement;
+  var caret = writerOpen && active && active.classList && active.classList.contains("wr-para") && doc.contains(active)
+    ? rememberCellSelection(active) : null;
   var titleEl = document.getElementById("writer-title");
   if (document.activeElement !== titleEl) titleEl.value = draw.title;
   titleEl.readOnly = draw.readOnly;
@@ -103,8 +95,15 @@ export function paintWriterDraw(draw) {
     doc.innerHTML = draw.html;
     doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
   }
+  notePaintedEpoch(doc);
   S.writerLastCell = null;
-  if (caret) focusWriterBlock(caret.id, caret.offset);
+  if (caret) {
+    var placed = placeEditorSelection(doc);
+    if (placed) {
+      S.writerLastCell = placed;
+      placed.scrollIntoView({ block: "nearest" });
+    }
+  }
   updateWriterStats();
 }
 
