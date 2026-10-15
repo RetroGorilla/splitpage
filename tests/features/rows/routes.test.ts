@@ -14,8 +14,13 @@ function page() {
     ["r1", "r2", "r3"].map((id) => '<div class="row" data-id="' + id + '"><span class="grip" id="grip-' + id + '"></span>' +
       '<button data-action="row-menu" data-id="' + id + '"></button><button data-action="move-up" data-id="' + id + '"></button>' +
       '<button data-action="move-down" data-id="' + id + '"></button><button data-action="insert-below" data-id="' + id + '"></button>' +
-      '<button data-action="delete-row" data-id="' + id + '"></button></div>').join("") +
-    '</div><div class="add-row-bar"><button data-action="add-row" id="add"></button></div><div id="other"></div>';
+      '<button data-action="delete-row" data-id="' + id + '"></button>' +
+      '<button class="status-btn" data-action="cycle-status" data-id="' + id + '" id="status-' + id + '"><i id="status-dot-' + id + '"></i></button>' +
+      '<span class="status-btn is-static" id="lamp-' + id + '"><i id="lamp-dot-' + id + '"></i></span></div>').join("") +
+    '<button class="hidden-shot-strip" data-action="expand-hidden-shot" data-ids="r4,r5" id="strip-btn"><span id="strip-label"></span></button>' +
+    '</div><div id="panel"><button data-action="jump-row" data-row="r2" id="jump-r2"><span id="jump-label"></span></button>' +
+    '<button data-action="jump-row" data-row="gone" id="jump-gone"></button>' +
+    '<div class="row"><span class="status-btn is-static" id="lamp-outside"></span></div></div><div class="add-row-bar"><button data-action="add-row" id="add"></button></div><div id="other"></div>';
   const byId = (id: string): HTMLElement => win.document.getElementById(id) as HTMLElement;
   const row = (id: string): HTMLElement => win.document.querySelector('.row[data-id="' + id + '"]') as HTMLElement;
   return { win, doc: win.document, byId, row };
@@ -47,7 +52,11 @@ function harness(p: ReturnType<typeof page>) {
       add: (afterId) => { calls.push("add:" + afterId); },
       moveBy: (id, dir) => { calls.push("moveBy:" + id + ":" + dir); },
       toggleMenu: (btn, first) => { calls.push("menu:" + btn.getAttribute("data-id") + ":" + first); },
-      armDelete: (btn, id) => { calls.push("arm:" + id + ":" + btn.getAttribute("data-action")); }
+      armDelete: (btn, id) => { calls.push("arm:" + id + ":" + btn.getAttribute("data-action")); },
+      cycleStatus: (id) => { calls.push("status:" + id); },
+      expandHidden: (ids) => { calls.push("expand:" + ids); },
+      reveal: (id) => { calls.push("reveal:" + id); },
+      gone: () => { calls.push("gone"); }
     }
   });
   return { state, calls, mount };
@@ -157,6 +166,57 @@ test("row routes: add-row and the scene menu commands route by action", () => {
   routes.dispose();
 });
 
+function sceneClick(routes: RowRoutes, win: Realm, target: Element): boolean {
+  let handled = false;
+  target.addEventListener("click", function once(ev) {
+    target.removeEventListener("click", once);
+    handled = routes.sceneClick(ev as MouseEvent);
+  });
+  target.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+  return handled;
+}
+
+test("row routes: a scene's status button and its static lamp cycle that scene's status, from inner content too", () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  assert.equal(sceneClick(routes, p.win, p.byId("status-r1")), true);
+  assert.equal(sceneClick(routes, p.win, p.byId("status-dot-r3")), true);
+  assert.equal(sceneClick(routes, p.win, p.byId("lamp-r2")), true);
+  assert.equal(sceneClick(routes, p.win, p.byId("lamp-dot-r3")), true);
+  assert.equal(sceneClick(routes, p.win, p.byId("lamp-outside")), false, "a static lamp outside the script's rows is not a scene's");
+  assert.equal(sceneClick(routes, p.win, p.byId("other")), false);
+  assert.deepEqual(h.calls, ["status:r1", "status:r3", "status:r2", "status:r3"]);
+  routes.dispose();
+});
+
+test("row routes: a hidden-shot strip expands its scenes", () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  assert.equal(sceneClick(routes, p.win, p.byId("strip-label")), true);
+  assert.deepEqual(h.calls, ["expand:r4,r5"]);
+  routes.dispose();
+});
+
+test("row routes: jump to scene reveals it, scrolls it to the centre and flashes it; a scene that is gone says so", () => {
+  const p = page();
+  const h = harness(p);
+  const scrolled: unknown[] = [];
+  p.win.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement, opts?: boolean | ScrollIntoViewOptions) {
+    scrolled.push([this.getAttribute("data-id"), opts]);
+  };
+  const routes = h.mount();
+  p.row("r2").classList.add("just-merged");
+  assert.equal(sceneClick(routes, p.win, p.byId("jump-label")), true);
+  assert.deepEqual(scrolled, [["r2", { behavior: "smooth", block: "center" }]]);
+  assert.ok(p.row("r2").classList.contains("just-merged"), "the flash runs again");
+  assert.equal(sceneClick(routes, p.win, p.byId("jump-gone")), true);
+  assert.deepEqual(h.calls, ["reveal:r2", "reveal:gone", "gone"], "revealed first, then found or reported gone");
+  assert.equal(scrolled.length, 1);
+  routes.dispose();
+});
+
 test("row routes: dispose removes every registration it made and stops the routes; a remount has one of each", () => {
   const p = page();
   const rowsTally = counted(p.byId("rows"));
@@ -174,6 +234,7 @@ test("row routes: dispose removes every registration it made and stops the route
   fire(p.win, p.byId("other"), "mouseup");
   assert.deepEqual(h.calls, [], "nothing reacts after dispose");
   assert.deepEqual(routedClick(first, p.win, p.byId("add")), { add: false, menu: false }, "a disposed owner routes nothing");
+  assert.equal(sceneClick(first, p.win, p.byId("status-r1")), false, "nor the scene clicks");
   const second = h.mount();
   fire(p.win, p.byId("grip-r1"), "dragstart");
   assert.deepEqual(h.calls, ["drag:r1"], "the remount handles one drag start once");
