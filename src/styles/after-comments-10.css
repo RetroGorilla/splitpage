@@ -63,8 +63,3 @@
       overflow-x: auto; -webkit-overflow-scrolling: touch;
     }
     .mini-toolbar button { padding: 9px 12px; font-size: 13px; flex: none; }
-
-    .findbar button { padding: 9px 11px; font-size: 13px; }
-
-    .modal-backdrop { padding: 10px; align-items: flex-start; }
-    .modal-panel { max-width: none; max-height: calc(100vh - 20px); padding: 16px 14px 14px; }

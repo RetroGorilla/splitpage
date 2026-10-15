@@ -1,3 +1,4 @@
+import { mountFind } from "../features/find/mount.ts";
 import { mountTags } from "../features/tags/mount.ts";
 import { S } from "./_state.js";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
@@ -328,6 +329,31 @@ import {
 } from "./20g-drafts.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { liveSession, runCommand } from "../legacy/session-bridge.ts";
+
+var find = null;
+
+export function mountFindFeature() {
+  if (find) find.dispose();
+  find = mountFind({
+    window: window,
+    ports: {
+      closeFindBar: closeFindBar,
+      stepFind: stepFind,
+      replaceCurrent: replaceCurrent,
+      replaceAll: replaceAll,
+      toggleBulkTag: toggleBulkTag,
+      runBulkTag: runBulkTag,
+      closeBulkTag: closeBulkTag,
+      pickBulkTagCat: pickBulkTagCat,
+      findQueryChanged: findQueryChanged,
+      leaveFindAtMatch: leaveFindAtMatch,
+      bulkTagOpen: bulkTagOpen,
+      getFindMatchCase: function () { return S.findMatchCase; },
+      setFindMatchCase: function (value) { S.findMatchCase = value; }
+    }
+  });
+  return find;
+}
 
 var tags = null;
 
@@ -998,41 +1024,7 @@ function init() {
   mountRowsEditing(rowsEl);
   document.getElementById("identity-chip").addEventListener("click", promptForName);
 
-  document.getElementById("find-close").addEventListener("click", closeFindBar);
-  document.getElementById("find-next").addEventListener("click", function () { stepFind(1); });
-  document.getElementById("find-prev").addEventListener("click", function () { stepFind(-1); });
-  document.getElementById("find-replace").addEventListener("click", replaceCurrent);
-  document.getElementById("find-replace-all").addEventListener("click", replaceAll);
-  document.getElementById("find-tag").addEventListener("click", toggleBulkTag);
-  document.getElementById("find-tag-go").addEventListener("click", runBulkTag);
-  document.getElementById("find-tag-cancel").addEventListener("click", function () {
-    closeBulkTag();
-    document.getElementById("find-tag").focus();
-  });
-  document.getElementById("find-tag-cats").addEventListener("click", function (e) {
-    var btn = e.target.closest(".tag-cat-btn");
-    if (btn) pickBulkTagCat(btn.getAttribute("data-tag-cat"));
-  });
-  document.getElementById("find-case").addEventListener("click", function (e) {
-    S.findMatchCase = !S.findMatchCase;
-    e.currentTarget.classList.toggle("is-active", S.findMatchCase);
-    e.currentTarget.setAttribute("aria-pressed", S.findMatchCase ? "true" : "false");
-    findQueryChanged();
-  });
-  document.getElementById("find-input").addEventListener("input", findQueryChanged);
-  document.getElementById("findbar").addEventListener("keydown", function (e) {
-    if (e.key === "Escape") {
-      e.preventDefault(); e.stopPropagation();
-      if (bulkTagOpen()) { closeBulkTag(); document.getElementById("find-tag").focus(); return; }
-      leaveFindAtMatch();
-      return;
-    }
-    if (e.key !== "Enter") return;
-    if (e.target.tagName === "BUTTON") return;
-    e.preventDefault();
-    if (e.target.id === "replace-input") { replaceCurrent(); return; }
-    stepFind(e.shiftKey ? -1 : 1);
-  });
+  mountFindFeature();
 
   document.getElementById("runtime-chip").addEventListener("click", promptForWpm);
   var lengthStatus = document.getElementById("length-status");
