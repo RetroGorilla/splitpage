@@ -40,6 +40,11 @@ function hearReplacement() {
 }
 const held = () => session.read((doc) => doc);
 const toastHost = () => document.getElementById("toast-host");
+const announced = [];
+const toastWatch = new window.MutationObserver((records) => {
+  for (const r of records) for (const n of r.addedNodes) if (n.classList && n.classList.contains("toast")) announced.push(n);
+});
+toastWatch.observe(toastHost(), { childList: true });
 const idle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
 
 function reply(status, body) {
@@ -56,6 +61,7 @@ globalThis.fetch = async (url, init) => {
 };
 
 after(() => {
+  toastWatch.disconnect();
   globalThis.fetch = realFetch;
   closeApp();
 });
@@ -93,6 +99,8 @@ async function logging(run) {
 
 function quiet() {
   toastHost().textContent = "";
+  toastWatch.takeRecords();
+  announced.length = 0;
   heard.length = 0;
   asked.length = 0;
 }
@@ -137,7 +145,7 @@ function bookkeeping() {
     server: asked.filter((a) => /^(GET|PUT) api\/docs\//.test(a)),
     title: S.state.title,
     rows: S.state.rows.map((r) => r.audioText),
-    toasts: shown().map(toastText).filter((t) => t !== REDRAW).map((t) => t.replace(/\d+/g, "#"))
+    toasts: announced.map(toastText).filter((t) => t !== REDRAW).map((t) => t.replace(/\d+/g, "#"))
   };
 }
 
