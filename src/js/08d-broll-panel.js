@@ -37,6 +37,7 @@ import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filt
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { mountBroll } from "../features/broll/mount.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
 
@@ -1161,14 +1162,6 @@ function onBrollInput(e) {
   }
 }
 
-function wireBrollRoot(root) {
-  root.addEventListener("click", function (e) { onBrollClick(e, root); });
-  root.addEventListener("change", onBrollChange);
-  root.addEventListener("focusout", onBrollFocusOut);
-  root.addEventListener("keydown", function (e) { onBrollKeydown(e, root); });
-  root.addEventListener("input", onBrollInput);
-}
-
 export function openBrollPanel() {
   if (!S.state) return;
   openSidePanel("broll-panel");
@@ -1183,34 +1176,51 @@ export function closeBrollPanel() {
   syncPanelClass();
 }
 
-export function wireBrollPanel() {
-  var panel = document.getElementById("broll-panel");
-  if (!panel) return;
-  wireBrollRoot(panel);
-  wireBrollPage();
+var brollMount = null;
 
-  var addBtn = document.getElementById("broll-add-save");
-  if (addBtn) addBtn.addEventListener("click", addBrollFromPanel);
-  var closeBtn = document.getElementById("broll-close");
-  if (closeBtn) closeBtn.addEventListener("click", closeBrollPanel);
-  var openBtn = document.getElementById("btn-broll");
-  if (openBtn) openBtn.addEventListener("click", function () {
-    appActions.invoke("panel-broll", "button");
+export function mountBrollFeature() {
+  if (brollMount) brollMount.dispose();
+  var panel = document.getElementById("broll-panel");
+  var page = brollPageEl();
+  brollMount = mountBroll({
+    window: window,
+    ports: {
+      click: onBrollClick,
+      change: onBrollChange,
+      focusout: onBrollFocusOut,
+      keydown: onBrollKeydown,
+      input: onBrollInput,
+      add: addBrollFromPanel,
+      closePanel: closeBrollPanel,
+      openPanel: function () { appActions.invoke("panel-broll", "button"); },
+      closePage: closeBrollPage,
+      pageOpen: brollPageOpen,
+      setPageGroup: function (value) {
+        pageView.group = oneOf(PAGE_GROUPS, value, "location");
+        saveView();
+        renderBrollPage();
+      },
+      menusOpen: function () { return groupMenuOpen || !!menuFor; },
+      closeMenus: function () { groupMenuOpen = false; menuFor = null; },
+      hasSelection: function () { return !!Object.keys(selection).length; },
+      clearSelection: clearSelection,
+      render: renderBrollViews,
+      reset: function () {
+        openId = null; renamingId = null; addingPersonFor = null;
+        editingLocFor = null; editingRefFor = null;
+        groupMenuOpen = false; menuFor = null;
+        clearSelection();
+        pageReturnFocus = null; pagePanelWasOpen = false;
+        if (panel && document.getElementById("broll-panel") === panel) panel.hidden = true;
+        if (page && brollPageEl() === page) {
+          page.hidden = true;
+          document.body.classList.remove("broll-page-open");
+        }
+        syncPanelClass();
+      }
+    }
   });
-  document.addEventListener("mousedown", function (e) {
-    if (!groupMenuOpen && !menuFor) return;
-    if (e.target.closest && e.target.closest(".broll-menu, .broll-group-btn, [data-action=\"broll-menu\"]")) return;
-    groupMenuOpen = false;
-    menuFor = null;
-    renderBrollViews();
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || !Object.keys(selection).length) return;
-    var p = document.getElementById("broll-panel");
-    if (!p || p.hidden || p.contains(e.target)) return;
-    clearSelection();
-    renderBrollViews();
-  });
+  return brollMount;
 }
 
 var pageView = { group: "location" };
@@ -1360,38 +1370,6 @@ function onBrollPageAction(action, btn) {
     if (!brollEntries().length) { showToast("There is no b-roll to print yet.", "warn"); return; }
     exportAs("b-roll pdf");
   }
-}
-
-function wireBrollPage() {
-  var page = brollPageEl();
-  if (!page) return;
-  wireBrollRoot(page);
-  page.addEventListener("change", function (e) {
-    if (e.target.id !== "broll-page-group") return;
-    pageView.group = oneOf(PAGE_GROUPS, e.target.value, "location");
-    saveView();
-    renderBrollPage();
-  });
-  page.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && e.target.classList && e.target.classList.contains("broll-page-note")) {
-      e.preventDefault();
-      e.target.blur();
-    }
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || !brollPageOpen() || e.defaultPrevented) return;
-    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
-    e.preventDefault();
-    closeBrollPage();
-  });
-  document.addEventListener("focusin", function (e) {
-    if (!brollPageOpen()) return;
-    var el = e.target;
-    if (!el || !el.closest || el.closest("#broll-page")) return;
-    if (el.closest(".modal-backdrop:not([hidden]), .toast")) return;
-    var back = document.getElementById("broll-page-close");
-    if (back) back.focus();
-  });
 }
 
 export function __init() {

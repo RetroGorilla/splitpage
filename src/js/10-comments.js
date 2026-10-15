@@ -171,13 +171,17 @@ var composerVersion = 0;
 var bindingsVersion = 0;
 var commentTimers = new Set();
 
+function ownsDocument(operation) {
+  return stillOwns(Object.assign({}, operation, { connection: captureOperation().connection }));
+}
+
 function commentTimer(fn, delay) {
   var version = bindingsVersion;
   var operation = captureOperation();
   var timer = setTimeout(function () {
     if (version !== bindingsVersion) return;
     commentTimers.delete(timer);
-    if (stillOwns(operation)) fn();
+    if (ownsDocument(operation)) fn();
   }, delay);
   commentTimers.add(timer);
   return timer;
@@ -189,7 +193,7 @@ export function captureCommentComposer() {
   var modal = document.getElementById("comment-modal");
   var body = document.getElementById("comment-body-editable");
   return function () {
-    if (!stillOwns(operation) || version !== composerVersion) return null;
+    if (!ownsDocument(operation) || version !== composerVersion) return null;
     var liveModal = document.getElementById("comment-modal");
     var liveBody = document.getElementById("comment-body-editable");
     return liveModal === modal && liveBody === body && liveModal && !liveModal.hidden ? liveBody : null;

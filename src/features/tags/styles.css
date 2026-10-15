@@ -385,3 +385,113 @@
   .tag-menu-item.is-active { background: var(--border); }
   .tag-menu-item.danger, .tag-menu-item.danger > svg { color: var(--danger); }
   .tag-menu-item.danger.armed { background: var(--danger-soft); }
+  .tag-owner-select, .tag-person-input, .comment-assignee-select {
+    flex: 1; min-width: 0;
+    font-family: var(--font-body); font-size: 12.5px;
+    padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); color: var(--text);
+  }
+  .tag-owner-select:focus, .tag-person-input:focus, .comment-assignee-select:focus { outline: none; border-color: var(--visual); }
+
+  .tag-status-pill.is-static:hover { background: transparent; color: var(--text-visual); }
+  .tag-status-seg button:disabled, .tag-status-menu-btn:disabled { cursor: default; }
+  .tag-status-choice:disabled:not(.is-active):hover { background: transparent; color: var(--text-dim); }
+  .tag-status-menu-btn:disabled { border-color: transparent; }
+  .tag-owner-field.is-readonly,
+  .tag-owner-field.is-readonly:hover,
+  .tag-owner-field.is-readonly:focus-within { border-color: transparent; }
+  .tag-owner-select:disabled { cursor: default; opacity: 1; color: var(--text); }
+  textarea.tag-notes-input[readonly] { border-color: transparent; resize: none; cursor: default; }
+  body.is-review #production-bulk { display: none; }
+
+  .tag-person-head .person-avatar { --size: 20px; }
+  .tag-person-none {
+    width: 18px; height: 18px; flex: none; color: var(--text-faint);
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .tag-person-remove {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 28px; height: 28px; margin-left: auto; padding: 0 6px;
+    border: 0; border-radius: var(--radius-sm); background: transparent;
+    color: var(--text-faint); font-family: var(--font-body); font-size: 13px; line-height: 16px; font-weight: 450;
+    cursor: pointer;
+  }
+  .tag-person-remove svg {
+    width: 16px; height: 16px;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .tag-person-remove:hover { background: var(--hover); color: var(--danger); }
+  .tag-person-remove.armed { background: var(--danger-soft); color: var(--danger); }
+
+  .tag-pills {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin: 0; padding: 10px 20px 6px; list-style: none;
+  }
+  .tag-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 28px; padding: 3px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 13px; line-height: 20px; color: var(--text); overflow-wrap: anywhere;
+  }
+  .tag-pill .tag-cat-dot { width: 6px; height: 6px; }
+
+  .tag-entity.is-gear .tag-entity-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    min-height: 44px; padding: 6px 20px;
+  }
+  .tag-entity.is-gear .tag-row-dot { margin-top: 13px; }
+  .tag-entity.is-gear .tag-entity-head { flex: 1; }
+  .tag-entity.is-gear .tag-status-pill { flex: none; margin-left: 0; font-size: 12.5px; color: var(--text-faint); }
+  .tag-entity.is-gear .tag-status-pill:hover { color: var(--text); }
+  .tag-entity.is-gear .tag-scenes { flex: 0 1 auto; max-width: 35%; text-align: right; }
+  .tag-entity.is-gear .tag-scene.jump-link { color: var(--text-faint); }
+  .tag-entity.is-gear .tag-scene.jump-link:hover { color: var(--text); }
+  .tag-entity.is-gear.is-expanded { padding-bottom: 12px; }
+
+  @container (max-width: 459px) {
+    .tag-col-labels { display: none; }
+    .tag-entity:not(.is-gear) .tag-entity-row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas: "name name name" "status scenes owner";
+      column-gap: 12px;
+      padding-bottom: 6px;
+    }
+    .tag-entity:not(.is-gear) .tag-entity-row { align-items: center; }
+    .tag-entity:not(.is-gear) .tag-entity-head { grid-area: name; padding-bottom: 2px; }
+    .tag-entity:not(.is-gear) .tag-status-pill { grid-area: status; }
+    .tag-entity:not(.is-gear) .tag-scenes { grid-area: scenes; }
+    .tag-entity:not(.is-gear) .tag-owner { grid-area: owner; }
+  }
+  @container (max-width: 359px) {
+    #production-panel .panel-tabs { gap: 14px; }
+    #production-panel [data-action="export-breakdown"] svg { display: none; }
+  }
+
+  @media (max-width: 760px) {
+    #production-panel .tag-status-pill, #gear-panel .tag-status-pill { height: 40px; padding: 0 6px; font-size: 13px; }
+    #gear-panel .tag-entity.is-gear .tag-status-pill { font-size: 12.5px; }
+    #production-panel .tag-status-seg button, #gear-panel .tag-status-seg button {
+      height: 40px; min-width: 0; padding: 0 8px; font-size: 14px;
+    }
+    #production-panel .tag-scene, #gear-panel .tag-scene { position: relative; padding: 0; font-size: 12.5px; }
+    #production-panel .tag-scene::after, #gear-panel .tag-scene::after { content: ""; position: absolute; inset: -12px -3px; }
+    #production-panel .tag-scenes, #gear-panel .tag-scenes { padding: 12px 0; }
+    #gear-panel .tag-entity.is-gear .tag-entity-head { padding: 10px 0; }
+    #gear-panel .tag-entity.is-gear .tag-row-dot { margin-top: 17px; }
+    #production-panel .tag-entity-detail dt, #gear-panel .tag-entity-detail dt { padding-top: 12px; }
+    #gear-panel .tag-mentions { padding: 10px 0; }
+    #production-panel .tag-quiet-btn, #gear-panel .tag-quiet-btn,
+    #production-panel .tag-status-menu-btn, #gear-panel .tag-status-menu-btn { height: 40px; padding: 0 8px; font-size: 14px; }
+    #production-panel .tag-more-btn, #gear-panel .tag-more-btn,
+    #production-panel .bulk-clear { width: 40px; height: 40px; padding: 0; }
+    #production-panel .tag-person-remove { min-width: 40px; height: 40px; padding: 0 8px; font-size: 13px; }
+    #production-panel .tag-owner-field, #gear-panel .tag-owner-field,
+    #production-panel .bulk-bar .ev-field { height: 40px; }
+    #production-panel .ev-field > select, #gear-panel .ev-field > select,
+    #production-panel .ev-field > .bulk-select,
+    #production-panel input.ev-field, #gear-panel input.ev-field,
+    #production-panel textarea.tag-notes-input, #gear-panel textarea.tag-notes-input,
+    #gear-panel .gear-quickadd textarea { font-size: 16px; }
+    #production-panel input.ev-field, #gear-panel input.ev-field { height: 40px; }
+    .tag-menu-item { height: 44px; }
+  }
