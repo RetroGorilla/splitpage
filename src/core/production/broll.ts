@@ -109,6 +109,8 @@ export type BrollPlan = { create: NewBrollShot[]; rename: BrollRename[] };
 
 export type UnkeyedScope = ((rowId: string) => boolean) | null;
 
+export type LineShotIds = { readonly held: Map<string, string>; readonly drawn: Map<string, string> };
+
 export type BrollState = { rows: readonly ProductionRow[]; brollShots: readonly BrollShot[]; productionTags: RegistryList };
 
 export type BrollAnchorPlan = Record<string, string>;
@@ -444,7 +446,8 @@ export function planBrollRecords(
   readers: ProductionReaders,
   ids: IdSource,
   plainTextOf: FieldText,
-  unkeyedIn: UnkeyedScope
+  unkeyedIn: UnkeyedScope,
+  lines?: LineShotIds
 ): BrollPlan {
   const shots = state.brollShots;
   const live = collectBrollFromRows(state.rows, readers);
@@ -452,22 +455,51 @@ export function planBrollRecords(
   const held = brollHeldIds(live);
   const byId = shotIndexById(shots);
   const plan: BrollPlan = { create: [], rename: [] };
+  const seen: Record<string, number> = Object.create(null);
+
+  function lineKey(found: BrollFound): string {
+    const base = found.rowId + "\u0000" + normalizeTagName(found.name);
+    seen[base] = (seen[base] || 0) + 1;
+    return base + "\u0000" + seen[base];
+  }
+
+  function unkeyedId(key: string): string {
+    const shared = lines && (lines.held.get(key) || lines.drawn.get(key));
+    const id = shared && !(shared in byId) && !claimed[shared] ? shared : ids.id("bs");
+    if (lines && !lines.drawn.has(key)) lines.drawn.set(key, id);
+    return id;
+  }
 
   live.forEach(function (found) {
+    const key = lines && !found.id && found.name ? lineKey(found) : "";
     const at = brollMatchRecord(found, claimed, byId, held, shots);
     if (at !== -1) {
       const rec = shots[at] as BrollShot;
       claimed[rec.id] = true;
+      if (key && lines && !lines.held.has(key)) lines.held.set(key, rec.id);
       if (rec.name !== found.name || rec.desc !== found.desc) plan.rename.push({ at: at, name: found.name, desc: found.desc });
       return;
     }
     if (!found.name) return;
     if (!found.id && unkeyedIn && !unkeyedIn(found.rowId)) return;
-    const shot = newBrollShot(seedFields(state, found, found.id || ids.id("bs"), readers, plainTextOf));
+    const shot = newBrollShot(seedFields(state, found, found.id || (key ? unkeyedId(key) : ids.id("bs")), readers, plainTextOf));
     claimed[shot.id] = true;
     plan.create.push(shot);
   });
   return plan;
+}
+
+export function alignLineShots(docs: readonly { brollShots: BrollShot[] }[], lines: LineShotIds): void {
+  lines.held.forEach(function (keep, key) {
+    const drew = lines.drawn.get(key);
+    if (!drew || drew === keep) return;
+    docs.forEach(function (doc) {
+      const shots = doc.brollShots;
+      if (shots.some(function (b) { return b.id === keep; })) return;
+      const rec = shots.find(function (b) { return b.id === drew; });
+      if (rec) rec.id = keep;
+    });
+  });
 }
 
 export function hasBrollRecordWork(plan: BrollPlan): boolean {
