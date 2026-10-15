@@ -5,3 +5,11 @@ export const appActions = createActionRegistry({
     queueMicrotask(() => { throw error; });
   }
 });
+
+export function runFromButton(id: string): void {
+  appActions.invoke(id, "button");
+}
+
+export function saveFromButton(): void {
+  runFromButton("save");
+}

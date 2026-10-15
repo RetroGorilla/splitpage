@@ -6,7 +6,7 @@ import { S } from "../js/_state.js";
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { mountFindFeature } = await import("../js/21-events.js");
+const { mountFindFeature } = await import("../js/22b-production-wiring.js");
 after(closeApp);
 
 const targets = {

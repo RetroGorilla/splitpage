@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { mountOverlayFeature } = await import("../js/21-events.js");
+const { mountOverlayFeature } = await import("../js/22e-overlay-wiring.js");
 after(closeApp);
 
 function install() {
