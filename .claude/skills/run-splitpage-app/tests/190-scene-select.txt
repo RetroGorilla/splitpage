@@ -29,6 +29,15 @@ eval (function(){ window.row = function(id){ return document.querySelector('#row
 expect st('r2').imageRef && st('r2').imageRef.sha256.length === 64
 
 # ---- 1. a drag inside the box selects words, and nothing else --------------
+# Opening the file slides the rows that share an id with the page's old rows
+# (04a-row-motion.js, 180 ms). On the first drag move Chromium hit-tests the
+# press point again for the selection's start; if r2 has slid up so that point
+# is no longer on its text, the drag selects nothing (#593, about 1 run in 2
+# when the drag started inside the slide). Slide r2 by hand every run so the
+# wait below is always exercised, and drag only once no row is moving.
+eval row('r2').animate([{ transform: 'translateY(30px)' }, { transform: 'translateY(0)' }], { duration: 180, easing: 'cubic-bezier(0.2, 0, 0, 1)' }) && true
+expect row('r2').getAnimations().length > 0
+wait Array.prototype.every.call(document.querySelectorAll('#rows .row'), function(r){ return r.getAnimations().length === 0; })
 mouse down pt(cell('r2', 'audioText'), 0.05, 0.5)
 mouse move pt(cell('r2', 'audioText'), 0.6, 0.5)
 expect T.tracking().scene === false
