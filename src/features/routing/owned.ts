@@ -4,13 +4,13 @@ export interface Disposable {
 
 export interface Owned<T extends Disposable> {
   readonly owner: () => T | null;
-  readonly replace: (create: () => T, routes?: (owner: T) => readonly (() => void)[]) => T;
+  readonly replace: (create: () => T, routes?: (owner: T) => readonly (() => () => void)[]) => T;
   readonly stop: () => void;
 }
 
 export function owned<T extends Disposable>(): Owned<T> {
   let current: T | null = null;
-  let unroute: readonly (() => void)[] = [];
+  let unroute: (() => void)[] = [];
   const stop = (): void => {
     const owner = current;
     const routes = unroute;
@@ -26,7 +26,7 @@ export function owned<T extends Disposable>(): Owned<T> {
       const owner = create();
       current = owner;
       try {
-        unroute = routes ? routes(owner) : [];
+        for (const route of routes ? routes(owner) : []) unroute.push(route());
       } catch (error) {
         stop();
         throw error;

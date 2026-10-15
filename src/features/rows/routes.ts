@@ -180,6 +180,10 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
       mount.rows.removeEventListener("dragend", onDragEnd);
       doc.removeEventListener("mouseup", onMouseUp);
       realm.removeEventListener("dragover", onWindowDragOver);
+      if (!ports.dragging()) return;
+      ports.setDragging(null);
+      ports.clearMarkers();
+      ports.stopScroll();
     }
   };
 }
