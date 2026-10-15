@@ -258,11 +258,11 @@ export function updatePrompterStatus() {
 var prompterWakeLock = null;
 var wakeLockGen = 0;
 
-export function acquireWakeLock() {
+export function acquireWakeLock(owns) {
   if (!navigator.wakeLock || !navigator.wakeLock.request) return;
   var gen = ++wakeLockGen;
   navigator.wakeLock.request("screen").then(function (lock) {
-    if (gen !== wakeLockGen || !S.prompterOpen) { lock.release().catch(function () {}); return; }
+    if (gen !== wakeLockGen || !S.prompterOpen || (owns && !owns())) { lock.release().catch(function () {}); return; }
     prompterWakeLock = lock;
   }).catch(function () { });
 }
@@ -273,6 +273,12 @@ function releaseWakeLock() {
     prompterWakeLock.release().catch(function () {});
     prompterWakeLock = null;
   }
+}
+
+export function disposePrompterView() {
+  setPrompterPlaying(false);
+  stopVoiceFollow();
+  releaseWakeLock();
 }
 
 var PROMPTER_MIRROR_KEY = "splitpage-prompter-mirror";

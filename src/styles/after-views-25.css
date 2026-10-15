@@ -1,0 +1,7 @@
+    .topbar-left .presence-bar { grid-column: 3; grid-row: 3; padding-left: 8px; }
+    .presence-bar .presence-chip { width: 16px; height: 16px; font-size: 7.5px; box-shadow: 0 0 0 1.5px var(--bg); }
+    .presence-bar .presence-chip + .presence-chip { margin-left: -4px; }
+    .presence-bar .presence-more { min-width: 16px; height: 16px; padding: 0 2px; font-size: 7.5px; box-shadow: 0 0 0 1.5px var(--bg), inset 0 0 0 1px var(--border-strong); }
+    .presence-bar .presence-chip + .presence-more { margin-left: -4px; }
+    .doc-meta { grid-column: 4; grid-row: 3; font-size: 12px; line-height: 16px; }
+    .doc-meta::before, .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: "·"; margin: 0 6px; color: var(--text-faint); }

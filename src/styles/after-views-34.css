@@ -1,0 +1,4 @@
+  @media (prefers-reduced-motion: reduce) {
+    .rundown.is-lensed .rundown-ruler,
+    .rundown.is-lensed .rundown-overlay { transition: none; }
+  }

@@ -1,0 +1,3 @@
+  .doc-meta .identity-chip { flex: none; display: inline-flex; align-items: center; }
+  .doc-meta #identity-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
+  .doc-meta .identity-chip:hover { color: var(--text); text-decoration: underline; }

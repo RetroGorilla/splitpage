@@ -60,7 +60,7 @@ test("a read of lines typed after entry draws ids it does not keep and writes no
   assert.deepEqual(S.state.brollShots, [], "planning wrote the document");
   plan.apply(S.state);
   assert.deepEqual(shots(), [["Steam", "bsuz4mfclo5vwtxke"], ["Hands", "bss7dow7oo5vwtxke"]]);
-  assert.equal(derivedRecordsPlan(S.state, WHOLE_DOCUMENT), null, "a second plan found work");
+  assert.deepEqual(derivedRecordsPlan(S.state, WHOLE_DOCUMENT).fields, [], "a second plan found work");
   assert.equal(makeId("probe"), "probeqwyplh9o5vwtxke");
 });
 
