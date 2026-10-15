@@ -1,0 +1,41 @@
+  .row-menu-wrap { position: relative; }
+  .row-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-width: 184px;
+    padding: 4px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+  }
+  .row-menu.opens-up { top: auto; bottom: calc(100% + 4px); }
+  .gutter-btn.row-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 450;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .row-menu-item .mi-icon { width: 18px; height: 18px; color: var(--text-dim); }
+  .row-menu-item:hover, .row-menu-item:focus-visible { background: var(--hover); outline: none; }
+  .row-menu-item.danger, .row-menu-item.danger .mi-icon { color: var(--danger); }
+  .row-menu-item.danger.armed { background: var(--danger-soft); }
+  .row-menu-item:disabled { opacity: 0.45; cursor: default; }
+  .row-menu-item:disabled:hover { background: transparent; }
