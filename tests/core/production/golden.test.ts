@@ -5,8 +5,8 @@ import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
 import { ensureTagIds, registryKey } from "../../../src/core/document/tags.ts";
 import { plainText } from "../../../src/core/document/text-policy.ts";
-import { anchorBrollCell, brollAnchorTodo, brollEntries, planBrollAnchors } from "../../../src/core/production/broll.ts";
-import type { BrollEntry, BrollRead, BrollShot } from "../../../src/core/production/broll.ts";
+import { anchorBrollCell, applyBrollRecords, brollAnchorTodo, brollEntries, planBrollAnchors, planBrollRecords } from "../../../src/core/production/broll.ts";
+import type { BrollEntry, BrollShot } from "../../../src/core/production/broll.ts";
 import { createProductionReaders } from "../../../src/core/production/readers.ts";
 import {
   bulkTagCell,
@@ -77,18 +77,6 @@ function applyHealing(doc: Doc, plan: HealingPlan): void {
   plan.register.forEach((t) => { doc.productionTags.push(t); });
 }
 
-function applyBroll(doc: Doc, read: BrollRead): void {
-  read.plan.create.forEach((c) => {
-    doc.brollShots.push(c.shot);
-    (read.entries[c.entry] as BrollEntry).rec = c.shot;
-  });
-  read.plan.rename.forEach((r) => {
-    const rec = doc.brollShots[r.at] as BrollShot;
-    rec.name = r.name;
-    rec.desc = r.desc;
-  });
-}
-
 function anchorAll(doc: Live, ids: IdSource): number {
   const plan = planned(doc, () => planBrollAnchors(doc, readers, ids));
   let total = 0;
@@ -108,7 +96,7 @@ function readAll(doc: Live, ids: IdSource): Out {
   const before = JSON.stringify(doc);
   const out: Out = {
     entries: entriesView(deriveProductionIndex(doc, readers).entries),
-    brollRead: brollView(doc, brollEntries(doc, readers, ids, plainTextOf, false).entries)
+    brollRead: brollView(doc, brollEntries(doc, readers, ids, plainTextOf))
   };
   out.readsWroteNothing = JSON.stringify(doc) === before;
   return out;
@@ -145,15 +133,15 @@ function repairAll(doc: Live, out: Out, ids: IdSource): Out {
   applyHealing(doc, again);
   out.healedAgain = again.count;
   const shotsBefore = jsonCopy(doc.brollShots);
-  const read = planned(doc, () => brollEntries(doc, readers, ids, plainTextOf, true));
-  applyBroll(doc, read);
-  const repair = brollView(doc, read.entries);
+  const records = planned(doc, () => planBrollRecords(doc, readers, ids, plainTextOf, null));
+  applyBrollRecords(doc.brollShots, records);
+  const repair = brollView(doc, brollEntries(doc, readers, ids, plainTextOf));
   out.brollRepair = sameAsOr("brollRead", out.brollRead, repair);
   out.shotsAfterRepair = unchangedOr(shotsBefore, doc.brollShots);
   const rowsBefore = jsonCopy(doc.rows.map((r) => r.visualText));
   out.anchored = anchorAll(doc, ids);
   out.visualAfterAnchoring = unchangedOr(rowsBefore, doc.rows.map((r) => r.visualText));
-  out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(doc, brollEntries(doc, readers, ids, plainTextOf, false).entries));
+  out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(doc, brollEntries(doc, readers, ids, plainTextOf)));
   return out;
 }
 

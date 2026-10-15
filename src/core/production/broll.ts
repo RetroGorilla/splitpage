@@ -10,7 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
-import { cappedLongText, cappedName, unitCutName } from "../document/text-policy.ts";
+import { cappedLongText, cappedName, plainText, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
@@ -103,13 +103,11 @@ export type BrollEntry = {
   origin: string | undefined;
 };
 
-export type BrollCreate = { entry: number; shot: NewBrollShot };
-
 export type BrollRename = { at: number; name: string; desc: string };
 
-export type BrollPlan = { create: BrollCreate[]; rename: BrollRename[] };
+export type BrollPlan = { create: NewBrollShot[]; rename: BrollRename[] };
 
-export type BrollRead = { entries: BrollEntry[]; plan: BrollPlan };
+export type UnkeyedScope = ((rowId: string) => boolean) | null;
 
 export type BrollState = { rows: readonly ProductionRow[]; brollShots: readonly BrollShot[]; productionTags: RegistryList };
 
@@ -278,7 +276,7 @@ function brollRow(rows: readonly ProductionRow[], rowId: string): ProductionRow 
 }
 
 export function brollSeedRef(row: ProductionRow | null | undefined, plainTextOf: FieldText): string {
-  return row ? cappedLongText(plainTextOf(row.audioText).trim(), BROLL_TEXT_MAX) : "";
+  return row ? cappedLongText(plainText(plainTextOf(row.audioText)).trim(), BROLL_TEXT_MAX) : "";
 }
 
 export function brollSeedLocation(row: ProductionRow | null | undefined, readers: ProductionReaders): string {
@@ -397,40 +395,38 @@ function newBrollShot(fields: BrollSeedFields): NewBrollShot {
   };
 }
 
+function seedFields(state: BrollState, found: BrollFound, id: string, readers: ProductionReaders, plainTextOf: FieldText): BrollSeedFields {
+  const row = brollRow(state.rows, found.rowId);
+  return {
+    id: id,
+    name: found.name,
+    desc: found.desc,
+    audioRef: brollSeedRef(row, plainTextOf),
+    location: brollSeedLocation(row, readers)
+  };
+}
+
 export function brollEntries(
   state: ValidatedDocument,
   readers: ProductionReaders,
   ids: IdSource,
-  plainTextOf: FieldText,
-  repair: boolean
-): BrollRead {
+  plainTextOf: FieldText
+): BrollEntry[] {
   const shots = state.brollShots;
   const live = collectBrollFromRows(state.rows, readers);
   const claimed: Record<string, boolean> = Object.create(null);
   const held = brollHeldIds(live);
   const byId = shotIndexById(shots);
   const entries: BrollEntry[] = [];
-  const plan: BrollPlan = { create: [], rename: [] };
 
   live.forEach(function (found) {
     const at = brollMatchRecord(found, claimed, byId, held, shots);
     let rec: BrollShot;
     if (at === -1) {
-      const row = brollRow(state.rows, found.rowId);
-      const fields: BrollSeedFields = {
-        id: found.id || ids.id("bs"),
-        name: found.name,
-        desc: found.desc,
-        audioRef: brollSeedRef(row, plainTextOf),
-        location: brollSeedLocation(row, readers)
-      };
-      if (repair) ids.id("bs");
-      const seed: BrollSeed = Object.assign({ status: BROLL_STATUS_IDS[0], props: [], origin: "script" }, fields);
-      plan.create.push({ entry: entries.length, shot: newBrollShot(fields) });
-      rec = seed;
+      const fields = seedFields(state, found, found.id || ids.id("bs"), readers, plainTextOf);
+      rec = Object.assign({ status: BROLL_STATUS_IDS[0], props: [], origin: "script" }, fields) as BrollSeed;
     } else {
       rec = shots[at] as BrollShot;
-      if (rec.name !== found.name || rec.desc !== found.desc) plan.rename.push({ at: at, name: found.name, desc: found.desc });
     }
     claimed[rec.id] = true;
     entries.push(brollEntryFrom(rec, found, state.productionTags));
@@ -440,7 +436,51 @@ export function brollEntries(
     if (!claimed[rec.id]) entries.push(brollEntryFrom(rec, null, state.productionTags));
   });
 
-  return { entries: entries, plan: plan };
+  return entries;
+}
+
+export function planBrollRecords(
+  state: ValidatedDocument,
+  readers: ProductionReaders,
+  ids: IdSource,
+  plainTextOf: FieldText,
+  unkeyedIn: UnkeyedScope
+): BrollPlan {
+  const shots = state.brollShots;
+  const live = collectBrollFromRows(state.rows, readers);
+  const claimed: Record<string, boolean> = Object.create(null);
+  const held = brollHeldIds(live);
+  const byId = shotIndexById(shots);
+  const plan: BrollPlan = { create: [], rename: [] };
+
+  live.forEach(function (found) {
+    const at = brollMatchRecord(found, claimed, byId, held, shots);
+    if (at !== -1) {
+      const rec = shots[at] as BrollShot;
+      claimed[rec.id] = true;
+      if (rec.name !== found.name || rec.desc !== found.desc) plan.rename.push({ at: at, name: found.name, desc: found.desc });
+      return;
+    }
+    if (!found.name) return;
+    if (!found.id && unkeyedIn && !unkeyedIn(found.rowId)) return;
+    const shot = newBrollShot(seedFields(state, found, found.id || ids.id("bs"), readers, plainTextOf));
+    claimed[shot.id] = true;
+    plan.create.push(shot);
+  });
+  return plan;
+}
+
+export function hasBrollRecordWork(plan: BrollPlan): boolean {
+  return plan.create.length > 0 || plan.rename.length > 0;
+}
+
+export function applyBrollRecords(shots: BrollShot[], plan: BrollPlan): void {
+  plan.rename.forEach(function (r) {
+    const rec = shots[r.at] as BrollShot;
+    rec.name = r.name;
+    rec.desc = r.desc;
+  });
+  plan.create.forEach(function (shot) { shots.push(shot); });
 }
 
 export function brollLineKey(rowId: string, ordinal: number): string {

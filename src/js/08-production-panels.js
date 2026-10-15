@@ -16,7 +16,6 @@ import {
   deleteProductionTagEntry,
   disarmBulkDelete,
   findOrAddPerson,
-  healTagRegistry,
   nextTagStatus,
   normalizeTagName,
   personById,
@@ -642,9 +641,22 @@ function renderProductionList(entries) {
   }).join("");
 }
 
+var registeredByAction = false;
+
 function trackedEntry(item) {
-  healTagRegistry();
-  return registryEntry(item.cat.id, item.name);
+  var entry = registryEntry(item.cat.id, item.name);
+  if (entry) return entry;
+  registerProductionTag(item.cat.id, item.name);
+  entry = registryEntry(item.cat.id, item.name);
+  if (entry) registeredByAction = true;
+  return entry;
+}
+
+function noteRegistered() {
+  var was = registeredByAction;
+  registeredByAction = false;
+  if (was) markDirty();
+  return was;
 }
 
 function findTagByKey(key) {
@@ -837,7 +849,8 @@ export function bulkSetOwner(personId) {
     entry.owner = owner;
     n++;
   });
-  if (!n) { renderProduction(); return; }
+  if (!n) { noteRegistered(); renderProduction(); return; }
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -857,7 +870,8 @@ export function bulkSetStatus(statusId) {
     entry.status = want.id;
     n++;
   });
-  if (!n) { renderProduction(); return; }
+  if (!n) { noteRegistered(); renderProduction(); return; }
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -969,8 +983,9 @@ export function setTagStatus(key, statusId) {
   var want = statusId === null
     ? nextTagStatus(entry.status)
     : (tagStatus(statusId) || TAG_STATUSES[0]).id;
-  if (entry.status === want) return;
+  if (entry.status === want) { noteRegistered(); return; }
   entry.status = want;
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -982,6 +997,7 @@ export function setTagOwner(key, personId) {
   var entry = trackedEntry(item);
   if (!entry) return;
   entry.owner = personById(personId) ? personId : "";
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -993,8 +1009,9 @@ export function setTagNotes(key, text) {
   var entry = trackedEntry(item);
   if (!entry) return;
   var clean = cappedLongText(plainText(text), 2000);
-  if (entry.notes === clean) return;
+  if (entry.notes === clean) { noteRegistered(); return; }
   entry.notes = clean;
+  registeredByAction = false;
   markDirty();
 }
 
@@ -1007,6 +1024,7 @@ export function addPersonForTag(key) {
   var item = findTagByKey(key);
   var entry = item && trackedEntry(item);
   if (entry) entry.owner = id;
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();

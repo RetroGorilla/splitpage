@@ -2,7 +2,7 @@ import { createDocumentSession } from "../../src/application/session/document-se
 import type { Command, CommandOutcome, DocumentSession, DocumentView, Plan, SessionCounters } from "../../src/application/session/document-session.ts";
 import { NO_CHANGES, needsReconciliation } from "../../src/application/session/change-set.ts";
 import type { ChangeSet, SessionChange } from "../../src/application/session/change-set.ts";
-import type { Capability, TimerPort } from "../../src/application/session/ports.ts";
+import type { Capability, RecordsPlan, TimerPort } from "../../src/application/session/ports.ts";
 import type { RefreshTiming } from "../../src/application/session/effects.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
@@ -57,6 +57,7 @@ export interface Harness {
 export interface HarnessHooks {
   beforeUndo?: (session: DocumentSession) => void;
   reconcile?: (doc: ValidatedDocument) => number;
+  records?: (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
   entry?: (raw: unknown) => ValidatedDocument;
   attribute?: (doc: DocumentView) => Plan | null;
   record?: () => void;
@@ -100,6 +101,11 @@ export function harness(timing?: RefreshTiming, hooks: HarnessHooks = {}): Harne
       anchors: function (doc) {
         log.push("reconcile");
         return hooks.reconcile ? hooks.reconcile(doc) : 0;
+      },
+      records: function (doc, changes) {
+        if (!hooks.records) return null;
+        log.push("records");
+        return hooks.records(doc, changes);
       }
     },
     attribution: {
