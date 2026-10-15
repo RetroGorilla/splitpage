@@ -10,6 +10,10 @@ export interface RowRoutePorts {
   readonly moveBy: (rowId: string, dir: -1 | 1) => void;
   readonly toggleMenu: (button: Element, focusFirst: boolean) => void;
   readonly armDelete: (button: Element, rowId: string) => void;
+  readonly cycleStatus: (rowId: string) => void;
+  readonly expandHidden: (ids: string | null) => void;
+  readonly reveal: (rowId: string) => void;
+  readonly gone: () => void;
 }
 
 export interface RowRoutesMount {
@@ -20,6 +24,7 @@ export interface RowRoutesMount {
 
 export interface RowRoutes {
   readonly addClick: (e: MouseEvent) => boolean;
+  readonly sceneClick: (e: MouseEvent) => boolean;
   readonly menuClick: (e: MouseEvent) => boolean;
   readonly dragOver: (e: DragEvent) => boolean;
   readonly drop: (e: DragEvent) => boolean;
@@ -41,6 +46,25 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
 
   function idOf(el: Element): string {
     return el.getAttribute("data-id") || "";
+  }
+
+  function rowIn(rowId: string): HTMLElement | null {
+    const rows = mount.rows.querySelectorAll(".row");
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row instanceof realm.HTMLElement && row.getAttribute("data-id") === rowId) return row;
+    }
+    return null;
+  }
+
+  function jumpTo(rowId: string): void {
+    ports.reveal(rowId);
+    const row = rowIn(rowId);
+    if (!row) { ports.gone(); return; }
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.remove("just-merged");
+    void row.offsetWidth;
+    row.classList.add("just-merged");
   }
 
   function onDragStart(e: Event): void {
@@ -95,6 +119,21 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
       if (!closest(e, '[data-action="add-row"]')) return false;
       ports.add(null);
       return true;
+    },
+    sceneClick(e: MouseEvent): boolean {
+      if (!open) return false;
+      const status = closest(e, '[data-action="cycle-status"]');
+      if (status) { ports.cycleStatus(idOf(status)); return true; }
+      const lamp = closest(e, ".row .status-btn.is-static");
+      if (lamp && mount.rows.contains(lamp)) {
+        const row = lamp.closest(".row");
+        if (row) { ports.cycleStatus(idOf(row)); return true; }
+      }
+      const strip = closest(e, '[data-action="expand-hidden-shot"]');
+      if (strip) { ports.expandHidden(strip.getAttribute("data-ids")); return true; }
+      const jump = closest(e, '[data-action="jump-row"]');
+      if (jump) { jumpTo(jump.getAttribute("data-row") || ""); return true; }
+      return false;
     },
     menuClick(e: MouseEvent): boolean {
       if (!open) return false;
