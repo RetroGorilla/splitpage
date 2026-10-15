@@ -73,7 +73,7 @@ test("owned replaces its owner, unrouting and disposing the previous one first, 
   const log: string[] = [];
   const slot = owned<{ dispose: () => void; name: string }>();
   const make = (name: string) => () => ({ name, dispose: () => { log.push(`dispose ${name}`); } });
-  const routes = (owner: { name: string }) => [() => { log.push(`unroute ${owner.name}`); }];
+  const routes = (owner: { name: string }) => [() => () => { log.push(`unroute ${owner.name}`); }];
   slot.replace(make("one"), routes);
   assert.equal(slot.owner()?.name, "one");
   slot.replace(make("two"), routes);
@@ -90,4 +90,22 @@ test("owned stops a new owner whose routes fail to register", () => {
   assert.throws(() => slot.replace(() => ({ dispose: () => { log.push("dispose"); } }), () => { throw new Error("taken"); }), /taken/);
   assert.deepEqual(log, ["dispose"]);
   assert.equal(slot.owner(), null);
+});
+
+test("owned releases the slots a new owner took when a later slot fails, so a retry can take them", () => {
+  const log: string[] = [];
+  const router = createRootRouter(["a", "b", "c"] as const);
+  const unblock = router.route("b", () => false);
+  const slot = owned<{ dispose: () => void }>();
+  const create = () => ({ dispose: () => { log.push("dispose"); } });
+  const routes = () => (["a", "b", "c"] as const).map((name) => () => router.route(name, () => true));
+  assert.throws(() => slot.replace(create, routes), /already taken/);
+  assert.deepEqual(router.routed(), ["b"], "slot a, taken before b failed, is free again");
+  assert.deepEqual(log, ["dispose"]);
+  assert.equal(slot.owner(), null);
+  unblock();
+  slot.replace(create, routes);
+  assert.deepEqual(router.routed(), ["a", "b", "c"]);
+  slot.stop();
+  assert.deepEqual(router.routed(), []);
 });
