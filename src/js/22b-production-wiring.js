@@ -160,9 +160,9 @@ export function mountTagsFeature() {
     });
   }, function (owner) {
     return [
-      routeRootClick("tags-jump", function (e) { return owner.jumpClick(e); }),
-      routeRootClick("tags", function (e) { return owner.click(e); }),
-      routeRootMouseDown("tags-anchor", function (e) { owner.anchorMouseDown(e); return false; })
+      function () { return routeRootClick("tags-jump", function (e) { return owner.jumpClick(e); }); },
+      function () { return routeRootClick("tags", function (e) { return owner.click(e); }); },
+      function () { return routeRootMouseDown("tags-anchor", function (e) { owner.anchorMouseDown(e); return false; }); }
     ];
   });
 }
