@@ -436,6 +436,11 @@ function pendingServerResume() {
   } catch (e) { return null; }
 }
 
+function sameDocumentAs(op) {
+  var now = captureOperation();
+  return now.epoch === op.epoch && now.docId === op.docId && now.destination === op.destination;
+}
+
 async function resumeServerDoc() {
   var override = S.draftServerResume;
   var pending = pendingServerResume();
@@ -443,12 +448,20 @@ async function resumeServerDoc() {
 
   var seqAtStart = S.editSeq;
   var stateAtStart = S.state ? cloneState(S.state) : null;
+  var op = captureOperation();
 
   var body;
   var via = conn;
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
     if (!stillOnServer(via)) return false;
+    if (!sameDocumentAs(op)) {
+      if (override) {
+        S.draftServerResume = null;
+        try { override.onDone("replaced"); } catch (e) {}
+      }
+      return "replaced";
+    }
     forgetRemoteMisses();
   } catch (err) {
     if (override && err && err.code === "not-found") {
@@ -771,7 +784,7 @@ export async function finishServerDetect() {
   var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
-      if (resumed === true) return;
+      if (resumed === true || resumed === "replaced") return;
       var refused = resumed === "empty" ? pendingServerResume() : null;
       openSharedDocFromLink(refused ? refused.id : "");
     }, function () { openSharedDocFromLink(""); });
