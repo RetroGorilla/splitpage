@@ -763,6 +763,12 @@ export function installMergeBanner(banner) {
   return function () { if (mergeBanner === banner) mergeBanner = null; };
 }
 
+export function toastLastEditor(loaded) {
+  if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
+    showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
+  }
+}
+
 export function reportMerge(result, opts) {
   opts = opts || {};
   if (mergeBanner) mergeBanner.show(result, { undo: opts.undo });

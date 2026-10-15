@@ -901,6 +901,12 @@ export function offerBrowserDraftAfterLinkOff(docId) {
   }).then(null, function () { return false; });
 }
 
+export function desktopDraftTaker() {
+  var desktop = S.DESKTOP;
+  if (!(desktop && draftRestorePending && typeof desktop.takeDraft === "function")) return null;
+  return function () { return desktop.takeDraft(); };
+}
+
 export async function applyTakenDraft(t) {
   var outcome;
   try {
