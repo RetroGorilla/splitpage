@@ -9,8 +9,7 @@ import {
   firstWriteBeforeAdoption,
   mockClock,
   rightToday,
-  traceFields,
-  wrongToday
+  traceFields
 } from "./_m4-matrix.mjs";
 
 const { liveSession, provideRefreshRunner, requestRefresh, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
@@ -313,7 +312,7 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   }
 });
 
-wrongToday("T2c-resume-switch", "a late server resume leaves a document opened during its fetch in place", async (t) => {
+rightToday("T2c-resume-switch", "a late server resume leaves a document opened during its fetch in place", async (t) => {
   mockClock(t);
   useDocument(script("Before late resume"));
   const base = script("Late server draft", { docId: "d" + "e".repeat(32) });
@@ -365,7 +364,7 @@ wrongToday("T2c-resume-switch", "a late server resume leaves a document opened d
     await store.remove(key, "another-tab");
     setHome("none");
   }
-}, /late server resume must leave the newly opened document in place/);
+});
 
 rightToday("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before reopen"));
@@ -388,6 +387,57 @@ rightToday("T2c-reopen", "a server document reopened after a sign-in opens its e
   } finally {
     uninstall();
     sessionStorage.removeItem(SERVER_RESUME_KEY);
+    setHome("none");
+  }
+});
+
+rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened during its fetch in place and keeps the stash", async (t) => {
+  mockClock(t);
+  useDocument(script("Before sign-in resume"));
+  const served = script("Late signed-in server copy", { docId: "d" + "c".repeat(32) });
+  const mine = cloneState(served);
+  mine.rows[0].audioText = "Typed before signing in.";
+  const stash = JSON.stringify({ at: new Date().toISOString(), by: "", base: served, mine: mine });
+  const held = serverFetch((r) => {
+    if (r.method !== "GET") return null;
+    if (r.url.includes("api/docs/server-r3")) return { status: 200, body: { id: "server-r3", rev: 5, state: served } };
+    return { status: 200, body: { role: "edit", scope: "" } };
+  });
+  held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-r3"));
+  const uninstall = held.install();
+  sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "server-r3", rev: 4 }));
+  sessionStorage.setItem("splitpage-conflict-stash", stash);
+  try {
+    const detecting = finishServerDetect();
+    await held.gates.arrived("fetch");
+    const connection = homeModule.conn;
+    const replacement = script("Opened during sign-in resume", { docId: "d" + "b".repeat(32) });
+    const file = splitpageFile(replacement, "opened-during-sign-in.splitpage");
+    const target = createHeldFileHandle({ name: file.name });
+    await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
+    assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
+    assert.equal(homeModule.conn, connection, "setup: opening the file kept the same connection");
+    const opened = JSON.stringify(S.state);
+    const baseline = JSON.stringify(S.baseState);
+    const destination = homeModule.home;
+    const epoch = session.epoch();
+    held.gates.release("fetch");
+    await detecting;
+    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(S.state.title, replacement.title, "late sign-in resume must leave the newly opened document in place");
+    assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
+    assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
+    assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
+    assert.equal(S.dirty, false, "the opened document stays clean");
+    assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
+    assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
+    assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "the resume sends no server write");
+    assert.equal(sessionStorage.getItem("splitpage-conflict-stash"), stash, "the edits typed before signing in are kept");
+  } finally {
+    held.gates.releaseAll("fetch");
+    uninstall();
+    sessionStorage.removeItem(SERVER_RESUME_KEY);
+    sessionStorage.removeItem("splitpage-conflict-stash");
     setHome("none");
   }
 });
