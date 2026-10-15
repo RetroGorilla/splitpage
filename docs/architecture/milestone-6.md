@@ -2,7 +2,7 @@
 
 The working notes for milestone 6 of [the implementation plan](../IMPLEMENTATION-PLAN.md#6--finish-feature-ownership-and-editing-migration), as amended by the [external review of the plan](milestones-4-7-rescope.md#external-review-of-milestone-6s-plan-2026-10-14). The plan holds the scope, the CSS bound and the gate. This file holds the step list, the acceptance tables and the `21-events.js` ledger, and records what each step built once it merges.
 
-Status: built. Derived from `dcfb92d`. Every step has merged and `21-events.js` is deleted; the gate below runs on the closing tree.  The gate record is [milestone-6-gate.md](milestone-6-gate.md).
+Status: built. Derived from `dcfb92d`. Every step has merged and `21-events.js` is deleted; the gate below runs on the closing tree. The gate record is [milestone-6-gate.md](milestone-6-gate.md).
 
 ## Models
 
