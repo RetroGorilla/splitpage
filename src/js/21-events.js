@@ -4,6 +4,7 @@ import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { mountComposition } from "../features/editing/composition.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
+import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
   expandHiddenShotStrip,
@@ -21,7 +22,6 @@ import {
   promptForWpm,
   reportMerge,
   restoreSnapshotFromCard,
-  stampRow,
   undoMerge,
   updateIdentityChip
 } from "./03-sync.js";
@@ -640,48 +640,13 @@ function keepCaretInView(cellEl) {
   nearestScrollAncestor(cellEl).scrollBy({ top: delta, behavior: "smooth" });
 }
 
-function isUndoKey(e) {
-  return (e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "z" || e.key === "Z");
-}
-function isRedoKey(e) {
-  return (e.ctrlKey || e.metaKey) && !e.altKey &&
-    (((e.key === "z" || e.key === "Z") && e.shiftKey) || ((e.key === "y" || e.key === "Y") && !e.shiftKey));
-}
-
-function ownsItsUndo(el) {
-  if (!el || el === document.body) return false;
-  if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
-  if (el.isContentEditable) {
-    var cell = el.closest && el.closest(".cell-editable");
-    return !(cell && isScriptCell(cell));
-  }
-  return false;
-}
-
-function onUndoKey(e) {
-  if (e.defaultPrevented) return false;
-  var redoing = isRedoKey(e);
-  if (!redoing && !(isUndoKey(e) && !e.shiftKey)) return false;
-  if (ownsItsUndo(document.activeElement)) return false;
-  if (reviewMode()) return false;
-  e.preventDefault();
-  undoOrRedo(redoing);
-  return true;
-}
-
-function undoOrRedo(redoing) {
-  if (screenIsStale()) return;
-  if (writerUndoStep(redoing ? "redo" : "undo")) return;
-  if (redoing) redo(); else undo();
-}
-
 function onDraftUndoKey(e, box) {
   if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return false;
-  var redoing = isRedoKey(e);
-  if (!redoing && !(isUndoKey(e) && !e.shiftKey)) return false;
+  var dir = undoGesture(e);
+  if (!dir) return false;
   if (!isDraftBox(box)) return false;
   e.preventDefault();
-  if (redoing) draftRedo(box); else draftUndo(box);
+  if (dir === "redo") draftRedo(box); else draftUndo(box);
   return true;
 }
 
@@ -738,14 +703,6 @@ function onDraftDrop(e) {
   pasteIntoDraft(box, html, text);
 }
 
-function onUndoBeforeInput(e) {
-  if (e.inputType !== "historyUndo" && e.inputType !== "historyRedo") return;
-  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (!cellEl || !isScriptCell(cellEl)) return;
-  e.preventDefault();
-  undoOrRedo(e.inputType === "historyRedo");
-}
-
 function onFormatBeforeInput(e) {
   if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
   var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
@@ -763,16 +720,14 @@ function refreshFormatState(cellEl) {
 
 var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
 
+var undoRoutes = null;
+
 function afterUndoApplied(steps) {
   var cellStep = null;
   steps.forEach(function (st) {
-    if (st.op !== "rowField") return;
-    var row = S.state.rows.find(function (r) { return r.id === st.rowId; });
-    if (!row) return;
-    stampRow(row);
+    if (st.op !== "rowField" || !S.state.rows.some(function (r) { return r.id === st.rowId; })) return;
     if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
   });
-  markDirty();
   S.undoApplying = true;
   try {
     if (writerOpen) renderWriter(); else render();
@@ -789,10 +744,6 @@ function afterUndoApplied(steps) {
       placeCaretAtTextOffset(cell, caretAfterStep(cellStep));
     }
   }
-}
-
-function onUndoRefused(reason, dir) {
-  showToast("Could not " + dir + " — " + (reason || "the document has changed since") + ".", "warn");
 }
 
 function onRootInput(e) {
@@ -926,10 +877,7 @@ function announceAttached(res, before) {
   var msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (res.rowIndex + 1);
   var entry = lastUndoEntry();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
-  showActionToast(msg, "ok", "Undo", function () {
-    if (lastUndoEntry() === entry) undo();
-    else showToast("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
-  });
+  showActionToast(msg, "ok", "Undo", function () { undoRoutes.undoIfLatest(entry); });
 }
 
 function onRootCopy(e) {
@@ -978,7 +926,7 @@ function onRootKeydown(e) {
   if (!cellEl) return;
   if (reviewMode() && isScriptCell(cellEl)) return;
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
-  if (onUndoKey(e)) return;
+  if (undoRoutes.key(e)) return;
   if (plainTagOpen(cellEl)) {
     if (e.key === "Tab") { e.preventDefault(); closePlainTag(); return; }
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); cancelPlainTag(); return; }
@@ -1244,12 +1192,6 @@ function init() {
   document.addEventListener("mousedown", function (e) {
     if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
   }, true);
-  configureUndo({ commentsAreSent: onServerDoc, afterApply: afterUndoApplied, onRefused: onUndoRefused });
-  window.addEventListener("keydown", function (e) {
-    if (e.target && e.target.closest && e.target.closest("#rows, #writer-doc")) return;
-    onUndoKey(e);
-  });
-  rowsEl.addEventListener("beforeinput", onUndoBeforeInput);
   rowsEl.addEventListener("beforeinput", onFormatBeforeInput);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
@@ -1769,13 +1711,28 @@ function init() {
   document.getElementById("btn-write").addEventListener("click", function () { runFromButton("write"); });
 
   var writerDocEl = document.getElementById("writer-doc");
+  undoRoutes = mountUndoRoutes({
+    window: window,
+    roots: [rowsEl, writerDocEl],
+    ports: {
+      replay: function (dir) { if (dir === "redo") redo(); else undo(); },
+      writerStep: writerUndoStep,
+      stale: screenIsStale,
+      reviewOnly: reviewMode,
+      scriptCell: isScriptCell,
+      latest: lastUndoEntry,
+      warn: function (message) { showToast(message, "warn"); },
+      commentsAreSent: onServerDoc,
+      afterReplay: afterUndoApplied,
+      install: configureUndo
+    }
+  });
   writerDocEl.addEventListener("input", onRootInput);
   writerDocEl.addEventListener("focusout", onRootFocusOut);
   writerDocEl.addEventListener("paste", onRootPaste);
   writerDocEl.addEventListener("copy", onRootCopy);
   writerDocEl.addEventListener("cut", onRootCut);
   writerDocEl.addEventListener("keydown", onRootKeydown);
-  writerDocEl.addEventListener("beforeinput", onUndoBeforeInput);
   writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
   mountScriptComposition([rowsEl, writerDocEl]);
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);

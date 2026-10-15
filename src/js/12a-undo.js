@@ -1,11 +1,12 @@
 import { S } from "./_state.js";
 import { STATE_FIELDS } from "./02-state.js";
+import { changeSet } from "../application/session/change-set.ts";
 import { STATE_FIELDS as FIELD_POLICIES } from "../core/document/fields.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { personIdRemap, personSurvives, repointOwners } from "../core/merge/lists.ts";
 import { toHtml } from "../core/text/html.ts";
-import { normalizeCell } from "../core/text/runs.ts";
+import { commentIds, normalizeCell } from "../core/text/runs.ts";
 import { applySteps, invertSteps } from "../core/text/steps.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 
@@ -258,7 +259,7 @@ function repointLists(state, remap) {
   });
 }
 
-export function applyStepsLive(state, steps, out) {
+function planStepsLive(state, steps) {
   var order = state.rows.map(function (r) { return r.id; });
   var byId = idMap();
   state.rows.forEach(function (r) { byId[r.id] = r; });
@@ -302,8 +303,11 @@ export function applyStepsLive(state, steps, out) {
       return { ok: false, reason: "unknown step" };
     }
   }
-  var resolved = resolveDocFields(state, plan);
-  var remap = resolved.remap;
+  return { ok: true, plan: plan, resolved: resolveDocFields(state, plan) };
+}
+
+function writePlanned(state, planned, out) {
+  var plan = planned.plan, resolved = planned.resolved, remap = resolved.remap;
   plan.forEach(function (p) {
     if (p.op === "set") {
       if (p.value === undefined) delete p.row[p.key]; else p.row[p.key] = p.value;
@@ -328,6 +332,42 @@ export function applyStepsLive(state, steps, out) {
     });
   }
   return resolved.cleared.length ? { ok: true, cleared: resolved.cleared.length } : { ok: true };
+}
+
+export function applyStepsLive(state, steps, out) {
+  var planned = planStepsLive(state, steps);
+  return planned.ok ? writePlanned(state, planned, out) : planned;
+}
+
+function replayChanges(steps, planned) {
+  var cells = [], inserted = [], removed = [], docFields = [], moved = false, runsMoved = false;
+  function field(rowId, key) {
+    if (!cells.some(function (c) { return c.rowId === rowId && c.field === key; })) cells.push({ rowId: rowId, field: key });
+  }
+  function docField(key) { if (docFields.indexOf(key) === -1) docFields.push(key); }
+  steps.forEach(function (s) {
+    if (s.op === "rowField") {
+      field(s.rowId, s.key);
+      field(s.rowId, "updatedAt");
+      field(s.rowId, "updatedBy");
+    } else if (s.op === "insertRow") {
+      inserted.push(s.row.id);
+    } else if (s.op === "deleteRow") {
+      removed.push(s.row.id);
+    } else if (s.op === "moveRow") {
+      moved = true;
+    }
+  });
+  planned.plan.forEach(function (p) {
+    if (p.op === "doc") docField(p.key);
+    if (p.op === "set" && TEXT_KEYS[p.key] && !sameIds(p.row[p.key], p.value)) runsMoved = true;
+  });
+  if (planned.resolved.remap) Object.keys(OWNED_LISTS).forEach(docField);
+  return changeSet({ cells: cells, rowsInserted: inserted, rowsRemoved: removed, rowsMoved: moved, runsMoved: runsMoved, docFields: docFields });
+}
+
+function sameIds(before, after) {
+  return same(commentIds(fromHtml(before == null ? "" : before)), commentIds(fromHtml(after == null ? "" : after)));
 }
 
 function onlyCell(steps) {
@@ -494,31 +534,62 @@ export function createUndoHistory() {
     return true;
   }
 
-  function step(from, to, state, invert) {
-    var entry = from.pop();
-    if (!entry) return { ok: false, empty: true };
+  function prepare(dir, state) {
+    var invert = dir === "undo";
+    var from = invert ? done : undone, to = invert ? undone : done;
+    var entry = from[from.length - 1];
+    if (!entry) return null;
     var steps = invert ? invertSteps(entry.steps) : entry.steps.slice();
+    var planned = planStepsLive(state, steps);
+    function marked(ok) {
+      if (!current || current.ended) return;
+      if (entry.n <= current.n) remark(state);
+      if (ok) current.ended = true;
+    }
+    if (!planned.ok) {
+      return {
+        refused: planned.reason,
+        steps: steps,
+        drop: function () {
+          if (from[from.length - 1] === entry) from.pop();
+          parked = null;
+          marked(false);
+        }
+      };
+    }
     var watch = entry.unassigned || [];
     var had = watch.map(function (w) { return ownerAt(state, w); });
-    var out = {};
-    var r = applyStepsLive(state, steps, out);
-    if (r.ok) {
-      to.push(entry);
-      var ids = idMap();
-      out.cleared.forEach(function (k) { ids[k] = true; });
-      watch.forEach(function (w, i) { if (had[i] && !ownerAt(state, w)) ids[itemKey(w.key, w)] = true; });
-      if (out.scanned.length || out.replayed.length) foldScan(entry, out.scanned, out.replayed, invert);
-      var count = Object.keys(ids).length;
-      r = count ? { ok: true, cleared: count } : { ok: true };
-    } else {
-      parked = null;
+    var out = null;
+    return {
+      steps: steps,
+      changes: replayChanges(steps, planned),
+      write: function () {
+        out = {};
+        writePlanned(state, planned, out);
+      },
+      finish: function () {
+        var ids = idMap();
+        out.cleared.forEach(function (k) { ids[k] = true; });
+        watch.forEach(function (w, i) { if (had[i] && !ownerAt(state, w)) ids[itemKey(w.key, w)] = true; });
+        if (out.scanned.length || out.replayed.length) foldScan(entry, out.scanned, out.replayed, invert);
+        from.pop();
+        to.push(entry);
+        marked(true);
+        var count = Object.keys(ids).length;
+        return count ? { ok: true, steps: steps, cleared: count } : { ok: true, steps: steps };
+      }
+    };
+  }
+
+  function step(dir, state) {
+    var p = prepare(dir, state);
+    if (!p) return { ok: false, empty: true };
+    if (p.refused) {
+      p.drop();
+      return { ok: false, reason: p.refused, steps: p.steps };
     }
-    if (current && !current.ended) {
-      if (entry.n <= current.n) remark(state);
-      if (r.ok) current.ended = true;
-    }
-    if (r.ok && r.cleared) return { ok: true, steps: steps, cleared: r.cleared };
-    return r.ok ? { ok: true, steps: steps } : { ok: false, reason: r.reason, steps: steps };
+    p.write();
+    return p.finish();
   }
 
   function forget(touched) {
@@ -565,8 +636,9 @@ export function createUndoHistory() {
 
   return {
     record: record,
-    undo: function (state) { return step(done, undone, state, true); },
-    redo: function (state) { return step(undone, done, state, false); },
+    undo: function (state) { return step("undo", state); },
+    redo: function (state) { return step("redo", state); },
+    prepare: prepare,
     forget: forget,
     standing: standing,
     amend: amend,
@@ -629,12 +701,33 @@ var flushQueued = false;
 var applying = false;
 var commentsAreSent = function () { return false; };
 var hooks = { afterApply: null, onRefused: null, adopted: null };
+var replays = { run: replayUnwired, stamps: null };
 
 export function configureUndo(opts) {
+  var was = { commentsAreSent: commentsAreSent, afterApply: hooks.afterApply, onRefused: hooks.onRefused };
   if (opts.commentsAreSent) commentsAreSent = opts.commentsAreSent;
   if (opts.afterApply) hooks.afterApply = opts.afterApply;
   if (opts.onRefused) hooks.onRefused = opts.onRefused;
   if (opts.adopted) hooks.adopted = opts.adopted;
+  return function () {
+    if (opts.commentsAreSent && commentsAreSent === opts.commentsAreSent) commentsAreSent = was.commentsAreSent;
+    if (opts.afterApply && hooks.afterApply === opts.afterApply) hooks.afterApply = was.afterApply;
+    if (opts.onRefused && hooks.onRefused === opts.onRefused) hooks.onRefused = was.onRefused;
+  };
+}
+
+export function routeUndoReplays(run, stamps) {
+  replays.run = run;
+  replays.stamps = stamps;
+}
+
+function replayUnwired(task) {
+  var plan = task.plan(S.state);
+  if (!plan) return { kind: "noop" };
+  if (plan.refused) return { kind: "rejected", reason: plan.refused };
+  plan.apply(S.state);
+  plan.settle();
+  return { kind: "applied" };
 }
 
 function restart() {
@@ -704,26 +797,69 @@ function announceCleared(count) {
   if (Ctor) document.dispatchEvent(new Ctor("undo-owner-cleared", { detail: { count: count } }));
 }
 
+function stamp(state, steps) {
+  var stamps = replays.stamps;
+  if (!stamps) return;
+  steps.forEach(function (st) {
+    if (st.op !== "rowField") return;
+    var row = state.rows.find(function (r) { return r.id === st.rowId; });
+    if (!row) return;
+    row.updatedAt = stamps.clock.nowIso();
+    row.updatedBy = stamps.editor.name();
+  });
+}
+
+function replayTask(dir, seen) {
+  return {
+    name: dir,
+    plan: function (state) {
+      var p = history.prepare(dir, state);
+      seen.prepared = p;
+      if (!p) return null;
+      if (p.refused) return { refused: p.refused };
+      return {
+        changes: p.changes,
+        apply: function (live) {
+          p.write();
+          stamp(live, p.steps);
+        },
+        settle: function () {
+          seen.result = p.finish();
+          base = clone(state);
+          tracked = state;
+        }
+      };
+    }
+  };
+}
+
 function run(dir) {
   flushEdits();
   if (!S.state) return { ok: false, empty: true };
+  var seen = { prepared: null, result: null };
+  var outcome;
   applying = true;
-  var r;
   try {
-    r = dir === "undo" ? history.undo(S.state) : history.redo(S.state);
+    outcome = replays.run(replayTask(dir, seen), S.state);
   } finally {
     applying = false;
   }
-  if (r.ok) {
-    base = clone(S.state);
-    tracked = S.state;
+  var p = seen.prepared;
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "applied" || outcome.kind === "committed") {
+    var r = seen.result;
     if (hooks.afterApply) hooks.afterApply(r.steps, dir);
     if (r.cleared) announceCleared(r.cleared);
-  } else if (!r.empty) {
-    base = clone(S.state);
-    if (hooks.onRefused) hooks.onRefused(r.reason, dir);
+    return r;
   }
-  return r;
+  if (p && p.refused) {
+    p.drop();
+    base = clone(S.state);
+    if (hooks.onRefused) hooks.onRefused(p.refused, dir);
+    return { ok: false, reason: p.refused, steps: p.steps };
+  }
+  if (outcome.kind === "rejected") return { ok: false, reason: outcome.reason };
+  return { ok: false, empty: true };
 }
 
 export function settleAfterApply() {
