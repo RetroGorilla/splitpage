@@ -25,6 +25,8 @@ on:
       - .github/workflows/ci.yml
       - tools/artifact-files.mjs
       - tools/main-module.mjs
+      - tools/css-inputs.mjs
+      - css-inputs.json
   push:
     branches: [main]
     paths:
@@ -50,6 +52,8 @@ on:
       - .github/workflows/ci.yml
       - tools/artifact-files.mjs
       - tools/main-module.mjs
+      - tools/css-inputs.mjs
+      - css-inputs.json
 
 concurrency:
   group: docker-${{ github.ref }}
