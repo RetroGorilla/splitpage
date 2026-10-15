@@ -1,4 +1,4 @@
-import { atomKey, unitKey } from "../../core/text/selection.ts";
+import { MEDIA_KEY, atomKey, unitKey } from "../../core/text/selection.ts";
 import type { Affinity, CellPoints } from "../../core/text/selection.ts";
 
 export interface DomPoint {
@@ -157,7 +157,7 @@ export function domKeys(cellEl: Node): string[] {
       for (let i = 0; i < text.length; i++) keys.push(unitKey(text[i] as string));
     } else if (kind === "atom") {
       const id = isElement(n) ? n.getAttribute("data-broll-id") : null;
-      keys.push(atomKey(id === null ? "#media" : id));
+      keys.push(id === null ? MEDIA_KEY : atomKey(id));
     } else {
       keys.push("\n");
     }
