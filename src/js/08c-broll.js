@@ -5,7 +5,6 @@ import {
   inertBody,
   sanitizeHtml
 } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import {
   isInsideTagOrLink,
@@ -13,10 +12,10 @@ import {
   productionReaders,
   registerProductionTag,
   registryEntry,
-  scheduleIdleRefresh
+  scheduleIdleRefresh,
+  tagRecordsPlan
 } from "./07-production-tags.js";
 import { renderBrollViews } from "./08d-broll-panel.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
@@ -31,8 +30,10 @@ import {
   normalizeBrollProps
 } from "../core/document/broll.ts";
 import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
+import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import {
   anchorBrollCell,
+  applyBrollRecords,
   brollAnchorTodo,
   brollEntries as readBrollEntries,
   brollInCell,
@@ -42,14 +43,17 @@ import {
   brollSeedLocation,
   brollSeedRef,
   brollSortedForList,
-  planBrollAnchors
+  hasBrollRecordWork,
+  planBrollAnchors,
+  planBrollRecords
 } from "../core/production/broll.ts";
 import { holdsMedia } from "../core/production/tags.ts";
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
+import { provideRecordsReconciler, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_NAME_MAX,
@@ -173,23 +177,35 @@ export function deleteBrollRecord(id) {
   return before !== S.state.brollShots.length;
 }
 
-function applyBrollPlan(read) {
-  read.plan.create.forEach(function (c) {
-    S.state.brollShots.push(c.shot);
-    read.entries[c.entry].rec = c.shot;
-  });
-  read.plan.rename.forEach(function (r) {
-    var rec = S.state.brollShots[r.at];
-    rec.name = r.name;
-    rec.desc = r.desc;
-  });
+export function brollEntries() {
+  return readBrollEntries(S.state, productionReaders, randomIds, htmlToPlainText);
 }
 
-export function brollEntries(readOnly) {
-  var read = readBrollEntries(S.state, productionReaders, randomIds, htmlToPlainText, !readOnly);
-  if (!readOnly) applyBrollPlan(read);
-  return read.entries;
+function unkeyedScope(changes) {
+  if (changes.whole) return null;
+  var inserted = Object.create(null);
+  changes.rowsInserted.forEach(function (id) { inserted[id] = true; });
+  return function (rowId) { return !!inserted[rowId]; };
 }
+
+export function derivedRecordsPlan(doc, changes) {
+  if (!doc || doc !== S.state) return null;
+  var tags = tagRecordsPlan();
+  var shots = planBrollRecords(doc, productionReaders, randomIds, htmlToPlainText, unkeyedScope(changes));
+  var fields = [];
+  if (tags) fields.push("productionTags");
+  if (hasBrollRecordWork(shots)) fields.push("brollShots");
+  if (!fields.length) return null;
+  return {
+    fields: fields,
+    apply: function (into) {
+      if (tags) tags();
+      applyBrollRecords(into.brollShots, shots);
+    }
+  };
+}
+
+provideRecordsReconciler(derivedRecordsPlan);
 
 export function addBrollProp(shotId, rawName) {
   var rec = brollRecord(shotId);
@@ -228,7 +244,7 @@ export function brollPropsRenamed(fromId, oldName, toId, toName) {
 export function brollShotsByProp() {
   var out = Object.create(null);
   if (!S.state || !S.state.brollShots) return out;
-  brollSortedForList(brollEntries(true)).forEach(function (e) {
+  brollSortedForList(brollEntries()).forEach(function (e) {
     e.props.forEach(function (p) {
       var k = "prop " + normalizeTagName(p.name);
       if (!out[k]) out[k] = [];
@@ -386,29 +402,18 @@ export function anchorBrollInRows(rows, doc) {
   return total;
 }
 
-function brollAnchoringIdle() {
-  var el = document.activeElement;
-  return !(el && el.isContentEditable);
-}
-
-function maybeAnchorBroll() {
-  if (!S.state || !brollAnchoringIdle()) return 0;
-  var n = anchorBrollInRows(S.state.rows);
-  if (!n) return 0;
-  markDirty();
-  render();
-  return n;
-}
-
 export function anchorBrollInLeftCell(cellEl) {
   if (!S.state || cellEl.getAttribute("data-field") !== "visualText") return 0;
   var row = brollRow(cellEl.getAttribute("data-id"));
   if (!row) return 0;
-  var n = anchorBrollInRows([row]);
+  var copy = { id: row.id, visualText: row.visualText };
+  var n = anchorBrollInRows([copy]);
   if (!n) return 0;
+  var outcome = runCommand(cellTextCommand(row.id, "visualText", cellRuns(scriptCellOf(copy.visualText)), sessionTextPorts));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return 0;
   cellEl.innerHTML = row.visualText;
   ensureTrailingCaretSpot(cellEl);
-  markDirty();
   scheduleBrollRefresh();
   return n;
 }
@@ -456,7 +461,6 @@ export function scheduleBrollRefresh() {
 }
 
 export function runBrollRefresh() {
-  maybeAnchorBroll();
   updateBrollBadge();
   renderBrollViews();
 }

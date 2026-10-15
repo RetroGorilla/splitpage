@@ -463,3 +463,22 @@ test("a migrated document is a fixed point: migrating it again changes nothing",
   again.cell([T("a "), tagged("location", "Roof")]);
   assert.equal(JSON.stringify(migrateRows(jsonCopy(once), again.ports)), text);
 });
+
+test("6.5: entry gives each named b-roll line a record, renames the one a line matches, and makes none for a bare line (#325 H)", () => {
+  const f = fakeMigration();
+  const out = migrateRows({
+    schema: 2,
+    rows: [
+      { id: "r1", visualText: "B-roll: Steam", audioText: f.cell([T("Say <b>now</b>")]) },
+      { id: "r2", visualText: "B-roll:", audioText: "One." },
+      { id: "r3", visualText: "B-roll: The Pour", audioText: "" }
+    ],
+    brollShots: [{ id: "b_pour", name: "the pour" }]
+  }, f.ports);
+  assert.deepEqual(list(out, "brollShots").map((b) => [b.id, b.name, b.audioRef]), [
+    ["b_pour", "The Pour", ""],
+    ["bs-fake-1", "Steam", "Say now"]
+  ]);
+  const again = migrateRows(jsonCopy(out), fakeMigration().ports);
+  assert.deepEqual(again.brollShots, out.brollShots, "entering it again changes nothing");
+});

@@ -1,7 +1,7 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
 import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
-import type { Capability, CellTextPorts, StampPorts } from "../application/session/ports.ts";
+import type { Capability, CellTextPorts, RecordsPlan, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
@@ -46,6 +46,10 @@ export const sessionTextPorts: CellTextPorts = Object.freeze({
 
 let refreshRunner: (jobs: ReadonlySet<string>) => void = function () { missing("refresh"); };
 
+type RecordsReconciler = (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
+
+let recordsReconciler: RecordsReconciler = function () { return null; };
+
 function enter(raw: unknown): ValidatedDocument {
   return migrateRows(raw);
 }
@@ -61,7 +65,10 @@ function startSession(after: SessionCounters): DocumentSession {
       refresh: function (jobs) { refreshRunner(jobs); }
     },
     capability: { edit: function () { return given.edit(); } },
-    reconcile: { anchors: function (doc) { return syncCommentAnchors(doc, cellOf); } },
+    reconcile: {
+      anchors: function (doc) { return syncCommentAnchors(doc, cellOf); },
+      records: function (doc, changes) { return recordsReconciler(doc, changes); }
+    },
     attribution: { attribute: function (doc) { return given.attribute(doc); } },
     report: function (error) { console.error(error); },
     timers: {
@@ -160,6 +167,10 @@ export function editAllowed(): boolean {
 
 export function provideRefreshRunner(run: (jobs: ReadonlySet<string>) => void): void {
   refreshRunner = run;
+}
+
+export function provideRecordsReconciler(reconcile: RecordsReconciler): void {
+  recordsReconciler = reconcile;
 }
 
 export function noteSessionEdit(): void {

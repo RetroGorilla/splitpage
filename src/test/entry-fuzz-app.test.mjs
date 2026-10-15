@@ -34,12 +34,8 @@ function hearReplacement() {
 const held = () => session.read((doc) => doc);
 const migrate = (raw) => migrateRows(raw);
 
-const KNOWN_SHOT_AUDIO_REF = "the b-roll repair at render writes shots migrateRows then changes: an audioRef with angle brackets, or a shot with no name (#325)";
-
-const SHOT_AUDIO_REF = /^\.brollShots\[\d+\]\.audioRef "[^]*<[^]*>/;
-
-function allowed(path) {
-  return SHOT_AUDIO_REF.test(path) ? KNOWN_SHOT_AUDIO_REF : null;
+function allowed() {
+  return null;
 }
 
 const errors = [];
@@ -155,18 +151,13 @@ async function through(name, raw, where, tally, spoilMine, broken) {
   assert.equal(session.generation(), gen, where + ": generation");
   assert.equal(held(), S.state, where + ": the session holds the document the app shows");
   assert.equal(JSON.stringify(before), beforeText, where + ": the replaced document was not written into");
-  const verdict = verdictOf(S.state, tally);
+  const verdict = verdictOf(S.state);
   assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
   verdict.known.forEach((k) => bump(tally.known, k));
 }
 
-function verdictOf(doc, tally) {
-  let judged = doc;
-  if (Array.isArray(judged.brollShots) && judged.brollShots.some((b) => b && b.name === "")) {
-    bump(tally.known, KNOWN_SHOT_AUDIO_REF);
-    judged = { ...judged, brollShots: judged.brollShots.filter((b) => !b || b.name !== "") };
-  }
-  return judge(judged, migrate, allowed);
+function verdictOf(doc) {
+  return judge(doc, migrate, allowed);
 }
 
 async function seedEntries(seed, tally = { kinds: {}, known: {}, typed: {} }, broken = false) {
@@ -184,6 +175,7 @@ test("booted app: seeded raw documents through a draft adoption, a server update
   for (let seed = 1; seed <= SEEDS; seed++) await seedEntries(seed, tally);
   flushEdits();
   t.diagnostic(JSON.stringify(tally));
+  assert.deepEqual(tally.known, {});
   for (const name of Object.keys(ENTRIES)) assert.ok((tally.kinds[name] || 0) >= SEEDS / 4, "every entry point lands: " + name + " " + JSON.stringify(tally.kinds));
 });
 
@@ -271,7 +263,7 @@ test("booted app: seeded files reloaded in place keep the epoch and generation, 
     }
     bump(tally.kinds, "reload");
     assert.deepEqual(heard, ["reload"], where);
-    const verdict = verdictOf(S.state, tally);
+    const verdict = verdictOf(S.state);
     assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
     verdict.known.forEach((k) => bump(tally.known, k));
   }
@@ -309,31 +301,30 @@ test("a reload in place of a file with no heading takes the title from the file'
   assert.equal(doc.title, "Kettle notes");
 });
 
-test("today a shot's audioRef taken from a line that reads like a tag keeps the brackets, and the next migration strips them (#325)", async () => {
+test("a shot's audioRef taken from a line that reads like a tag is stored without the brackets, so the next migration changes nothing (#325 H)", async () => {
   const raw = migrateRows({
     schema: 2, title: "Brackets", docId: "d" + "5".repeat(32),
     rows: [{ id: "r1", visualText: "B-roll: harbour", audioText: "Say &lt;b&gt;now&lt;/b&gt;", status: "todo" }]
   });
   await through("server", raw, "brackets", { kinds: {}, known: {}, typed: {} });
-  const shot = held().brollShots.find((b) => /<b>/.test(b.audioRef));
-  assert.ok(shot, JSON.stringify(held().brollShots));
-  assert.equal(migrateRows(cloneState(held())).brollShots.find((b) => b.id === shot.id).audioRef, shot.audioRef.replace(/<[^>]*>/g, ""));
-  assert.deepEqual(judge(held(), migrate, allowed), { problems: [], known: [KNOWN_SHOT_AUDIO_REF] });
+  assert.deepEqual(held().brollShots.map((b) => [b.name, b.audioRef]), [["harbour", "Say now"]]);
+  assert.deepEqual(migrateRows(cloneState(held())).brollShots, held().brollShots);
+  assert.deepEqual(judge(held(), migrate, allowed), { problems: [], known: [] });
 });
 
-test("today a bare \"B-roll:\" line makes the render-time repair add a shot with no name, which the next migration drops (#325)", async () => {
+test("a bare \"B-roll:\" line makes no shot, at entry or at render (#325 H)", async () => {
   const raw = migrateRows({
     schema: 2, title: "Bare", docId: "d" + "6".repeat(32),
     rows: [{ id: "r1", visualText: "B-roll:", audioText: "One.", status: "todo" }]
   });
   await through("server", raw, "bare", { kinds: {}, known: {}, typed: {} });
-  assert.deepEqual(held().brollShots.map((b) => b.name), [""]);
+  assert.deepEqual(held().brollShots, []);
   assert.deepEqual(migrateRows(cloneState(held())).brollShots, []);
 });
 
-test("today seed 400's recovery still finds the shot with no name (#325)", async () => {
+test("seed 400's recovery, which used to find a shot with no name, ends in a valid fixed point with nothing allowed (#325 H)", async () => {
   const tally = await seedEntries(400);
-  assert.ok((tally.known[KNOWN_SHOT_AUDIO_REF] || 0) > 0, JSON.stringify(tally));
+  assert.deepEqual(tally.known, {});
 });
 
 test("a comment createdAt whose toString is not a function migrates to null, so applyMerge renders, reports the merge and marks it unsaved (#410)", async () => {

@@ -20,7 +20,6 @@ import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
 import {
-  healTagRegistry,
   openTagComposer,
   productionIndexStats,
   resetProductionIndexStats,
@@ -699,7 +698,6 @@ function paintAll() {
   syncAnchorResolvedClasses();
   updateScriptStats();
   updateCommentsCount();
-  healTagRegistry();
   updateTagBadges();
   scheduleBrollRefresh();
   renderProduction();

@@ -239,17 +239,24 @@ function adoptRegisteredIds(ix) {
   holdIndex(core, registeredFirst(ix.entries), ix.state);
 }
 
-export function healTagRegistry() {
-  if (!S.state) return 0;
+export function tagRecordsPlan() {
+  if (!S.state) return null;
   var ix = productionIndex();
   var plan = planRegistryHealing(S.state, productionReaders, cueSnapshot, ix.core);
   cueSnapshot = plan.cues;
-  if (!plan.count) return 0;
-  plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
-  addRegistryTags(plan.register);
-  adoptRegisteredIds(ix);
-  if (plan.retitle.length) prodIndex = null;
-  return plan.count;
+  if (!plan.count) return null;
+  return function () {
+    plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
+    addRegistryTags(plan.register);
+    adoptRegisteredIds(ix);
+    if (plan.retitle.length) prodIndex = null;
+    return plan.count;
+  };
+}
+
+export function healTagRegistry() {
+  var apply = tagRecordsPlan();
+  return apply ? apply() : 0;
 }
 
 var cueSnapshot = null;
@@ -289,7 +296,6 @@ function runIdleRefresh(jobs) {
 provideRefreshRunner(runIdleRefresh);
 
 function refreshProductionNow() {
-  healTagRegistry();
   var panel = document.getElementById("production-panel");
   var gearPanel = document.getElementById("gear-panel");
   if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();

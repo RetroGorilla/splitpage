@@ -43,8 +43,14 @@ export interface CapabilityPort {
   edit: () => Capability;
 }
 
+export interface RecordsPlan {
+  readonly fields: readonly string[];
+  readonly apply: (doc: ValidatedDocument) => void;
+}
+
 export interface ReconcilePort {
   anchors: (doc: ValidatedDocument) => number;
+  records?: ((doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null) | undefined;
 }
 
 export type ReportPort = (error: unknown) => void;

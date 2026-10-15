@@ -80,7 +80,7 @@ function exportReadModels(doc) {
   return {
     production: deriveProductionIndex(doc, productionReaders).entries,
     commentNumbers: numberComments(doc),
-    broll: brollEntries(doc, productionReaders, randomIds, htmlToPlainText, false).entries
+    broll: brollEntries(doc, productionReaders, randomIds, htmlToPlainText)
   };
 }
 

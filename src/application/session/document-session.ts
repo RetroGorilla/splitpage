@@ -1,10 +1,10 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { isDocumentObject } from "../../core/migrate.ts";
-import { WHOLE_DOCUMENT, combined, isEmpty, needsReconciliation } from "./change-set.ts";
+import { WHOLE_DOCUMENT, changeSet, combined, isEmpty, needsReconciliation } from "./change-set.ts";
 import type { ChangeSet, SessionChange, TransactionKind } from "./change-set.ts";
 import { attempt, createEffectScheduler } from "./effects.ts";
 import type { RefreshTiming } from "./effects.ts";
-import type { CapabilityPort, DocumentEntry, EffectPort, ReconcilePort, ReportPort, TimerPort, UndoPort } from "./ports.ts";
+import type { CapabilityPort, DocumentEntry, EffectPort, ReconcilePort, RecordsPlan, ReportPort, TimerPort, UndoPort } from "./ports.ts";
 
 export type DeepReadonly<T> =
   T extends (infer U)[] ? readonly DeepReadonly<U>[]
@@ -231,6 +231,15 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return { generation: at, errors: reported(errors) };
   }
 
+  function withRecords(doc: ValidatedDocument, changes: ChangeSet, kept: Restore[] | null): ChangeSet {
+    const records = ports.reconcile.records;
+    const plan: RecordsPlan | null = records ? records(doc, changes) : null;
+    if (!plan || !plan.fields.length) return changes;
+    if (kept) plan.fields.forEach(function (key) { kept.push(keepField(doc as unknown as Bag, key)); });
+    plan.apply(doc);
+    return combined(changes, changeSet({ docFields: plan.fields }));
+  }
+
   function adopt(raw: unknown): ValidatedDocument | null {
     if (disposed) return null;
     if (refuses(raw)) return document;
@@ -322,7 +331,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       return { kind: "failed", error: error };
     }
     const sign = signed && !isEmpty(signed.changes) ? signed : null;
-    const changes = sign ? combined(planned, sign.changes) : planned;
+    let changes = sign ? combined(planned, sign.changes) : planned;
     const restore = rollbackPoint(doc, changes);
     try {
       apply(doc);
@@ -331,12 +340,16 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       restore();
       return { kind: "failed", error: error };
     }
-    const unanchor = needsReconciliation(changes) ? anchorPoint(doc) : null;
+    const unrecord: Restore[] = [];
+    let unanchor: Restore | null = null;
     try {
+      if (kind === "edit") changes = withRecords(doc, changes, unrecord);
+      unanchor = needsReconciliation(changes) ? anchorPoint(doc) : null;
       if (unanchor) ports.reconcile.anchors(doc);
       if (settle) settle();
     } catch (error) {
       if (unanchor) unanchor();
+      unrecord.reverse().forEach(function (back) { back(); });
       restore();
       return { kind: "failed", error: error };
     }
@@ -371,7 +384,15 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     replay: replay,
     amend: function (task) { return replayAs("amend", task); },
     noteEdit: function (changes) {
-      if (!disposed) commit("edit", changes || WHOLE_DOCUMENT);
+      if (disposed) return;
+      let noted = changes || WHOLE_DOCUMENT;
+      const errors: unknown[] = [];
+      if (document) {
+        const doc = document;
+        attempt(errors, function () { noted = withRecords(doc, noted, null); });
+      }
+      reported(errors);
+      commit("edit", noted);
     },
     refresh: function (job) { scheduler.refresh(job); },
     subscribe: function (listener) {
