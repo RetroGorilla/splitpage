@@ -3,11 +3,13 @@ import { captureOperation, documentTransitions, stillOwns } from "../legacy/tran
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { mountComposition } from "../features/editing/composition.ts";
 import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
+import { mountEditorToolbar } from "../features/editing/toolbar.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountClipboardRoutes } from "../features/clipboard/routes.ts";
 import { mountMediaRoutes } from "../features/media/routes.ts";
 import { mountMergeBanner } from "../features/merge/banner.ts";
+import { mountRowsEditor } from "../features/rows/editor.ts";
 import { mountRowRoutes } from "../features/rows/routes.ts";
 import { mountTitleRoutes } from "../features/title/routes.ts";
 import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
@@ -348,14 +350,7 @@ export function onRootClick(e) {
 
   if (rowRoutes && rowRoutes.addClick(e)) return;
 
-  var tbBtn = e.target.closest(".mini-toolbar button[data-cmd]");
-  if (tbBtn) { handleToolbarCmd(tbBtn); return; }
-
-  var linkConfirm = e.target.closest('[data-action="link-confirm"]');
-  if (linkConfirm) { confirmLink(linkConfirm.closest(".field-wrap")); return; }
-
-  var linkCancel = e.target.closest('[data-action="link-cancel"]');
-  if (linkCancel) { cancelLink(linkCancel.closest(".field-wrap")); return; }
+  if (editorToolbar && editorToolbar.click(e)) return;
 
   if (videoPopover && videoPopover.click(e)) return;
 
@@ -510,29 +505,7 @@ export function onRootClick(e) {
   var restoreSnapBtn = e.target.closest('[data-action="restore-snapshot"]');
   if (restoreSnapBtn) { restoreSnapshotFromCard(restoreSnapBtn); return; }
 
-  var statusBtn = e.target.closest('[data-action="cycle-status"]');
-  if (statusBtn) { cycleRowStatus(statusBtn.getAttribute("data-id")); return; }
-
-  var statusLamp = e.target.closest("#rows .row .status-btn.is-static");
-  if (statusLamp) { cycleRowStatus(statusLamp.closest(".row").getAttribute("data-id")); return; }
-
-  var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
-  if (expandShotBtn) { expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids")); return; }
-
-  var jumpRowBtn = e.target.closest('[data-action="jump-row"]');
-  if (jumpRowBtn) {
-    revealRow(jumpRowBtn.getAttribute("data-row"));
-    var target = document.querySelector('#rows .row[data-id="' + cssAttr(jumpRowBtn.getAttribute("data-row")) + '"]');
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      target.classList.remove("just-merged");
-      void target.offsetWidth;
-      target.classList.add("just-merged");
-    } else {
-      showToast("That scene is no longer here.", "warn");
-    }
-    return;
-  }
+  if (rowRoutes && rowRoutes.sceneClick(e)) return;
 
   if (rowRoutes && rowRoutes.menuClick(e)) return;
 
@@ -676,7 +649,19 @@ function refreshFormatState(cellEl) {
   else updateToolbarState(cellEl);
 }
 
-var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
+var editorToolbar = null;
+
+var editorToolbarPorts = {
+  command: handleToolbarCmd,
+  confirmLink: confirmLink,
+  cancelLink: cancelLink,
+  format: function (cellEl, cmd) { refreshFormatState(toggleCellFormat(cellEl, cmd) || cellEl); }
+};
+
+function mountToolbar() {
+  if (editorToolbar) editorToolbar.dispose();
+  editorToolbar = mountEditorToolbar({ window: window, ports: editorToolbarPorts });
+}
 
 var undoRoutes = null;
 
@@ -710,12 +695,38 @@ var rowRoutePorts = {
   add: addRow,
   moveBy: function (rowId, dir) { moveRow(rowId, dir); refocusRowMenu(rowId); },
   toggleMenu: toggleRowMenu,
-  armDelete: armDelete
+  armDelete: armDelete,
+  cycleStatus: cycleRowStatus,
+  expandHidden: expandHiddenShotStrip,
+  reveal: revealRow,
+  gone: function () { showToast("That scene is no longer here.", "warn"); }
 };
 
 function mountRows(rowsEl) {
   if (rowRoutes) rowRoutes.dispose();
   rowRoutes = mountRowRoutes({ window: window, rows: rowsEl, ports: rowRoutePorts });
+}
+
+var rowsEditor = null;
+
+var rowsEditorPorts = {
+  click: onRootClick,
+  mousedown: onRootMouseDown,
+  input: onRootInput,
+  keydown: onRootKeydown,
+  rowDragging: function () { return !!S.dragRowId; },
+  rowDragOver: function (e) { return !!rowRoutes && rowRoutes.dragOver(e); },
+  rowDrop: function (e) { return !!rowRoutes && rowRoutes.drop(e); },
+  scriptCell: isScriptCell,
+  reviewOnly: reviewMode,
+  hasMedia: hasMediaFiles,
+  insert: insertIntoScriptCell,
+  notMedia: function () { showToast("Only pictures and video files go in a scene's Image section.", "warn"); }
+};
+
+function mountRowsEditing(rowsEl) {
+  if (rowsEditor) rowsEditor.dispose();
+  rowsEditor = mountRowsEditor({ window: window, rows: rowsEl, addBar: document.querySelector(".add-row-bar"), ports: rowsEditorPorts });
 }
 
 function afterUndoApplied(steps) {
@@ -951,11 +962,7 @@ function mountVideo() {
 
 function onRootKeydown(e) {
   if (rowMenuKeydown(e)) return;
-  if (e.target.matches && e.target.matches(".link-popover input")) {
-    if (e.key === "Enter") { e.preventDefault(); confirmLink(e.target.closest(".field-wrap")); }
-    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancelLink(e.target.closest(".field-wrap")); }
-    return;
-  }
+  if (editorToolbar && editorToolbar.keydown(e)) return;
   if (videoPopover && videoPopover.keydown(e)) return;
   var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
   if (!cellEl) return;
@@ -1018,87 +1025,7 @@ function onRootKeydown(e) {
     syncFieldFromDom(insertLineBreak(cellEl));
     return;
   }
-  var fmtCmd = mod ? FORMAT_KEYS[String(e.key || "").toLowerCase()] : null;
-  if (fmtCmd) {
-    e.preventDefault();
-    refreshFormatState(toggleCellFormat(cellEl, fmtCmd) || cellEl);
-  }
-}
-
-function isFileDrag(e) {
-  var types = e.dataTransfer && e.dataTransfer.types;
-  if (!types) return false;
-  for (var i = 0; i < types.length; i++) if (types[i] === "Files") return true;
-  return false;
-}
-
-function imageDropTarget(e) {
-  if (S.dragRowId || !isFileDrag(e)) return null;
-  var cell = e.target.closest(".visual-cell");
-  return cell ? cell.querySelector(".visual-media") : null;
-}
-
-function onRootDragOver(e) {
-  var drop = imageDropTarget(e);
-  if (drop) {
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
-    document.querySelectorAll("#rows .visual-cell.drag-over").forEach(function (c) {
-      c.classList.remove("drag-over");
-    });
-    drop.closest(".visual-cell").classList.add("drag-over");
-    return;
-  }
-  if (rowRoutes && rowRoutes.dragOver(e)) return;
-  if (e.target.closest && e.target.closest(".cell-editable")) {
-    e.preventDefault();
-    try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
-  }
-}
-
-function onRootDragLeave(e) {
-  var cell = e.target.closest && e.target.closest(".visual-cell");
-  if (cell && !cell.contains(e.relatedTarget)) cell.classList.remove("drag-over");
-}
-
-function onRootDrop(e) {
-  var drop = imageDropTarget(e);
-  var dropFiles = e.dataTransfer && e.dataTransfer.files;
-  var mediaDrop = drop && hasMediaFiles(dropFiles);
-  if (drop) drop.closest(".visual-cell").classList.remove("drag-over");
-  if (drop && !mediaDrop) {
-    e.preventDefault();
-    if (dropFiles && dropFiles.length) showToast("Only pictures and video files go in a scene's Image section.", "warn");
-    return;
-  }
-  if (mediaDrop && !(e.target.closest && e.target.closest(".cell-editable"))) {
-    e.preventDefault();
-    if (reviewMode()) return;
-    var visualCell = drop.closest(".visual-cell").querySelector(".cell-editable");
-    if (visualCell) insertIntoScriptCell(visualCell, "", "", dropFiles);
-    return;
-  }
-  if (rowRoutes && rowRoutes.drop(e)) return;
-  var cellEl = e.target.closest && e.target.closest(".cell-editable");
-  if (cellEl) {
-    e.preventDefault();
-    var dt = e.dataTransfer;
-    var html = dt ? dt.getData("text/html") : "";
-    var text = dt ? dt.getData("text/plain") : "";
-    var files = dt ? dt.files : null;
-    if (!html && !text && !hasMediaFiles(files)) return;
-    if (isScriptCell(cellEl) && reviewMode()) return;
-    cellEl.focus();
-    try {
-      var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
-      if (range && cellEl.contains(range.startContainer)) {
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-    } catch (err) {}
-    if (isScriptCell(cellEl)) insertIntoScriptCell(cellEl, html, text, files);
-  }
+  if (editorToolbar) editorToolbar.formatKey(e, cellEl);
 }
 
 function init() {
@@ -1182,19 +1109,13 @@ function init() {
   });
 
   mountVideo();
+  mountToolbar();
   var rowsEl = document.getElementById("rows");
-  rowsEl.addEventListener("click", onRootClick);
-  rowsEl.addEventListener("mousedown", onRootMouseDown);
-  rowsEl.addEventListener("input", onRootInput);
-  rowsEl.addEventListener("keydown", onRootKeydown);
   document.addEventListener("mousedown", function (e) {
     if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
   }, true);
   mountRows(rowsEl);
-  rowsEl.addEventListener("dragover", onRootDragOver);
-  rowsEl.addEventListener("dragleave", onRootDragLeave);
-  rowsEl.addEventListener("drop", onRootDrop);
-  document.querySelector(".add-row-bar").addEventListener("click", onRootClick);
+  mountRowsEditing(rowsEl);
   window.addEventListener("scroll", hideTagGhost, true);
   window.addEventListener("resize", hideTagGhost);
   window.addEventListener("scroll", hideUntaggedPrompt, true);
