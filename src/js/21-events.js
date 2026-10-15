@@ -1,3 +1,4 @@
+import { mountOverlay } from "../features/overlay/mount.ts";
 import { mountFind } from "../features/find/mount.ts";
 import { mountTags } from "../features/tags/mount.ts";
 import { S } from "./_state.js";
@@ -353,6 +354,30 @@ export function mountFindFeature() {
     }
   });
   return find;
+}
+
+var overlay = null;
+
+export function mountOverlayFeature() {
+  if (overlay) overlay.dispose();
+  overlay = mountOverlay({
+    window: window,
+    ports: {
+      closeRowMenus: closeRowMenus,
+      selectedKeys: selectedKeys,
+      clearProductionSelection: clearProductionSelection,
+      renderProduction: renderProduction,
+      closeCommentComposer: closeCommentComposer,
+      closeCommentsPanel: closeCommentsPanel,
+      writerOpen: function () { return writerOpen; },
+      paintingScreen: paintingScreen,
+      hasTagGhost: function () { return !!tagGhost; },
+      hideTagGhost: hideTagGhost,
+      closeWriter: closeWriter,
+      focus: function (target) { target.focus(); }
+    }
+  });
+  return overlay;
 }
 
 var tags = null;
@@ -1017,9 +1042,7 @@ function init() {
   mountVideo();
   mountToolbar();
   var rowsEl = document.getElementById("rows");
-  document.addEventListener("mousedown", function (e) {
-    if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
-  }, true);
+  mountOverlayFeature();
   mountRows(rowsEl);
   mountRowsEditing(rowsEl);
   document.getElementById("identity-chip").addEventListener("click", promptForName);
@@ -1033,9 +1056,7 @@ function init() {
   document.getElementById("history-close").addEventListener("click", closeHistoryPanel);
   document.getElementById("history-panel").addEventListener("click", onRootClick);
 
-  document.querySelector(".toolbar").addEventListener("mousedown", function (e) {
-    if (e.target.closest(".btn")) e.preventDefault();
-  });
+  overlay.mountToolbar();
 
   mountBrollFeature();
 
@@ -1186,17 +1207,7 @@ function init() {
   commentsMount.mountRoots();
   initSidePanelResizeHandles();
   commentsMount.mountControls();
-  window.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape") return;
-    if (selectedKeys().length && !document.getElementById("production-panel").hidden) {
-      e.preventDefault();
-      clearProductionSelection();
-      renderProduction();
-      return;
-    }
-    if (!document.getElementById("comment-modal").hidden) closeCommentComposer(true);
-    else if (!document.getElementById("comments-panel").hidden) closeCommentsPanel();
-  });
+  overlay.mountCommentsEscape();
 
   mountMedia(document.getElementById("file-input"));
 
@@ -1388,26 +1399,10 @@ function init() {
     applyWriterSize(parseInt(e.target.value, 10), true);
   });
 
-  document.querySelector(".writer-bar").addEventListener("mousedown", function (e) {
-    if (e.target.closest(".wr-fmt")) e.preventDefault();
-  });
+  overlay.mountWriterBar();
   document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
 
-  document.addEventListener("focusin", function (e) {
-    if (!writerOpen || paintingScreen()) return;
-    var el = e.target;
-    if (!el || !el.closest) return;
-    if (el.closest("#writer")) return;
-    if (el.closest(".modal-backdrop:not([hidden]), .toast")) return;
-    var back = document.querySelector("#writer-doc .wr-para") || document.getElementById("wr-close");
-    if (back) back.focus();
-  });
-
-  window.addEventListener("keydown", function (e) {
-    if (!writerOpen || e.key !== "Escape") return;
-    if (tagGhost) { hideTagGhost(); return; }
-    closeWriter();
-  });
+  overlay.mountWriterFocus();
 
   startup.finish();
 }
