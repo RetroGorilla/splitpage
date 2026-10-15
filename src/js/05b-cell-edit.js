@@ -124,7 +124,7 @@ export function editCell(cellEl, fn) {
   if (!out || !out.cell) return null;
   var next = toHtml(out.cell);
   if (next !== open.html) {
-    var outcome = runCommand(cellTextCommand(open.rowId, open.field, cellRuns(out.cell), sessionTextPorts));
+    var outcome = runCommand(cellTextCommand(open.rowId, open.field, cellRuns(out.cell), sessionTextPorts, out.records));
     if (outcome.kind === "failed") throw outcome.error;
     if (outcome.kind === "rejected") return null;
   }
