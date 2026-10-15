@@ -210,13 +210,7 @@ function mintFree(prefix, taken, mint) {
   return id;
 }
 
-export function insertScenes(clip, opts) {
-  opts = opts || {};
-  var state = S.state;
-  var mint = opts.mint || makeId;
-  var move = !!opts.move && scenesAway(clip, state);
-  var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
-
+function sceneRowIds(clip, state, move, mint) {
   var rowTaken = Object.create(null);
   state.rows.forEach(function (r) { rowTaken[r.id] = true; });
   var rowMap = Object.create(null);
@@ -224,6 +218,53 @@ export function insertScenes(clip, opts) {
     if (move && !rowTaken[r.id]) { rowTaken[r.id] = true; rowMap[r.id] = r.id; }
     else rowMap[r.id] = mintFree("r", rowTaken, mint);
   });
+  return rowMap;
+}
+
+export function scenePaste(clip, opts) {
+  opts = opts || {};
+  var mint = opts.mint || makeId;
+  var planned = null;
+  var result = null;
+  return {
+    plan: function (doc) {
+      if (!clip || !clip.rows || !clip.rows.length) return null;
+      var row = doc.rows.filter(function (r) { return r.id === opts.afterRowId; })[0];
+      var move = isMove(clip, doc);
+      var rowMap = sceneRowIds(clip, doc, move, mint);
+      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankScene(doc, row) ? row.id : null };
+      return {
+        inserted: clip.rows.map(function (r) { return rowMap[r.id]; }),
+        replaced: planned.replaceRowId,
+        title: !!opts.title,
+        saveNow: !opts.holdComments
+      };
+    },
+    apply: function (live) {
+      result = insertScenes(clip, {
+        state: live,
+        rowMap: planned.rowMap,
+        afterRowId: opts.afterRowId,
+        replaceRowId: planned.replaceRowId,
+        move: planned.move,
+        holdComments: !!opts.holdComments,
+        mint: mint,
+        stamp: opts.stamp
+      });
+      if (opts.title) live.title = opts.title;
+    },
+    result: function () { return result; }
+  };
+}
+
+export function insertScenes(clip, opts) {
+  opts = opts || {};
+  var state = opts.state || S.state;
+  var mint = opts.mint || makeId;
+  var move = !!opts.move && scenesAway(clip, state);
+  var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
+
+  var rowMap = opts.rowMap || sceneRowIds(clip, state, move, mint);
   var firstRowId = rowMap[clip.rows[0].id];
 
   var comments = list("comments");

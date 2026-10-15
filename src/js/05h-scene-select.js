@@ -3,24 +3,25 @@ import { ensureBytes } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
-import { syncCommentAnchors } from "./04c-doc-model.js";
 import { isScriptCell, render, syncFieldFromDom } from "./05-render.js";
 import {
-  SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload, removeScenes, scenesOnClipboard,
-  setLiveCut
+  SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
 } from "./05g-scene-clip.js";
 import { closeRowMenus } from "./06-rows.js";
 import { scheduleProductionRefresh } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
 import { renderComments } from "./10-comments.js";
-import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
 import { renderWriter, writerOpen } from "./19-writer.js";
 import { randomHexBytes } from "../adapters/identity/ids.ts";
+import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
+import { REVIEW_ONLY, runCommand } from "../legacy/session-bridge.ts";
+import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
@@ -291,17 +292,22 @@ function afterCut(w) {
   else offerUndo(msg, entry);
 }
 
+function runSceneCommand(command) {
+  var outcome = runCommand(command);
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn");
+  return outcome.kind === "applied" || outcome.kind === "committed";
+}
+
 function takeOut(ids) {
   breakUndoCoalescing();
   var before = lastUndoEntry();
-  removeScenes(ids);
+  var done = runSceneCommand(removeScenesCommand(ids));
   sel = null;
   paint();
-  markDirty();
   flushEdits();
   breakUndoCoalescing();
-  repaint();
-  queueAutoSave();
+  if (done) repaint();
   var entry = lastUndoEntry();
   return entry === before ? null : entry;
 }
@@ -336,28 +342,19 @@ function pasteClip(clip, afterRowId, opts) {
   opts = opts || {};
   breakUndoCoalescing();
   var before = lastUndoEntry();
-  var row = S.state.rows.filter(function (r) { return r.id === afterRowId; })[0];
-  var move = isMove(clip, S.state);
   var hold = onServerDoc();
-  var res = insertScenes(clip, {
-    afterRowId: afterRowId,
-    replaceRowId: row && isBlankScene(S.state, row) ? row.id : null,
-    move: move,
-    holdComments: hold,
-    stamp: stampRow
-  });
-  if (opts.title) S.state.title = opts.title;
-  markDirty();
+  var paste = scenePaste(clip, { afterRowId: afterRowId, holdComments: hold, title: opts.title, stamp: stampRow });
+  if (!runSceneCommand(pasteScenesCommand(paste))) return null;
+  var res = paste.result();
   flushEdits();
   if (res.held.length) {
-    res.held.forEach(function (c) { S.state.comments.push(c); });
-    syncCommentAnchors(S.state);
-    markDirty();
+    runSceneCommand(addHeldCommentsCommand(res.held));
     flushEdits();
+  } else if (hold) {
+    queueAutoSave();
   }
   breakUndoCoalescing();
   repaint();
-  queueAutoSave();
   if (!writerOpen && res.rowIds.length) {
     selectScenes(res.rowIds[0], res.rowIds[res.rowIds.length - 1]);
     var first = document.querySelector('#rows .row[data-id="' + cssAttr(res.rowIds[0]) + '"]');
