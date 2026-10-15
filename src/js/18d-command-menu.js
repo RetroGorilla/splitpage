@@ -8,6 +8,7 @@ import {
 } from "./18b-file-menu.js";
 import { exportActionName, exportActionReason } from "./18c-export-dialog.js";
 import { runExportAction } from "./18-local-files.js";
+import { placeEditorSelection, rememberCellSelection } from "./05b-cell-edit.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
@@ -236,7 +237,9 @@ export function openCommandMenu() {
   var range = null;
   var sel = window.getSelection && window.getSelection();
   if (ae && ae.isContentEditable && sel && sel.rangeCount && ae.contains(sel.anchorNode)) range = sel.getRangeAt(0).cloneRange();
-  returnFocus = ae && ae !== document.body ? { el: ae, range: range } : null;
+  var surface = ae && ae.closest ? ae.closest("#rows, #writer-doc") : null;
+  var editor = surface && rememberCellSelection(ae) ? surface.id : null;
+  returnFocus = ae && ae !== document.body ? { el: ae, range: range, editor: editor } : null;
   refreshFileMenu();
   var modal = el("cmdk");
   var input = el("cmdk-input");
@@ -256,7 +259,11 @@ export function closeCommandMenu(restore) {
   active = -1;
   var back = returnFocus;
   returnFocus = null;
-  if (restore === false || !back || !document.contains(back.el)) return;
+  if (restore === false || !back) return;
+  if (!document.contains(back.el)) {
+    if (back.editor) placeEditorSelection(document.getElementById(back.editor));
+    return;
+  }
   back.el.focus({ preventScroll: true });
   if (back.range) {
     try {
