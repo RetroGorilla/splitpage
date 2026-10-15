@@ -1,0 +1,12 @@
+    .doc-title {
+      grid-column: 2 / -1;
+      grid-row: 2;
+      field-sizing: fixed;
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      height: 24px;
+      margin: 0;
+      padding: 1px 4px;
+      font-size: 16px;
+    }

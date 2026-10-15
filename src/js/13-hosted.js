@@ -871,7 +871,15 @@ export async function fetchReviewLink() {
          "#review=" + body.reviewKey;
 }
 
+var serverPickerEpoch = 0;
+
+export function captureServerPicker() {
+  var epoch = serverPickerEpoch;
+  return function () { return epoch === serverPickerEpoch; };
+}
+
 export async function openServerPicker() {
+  serverPickerEpoch++;
   var modal = document.getElementById("server-modal");
   var list = document.getElementById("server-doc-list");
   modal.hidden = false;
@@ -890,6 +898,7 @@ export async function openServerPicker() {
 }
 
 export function closeServerPicker() {
+  serverPickerEpoch++;
   document.getElementById("server-modal").hidden = true;
 }
 
