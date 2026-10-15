@@ -1,8 +1,5 @@
 export interface WriterRoutePorts {
   readonly input: (e: Event) => void;
-  readonly paste: (e: Event) => void;
-  readonly copy: (e: Event) => void;
-  readonly cut: (e: Event) => void;
   readonly keydown: (e: Event) => void;
   readonly editKeydown: (e: KeyboardEvent) => void;
   readonly format: (button: Element) => void;
@@ -47,9 +44,6 @@ export function mountWriterRoutes(mount: WriterRoutesMount): WriterRoutes {
 
   const bindings: ReadonlyArray<readonly [EventTarget, string, Listener, boolean]> = [
     [mount.doc, "input", ports.input, false],
-    [mount.doc, "paste", ports.paste, false],
-    [mount.doc, "copy", ports.copy, false],
-    [mount.doc, "cut", ports.cut, false],
     [mount.doc, "keydown", ports.keydown, false],
     [mount.doc, "keydown", onEditKeydown, true],
     [mount.bar, "click", onBarClick, false]

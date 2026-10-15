@@ -5,6 +5,7 @@ import { mountComposition } from "../features/editing/composition.ts";
 import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
+import { mountClipboardRoutes } from "../features/clipboard/routes.ts";
 import { mountMergeBanner } from "../features/merge/banner.ts";
 import { mountRowRoutes } from "../features/rows/routes.ts";
 import { mountTitleRoutes } from "../features/title/routes.ts";
@@ -815,9 +816,6 @@ var writerRoutes = null;
 
 var writerRoutePorts = {
   input: onRootInput,
-  paste: onRootPaste,
-  copy: onRootCopy,
-  cut: onRootCut,
   keydown: onRootKeydown,
   editKeydown: onWriterKeydown,
   format: onWriterFormat,
@@ -873,23 +871,38 @@ function mountFocusAndSelection(rowsEl, writerDocEl) {
   return editorFocus;
 }
 
+var clipboardRoutes = null;
+
+var clipboardRoutePorts = {
+  scriptCell: isScriptCell,
+  reviewOnly: reviewMode,
+  copy: copyFromCell,
+  afterCut: afterScriptCellChange,
+  pasteScenes: pasteScenesAt,
+  pasteDraft: pasteIntoDraft,
+  hasMedia: hasMediaFiles,
+  readMedia: function (files) {
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: grantVideoFile });
+  },
+  capture: captureOperation,
+  stillOwns: stillOwns,
+  notAdded: showPictureNotAdded,
+  placeOf: capturePastePlace,
+  restorePlace: restorePastePlace,
+  findCell: function (rowId, field) {
+    return document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
+  },
+  insertNow: function (cellEl, html, text, extra) { insertIntoScriptCellNow(cellEl, html, text, extra); }
+};
+
+function mountClipboard(rowsEl, writerDocEl) {
+  if (clipboardRoutes) clipboardRoutes.dispose();
+  clipboardRoutes = mountClipboardRoutes({ window: window, roots: [rowsEl, writerDocEl], ports: clipboardRoutePorts });
+  return clipboardRoutes;
+}
+
 function insertIntoScriptCell(cellEl, html, text, files) {
-  if (hasMediaFiles(files)) {
-    var rowId = cellEl.getAttribute("data-id");
-    var field = cellEl.getAttribute("data-field");
-    var ctx = captureOperation();
-    var began = capturePastePlace(cellEl);
-    readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: grantVideoFile }).then(function (extra) {
-      if (!stillOwns(ctx)) { showPictureNotAdded(); return; }
-      var live = cellEl.isConnected ? cellEl
-        : document.querySelector('#rows .cell-editable[data-id="' + cssAttr(rowId) + '"][data-field="' + field + '"]');
-      if (!live) return;
-      if (html || text) restorePastePlace(live, began);
-      insertIntoScriptCellNow(live, html, text, extra);
-    });
-    return;
-  }
-  insertIntoScriptCellNow(cellEl, html, text, null);
+  clipboardRoutes.insert(cellEl, html, text, files);
 }
 
 function insertIntoScriptCellNow(cellEl, html, text, extra) {
@@ -930,34 +943,8 @@ function announceAttached(res, before) {
   showActionToast(msg, "ok", "Undo", function () { undoRoutes.undoIfLatest(entry); });
 }
 
-function onRootCopy(e) {
-  onRootCopyOrCut(e, false);
-}
-function onRootCut(e) {
-  onRootCopyOrCut(e, true);
-}
-function onRootCopyOrCut(e, cut) {
-  var cellEl = e.target.closest && e.target.closest(".cell-editable");
-  if (!cellEl || !isScriptCell(cellEl)) return;
-  var readOnly = reviewMode();
-  if (copyFromCell(e, cellEl, cut, readOnly) && cut && !readOnly) {
-    var fresh = document.activeElement && document.activeElement.closest && document.activeElement.closest(".cell-editable");
-    afterScriptCellChange(fresh || cellEl);
-  }
-}
-
 function onRootPaste(e) {
-  var cellEl = e.target.closest && e.target.closest(".cell-editable");
-  if (!cellEl) return;
-  e.preventDefault();
-  var cd = e.clipboardData || window.clipboardData;
-  if (isScriptCell(cellEl)) {
-    if (pasteScenesAt(cd, cellEl)) return;
-    if (reviewMode()) return;
-    insertIntoScriptCell(cellEl, cd.getData("text/html"), cd.getData("text/plain"), cd.files);
-    return;
-  }
-  pasteIntoDraft(cellEl, cd.getData("text/html"), cd.getData("text/plain"));
+  clipboardRoutes.paste(e);
 }
 
 var videoPopover = null;
@@ -1204,9 +1191,6 @@ function init() {
   rowsEl.addEventListener("click", onRootClick);
   rowsEl.addEventListener("mousedown", onRootMouseDown);
   rowsEl.addEventListener("input", onRootInput);
-  rowsEl.addEventListener("paste", onRootPaste);
-  rowsEl.addEventListener("copy", onRootCopy);
-  rowsEl.addEventListener("cut", onRootCut);
   rowsEl.addEventListener("keydown", onRootKeydown);
   document.addEventListener("mousedown", function (e) {
     if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
@@ -1720,6 +1704,7 @@ function init() {
       install: configureUndo
     }
   });
+  mountClipboard(rowsEl, writerDocEl);
   mountFocusAndSelection(rowsEl, writerDocEl);
   mountScriptComposition([rowsEl, writerDocEl]);
   mountWriter(writerDocEl);
