@@ -1,0 +1,5 @@
+    :is(#btn-broll, #btn-comments):is(:focus-visible, .is-label-open) {
+      margin-left: calc(-1 * var(--label-grow));
+      padding-left: calc(6px + var(--label-x, 0px));
+    }
+    :is(#btn-broll, #btn-comments):is(:focus-visible, .is-label-open)::before { left: var(--label-grow); }
