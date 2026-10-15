@@ -1,0 +1,5 @@
+    .scene-gallery-actions { margin: 8px 12px 0; }
+    .scene-gallery-buttons { flex-wrap: wrap; }
+    .scene-gallery-grid { padding: 4px 12px; max-height: 124px; }
+    .scene-gallery-grid-tile { width: 96px; height: 54px; }
+    .scene-gallery-divider { height: 54px; }

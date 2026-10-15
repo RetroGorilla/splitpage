@@ -1,0 +1,9 @@
+  .scene-gallery-position,
+  .scene-gallery-kind {
+    position: absolute; display: flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px;
+    background: var(--media-scrim); color: var(--media-ink); white-space: nowrap;
+    font-family: var(--font-display); font-size: 11px; line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery-position { left: 12px; top: 12px; }
+  .scene-gallery-kind { left: 12px; bottom: 12px; gap: 6px; font-family: var(--font-body); font-size: 12px; }
+  .scene-gallery-kind svg { width: 10px; height: 10px; fill: currentColor; stroke: none; }

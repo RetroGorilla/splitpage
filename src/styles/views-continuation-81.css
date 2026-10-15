@@ -1,0 +1,17 @@
+
+  .comments-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: var(--danger);
+    color: var(--accent-contrast);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 16px;
+  }
+  .comments-badge[hidden] { display: none; }

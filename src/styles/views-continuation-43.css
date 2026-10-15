@@ -1,0 +1,46 @@
+
+  .menu-group { padding: 4px 0 2px; }
+  .menu-group + .menu-group, .fm-card + .menu-group, .mi-command + .menu-group { border-top: 1px solid var(--border); margin-top: 4px; }
+  .menu-group-head {
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--text-faint);
+    padding: 8px 8px 4px;
+  }
+
+  .fm-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    margin-bottom: 4px;
+  }
+  .fm-card-file { display: flex; align-items: center; gap: 10px; padding: 8px 8px 6px; }
+  .fm-card-icon {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .fm-card-text { min-width: 0; }
+  .fm-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fm-card-meta { font-size: 12.5px; line-height: 16px; color: var(--text-faint); margin-top: 1px; }
+  .fm-card-meta .is-unsaved { color: var(--accent); }

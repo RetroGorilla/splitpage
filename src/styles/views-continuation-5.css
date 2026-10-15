@@ -1,0 +1,25 @@
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .toolbar > .btn { flex: none; }
+
+  .btn.cmdk-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 5px 0 9px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 450;
+    cursor: pointer;
+  }
+  .btn.cmdk-trigger .btn-icon { color: var(--text-dim); }

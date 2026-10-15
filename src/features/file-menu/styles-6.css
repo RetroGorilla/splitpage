@@ -1,0 +1,40 @@
+  .mini-toolbar {
+    display: none;
+    align-items: center;
+    gap: 2px;
+    margin: 0 0 6px;
+    padding: 3px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    width: fit-content;
+    box-shadow: var(--shadow);
+  }
+  .field-wrap:focus-within .mini-toolbar { display: flex; }
+  .mini-toolbar button {
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    border-radius: 5px;
+    padding: 6px 9px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .mini-toolbar button:hover { background: var(--hover); color: var(--text); }
+  .mini-toolbar button.is-active { background: var(--selection); color: var(--text); }
+  .mini-toolbar button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .mini-toolbar .tb-sep { width: 1px; height: 18px; background: var(--border-strong); margin: 0 2px; flex: none; }
+  #rows .mini-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--text);
+    border-radius: var(--radius-sm);
+  }
+  #rows .mini-toolbar button.tb-tag { width: auto; gap: 2px; padding: 0 6px 0 8px; }

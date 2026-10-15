@@ -11,34 +11,44 @@ var UPDATE_POLL_LIMIT = 20;
 var updatePolls = 0;
 var updatePollTimer = null;
 
+var stopUpdateStatus = null;
+
 export function loadUpdateStatus() {
-  if (S.DESKTOP && S.DESKTOP.getUpdateStatus) {
-    if (S.DESKTOP.onUpdateStatus) S.DESKTOP.onUpdateStatus(applyUpdateStatus);
-    S.DESKTOP.getUpdateStatus().then(applyUpdateStatus).catch(function () {});
-    return;
+  if (stopUpdateStatus) stopUpdateStatus();
+  var active = true;
+  var desktop = S.DESKTOP;
+  updatePolls = 0;
+  function apply(status) { if (active) applyUpdateStatus(status); }
+  function fetchStatus() {
+    fetch("update-status.json", { cache: "no-store" })
+      .then(function (res) { return active && res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (!active || !body || typeof body !== "object") return;
+        apply(body);
+        if (!body.checking || updatePollTimer || updatePolls >= UPDATE_POLL_LIMIT) return;
+        updatePolls++;
+        updatePollTimer = setTimeout(function () {
+          if (!active) return;
+          updatePollTimer = null;
+          fetchStatus();
+        }, UPDATE_POLL_MS);
+      }).catch(function () {});
   }
-  fetchUpdateStatus();
-}
-
-function fetchUpdateStatus() {
-  fetch("update-status.json", { cache: "no-store" })
-    .then(function (res) { return res.ok ? res.json() : null; })
-    .then(function (body) {
-      if (!body || typeof body !== "object") return;
-      applyUpdateStatus(body);
-      if (body.checking) pollUpdateStatus();
-    })
-    .catch(function () { });
-}
-
-function pollUpdateStatus() {
-  if (updatePollTimer) return;
-  if (updatePolls >= UPDATE_POLL_LIMIT) return;
-  updatePolls++;
-  updatePollTimer = setTimeout(function () {
-    updatePollTimer = null;
-    fetchUpdateStatus();
-  }, UPDATE_POLL_MS);
+  function dispose() {
+    if (!active) return;
+    active = false;
+    if (updatePollTimer) { clearTimeout(updatePollTimer); updatePollTimer = null; }
+    if (desktop && desktop.onUpdateStatus) desktop.onUpdateStatus(null);
+    var action = document.getElementById("update-bar-action");
+    if (action) action.onclick = null;
+    stopUpdateStatus = null;
+  }
+  stopUpdateStatus = dispose;
+  if (desktop && desktop.getUpdateStatus) {
+    if (desktop.onUpdateStatus) desktop.onUpdateStatus(apply);
+    desktop.getUpdateStatus().then(apply).catch(function () {});
+  } else fetchStatus();
+  return dispose;
 }
 
 function applyUpdateStatus(status) {
@@ -215,13 +225,20 @@ export function desktopAppOffered() {
 }
 
 export function renderDesktopAppNotice() {
-  if (!desktopAppOffered()) return;
+  var active = true;
+  function dispose() {
+    if (!active) return;
+    active = false;
+    var action = document.getElementById("desktop-app-bar-action");
+    if (action) action.onclick = null;
+  }
+  if (!desktopAppOffered()) return dispose;
   try {
-    if (localStorage.getItem(DESKTOP_NOTICE_KEY) === "1") return;
+    if (localStorage.getItem(DESKTOP_NOTICE_KEY) === "1") return dispose;
   } catch (e) { }
 
   var bar = document.getElementById("desktop-app-bar");
-  if (!bar) return;
+  if (!bar) return dispose;
   var textEl = document.getElementById("desktop-app-bar-text");
   if (textEl) {
     textEl.textContent = "The Splitpage desktop app is available — its own window, " +
@@ -230,9 +247,10 @@ export function renderDesktopAppNotice() {
   var url = desktopAppUrl();
   var actionBtn = document.getElementById("desktop-app-bar-action");
   if (actionBtn) {
-    actionBtn.onclick = function () { window.open(url, "_blank", "noopener"); };
+    actionBtn.onclick = function () { if (active) window.open(url, "_blank", "noopener"); };
   }
   bar.hidden = false;
+  return dispose;
 }
 
 export function desktopAppUrl() {

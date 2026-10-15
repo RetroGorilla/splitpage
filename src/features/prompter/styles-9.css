@@ -1,0 +1,6 @@
+    .prompter-scroll { padding-inline: 6vw; }
+    .prompter-bar { gap: 8px 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+    .prompter-bar .grp { flex: 1 1 40%; }
+    .prompter-bar input[type="range"] { flex: 1; width: auto; }
+    .prompter-bar .div-sep { display: none; }
+    .prompter-bar button { padding: 10px 12px; }

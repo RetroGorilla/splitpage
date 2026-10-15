@@ -408,6 +408,12 @@ export function clearPendingFileRows() {
 
 var importIntoNewDocument = null;
 var importModalEpoch = 0;
+
+export function captureImportPreview() {
+  var epoch = importModalEpoch;
+  return function () { return epoch === importModalEpoch; };
+}
+
 var importDecodes = 0;
 var importOperation = null;
 

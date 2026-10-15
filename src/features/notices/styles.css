@@ -1,0 +1,52 @@
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  margin: 10px 0 0;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 18px;
+}
+.update-bar > span:not([class]), #update-bar-text, #desktop-app-bar-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.update-bar-icon { flex: none; width: 16px; height: 16px; color: var(--visual); fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.update-bar-action {
+  flex: none;
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  background: none;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 450;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.update-bar-action:hover { background: var(--hover); }
+.update-bar-dismiss {
+  margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+}
+.update-bar-dismiss:hover { color: var(--text); background: var(--hover); }
+.update-bar-dismiss:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.update-bar-dismiss svg {
+  width: 16px; height: 16px;
+  fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+}

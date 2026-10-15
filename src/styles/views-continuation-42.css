@@ -1,0 +1,6 @@
+  .menu-sub {
+    margin: 2px 0 4px 18px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border);
+  }
+  .menu-sub-empty { font-size: 13px; color: var(--text-dim); padding: 8px 10px; }

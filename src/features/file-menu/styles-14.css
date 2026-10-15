@@ -1,0 +1,12 @@
+  .mi.mi-foot {
+    width: auto;
+    min-height: 28px;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--text-dim);
+  }
+  .mi-foot .mi-icon { width: 16px; height: 16px; }
+  .mi-foot:hover:not(:disabled) { color: var(--text); }
+  .mi-foot .mi-keys { margin-left: 2px; }
