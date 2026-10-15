@@ -70,7 +70,8 @@ interface Rig {
 interface RigOptions {
   readonly desktop?: boolean;
   readonly taker?: (() => PromiseLike<string>) | null;
-  readonly load?: () => PromiseLike<Loaded>;
+  readonly load?: (pristine: boolean) => PromiseLike<Loaded>;
+  readonly pristine?: boolean;
   readonly report?: Report | null;
   readonly keepLive?: boolean;
   readonly win?: FakeWindow;
@@ -93,7 +94,8 @@ function rig(options: RigOptions = {}): Rig {
         applyDraft: (draft) => { log.push(`apply-draft:${String(draft)}`); return "restored"; }
       },
       document: {
-        load: options.load ?? (() => { log.push("load"); return Promise.resolve({ title: "Seed" }); }),
+        pristine: () => options.pristine ?? false,
+        load: options.load ?? ((pristine) => { log.push(pristine ? "load pristine" : "load"); return Promise.resolve({ title: "Seed" }); }),
         clone: (loaded) => { log.push("clone"); return { copyOf: loaded.title }; },
         applyStash: (loaded, opts) => {
           log.push(`stash:${opts.recovery}:${opts.report}`);
@@ -144,6 +146,23 @@ test("in the browser: the server is detected first, then load, stash adoption, f
     ]);
   } finally {
     startup.dispose();
+  }
+});
+
+test("the initial load is handed the seed check's answer, asked once, when the load starts", async () => {
+  for (const pristine of [true, false]) {
+    let asked = 0;
+    const r = rig({ pristine });
+    const ports = { ...r.ports, document: { ...r.ports.document, pristine: () => { asked++; r.log.push("seed-check"); return pristine; } } };
+    const startup = beginStartup(ports);
+    try {
+      assert.equal(asked, 0, "the seed check waits for the load");
+      await startup.openDocument();
+      assert.equal(asked, 1);
+      assert.deepEqual(r.log.slice(0, 3), ["detect-server", "seed-check", pristine ? "load pristine" : "load"]);
+    } finally {
+      startup.dispose();
+    }
   }
 });
 

@@ -250,8 +250,6 @@ function offerTourResume() {
   });
 }
 
-handTourPauseTo({ interrupt: interruptTour, offerResume: offerTourResume });
-
 export function startTour() {
   var from = tourResumeFrom;
   tourResumeFrom = -1;
@@ -300,6 +298,7 @@ function tourBack() {
 }
 
 export function __init() {
+  handTourPauseTo({ interrupt: interruptTour, offerResume: offerTourResume });
   injectTaggingHelpGuideLink();
 
   (function wireHelpModal() {

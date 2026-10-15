@@ -281,10 +281,10 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-30 — The setup wizard appears only over a pristine copy
 
 - **Behaviour:** The first-run wizard appears only when the build's seed-check meta passes, `splitpage-onboarding` is unset and no document is loading. File ▸ "Set up Splitpage…" opens it on purpose.
-- **Tests:** browser `13-onboarding.txt` (cites "invariant #30").
+- **Tests:** browser `13-onboarding.txt` (cites "invariant #30"); `tests/bootstrap/wiring.test.ts` ("INV-30: through the shim's real wiring, initializers and startup…"), which boots the real shim in a fresh process for each arrival (a remembered file, a `?doc=` link, a desktop draft to restore) and over a pristine browser and desktop copy, the positive controls.
 - **Owner:** `src/bootstrap` · **Milestone:** 7 · **Class:** keep
 - **Replacement:** —
-- **Acceptance:** `13-onboarding.txt` passes with milestone 7's explicit wiring step. Bootstrap test: when a document arrives by file, link or restore, the wizard is never constructed.
+- **Acceptance:** `13-onboarding.txt` passes with milestone 7's explicit wiring step. Bootstrap test: when a document arrives by file, link or restore, the wizard does not open. (The modal is wired whether or not it may show, so milestone 7.2 tests that it does not open, not that it is never constructed.)
 
 ### INV-31 — A `.splitpage` file is the migrated state, pictures inline
 

@@ -16,7 +16,7 @@ import {
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteAbsorbedDirty, noteSessionEdit, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
 import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
@@ -42,26 +42,28 @@ function signLegacyEdit() {
   if (plan) plan.apply(S.state);
 }
 
-provideSessionEffects({
-  dirty: function () {
-    S.dirty = true;
-    S.editSeq = noteSaveChange();
-  },
-  attribute: myColorPlan,
-  draft: function () {
-    if (typeof noteDraftChange === "function") noteDraftChange();
-  },
-  save: function (change) {
-    if (!saveBusy()) setSaveButtons();
-    if (change.kind !== "recovery") scheduleAutoSave();
-    if (home.kind === "import") { home.dirty = true; updateFileChip(); }
-    else if (onServerDoc()) { updateFileChip(); }
-    if (change.changes.saveNow) queueAutoSave();
-  },
-  edit: function () {
-    return editCapability(authorityOf(homeConn()));
-  }
-});
+export function legacySessionEffects() {
+  return {
+    dirty: function () {
+      S.dirty = true;
+      S.editSeq = noteSaveChange();
+    },
+    attribute: myColorPlan,
+    draft: function () {
+      if (typeof noteDraftChange === "function") noteDraftChange();
+    },
+    save: function (change) {
+      if (!saveBusy()) setSaveButtons();
+      if (change.kind !== "recovery") scheduleAutoSave();
+      if (home.kind === "import") { home.dirty = true; updateFileChip(); }
+      else if (onServerDoc()) { updateFileChip(); }
+      if (change.changes.saveNow) queueAutoSave();
+    },
+    edit: function () {
+      return editCapability(authorityOf(homeConn()));
+    }
+  };
+}
 
 export function setSaveButtons() {
   var view = saveButtonView({ busy: saveBusy(), dirty: !!S.dirty });

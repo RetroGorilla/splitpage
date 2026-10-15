@@ -14,7 +14,8 @@ export interface StashResult<Doc, Report> {
 }
 
 export interface InitialDocumentPorts<Loaded extends WrittenMarks, Doc, Report> {
-  readonly load: () => PromiseLike<Loaded>;
+  readonly pristine: () => boolean;
+  readonly load: (pristine: boolean) => PromiseLike<Loaded>;
   readonly clone: (loaded: Loaded) => Doc;
   readonly applyStash: (loaded: Loaded, options: StashOptions<Doc>) => StashResult<Doc, Report>;
   readonly liveDocument: () => unknown;
@@ -58,7 +59,7 @@ export function openInitialDocument<Loaded extends WrittenMarks, Doc, Report>(
   desktop: boolean,
   current: () => boolean
 ): Promise<void> {
-  return Promise.resolve(ports.load()).then((loaded) => {
+  return Promise.resolve(ports.load(ports.pristine())).then((loaded) => {
     if (!current()) return;
     adopt(ports, desktop, loaded);
     setUpIdentityAndHistory(ports, desktop);

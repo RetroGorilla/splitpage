@@ -1,0 +1,67 @@
+import { fileURLToPath } from "node:url";
+import { relative } from "node:path";
+
+const REPO = fileURLToPath(new URL("../../", import.meta.url));
+
+export const CONFIGURATION = Object.freeze({
+  "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced"] },
+  "src/legacy/undo-adapter.ts": { functions: ["routeReplays", "watchUndoAdoption"] },
+  "src/js/12a-undo.js": { functions: ["configureUndo", "routeUndoReplays"] },
+  "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
+  "src/legacy/export-formats.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
+  "src/legacy/save-bridge.ts": { functions: ["startSaves"] },
+  "src/legacy/transition-bridge.ts": { functions: ["startTransitions"] },
+  "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
+  "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },
+  "src/legacy/file-actions.ts": { functions: ["registerFileActions"] },
+  "src/legacy/help-actions.ts": { functions: ["registerHelpActions"] },
+  "src/legacy/share-actions.ts": { functions: ["registerShareActions"] },
+  "src/legacy/this-document-actions.ts": { functions: ["registerThisDocumentActions"] },
+  "src/legacy/view-actions.ts": { functions: ["registerViewActions"] },
+  "src/legacy/zoom-actions.ts": { functions: ["registerZoomActions"] },
+  "src/js/14e-export-formats.js": { functions: ["registerBuiltInExporters"] },
+  "src/bootstrap/wiring.ts": { functions: ["wireApp"] },
+  "src/bootstrap/app.ts": { functions: ["startApp", "startAppWhenReady"] },
+  "src/bootstrap/actions.ts": { functions: ["startActions"] },
+  "src/bootstrap/startup/page-lifetime.ts": { functions: ["watchHistoryMigration", "registerServiceWorker"] }
+});
+
+function record(file, name) {
+  return "globalThis.__loadOrderCall?.(" + JSON.stringify(file) + ", " + JSON.stringify(name) + ", new Error().stack)";
+}
+
+export function spied(file, source) {
+  const spec = CONFIGURATION[file];
+  if (!spec) return source;
+  const typed = file.endsWith(".ts");
+  let out = source;
+  for (const name of spec.functions) {
+    const head = "export function " + name + "(";
+    const rest = typed ? "...args: unknown[]" : "...args";
+    out = out.replace(head, head + rest + ") {\n  " + record(file, name) + ";\n  return spied_" + name + ".apply(this, args);\n}\nfunction spied_" + name + "(");
+  }
+  if (spec.facade) {
+    const { name, methods } = spec.facade;
+    for (const method of methods) {
+      out += "\n{\n  const real = " + name + "." + method + ";\n  " + name + "." + method + " = function (...args" + (typed ? ": unknown[]" : "") + ") {\n    " + record(file, name + "." + method) + ";\n    return Reflect.apply(real, this, args);\n  };\n}\n";
+    }
+  }
+  return out;
+}
+
+let target = null;
+
+export function initialize(data) {
+  target = (data && data.target) || null;
+}
+
+export async function load(url, context, nextLoad) {
+  if (target && url === new URL("_load-order-target.mjs", import.meta.url).href) {
+    return { format: "module", source: "import " + JSON.stringify(target) + ";\n", shortCircuit: true };
+  }
+  const result = await nextLoad(url, context);
+  if (!url.startsWith("file:")) return result;
+  const file = relative(REPO, fileURLToPath(url)).split("\\").join("/");
+  if (!CONFIGURATION[file]) return result;
+  return { ...result, source: spied(file, String(result.source)) };
+}

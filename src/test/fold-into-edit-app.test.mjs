@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -15,9 +15,12 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { foldIntoEdit, undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { thumbnailsAfterPaste } = await import("../js/05v-video.js");
-const { liveSession, provideSessionEffects } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../legacy/session-bridge.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
 const writer = await import("../js/19-writer.js");
+
+const naming = { name: getEditorName };
+await rewireRunningApp({ editorName: () => naming.name() });
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const decode = createHeldImageDecode({ dataUrl: PNG, encodedDataUrl: PNG });
@@ -179,11 +182,11 @@ test("6.3: a throw before the commit leaves the document, the entry and the hist
   const steps = JSON.stringify(entry.steps);
   const sizes = undoSizes();
   const generation = liveSession().generation();
-  provideSessionEffects({ editorName: () => { throw new Error("no editor name"); } });
+  naming.name = () => { throw new Error("no editor name"); };
   try {
     assert.throws(() => foldIntoEdit(entry, touchesR1, giveThumb(THUMB)), /no editor name/);
   } finally {
-    provideSessionEffects({ editorName: getEditorName });
+    naming.name = getEditorName;
   }
   assert.equal(docText(), text, "the thumbnail and the stamp are rolled back");
   assert.equal(JSON.stringify(entry.steps), steps, "the entry was not amended");

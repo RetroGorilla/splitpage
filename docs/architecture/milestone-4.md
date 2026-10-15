@@ -104,7 +104,7 @@ Alongside: collaboration behind application interfaces with an explicit authorit
 - `src/adapters/storage/`: the IndexedDB draft store (from `03d-drafts-idb.js`), the desktop draft store over IPC, and the blob store (from `02c-blobs.js`).
 - `src/adapters/transport/`: a server transport bound to one connection instance; every request of an operation goes through it.
 - `src/adapters/files/`: file targets (a File System Access handle, the desktop handle, a download) behind one port.
-- `src/legacy/transition-bridge.ts`, `save-bridge.ts`, `recovery-bridge.ts`: each exports a `start…(ports)` that `_entry.js` calls once after the numbered `__init`s, as it calls `startActions`. Before it runs, every accessor throws. Milestone 7 moves those calls into `src/bootstrap/`.
+- `src/legacy/transition-bridge.ts`, `save-bridge.ts`, `recovery-bridge.ts`: each exports a `start…(ports)` that `_entry.js` calls once after the numbered `__init`s, as it calls `startActions`. Before it runs, every accessor throws. Milestone 7 moved those calls into `src/bootstrap/`: since 7.1 `wireApp` in `src/bootstrap/wiring.ts` makes them, before the numbered `__init`s, and since 7.2 nothing is configured at module evaluation ([milestone-7.md](milestone-7.md#as-built)).
 - Test harness: `src/test/_m4-matrix.mjs` and the case files `src/test/m4-matrix-*.test.mjs`, booted-app tests that drive the legacy code; owners' application tests under `tests/application/`.
 - `docs/architecture/saving.md`: the as-built description of the transition API and the save coordinator, written in 4.10.
 

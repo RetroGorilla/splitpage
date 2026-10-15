@@ -53,7 +53,7 @@ import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
-import { provideRecordsReconciler, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_NAME_MAX,
@@ -205,8 +205,6 @@ export function derivedRecordsPlan(doc, changes) {
     commit: tags ? tags.commit : undefined
   };
 }
-
-provideRecordsReconciler(derivedRecordsPlan);
 
 export function addBrollProp(shotId, rawName) {
   var rec = brollRecord(shotId);

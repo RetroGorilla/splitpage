@@ -1,4 +1,4 @@
-import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
+import { bootApp, clearTimers, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { S } from "../js/_state.js";
@@ -55,6 +55,10 @@ await bootApp();
 
 after(closeApp);
 
+const { runIdleRefresh } = await import("../js/07-production-tags.js");
+const refreshed = { into: null };
+await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
+
 const { migrateRows } = await import("../js/02-state.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -64,7 +68,7 @@ const { startNewScript } = await import("../js/18b-file-menu.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
-const { provideRefreshRunner, requestRefresh } = await import("../legacy/session-bridge.ts");
+const { requestRefresh } = await import("../legacy/session-bridge.ts");
 
 function script(title) {
   return migrateRows({
@@ -208,7 +212,8 @@ test("E9: a replaced document leaves no listener, observer, timer, refresh or ob
   assert.ok(Object.keys(before.listeners).length > 0, "setup: the app registered its listeners at boot");
 
   const jobs = [];
-  provideRefreshRunner((due) => jobs.push(...due));
+  refreshed.into = jobs;
+  t.after(() => { refreshed.into = null; });
   const link = normalizeVideoLink({ name: "clip.mp4", size: 5 });
 
   for (let round = 0; round < 3; round++) {
@@ -248,7 +253,8 @@ test("E9: the session's own dispose stops its timers and drops its listeners", a
   useDocument(script("Disposed"));
   const heard = [];
   const jobs = [];
-  provideRefreshRunner((due) => jobs.push(...due));
+  refreshed.into = jobs;
+  t.after(() => { refreshed.into = null; });
   session.subscribe((change) => heard.push(change.kind));
   S.state.rows[0].audioText = "Before dispose.";
   markDirty();
