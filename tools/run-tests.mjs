@@ -135,7 +135,8 @@ export function runTests({
   spawn = spawnSync,
   listOnly = false,
   only = [],
-  env = process.env
+  env = process.env,
+  nodeError = null
 } = {}) {
   if (env.GOLDEN_UPDATE !== undefined) {
     printError(`run-tests: GOLDEN_UPDATE is set (${JSON.stringify(env.GOLDEN_UPDATE)}), which would make the golden tests rewrite their fixtures instead of checking them.`);
@@ -174,6 +175,10 @@ export function runTests({
     return 2;
   }
   if (listOnly) return 0;
+  if (nodeError) {
+    printError(nodeError);
+    return 2;
+  }
 
   const summary = [];
   for (const e of chosen) {
@@ -190,12 +195,40 @@ export function runTests({
   return failed ? 1 : 0;
 }
 
-export function nodeVersionWarning(version = process.version, repo = REPO) {
+function readNvmrc(repo) {
   const file = join(repo, ".nvmrc");
-  if (!existsSync(file)) return null;
-  const pinned = readFileSync(file, "utf8").trim().replace(/^v/, "");
+  return existsSync(file) ? readFileSync(file, "utf8").trim().replace(/^v/, "") || null : null;
+}
+
+export function nodeVersionWarning(version = process.version, repo = REPO) {
+  const pinned = readNvmrc(repo);
   if (!pinned || version.replace(/^v/, "") === pinned) return null;
   return `run-tests: warning: running Node ${version.replace(/^v/, "")}, but .nvmrc pins ${pinned}; run \`nvm use\` first, some tests fail on other patch versions`;
+}
+
+const triple = (v) => {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(v.trim());
+  return m ? m.slice(1).map(Number) : null;
+};
+const compare = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+function satisfies(version, clause) {
+  const m = /^(\^|>=)\s*(.+)$/.exec(clause.trim());
+  const floor = m && triple(m[2]);
+  if (!floor) return null;
+  if (compare(version, floor) < 0) return false;
+  return m[1] === ">=" || version[0] === floor[0];
+}
+
+export function unsupportedNodeError(version = process.version, repo = REPO) {
+  const file = join(repo, "package.json");
+  if (!existsSync(file)) return null;
+  const range = JSON.parse(readFileSync(file, "utf8")).engines?.node;
+  const v = triple(version);
+  if (!range || !v) return null;
+  const verdicts = range.split("||").map((c) => satisfies(v, c));
+  if (verdicts.includes(null) || verdicts.includes(true)) return null;
+  return `run-tests: Node ${version.replace(/^v/, "")} is outside package.json's engines (${range}), so tests fail for the runtime rather than the code (on 22.22.0, TextDecoder("latin1") breaks list-pdfs and pdf-script); install a supported Node, such as the ${readNvmrc(repo) ?? "pinned"} in .nvmrc, and run again`;
 }
 
 export function parseArgs(args) {
@@ -226,6 +259,6 @@ if (isMain(import.meta.url)) {
   } else {
     const warning = nodeVersionWarning();
     if (warning) console.error(warning);
-    process.exitCode = runTests(parsed);
+    process.exitCode = runTests({ ...parsed, nodeError: unsupportedNodeError() });
   }
 }
