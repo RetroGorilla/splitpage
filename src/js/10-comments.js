@@ -1,3 +1,4 @@
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
@@ -166,6 +167,55 @@ function initTaggingHelp() {
 
 export var COMMENT_NAME_KEY = "splitpage-comment-author";
 var pendingComment = null;
+var composerVersion = 0;
+var bindingsVersion = 0;
+var commentTimers = new Set();
+
+function commentTimer(fn, delay) {
+  var version = bindingsVersion;
+  var operation = captureOperation();
+  var timer = setTimeout(function () {
+    if (version !== bindingsVersion) return;
+    commentTimers.delete(timer);
+    if (stillOwns(operation)) fn();
+  }, delay);
+  commentTimers.add(timer);
+  return timer;
+}
+
+export function captureCommentComposer() {
+  var operation = captureOperation();
+  var version = composerVersion;
+  var modal = document.getElementById("comment-modal");
+  var body = document.getElementById("comment-body-editable");
+  return function () {
+    if (!stillOwns(operation) || version !== composerVersion) return null;
+    var liveModal = document.getElementById("comment-modal");
+    var liveBody = document.getElementById("comment-body-editable");
+    return liveModal === modal && liveBody === body && liveModal && !liveModal.hidden ? liveBody : null;
+  };
+}
+
+export function resetCommentBindings() {
+  bindingsVersion++;
+  composerVersion++;
+  commentTimers.forEach(function (timer) { clearTimeout(timer); });
+  commentTimers.clear();
+  clearTimeout(deleteCommentArmTimer);
+  deleteCommentArmTimer = null;
+  S.deleteCommentArmId = null;
+  closeCommentMenu(false);
+  pendingComment = null;
+  expandedReplyIds = idMap();
+  replyDrafts = idMap();
+  document.getElementById("comment-modal").hidden = true;
+  closeCommentsPanel();
+  closeFieldPopovers(document.getElementById("comment-modal"));
+  var body = document.getElementById("comment-body-editable");
+  body.innerHTML = "";
+  resetDraftHistory(body);
+}
+
 var expandedReplyIds = idMap();
 var replyDrafts = idMap();
 S.deleteCommentArmId = null;
@@ -473,6 +523,7 @@ function closeFieldPopovers(root) {
 }
 
 export function openCommentComposer(ctx) {
+  composerVersion++;
   pendingComment = ctx;
   S.savedRange = null;
   S.savedRangeCell = null;
@@ -485,10 +536,12 @@ export function openCommentComposer(ctx) {
   bodyEl.innerHTML = "";
   resetDraftHistory(bodyEl);
   document.getElementById("comment-modal").hidden = false;
-  setTimeout(function () { bodyEl.focus(); }, 0);
+  var resolveComposer = captureCommentComposer();
+  commentTimer(function () { var body = resolveComposer(); if (body) body.focus(); }, 0);
 }
 
 export function closeCommentComposer(cancelled) {
+  composerVersion++;
   document.getElementById("comment-modal").hidden = true;
   if (cancelled && pendingComment) {
     unwrapAnchorInState(pendingComment.rowId, pendingComment.field, pendingComment.id);
@@ -534,6 +587,7 @@ export function postComment() {
   });
   markDirty();
   document.getElementById("comment-modal").hidden = true;
+  composerVersion++;
   pendingComment = null;
   bodyEl.innerHTML = "";
   resetDraftHistory(bodyEl);
@@ -599,7 +653,7 @@ export function armDeleteComment(btn, id) {
   }
   S.deleteCommentArmId = id;
   clearTimeout(deleteCommentArmTimer);
-  deleteCommentArmTimer = setTimeout(function () {
+  deleteCommentArmTimer = commentTimer(function () {
     S.deleteCommentArmId = null;
     renderComments();
   }, 2800);
@@ -672,7 +726,9 @@ export function jumpToComment(cmtId) {
     renderComments();
   }
   openCommentsPanel();
-  setTimeout(function () {
+  var panel = document.getElementById("comments-panel");
+  commentTimer(function () {
+    if (document.getElementById("comments-panel") !== panel) return;
     var card = document.querySelector('.comment-card[data-id="' + safeId(cmtId, "c") + '"]');
     if (!card) return;
     card.scrollIntoView({ behavior: "smooth", block: "center" });

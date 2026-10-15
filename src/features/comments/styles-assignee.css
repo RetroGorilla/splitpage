@@ -1,0 +1,7 @@
+  .tag-owner-select, .tag-person-input, .comment-assignee-select {
+    flex: 1; min-width: 0;
+    font-family: var(--font-body); font-size: 12.5px;
+    padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); color: var(--text);
+  }
+  .tag-owner-select:focus, .tag-person-input:focus, .comment-assignee-select:focus { outline: none; border-color: var(--visual); }

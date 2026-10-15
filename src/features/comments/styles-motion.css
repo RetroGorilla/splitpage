@@ -1,0 +1,18 @@
+  .comments-panel {
+    transition: transform var(--dur-enter) var(--ease-enter),
+                overlay var(--dur-enter) allow-discrete,
+                display var(--dur-enter) allow-discrete;
+  }
+  .comments-panel[hidden] {
+    transform: translateX(100%);
+    transition: transform var(--dur-exit) var(--ease-exit),
+                overlay var(--dur-exit) allow-discrete,
+                display var(--dur-exit) allow-discrete;
+  }
+  @starting-style {
+    .comments-panel:not([hidden]) { transform: translateX(100%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .comments-panel { transition: none; }
+    .comments-panel[hidden] { transform: translateX(0); }
+  }
