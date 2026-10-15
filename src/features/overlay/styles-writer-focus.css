@@ -1,0 +1,4 @@
+  .writer .wr-para.cell-editable:focus {
+    background: var(--surface);
+    box-shadow: 0 0 0 2px var(--audio) inset;
+  }
