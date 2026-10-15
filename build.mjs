@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { appCss } from "./tools/css-inputs.mjs";
 
 let esbuild;
 try {
@@ -229,7 +230,7 @@ const version = () => readFileSync(join(ROOT, "VERSION"), "utf8").trim();
 const PARTS = [
   ["{{VERSION}}", version],
   ["{{SEED_CHECK}}", seedCheckValue],
-  ["/*{{APP_CSS}}*/", () => src("app.css")],
+  ["/*{{APP_CSS}}*/", appCss],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
   ["{{HELP_TOC}}", () => helpHtml().toc],
   ["{{HELP_HTML}}", () => helpHtml().html],

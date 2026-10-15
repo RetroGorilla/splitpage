@@ -1,13 +1,9 @@
-import { readFileSync } from "node:fs";
+import { appCss, cssInputs } from "./css-inputs.mjs";
 
 export const repoUrl = new URL("../", import.meta.url);
 
-export function readBuiltCss() {
-  const build = readFileSync(new URL("build.mjs", repoUrl), "utf8");
-  const inputs = [...build.matchAll(/\["\/\*\{\{APP_CSS\}\}\*\/", \(\) => src\("([^"]+)"\)\]/g)];
-  if (inputs.length !== 1) throw new Error("Expected one direct APP_CSS input in build.mjs; update the CSS reader when aggregation lands");
-  const path = "src/" + inputs[0][1];
-  return { path, css: readFileSync(new URL(path, repoUrl), "utf8") };
+export function readBuiltCss({ inputs = cssInputs, read } = {}) {
+  return { paths: [...inputs], css: appCss(inputs, read) };
 }
 
 function delimiter(text, start, stops) {
@@ -101,25 +97,53 @@ export function resolveTokens(value, definitions, stack = []) {
 const definitionsOf = (rule) => rule.declarations.filter((d) => d.property.startsWith("--")).map((d) => [d.property, d.value]);
 const normalise = (value) => value.replace(/\s+/g, "").toLowerCase().replace(/#([\da-f]{3})\b/g, (_, hex) => "#" + [...hex].map((c) => c + c).join(""));
 
+function selectors(text) {
+  const parts = [];
+  for (let at = 0; at < text.length;) {
+    const end = delimiter(text, at, ",");
+    parts.push(text.slice(at, end).trim());
+    at = end + 1;
+  }
+  return parts;
+}
+
+function activeContext(context, theme, matchedContext) {
+  return context.every((part) => {
+    if (/^@media\s*\(prefers-color-scheme:\s*dark\)$/.test(part)) return theme === "system-dark";
+    if (/^@media\s*\(prefers-color-scheme:\s*light\)$/.test(part)) return theme === "light" || theme === "prompter";
+    return matchedContext.includes(part);
+  });
+}
+
+function activeSelector(selector, theme) {
+  if (selector.includes(':root[data-theme="dark"]')) return theme === "dark";
+  if (selector.includes(':root[data-theme="light"]')) return theme === "light" || theme === "prompter";
+  if (selector.includes(':root:not([data-theme="light"])')) return theme === "system-dark";
+  return true;
+}
+
+function palette(rules, theme, selector, context) {
+  const definitions = new Map();
+  const line = /\.prompter-line(?![\w-])/.test(selector);
+  const prompter = line || /\.prompter(?![\w-])/.test(selector);
+  const scopes = [":root", ...(prompter ? [".prompter"] : []), ...(line ? [".prompter-line"] : [])];
+  for (const scope of scopes) {
+    for (const rule of rules) {
+      if (!activeContext(rule.context, theme, context)) continue;
+      const matches = selectors(rule.selector).some((part) => activeSelector(part, theme) &&
+        (scope === ":root" ? [":root", ':root[data-theme="dark"]', ':root:not([data-theme="light"])'].includes(part) : part === scope));
+      if (matches) for (const [name, value] of definitionsOf(rule)) definitions.set(name, value);
+    }
+  }
+  return definitions;
+}
+
 export function compareCssColours(before, after) {
   const oldRules = cssRules(before), newRules = cssRules(after);
   const differences = [];
   if (oldRules.length !== newRules.length) return ["CSS rule count changed"];
   const themes = ["light", "dark", "system-dark", "prompter"];
-  function palette(rules, theme) {
-    const definitions = new Map();
-    for (const rule of rules) {
-      const root = rule.selector === ":root";
-      const media = rule.selector === ':root:not([data-theme="light"])';
-      const dark = rule.selector === ':root[data-theme="dark"], .prompter, .prompter-line';
-      if (root || (media && theme === "system-dark") || (dark && theme !== "light")) {
-        for (const [name, value] of definitionsOf(rule)) definitions.set(name, value);
-      }
-    }
-    return definitions;
-  }
   for (const theme of themes) {
-    const oldPalette = palette(oldRules, theme), newPalette = palette(newRules, theme);
     for (let i = 0; i < oldRules.length; i++) {
       const a = oldRules[i], b = newRules[i];
       const label = `${theme} | ${a.context.join(" | ")} | ${a.selector}`;
@@ -127,20 +151,23 @@ export function compareCssColours(before, after) {
         differences.push(label + ": selector or media context changed");
         continue;
       }
-      const oldDefinitions = new Map([...oldPalette, ...definitionsOf(a)]);
-      const newDefinitions = new Map([...newPalette, ...definitionsOf(b)]);
-      const oldDeclarations = a.declarations;
-      const newDeclarations = b.declarations.filter((d) => !d.property.startsWith("--") || oldDefinitions.has(d.property));
-      if (oldDeclarations.length !== newDeclarations.length) {
-        differences.push(label + ": declaration count changed");
-        continue;
-      }
-      for (let j = 0; j < oldDeclarations.length; j++) {
-        const x = oldDeclarations[j], y = newDeclarations[j];
-        const oldValue = resolveTokens(x.value, oldDefinitions);
-        const newValue = resolveTokens(y.value, newDefinitions);
-        if (x.property !== y.property || normalise(oldValue) !== normalise(newValue)) {
-          differences.push(`${label} | ${x.property}: ${oldValue} -> ${newValue}`);
+      for (const selector of selectors(a.selector)) {
+        if (!activeSelector(selector, theme) || !activeContext(a.context, theme, a.context)) continue;
+        const oldDefinitions = new Map([...palette(oldRules, theme, selector, a.context), ...definitionsOf(a)]);
+        const newDefinitions = new Map([...palette(newRules, theme, selector, b.context), ...definitionsOf(b)]);
+        const oldDeclarations = a.declarations;
+        const newDeclarations = b.declarations.filter((d) => !d.property.startsWith("--") || oldDefinitions.has(d.property));
+        if (oldDeclarations.length !== newDeclarations.length) {
+          differences.push(label + ": declaration count changed");
+          continue;
+        }
+        for (let j = 0; j < oldDeclarations.length; j++) {
+          const x = oldDeclarations[j], y = newDeclarations[j];
+          const oldValue = resolveTokens(x.value, oldDefinitions);
+          const newValue = resolveTokens(y.value, newDefinitions);
+          if (x.property !== y.property || normalise(oldValue) !== normalise(newValue)) {
+            differences.push(`${label} | ${selector} | ${x.property}: ${oldValue} -> ${newValue}`);
+          }
         }
       }
     }
