@@ -36,6 +36,17 @@ export type CommandOutcome =
   | { readonly kind: "rejected"; readonly reason: string }
   | { readonly kind: "failed"; readonly error: unknown };
 
+export interface ReplayPlan {
+  readonly changes: ChangeSet;
+  readonly apply: (doc: ValidatedDocument) => void;
+  readonly settle: () => void;
+}
+
+export interface Replay {
+  readonly name: string;
+  readonly plan: (doc: ValidatedDocument) => ReplayPlan | Refusal | null;
+}
+
 export interface AttributionPort {
   readonly attribute: (doc: DocumentView) => Plan | null;
 }
@@ -78,6 +89,7 @@ export interface DocumentSession {
   absorbReload: (content: ReloadedContent) => ValidatedDocument | null;
   settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
+  replay: (replay: Replay) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
   refresh: (job: string) => void;
   subscribe: (listener: SessionListener) => () => void;
@@ -207,12 +219,12 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     reported(errors);
   }
 
-  function commit(changes: ChangeSet): { generation: number; errors: unknown[] } {
+  function commit(kind: "edit" | "replay", changes: ChangeSet): { generation: number; errors: unknown[] } {
     generation++;
     const at = generation;
     const errors: unknown[] = [];
-    attempt(errors, function () { ports.undo.record(changes); });
-    const change = changeOf("edit", changes);
+    if (kind === "edit") attempt(errors, function () { ports.undo.record(changes); });
+    const change = changeOf(kind, changes);
     scheduler.pass(change).forEach(function (error) { errors.push(error); });
     publish(change, errors);
     return { generation: at, errors: reported(errors) };
@@ -278,6 +290,26 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     if (!plan) return { kind: "noop" };
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     if (isEmpty(plan.changes)) return { kind: "noop" };
+    return transact("edit", doc, plan.changes, plan.apply, null);
+  }
+
+  function replay(task: Replay): CommandOutcome {
+    if (disposed) return { kind: "rejected", reason: DISPOSED };
+    const doc = document;
+    if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
+    let plan: ReplayPlan | Refusal | null;
+    try {
+      plan = task.plan(doc);
+    } catch (error) {
+      return { kind: "failed", error: error };
+    }
+    if (!plan) return { kind: "noop" };
+    if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
+    if (isEmpty(plan.changes)) return { kind: "noop" };
+    return transact("replay", doc, plan.changes, plan.apply, plan.settle);
+  }
+
+  function transact(kind: "edit" | "replay", doc: ValidatedDocument, planned: ChangeSet, apply: (doc: ValidatedDocument) => void, settle: (() => void) | null): CommandOutcome {
     let signed: Plan | null;
     try {
       signed = ports.attribution.attribute(doc);
@@ -285,26 +317,25 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       return { kind: "failed", error: error };
     }
     const sign = signed && !isEmpty(signed.changes) ? signed : null;
-    const changes = sign ? combined(plan.changes, sign.changes) : plan.changes;
+    const changes = sign ? combined(planned, sign.changes) : planned;
     const restore = rollbackPoint(doc, changes);
     try {
-      plan.apply(doc);
+      apply(doc);
       if (sign) sign.apply(doc);
     } catch (error) {
       restore();
       return { kind: "failed", error: error };
     }
-    if (needsReconciliation(changes)) {
-      const unanchor = anchorPoint(doc);
-      try {
-        ports.reconcile.anchors(doc);
-      } catch (error) {
-        unanchor();
-        restore();
-        return { kind: "failed", error: error };
-      }
+    const unanchor = needsReconciliation(changes) ? anchorPoint(doc) : null;
+    try {
+      if (unanchor) ports.reconcile.anchors(doc);
+      if (settle) settle();
+    } catch (error) {
+      if (unanchor) unanchor();
+      restore();
+      return { kind: "failed", error: error };
     }
-    const done = commit(changes);
+    const done = commit(kind, changes);
     if (done.errors.length) return { kind: "committed", generation: done.generation, changes: changes, errors: done.errors.slice() };
     return { kind: "applied", generation: done.generation, changes: changes };
   }
@@ -332,8 +363,9 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     absorbReload: absorbReload,
     settle: settle,
     run: run,
+    replay: replay,
     noteEdit: function (changes) {
-      if (!disposed) commit(changes || WHOLE_DOCUMENT);
+      if (!disposed) commit("edit", changes || WHOLE_DOCUMENT);
     },
     refresh: function (job) { scheduler.refresh(job); },
     subscribe: function (listener) {

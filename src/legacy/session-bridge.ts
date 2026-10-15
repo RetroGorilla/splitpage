@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, SessionCounters, SessionListener } from "../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { Capability, CellTextPorts, StampPorts } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
@@ -7,7 +7,7 @@ import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
 import { migrateRows } from "../js/02-state.js";
 import { cellOf } from "./richtext.ts";
-import { createUndoAdapter, followLiveDocument, watchUndoAdoption } from "./undo-adapter.ts";
+import { createUndoAdapter, followLiveDocument, routeReplays, watchUndoAdoption } from "./undo-adapter.ts";
 
 export interface LegacyEffects {
   dirty: (change: SessionChange) => void;
@@ -102,6 +102,7 @@ const session: DocumentSession = {
   absorbReload: function (content: ReloadedContent) { return current.absorbReload(content); },
   settle: function (kind: AbsorbedKind) { current.settle(kind); },
   run: function (command: Command) { return current.run(command); },
+  replay: function (task: Replay) { return current.replay(task); },
   noteEdit: function (changes?: ChangeSet) { current.noteEdit(changes); },
   refresh: function (job: string) { current.refresh(job); },
   subscribe: function (listener: SessionListener) { return current.subscribe(listener); },
@@ -110,6 +111,11 @@ const session: DocumentSession = {
     current.dispose();
   }
 };
+
+routeReplays(function (task, live) {
+  if (live && current.read(function (held) { return held; }) !== live) current.adopt(live);
+  return session.replay(task);
+}, sessionStamps);
 
 export function adoptReplacement(doc: ValidatedDocument): void {
   if (ended) return;
