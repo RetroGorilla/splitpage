@@ -1,5 +1,5 @@
 import { toHtml } from "../../core/text/html.ts";
-import { commentIds, normalizeCell } from "../../core/text/runs.ts";
+import { commentIds, isMediaRun, normalizeCell } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
 import { changeSet } from "../session/change-set.ts";
@@ -12,29 +12,18 @@ export interface CellRuns {
   readonly runs: readonly Run[];
 }
 
-export interface SanitisedMediaHtml {
-  readonly kind: "media-html";
-  readonly html: string;
-}
-
-export type CellText = CellRuns | SanitisedMediaHtml;
+export type CellText = CellRuns;
 
 export const CELL_TEXT_DERIVES: readonly string[] = Object.freeze(["production", "broll"]);
 
 const ANCHOR = "cmt-anchor";
 
-const MEDIA = /<img|video-embed-card/;
-
 export function cellRuns(runs: readonly Run[]): CellRuns {
   return Object.freeze({ kind: "runs", runs: runs });
 }
 
-export function sanitisedMediaHtml(html: string): SanitisedMediaHtml {
-  return Object.freeze({ kind: "media-html", html: html });
-}
-
 function storedForm(text: CellText): string {
-  return text.kind === "runs" ? toHtml(text.runs) : text.html;
+  return toHtml(text.runs);
 }
 
 function idsInHtml(html: unknown, cells: CellDecoder): readonly string[] {
@@ -46,9 +35,6 @@ function idsInRuns(runs: readonly Run[]): readonly string[] {
   return runs.some(function (r) { return !!r.marks.cmt; }) ? commentIds(runs) : [];
 }
 
-function idsIn(text: CellText, stored: string, cells: CellDecoder): readonly string[] {
-  return text.kind === "runs" ? idsInRuns(text.runs) : idsInHtml(stored, cells);
-}
 
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every(function (id, i) { return id === b[i]; });
@@ -64,8 +50,9 @@ function withoutComments(runs: readonly Run[]): string {
 }
 
 function onlyAnchorsDiffer(before: unknown, after: string, text: CellText, cells: CellDecoder): boolean {
-  if (text.kind !== "runs" || typeof before !== "string" || MEDIA.test(before)) return false;
+  if (typeof before !== "string" || text.runs.some(isMediaRun)) return false;
   const was = cells(before);
+  if (was.some(isMediaRun)) return false;
   return toHtml(was) !== after && withoutComments(was) === withoutComments(text.runs);
 }
 
@@ -93,7 +80,7 @@ export function cellTextCommand(rowId: string, field: string, text: CellText, po
       if (before === after) return null;
       const can = capability.edit();
       if (!can.allowed && !onlyAnchorsDiffer(before, after, text, ports.cells)) return { refused: can.reason };
-      const moved = !sameIds(idsInHtml(before, ports.cells), idsIn(text, after, ports.cells));
+      const moved = !sameIds(idsInHtml(before, ports.cells), idsInRuns(text.runs));
       return {
         changes: textChanges(rowId, field, moved),
         apply: function (live) {

@@ -61,7 +61,7 @@ import {
   typingMarks
 } from "../core/text/edits.ts";
 import { cellLength, projection } from "../core/text/runs.ts";
-import { cellRuns, cellTextCommand, sanitisedMediaHtml } from "../application/commands/cell-text.ts";
+import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
@@ -813,6 +813,8 @@ export function renderFirstDraw() {
   return absorbRender(FIRST_DRAW_FAILED);
 }
 
+var SCRIPT_CELL = Object.freeze({ media: true });
+
 export function syncFieldFromDom(cellEl) {
   if (!cellEl.isConnected || S.undoApplying || screenStale) return;
   var id = cellEl.getAttribute("data-id");
@@ -821,8 +823,7 @@ export function syncFieldFromDom(cellEl) {
   if (idx !== -1) {
     var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
     html = storedHtmlFromDom(html);
-    var text = /<img|video-embed-card/.test(html) ? sanitisedMediaHtml(sanitizeHtml(html)) : cellRuns(fromHtml(html));
-    var outcome = runCommand(cellTextCommand(id, field, text, sessionTextPorts));
+    var outcome = runCommand(cellTextCommand(id, field, cellRuns(fromHtml(html, SCRIPT_CELL)), sessionTextPorts));
     if (outcome.kind === "failed") throw outcome.error;
     noteFieldPainted(cellEl, field, S.state.rows[idx]);
   }
