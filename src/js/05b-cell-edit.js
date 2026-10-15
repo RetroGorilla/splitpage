@@ -1,15 +1,15 @@
 import { S } from "./_state.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { cssAttr, ensureTrailingCaretSpot } from "./04-richtext.js";
 import { screenIsStale, syncFieldFromDom } from "./05-render.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { toHtml } from "../core/text/html.ts";
 import { cellKeys, isSelectionField } from "../core/text/selection.ts";
 import { createSelectionModel } from "../application/editing/selection.ts";
+import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "../features/editing/cell-dom.ts";
 import { cellOf, fromHtml } from "../legacy/richtext.ts";
-import { liveSession } from "../legacy/session-bridge.ts";
+import { liveSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
 export { domToPos, posToDom };
 
@@ -124,10 +124,9 @@ export function editCell(cellEl, fn) {
   if (!out || !out.cell) return null;
   var next = toHtml(out.cell);
   if (next !== open.html) {
-    var row = S.state.rows[findRowIndex(open.rowId)];
-    row[open.field] = next;
-    stampRow(row);
-    markDirty();
+    var outcome = runCommand(cellTextCommand(open.rowId, open.field, cellRuns(out.cell), sessionTextPorts));
+    if (outcome.kind === "failed") throw outcome.error;
+    if (outcome.kind === "rejected") return null;
   }
   return closeCellEdit(cellEl, next, out.sel);
 }
