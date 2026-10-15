@@ -1,0 +1,17 @@
+
+  @media (min-width: 1100px) {
+    #root {
+      transition: padding-right var(--dur-exit) var(--ease-exit);
+    }
+    body.panel-open #root {
+      transition: padding-right var(--dur-enter) var(--ease-enter);
+    }
+    body.is-panel-resizing #root { transition: none; }
+    .topbar-row {
+      transition: margin-right var(--dur-exit) var(--ease-exit);
+    }
+    body.panel-open .topbar-row {
+      transition: margin-right var(--dur-enter) var(--ease-enter);
+    }
+    body.is-panel-resizing .topbar-row { transition: none; }
+  }
