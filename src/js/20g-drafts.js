@@ -670,6 +670,7 @@ async function restoreServerDraft(t, mine, origin) {
   hideDraftPendingBanner();
   if (outcome === "server-resumed") return "server-resumed";
   if (outcome === "server-copy") return "server-copy";
+  if (outcome === "replaced") return keptForNextLaunch();
   S.draftServerResume = null;
   recoverDraftAsUnsavedCopy(t,
     "“" + title + "” is no longer on the server — the changes recovered from the last session are " +
