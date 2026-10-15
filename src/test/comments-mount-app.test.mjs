@@ -7,7 +7,7 @@ import { createHeldImageDecode } from "./_m4-matrix.mjs";
 window.Element.prototype.scrollIntoView = function () {};
 window.Element.prototype.scrollBy = function () {};
 await bootApp();
-const { mountCommentsFeature } = await import("../js/21-events.js");
+const { mountCommentsFeature } = await import("../js/22c-comments-wiring.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { updateConnection } = await import("../js/_home.js");

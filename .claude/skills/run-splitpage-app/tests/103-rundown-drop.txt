@@ -1,5 +1,5 @@
 # Dragging a scene from the script onto the rundown to move it (issue #185,
-# 05f-rundown.js's onStripDragOver/onStripDrop, 21-events.js's auto-scroll
+# 05f-rundown.js's onStripDragOver/onStripDrop, 22a-editor-wiring.js's auto-scroll
 # standing down over the strip). A real native drag cannot be produced over
 # CDP, so, as in 33-drag-autoscroll.txt, this fires the events a grip drag
 # does: `mousedown` on the grip, `dragstart` on the row, then `dragover` and

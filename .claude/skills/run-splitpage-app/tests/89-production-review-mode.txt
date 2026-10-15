@@ -1,8 +1,8 @@
 # The Production and Gear panels in a review session (#30;
 # src/js/08-production-panels.js, 20-teleprompter.js wireTagEntityContainer,
-# 21-events.js): the breakdown to read, not to change.
+# 22b-production-wiring.js): the breakdown to read, not to change.
 #
-# Their clicks were already refused by the click guard (21-events.js
+# Their clicks were already refused by the click guard (src/features/review/click-gate.ts
 # REVIEW_SAFE_ACTIONS), but their form fields were not: a reviewer could
 # change a card's owner, type into its notes, and Ctrl+click (or long-press)
 # a selection and use the bulk bar's selects. The server keeps none of it,
