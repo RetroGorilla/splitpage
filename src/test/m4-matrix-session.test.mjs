@@ -442,6 +442,60 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
   }
 });
 
+rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened document does not come back over it at a later sign-in", async (t) => {
+  mockClock(t);
+  useDocument(script("Before stale sign-in resume"));
+  const served = script("Stale signed-in server copy", { docId: "d" + "a".repeat(32) });
+  const mine = cloneState(served);
+  mine.rows[0].audioText = "Typed before the dropped sign-in.";
+  const stash = JSON.stringify({ at: new Date().toISOString(), by: "", base: served, mine: mine });
+  const pending = JSON.stringify({ id: "server-r4", rev: 4 });
+  const held = serverFetch((r) => {
+    if (r.method !== "GET") return null;
+    if (r.url.includes("api/docs/server-r4")) return { status: 200, body: { id: "server-r4", rev: 5, state: served } };
+    return { status: 200, body: { role: "edit", scope: "" } };
+  });
+  held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-r4"));
+  const uninstall = held.install();
+  sessionStorage.setItem(SERVER_RESUME_KEY, pending);
+  sessionStorage.setItem("splitpage-conflict-stash", stash);
+  try {
+    const detecting = finishServerDetect();
+    await held.gates.arrived("fetch");
+    const replacement = script("Opened during the dropped sign-in resume", { docId: "d" + "9".repeat(32) });
+    const file = splitpageFile(replacement, "opened-during-dropped-sign-in.splitpage");
+    const target = createHeldFileHandle({ name: file.name });
+    await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
+    held.gates.release("fetch");
+    await detecting;
+    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(S.state.title, replacement.title, "setup: the first resume was dropped for the newly opened document");
+    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "setup: the dropped resume kept its key");
+    const opened = JSON.stringify(S.state);
+    const baseline = JSON.stringify(S.baseState);
+    const destination = homeModule.home;
+    const epoch = session.epoch();
+    await finishServerDetect();
+    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(S.state.title, replacement.title, "a later sign-in must not resume the server document over the opened one");
+    assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
+    assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
+    assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
+    assert.equal(S.dirty, false, "the opened document stays clean");
+    assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
+    assert.equal(target.commits.length, 0, "nothing is written to the opened file");
+    assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "no server write is sent");
+    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "the key stays for the next page load");
+    assert.equal(sessionStorage.getItem("splitpage-conflict-stash"), stash, "the edits typed before signing in are kept");
+  } finally {
+    held.gates.releaseAll("fetch");
+    uninstall();
+    sessionStorage.removeItem(SERVER_RESUME_KEY);
+    sessionStorage.removeItem("splitpage-conflict-stash");
+    setHome("none");
+  }
+});
+
 rightToday("T2d", "a restored draft opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before draft"));
   const epoch = session.epoch();
