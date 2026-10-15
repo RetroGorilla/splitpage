@@ -1357,7 +1357,7 @@ function onBrollPageAction(action, btn) {
     closeBrollPage(function () { jumpToBrollShot(id); });
   } else if (action === "broll-page-csv") exportAs("b-roll csv");
   else if (action === "broll-page-print") {
-    if (!brollEntries(true).length) { showToast("There is no b-roll to print yet.", "warn"); return; }
+    if (!brollEntries().length) { showToast("There is no b-roll to print yet.", "warn"); return; }
     exportAs("b-roll pdf");
   }
 }

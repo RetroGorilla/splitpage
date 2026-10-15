@@ -12,8 +12,10 @@
 #     cut, or a drop, is a copy;
 #   * a key from another document whose id this one does not know keeps it;
 #   * a document already holding two keys with one id (pasted by an older
-#     version) is healed by the anchoring pass: the first line keeps the
-#     id, the second gets its own, and the list holds one record per id.
+#     version) gets a record per line at entry and is re-keyed when the
+#     second line's cell is left (6.5: the anchoring pass no longer runs on
+#     an idle read): the first line keeps the id, the second gets its own,
+#     and the list holds one record per id.
 # The pure half is src/test/clipboard.test.mjs and broll-model.test.mjs.
 # Every `eval` is one physical line.
 
@@ -113,10 +115,11 @@ expect rec('bsElsewhere') && rec('bsElsewhere').name === 'puffins' && rec('bsEls
 expect unique(allKeys())
 expect unique(recIds())
 
-# ---- 6. a document already holding one id twice is healed -------------------
+# ---- 6. a document already holding one id twice is healed when the cell is left
 eval (function(){ var doc = { schema: 2, title: 'B-roll twice', rows: [ { id: 'd1', visualText: KEY('bsTwin') + ' the gulls', audioText: 'one', status: 'todo' }, { id: 'd2', visualText: 'intro<br>' + KEY('bsTwin') + ' the gulls again', audioText: 'two', status: 'todo' } ], brollShots: [ { id: 'bsTwin', name: 'the gulls', desc: '', status: 'shot', reshoot: false, notes: 'first', owner: '', audioRef: '', location: '', origin: 'script' } ], comments: [] }; F.openFile(new File([JSON.stringify(doc)], 'broll-twice.splitpage')); return true; })()
-wait F.state().title === 'B-roll twice'
-eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+wait F.state().title === 'B-roll twice' && cell('d2', 'visualText')
+expect F.state().brollShots.length === 2
+eval cell('d2', 'visualText').focus(); true
 click #doc-title
 wait unique(allKeys()) && allKeys().length === 2
 expect keysIn(st('d1', 'visualText')).join() === 'bsTwin'

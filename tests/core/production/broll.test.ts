@@ -14,7 +14,8 @@ import {
   brollSeedRef,
   brollSortedForList,
   collectBrollFromRows,
-  planBrollAnchors
+  planBrollAnchors,
+  planBrollRecords
 } from "../../../src/core/production/broll.ts";
 import type { BrollShot, BrollState } from "../../../src/core/production/broll.ts";
 import type { RegistryTag } from "../../../src/core/production/tags.ts";
@@ -124,11 +125,12 @@ function crafted(): BrollState & { brollShots: BrollShot[] } & ValidatedDocument
   });
 }
 
-test("the b-roll read model matches each line to a shot and plans the shots to create and rename, writing nothing", () => {
+test("the b-roll read model matches each line to a shot and the records plan the shots to create and rename, both writing nothing", () => {
   const state = crafted();
   const before = JSON.stringify(state);
   const ids = countingIds();
-  const res = brollEntries(state, readers, ids, plainTextOf, false);
+  const entries = brollEntries(state, readers, ids, plainTextOf);
+  const res = { entries: entries, plan: planBrollRecords(state, readers, countingIds(), plainTextOf, null) };
   assert.equal(JSON.stringify(state), before);
   assert.deepEqual(ids.minted, ["bsmint0001", "bsmint0002", "bsmint0003"]);
   assert.deepEqual(res.entries.map((e) => [e.id, e.name, e.desc, e.rowId, e.rowIndex, e.ordinal, e.markerless, e.orphaned, e.status]), [
@@ -152,18 +154,18 @@ test("the b-roll read model matches each line to a shot and plans the shots to c
     props: [], origin: "script"
   });
   assert.deepEqual(res.plan.create, [
-    { entry: 1, shot: created("bsmint0001", "drone sweep", "low and slow", "Waves on the pier.", "Pier") },
-    { entry: 2, shot: created("bsmint0002", "the gulls again", "", "", "") },
-    { entry: 4, shot: created("bsmint0003", "new wording", "", "Quiet quay now.", "Quay") }
+    created("bsmint0001", "drone sweep", "low and slow", "Waves on the pier.", "Pier"),
+    created("bsmint0002", "the gulls again", "", "", ""),
+    created("bsmint0003", "new wording", "", "Quiet quay now.", "Quay")
   ]);
   assert.deepEqual(JSON.stringify(res.entries[1]?.rec), JSON.stringify({
     status: "unshot", props: [], origin: "script", id: "bsmint0001", name: "drone sweep", desc: "low and slow",
     audioRef: "Waves on the pier.", location: "Pier"
   }), "an unmatched line's entry shows the shot it would seed, in the read model's own shape");
-  assert.notEqual(res.entries[1]?.rec, res.plan.create[0]?.shot);
+  assert.notEqual(res.entries[1]?.rec, res.plan.create[0]);
 });
 
-test("a repair draws one more id after each created shot's seeds and stores none of them; a read draws only for lines with no id", () => {
+test("a read and a records plan each draw one id per line with no key, and neither writes", () => {
   const log: string[] = [];
   const ids = countingIds();
   const logged = { id: (p: string) => { const id = ids.id(p); log.push(id); return id; }, docId: ids.docId };
@@ -176,14 +178,14 @@ test("a repair draws one more id after each created shot's seeds and stores none
     brollShots: [],
     productionTags: []
   });
-  const read = brollEntries(state, readers, logged, seeded, false);
+  const read = brollEntries(state, readers, logged, seeded);
   assert.deepEqual(log, ["bsmint0001", "seed", "bsmint0002", "seed", "seed"]);
-  assert.deepEqual(read.plan.create.map((c) => c.shot.id), ["bsmint0001", "bsmint0002", "bs_new"]);
+  assert.deepEqual(read.map((e) => e.id), ["bsmint0001", "bsmint0002", "bs_new"]);
   log.length = 0;
-  const repair = brollEntries(state, readers, logged, seeded, true);
-  assert.deepEqual(log, ["bsmint0003", "seed", "bsmint0004", "bsmint0005", "seed", "bsmint0006", "seed", "bsmint0007"]);
-  assert.deepEqual(repair.plan.create.map((c) => c.shot.id), ["bsmint0003", "bsmint0005", "bs_new"]);
-  assert.deepEqual(repair.entries.map((e) => e.id), ["bsmint0003", "bsmint0005", "bs_new"]);
+  const plan = planBrollRecords(state, readers, logged, seeded, null);
+  assert.deepEqual(log, ["bsmint0003", "seed", "bsmint0004", "seed", "seed"]);
+  assert.deepEqual(plan.create.map((c) => c.id), ["bsmint0003", "bsmint0004", "bs_new"]);
+  assert.deepEqual(state.brollShots, []);
 });
 
 test("a line never takes a shot a keyed line further down holds, and a typed marker takes a shot by its name", () => {
@@ -195,10 +197,9 @@ test("a line never takes a shot a keyed line further down holds, and a typed mar
     brollShots: [shot("bsA", "the gulls", { status: "shot" }), shot("bsD", "drone sweep")],
     productionTags: []
   });
-  const ids = countingIds();
-  const res = brollEntries(state, readers, ids, plainTextOf, false);
-  assert.deepEqual(res.entries.map((e) => e.id), ["bsmint0001", "bsD", "bsA"]);
-  assert.deepEqual(res.plan.rename, [{ at: 1, name: "Drone Sweep", desc: "" }]);
+  const entries = brollEntries(state, readers, countingIds(), plainTextOf);
+  assert.deepEqual(entries.map((e) => e.id), ["bsmint0001", "bsD", "bsA"]);
+  assert.deepEqual(planBrollRecords(state, readers, countingIds(), plainTextOf, null).rename, [{ at: 1, name: "Drone Sweep", desc: "" }]);
   const plan = planBrollAnchors(state, readers, countingIds("anchor"));
   assert.deepEqual(Object.entries(plan), [[brollLineKey("r0", 0), "bsanchor0001"], [brollLineKey("r0", 1), "bsD"]]);
 });
@@ -294,7 +295,7 @@ test("INV-56: a shot shows props tagged on its lines and hand-added ones by regi
     })],
     productionTags: registry
   });
-  const res = brollEntries(state, readers, countingIds(), plainTextOf, false);
+  const res = { entries: brollEntries(state, readers, countingIds(), plainTextOf), plan: planBrollRecords(state, readers, countingIds(), plainTextOf, null) };
   assert.deepEqual(res.entries[0]?.props, [
     { key: "t:t_mug", id: "t_mug", name: "Red mug", status: "have", auto: true, hand: true, tracked: true, ref: "t_mug" },
     { key: "n:boat hook", id: "", name: "Boat hook", status: "", auto: false, hand: true, tracked: false, ref: "n:boat hook" },
@@ -303,7 +304,7 @@ test("INV-56: a shot shows props tagged on its lines and hand-added ones by regi
   assert.deepEqual(res.entries[1]?.props, [
     { key: "n:lamp", id: "", name: "Lamp", status: "", auto: true, hand: false, tracked: false, ref: "" }
   ]);
-  assert.deepEqual(res.plan.create.map((c) => c.shot.props), [[]]);
+  assert.deepEqual(res.plan.create.map((c) => c.props), [[]]);
 });
 
 test("INV-56: renaming a prop is planned per shot, by id and by name for a prop with none, and normalised", () => {
