@@ -26,9 +26,9 @@ export function missingStateFields(s) {
   return missingFieldsIn(s, STATE_FIELDS);
 }
 
-export function migrateRows(s) {
+export function migrateRows(s, brollLines) {
   return withDocumentPorts(STATE_FIELDS, function (ports) {
-    return migrateRowsWith(s, ports);
+    return migrateRowsWith(s, brollLines ? Object.assign({}, ports, { brollLines: brollLines }) : ports);
   });
 }
 

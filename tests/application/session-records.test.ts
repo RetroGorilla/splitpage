@@ -158,3 +158,47 @@ test("6.5: noteEdit runs the records on what it notes and declares them; a throw
   assert.equal(broken.reported.length, 1);
   assert.deepEqual(broken.published.map(function (c) { return c.kind; }), ["edit"]);
 });
+
+test("6.5 follow-up: a legacy edit whose records throw partway leaves none of them written, so nothing lands undeclared", () => {
+  const h = opened({
+    records: function () {
+      return {
+        fields: ["brollShots"],
+        apply: function (into) {
+          (into.brollShots as unknown[]).push({ id: "bs_half", name: "Half written" });
+          throw new Error("records broke while writing");
+        }
+      };
+    }
+  });
+  const before = textOf(h);
+  h.session.noteEdit(changeSet({ cells: [{ rowId: "r1", field: "audioText" }] }));
+  assert.equal(h.session.generation(), 1, "the legacy edit still commits");
+  assert.equal(h.reported.length, 1);
+  assert.equal(textOf(h), before, "the half-written records are taken back");
+  assert.deepEqual(h.published.map(function (c) { return c.changes.docFields; }), [[]]);
+});
+
+test("6.5 follow-up: a records plan's commit runs only once its transaction can no longer roll back", () => {
+  const commits: string[] = [];
+  function tracked(fail: "plan" | "apply" | null): (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null {
+    const inner = shotsFor([], fail === "apply" ? "apply" : null);
+    return function (doc, changes) {
+      const plan = inner(doc, changes);
+      return { fields: plan ? plan.fields : [], apply: plan ? plan.apply : function () {}, commit: function () { commits.push("commit"); } };
+    };
+  }
+  const h = opened({ records: tracked(null) });
+  assert.equal(runConfined(h.session, setAudio("r1", "Steam rises.")).kind, "applied");
+  assert.equal(runConfined(h.session, setAudio("r1", "Steam rises.")).kind, "applied");
+  h.session.noteEdit();
+  assert.deepEqual(commits, ["commit", "commit", "commit"], "with and without records to write");
+
+  commits.length = 0;
+  const failing = opened({ records: tracked("apply") });
+  assert.equal(failing.session.run(setAudio("r1", "Steam rises.")).kind, "failed");
+  failing.session.noteEdit();
+  const anchors = opened({ records: tracked(null), reconcile: function () { throw new Error("anchors broke"); } });
+  assert.equal(anchors.session.run(setAudio("r1", "Steam rises.", changeSet({ cells: [{ rowId: "r1", field: "audioText" }], runsMoved: true }))).kind, "failed");
+  assert.deepEqual(commits, [], "a rolled-back edit commits nothing");
+});
