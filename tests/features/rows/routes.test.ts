@@ -240,3 +240,21 @@ test("row routes: dispose removes every registration it made and stops the route
   assert.deepEqual(h.calls, ["drag:r1"], "the remount handles one drag start once");
   second.dispose();
 });
+
+test("row routes: dispose during a drag ends it: the dragged scene, its markers and the auto-scroll are released", () => {
+  const p = page();
+  const h = harness(p);
+  const first = h.mount();
+  p.row("r1").setAttribute("draggable", "true");
+  fire(p.win, p.byId("grip-r1"), "dragstart");
+  fire(p.win, p.byId("other"), "dragover", { clientX: 5, clientY: 2 });
+  first.dispose();
+  assert.equal(h.state.dragging, null);
+  assert.deepEqual(h.calls, ["drag:r1", "scroll:5,2", "drag:null", "clear", "stop"]);
+  first.dispose();
+  assert.equal(h.calls.length, 5, "a second dispose does nothing");
+  const second = h.mount();
+  fire(p.win, p.byId("other"), "dragover", { clientX: 5, clientY: 2 });
+  assert.equal(h.calls.length, 5, "the remount inherits no drag, so an edge dragover does not scroll");
+  second.dispose();
+});

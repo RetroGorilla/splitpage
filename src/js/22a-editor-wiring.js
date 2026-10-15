@@ -231,7 +231,7 @@ export function mountToolbarFeature() {
   return editorToolbar.replace(function () {
     return mountEditorToolbar({ window: window, ports: editorToolbarPorts });
   }, function (owner) {
-    return [routeRootClick("toolbar", function (e) { return owner.click(e); })];
+    return [function () { return routeRootClick("toolbar", function (e) { return owner.click(e); }); }];
   });
 }
 
@@ -305,8 +305,8 @@ export function mountMediaFeature() {
     return mountMediaRoutes({ window: window, fileInput: document.getElementById("file-input"), ports: mediaRoutePorts });
   }, function (owner) {
     return [
-      routeRootClick("media-picker", function (e) { return owner.pickerClick(e); }),
-      routeRootClick("media-link", function (e) { return owner.linkClick(e); })
+      function () { return routeRootClick("media-picker", function (e) { return owner.pickerClick(e); }); },
+      function () { return routeRootClick("media-link", function (e) { return owner.linkClick(e); }); }
     ];
   });
 }
@@ -338,9 +338,9 @@ export function mountRowsFeature() {
     return mountRowRoutes({ window: window, rows: document.getElementById("rows"), ports: rowRoutePorts });
   }, function (owner) {
     return [
-      routeRootClick("rows-add", function (e) { return owner.addClick(e); }),
-      routeRootClick("rows-scene", function (e) { return owner.sceneClick(e); }),
-      routeRootClick("rows-menu", function (e) { return owner.menuClick(e); })
+      function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
+      function () { return routeRootClick("rows-scene", function (e) { return owner.sceneClick(e); }); },
+      function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); }
     ];
   });
 }
@@ -621,7 +621,7 @@ export function mountVideoFeature() {
   return videoPopover.replace(function () {
     return mountVideoPopover({ window: window, ports: { confirm: confirmVideo, cancel: cancelVideo } });
   }, function (owner) {
-    return [routeRootClick("video", function (e) { return owner.click(e); })];
+    return [function () { return routeRootClick("video", function (e) { return owner.click(e); }); }];
   });
 }
 
