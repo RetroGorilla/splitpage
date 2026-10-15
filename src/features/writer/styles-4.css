@@ -1,0 +1,15 @@
+    .writer-top { padding: 8px 12px; gap: 4px 10px; flex-wrap: wrap; }
+    .writer-kicker { display: none; }
+    .writer-stats { gap: 10px; font-size: 12px; order: 5; flex: 1 1 100%; padding-left: 9px; }
+    .writer-scroll { padding: 18px 12px 60vh; }
+    .writer .wr-para.cell-editable { padding: 6px 10px 10px; }
+    .writer-bar {
+      gap: 8px; padding: 8px 10px;
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    }
+    .writer-bar::-webkit-scrollbar { display: none; }
+    .writer-bar > * { flex: none; }
+    .writer-bar button { padding: 9px 10px; }
+    .writer-bar input[type="range"] { width: 80px; }
+    .writer-bar .div-sep, .writer-hint { display: none; }
+  }

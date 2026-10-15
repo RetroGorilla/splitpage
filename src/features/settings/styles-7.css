@@ -1,0 +1,19 @@
+  .identity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    margin-right: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .identity-chip:hover { border-color: var(--visual); color: var(--text); }
+  .identity-dot, .person-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--person, var(--text-faint)); flex: none; }
+  .identity-chip.unnamed { border-style: dashed; }
+  .identity-chip.unnamed .identity-dot { background: var(--text-faint); }

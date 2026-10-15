@@ -1,0 +1,48 @@
+  .modal-panel.conflict-panel { max-width: 720px; }
+  .conflict-panel .modal-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+  .modal-panel.merge-review-panel { max-width: 780px; }
+  .merge-group { margin-bottom: 16px; }
+  .merge-group-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    font-family: var(--font-body); font-size: 13px; font-weight: 600;
+    color: var(--text-dim);
+    padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .merge-group-note {
+    font-size: 12px; font-weight: 450; color: var(--text-dim);
+  }
+  .merge-entry { margin-bottom: 12px; }
+  .merge-entry-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+  }
+  .merge-entry-outcome { font-weight: 400; font-size: 12px; color: var(--text-dim); }
+  .merge-entry[data-outcome="conflict"] .merge-entry-outcome { color: var(--danger); }
+  .merge-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .merge-side {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); padding: 8px 10px; min-width: 0;
+  }
+  .merge-side-head {
+    font-family: var(--font-body); font-size: 12px; font-weight: 500;
+    color: var(--text-faint); margin-bottom: 5px;
+  }
+  .merge-side-body {
+    font-size: 13.5px; line-height: 1.5; color: var(--text);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .diff-del {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    text-decoration: line-through; border-radius: 2px;
+  }
+  .diff-add {
+    background: color-mix(in srgb, var(--ok) 20%, transparent);
+    border-radius: 2px;
+  }
+  .diff-empty { color: var(--text-faint); font-style: italic; }
+  .diff-img { max-width: 100%; max-height: 120px; border-radius: var(--radius-sm); display: block; }
+
+  @media (max-width: 560px) {
+    .merge-sides { grid-template-columns: 1fr; }
+  }

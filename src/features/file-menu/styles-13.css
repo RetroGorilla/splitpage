@@ -1,0 +1,26 @@
+    .menu-wrap .menu {
+      position: fixed;
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      max-width: none;
+      max-height: 86vh;
+      border-radius: 14px 14px 0 0;
+      border-bottom: none;
+      padding-bottom: env(safe-area-inset-bottom);
+      transform-origin: bottom center;
+    }
+    @starting-style {
+      .menu-wrap .menu:not([hidden]) { opacity: 0; transform: translateY(24px); }
+    }
+    .menu-backdrop { display: block; }
+    .menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 8px 4px 16px;
+    }
+    .mi { min-height: 44px; }
+    .mi.mi-foot { min-height: 38px; }
