@@ -1111,14 +1111,14 @@ function insertIntoScriptCell(cellEl, html, text, files) {
 
 function insertIntoScriptCellNow(cellEl, html, text, extra) {
   if (screenIsStale()) {
-    showToast("Could not paste â€” press Redraw first.", "error");
+    showToast("Could not paste — press Redraw first.", "error");
     return;
   }
   var before = lastUndoEntry();
   var res = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
   var lost = res.lost + (extra ? extra.lost : 0);
-  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added â€” only a link to it was copied. Save it, then paste or drop the file.", "warn");
+  if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
   if (res.attached) {
     var attachedRowId = cellEl.getAttribute("data-id");
     renderRow(attachedRowId);
