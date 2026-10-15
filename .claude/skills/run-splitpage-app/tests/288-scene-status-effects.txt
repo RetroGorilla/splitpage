@@ -48,6 +48,11 @@ expect window.__written === window.__w0
 wait __cycled()
 expect __disk('r2').status === 'ready'
 expect __mark()
+# The gutter shows when a row was last edited, to the minute, so the length
+# edit below repaints row r2 if the minute turns between this undo's paint and
+# the edit (#590). Shift the page's clock to the start of a minute from here on
+# so both stamps share a minute.
+expect (function(){ var Real = Date, off = 60500 - Real.now() % 60000; function Pinned(){ return arguments.length ? new (Function.prototype.bind.apply(Real, [null].concat(Array.prototype.slice.call(arguments))))() : new Real(Real.now() + off); } Pinned.prototype = Real.prototype; Pinned.now = function(){ return Real.now() + off; }; Pinned.UTC = Real.UTC; Pinned.parse = Real.parse; window.Date = Pinned; window.__clockShift = function(ms){ off += ms; return true; }; window.__meta = function(id){ return document.querySelector('#rows .row[data-id="' + id + '"] .row-meta').textContent; }; return new Date().getSeconds() === 0; })()
 eval __undo('r2')
 key ctrl KeyZ
 expect __live('r2').status === 'todo'
@@ -69,7 +74,7 @@ eval (function(){ document.activeElement.blur(); U.flush(); window.__u0 = U.size
 click #rows .row[data-id="r2"] .row-read
 wait document.activeElement && document.activeElement.classList.contains('row-read-input')
 type 1:30
-eval (function(){ window.__rowEl = document.querySelector('#rows .row[data-id="r2"]'); R.reset(); __arm(); return true; })()
+eval (function(){ window.__rowEl = document.querySelector('#rows .row[data-id="r2"]'); window.__meta0 = __meta('r2'); R.reset(); __arm(); return true; })()
 key Enter
 expect __live('r2').lengthSeconds === 90
 expect __live('r2').updatedAt !== window.__stamp0
@@ -77,6 +82,7 @@ expect window.__log.indexOf('Unsaved changes') !== -1
 expect R.counts().render === 0
 expect R.counts().rowsPainted === 0
 expect R.counts().cellsPainted === 0
+expect __meta('r2') === window.__meta0
 expect document.querySelector('#rows .row[data-id="r2"]') === window.__rowEl
 expect document.querySelector('#rows .row[data-id="r2"] .row-read').textContent.indexOf('1:30') !== -1
 sleep 150
@@ -86,6 +92,24 @@ expect __cycled()
 expect __disk('r2').lengthSeconds === 90
 eval U.flush()
 expect U.sizes().undo === window.__u0 + 1
+sleep 300
+expect __same()
+
+# A length set in a later minute repaints the gutter's time, and only that.
+eval (function(){ document.activeElement.blur(); U.flush(); return __clockShift(60000); })()
+click #rows .row[data-id="r2"] .row-read
+wait document.activeElement && document.activeElement.classList.contains('row-read-input')
+type 1:45
+eval (function(){ window.__rowEl = document.querySelector('#rows .row[data-id="r2"]'); window.__meta0 = __meta('r2'); window.__cells = document.querySelectorAll('#rows .row[data-id="r2"] .field-wrap, #rows .row[data-id="r2"] .visual-media'); R.reset(); __arm(); return true; })()
+key Enter
+expect __live('r2').lengthSeconds === 105
+expect R.counts().render === 0
+expect R.counts().rowsPainted === 1
+expect R.counts().cellsPainted === 0
+expect document.querySelector('#rows .row[data-id="r2"]') === window.__rowEl
+expect Array.prototype.every.call(window.__cells, function(n){ return n.isConnected; })
+expect __meta('r2') !== window.__meta0
+wait __cycled()
 sleep 300
 expect __same()
 
