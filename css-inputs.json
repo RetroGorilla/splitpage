@@ -1,3 +1,5 @@
 [
-  "src/app.css"
+  "src/app.css",
+  "src/features/broll/styles.css",
+  "src/styles/after-broll.css"
 ]

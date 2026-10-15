@@ -20,8 +20,8 @@ test("CSS aggregation preserves listed order, separators and single-file bytes",
   assert.throws(() => appCss(["first.css", "FIRST.css"], read), /Duplicate CSS input/);
   assert.throws(() => appCss(["src/App.css"]), /incorrectly cased CSS input/);
   assert.throws(() => appCss(["src/missing.css"]), /Missing/);
-  assert.deepEqual(cssInputs, ["src/app.css"]);
-  assert.equal(appCss(), readFileSync(new URL(cssInputs[0], repoUrl), "utf8"));
+  assert.deepEqual(cssInputs, ["src/app.css", "src/features/broll/styles.css", "src/styles/after-broll.css"]);
+  assert.equal(appCss(), cssInputs.map((path) => readFileSync(new URL(path, repoUrl), "utf8")).join("\n"));
   assert.deepEqual(readBuiltCss(), { paths: [...cssInputs], css: appCss() });
   assert.equal(readBuiltCss({ inputs, read }).css, appCss(inputs, read));
 });
