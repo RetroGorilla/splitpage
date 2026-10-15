@@ -57,7 +57,7 @@ Since 4.7 a session port that was never provided throws "The session's … port 
 
 1. The action registry and the export registry (`createActionRegistry`, `createExportRegistry`), installed into the legacy facades below.
 2. The session: `startSessionBridge(ports)` replaces the module-evaluation `startSession` call. The ports are passed in: entry (`migrateRows`), undo adapter, effects, capability, reconcilers, attribution, report and timers.
-3. The command ports built from the same effects: `sessionStamps` and `sessionTextPorts` become values of the wiring, re-exported by the bridge for the numbered modules.
+3. The command ports built from the same effects. `sessionStamps` and `sessionTextPorts` stay stable forwarding objects exported by the bridge, because numbered modules import them as bindings: their identity never changes across rewires, and what they forward to is the wiring's current effects.
 4. Undo routing and adoption (`routeReplays`, `watchUndoAdoption`), called by `startSessionBridge` rather than at module evaluation.
 5. The save coordinator, the transitions and the draft recovery, through the existing `startSaves`, `startTransitions` and `startRecovery`, moved out of `_entry.js` in their current order relative to each other.
 
@@ -65,9 +65,11 @@ Since 4.7 a session port that was never provided throws "The session's … port 
 
 **Legacy facades.** The numbered modules keep their imports: 17 import `session-bridge.ts`, 15 `transition-bridge.ts`, 13 `app-actions.ts` and 4 `export-formats.ts` (counts include `21-events.js` and `_entry.js` on `ab93357`). `appActions`, `exportFormats` and the session bridge's exports become facades over the wired instances that throw "not started yet" before `wireApp` has run and after its `dispose()`, which is the pattern the save, transition and recovery bridges already follow (milestone 4). Rewriting those importers is 4.x.
 
+**The built-in exporters.** `14e-export-formats.js` stops calling `registerBuiltInExporters()` at module evaluation, and `registerBuiltInExporters(registry)` takes the registry it fills. `_entry.js` passes it to `wireApp`, which calls it on the registry it built. This has to be in 7.1: once `exportFormats` throws before `wireApp`, the call at the bottom of 14e would throw while the bundle evaluates and the app would not load. It is the only module-evaluation use of `appActions`, `exportFormats`, `sessionStamps` or `sessionTextPorts` on `ab93357` (the review of this plan parsed every numbered module's top-level statements).
+
 **Interim check for the load-order providers.** In 7.1 the four `provide…` calls still run at module evaluation. `wireApp` checks that each one has run before it constructs the session, and refuses otherwise, so 7.1 already meets the partial-failure contract. 7.2 removes the providers.
 
-**Failure.** `wireApp` validates every dependency before constructing anything: a missing dependency throws a `WiringError` naming it. A dependency that throws while an owner is being constructed is caught, the owners already built are disposed in reverse order (as `startActions` does), and a `WiringError` naming the step and carrying the cause is thrown. `_entry.js` then reports it through `console.error` and does not call `startApp` or any `__init`, so no feature mounts. No new user-facing message is added (plan §1: no new features); see [open question 3](#open-questions).
+**Failure.** `wireApp` validates every dependency before constructing anything: a missing dependency throws a `WiringError` naming it. A dependency that throws while an owner is being constructed is caught, the owners already built are disposed in reverse order (as `startActions` does), and a `WiringError` naming the step and carrying the cause is thrown. `_entry.js` then reports it through `console.error` and does not call `startApp` or any `__init`, so no feature mounts. No new user-facing message is added (plan §1: no new features); see [decision 2](#decisions-taken).
 
 **Cleanup.** `dispose()` releases in reverse construction order: the recovery, transition and save starts' stop functions; the session's `dispose()` (its subscribers and timers); undo routing; the registries emptied and uninstalled from the facades. After it, every facade throws "not started yet" and `wireApp` can run again.
 
@@ -82,7 +84,10 @@ Since 4.7 a session port that was never provided throws "The session's … port 
 | `src/legacy/session-bridge.ts` | `startSessionBridge(ports)` and its stop; no session, no undo routing at module evaluation; facade exports throw before start |
 | `src/legacy/app-actions.ts`, `src/legacy/export-formats.ts` | facades over the wired registries |
 | 6.9's `startApp` module in `src/bootstrap/` | takes `Wiring` and passes the registries and session to the mounts that need them |
+| `src/js/14e-export-formats.js` | no registration at module evaluation; `registerBuiltInExporters(registry)` |
 | `src/test/_app-boot.mjs`, `src/test/_fanout-stubs.mjs` | boot through `wireApp`; `wireSession` wires through `startSessionBridge` |
+| the 34 test files under `src/test/` and `tests/` that import `legacy/session-bridge.ts` | each one that reads the session or runs a command without booting the app calls `wireSession` first; no assertion changes. The count of files actually changed is recorded in the PR |
+| the 5 test files that import 14e, `export-formats.ts` or `app-actions.ts` (`export-registry-app`, `m4-matrix-exports`, `tour-interrupt-app`, `views-mount-app`, `tests/legacy/command-palette.test.ts`) | wire the registries they use through `wireApp` or a registry helper |
 | `docs/architecture/dependencies.md` | the shim section and its owner table |
 | `docs/architecture/milestone-7.md` | "As built" for 7.1 |
 
@@ -92,7 +97,7 @@ Since 4.7 a session port that was never provided throws "The session's … port 
   - *Startup.* With fake ports, `wireApp` constructs every owner in the order above; `startApp` receives the wiring, and a probe mount registered by the test sees a started session, both registries and all three bridges started. The facades throw before `wireApp` and after `dispose()`.
   - *Failed partial startup.* For each dependency, a run with it missing and a run with it throwing: `WiringError` names it, every owner built before it is disposed (counted by the fakes), no facade is left started, and `startApp` is never reached. The interim check: a run where a `provide…` call has not happened refuses in the same way.
   - *Cleanup.* Wire, start, dispose, three times: one handler per window registration, no session subscriber or timer left (fake clock advanced and pending work settled before asserting, under milestone 4's production-cleanup rule), registries empty after each dispose, and the same owners after each rewire. App-lifetime subscriptions that legitimately survive are named in the test.
-- `tests/bootstrap/legacy-shim.test.ts`: no file under `src/application`, `src/features` or `src/bootstrap` imports `src/js/_entry.js`, resolved through `tools/dep-report.mjs`'s resolver rather than a text search; and the shim's import list is a subset of the frozen list of 69 modules plus `wiring.ts` and `startApp`'s module, so nothing new registers into it (the list may only shrink). See [open question 2](#open-questions) for this reading of "registers into it".
+- `tests/bootstrap/legacy-shim.test.ts`: no file under `src/application`, `src/features` or `src/bootstrap` imports `src/js/_entry.js`, resolved through `tools/dep-report.mjs`'s resolver rather than a text search; and the shim's set of import specifiers is a subset of a frozen set, so nothing new registers into it (the set may only shrink). The frozen set, after 7.1 and unchanged by 7.2, has 72 members: the 69 numbered modules it starts, `14e-export-formats.js` (for `registerBuiltInExporters`), `../bootstrap/wiring.ts` and `startApp`'s module. Everything `_entry.js` passes to `wireApp` comes from those numbered modules (`legacySavePorts` from 14, `draftRecoveryPorts` from 20g, the document ports from 02b and 03, and in 7.2 the effects from 03, 07, 08c and 12); its imports of `app-actions.ts` and the three start bridges move into `wiring.ts`. The set compares specifiers, not imported names, so 7.2 adding a named import from 03 does not change it. This is [decision 1](#decisions-taken).
 - Existing tests kept green unchanged in their assertions: `tests/bootstrap/start-actions.test.ts`, `tests/bootstrap/startup.test.ts`, `src/test/session-bridge-unwired.test.mjs` (its expectation moves from "port not provided" to "not started yet", with the same throwing behaviour), the boot tests (`*-boot*.test.mjs`, `session-bridge-app.test.mjs`), and the race matrix under `SPLITPAGE_M4_GATE=1`.
 
 **Local evidence in the PR.** `npm run verify` on Node 24.22.0; `SPLITPAGE_M4_GATE=1 npm run verify`; the boot and startup suites of [testing.md](testing.md)'s change table for bootstrap changes, plain and with `SPLITPAGE_FREEZE_CACHES=1`.
@@ -102,14 +107,14 @@ Since 4.7 a session port that was never provided throws "The session's … port 
 **Scope.** No numbered module configures an owner as a side effect of being loaded:
 
 - `12-dirty-toast.js` and `03-sync.js` export their session effects (`legacySessionEffects()`, `getEditorName`), `07-production-tags.js` exports `runIdleRefresh`, `08c-broll.js` exports `derivedRecordsPlan` (it already does), and `_entry.js` passes them to `wireApp`. The four `provide…` calls go, and so do `provideSessionEffects`, `provideRefreshRunner`, `provideRecordsReconciler` and the bridge's `given` object. 7.1's interim check goes with them. The records reconciler becomes a required dependency, so a missing one is reported instead of silently returning `null`.
-- `14e-export-formats.js` stops calling `registerBuiltInExporters()` at module evaluation; `wireApp` calls `registerBuiltInExporters(registry)` on the registry it built.
+- The initial load stops reaching into onboarding: `loadInitialDocument` in `02b-doc-id.js` reads `seedCheckPasses` from `20b-onboarding.js` today, which is the cycle edge recorded in `tools/dep-baseline.json` as "goes when bootstrap owns the initial load (milestone 7)". The seed check becomes a port of `openInitialDocument` (6.9's `startup/initial-document.ts`), passed in by the wiring, `02b` drops the import and `node tools/dep-report.mjs --prune` removes the entry. If 6.9's second PR leaves the load shaped so that this is not a port change, 7.2 instead rewords the entry's reason to name plan §8's composition root, and says so; either way no exception names milestone 7 after it.
 - Tests that relied on module-evaluation providers (9 files call a `provide…` function, 3 use `wireSession`) wire explicitly through `wireSession` or `wireApp`.
 
 **INV-30.** Its acceptance in [invariants.md](invariants.md#inv-30--the-setup-wizard-appears-only-over-a-pristine-copy) names this milestone: `13-onboarding.txt` passes with the wiring step, and a bootstrap test shows the wizard is never constructed when a document arrives by file, link or restore. The test goes in `tests/bootstrap/wiring.test.ts`, driving `startApp` with each arrival kind.
 
 **Docs.** `session.md` (the bridge section: construction by the wiring step, the providers gone), `saving.md` (the start calls now in `src/bootstrap/wiring.ts`), `actions.md` ("The legacy shim" section), `milestone-4.md`'s note that milestone 7 moves the start calls, this file's "As built" for 7.2, and [the release-checklist inventory](#release-checklist-inputs) re-measured on 7.2's tree.
 
-**Files.** `src/bootstrap/wiring.ts`, `src/js/_entry.js`, `src/legacy/session-bridge.ts`, `src/js/03-sync.js`, `src/js/07-production-tags.js`, `src/js/08c-broll.js`, `src/js/12-dirty-toast.js`, `src/js/14e-export-formats.js`, `src/test/_fanout-stubs.mjs` and the test files that called a provider, `tests/bootstrap/wiring.test.ts`, and the docs above.
+**Files.** `src/bootstrap/wiring.ts`, `src/js/_entry.js`, `src/legacy/session-bridge.ts`, `src/js/03-sync.js`, `src/js/07-production-tags.js`, `src/js/08c-broll.js`, `src/js/12-dirty-toast.js`, `src/js/02b-doc-id.js`, `src/bootstrap/startup/initial-document.ts`, `tools/dep-baseline.json`, `src/test/_fanout-stubs.mjs` and the test files that called a provider, `tests/bootstrap/wiring.test.ts`, and the docs above.
 
 **Tests added.** In `wiring.test.ts`: each former provider omitted in turn is reported by `wireApp` (the records reconciler included); a session built by `wireApp` uses exactly the effects passed in (a probe effect counts one call per edit); INV-30's three arrival kinds. In `legacy-shim.test.ts`: no numbered module calls a bridge's configuration function at module evaluation, checked by importing each started module alone and asserting that no owner became started.
 
@@ -124,13 +129,13 @@ From plan §5 (milestone 7) and §4, on the closing tree. Evidence attached to t
 | Completed frontend areas: acyclic dependencies, strict types, no authored comments, one document-mutation boundary | `npm run verify` on Node 24.22.0 (lint, typecheck, `check:deps`, `check:comments`, build, `sw.js` stamp, `test:all`) and `node tools/dep-report.mjs --metrics` output |
 | Wiring tests: startup, failed partial startup, cleanup | `tests/bootstrap/wiring.test.ts` located by name and passing |
 | Nothing migrated imports or registers into the shim | `tests/bootstrap/legacy-shim.test.ts` passing |
-| Remaining legacy exceptions exact and visible | the dependency baseline unchanged or smaller, no new exception, and the inventory below |
+| Remaining legacy exceptions exact and visible | the dependency baseline unchanged or smaller, no new exception, no exception whose reason names milestone 7, and the inventory below |
 | Resource release on replacement | carried from the milestone 4 and 6 gates; the race matrix with `SPLITPAGE_M4_GATE=1`, no previously passing case demoted or weakened |
 | INV-30 | `13-onboarding.txt` and the bootstrap test passing |
 | Full Windows browser runs | `run-tests.ps1`, plain and with `SPLITPAGE_FREEZE_CACHES=1`; `summary.txt` and `digest.txt` of both |
 | Electron dev smoke | `node desktop/test/smoke.mjs` log, dev target |
 | Windows x64 packaged check | not required: the build entry does not change and no packaging input moves. If either changes, it is required |
-| External review | not part of this gate; the 4.0 release gate's external review covers milestones 5 and 7 with milestone 6's own (plan §7) |
+| External review | not part of this gate. Milestone 7's external review is folded into the 4.0 release gate's review, which covers milestones 5 and 7 together with milestone 6's own: the [re-scope Adam approved on 2026-10-07](milestones-4-7-rescope.md#updated-spec-for-the-rest-of-40) says so, plan §7 lists it, and Adam reaffirmed it on 2026-10-15 |
 | Linux full run, native ARM64, Docker, portable, 3.1 exchange | the 4.0 release gate, not this one |
 
 Then plan §7's release matrix runs before 4.0 is declared ready.
@@ -141,7 +146,7 @@ Plan §7 asks the release to name the shim, the count of numbered modules it sti
 
 **The shim:** `src/js/_entry.js`, "the legacy initializer shim". It starts 70 numbered modules on `ab93357` (69 once 6.9's second PR deletes `21-events.js`); four more numbered modules load only as imports. Runtime cycle: one, 48 modules and 357 edges. `S` assigners: 3 (`00-prelude.js`, `02b-doc-id.js`, `03-sync.js`).
 
-**The bridges:** 23 files under `src/legacy/`, 1,630 lines. "Importers" counts numbered modules (and `_entry.js`); the right column is what keeps the file alive.
+**The bridges:** 23 files under `src/legacy/`, 1,379 lines. "Importers" counts numbered modules (and `_entry.js`); the right column is what keeps the file alive.
 
 | File | Lines | Imported by | Kept by |
 | --- | --- | --- | --- |
@@ -165,17 +170,22 @@ Plan §7 asks the release to name the shim, the count of numbered modules it sti
 
 Owners: every bridge is owned by the integration owner until 4.x's bridge work (plan §8 item 2), which removes each with the legacy modules that keep it. The per-module owner table is `dependencies.md`'s shim section (7.1).
 
-## Open questions
+## Open question
 
-For the plan review to rule on. Each has the default this plan takes.
+For the external plan review.
 
-1. **Where the wiring runs.** Default: before the first `__init`, where `startSaves` is today, so the session exists before any module's init runs. Moving `startTransitions` and `startRecovery` ahead of the `__init`s is a reorder; their ports are built from module-evaluation values on `ab93357` (`liveDocumentPort`, `draftRecoveryPorts()` with its module-level writer id), and 7.1's boot tests confirm it. If one is found to need an initialized module, 7.1 splits the wiring into construct (before) and start (after), both inside `wireApp`'s lifetime.
-2. **What "registers into the shim" means.** Default: the shim's import list may only shrink (a frozen list), and, from 7.2, no numbered module configures a bridge at module evaluation. The alternative reading, a dep-report rule instead of a test, would make it a baseline exception rather than a test failure.
-3. **What a failed startup shows the user.** Default: `console.error` with the `WiringError`, and the static page with nothing mounted, which is what an exception in `_entry.js` does today. A visible message would be a new feature, so it is not added.
-4. **Whether production calls the teardown.** Default: no. The page's unload already releases everything; `dispose()` exists for the cleanup tests, the boot helper and the 4.x composition root. Calling it on `pagehide` or desktop tab close would change close and quit behaviour.
-5. **Facades versus rewriting importers.** Default: facades. The roughly 100 numbered-module imports of the bridges (summed from the inventory table) stay as they are; rewriting them to receive the wiring is the 4.x composition root's job.
-6. **`tools/modularize.mjs`.** It generated `_entry.js` and would overwrite the shim, comments included, if rerun. Default: leave it untouched and say so in the shim section of `dependencies.md`; deleting it is outside the plan's milestone 7 scope.
-7. **The gate record.** Default: its own docs-only PR after 7.2, as for milestones 3 to 6, not counted as a third code PR.
+**Where the wiring runs.** This plan takes: before the first `__init`, where `startSaves` is today, so the session exists before any module's init runs. Moving `startTransitions` and `startRecovery` ahead of the `__init`s is a reorder; their ports are built from module-evaluation values on `ab93357` (`liveDocumentPort`, `draftRecoveryPorts()` with its module-level writer id), and 7.1's boot tests confirm it. If one is found to need an initialized module, 7.1 splits the wiring into construct (before) and start (after), both inside `wireApp`'s lifetime.
+
+## Decisions taken
+
+Settled in this plan and its review; not reopened by the plan review.
+
+1. **"Registers into the shim"** means the shim's set of import specifiers may only shrink (the frozen set in 7.1's tests), and, from 7.2, no numbered module configures a bridge at module evaluation. It is a test, not a dep-report rule, so a breach fails instead of becoming a baseline entry.
+2. **A failed startup** reports the `WiringError` through `console.error` and leaves the static page with nothing mounted, as an exception in `_entry.js` does today (inferred, not measured). A visible message would be a new feature (plan §1).
+3. **Production does not call the teardown.** The page's unload already releases everything; `dispose()` exists for the cleanup tests, the boot helper and the 4.x composition root. Calling it on `pagehide` or desktop tab close would change close and quit behaviour.
+4. **Facades, not rewritten importers.** The roughly 100 numbered-module imports of the bridges stay; rewriting them to receive the wiring is plan §8's 4.x work.
+5. **`tools/modularize.mjs`** stays untouched. It generated `_entry.js` and would overwrite the shim, comments included, if rerun; the shim section of `dependencies.md` says so.
+6. **The gate record** is its own docs-only PR after 7.2, as for milestones 3 to 6, not a third code PR.
 
 ## As built
 
