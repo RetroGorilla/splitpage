@@ -2,6 +2,8 @@
 
 The working notes for milestone 5 of [the implementation plan](../IMPLEMENTATION-PLAN.md#5--make-formats-consume-captured-data-and-one-registry), as amended by the [external review of the plan](milestones-4-7-rescope.md#external-review-of-milestone-5-2026-10-14). This file records what each step built. The steps themselves, their models and the gate are in the plan.
 
+Status: all code steps are merged (5.1 to 5.4, last merge `dcfb92d`). The gate runs passed on `dcfb92d` ([milestone-5-gate.md](milestone-5-gate.md)); the Linux full run and native ARM64 wait for the 4.0 release gate. The external code review (Sol, Codex CLI) found 0 blockers; its four findings were fixed in #586 and are triaged there. Node 24 ([#583](https://github.com/RetroGorilla/splitpage/pull/583)) lands right after.
+
 ## As built
 
 ### Step 1: the remaining writers take the captured document
