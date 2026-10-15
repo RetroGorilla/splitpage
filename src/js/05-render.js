@@ -63,6 +63,7 @@ import {
 import { cellLength, projection } from "../core/text/runs.ts";
 import { cellRuns, cellTextCommand, sanitisedMediaHtml } from "../application/commands/cell-text.ts";
 import { fromHtml } from "../legacy/richtext.ts";
+import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
 export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
@@ -469,37 +470,11 @@ function commitRowPatch(rowEl, patch) {
   return patch.parts.length > 0;
 }
 
-var painting = 0;
-var afterPaint = [];
+var paintGuard = createPaintGuard();
 
-export function whilePainting(draw) {
-  painting++;
-  var drawn = false;
-  try {
-    var out = draw();
-    drawn = true;
-    return out;
-  } finally {
-    painting--;
-    if (!painting) runAfterPaint(drawn);
-  }
-}
+export var whilePainting = paintGuard.whilePainting;
 
-function runAfterPaint(drawn) {
-  var queued = afterPaint;
-  if (drawn) {
-    afterPaint = [];
-    queued.forEach(function (entry) { entry.fn(); });
-    return;
-  }
-  afterPaint = queued.filter(function (entry) { return !entry.ifFailed; });
-  queued.forEach(function (entry) { if (entry.ifFailed) entry.ifFailed(); });
-}
-
-export function afterThisPaint(fn, ifFailed) {
-  if (painting) afterPaint.push({ fn: fn, ifFailed: ifFailed });
-  else fn();
-}
+export var afterThisPaint = paintGuard.afterThisPaint;
 
 export function renderRow(rowId) {
   return whilePainting(function () { return paintOneRow(rowId); });
@@ -696,7 +671,7 @@ export function render() {
 }
 
 export function paintingScreen() {
-  return painting > 0;
+  return paintGuard.painting();
 }
 
 function paintAll() {
