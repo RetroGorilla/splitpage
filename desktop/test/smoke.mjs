@@ -4660,6 +4660,7 @@ async function caseHostTabTornOffDuringLastWindowClose(target, fixturesDir) {
     const tabAId = held[marker].id;
     const tabBId = await shell(cdpA, "createTab", {});
     cdpB = await connectTab(app, tabBId);
+    await waitForRows(cdpB, 20000);
     fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
 
     const seen0 = await dialogsSeen(cdpB);
