@@ -4,11 +4,11 @@ import { cssAttr, ensureTrailingCaretSpot } from "./04-richtext.js";
 import { screenIsStale, syncFieldFromDom } from "./05-render.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { toHtml } from "../core/text/html.ts";
-import { cellKeys, isSelectionField } from "../core/text/selection.ts";
+import { editorKeys, isSelectionField } from "../core/text/selection.ts";
 import { createSelectionModel } from "../application/editing/selection.ts";
 import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "../features/editing/cell-dom.ts";
-import { cellOf, fromHtml } from "../legacy/richtext.ts";
+import { fromHtml, scriptCellOf } from "../legacy/richtext.ts";
 import { liveSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
 export { domToPos, posToDom };
@@ -18,7 +18,7 @@ var editorSelection = createSelectionModel({
   order: function () { return S.state ? S.state.rows.map(function (r) { return r.id; }) : []; },
   keys: function (rowId, field) {
     var idx = S.state ? findRowIndex(rowId) : -1;
-    return idx === -1 ? null : cellKeys(cellOf(S.state.rows[idx][field] || ""));
+    return idx === -1 ? null : editorKeys(scriptCellOf(S.state.rows[idx][field] || ""));
   }
 });
 
