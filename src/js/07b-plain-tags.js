@@ -2,7 +2,6 @@ import { cellSelection, domToPos, editCell, setCellSelection } from "./05b-cell-
 import {
   isBlankTagName,
   isInsideTagOrLink,
-  registerProductionTag,
   registryEntry,
   tagCategory,
   updateTagBadges
@@ -240,8 +239,7 @@ export function closePlainTag() {
     if (projection(cell).slice(from, to) !== o.keyword + typed.replace(ZWSP_RE, "")) return null;
     var res = applyPlainTag(cell, from, to, o.cat, name);
     if (!res) return null;
-    registerProductionTag(o.cat, res.name);
-    return { cell: res.cell, sel: { from: res.caret, to: res.caret } };
+    return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
   if (!done) { unwrap(o); return true; }
   updateTagBadges();
