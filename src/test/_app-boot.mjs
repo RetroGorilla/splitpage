@@ -64,7 +64,7 @@ function stateDataText(html) {
   return new window.DOMParser().parseFromString(html, "text/html").getElementById("state-data").textContent;
 }
 
-export async function bootApp(stateData) {
+export async function bootApp(stateData, opts) {
   const { checksumText } = await import("../js/20b-onboarding.js");
   const page = read("../page.html").replace("{{VERSION}}", () => read("../../VERSION").trim());
   const seedText = stateDataText(page.replace("{{SEED_STATE}}", () => SEED_TEXT));
@@ -75,7 +75,18 @@ export async function bootApp(stateData) {
   const parsed = new window.DOMParser().parseFromString(filled, "text/html");
   document.head.innerHTML = parsed.head.innerHTML;
   document.body.innerHTML = parsed.body.innerHTML;
-  await import("../js/_entry.js");
+  if (opts && opts.beforeStart) {
+    Object.defineProperty(document, "readyState", { configurable: true, get: () => "loading" });
+    try {
+      await import("../js/_entry.js");
+      opts.beforeStart();
+    } finally {
+      delete document.readyState;
+    }
+    document.dispatchEvent(new window.Event("DOMContentLoaded"));
+  } else {
+    await import("../js/_entry.js");
+  }
   await S.initialStateReady;
   return seen.splice(0);
 }
@@ -88,4 +99,28 @@ export function clearTimers() {
 export function closeApp() {
   clearTimers();
   for (const channel of channels) channel.close();
+}
+
+export async function appWiringDeps() {
+  const [{ migrateRows }, docId, sync, exporting, formats, drafts] = await Promise.all([
+    import("../js/02-state.js"),
+    import("../js/02b-doc-id.js"),
+    import("../js/03-sync.js"),
+    import("../js/14-export.js"),
+    import("../js/14e-export-formats.js"),
+    import("../js/20g-drafts.js")
+  ]);
+  return {
+    entry: migrateRows,
+    exporters: formats.registerBuiltInExporters,
+    saves: exporting.legacySavePorts,
+    transitions: { live: docId.liveDocumentPort, destination: sync.documentDestinationPort, identity: docId.documentIdentityPort },
+    recovery: drafts.draftRecoveryPorts,
+    keyTarget: window
+  };
+}
+
+export async function rewireApp(overrides) {
+  const { wireApp } = await import("../bootstrap/wiring.ts");
+  return wireApp(Object.assign(await appWiringDeps(), overrides));
 }

@@ -1,6 +1,8 @@
 import type { CommentsMount } from "../features/comments/mount.ts";
 import type { OverlayMount } from "../features/overlay/mount.ts";
+import { startActions } from "./actions.ts";
 import { beginStartup } from "./startup.ts";
+import type { Wiring } from "./wiring.ts";
 import { whenDocumentReady } from "./startup/dom-ready.ts";
 import { mountBrollFeature, stopBrollFeature } from "../js/08d-broll-panel.js";
 import {
@@ -62,9 +64,9 @@ function view(key: string, mount: () => unknown): [() => unknown, () => void] {
   return [mount, () => stopViewFeature(key)];
 }
 
-export function startApp(): () => void {
+export function startApp(wiring: Wiring): () => void {
   if (running) throw new Error("the app is already started; stop it first");
-  const stops: (() => void)[] = [];
+  const stops: (() => void)[] = [wiring.dispose];
   const stopAll = (): unknown[] => {
     const failures: unknown[] = [];
     while (stops.length) {
@@ -81,6 +83,7 @@ export function startApp(): () => void {
     mount();
   };
   try {
+    stops.push(startActions(wiring.actions, wiring.keyTarget));
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
     run(view("mountNotices", mountNoticesFeature));
@@ -156,13 +159,21 @@ export function stopApp(): void {
   running?.();
 }
 
-export function startAppWhenReady(doc: Document): void {
+export function startAppWhenReady(doc: Document, wiring: Wiring): void {
   if (running || cancelReady) throw new Error("the app is already started or waiting to start; stop it first");
   let started = false;
   const cancel = whenDocumentReady(doc, () => {
     started = true;
     cancelReady = null;
-    startApp();
+    startApp(wiring);
   });
-  if (!started) cancelReady = cancel;
+  if (!started) {
+    cancelReady = () => {
+      try {
+        cancel();
+      } finally {
+        wiring.dispose();
+      }
+    };
+  }
 }

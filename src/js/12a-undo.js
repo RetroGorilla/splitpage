@@ -704,7 +704,8 @@ var flushQueued = false;
 var applying = false;
 var commentsAreSent = function () { return false; };
 var hooks = { afterApply: null, onRefused: null, adopted: null };
-var replays = { run: replayUnwired, amend: replayUnwired, stamps: null };
+var UNROUTED = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
+var replays = UNROUTED;
 
 export function configureUndo(opts) {
   var was = { commentsAreSent: commentsAreSent, afterApply: hooks.afterApply, onRefused: hooks.onRefused };
@@ -716,13 +717,16 @@ export function configureUndo(opts) {
     if (opts.commentsAreSent && commentsAreSent === opts.commentsAreSent) commentsAreSent = was.commentsAreSent;
     if (opts.afterApply && hooks.afterApply === opts.afterApply) hooks.afterApply = was.afterApply;
     if (opts.onRefused && hooks.onRefused === opts.onRefused) hooks.onRefused = was.onRefused;
+    if (opts.adopted && hooks.adopted === opts.adopted) hooks.adopted = null;
   };
 }
 
 export function routeUndoReplays(run, stamps, amend) {
-  replays.run = run;
-  replays.amend = amend || run;
-  replays.stamps = stamps;
+  var mine = Object.freeze({ run: run, amend: amend || run, stamps: stamps });
+  replays = mine;
+  return function () {
+    if (replays === mine) replays = UNROUTED;
+  };
 }
 
 function replayUnwired(task) {

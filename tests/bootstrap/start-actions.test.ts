@@ -3,6 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import { startActions, stopActions } from "../../src/bootstrap/actions.ts";
+import { wireRegistries } from "../../src/test/_registries.mjs";
+
+wireRegistries();
 
 class CountingTarget extends EventTarget {
   listeners = 0;

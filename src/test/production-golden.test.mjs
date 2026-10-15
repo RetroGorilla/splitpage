@@ -19,6 +19,9 @@ import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 import { startSaves } from "../legacy/save-bridge.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
+import { startTestSession } from "./_session.mjs";
+
+startTestSession();
 
 freezeClockAndRandom(0x70726f64);
 startSaves({
