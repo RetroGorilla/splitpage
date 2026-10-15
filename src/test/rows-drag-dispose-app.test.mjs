@@ -22,7 +22,7 @@ function runFrames(n) {
   }
 }
 
-const { bootApp, closeApp } = await import("./_app-boot.mjs");
+const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
 const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
@@ -60,7 +60,7 @@ test("stopping the app mid edge-drag ends the drag: the auto-scroll stops, the m
   runFrames(3);
   assert.equal(scrolled, 2, "nothing scrolls after dispose");
 
-  app.startApp();
+  app.startApp(await rewireApp());
   await S.initialStateReady;
   assert.equal(S.dragRowId, null, "the remount inherits no dragged scene");
   document.body.dispatchEvent(new window.MouseEvent("dragover", { bubbles: true, cancelable: true, clientX: 10, clientY: 2 }));
