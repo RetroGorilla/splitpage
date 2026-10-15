@@ -19,7 +19,7 @@ const { getSavedAuthorName, openCommentComposer, postComment, postReply, toggleR
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../js/20s-settings.js");
 const { render } = await import("../js/05-render.js");
-const { toastLastEditor } = await import("../js/21-events.js");
+const { toastLastEditor } = await import("../js/03-sync.js");
 
 after(closeApp);
 

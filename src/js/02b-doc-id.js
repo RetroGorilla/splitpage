@@ -32,6 +32,11 @@ export function migrateDocument(raw, origin) {
   });
 }
 
+export function loadInitialDocument() {
+  S.state = null;
+  return loadInitialState();
+}
+
 export async function loadInitialState() {
   var raw = null;
   var pristine = seedCheckPasses();
