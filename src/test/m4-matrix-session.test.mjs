@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -12,7 +12,7 @@ import {
   traceFields
 } from "./_m4-matrix.mjs";
 
-const { liveSession, provideRefreshRunner, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
+const { liveSession, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
@@ -49,6 +49,10 @@ const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 
 after(closeApp);
+
+const { runIdleRefresh } = await import("../js/07-production-tags.js");
+const refreshed = { into: null };
+await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
 async function traced(run) {
   const trace = traceFields(S, TRACED, probe);
@@ -697,7 +701,8 @@ rightToday("T6", "with autosave off, nothing is scheduled after a restore or an 
 rightToday("L1a", "a refresh the old document asked for does not run once the document was replaced", async (t) => {
   const clock = mockClock(t);
   const jobs = [];
-  provideRefreshRunner((due) => jobs.push(...due));
+  refreshed.into = jobs;
+  t.after(() => { refreshed.into = null; });
   useDocument(script("Old document"));
   clock.tick(5000);
   requestRefresh("m4-old-document");

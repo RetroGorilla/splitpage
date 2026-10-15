@@ -20,8 +20,9 @@ import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, 
 import { startSaves } from "../legacy/save-bridge.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { startTestSession } from "./_session.mjs";
+import { appSessionDeps } from "./_app-session.mjs";
 
-startTestSession();
+startTestSession(appSessionDeps());
 
 freezeClockAndRandom(0x70726f64);
 startSaves({

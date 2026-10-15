@@ -1,4 +1,7 @@
 import { bootApp, closeApp, rewireApp } from "../../src/test/_app-boot.mjs";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
@@ -16,16 +19,16 @@ import { savesStarted } from "../../src/legacy/save-bridge.ts";
 import {
   liveSession,
   onDocumentReplaced,
-  provideRecordsReconciler,
-  provideRefreshRunner,
-  provideSessionEffects,
   requestRefresh,
+  runCommand,
+  sessionStamps,
   sessionStarted
 } from "../../src/legacy/session-bridge.ts";
 import type { ReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
 import { documentTransitions, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import type { LegacyTransitionPorts } from "../../src/legacy/transition-bridge.ts";
 import { routeReplays, watchUndoAdoption } from "../../src/legacy/undo-adapter.ts";
+import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { S } from "../../src/js/_state.js";
 import { migrateRows } from "../../src/js/02-state.js";
 
@@ -106,6 +109,7 @@ interface Fakes {
   readonly held: { adopted: ((doc: unknown) => void) | null; run: ReplayRunner | null };
   readonly live: { exporters: number; undo: number };
   readonly timers: FakeTimers;
+  readonly refreshed: string[];
   readonly deps: WiringDeps;
 }
 
@@ -114,6 +118,7 @@ function fakes(): Fakes {
   const held: Fakes["held"] = { adopted: null, run: null };
   const counts = { exporters: 0, undo: 0 };
   const timers = new FakeTimers();
+  const refreshed: string[] = [];
   const note = (what: string): void => { log.push([what, started()]); };
   const undo: SessionUndoPorts = {
     adapter: { adopt: () => {}, record: () => {}, absorbServer: () => {}, absorbReload: () => {} },
@@ -136,6 +141,10 @@ function fakes(): Fakes {
       return createActionRegistry();
     },
     entry: (raw) => migrateRows(raw),
+    effects: { dirty: () => {}, draft: () => {}, save: () => {}, edit: () => ({ allowed: true }), attribute: () => null },
+    editorName: () => "Ann",
+    refresh: (jobs) => { refreshed.push(...jobs); },
+    records: () => null,
     exporters: (registry: ExportRegistry) => {
       note("exporters");
       counts.exporters++;
@@ -166,13 +175,7 @@ function fakes(): Fakes {
     timers,
     report: () => {}
   };
-  return { log, held, live: counts, timers, deps };
-}
-
-function provideEverything(refreshed: string[] = []): void {
-  provideSessionEffects({ dirty: () => {}, draft: () => {}, save: () => {}, edit: () => ({ allowed: true }), editorName: () => "Ann", attribute: () => null });
-  provideRefreshRunner((jobs) => { refreshed.push(...jobs); });
-  provideRecordsReconciler(() => null);
+  return { log, held, live: counts, timers, refreshed, deps };
 }
 
 function must<T>(value: T | null | undefined): T {
@@ -198,17 +201,7 @@ function refused(run: () => unknown): WiringError {
   assert.fail("wireApp did not refuse");
 }
 
-test("interim check: before the load-order providers have run, wireApp refuses and builds nothing", () => {
-  const f = fakes();
-  const error = refused(() => wireApp(f.deps));
-  assert.equal(error.step, "session effects");
-  assert.match(error.message, /dirty, draft, save, edit capability, editor name, attribution, refresh runner, records reconciler/);
-  assert.deepEqual(f.log, []);
-  assert.deepEqual(started(), NOTHING);
-});
-
 test("startup: wireApp builds every owner in order, each step sees only the owners before it, and dispose releases them all", () => {
-  provideEverything();
   assert.deepEqual(started(), NOTHING);
   assert.throws(() => appActions.list(), /The action registry is not started yet/);
   assert.throws(() => exportFormats.cards(), /The export registry is not started yet/);
@@ -237,7 +230,7 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
 });
 
 test("failed partial startup: each missing dependency is named and nothing is built", () => {
-  const required: (keyof WiringDeps)[] = ["entry", "exporters", "saves", "transitions", "recovery", "keyTarget"];
+  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "exporters", "saves", "transitions", "recovery", "keyTarget"];
   for (const name of required) {
     const f = fakes();
     const error = refused(() => wireLoose(without(f.deps, name)));
@@ -245,6 +238,14 @@ test("failed partial startup: each missing dependency is named and nothing is bu
     assert.match(error.message, new RegExp("the " + name + " dependency is missing"));
     assert.deepEqual(f.log, [], name + ": nothing is built");
     assert.deepEqual(started(), NOTHING, name + ": no facade is started");
+  }
+  for (const effect of ["dirty", "draft", "save", "edit", "attribute"] as const) {
+    const f = fakes();
+    const error = refused(() => wireLoose({ ...f.deps, effects: without(f.deps.effects, effect) }));
+    assert.equal(error.step, "effects");
+    assert.match(error.message, new RegExp("the effects dependency has no " + effect + " effect"));
+    assert.deepEqual(f.log, [], effect + ": nothing is built");
+    assert.deepEqual(started(), NOTHING, effect + ": no facade is started");
   }
   for (const port of ["live", "destination", "identity"] as const) {
     const f = fakes();
@@ -344,9 +345,60 @@ test("undo teardown: an old uninstall run after a newer installation leaves the 
   assert.deepEqual(heard, ["new"], "a released watch hears nothing");
 });
 
+test("a session built by wireApp runs exactly the effects it was handed: a probe counts one call of each per edit", () => {
+  const f = fakes();
+  const calls = new Map<string, number>();
+  const count = (what: string): void => { calls.set(what, (calls.get(what) ?? 0) + 1); };
+  const counted = (): Record<string, number> => Object.fromEntries([...calls].sort());
+  const wiring = wireApp({
+    ...f.deps,
+    undo: undefined,
+    effects: {
+      dirty: () => { count("dirty"); },
+      draft: () => { count("draft"); },
+      save: () => { count("save"); },
+      edit: () => { count("edit"); return { allowed: true }; },
+      attribute: () => { count("attribute"); return null; }
+    },
+    editorName: () => { count("editor name"); return "Probe"; },
+    refresh: (jobs) => { for (const job of jobs) count("refresh " + job); },
+    records: () => { count("records"); return null; }
+  });
+  try {
+    const doc = migrateRows({ title: "Probe", rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });
+    Reflect.set(S, "state", doc);
+    Object.assign(must(doc.rows[0]), { audioText: "typed" });
+    calls.clear();
+    liveSession().noteEdit();
+    assert.deepEqual(counted(), { dirty: 1, draft: 1, save: 1 }, "a legacy edit runs each change effect once");
+    calls.clear();
+    const outcome = runCommand(sceneLengthCommand("r1", 30, sessionStamps));
+    assert.equal(outcome.kind, "applied");
+    assert.equal(doc.rows[0]?.updatedBy, "Probe", "the stamp comes from the editor name handed in");
+    assert.deepEqual(counted(), { attribute: 1, dirty: 1, draft: 1, edit: 1, "editor name": 1, records: 1, save: 1 }, "a command runs each effect once");
+    calls.clear();
+    requestRefresh("probe");
+    f.timers.advance(60_000);
+    assert.equal(calls.get("refresh probe"), 1, "a refresh that comes due reaches the runner handed in, once");
+    assert.deepEqual([...calls.keys()].filter((what) => !what.startsWith("refresh ")), [], "a refresh runs no other effect");
+  } finally {
+    wiring.dispose();
+  }
+  assert.deepEqual(started(), NOTHING);
+});
+
+test("session release: a session dispose that throws still runs the undo uninstalls", () => {
+  const f = fakes();
+  const stopFails = new Error("timer stop failed");
+  const wiring = wireApp({ ...f.deps, timers: { now: () => 0, start: () => 1, stop: () => { throw stopFails; } } });
+  requestRefresh("probe");
+  assert.deepEqual(f.live, { exporters: 1, undo: 2 });
+  assert.throws(() => wiring.dispose(), (error) => error instanceof AggregateError && error.errors.includes(stopFails));
+  assert.deepEqual(f.live, { exporters: 0, undo: 0 }, "the undo routing and adoption watch were uninstalled");
+  assert.deepEqual(started(), NOTHING);
+});
+
 test("cleanup: wire and dispose three times leaves no timer or subscriber, empty registries, and the same owners each time", () => {
-  const refreshed: string[] = [];
-  provideEverything(refreshed);
   for (let round = 0; round < 3; round++) {
     const f = fakes();
     const wiring = wireApp(f.deps);
@@ -359,7 +411,7 @@ test("cleanup: wire and dispose three times leaves no timer or subscriber, empty
     wiring.dispose();
     f.timers.advance(60_000);
     assert.equal(f.timers.pending.size, 0, "round " + round + ": no session timer is left");
-    assert.deepEqual(refreshed, [], "round " + round + ": a disposed session runs no refresh");
+    assert.deepEqual(f.refreshed, [], "round " + round + ": a disposed session runs no refresh");
     assert.equal(heard, 0);
     assert.deepEqual(registries[0].list(), [], "the action registry is empty");
     assert.equal(registries[1].byId("probe"), undefined, "the export registry is empty");
@@ -409,6 +461,26 @@ function listenerCount(): number {
   let n = 0;
   for (const set of listeners.values()) n += set.size;
   return n;
+}
+
+function labelOf(target: EventTarget): string {
+  if (target === window) return "window";
+  if (target === document) return "document";
+  const element = target as Element;
+  if (element.id) return "#" + element.id;
+  if (element.tagName) return element.tagName.toLowerCase() + (typeof element.className === "string" && element.className.trim() ? "." + element.className.trim().split(/\s+/).join(".") : "");
+  return target.constructor.name;
+}
+
+function survivorNames(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [target, set] of listeners) {
+    for (const key of set) {
+      const name = labelOf(target) + " " + key.split("/").slice(0, 2).join("/");
+      out[name] = (out[name] ?? 0) + 1;
+    }
+  }
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
 function windowListeners(): Record<string, number> {
@@ -545,14 +617,32 @@ test("lifecycle: start, stop and start again three times with the same owners an
   assert.deepEqual(rounds[2], rounds[0]);
 });
 
+const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
+  "document beforecopy/C": 1, "document beforecut/C": 1, "document click/B": 1, "document contextmenu/B": 1, "document copy/C": 1,
+  "document cut/C": 1, "document dragend/B": 1, "document dragover/B": 1, "document dragstart/C": 1, "document drop/B": 1, "document focusin/B": 1,
+  "document input/C": 1, "document keydown/C": 3, "document mousedown/B": 1, "document mousedown/C": 2, "document mousemove/B": 1,
+  "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 4,
+  "document splitpage:pref/B": 4, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 3, "window beforeinput/C": 1,
+  "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
+  "window focus/C": 2, "window focusin/C": 3, "window hashchange/B": 1, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 8,
+  "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 2,
+  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window pointerup/C": 1, "window resize/B": 7, "window scroll/B": 1,
+  "window scroll/C": 2, "window storage/B": 3, "window touchmove/B": 1, "window wheel/B": 1
+};
+
+function globalOnly(names: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(names).filter(([name]) => /^(?:window|document) /.test(name)));
+}
+
 test("cleanup: the app-lifetime registrations that survive a stop are the ones made by the initializers, which run once", async () => {
   const app = await import("../../src/bootstrap/app.ts");
   const wiring = await wireReal();
   app.startApp(wiring);
   await S.initialStateReady;
   app.stopApp();
-  const survivors = listenerCount();
-  assert.ok(survivors > 0, "initializer listeners stay: the shim's __init calls are not repeated by a restart");
+  const survivors = survivorNames();
+  assert.deepEqual(globalOnly(survivors), SURVIVING_GLOBAL_LISTENERS, "the window and document listeners the initializers registered, by event, stay");
+  assert.ok(Object.keys(survivors).length > Object.keys(SURVIVING_GLOBAL_LISTENERS).length, "the initializers' element listeners stay too");
   let replaced = 0;
   onDocumentReplaced(() => { replaced++; });
   const again = await wireReal();
@@ -562,5 +652,62 @@ test("cleanup: the app-lifetime registrations that survive a stop are the ones m
   documentTransitions().startNew({ from: { document: migrateRows({ title: "Fresh", rows: [] }) }, reason: "test: a new script", destination: NO_DESTINATION });
   assert.ok(replaced > 0, "document-replaced listeners registered on the bridge survive a rewire");
   app.stopApp();
-  assert.equal(listenerCount(), survivors);
+  assert.deepEqual(survivorNames(), survivors, "a second start and stop leaves exactly the same named listeners");
+});
+
+interface OnboardingReport {
+  readonly arrival: string;
+  readonly error: string | null;
+  readonly booted: boolean;
+  readonly seedCheck: boolean | null;
+  readonly desktop: boolean;
+  readonly opened: boolean;
+}
+
+async function bootFresh(arrival: string): Promise<OnboardingReport> {
+  const probe = fileURLToPath(new URL("../../src/test/_onboarding-probe.mjs", import.meta.url));
+  const { stdout } = await promisify(execFile)(process.execPath, [probe, arrival], { cwd: fileURLToPath(new URL("../../", import.meta.url)), maxBuffer: 1 << 24 });
+  return JSON.parse(stdout.trim().split("\n").pop() ?? "") as OnboardingReport;
+}
+
+test("INV-30: through the shim's real wiring, initializers and startup, the wizard opens over a pristine copy and stays shut when a document arrives by file, link or restore", { timeout: 120_000 }, async () => {
+  const arrivals = ["pristine", "file", "link", "desktop pristine", "restore"];
+  const reports = await Promise.all(arrivals.map(bootFresh));
+  for (const report of reports) {
+    assert.equal(report.error, null, report.arrival + ": the app booted");
+    assert.equal(report.booted, true, report.arrival + ": the onboarding initializer ran");
+    assert.equal(report.seedCheck, true, report.arrival + ": the seed check passes, so only the arrival can keep the wizard shut");
+  }
+  assert.deepEqual(reports.map((r) => [r.arrival, r.desktop, r.opened]), [
+    ["pristine", false, true],
+    ["file", false, false],
+    ["link", false, false],
+    ["desktop pristine", true, true],
+    ["restore", true, false]
+  ], "the pristine copies are the positive controls: the same boot path opens the wizard when nothing arrives");
+});
+
+interface InitialLoadReport {
+  readonly pristine: boolean;
+  readonly error: string | null;
+  readonly seedCheck: boolean | null;
+  readonly title: string | null;
+  readonly docIdIsTheFiles: boolean;
+  readonly writtenOut: boolean;
+}
+
+async function loadFresh(kind: "pristine" | "saved"): Promise<InitialLoadReport> {
+  const probe = fileURLToPath(new URL("../../src/test/_initial-load-probe.mjs", import.meta.url));
+  const { stdout } = await promisify(execFile)(process.execPath, [probe, kind], { cwd: fileURLToPath(new URL("../../", import.meta.url)), maxBuffer: 1 << 24 });
+  return JSON.parse(stdout.trim().split("\n").pop() ?? "") as InitialLoadReport;
+}
+
+test("the booted app's initial load gets the seed check through its port: a pristine copy of a saved page is a fresh document, the same page without the check opens as its file", { timeout: 120_000 }, async () => {
+  const [pristine, saved] = await Promise.all([loadFresh("pristine"), loadFresh("saved")]);
+  for (const report of [pristine, saved]) {
+    assert.equal(report.error, null);
+    assert.equal(report.title, "Saved", "both pages carry the same saved script");
+  }
+  assert.deepEqual([pristine.seedCheck, pristine.docIdIsTheFiles, pristine.writtenOut], [true, false, false], "a pristine copy is not the file it came from");
+  assert.deepEqual([saved.seedCheck, saved.docIdIsTheFiles, saved.writtenOut], [false, true, true], "a saved page opens as its file");
 });

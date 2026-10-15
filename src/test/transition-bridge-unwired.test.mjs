@@ -4,11 +4,12 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 
 const bridge = await import("../legacy/transition-bridge.ts");
-const { liveSession, provideRefreshRunner, provideSessionEffects, requestRefresh } = await import("../legacy/session-bridge.ts");
+const { liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { startTestSession } = await import("./_session.mjs");
+const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
-startTestSession();
+const unwired = unwiredSessionDeps();
+startTestSession(unwired.deps);
 
 function script(title) {
   return migrateRows({ title: title, docId: "d" + "1".repeat(32), rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });
@@ -47,8 +48,8 @@ test("started once, with the ports it is handed; a second start throws until the
 test("a replacement through the API disposes the old document's session: its armed refresh never runs and its subscriptions hear nothing", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1_000_000 });
   const ran = [];
-  provideRefreshRunner((jobs) => ran.push(...jobs));
-  provideSessionEffects({ dirty: () => {}, draft: () => {}, save: () => {} });
+  unwired.given.refresh = (jobs) => ran.push(...jobs);
+  Object.assign(unwired.given, { dirty: () => {}, draft: () => {}, save: () => {} });
   const stop = startWith([]);
   try {
     bridge.documentTransitions().open({ from: { document: script("Old") }, reason: "opened" });

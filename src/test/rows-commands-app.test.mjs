@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -12,11 +12,16 @@ const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession, provideSessionEffects } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../legacy/session-bridge.ts");
+const { legacySessionEffects } = await import("../js/12-dirty-toast.js");
 const { addRow, moveRowTo } = await import("../js/06-rows.js");
 const writer = await import("../js/19-writer.js");
 
 after(closeApp);
+
+const appEffects = legacySessionEffects();
+const effects = Object.assign({}, appEffects);
+await rewireRunningApp({ effects: effects });
 
 const realNow = Date.now;
 let clock = 7_000_000;
@@ -200,13 +205,13 @@ test("rows: when the session refuses edits, a strip drop and an add leave the sc
   await open();
   const before = JSON.stringify(S.state);
   const generation = liveSession().generation();
-  provideSessionEffects({ edit: () => ({ allowed: false, reason: "review" }) });
+  effects.edit = () => ({ allowed: false, reason: "review" });
   try {
     moveRowTo("r1", "r3", true);
     addRow("r1");
     await settle();
   } finally {
-    provideSessionEffects({ edit: () => ({ allowed: true }) });
+    effects.edit = appEffects.edit;
   }
   assert.equal(JSON.stringify(S.state), before, "nothing was written around the session");
   assert.equal(liveSession().generation(), generation);

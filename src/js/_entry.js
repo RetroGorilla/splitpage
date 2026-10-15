@@ -69,7 +69,10 @@ import { __init as init_20k_phone_bar } from "./20k-phone-bar.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort, liveDocumentPort } from "./02b-doc-id.js";
-import { documentDestinationPort } from "./03-sync.js";
+import { documentDestinationPort, getEditorName } from "./03-sync.js";
+import { runIdleRefresh } from "./07-production-tags.js";
+import { derivedRecordsPlan } from "./08c-broll.js";
+import { legacySessionEffects } from "./12-dirty-toast.js";
 import { legacySavePorts } from "./14-export.js";
 import { registerBuiltInExporters } from "./14e-export-formats.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
@@ -80,6 +83,10 @@ var wiring = null;
 try {
   wiring = wireApp({
     entry: migrateRows,
+    effects: legacySessionEffects(),
+    editorName: getEditorName,
+    refresh: runIdleRefresh,
+    records: derivedRecordsPlan,
     exporters: registerBuiltInExporters,
     saves: legacySavePorts,
     transitions: { live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort },

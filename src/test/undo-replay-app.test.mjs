@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -13,10 +13,13 @@ const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession, provideSessionEffects } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 
 after(closeApp);
+
+const naming = { name: getEditorName };
+await rewireRunningApp({ editorName: () => naming.name() });
 
 const realNow = Date.now;
 let clock = 9_000_000;
@@ -229,11 +232,11 @@ test("6.2: a throw before the commit leaves the document and the history as they
   const sizes = undoSizes();
   const top = lastUndoEntry();
   const generation = liveSession().generation();
-  provideSessionEffects({ editorName: () => { throw new Error("no editor name"); } });
+  naming.name = () => { throw new Error("no editor name"); };
   try {
     assert.throws(() => undo(), /no editor name/);
   } finally {
-    provideSessionEffects({ editorName: getEditorName });
+    naming.name = getEditorName;
   }
   assert.equal(docText(), text, "the replayed text and the stamp are rolled back");
   assert.deepEqual(undoSizes(), sizes);

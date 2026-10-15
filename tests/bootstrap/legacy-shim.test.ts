@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { analyzeScript, resolveSpecifier } from "../../tools/dep-report.mjs";
 import { REPO, isScript, listRepoFiles } from "../../tools/source-scan.mjs";
+import { CONFIGURATION } from "../../src/test/_load-order-hooks.mjs";
 
 const SHIM = "src/js/_entry.js";
 
@@ -66,4 +70,77 @@ test("no migrated module under application, features or bootstrap imports the le
 test("the resolver used by the scan does find an import of the shim", () => {
   const fileSet = new Set([SHIM, "src/bootstrap/probe.ts"]);
   assert.deepEqual(resolveSpecifier("src/bootstrap/probe.ts", "../js/_entry.js", fileSet), { kind: "file", target: SHIM });
+});
+
+interface LoadReport {
+  readonly target: string;
+  readonly calls: readonly { readonly file: string; readonly name: string; readonly from: string }[];
+  readonly error: string | null;
+  readonly owners: Readonly<Record<string, boolean | string>>;
+}
+
+const NOTHING_STARTED = { session: false, saves: false, recovery: false, transitions: false, actions: false, exports: false };
+const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
+const run = promisify(execFile);
+
+async function loadAlone(target: string): Promise<LoadReport> {
+  const { stdout } = await run(process.execPath, [join(REPO, "src/test/_load-order-probe.mjs"), target], { cwd: REPO, maxBuffer: 1 << 24 });
+  return JSON.parse(stdout.trim().split("\n").pop() ?? "") as LoadReport;
+}
+
+async function loadEachAlone(targets: readonly string[]): Promise<LoadReport[]> {
+  const reports: LoadReport[] = [];
+  const queue = [...targets];
+  const worker = async (): Promise<void> => {
+    for (let next = queue.shift(); next !== undefined; next = queue.shift()) reports.push(await loadAlone(next));
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(8, availableParallelism())) }, worker));
+  return reports.sort((a, b) => (a.target < b.target ? -1 : 1));
+}
+
+const NUMBERED = readdirSync(join(REPO, "src/js")).filter((name) => /^\d/.test(name) && name.endsWith(".js")).map((name) => "src/js/" + name);
+
+test("every configuration function the load-order check spies on exists, and every bridge or bootstrap export that configures is spied on", () => {
+  const listed = new Set<string>();
+  for (const [file, entry] of Object.entries(CONFIGURATION)) {
+    const spec = entry as { readonly functions: readonly string[]; readonly facade?: { readonly name: string } };
+    const source = readFileSync(join(REPO, file), "utf8");
+    for (const name of spec.functions) {
+      assert.equal(source.split("export function " + name + "(").length, 2, file + " declares " + name + " once");
+      listed.add(file + "#" + name);
+    }
+    if (spec.facade) assert.match(source, new RegExp("export const " + spec.facade.name + "\\b"), file + " has the " + spec.facade.name + " facade");
+  }
+  const unlisted: string[] = [];
+  const files = (listRepoFiles(REPO) as readonly string[]).filter((f) => /^src\/(?:legacy|bootstrap)\/.+\.ts$/.test(f));
+  for (const file of files) {
+    for (const found of readFileSync(join(REPO, file), "utf8").matchAll(/^export (?:async )?function (\w+)/gm)) {
+      const name = found[1] ?? "";
+      if (CONFIGURES.test(name) && !listed.has(file + "#" + name)) unlisted.push(file + "#" + name);
+    }
+  }
+  assert.deepEqual(unlisted, [], "a new function that stores a callback, an effect or an owner is added to the spy list");
+});
+
+test("the load-order check catches a module that configures a bridge while it loads, including one that only stores a callback", async () => {
+  const report = await loadAlone("src/test/_configures-on-load.mjs");
+  assert.equal(report.error, null);
+  assert.deepEqual(report.calls.map((c) => [c.file, c.name, c.from]), [
+    ["src/legacy/tour-pause.ts", "handTourPauseTo", "src/test/_configures-on-load.mjs"],
+    ["src/legacy/export-formats.ts", "installExportFormats", "src/test/_configures-on-load.mjs"]
+  ]);
+  assert.deepEqual(report.owners, { ...NOTHING_STARTED, exports: true });
+});
+
+test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
+  assert.equal(NUMBERED.length, 79, "every numbered module, the ones the shim starts and the ten that only load");
+  for (const loadOnly of ["src/js/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/js/22a-editor-wiring.js", "src/js/22f-startup-wiring.js"]) {
+    assert.ok(NUMBERED.includes(loadOnly), loadOnly);
+  }
+  const reports = await loadEachAlone(NUMBERED);
+  assert.equal(reports.length, NUMBERED.length);
+  const offenders = reports
+    .filter((r) => r.error !== null || r.calls.length || JSON.stringify(r.owners) !== JSON.stringify(NOTHING_STARTED))
+    .map((r) => ({ target: r.target, error: r.error?.split("\n")[0] ?? null, calls: r.calls.map((c) => c.from + " -> " + c.file + "#" + c.name), owners: r.owners }));
+  assert.deepEqual(offenders, []);
 });

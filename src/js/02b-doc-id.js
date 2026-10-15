@@ -14,7 +14,6 @@ import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
-import { seedCheckPasses } from "./20b-onboarding.js";
 import {
   decideDuplicateLoser,
   docIdFromSha256Hex,
@@ -32,14 +31,13 @@ export function migrateDocument(raw, origin) {
   });
 }
 
-export function loadInitialDocument() {
+export function loadInitialDocument(pristine) {
   S.state = null;
-  return loadInitialState();
+  return loadInitialState(pristine);
 }
 
-export async function loadInitialState() {
+export async function loadInitialState(pristine) {
   var raw = null;
-  var pristine = seedCheckPasses();
   if (!pristine) {
     try { raw = JSON.parse(document.getElementById("state-data").textContent); } catch (e) { raw = null; }
   }
