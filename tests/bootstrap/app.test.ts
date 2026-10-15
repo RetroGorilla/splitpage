@@ -1,12 +1,21 @@
 import "../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createActionRegistry } from "../../src/application/actions.ts";
+import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { Wiring } from "../../src/bootstrap/wiring.ts";
+import { liveSession } from "../../src/legacy/session-bridge.ts";
 
 test("the app module refuses a second start, and a start waiting for DOM ready is cancelled by stop", async () => {
   const app = await import("../../src/bootstrap/app.ts");
   let released = 0;
-  const wiring = { dispose: () => { released++; } } as unknown as Wiring;
+  const wiring: Wiring = {
+    actions: createActionRegistry(),
+    exports: createExportRegistry(),
+    session: liveSession(),
+    keyTarget: new EventTarget(),
+    dispose: () => { released++; }
+  };
   const loading = Object.assign(new EventTarget(), { readyState: "loading" }) as unknown as Document;
   app.startAppWhenReady(loading, wiring);
   assert.throws(() => app.startAppWhenReady(loading, wiring), /already started or waiting/);
