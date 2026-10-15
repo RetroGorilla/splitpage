@@ -29,7 +29,7 @@ import {
 } from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
 import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
-import type { BrollShot } from "./production/broll.ts";
+import type { BrollShot, LineShotIds } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
 import { TAG_FIELDS, collectTagsFromRows, cueCutRenames, missingRegistryTags, retagMarks } from "./production/tags.ts";
 import { syncCommentAnchors } from "./text/anchors.ts";
@@ -48,6 +48,7 @@ export interface MigratePorts {
   readers: ProductionReaders;
   ids: IdSource;
   fields?: readonly StateField[] | undefined;
+  brollLines?: LineShotIds | undefined;
 }
 
 export interface DocumentOrigin {
@@ -311,7 +312,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
   const readers = ports.readers;
   applyBrollRecords(s.brollShots as BrollShot[], planBrollRecords(s as ValidatedDocument, readers, ids, function (html) {
     return toPlainText(readers.cellOf(html || ""));
-  }, null));
+  }, null, ports.brollLines));
 
   fields.forEach(function (f) {
     if (!f.normalize || !(f.key in s)) return;

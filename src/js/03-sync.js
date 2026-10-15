@@ -785,7 +785,7 @@ var mergePorts = {
   isDocument: function (raw) { return isDocumentObject(raw); },
   merge: function (input) {
     return mergeIncoming(input, isDocumentObject, {
-      entry: function (raw) { return migrateRows(cloneState(raw)); },
+      entry: function (raw, lines) { return migrateRows(cloneState(raw), lines); },
       merge: mergeStates
     });
   },
