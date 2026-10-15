@@ -9,7 +9,8 @@ import {
   firstWriteBeforeAdoption,
   mockClock,
   rightToday,
-  traceFields
+  traceFields,
+  wrongToday
 } from "./_m4-matrix.mjs";
 
 const { liveSession, provideRefreshRunner, requestRefresh, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
@@ -311,6 +312,60 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
     setHome("none");
   }
 });
+
+wrongToday("T2c-resume-switch", "a late server resume leaves a document opened during its fetch in place", async (t) => {
+  mockClock(t);
+  useDocument(script("Before late resume"));
+  const base = script("Late server draft", { docId: "d" + "e".repeat(32) });
+  const mine = cloneState(base);
+  mine.rows[0].audioText = "Recovered browser edits.";
+  const store = openDraftStore({ indexedDB: window.indexedDB });
+  const key = browserDraftKey(draftBaseOf("", location.href), "server-late-resume");
+  assert.deepEqual(await store.put({
+    key: key, base: draftBaseOf("", location.href), docId: "server-late-resume", rev: 2, title: base.title, writerId: "another-tab",
+    editSeq: 1, schema: 5, docIdWrittenOut: true, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base)
+  }), { ok: true, evicted: 0 });
+  const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-late-resume")
+    ? { status: 200, body: { id: "server-late-resume", rev: 3, state: base } } : null));
+  held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-late-resume"));
+  const uninstall = held.install();
+  const available = S.serverMode.available;
+  S.serverMode.available = true;
+  let resuming;
+  try {
+    resuming = openServerDoc("server-late-resume");
+    await held.gates.arrived("fetch");
+    assert.equal(S.draftServerResume.id, "server-late-resume", "setup: the held fetch belongs to a server draft resume");
+    const connection = homeModule.conn;
+    const replacement = script("Opened during resume", { docId: "d" + "f".repeat(32) });
+    const file = splitpageFile(replacement, "opened-during-resume.splitpage");
+    const target = createHeldFileHandle({ name: file.name });
+    await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
+    assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
+    assert.equal(homeModule.conn, connection, "setup: opening the file kept the same connection");
+    const opened = JSON.stringify(S.state);
+    const baseline = JSON.stringify(S.baseState);
+    const destination = homeModule.home;
+    const epoch = session.epoch();
+    held.gates.release("fetch");
+    await resuming;
+    assert.equal(S.state.title, replacement.title, "late server resume must leave the newly opened document in place");
+    assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
+    assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
+    assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
+    assert.equal(S.dirty, false, "the opened document stays clean");
+    assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
+    assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
+    assert.deepEqual(held.requests.map((r) => r.method), ["GET"], "the resume sends no server write");
+  } finally {
+    held.gates.releaseAll("fetch");
+    if (resuming) await resuming;
+    S.serverMode.available = available;
+    uninstall();
+    await store.remove(key, "another-tab");
+    setHome("none");
+  }
+}, /late server resume must leave the newly opened document in place/);
 
 rightToday("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before reopen"));
