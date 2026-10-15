@@ -354,8 +354,7 @@ function tagTextRange(cellEl, node, a, b, text, cat, name) {
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== node.data.slice(a, b).replace(/\u200B/g, "")) return null;
     var r = replaceWithTag(cell, from, to, text, namedTagId(cat, name));
-    registerProductionTag(cat, name);
-    return { cell: r.cell, sel: { from: r.end, to: r.end } };
+    return { cell: r.cell, sel: { from: r.end, to: r.end }, records: { tags: [{ cat: cat, name: name }] } };
   });
 }
 
