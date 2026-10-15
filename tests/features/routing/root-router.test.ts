@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ROOT_CLICK_ORDER, createRootRouter } from "../../../src/features/routing/root-router.ts";
+import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../../src/features/routing/root-router.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
 
 test("routes run in the declared order and stop at the first that handles the event", () => {
@@ -48,6 +48,25 @@ test("unknown and repeated slots are refused", () => {
 test("the click order lists the thirteen delegated routes once", () => {
   assert.equal(ROOT_CLICK_ORDER.length, 13);
   assert.equal(new Set(ROOT_CLICK_ORDER).size, 13);
+});
+
+test("the click and mousedown orders keep the ledger's B02 to B57 order", () => {
+  assert.deepEqual([...ROOT_CLICK_ORDER], [
+    "rows-add",
+    "toolbar",
+    "video",
+    "comments",
+    "tags-jump",
+    "comments-jump",
+    "tags",
+    "history-restore",
+    "rows-scene",
+    "rows-menu",
+    "media-picker",
+    "gallery",
+    "media-link"
+  ]);
+  assert.deepEqual([...ROOT_MOUSEDOWN_ORDER], ["tags-anchor"]);
 });
 
 test("owned replaces its owner, unrouting and disposing the previous one first, and stop is idempotent", () => {
