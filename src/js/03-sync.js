@@ -4,6 +4,7 @@ import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref,
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
 import { noteMerged, noteRecovery, noteServerUpdate, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
@@ -755,53 +756,16 @@ export async function renderHistory() {
 }
 
 S.lastMergeUndo = null;
-var undoArmed = false;
-var undoArmTimer = null;
-var undoMergeForceFor = null;
+var mergeBanner = null;
 
-var UNDO_SAVED_NOTE = "Undo merge puts your version back here; the next save replaces the merged copy on the server.";
-var UNDO_SAVED_TITLE = "Go back to the version you were saving, before someone else's changes were merged into it. " +
-  "It stays unsaved until the next save, which replaces the merged copy on the server. Recoverable from Version history.";
-var undoTitleDefault = null;
+export function installMergeBanner(banner) {
+  mergeBanner = banner;
+  return function () { if (mergeBanner === banner) mergeBanner = null; };
+}
 
 export function reportMerge(result, opts) {
   opts = opts || {};
-  var s = result.stats;
-  var bits = [];
-  if (s.rowsFromMe) bits.push(s.rowsFromMe + " row" + (s.rowsFromMe === 1 ? "" : "s") + " you edited");
-  if (s.rowsAddedByMe) bits.push(s.rowsAddedByMe + " row" + (s.rowsAddedByMe === 1 ? "" : "s") + " you added");
-  if (s.rowsFromThem) bits.push(s.rowsFromThem + " changed by someone else");
-  if (s.rowsAddedByThem) bits.push(s.rowsAddedByThem + " added by someone else");
-
-  if (!bits.length && !result.conflicts.length) {
-    if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
-    return;
-  }
-
-  var summary = bits.length ? "Kept " + bits.join(", ") + "." : "Nothing was lost.";
-  if (result.conflicts.length) {
-    summary += " " + result.conflicts.length + " edit" + (result.conflicts.length === 1 ? " was" : "s were") +
-      " changed on both sides — your version is saved as a comment.";
-  }
-
-  var undoBtn = document.getElementById("merge-undo");
-  if (undoTitleDefault === null) undoTitleDefault = undoBtn.title;
-  var offerUndo = opts.undo !== false && !!S.lastMergeUndo;
-  undoBtn.hidden = !offerUndo;
-  undoBtn.title = opts.undo === "saved" ? UNDO_SAVED_TITLE : undoTitleDefault;
-  if (offerUndo && opts.undo === "saved") summary += " " + UNDO_SAVED_NOTE;
-
-  document.getElementById("merge-summary").textContent = " " + summary;
-  document.getElementById("merge-review").hidden = !result.conflicts.length;
-  var banner = document.getElementById("merge-banner");
-  banner.classList.toggle("notice-warn", !!result.conflicts.length);
-  banner.hidden = false;
-
-  result.conflicts.forEach(function (c) {
-    var el = document.querySelector('#rows .row[data-id="' + safeId(c.rowId, "r") + '"]');
-    if (el) el.classList.add("just-merged");
-  });
-
+  if (mergeBanner) mergeBanner.show(result, { undo: opts.undo });
   if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
 }
 
@@ -811,73 +775,39 @@ function noteMergeAutoSave(opts) {
                "Press Save once you have looked them over.");
 }
 
-var UNDO_LABELS = {
-  "server-conflict": "Before merging in someone else's changes",
-  "server-resume": "Before merging your recovered changes",
-  "stash": "Before merging your unsaved changes"
-};
-
-export function applyMerge(opts) {
-  opts = opts || {};
-  var result = null;
-  var snap = null;
-
-  if (!isDocumentObject(opts.theirs) || (!opts.unchanged && !isDocumentObject(opts.mine))) {
-    return { state: S.state, result: null, snapshot: null };
-  }
-
-  if (!opts.unchanged) {
-    if (opts.undoPoint) snap = pushSnapshot(UNDO_LABELS[opts.source], opts.undoPoint);
-    if (opts.keepLabel) pushSnapshot(opts.keepLabel, opts.mine);
-    result = mergeIncoming(opts, isDocumentObject, {
+var mergePorts = {
+  isDocument: function (raw) { return isDocumentObject(raw); },
+  merge: function (input) {
+    return mergeIncoming(input, isDocumentObject, {
       entry: function (raw) { return migrateRows(cloneState(raw)); },
       merge: mergeStates
     });
-  }
-  var next = result ? result.merged : opts.theirs;
-
-  function armUndoPoint(docId) {
-    if (!opts.undoPoint) return;
-    S.lastMergeUndo = snap ? { id: snap.id, docId: docId, source: opts.source } : null;
-  }
-
-  if (opts.mergeOnly) {
-    armUndoPoint(snap && snap.docId);
-    return { state: next, result: result, snapshot: snap };
-  }
-
-  var kind = opts.recovery || opts.source === "server-resume" ? "recovery" : "server";
-
-  function adopt() {
-    if (result) next = noteMerged(kind, next);
+  },
+  snapshot: function (label, doc) { return pushSnapshot(label, doc); },
+  current: function () { return S.state; },
+  adopt: function (kind, next, merged) {
+    if (merged) next = noteMerged(kind, next);
     else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
     S.state = next;
-    if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
-    armUndoPoint(S.state.docId);
-    if (opts.newBase !== undefined) {
-      setBaseState(typeof opts.newBase === "function" ? opts.newBase() : opts.newBase, "merge: " + (opts.source || ""));
-    }
-    renderAbsorbed();
-    if (opts.chips) { updateIdentityChip(); updateFileChip(); }
-    if (result) {
-      if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave, kind: kind });
-    } else if (opts.report !== false) {
-      markAbsorbedDirty(kind);
-    }
-    if (opts.toast) {
-      var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
-      if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
-    }
-    return { state: next, result: result, snapshot: snap };
+    return next;
+  },
+  documentId: function (doc) { return doc.docId; },
+  noteHistoryFrom: function (prevDocId) { noteMergedDocId(prevDocId); },
+  armUndo: function (record) { S.lastMergeUndo = record; },
+  setBase: function (next, why) { setBaseState(next, why); },
+  capture: function () { return captureRestore(); },
+  stillOwns: function (ctx) { return stillRestoring(ctx); },
+  view: {
+    redraw: function () { renderAbsorbed(); },
+    chips: function () { updateIdentityChip(); updateFileChip(); },
+    report: function (result, opts) { reportMerge(result, opts); },
+    absorbedDirty: function (kind) { markAbsorbedDirty(kind); },
+    toast: function (text, tone, sticky) { showToast(text, tone, sticky); }
   }
+};
 
-  if (!opts.awaitUndoPoint) return adopt();
-  var written = snap && snap.done ? snap.done : null;
-  var ctx = captureRestore();
-  return Promise.resolve(written).then(null, function () {}).then(function () {
-    if (!stillRestoring(ctx)) return { state: S.state, result: null, snapshot: snap, replaced: true };
-    return adopt();
-  });
+export function applyMerge(opts) {
+  return applyIncomingMerge(opts || {}, mergePorts);
 }
 
 var baseStateWhy = "";
@@ -897,53 +827,8 @@ export function baseStateReason() {
   return baseStateWhy;
 }
 
-var UNDO_CONFIRM = { "server-conflict": "Drop their changes?" };
-var UNDO_LOCAL = { "server-conflict": true };
-var UNDO_RESTORED = {
-  "server-conflict": "Your version is back, unsaved. The next save replaces the merged copy on the server."
-};
-
-export function undoMerge(btn) {
-  if (!S.lastMergeUndo) { showToast("No merge snapshot to undo.", "warn"); return; }
-  if (!S.state || S.lastMergeUndo.docId !== S.state.docId) {
-    showToast("That merge belongs to a different document, so there is nothing to undo here.", "warn");
-    return;
-  }
-  if (undoArmed) {
-    clearTimeout(undoArmTimer);
-    undoArmed = false;
-    btn.textContent = "Undo merge";
-    btn.classList.remove("armed");
-    var undo = S.lastMergeUndo;
-    var force = undoMergeForceFor === undo;
-    undoMergeForceFor = null;
-    restoreSnapshot(undo.id, {
-      force: force,
-      local: !!UNDO_LOCAL[undo.source],
-      restoredText: UNDO_RESTORED[undo.source]
-    }).then(function (r) {
-      if (r === "no-backup") {
-        undoMergeForceFor = undo;
-        showToast("Could not keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
-      } else if (r === "missing") {
-        showToast("The snapshot from before the merge is no longer in the history.", "warn");
-      } else if (r === "corrupt") {
-        showToast("The snapshot from before the merge could not be read, so nothing was undone.", "warn");
-      } else if (r === "changed") {
-        showToast("A different document was opened while undoing, so nothing was undone.", "warn");
-      }
-    }, function (e) { if (window.console) console.error(e); });
-    return;
-  }
-  undoArmed = true;
-  btn.textContent = UNDO_CONFIRM[S.lastMergeUndo.source] || "Discard my edits?";
-  btn.classList.add("armed");
-  clearTimeout(undoArmTimer);
-  undoArmTimer = setTimeout(function () {
-    undoArmed = false;
-    btn.textContent = "Undo merge";
-    btn.classList.remove("armed");
-  }, 3000);
+export function restoreMergeSnapshot(id, request) {
+  return restoreSnapshot(id, request);
 }
 
 export function findRowIndex(id) {
