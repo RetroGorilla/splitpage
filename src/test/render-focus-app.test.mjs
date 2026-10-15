@@ -166,7 +166,7 @@ test("an update drawn while a Writer paragraph has focus keeps the incoming text
   const active = document.activeElement;
   assert.equal(active, para("r2"), "the focus stays in the Writer, on the same scene");
   assert.equal(active.textContent, "Theirs two.");
-  assert.equal(caretOffset(active), 4);
+  assert.equal(caretOffset(active), "Theirs".length, "the caret at the end of the replaced word maps to the end of its replacement (#464)");
   assert.equal(gridCell("r2").textContent, "Theirs two.");
   writer.closeWriter();
 });
@@ -184,7 +184,7 @@ test("an update drawn while a grid cell has focus keeps the incoming text in tha
   const active = document.activeElement;
   assert.equal(active, gridCell("r1"));
   assert.equal(active.textContent, "Theirs one, longer.");
-  assert.equal(caretOffset(active), "Theirs one, longer.".length);
+  assert.equal(caretOffset(active), "Theirs".length, "the caret inside the replaced word maps to that word's place (#464)");
 });
 
 test("an update that removes the focused scene makes no edit, in the grid and in the Writer (#477)", () => {
