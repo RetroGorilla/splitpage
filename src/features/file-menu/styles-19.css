@@ -1,5 +1,0 @@
-    .mini-toolbar {
-      width: 100%; max-width: 100%; box-sizing: border-box;
-      overflow-x: auto; -webkit-overflow-scrolling: touch;
-    }
-    .mini-toolbar button { padding: 9px 12px; font-size: 13px; flex: none; }

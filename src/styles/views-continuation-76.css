@@ -1,6 +1,0 @@
-    .topbar-row {
-      transition: margin-right var(--dur-exit) var(--ease-exit);
-    }
-    body.panel-open .topbar-row {
-      transition: margin-right var(--dur-enter) var(--ease-enter);
-    }

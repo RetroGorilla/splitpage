@@ -1,8 +1,0 @@
-    .scene-gallery-step {
-      position: absolute; top: 50%; z-index: 1; width: 36px; height: 36px; margin-top: -18px;
-      border-color: transparent; background: var(--media-scrim); color: var(--media-ink);
-    }
-    .scene-gallery-step:disabled { display: none; }
-    .scene-gallery-step:hover:not(:disabled) { background: var(--media-step-hover-scrim); border-color: transparent; }
-    .scene-gallery-step[data-gact="prev"] { left: 16px; }
-    .scene-gallery-step[data-gact="next"] { right: 16px; }

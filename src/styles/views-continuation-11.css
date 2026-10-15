@@ -1,9 +1,0 @@
-  .tb-icon { width: 18px; height: 18px; }
-  .tb-chevron { width: 14px; height: 14px; color: var(--text-dim); }
-  .tb-letter { font-family: var(--font-body); font-size: 15px; line-height: 1; font-weight: 500; }
-  .tb-b { font-weight: 700; }
-  .tb-i { font-style: italic; }
-  .tb-u { text-decoration: underline; text-underline-offset: 3px; }
-  .tb-s { text-decoration: line-through; }
-  .tb-dir { font-style: italic; letter-spacing: 0.04em; }
-  @media (min-width: 761px) {

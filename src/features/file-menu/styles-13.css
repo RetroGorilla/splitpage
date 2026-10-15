@@ -1,2 +1,0 @@
-  .fm-card .mi:hover:not(:disabled), .fm-card .mi:focus-visible { background: var(--hover); }
-  .fm-card .mi[data-file-action="save-back"]:disabled { display: none; }

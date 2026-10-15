@@ -1,8 +1,0 @@
-  .reply-composer .mini-toolbar button {
-    display: inline-flex; align-items: center; justify-content: center;
-    min-width: 28px; height: 28px;
-    padding: 0 7px;
-    font-size: 13px; font-weight: 500;
-    color: var(--text-dim);
-    border-radius: var(--radius-sm);
-  }
