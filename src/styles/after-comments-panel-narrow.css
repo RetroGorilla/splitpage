@@ -1,0 +1,137 @@
+
+    .phone-bar {
+      display: flex;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 110;
+      height: calc(72px + env(safe-area-inset-bottom));
+      padding: 0 3px env(safe-area-inset-bottom);
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .phone-tab {
+      position: relative;
+      flex: 1 1 0;
+      min-width: 0;
+      height: 71px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-dim);
+      font-family: var(--font-body);
+      font-size: 11.5px;
+      line-height: 14px;
+      font-weight: 450;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .phone-tab[aria-current="page"] { color: var(--text); font-weight: 600; }
+    .phone-tab[aria-current="page"]::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: -1px;
+      width: 28px;
+      height: 2px;
+      margin-left: -14px;
+      border-radius: 0 0 2px 2px;
+      background: var(--visual);
+    }
+    .phone-tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -4px; border-radius: var(--radius-sm); }
+    .phone-tab-glyph { position: relative; flex: none; width: 22px; height: 22px; }
+    .phone-tab-icon {
+      display: block;
+      width: 22px;
+      height: 22px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .phone-tab-count {
+      position: absolute;
+      left: 25px;
+      top: -3px;
+      font-family: var(--font-display);
+      font-size: 10.5px;
+      line-height: 12px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-faint);
+    }
+    .phone-tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 370px) {
+      .phone-tab { font-size: 10.5px; }
+    }
+    body.is-review .phone-tab[data-for="btn-write"] { display: none; }
+    #toast-host { bottom: calc(88px + env(safe-area-inset-bottom)); }
+    @media (max-width: 480px) {
+      .tour-overlay .tour-card { bottom: calc(88px + env(safe-area-inset-bottom)); }
+    }
+
+    .bulk-btn, .tag-person-add { padding: 8px 10px; }
+    .server-doc-delete, .tag-person-remove, .bulk-clear { padding: 6px 10px; font-size: 16px; }
+
+    .prompter-scroll { padding-inline: 6vw; }
+    .prompter-bar { gap: 8px 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+    .prompter-bar .grp { flex: 1 1 40%; }
+    .prompter-bar input[type="range"] { flex: 1; width: auto; }
+    .prompter-bar .div-sep { display: none; }
+    .prompter-bar button { padding: 10px 12px; }
+
+    .menu-wrap .menu {
+      position: fixed;
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      max-width: none;
+      max-height: 86vh;
+      border-radius: 14px 14px 0 0;
+      border-bottom: none;
+      padding-bottom: env(safe-area-inset-bottom);
+      transform-origin: bottom center;
+    }
+    @starting-style {
+      .menu-wrap .menu:not([hidden]) { opacity: 0; transform: translateY(24px); }
+    }
+    .menu-backdrop { display: block; }
+    .menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 8px 4px 16px;
+    }
+    .mi { min-height: 44px; }
+    .mi.mi-foot { min-height: 38px; }
+
+    .add-row-btn { width: 100%; padding: 13px 0; }
+
+    .writer-top { padding: 8px 12px; gap: 4px 10px; flex-wrap: wrap; }
+    .writer-kicker { display: none; }
+    .writer-stats { gap: 10px; font-size: 12px; order: 5; flex: 1 1 100%; padding-left: 9px; }
+    .writer-scroll { padding: 18px 12px 60vh; }
+    .writer .wr-para.cell-editable { padding: 6px 10px 10px; }
+    .writer-bar {
+      gap: 8px; padding: 8px 10px;
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    }
+    .writer-bar::-webkit-scrollbar { display: none; }
+    .writer-bar > * { flex: none; }
+    .writer-bar button { padding: 9px 10px; }
+    .writer-bar input[type="range"] { width: 80px; }
+    .writer-bar .div-sep, .writer-hint { display: none; }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    #root { --script-floor: 16px; }
+    .cell-editable { font-size: 16px; }
