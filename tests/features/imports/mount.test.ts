@@ -171,7 +171,7 @@ test("imports: a newer input cancels the old timer and split changes stay immedi
   const split = h.document.querySelector('input[name="import-split"]');
   assert.ok(split);
   h.fire(split, "change");
-  assert.deepEqual(h.calls.map((call) => call.name), ["maybeAutoDetectTwoColumn", "updateImportPreview", "touchMode", "updateImportPreview"]);
+  assert.deepEqual(h.calls.map((call) => String(call.name)), ["maybeAutoDetectTwoColumn", "updateImportPreview", "touchMode", "updateImportPreview"]);
   owners.forEach((owner) => owner.dispose());
   timers.dispose();
   h.window.close();
