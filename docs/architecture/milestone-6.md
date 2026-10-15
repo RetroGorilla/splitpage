@@ -291,7 +291,7 @@ Executable criteria for every CSS PR (6.7 and each 6.8 step that moves styles):
 
 - A declared, case-correct ordered file list in `build.mjs`; explicit separators; a check for missing and for duplicate inputs; cascade order and media-query placement preserved.
 - Tests read the same aggregate as the build, including `palette.test.mjs`, `plain-tags.test.mjs` and `render-guard-app.test.mjs` (which read `app.css` directly today), the palette and export-colour checks, and the plain-tag and stale-screen rules.
-- Before and after captures of the affected views in light and dark themes, the relevant narrow and wide layouts, focus states and reduced motion, with font loading or fallback, browser or Electron version, viewport and scale recorded.
+- Before and after captures of the affected views in light and dark themes, the relevant narrow and wide layouts, focus states and reduced motion, with font loading or fallback, browser or Electron version, viewport and scale recorded. For milestone 6 the maintainer accepted the comparator's byte-identical output on each mechanical split as the substitute for these captures (decision recorded in [milestone-6-gate.md](milestone-6-gate.md#external-review)).
 - The generated inline CSS, the CSP, the worker stamp and the standalone HTML output verified on Linux CI as well as the existing Windows checks. The CSP hashes the script, so there is no CSS hash to preserve; `PAGE_SHELL` capture is unchanged.
 - Token conversion (6.7) is separate from the first aggregation or feature move.
 - Out of scope: a build-entry switch, an external runtime stylesheet, cascade layers.
