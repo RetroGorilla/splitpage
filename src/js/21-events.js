@@ -4,6 +4,7 @@ import { captureOperation, documentTransitions, stillOwns } from "../legacy/tran
 import { createReviewClickGate } from "../features/review/click-gate.ts";
 import { beginStartup } from "../bootstrap/startup.ts";
 import { whenDocumentReady } from "../bootstrap/startup/dom-ready.ts";
+import { mountComments } from "../features/comments/mount.ts";
 import { mountComposition } from "../features/editing/composition.ts";
 import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { mountEditorToolbar } from "../features/editing/toolbar.ts";
@@ -185,6 +186,7 @@ import {
   AUTHOR_NAME_FIELDS,
   armDeleteComment,
   captureReplyDrafts,
+  captureCommentComposer,
   closeCommentComposer,
   closeCommentsPanel,
   jumpToAnchor,
@@ -195,6 +197,7 @@ import {
   postReply,
   renderComments,
   restoreConflictValue,
+  resetCommentBindings,
   setCommentAssignee,
   setCommentAssigneeFilter,
   setCommentFilterMode,
@@ -409,39 +412,11 @@ export function onRootClick(e) {
 
   if (videoPopover && videoPopover.click(e)) return;
 
-  var toggleResolveBtn = e.target.closest('[data-action="toggle-resolve"]');
-  if (toggleResolveBtn) { toggleResolve(toggleResolveBtn.getAttribute("data-id")); return; }
-
-  var commentFilterBtn = e.target.closest("#comments-filter-seg [data-filter]");
-  if (commentFilterBtn) { setCommentFilterMode(commentFilterBtn.getAttribute("data-filter")); return; }
-
-  var toggleReplyBtn = e.target.closest('[data-action="toggle-reply"]');
-  if (toggleReplyBtn) { toggleReplyComposer(toggleReplyBtn.getAttribute("data-id")); return; }
-
-  var replyCancelBtn = e.target.closest('[data-action="reply-cancel"]');
-  if (replyCancelBtn) { toggleReplyComposer(replyCancelBtn.getAttribute("data-id")); return; }
-
-  var replyPostBtn = e.target.closest('[data-action="reply-post"]');
-  if (replyPostBtn) { postReply(replyPostBtn.getAttribute("data-id")); return; }
-
-  var deleteCommentBtn = e.target.closest('[data-action="delete-comment"]');
-  if (deleteCommentBtn) { armDeleteComment(deleteCommentBtn, deleteCommentBtn.getAttribute("data-id")); return; }
-
-  var restoreConflictBtn = e.target.closest('[data-action="restore-conflict"]');
-  if (restoreConflictBtn) { restoreConflictValue(restoreConflictBtn.getAttribute("data-id")); return; }
-
-  var commentMenuBtn = e.target.closest('[data-action="comment-menu"]');
-  if (commentMenuBtn) { toggleCommentMenu(commentMenuBtn.getAttribute("data-id")); return; }
-  if (e.target.closest(".comment-menu")) return;
+  if (commentsMount && commentsMount.click(e)) return;
 
   if (tags && tags.jumpClick(e)) return;
 
-  var jumpCard = e.target.closest(".comment-card.is-jumpable");
-  if (jumpCard && !e.target.closest(".reply-composer") && !e.target.closest("a") &&
-      window.getSelection().isCollapsed) {
-    jumpToAnchor(jumpCard.getAttribute("data-id"));
-    return;
-  }
+  if (commentsMount && commentsMount.jumpClick(e)) return;
 
   if (tags && tags.click(e)) return;
 
@@ -519,57 +494,59 @@ function onDraftUndoKey(e, box) {
   return true;
 }
 
-function onDraftBeforeInput(e) {
-  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (!box || !isDraftBox(box)) return;
-  if (e.inputType === "historyUndo" || e.inputType === "historyRedo") {
-    e.preventDefault();
-    if (e.inputType === "historyRedo") draftRedo(box); else draftUndo(box);
-    return;
-  }
-  if (e.inputType === "insertText" && !e.isComposing && e.data && typePendingMarks(box, e.data)) {
-    e.preventDefault();
-    return;
-  }
-  noteDraftBeforeInput(box, e);
-}
+var commentsMount = null;
 
-function onDraftFocusIn(e) {
-  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (box) noteDraftFocus(box);
-}
-
-function onDraftComposition(e) {
-  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (box) noteDraftComposition(box, e.type === "compositionstart");
-}
-
-var draftDragSource = null;
-function onDraftDragStart(e) {
-  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
-  draftDragSource = box && isDraftBox(box) ? box : null;
-}
-function onDraftDragEnd() {
-  draftDragSource = null;
-}
-function onDraftDrop(e) {
-  var box = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (!box || !isDraftBox(box) || draftDragSource === box) return;
-  var dt = e.dataTransfer;
-  var html = dt ? dt.getData("text/html") : "";
-  var text = dt ? dt.getData("text/plain") : "";
-  if (!html && !text) return;
-  e.preventDefault();
-  box.focus();
-  try {
-    var range = document.caretRangeFromPoint && document.caretRangeFromPoint(e.clientX, e.clientY);
-    if (range && box.contains(range.startContainer)) {
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
+export function mountCommentsFeature() {
+  if (commentsMount) commentsMount.dispose();
+  commentsMount = mountComments({
+    window: window,
+    ports: {
+      rootClick: onRootClick,
+      rootMouseDown: onRootMouseDown,
+      rootInput: onRootInput,
+      rootFocusOut: onRootFocusOut,
+      rootPaste: onRootPaste,
+      rootKeydown: onRootKeydown,
+      authorFields: AUTHOR_NAME_FIELDS,
+      limitAuthor: limitAuthorNameField,
+      isDraft: isDraftBox,
+      draftUndo: draftUndo,
+      draftRedo: draftRedo,
+      typeMarks: typePendingMarks,
+      beforeInput: noteDraftBeforeInput,
+      focusDraft: noteDraftFocus,
+      composeDraft: noteDraftComposition,
+      pasteDraft: pasteIntoDraft,
+      toggleResolve: toggleResolve,
+      filter: setCommentFilterMode,
+      toggleReply: toggleReplyComposer,
+      postReply: postReply,
+      deleteComment: armDeleteComment,
+      restoreConflict: restoreConflictValue,
+      menu: toggleCommentMenu,
+      jump: jumpToAnchor,
+      openPanel: function () { runFromButton("panel-comments"); },
+      closePanel: closeCommentsPanel,
+      assigneeFilter: setCommentAssigneeFilter,
+      assignee: setCommentAssignee,
+      sortMode: function () { return S.commentSortMode; },
+      captureReplies: captureReplyDrafts,
+      sort: setCommentSortMode,
+      closeComposer: closeCommentComposer,
+      post: postComment,
+      captureComposer: captureCommentComposer,
+      compressImage: compressImageFile,
+      appendImage: function (box, dataUrl) {
+        var rec = internDataUrl(dataUrl);
+        if (!rec) throw new Error("not a picture the registry takes");
+        persist([rec.sha256]);
+        appendDraftMedia(box, storedImageHtml(rec));
+      },
+      imageError: function () { showToast("Could not use that image.", "error"); },
+      reset: resetCommentBindings
     }
-  } catch (err) {}
-  pasteIntoDraft(box, html, text);
+  });
+  return commentsMount;
 }
 
 function refreshFormatState(cellEl) {
@@ -1009,13 +986,7 @@ function init() {
 
   S.initialStateReady = startup.openDocument();
 
-  document.addEventListener("input", function (e) {
-    if (e.isComposing) return;
-    if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
-  });
-  document.addEventListener("compositionend", function (e) {
-    if (e.target && e.target.matches && e.target.matches(AUTHOR_NAME_FIELDS)) limitAuthorNameField(e.target);
-  });
+  mountCommentsFeature();
 
   mountVideo();
   mountToolbar();
@@ -1220,56 +1191,9 @@ function init() {
     });
   });
 
-  var commentModalEl = document.getElementById("comment-modal");
-  [commentModalEl, document.getElementById("comments-panel")].forEach(function (el) {
-    el.addEventListener("click", onRootClick);
-    el.addEventListener("mousedown", onRootMouseDown);
-    el.addEventListener("input", onRootInput);
-    el.addEventListener("focusout", onRootFocusOut);
-    el.addEventListener("paste", onRootPaste);
-    el.addEventListener("keydown", onRootKeydown);
-    el.addEventListener("focusin", onDraftFocusIn);
-    el.addEventListener("beforeinput", onDraftBeforeInput);
-    el.addEventListener("compositionstart", onDraftComposition);
-    el.addEventListener("compositionend", onDraftComposition);
-    el.addEventListener("dragstart", onDraftDragStart);
-    el.addEventListener("dragend", onDraftDragEnd);
-    el.addEventListener("drop", onDraftDrop);
-  });
-
-  document.getElementById("btn-comments").addEventListener("click", function () { runFromButton("panel-comments"); });
-  document.getElementById("comments-panel-close").addEventListener("click", closeCommentsPanel);
+  commentsMount.mountRoots();
   initSidePanelResizeHandles();
-  document.getElementById("comments-panel").addEventListener("change", function (e) {
-    if (e.target.id === "comments-assignee-filter") { setCommentAssigneeFilter(e.target.value); return; }
-    if (e.target.classList.contains("comment-assignee-select")) {
-      setCommentAssignee(e.target.getAttribute("data-id"), e.target.value);
-    }
-  });
-  var commentsSortSelect = document.getElementById("comments-sort");
-  commentsSortSelect.value = S.commentSortMode;
-  commentsSortSelect.addEventListener("change", function (e) {
-    captureReplyDrafts();
-    setCommentSortMode(e.target.value);
-  });
-
-  document.getElementById("comment-close").addEventListener("click", function () { closeCommentComposer(true); });
-  document.getElementById("comment-cancel").addEventListener("click", function () { closeCommentComposer(true); });
-  document.getElementById("comment-post").addEventListener("click", postComment);
-  commentModalEl.addEventListener("click", function (e) {
-    if (e.target.id === "comment-modal") closeCommentComposer(true);
-  });
-  document.getElementById("comment-image-input").addEventListener("change", function (e) {
-    var file = e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    compressImageFile(file, 700, 0.72).then(function (dataUrl) {
-      var rec = internDataUrl(dataUrl);
-      if (!rec) throw new Error("not a picture the registry takes");
-      persist([rec.sha256]);
-      appendDraftMedia(document.getElementById("comment-body-editable"), storedImageHtml(rec));
-    }).catch(function () { showToast("Could not use that image.", "error"); });
-  });
+  commentsMount.mountControls();
   window.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
     if (selectedKeys().length && !document.getElementById("production-panel").hidden) {

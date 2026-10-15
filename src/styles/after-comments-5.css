@@ -1,0 +1,14 @@
+
+  @media (min-width: 1100px) {
+    body.panel-open #root {
+      padding-right: calc(min(var(--open-panel-width, 488px), 100vw) + 20px);
+    }
+    body.panel-open .topbar-row {
+      margin-right: calc(-1 * min(var(--open-panel-width, 488px), 100vw));
+    }
+  }
+  @media (min-width: 761px) and (max-width: 1099px) {
+    body.panel-open .topbar .rundown {
+      margin-right: calc(min(var(--open-panel-width, 488px), 100vw) - var(--page-gutter, 0px));
+    }
+  }
