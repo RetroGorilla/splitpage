@@ -36,9 +36,6 @@ function harness(p: ReturnType<typeof page>) {
     bar: p.win.document.querySelector(".writer-bar") as Element,
     ports: {
       input: shared("input"),
-      paste: shared("paste"),
-      copy: shared("copy"),
-      cut: shared("cut"),
       keydown: shared("keydown"),
       editKeydown: (e) => { calls.push("edit:" + e.key); },
       format: (btn) => { calls.push("format:" + btn.getAttribute("data-cmd")); },
@@ -54,12 +51,12 @@ function fire(p: ReturnType<typeof page>, id: string, type: string): void {
   p.byId(id).dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, key: "Enter" } as KeyboardEventInit));
 }
 
-test("writer routes: each script event on the Writer reaches its shared route once", () => {
+test("writer routes: input on the Writer reaches the shared route once; the clipboard is not the Writer's", () => {
   const p = page();
   const h = harness(p);
   h.mount();
   for (const type of ["input", "paste", "copy", "cut"]) fire(p, "p1", type);
-  assert.deepEqual(h.calls, ["input:input:p1", "paste:paste:p1", "copy:copy:p1", "cut:cut:p1"]);
+  assert.deepEqual(h.calls, ["input:input:p1"], "paste, copy and cut belong to the clipboard owner");
 });
 
 test("writer routes: the Writer's own keydown runs in capture, before the shared bubble keydown", () => {
@@ -80,7 +77,7 @@ test("writer routes: a capture-phase stop on the Writer keeps the bubble route f
     doc: p.byId("writer-doc"),
     bar: p.win.document.querySelector(".writer-bar") as Element,
     ports: {
-      input: () => {}, paste: () => {}, copy: () => {}, cut: () => {},
+      input: () => {},
       keydown: () => { calls.push("bubble"); },
       editKeydown: (e) => { calls.push("edit"); e.stopPropagation(); },
       format: () => {}, gutter: () => {}, exportNarration: () => {}
@@ -107,11 +104,11 @@ test("writer routes: dispose removes every registration, and a remount handles e
   const bar = counted(p.win.document.querySelector(".writer-bar") as Element);
   const h = harness(p);
   const first = h.mount();
-  assert.equal(doc.added, 6);
+  assert.equal(doc.added, 3);
   assert.equal(bar.added, 1);
   first.dispose();
   first.dispose();
-  assert.equal(doc.removed, 6);
+  assert.equal(doc.removed, 3);
   assert.equal(bar.removed, 1);
   fire(p, "p1", "input");
   fire(p, "p1", "keydown");
