@@ -537,7 +537,7 @@ CI runs on the maintainer's self-hosted runners (repository variable
 pull request and its jobs run on GitHub's runners instead; no other run
 moves. Adding the label does not rerun CI: push to the pull request after
 labelling it, because a run reads the labels from the moment it started. First compare the queue with the median recent run time (about
-8 to 14 minutes) and wait if the run in front is nearly done. Remove the
+3 to 6 minutes in October 2026) and wait if the run in front is nearly done. Remove the
 label once the pull request is green. Never change `CI_RUNNER` for this.
 
 `gate` is the one check to mark required in branch protection: a
@@ -561,6 +561,5 @@ files that the files themselves cannot.
 
 The full browser regression, the Windows runs and the packaged x64 check
 are local milestone and release gates; the Linux full run and the packaged
-ARM64 check are local gates at the 4.0 release only (plan section 4). The
-maintainer's machines are never registered as runners for pull-request
-workflows.
+ARM64 check are local gates at the 4.0 release only (plan section 4). Pull requests from forks must never reach the self-hosted runners
+([ci.md](ci.md)).
