@@ -103,6 +103,7 @@ const session: DocumentSession = {
   settle: function (kind: AbsorbedKind) { current.settle(kind); },
   run: function (command: Command) { return current.run(command); },
   replay: function (task: Replay) { return current.replay(task); },
+  amend: function (task: Replay) { return current.amend(task); },
   noteEdit: function (changes?: ChangeSet) { current.noteEdit(changes); },
   refresh: function (job: string) { current.refresh(job); },
   subscribe: function (listener: SessionListener) { return current.subscribe(listener); },
@@ -112,10 +113,17 @@ const session: DocumentSession = {
   }
 };
 
-routeReplays(function (task, live) {
+function holdLive(live: ValidatedDocument | null): void {
   if (live && current.read(function (held) { return held; }) !== live) current.adopt(live);
+}
+
+routeReplays(function (task, live) {
+  holdLive(live);
   return session.replay(task);
-}, sessionStamps);
+}, sessionStamps, function (task, live) {
+  holdLive(live);
+  return session.amend(task);
+});
 
 export function adoptReplacement(doc: ValidatedDocument): void {
   if (ended) return;
