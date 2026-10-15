@@ -12,10 +12,10 @@ import {
   traceFields
 } from "./_m4-matrix.mjs";
 
-const { liveSession, provideRefreshRunner, requestRefresh, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
+const { liveSession, provideRefreshRunner, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
 const session = liveSession();
-const probe = { epoch: () => session.epoch(), held: () => session.read((doc) => doc) };
+const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
 const TRACED = ["state", "baseState", "docIdWrittenOut", "dirty", "editSeq"];
 
 const bootTrace = traceFields(S, TRACED, probe);

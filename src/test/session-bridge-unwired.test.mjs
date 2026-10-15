@@ -7,6 +7,7 @@ const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { startTestSession } = await import("./_session.mjs");
 
 function script() {
   S.state = migrateRows({ title: "Unwired", rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });
@@ -14,6 +15,12 @@ function script() {
 }
 
 test("with nothing wired, loading the bridge alone provides no port: each one throws instead of running on a default", () => {
+  assert.throws(() => bridge.editAllowed(), /The document session is not started yet/);
+  assert.throws(() => bridge.sessionStamps.editor.name(), /The document session is not started yet/);
+});
+
+test("with the bridge started but nothing provided, each port throws instead of running on a default", () => {
+  startTestSession();
   assert.throws(() => bridge.editAllowed(), /The session's edit capability port was not provided/);
   assert.throws(() => bridge.sessionStamps.editor.name(), /The session's editor name port was not provided/);
 });

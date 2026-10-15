@@ -2,6 +2,7 @@ import { S } from "../js/_state.js";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../js/12a-undo.js";
 import { provideRefreshRunner, provideSessionEffects } from "../legacy/session-bridge.ts";
+import { startTestSession } from "./_session.mjs";
 
 export function wireSession(effects) {
   provideSessionEffects(Object.assign({
@@ -13,6 +14,7 @@ export function wireSession(effects) {
     attribute: () => null
   }, effects));
   provideRefreshRunner(() => {});
+  startTestSession();
 }
 
 export const calls = [];

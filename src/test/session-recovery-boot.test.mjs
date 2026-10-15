@@ -13,9 +13,8 @@ sessionStorage.setItem("splitpage-conflict-stash", JSON.stringify({ at: "2026-10
 
 const session = liveSession();
 const heard = [];
-session.subscribe((c) => heard.push(c.kind + ":" + c.epoch + ":" + c.generation));
 
-await bootApp();
+await bootApp(undefined, { beforeStart: () => session.subscribe((c) => heard.push(c.kind + ":" + c.epoch + ":" + c.generation)) });
 
 after(closeApp);
 
