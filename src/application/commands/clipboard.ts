@@ -125,7 +125,7 @@ export function takenBrollIds(
 ): Record<string, true> {
   const taken: Record<string, true> = Object.create(null) as Record<string, true>;
   function keysOf(cell: readonly Run[]): void {
-    cell.forEach(function (r) { if (r.atom && r.id) taken[r.id] = true; });
+    cell.forEach(function (r) { if (r.atom === "broll" && r.id) taken[r.id] = true; });
   }
   (scope.rows || []).forEach(function (row) {
     if (!row) return;
@@ -150,7 +150,7 @@ export function freshBrollIds(
   const used: Record<string, true> = Object.create(null) as Record<string, true>;
   const minted: string[] = [];
   const out = cell.map(function (r): Run {
-    if (!r.atom) return r;
+    if (r.atom !== "broll") return r;
     let id = r.id;
     if (!id || taken[id] || used[id]) {
       let guard = 0;
@@ -165,7 +165,7 @@ export function freshBrollIds(
 
 function brollKeyIds(cell: readonly Run[]): string[] {
   const ids: string[] = [];
-  cell.forEach(function (r) { if (r.atom && r.id) ids.push(r.id); });
+  cell.forEach(function (r) { if (r.atom === "broll" && r.id) ids.push(r.id); });
   return ids;
 }
 

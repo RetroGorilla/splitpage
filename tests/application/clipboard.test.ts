@@ -422,7 +422,7 @@ test("takenBrollIds counts every key in the script and the records unless a cut 
   let n = 0;
   const out = freshBrollIds(rt.decode(KEY("bsA") + KEY("bsZ") + KEY("bsZ")), { bsA: true }, () => "m" + String(++n));
   assert.deepEqual(out.minted, ["m1", "m2"]);
-  assert.deepEqual(out.cell.filter((r) => r.atom).map((r) => r.atom && r.id), ["m1", "bsZ", "m2"]);
+  assert.deepEqual(out.cell.filter((r) => r.atom).map((r) => r.atom === "broll" && r.id), ["m1", "bsZ", "m2"]);
 });
 
 

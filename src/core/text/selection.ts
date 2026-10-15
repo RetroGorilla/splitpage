@@ -1,4 +1,4 @@
-import { OBJ, normalizeCell } from "./runs.ts";
+import { OBJ, atomId, normalizeCell } from "./runs.ts";
 import type { CellInput } from "./runs.ts";
 
 export type SelectionField = "visualText" | "audioText";
@@ -43,7 +43,7 @@ export function unitKey(ch: string): string {
 export function cellKeys(cell: CellInput): string[] {
   const keys: string[] = [];
   normalizeCell(cell).forEach(function (r) {
-    if (r.atom) { keys.push(atomKey(r.id)); return; }
+    if (r.atom) { keys.push(atomKey(atomId(r))); return; }
     for (let i = 0; i < r.text.length; i++) keys.push(unitKey(r.text[i] as string));
   });
   return keys;
