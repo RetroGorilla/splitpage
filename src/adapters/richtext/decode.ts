@@ -20,6 +20,11 @@ export type CellReader = (html: unknown) => Frozen<Run[]>;
 
 const CELL_CACHE_BUDGET = 2000000;
 
+function cardHost(card: Element): string {
+  const host = card.querySelector(".vec-host");
+  return host ? String(host.textContent || "").replace(/^\u00B7 /, "") : "";
+}
+
 export function decodeBody(body: Node, opts?: DecodeOptions | null): Run[] {
   const options: DecodeOptions = opts || {};
   const tagId = options.tagId || defaultTagId;
@@ -36,19 +41,20 @@ export function decodeBody(body: Node, opts?: DecodeOptions | null): Run[] {
       const tag = el.tagName;
       if (tag === "BR") { runs.push({ text: "\n", marks: marks }); return; }
       if (tag === "IMG") {
-        if (options.onMedia) {
-          options.onMedia({ kind: "image", ref: {
-            sha256: el.getAttribute("data-blob"),
-            width: Number(el.getAttribute("data-w")) || null,
-            height: Number(el.getAttribute("data-h")) || null,
-            mime: el.getAttribute("data-mime") || null
-          } });
-        }
+        const ref = {
+          sha256: el.getAttribute("data-blob"),
+          width: Number(el.getAttribute("data-w")) || null,
+          height: Number(el.getAttribute("data-h")) || null,
+          mime: el.getAttribute("data-mime") || null
+        };
+        if (options.onMedia) options.onMedia({ kind: "image", ref: ref });
+        if (options.media) runs.push({ atom: "image", ref: ref, marks: marks });
         return;
       }
       const cls = el.classList;
       if (tag === "A" && cls && cls.contains("video-embed-card")) {
         if (options.onMedia) options.onMedia({ kind: "video", href: el.getAttribute("href") });
+        if (options.media) runs.push({ atom: "video", href: el.getAttribute("href"), host: cardHost(el), marks: marks });
         return;
       }
       if (tag === "SPAN" && cls && cls.contains("broll-key")) {

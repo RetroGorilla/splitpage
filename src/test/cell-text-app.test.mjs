@@ -147,7 +147,7 @@ test("an input that leaves the stored cell as it is makes no command", async () 
   assert.equal(row("r1").updatedAt, stamp);
 });
 
-test("a cell holding media is stored as its sanitised HTML through the same command", async () => {
+test("a cell holding media goes through the same command, and what it stores is the sanitiser's own form", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   const w = watch();
@@ -970,10 +970,10 @@ function randomCell(r) {
 function oracle(inner) {
   let html = inner.indexOf(ZW) === -1 ? inner : inner.split(ZW).join("");
   html = storedHtmlFromDom(html);
-  return /<img|video-embed-card/.test(html) ? sanitizeHtml(html) : toHtml(fromHtml(html));
+  return toHtml(fromHtml(html, { media: true }));
 }
 
-test("differential (seeded): the stored cell, the stamp and the edit count match the base's syncFieldFromDom on generated cell HTML", async () => {
+test("differential (seeded): the stored cell is toHtml of the decoded runs, media included, and the stamp and the edit count follow it, on generated cell HTML", async () => {
   await open();
   const fields = ["audioText", "visualText"];
   let changed = 0, same = 0;

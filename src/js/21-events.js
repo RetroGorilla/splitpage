@@ -6,6 +6,7 @@ import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountClipboardRoutes } from "../features/clipboard/routes.ts";
+import { mountMediaRoutes } from "../features/media/routes.ts";
 import { mountMergeBanner } from "../features/merge/banner.ts";
 import { mountRowRoutes } from "../features/rows/routes.ts";
 import { mountTitleRoutes } from "../features/title/routes.ts";
@@ -535,17 +536,7 @@ export function onRootClick(e) {
 
   if (rowRoutes && rowRoutes.menuClick(e)) return;
 
-  var imgAdd = e.target.closest('[data-action="image-add"], [data-action="image-add-more"], [data-action="image-replace"]');
-  if (imgAdd) {
-    S.pendingImageRowId = imgAdd.getAttribute("data-id");
-    pendingImageSlot = imgAdd.getAttribute("data-action") === "image-replace"
-      ? Number(imgAdd.getAttribute("data-slot")) || 0 : undefined;
-    document.getElementById("file-input").click();
-    return;
-  }
-
-  var imgRemove = e.target.closest('[data-action="image-remove"]');
-  if (imgRemove) { removeImage(imgRemove.getAttribute("data-id"), Number(imgRemove.getAttribute("data-slot")) || 0); return; }
+  if (mediaRoutes && mediaRoutes.pickerClick(e)) return;
 
   var tile = e.target.closest('[data-action="gallery-open"], [data-action="gallery-open-videos"]');
   if (tile) {
@@ -554,21 +545,8 @@ export function onRootClick(e) {
     return;
   }
 
-  var linkOff = e.target.closest('[data-action="gallery-link-remove"]');
-  if (linkOff) {
-    removeImageLink(linkOff.getAttribute("data-id"), Number(linkOff.getAttribute("data-slot")) || 0, linkOff.getAttribute("data-key"));
-    return;
-  }
-
-  var videoLinkEl = e.target.closest('[data-action="gallery-link"]');
-  if (videoLinkEl) {
-    e.preventDefault();
-    openGalleryLink(videoLinkEl.getAttribute("data-id"), Number(videoLinkEl.getAttribute("data-slot")) || 0, videoLinkEl.getAttribute("data-key"));
-    return;
-  }
+  if (mediaRoutes && mediaRoutes.linkClick(e)) return;
 }
-
-var pendingImageSlot;
 
 function refocusRowMenu(rowId) {
   closeRowMenus();
@@ -701,6 +679,23 @@ function refreshFormatState(cellEl) {
 var FORMAT_KEYS = { b: "bold", i: "italic", u: "underline" };
 
 var undoRoutes = null;
+
+var mediaRoutes = null;
+
+var mediaRoutePorts = {
+  pendingRow: function () { return S.pendingImageRowId; },
+  setPendingRow: function (rowId) { S.pendingImageRowId = rowId; },
+  choose: function () { document.getElementById("file-input").click(); },
+  addPicture: handleImageFile,
+  removePicture: removeImage,
+  removeLink: removeImageLink,
+  openLink: openGalleryLink
+};
+
+function mountMedia(fileInput) {
+  if (mediaRoutes) mediaRoutes.dispose();
+  mediaRoutes = mountMediaRoutes({ window: window, fileInput: fileInput, ports: mediaRoutePorts });
+}
 
 var rowRoutes = null;
 
@@ -1525,13 +1520,7 @@ function init() {
     else if (!document.getElementById("comments-panel").hidden) closeCommentsPanel();
   });
 
-  document.getElementById("file-input").addEventListener("change", function (e) {
-    var file = e.target.files && e.target.files[0];
-    if (file && S.pendingImageRowId) handleImageFile(S.pendingImageRowId, file, pendingImageSlot);
-    e.target.value = "";
-    S.pendingImageRowId = null;
-    pendingImageSlot = undefined;
-  });
+  mountMedia(document.getElementById("file-input"));
 
   mountTitles();
 

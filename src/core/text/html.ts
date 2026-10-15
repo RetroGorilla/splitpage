@@ -2,6 +2,7 @@ import { buildTree } from "./tree.ts";
 import type { TreeOptions, TreeParent } from "./tree.ts";
 import type { CellInput, FormatMark } from "./runs.ts";
 import type { TagName } from "../document/tags.ts";
+import { storedImageMarkup } from "../document/text-policy.ts";
 
 export type Where = { dir: boolean };
 
@@ -31,6 +32,12 @@ export function toHtml(cell: CellInput, opts?: HtmlOptions | null): string {
     node.kids.forEach(function (n) {
       if (n.text !== undefined) { out += textHtml(n.text, where); return; }
       if (n.br) { out += "<br>"; return; }
+      if (n.atom && n.atom.atom === "image") { out += storedImageMarkup(n.atom.ref); return; }
+      if (n.atom && n.atom.atom === "video") {
+        out += '<a class="video-embed-card" href="' + escAttr(n.atom.href) + '" target="_blank" rel="noopener">' +
+          '<span class="vec-play">\u25B6</span><span>Watch video</span><span class="vec-host">\u00B7 ' + escText(n.atom.host) + "</span></a>";
+        return;
+      }
       if (n.atom) {
         out += '<span class="broll-key" data-broll-id="' + escAttr(n.atom.id) + '" contenteditable="false">' + textHtml(n.atom.text, where) + "</span>";
         return;
