@@ -63,8 +63,8 @@ test("b-roll: all 19 S28 registrations preserve order, phase and multiplicity ac
   let owner = h.mount();
   assert.equal(h.order.length, 19);
   assert.deepEqual(h.order, [
-    ...targets["broll-panel"]!.map((type) => "broll-panel:" + type),
-    ...targets["broll-page"]!.map((type) => "broll-page:" + type),
+    ...(targets["broll-panel"] ?? []).map((type) => "broll-panel:" + type),
+    ...(targets["broll-page"] ?? []).map((type) => "broll-page:" + type),
     "window:keydown", "document:focusin", "broll-add-save:click", "broll-close:click", "btn-broll:click", "document:mousedown", "window:keydown"
   ]);
   for (const r of h.records) assert.deepEqual(r.added, r.expected, r.id);
@@ -140,7 +140,7 @@ for (const scenario of ["dispose and reopen", "same-ID root replacement", "stale
   test("b-roll: retained registration, " + scenario, () => {
     const h = harness();
     const owner = h.mount();
-    const held = h.records.find((r) => r.id === "broll-add-save")!.held[0]!.fn as EventListener;
+    const held = h.records.find((r) => r.id === "broll-add-save")?.held[0]?.fn as EventListener;
     let replacement: ReturnType<typeof mountBroll> | undefined;
     if (scenario === "dispose and reopen" || scenario === "stale callback after remount") {
       owner.dispose();
