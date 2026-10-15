@@ -1,3 +1,17 @@
 [
-  "src/app.css"
+  "src/app.css",
+  "src/features/tags/styles.css",
+  "src/app-after-tags.css",
+  "src/features/tags/styles-scenes.css",
+  "src/styles/after-tag-scenes.css",
+  "src/features/tags/styles-badge.css",
+  "src/styles/after-tag-badge.css",
+  "src/features/tags/styles-gear.css",
+  "src/styles/after-gear.css",
+  "src/features/tags/styles-phone-controls.css",
+  "src/styles/after-tag-phone.css",
+  "src/features/tags/styles-touch-fields.css",
+  "src/styles/after-tag-touch-fields.css",
+  "src/features/tags/styles-touch-hint.css",
+  "src/styles/app-tail.css"
 ]
