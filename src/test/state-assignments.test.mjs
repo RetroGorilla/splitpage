@@ -27,8 +27,8 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 const SITES = [
   "00-prelude.js#(anonymous)",
   "02b-doc-id.js#assign",
-  "03-sync.js#adopt",
-  "21-events.js#init"
+  "02b-doc-id.js#loadInitialDocument",
+  "03-sync.js#adopt"
 ];
 
 function sourceFiles(dir) {
@@ -122,9 +122,9 @@ test("there are four S.state assignments, in these functions", () => {
   assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
 });
 
-test("boot from the seed: 00-prelude and init assign null, then the transition API's live-document port the seed script, a migrateRows fixed point", () => {
+test("boot from the seed: 00-prelude and the initial load assign null, then the transition API's live-document port the seed script, a migrateRows fixed point", () => {
   assert.equal(seedCheckPasses(), true, "the page's seed check matches its state-data, as a fresh build's does");
-  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "21-events.js#init", "02b-doc-id.js#assign"]);
+  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "02b-doc-id.js#loadInitialDocument", "02b-doc-id.js#assign"]);
   assert.equal(atBoot[0].value, null);
   assert.equal(atBoot[1].value, null);
   const seed = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));

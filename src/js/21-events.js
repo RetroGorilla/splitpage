@@ -1,6 +1,8 @@
 import { S } from "./_state.js";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
-import { neverWrittenOut } from "../application/recovery/pristine.ts";
+import { createReviewClickGate } from "../features/review/click-gate.ts";
+import { beginStartup } from "../bootstrap/startup.ts";
+import { whenDocumentReady } from "../bootstrap/startup/dom-ready.ts";
 import { mountComposition } from "../features/editing/composition.ts";
 import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { mountEditorToolbar } from "../features/editing/toolbar.ts";
@@ -21,19 +23,19 @@ import {
   revealRow,
   updateHideShotMenu
 } from "./01b-hide-shot.js";
-import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "./02b-doc-id.js";
+import { initDocIdentityChannel, loadInitialDocument, syncDocIdentity } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
 import {
   SNAPSHOT_KEY,
   cloneState,
   closeHistoryPanel,
-  getEditorName,
   installMergeBanner,
   promptForName,
   promptForWpm,
   reportMerge,
   restoreMergeSnapshot,
   restoreSnapshotFromCard,
+  toastLastEditor,
   updateIdentityChip
 } from "./03-sync.js";
 import { startHistoryMigration } from "./03a-history-store.js";
@@ -317,36 +319,18 @@ import { initDesktop, notifyDesktopDocumentState } from "./20f-desktop.js";
 import {
   applyTakenDraft,
   armServerDraftResume,
-  draftRestorePending
+  desktopDraftTaker
 } from "./20g-drafts.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { liveSession, runCommand } from "../legacy/session-bridge.ts";
 
-var REVIEW_SAFE_ACTIONS = {
-  "toggle-reply": 1, "reply-post": 1, "reply-cancel": 1,
-  "link-confirm": 1, "link-cancel": 1, "video-confirm": 1, "video-cancel": 1,
-  "jump-tag": 1, "jump-row": 1, "writer-jump": 1,
-  "gallery-open": 1, "gallery-open-videos": 1,
-  "tag-expand": 1, "bulk-clear": 1,
-  "export-breakdown": 1, "export-packing-gear": 1
-};
-
-export function toastLastEditor(loaded) {
-  if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
-    showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
-  }
-}
+var reviewClickGate = createReviewClickGate({
+  reviewMode: function () { return reviewMode(); },
+  refuse: function () { reviewBlocked(); }
+});
 
 export function onRootClick(e) {
-  if (reviewMode()) {
-    var tbReview = e.target.closest(".mini-toolbar button[data-cmd]");
-    var actionEl = e.target.closest("[data-action]");
-    if (tbReview ? tbReview.getAttribute("data-cmd") !== "comment"
-                 : (actionEl && !REVIEW_SAFE_ACTIONS[actionEl.getAttribute("data-action")])) {
-      reviewBlocked();
-      return;
-    }
-  }
+  if (reviewClickGate(e.target)) return;
 
   if (rowRoutes && rowRoutes.addClick(e)) return;
 
@@ -1028,16 +1012,44 @@ function onRootKeydown(e) {
   if (editorToolbar) editorToolbar.formatKey(e, cellEl);
 }
 
-function init() {
+var startup = null;
 
-  var draftTaken = null;
-  if (S.DESKTOP && draftRestorePending && typeof S.DESKTOP.takeDraft === "function") {
-    draftTaken = Promise.resolve().then(function () {
-      return S.DESKTOP.takeDraft();
-    }).catch(function () { return null; });
-  } else {
-    detectServer();
-  }
+function startupPorts() {
+  return {
+    desktop: !!S.DESKTOP,
+    draft: {
+      taker: desktopDraftTaker(),
+      detectServer: detectServer,
+      armServerResume: armServerDraftResume,
+      applyDraft: applyTakenDraft
+    },
+    document: {
+      load: function () { return loadInitialDocument(); },
+      clone: cloneState,
+      applyStash: function (loaded, options) { return applyStashedWork(loaded, null, options); },
+      liveDocument: function () { return S.state; },
+      open: function (doc, reason) { documentTransitions().open({ from: { document: doc }, reason: reason }); },
+      firstDraw: renderFirstDraw,
+      refreshChrome: [updateIdentityChip, updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
+      reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
+      toastLastEditor: toastLastEditor,
+      resumeLastProject: tryResumeLastProject,
+      syncIdentity: syncDocIdentity,
+      openIdentityChannel: function () { initDocIdentityChannel(); },
+      notifyDesktop: notifyDesktopDocumentState,
+      startHistoryMigration: startHistoryMigration
+    },
+    page: {
+      window: window,
+      snapshotKey: SNAPSHOT_KEY,
+      unsaved: function () { return !!S.dirty && !suppressUnloadWarning; }
+    },
+    startDesktop: initDesktop
+  };
+}
+
+function init() {
+  startup = beginStartup(startupPorts());
   loadUpdateStatus();
   var updateDismiss = document.getElementById("update-bar-dismiss");
   if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
@@ -1062,43 +1074,7 @@ function init() {
     if (document.visibilityState === "visible" && S.prompterOpen) acquireWakeLock();
   });
 
-  S.state = null;
-  S.initialStateReady = loadInitialState().then(function (loaded) {
-    var applied = applyStashedWork(loaded, null, {
-      recovery: true,
-      newBase: function () { return cloneState(loaded); },
-      report: false
-    });
-    if (S.state !== applied.state) {
-      documentTransitions().open({ from: { document: applied.state }, reason: "boot: the version this page loaded, nothing to merge" });
-      renderFirstDraw();
-    }
-    updateIdentityChip();
-    updateAutoSaveMenu();
-    updateHideShotMenu();
-    updateSaveStatus();
-
-    if (applied.report) {
-      reportMerge(applied.report, { kind: "recovery" });
-    } else {
-      toastLastEditor(loaded);
-    }
-
-    if (!applied.report && neverWrittenOut(loaded)) {
-      if (!S.DESKTOP) tryResumeLastProject();
-    }
-    if (typeof syncDocIdentity === "function") syncDocIdentity();
-    if (!S.DESKTOP) initDocIdentityChannel();
-    if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
-    startHistoryMigration();
-  }).then(function () {
-    if (!draftTaken) return;
-    return draftTaken.then(function (t) {
-      armServerDraftResume(t);
-      detectServer();
-      return applyTakenDraft(t);
-    });
-  });
+  S.initialStateReady = startup.openDocument();
 
   document.addEventListener("input", function (e) {
     if (e.isComposing) return;
@@ -1652,21 +1628,7 @@ function init() {
     closeWriter();
   });
 
-  window.addEventListener("storage", function (e) {
-    if (e.key === SNAPSHOT_KEY && e.newValue) startHistoryMigration();
-  });
-
-  window.addEventListener("beforeunload", function (e) {
-    if (S.dirty && !suppressUnloadWarning) { e.preventDefault(); e.returnValue = ""; }
-  });
-
-  if (!S.DESKTOP && "serviceWorker" in navigator && location.protocol !== "file:") {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () {});
-    });
-  }
-
-  if (S.DESKTOP && typeof initDesktop === "function") initDesktop();
+  startup.finish();
 }
 
 function runFromButton(id) {
@@ -1676,9 +1638,5 @@ function runFromButton(id) {
 function saveFromButton() { runFromButton("save"); }
 
 export function __init() {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  whenDocumentReady(document, init);
 }
