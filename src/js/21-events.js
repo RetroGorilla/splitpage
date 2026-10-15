@@ -2,6 +2,7 @@ import { S } from "./_state.js";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { mountComposition } from "../features/editing/composition.ts";
+import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { conn, importHome } from "./_home.js";
 import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountMergeBanner } from "../features/merge/banner.ts";
@@ -705,16 +706,6 @@ function onDraftDrop(e) {
   pasteIntoDraft(box, html, text);
 }
 
-function onFormatBeforeInput(e) {
-  if (e.inputType !== "insertText" || e.isComposing || !e.data) return;
-  var cellEl = e.target && e.target.closest && e.target.closest(".cell-editable");
-  if (!cellEl || !isScriptCell(cellEl)) return;
-  var fresh = typePendingMarks(cellEl, e.data) || typeAtDirectionEdge(cellEl, e.data);
-  if (!fresh) return;
-  e.preventDefault();
-  onRootInput({ target: fresh, inputType: "insertText", data: e.data });
-}
-
 function refreshFormatState(cellEl) {
   if (cellEl.classList.contains("wr-para")) updateWriterFormatState();
   else updateToolbarState(cellEl);
@@ -808,21 +799,47 @@ function takeTitle(input) {
   return true;
 }
 
-function onRootFocusOut(e) {
-  hideTagGhost();
-  cancelPlainTag();
-  hideUntaggedPrompt();
-  S.untaggedMutedFor = null;
-  var cellEl = e.target.classList && e.target.classList.contains("cell-editable") ? e.target : null;
-  if (!cellEl) return;
-  if (S.undoApplying || paintingScreen()) return;
-  var wrap = cellEl.closest(".field-wrap");
-  var related = e.relatedTarget;
-  if (wrap && related && wrap.contains(related)) return;
-  var clean = sanitizeHtml(cellEl.innerHTML);
-  if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
-  syncFieldFromDom(cellEl);
-  if (!S.undoApplying) anchorBrollInLeftCell(cellEl);
+var editorFocusPorts = {
+  isScriptCell: isScriptCell,
+  blurSuppressed: function () { return !!S.undoApplying || paintingScreen(); },
+  leftEditable: function () {
+    hideTagGhost();
+    cancelPlainTag();
+    hideUntaggedPrompt();
+    S.untaggedMutedFor = null;
+  },
+  blurredCell: function (cellEl) {
+    var clean = sanitizeHtml(cellEl.innerHTML);
+    if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
+    syncFieldFromDom(cellEl);
+    if (!S.undoApplying) anchorBrollInLeftCell(cellEl);
+  },
+  typeAtMarks: function (cellEl, data) { return typePendingMarks(cellEl, data) || typeAtDirectionEdge(cellEl, data); },
+  typed: function (cellEl, data) { onRootInput({ target: cellEl, inputType: "insertText", data: data }); },
+  focusedRow: function (rowId) { S.lastFocusedRowId = rowId; },
+  focusedParagraph: function (paraEl) {
+    S.writerLastCell = paraEl;
+    updateWriterFormatState();
+  },
+  selectionChanged: function (active) {
+    forgetStalePendingMarks();
+    if (active && active.classList && active.classList.contains("cell-editable")) {
+      if (active.classList.contains("wr-para")) updateWriterFormatState();
+      else updateToolbarState(active);
+    }
+    refreshPlainTag();
+    updateUntaggedPrompt();
+  }
+};
+
+var onRootFocusOut = editorBlur(editorFocusPorts);
+
+var editorFocus = null;
+
+function mountFocusAndSelection(rowsEl, writerDocEl) {
+  if (editorFocus) editorFocus();
+  editorFocus = mountEditorFocus({ rows: rowsEl, writer: writerDocEl, doc: document, ports: editorFocusPorts });
+  return editorFocus;
 }
 
 function insertIntoScriptCell(cellEl, html, text, files) {
@@ -1186,7 +1203,6 @@ function init() {
   rowsEl.addEventListener("click", onRootClick);
   rowsEl.addEventListener("mousedown", onRootMouseDown);
   rowsEl.addEventListener("input", onRootInput);
-  rowsEl.addEventListener("focusout", onRootFocusOut);
   rowsEl.addEventListener("paste", onRootPaste);
   rowsEl.addEventListener("copy", onRootCopy);
   rowsEl.addEventListener("cut", onRootCut);
@@ -1194,7 +1210,6 @@ function init() {
   document.addEventListener("mousedown", function (e) {
     if (!(e.target.closest && e.target.closest(".row-menu-wrap"))) closeRowMenus();
   }, true);
-  rowsEl.addEventListener("beforeinput", onFormatBeforeInput);
   rowsEl.addEventListener("dragstart", onRootDragStart);
   rowsEl.addEventListener("dragend", onRootDragEnd);
   rowsEl.addEventListener("dragover", onRootDragOver);
@@ -1256,12 +1271,6 @@ function init() {
     e.preventDefault();
     if (e.target.id === "replace-input") { replaceCurrent(); return; }
     stepFind(e.shiftKey ? -1 : 1);
-  });
-
-  document.addEventListener("focusin", function (e) {
-    var cell = e.target.closest && e.target.closest(".cell-editable");
-    var id = cell && cell.getAttribute("data-id");
-    if (id) S.lastFocusedRowId = id;
   });
 
   document.getElementById("runtime-chip").addEventListener("click", promptForWpm);
@@ -1540,17 +1549,6 @@ function init() {
     else if (!document.getElementById("comments-panel").hidden) closeCommentsPanel();
   });
 
-  document.addEventListener("selectionchange", function () {
-    forgetStalePendingMarks();
-    var active = document.activeElement;
-    if (active && active.classList && active.classList.contains("cell-editable")) {
-      if (active.classList.contains("wr-para")) updateWriterFormatState();
-      else updateToolbarState(active);
-    }
-    refreshPlainTag();
-    updateUntaggedPrompt();
-  });
-
   document.getElementById("file-input").addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0];
     if (file && S.pendingImageRowId) handleImageFile(S.pendingImageRowId, file, pendingImageSlot);
@@ -1735,20 +1733,13 @@ function init() {
     }
   });
   writerDocEl.addEventListener("input", onRootInput);
-  writerDocEl.addEventListener("focusout", onRootFocusOut);
   writerDocEl.addEventListener("paste", onRootPaste);
   writerDocEl.addEventListener("copy", onRootCopy);
   writerDocEl.addEventListener("cut", onRootCut);
   writerDocEl.addEventListener("keydown", onRootKeydown);
-  writerDocEl.addEventListener("beforeinput", onFormatBeforeInput);
+  mountFocusAndSelection(rowsEl, writerDocEl);
   mountScriptComposition([rowsEl, writerDocEl]);
   writerDocEl.addEventListener("keydown", onWriterKeydown, true);
-  writerDocEl.addEventListener("focusin", function (e) {
-    if (e.target.classList && e.target.classList.contains("wr-para")) {
-      S.writerLastCell = e.target;
-      updateWriterFormatState();
-    }
-  });
   writerDocEl.addEventListener("click", function (e) {
     var gutter = e.target.closest('[data-action="writer-jump"]');
     if (gutter) { jumpFromWriterToRow(gutter.getAttribute("data-row")); return; }

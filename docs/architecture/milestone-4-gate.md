@@ -20,7 +20,7 @@ on `2cc8bf2` itself.
 | Windows x64 packaged check (stage, build, `verify-dist.mjs --arch x64`, packaged-x64 smoke) | stage and build exit 0; verify-dist 6/6; packaged smoke 974/974 | passed |
 | `npm run verify` | exit 0; `test:all` 254 of 254 files | passed |
 | External review | Astra (Codex CLI), 2026-10-14: 6 bugs reported, 4 fixed in #572, 2 deferred; 4 modularity suggestions accepted and scheduled | recorded ([below](#external-review)) |
-| Every matrix case `rightToday` | 110 cases, none `wrongToday` | passed |
+| Every matrix case `rightToday` at the recorded gate | 110 cases, none `wrongToday` on `2cc8bf2`; A3 follow-up below | passed |
 | Lifecycle test (E9) and capture-contract tests (E8) | `m4-lifecycle.test.mjs` and `export-capture-app.test.mjs` pass in the Windows `npm run verify` on `2cc8bf2` (exit 0, `test:all` 254 of 254 files) | passed |
 | Typing and render medians re-run at the gate (E13) | controlled same-sitting rerun: long fixture within noise or faster; short fixture has a 2 to 6 ms p95 tail on typing and new scene, tracked in [#575](https://github.com/RetroGorilla/splitpage/issues/575) | met with a note ([below](#typing-and-render-medians-e13)) |
 | Recovery tests (E7), browser and desktop | browser suites in the Windows run; desktop `draft:` and `session restore` groups below | passed |
@@ -35,12 +35,19 @@ smoke and `npm run verify` after), on the same machine and tree.
 
 ## Code
 
-All 23 steps merged by 2026-10-14. The race matrix has 110 cases (see
+All 23 steps merged by 2026-10-14. At the recorded gate the race matrix had
+110 cases (see
 [milestone-4.md, As built](milestone-4.md#as-built)), every one declared
-`rightToday` and none a known bug. Run with `SPLITPAGE_M4_GATE=1`, which fails
-any case still `wrongToday`. The matrix is in eight test files under
+`rightToday` and none a known bug. The gate uses `SPLITPAGE_M4_GATE=1`, which fails
+any case still `wrongToday`. At that gate the matrix was in eight test files under
 `src/test/` (the six case files, the harness `_m4-matrix.mjs` and its own
 test). The count is as of #571 plus the external-review fixes in #572.
+
+The current count is 134 cases in seven case files: 133 `rightToday` and
+the A3 follow-up `T2c-resume-switch` declared `wrongToday`. This case pins
+the late resume replacing a file opened during its held fetch. It passes
+without the gate variable and fails with `SPLITPAGE_M4_GATE=1`; the recorded
+run above predates this case. The harness rule is unchanged.
 
 ## Full Windows browser run (caches not frozen)
 
@@ -206,7 +213,7 @@ The raw review and the triage are kept with the project's files
 | A2: queued saves run against whatever document is open when they reach the front | Fixed in #572 (F5-replaced) |
 | A4: a file-draft merge adopts over a document opened during the backup wait | Fixed in #572 (K1b) |
 | A6: a Save As that mints a new doc id warns "finished after you reopened it" | Fixed in #572 (F9-warn) |
-| A3: server resume only checks the connection, so a document opened during the resume fetch can be replaced | Real, **deferred**. The safe fix changes the boot and draft-restore callers; it becomes a matrix-case follow-up |
+| A3: server resume only checks the connection, so a document opened during the resume fetch can be replaced | Real, fix **deferred**. Pinned by `T2c-resume-switch` (`wrongToday`): a held resume fetch replaces a newly opened file when released. The safe fix changes the boot and draft-restore callers |
 | A5: reviewer comment writes do not carry the job's ownership | **Deferred** with review mode (label `review-mode-later`) |
 
 Modularity suggestions, all agreed and none built:
@@ -229,6 +236,8 @@ merged tree, and E13 is met with a note ([above](#typing-and-render-medians-e13)
 the 4.0 release gate, as the gate section says. The external review is
 recorded above with its disposition.
 
-One item stays open as a follow-up, not a gate blocker (milestone-4.md's bug
-rule): A3, the server-resume takeover race, to be added as a matrix case with
-its fix.
+One item stays open as a follow-up to the recorded gate (milestone-4.md's bug
+rule): A3, the server-resume takeover race, is now pinned by
+`T2c-resume-switch` as `wrongToday`. Its fix remains deferred. A current
+`SPLITPAGE_M4_GATE=1` run fails this case until the fix lands and flips it
+to `rightToday`; the historical gate results above are unchanged.
