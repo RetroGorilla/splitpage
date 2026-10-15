@@ -1,3 +1,4 @@
+import { mountTags } from "../features/tags/mount.ts";
 import { S } from "./_state.js";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { createReviewClickGate } from "../features/review/click-gate.ts";
@@ -158,7 +159,8 @@ import {
   setTagStatus,
   tagAllMentions,
   toggleCardSelection,
-  wireTouchSelection
+  setTagOwner,
+  setTagNotes
 } from "./08-production-panels.js";
 import {
   anchorBrollInLeftCell,
@@ -249,7 +251,7 @@ import {
   reviewMode,
   toggleDriveNewFolder
 } from "./13-hosted.js";
-import { applyStashedWork, saveDoc, updateAutoSaveMenu } from "./14-export.js";
+import { applyStashedWork, queueAutoSave, saveDoc, updateAutoSaveMenu } from "./14-export.js";
 import {
   buildFileData,
   closeFileConflict,
@@ -324,6 +326,75 @@ import {
 import { appActions } from "../legacy/app-actions.ts";
 import { liveSession, runCommand } from "../legacy/session-bridge.ts";
 
+var tags = null;
+
+export function mountTagsFeature() {
+  if (tags) tags.dispose();
+  tags = mountTags({
+    window: window,
+    ports: {
+      acceptTagGhost: acceptTagGhost,
+      acceptUntaggedMention: acceptUntaggedMention,
+      applyTag: applyTag,
+      armBulkDelete: armBulkDelete,
+      clearProductionSelection: clearProductionSelection,
+      closeTagComposer: closeTagComposer,
+      disarmBulkDelete: disarmBulkDelete,
+      hideTagGhost: hideTagGhost,
+      hideUntaggedPrompt: hideUntaggedPrompt,
+      renderProduction: renderProduction,
+      bulkDeleteSelected: bulkDeleteSelected,
+      bulkAddPerson: bulkAddPerson,
+      closeGearPanel: closeGearPanel,
+      closeProductionPanel: closeProductionPanel,
+      openProductionPanel: openProductionPanel,
+      renderGearList: renderGearList,
+      applyGearQuickAdd: applyGearQuickAdd,
+      closePlainTag: closePlainTag,
+      refreshPlainTag: refreshPlainTag,
+      reviewBlocked: reviewBlocked,
+      queueAutoSave: queueAutoSave,
+      selectedKeys: selectedKeys,
+      plainTagOpen: plainTagOpen,
+      reviewMode: reviewMode,
+      addPersonForTag: addPersonForTag,
+      saveTagRename: saveTagRename,
+      tagAllMentions: tagAllMentions,
+      renderTagCategories: renderTagCategories,
+      armPersonDelete: armPersonDelete,
+      armRemoveTag: armRemoveTag,
+      armDeleteTag: armDeleteTag,
+      setTagStatus: setTagStatus,
+      bulkSetOwner: bulkSetOwner,
+      bulkSetStatus: bulkSetStatus,
+      handleSelectionClick: handleSelectionClick,
+      jumpToTag: jumpToTag,
+      toggleCardSelection: toggleCardSelection,
+      tagKey: tagKey,
+      cssAttr: cssAttr,
+      exportAs: exportAs,
+      runExport: runExport,
+      rootClick: onRootClick,
+      runFromButton: runFromButton,
+      setTagOwner: setTagOwner,
+      setTagNotes: setTagNotes,
+      bulkDeleteArmed: function () { return bulkDeleteArmed; },
+      isTouch: function () { return IS_TOUCH; },
+      addingPerson: function () { return S.tagAddingPersonFor; },
+      expanded: function () { return S.tagExpanded; },
+      productionGroup: function () { return S.productionGroupBy; },
+      setAddingPerson: function (value) { S.tagAddingPersonFor = value; },
+      setRenaming: function (value) { S.tagRenaming = value; },
+      setExpanded: function (value) { S.tagExpanded = value; },
+      setProductionGroup: function (value) { S.productionGroupBy = value; },
+      setGearGroup: function (value) { S.gearGroupBy = value; },
+      capture: function () { var context = captureOperation(); return function () { return stillOwns(context); }; },
+      installEntity: wireTagEntityContainer
+    }
+  });
+  return tags;
+}
+
 var reviewClickGate = createReviewClickGate({
   reviewMode: function () { return reviewMode(); },
   refuse: function () { reviewBlocked(); }
@@ -363,11 +434,7 @@ export function onRootClick(e) {
   if (commentMenuBtn) { toggleCommentMenu(commentMenuBtn.getAttribute("data-id")); return; }
   if (e.target.closest(".comment-menu")) return;
 
-  var jumpTagBtn = e.target.closest('[data-action="jump-tag"]');
-  if (jumpTagBtn) {
-    jumpToTag(jumpTagBtn.getAttribute("data-row"), jumpTagBtn.getAttribute("data-key"));
-    return;
-  }
+  if (tags && tags.jumpClick(e)) return;
 
   var jumpCard = e.target.closest(".comment-card.is-jumpable");
   if (jumpCard && !e.target.closest(".reply-composer") && !e.target.closest("a") &&
@@ -376,115 +443,7 @@ export function onRootClick(e) {
     return;
   }
 
-  var selCard = (e.ctrlKey || e.metaKey || e.shiftKey)
-    ? e.target.closest("#production-list .tag-entity") : null;
-  if (selCard && handleSelectionClick(e, selCard)) { e.preventDefault(); return; }
-
-  if (IS_TOUCH && selectedKeys().length) {
-    var touchRow = e.target.closest("#production-list .tag-entity-row");
-    if (touchRow) {
-      toggleCardSelection(touchRow.closest(".tag-entity").getAttribute("data-key"));
-      return;
-    }
-  }
-
-  var bulkClear = e.target.closest('[data-action="bulk-clear"]');
-  if (bulkClear) { clearProductionSelection(); renderProduction(); return; }
-
-  var bulkDel = e.target.closest('[data-action="bulk-delete"]');
-  if (bulkDel) {
-    if (bulkDeleteArmed) { disarmBulkDelete(); bulkDeleteSelected(); }
-    else { armBulkDelete(); renderProduction(); }
-    return;
-  }
-
-  var bulkPersonNew = e.target.closest('[data-action="bulk-person-new"]');
-  if (bulkPersonNew) {
-    S.tagAddingPersonFor = "__bulk__";
-    renderProduction();
-    var bpi = document.getElementById("bulk-person-input");
-    if (bpi) bpi.focus();
-    return;
-  }
-
-  var bulkPersonSave = e.target.closest('[data-action="bulk-person-save"]');
-  if (bulkPersonSave) { bulkAddPerson(); return; }
-
-  var bulkPersonCancel = e.target.closest('[data-action="bulk-person-cancel"]');
-  if (bulkPersonCancel) { S.tagAddingPersonFor = null; renderProduction(); return; }
-
-  var tagStatusCycle = e.target.closest('[data-action="tag-status-cycle"]');
-  if (tagStatusCycle) { setTagStatus(tagStatusCycle.getAttribute("data-key"), null); return; }
-
-  var tagStatusSet = e.target.closest('[data-action="tag-status-set"]');
-  if (tagStatusSet) {
-    setTagStatus(tagStatusSet.getAttribute("data-key"), tagStatusSet.getAttribute("data-status"));
-    return;
-  }
-
-  var tagExpandBtn = e.target.closest('[data-action="tag-expand"]');
-  if (tagExpandBtn) {
-    var expandKey = tagExpandBtn.getAttribute("data-key");
-    S.tagExpanded = S.tagExpanded === expandKey ? null : expandKey;
-    S.tagRenaming = null;
-    S.tagAddingPersonFor = null;
-    renderProduction();
-    return;
-  }
-
-  var personNewBtn = e.target.closest('[data-action="tag-person-new"]');
-  if (personNewBtn) {
-    S.tagAddingPersonFor = personNewBtn.getAttribute("data-key");
-    renderProduction();
-    var newInput = document.querySelector('.tag-person-input[data-key="' +
-      cssAttr(S.tagAddingPersonFor) + '"]');
-    if (newInput) newInput.focus();
-    return;
-  }
-
-  var personSaveBtn = e.target.closest('[data-action="tag-person-save"]');
-  if (personSaveBtn) { addPersonForTag(personSaveBtn.getAttribute("data-key")); return; }
-
-  var personCancelBtn = e.target.closest('[data-action="tag-person-cancel"]');
-  if (personCancelBtn) { S.tagAddingPersonFor = null; renderProduction(); return; }
-
-  var personDeleteBtn = e.target.closest('[data-action="person-delete"]');
-  if (personDeleteBtn) { armPersonDelete(personDeleteBtn, personDeleteBtn.getAttribute("data-person")); return; }
-
-  var groupBtn = e.target.closest("#production-modes [data-group]");
-  if (groupBtn) {
-    S.productionGroupBy = groupBtn.getAttribute("data-group");
-    if (S.productionGroupBy !== "cat" && S.productionGroupBy !== "person") clearProductionSelection();
-    renderProduction();
-    return;
-  }
-
-  var breakdownBtn = e.target.closest('[data-action="export-breakdown"]');
-  if (breakdownBtn) { exportAs("breakdown"); return; }
-
-  var packingGearBtn = e.target.closest('[data-action="export-packing-gear"]');
-  if (packingGearBtn) { runExport("export-packing-gear"); return; }
-
-  var tagRenameBtn = e.target.closest('[data-action="tag-rename"]');
-  if (tagRenameBtn) { S.tagRenaming = tagRenameBtn.getAttribute("data-key"); renderProduction(); return; }
-
-  var tagRenameSave = e.target.closest('[data-action="tag-rename-save"]');
-  if (tagRenameSave) { saveTagRename(tagRenameSave.getAttribute("data-key")); return; }
-
-  var tagRenameCancel = e.target.closest('[data-action="tag-rename-cancel"]');
-  if (tagRenameCancel) { S.tagRenaming = null; renderProduction(); return; }
-
-  var tagAllBtn = e.target.closest('[data-action="tag-all-mentions"]');
-  if (tagAllBtn) { tagAllMentions(tagAllBtn.getAttribute("data-key")); return; }
-
-  var tagRemoveBtn = e.target.closest('[data-action="tag-remove"]');
-  if (tagRemoveBtn) { armRemoveTag(tagRemoveBtn, tagRemoveBtn.getAttribute("data-key")); return; }
-
-  var tagDeleteBtn = e.target.closest('[data-action="tag-delete"]');
-  if (tagDeleteBtn) { armDeleteTag(tagDeleteBtn, tagDeleteBtn.getAttribute("data-key")); return; }
-
-  var catBtn = e.target.closest("#tag-cats .tag-cat-btn");
-  if (catBtn) { renderTagCategories(catBtn.getAttribute("data-tag-cat")); return; }
+  if (tags && tags.click(e)) return;
 
   var restoreSnapBtn = e.target.closest('[data-action="restore-snapshot"]');
   if (restoreSnapBtn) { restoreSnapshotFromCard(restoreSnapBtn); return; }
@@ -526,22 +485,7 @@ function onRootMouseDown(e) {
   var anchor = e.target.closest(".cmt-anchor");
   if (anchor) jumpToComment(anchor.getAttribute("data-cmt"));
 
-  var tagEl = e.target.closest(".tag-anchor");
-  if (tagEl) {
-    var key = tagKey(tagEl.getAttribute("data-tag-cat"), tagEl.getAttribute("data-tag-name"));
-    if (S.productionGroupBy === "scene") S.productionGroupBy = "cat";
-    S.tagExpanded = key;
-    openProductionPanel();
-    setTimeout(function () {
-      var card = document.querySelector('.tag-entity[data-key="' + cssAttr(key) + '"]');
-      if (card) {
-        card.scrollIntoView({ behavior: "smooth", block: "center" });
-        card.classList.remove("flash");
-        void card.offsetWidth;
-        card.classList.add("flash");
-      }
-    }, 30);
-  }
+  if (tags) tags.anchorMouseDown(e);
 }
 
 function nearestScrollAncestor(el) {
@@ -1057,18 +1001,7 @@ function init() {
   renderDesktopAppNotice();
   var desktopAppDismiss = document.getElementById("desktop-app-bar-dismiss");
   if (desktopAppDismiss) desktopAppDismiss.addEventListener("click", dismissDesktopAppNotice);
-  wireTouchSelection();
-
-  var ghostEl = document.getElementById("tag-ghost");
-  if (ghostEl) ghostEl.addEventListener("pointerdown", function (e) {
-    e.preventDefault();
-    acceptTagGhost();
-  });
-  var openHintEl = document.getElementById("tag-open-hint");
-  if (openHintEl) openHintEl.addEventListener("pointerdown", function (e) {
-    e.preventDefault();
-    if (plainTagOpen()) closePlainTag();
-  });
+  mountTagsFeature();
 
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible" && S.prompterOpen) acquireWakeLock();
@@ -1092,17 +1025,6 @@ function init() {
   }, true);
   mountRows(rowsEl);
   mountRowsEditing(rowsEl);
-  window.addEventListener("scroll", hideTagGhost, true);
-  window.addEventListener("resize", hideTagGhost);
-  window.addEventListener("scroll", hideUntaggedPrompt, true);
-  window.addEventListener("resize", hideUntaggedPrompt);
-  window.addEventListener("scroll", refreshPlainTag, true);
-  window.addEventListener("resize", refreshPlainTag);
-
-  var suggestEl = document.getElementById("tag-suggest");
-  suggestEl.addEventListener("mousedown", function (e) { e.preventDefault(); });
-  suggestEl.addEventListener("click", function () { acceptUntaggedMention(); });
-
   document.getElementById("identity-chip").addEventListener("click", promptForName);
 
   document.getElementById("find-close").addEventListener("click", closeFindBar);
@@ -1151,49 +1073,6 @@ function init() {
   document.querySelector(".toolbar").addEventListener("mousedown", function (e) {
     if (e.target.closest(".btn")) e.preventDefault();
   });
-
-  document.getElementById("btn-production").addEventListener("click", function () { runFromButton("panel-production"); });
-  document.getElementById("production-close").addEventListener("click", closeProductionPanel);
-  wireTagEntityContainer("production-panel");
-  document.getElementById("production-panel").addEventListener("keydown", function (e) {
-    if (!e.target.classList) return;
-    if (e.target.id === "bulk-person-input") {
-      if (e.key === "Enter" && reviewMode()) { e.preventDefault(); reviewBlocked(); renderProduction(); }
-      else if (e.key === "Enter") { e.preventDefault(); bulkAddPerson(); }
-      else if (e.key === "Escape") { e.preventDefault(); S.tagAddingPersonFor = null; renderProduction(); }
-      return;
-    }
-    if (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input")) return;
-    if (e.key === "Escape" && selectedKeys().length) {
-      e.preventDefault();
-      clearProductionSelection();
-      renderProduction();
-    }
-  });
-  document.getElementById("production-panel").addEventListener("change", function (e) {
-    if (reviewMode()) {
-      if (e.target.id === "bulk-owner" || e.target.id === "bulk-status") { reviewBlocked(); renderProduction(); }
-      return;
-    }
-    if (e.target.id === "bulk-owner") {
-      if (e.target.value !== "__none__") bulkSetOwner(e.target.value);
-      return;
-    }
-    if (e.target.id === "bulk-status") {
-      if (e.target.value !== "__none__") bulkSetStatus(e.target.value);
-    }
-  });
-
-  document.getElementById("btn-gear").addEventListener("click", function () { runFromButton("panel-gear"); });
-  document.getElementById("gear-close").addEventListener("click", closeGearPanel);
-  wireTagEntityContainer("gear-panel");
-  document.getElementById("gear-modes").addEventListener("click", function (e) {
-    var btn = e.target.closest("[data-group]");
-    if (!btn) return;
-    S.gearGroupBy = btn.getAttribute("data-group");
-    renderGearList();
-  });
-  document.getElementById("gear-quickadd-save").addEventListener("click", applyGearQuickAdd);
 
   wireBrollPanel();
 
@@ -1264,20 +1143,6 @@ function init() {
   });
   window.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !document.getElementById("drive-modal").hidden) closeDriveModal();
-  });
-
-  document.getElementById("tag-modal").addEventListener("click", onRootClick);
-  document.getElementById("tag-close").addEventListener("click", closeTagComposer);
-  document.getElementById("tag-cancel").addEventListener("click", closeTagComposer);
-  document.getElementById("tag-apply").addEventListener("click", applyTag);
-  document.getElementById("tag-modal").addEventListener("click", function (e) {
-    if (e.target.id === "tag-modal") closeTagComposer();
-  });
-  document.getElementById("tag-name").addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); applyTag(); }
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("tag-modal").hidden) closeTagComposer();
   });
 
   document.getElementById("resume-continue").addEventListener("click", async function () {
