@@ -25,7 +25,7 @@ const targets = {
 function open() {
   documentTransitions().open({
     from: { raw: {
-      schema: 2, docId: "dccccccccccccccccccccccccccccccc", title: "Comments lifetime",
+      schema: 2, docId: "d" + "c".repeat(32), title: "Comments lifetime",
       rows: [{ id: "r1", status: "todo", visualText: "Scene", audioText: "One" }],
       comments: [{ id: "c_one", kind: "anchor", rowId: "r1", field: "audioText", anchorId: "c_one", quotedText: "One", author: "Ada", body: "Existing comment", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", resolved: false, replies: [] }]
     } },
@@ -117,6 +117,7 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
       fire(input, "change");
       assert.equal(input.value, "");
       await decode.arrivedAtDecode();
+      assert.equal(decode.gates.parked("image.decode").length, 1);
       if (scenario === "dispose and reopen") {
         owner.dispose();
         open();
@@ -145,6 +146,7 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
       const toast = document.getElementById("toast-host").innerHTML;
       decode.releaseDecode();
       await new Promise(setImmediate);
+      assert.equal(decode.gates.parked("image.decode").length, 0);
       assert.equal(JSON.stringify(S.state), before);
       if (scenario === "normal completion") {
         assert.equal(body.querySelectorAll("img").length, 1);
@@ -155,7 +157,8 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
         assert.equal(document.getElementById("toast-host").innerHTML, toast);
       }
     } finally {
-      decode.releaseDecode();
+      decode.gates.releaseAll("image.decode");
+      await new Promise(setImmediate);
       restoreDecode();
       owner.dispose(); replacement?.dispose();
     }
