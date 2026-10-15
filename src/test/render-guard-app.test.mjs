@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
-import { readFileSync } from "node:fs";
+import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 
@@ -1008,7 +1008,7 @@ test("a failed render marks the page as a stale screen, and Redraw or a later cl
 });
 
 test("the dimming in app.css follows the blocked parts the page marks, so the list of parts lives in one place (#443)", () => {
-  const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
+  const { css } = readBuiltCss();
   const rules = css.split("}").filter((r) => /is-stale/.test(r));
   assert.equal(rules.length, 1, "one stale-screen rule: " + JSON.stringify(rules));
   assert.match(rules[0], /^\s*\.is-stale-part\s*\{\s*opacity:\s*0\.5;\s*$/);
