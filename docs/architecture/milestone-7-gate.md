@@ -227,9 +227,9 @@ review (Astra, Codex CLI, 2026-10-15), applied by #628.
 
 | # | Severity | Milestone | Finding | Decision |
 | --- | --- | --- | --- | --- |
-| 1 | blocking | 7 | Teardown leaves an active save running against released bridges. `src/legacy/save-bridge.ts:59` only clears the installed coordinator and does not stop its queue or continuations. After disposal, a held write that completes reaches the ownership check in `src/application/save/coordinator.ts:164`, which calls the now-unstarted transition bridge; that throws into a promise chain with no terminal rejection handler, so the original save request never reaches `current.settle` (`coordinator.ts:222`). After a rewire, old continuations can consult the replacement owners. Production does not call teardown, but the contract does not hold. Suggested: a coordinator shutdown that settles queued requests, guards active completions and keeps later callbacks away from released or replacement owners | to be fixed (fix PR pending) |
-| 2 | should-fix | 7 | `wireApp` accepts incomplete dependency objects. `src/bootstrap/wiring.ts:117` validates the transition ports only as objects, so `{ live: {}, destination: {}, identity: {} }` passes and fails later at `src/application/transitions/transitions.ts:60`, after startup can proceed. Save-port factory results reach `save-bridge.ts:51` unchecked. Suggested: validate required nested methods and factory results before installing their owners and name the missing port in the `WiringError` | to be fixed (fix PR pending) |
-| 3 | should-fix | 5 | An export can combine one exporter's bytes with another registration's filename. `src/js/18-local-files.js:170` keeps the selected exporter before awaiting assets and the build, but line 178 calls `exportFileName`, which looks the exporter up again in the mutable registry (line 145). Replacing or unregistering it while the build is pending changes the filename. Suggested: take the filename from the retained exporter's `fileName(...)`, using the finished product's `imageBundle` flag | to be fixed (fix PR pending) |
+| 1 | blocking | 7 | Teardown leaves an active save running against released bridges. `src/legacy/save-bridge.ts:59` only clears the installed coordinator and does not stop its queue or continuations. After disposal, a held write that completes reaches the ownership check in `src/application/save/coordinator.ts:164`, which calls the now-unstarted transition bridge; that throws into a promise chain with no terminal rejection handler, so the original save request never reaches `current.settle` (`coordinator.ts:222`). After a rewire, old continuations can consult the replacement owners. Production does not call teardown, but the contract does not hold. Suggested: a coordinator shutdown that settles queued requests, guards active completions and keeps later callbacks away from released or replacement owners | to be fixed in "M7: external review fixes, coordinator shutdown and wiring validation" (with the wiring test gaps) |
+| 2 | should-fix | 7 | `wireApp` accepts incomplete dependency objects. `src/bootstrap/wiring.ts:117` validates the transition ports only as objects, so `{ live: {}, destination: {}, identity: {} }` passes and fails later at `src/application/transitions/transitions.ts:60`, after startup can proceed. Save-port factory results reach `save-bridge.ts:51` unchecked. Suggested: validate required nested methods and factory results before installing their owners and name the missing port in the `WiringError` | to be fixed in the same PR as finding 1 |
+| 3 | should-fix | 5 | An export can combine one exporter's bytes with another registration's filename. `src/js/18-local-files.js:170` keeps the selected exporter before awaiting assets and the build, but line 178 calls `exportFileName`, which looks the exporter up again in the mutable registry (line 145). Replacing or unregistering it while the build is pending changes the filename. Suggested: take the filename from the retained exporter's `fileName(...)`, using the finished product's `imageBundle` flag | to be fixed in "M5: derive the export filename from the retained exporter" (with a held-build exporter swap test) |
 
 **Promised but not delivered**, as the review lists it:
 
@@ -237,7 +237,14 @@ review (Astra, Codex CLI, 2026-10-15), applied by #628.
   requires representative DOCX, XLSX and PDF reader or viewer checks and
   recorded project round trips; [milestone-5-gate.md](milestone-5-gate.md)
   lists them under "Not run". Passing byte fixtures do not supply this
-  evidence. **Open:** Adam has a decision on how to close it.
+  evidence. **In progress, viewer checks running.** Adam was asked on
+  2026-10-15 whether to run the checks on his PC now, with three options:
+  "Run now" (open the DOCX, XLSX and PDF exports in the viewers installed on
+  the PC and record the result), "Accept fixtures" (the byte-fixture tests
+  stay as the evidence and the gate record says the viewer checks were not
+  run) or "Defer" (the row stays open until before the 4.0 release). He has
+  not answered; work proceeds on the recommended option, "Run now", on
+  `53dff02`.
 - Milestone 7's teardown and missing-dependency contracts, as findings 1 and 2
   show.
 - The review accepts the deferred composition-root switch, bridge retirement
@@ -266,4 +273,5 @@ machine; this section is the disposition.
 - The release review's verdict is no for both milestones. Milestone 7 closes
   when findings 1 and 2 and the wiring test gaps are fixed and re-reviewed;
   finding 3 closes with its own fix PR.
-- Milestone 5's reader and viewer checks: Adam's decision is open.
+- Milestone 5's reader and viewer checks are running on Adam's PC under the
+  recommended option; his answer to the decision is still open.
