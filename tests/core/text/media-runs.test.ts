@@ -4,7 +4,7 @@ import { deleteRange, joinCells, setMark, splitCell } from "../../../src/core/te
 import { toHtml } from "../../../src/core/text/html.ts";
 import { atomId, cellLength, isMediaRun, normalizeCell, projection } from "../../../src/core/text/runs.ts";
 import type { ImageRun, Marks, VideoRun } from "../../../src/core/text/runs.ts";
-import { cellKeys } from "../../../src/core/text/selection.ts";
+import { MEDIA_KEY, cellKeys, editorKeys } from "../../../src/core/text/selection.ts";
 import { B, OBJ, T } from "./cells.ts";
 
 const SHA = "ab".repeat(32);
@@ -50,6 +50,12 @@ test("a media atom is one place: in the projection, the length, the selection ke
   assert.equal(cellLength(cell), 5);
   assert.deepEqual(cellKeys(cell), ["a", "b", OBJ + "image:" + SHA, OBJ + "video:https://youtu.be/abc", OBJ + "bs1"]);
   assert.equal(atomId(B("bs1")), "bs1");
+});
+
+test("the editor's selection keys name every media atom as the DOM does, and keep b-roll ids", () => {
+  const cell = normalizeCell([T("ab"), I(), V("https://youtu.be/abc"), B("bs1")]);
+  assert.deepEqual(editorKeys(cell), ["a", "b", MEDIA_KEY, MEDIA_KEY, OBJ + "bs1"]);
+  assert.equal(MEDIA_KEY, OBJ + "#media");
 });
 
 test("toHtml writes a picture as its stored image markup and a card as the stored card", () => {
